@@ -301,7 +301,7 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "falls back to CardElement when any item in a multi-item candidate cart fails a presentment gate" do
+  it "selects the buyer-currency presentment Payment Element for a cart priced in a currency other than the buyer's" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
     eur_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 500)
@@ -313,11 +313,40 @@ describe Checkout::StripePaymentPresenter do
       display_mode: "buyer_local",
       buyer_currency_shown: Currency::CAD,
     }
-    # The quote locks the whole cart total, so a single non-USD item invalidates the
-    # whole cart's presentment — everything falls back to canonical USD on CardElement.
+    # The seller pricing one item in euros says nothing about what a Canadian buyer is
+    # quoted: the quote converts the cart's canonical USD total into the buyer's currency
+    # either way, so both items present in CAD.
     add_products = [
       checkout_product_for(product, buyer_currency_display:),
       checkout_product_for(eur_product, buyer_currency_display:),
+    ]
+
+    expect(stripe_payment_props(add_products:)).to eq(
+      payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+    )
+  ensure
+    Feature.deactivate_user(:buyer_local_currency, seller) if seller
+    Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
+  end
+
+  it "falls back to CardElement when an item is already priced in the buyer's own currency" do
+    seller = create(:user, disable_buyer_local_currency: false)
+    product = create(:product, user: seller, price_cents: 1234)
+    cad_product = create(:product, user: seller, price_currency_type: "cad", price_cents: 500)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    # A product already priced in the buyer's currency has nothing to convert, so its
+    # buyer-local display stays off (buyer_currency_display_props returns "default" when
+    # the two currencies match) and it is not a presentment candidate. The quote locks the
+    # whole cart total, so that one item takes the whole cart back to canonical USD —
+    # which is right here, because quoting that item would round-trip its listed CAD
+    # price through two FX rates and charge the buyer an amount that drifts from the
+    # price on the page.
+    add_products = [
+      checkout_product_for(product, buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }),
+      checkout_product_for(cad_product, buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::CAD }),
     ]
 
     expect(stripe_payment_props(add_products:)).to eq(
@@ -978,16 +1007,58 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "does not fall back to CardElement for a non-EU tester (buyer-local display) — the EUR element mounts with wallets disabled" do
+    it "mounts the buyer-currency element, not the forced-currency one, for a Canadian buyer of an EUR-priced product" do
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      # Referenced so the forced-currency methods really are on offer for this cart (see the
+      # note in the matched-currency example below). Without it the resolver returns no local
+      # methods, the cart is not method-forced at all, and the example would pass without
+      # exercising the overlap it exists to pin.
+      platform_merchant_account
       add_products = [
         checkout_product_for(
           product,
           buyer_currency_display: {
             display_mode: "buyer_local",
             buyer_currency_shown: Currency::CAD,
+          }
+        )
+      ]
+
+      # This cart is both shapes at once: an EUR listing carries the forced local methods, and
+      # a Canadian buyer of it is an ordinary quote candidate. It must take the quote lane. The
+      # surcharge endpoint quotes this cart, so the checkout shows CA$ totals and submits the
+      # quote token — and the client-confirm lane rejects any request carrying a token
+      # (Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote), which would
+      # fail every payment attempt. Giving up the iDEAL/Bancontact tabs costs this buyer
+      # nothing: both methods need a bank in the country that issues them.
+      expect(stripe_payment_props(add_products:)).to eq(
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "keeps the forced-currency element for a buyer whose own currency is the listed one" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      # Referenced so the USD-holding platform account exists: the resolver only offers the
+      # forced-currency methods when it does (forced_currency_settlement_supported?), and the
+      # lazy let above means an example that never touches it depends on how the database
+      # happened to be seeded.
+      platform_merchant_account
+      # A Dutch buyer of a EUR product — the shape #6346 is about. The currencies match, so
+      # buyer_currency_display_props yields display_mode "default", no quote is created, and
+      # nothing is submitted for prepare to reject. This cart must keep the forced-currency
+      # element and its local method tabs: it is what makes iDEAL reachable at all.
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "default",
+            buyer_currency_shown: Currency::EUR,
           }
         )
       ]
@@ -1000,6 +1071,51 @@ describe Checkout::StripePaymentPresenter do
           disable_wallets: true,
         )
       )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "never mounts the client-confirm element for a cart Checkout::BuyerCurrencyQuote would really quote" do
+      # The two examples above pin the routing against a hand-written expectation of which carts
+      # get quoted. This one asserts the underlying rule against the quote service ITSELF, so the
+      # pair cannot silently drift apart: if quotable_product? is ever widened to cover a cart the
+      # method-forced lane still claims, this reddens even though both examples above still pass.
+      # What makes it load-bearing is that the combination is unpayable, not merely suboptimal —
+      # a quoted cart submits a token and client-confirm prepare fails closed on one
+      # (Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote).
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      platform_merchant_account
+      # The buyer's currency comes from GeoIP and the FX rate from Stripe; neither is what this
+      # example is about, so both are stubbed exactly as the quote service's own spec does.
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote)
+        .to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(StripeFxQuote).to receive(:create).and_return(
+        StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.7"))
+      )
+
+      line_item = Checkout::BuyerCurrencyQuote::LineItem.new(
+        permalink: product.unique_permalink, product:, price_cents: 1630,
+        tip_cents: 0, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0
+      )
+      quote = Checkout::BuyerCurrencyQuote.create(
+        line_items: [line_item], canonical_total_cents: 1630, ip: "24.48.0.1"
+      )
+      # Guard the guard: if this EUR listing stopped being quotable the assertion below would
+      # pass vacuously and the rule would no longer be under test.
+      expect(quote).to be_present
+      expect(quote.currency).to eq(Currency::CAD)
+
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }
+        )
+      ]
+
+      expect(stripe_payment_props(add_products:)[:integration])
+        .not_to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end
@@ -1364,7 +1480,7 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
-    it "keeps the CardElement fallback for an EUR-priced product when the client-confirm flag is off" do
+    it "mounts the buyer-currency element for an EUR-priced product when the client-confirm flag is off" do
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
@@ -1380,14 +1496,13 @@ describe Checkout::StripePaymentPresenter do
         )
       ]
 
+      # Without the client-confirm flag the iDEAL surface is unreachable, but this Canadian
+      # buyer of a EUR-priced product is still an ordinary quote candidate: the cart's
+      # canonical USD total converts into CAD exactly as a USD-priced cart's would
+      # It used to dead-end on CardElement because quoting refused
+      # any non-USD listing.
       expect(stripe_payment_props(add_products:)).to eq(
-        integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-        fallback_reason: "buyer_currency_presentment_unsupported",
-        disable_wallets: true,
-        request_apple_pay_merchant_tokens: false,
-        payment_element_wallets: false,
-        flat_payment_methods: false,
-        elements_options: nil,
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
@@ -1491,6 +1606,12 @@ describe Checkout::StripePaymentPresenter do
       # true (a wallet payment would charge through the canonical USD path while the cart shows
       # buyer-currency totals). The constraint is server-owned: the props must never say both
       # "wallets are disabled" and "render wallets in the element".
+      #
+      # The buyer-local display here is the LISTED currency, i.e. no display at all, which is
+      # what keeps this cart on the method-forced lane. A EUR listing shown to a buyer quoted in
+      # some other currency now takes the buyer-currency element instead (the quoted cart has to
+      # get a lane that can honor its token — see the ordering in #props), so this example uses
+      # the euro-zone buyer the forced lane actually serves.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
@@ -1499,12 +1620,22 @@ describe Checkout::StripePaymentPresenter do
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      # Ensure the Gumroad-managed Stripe platform account exists and holds USD: the resolver
+      # only offers the forced-currency methods when it does
+      # (PaymentMethodResolver#forced_currency_settlement_supported?), and CI databases do not
+      # always seed it. Without this the cart is not method-forced at all and the example would
+      # assert client-confirm for the wrong reason. Inlined rather than shared because the
+      # equivalent `let` lives in the method-forced describe block above.
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+        account.update!(charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+      end ||
+        create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
       add_products = [
         checkout_product_for(
           product,
           buyer_currency_display: {
-            display_mode: "buyer_local",
-            buyer_currency_shown: Currency::CAD,
+            display_mode: "default",
+            buyer_currency_shown: Currency::EUR,
           }
         )
       ]
