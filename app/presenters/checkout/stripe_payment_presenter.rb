@@ -83,14 +83,21 @@ class Checkout::StripePaymentPresenter
     # BUYER_CURRENCY_WALLETS_FEATURE_NAME so it can be pulled instantly.
     #
     # This branch has to come before the client-confirm one below, and the reason is a
-    # correctness constraint rather than a preference. Whenever a cart is a presentment
-    # candidate the surcharge endpoint quotes it, and the browser then both displays the quoted
-    # local total and submits the quote token with the payment. The client-confirm lane cannot
-    # honor a token — Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote
-    # fails the purchase closed rather than charge canonical USD behind a local-currency total —
-    # so sending a quoted cart there makes every payment attempt on it fail. The rule: if the
+    # correctness constraint rather than a preference. When a cart is a presentment candidate
+    # and the buyer's currency supports quoting, the surcharge endpoint quotes it, and the
+    # browser then both displays the quoted local total and submits the quote token with the
+    # payment. The client-confirm lane cannot honor a token:
+    # Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote fails the
+    # purchase closed rather than charge canonical USD behind a local-currency total, so
+    # sending a quoted cart there makes every payment attempt on it fail. The rule: if the
     # surcharge endpoint would quote the cart, checkout must mount a lane that can honor the
     # quote (this element, or CardElement via the fallback above).
+    #
+    # A candidate can also go unquoted, and that cart takes this branch too. A buyer whose
+    # GeoIP currency is USD sees a candidate display for a non-USD listing, but the quote
+    # service returns nothing for USD buyers, so the cart renders plain canonical USD and
+    # submits no token. That is safe; it does mean this element replaces the local-method
+    # tabs for those viewers.
     #
     # The two shapes really can overlap, and this is where that is decided. A product listed in
     # a forced currency, bought by someone whose own currency is different — a EUR product and a
