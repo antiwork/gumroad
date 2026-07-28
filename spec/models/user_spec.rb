@@ -785,16 +785,31 @@ describe User, :vcr do
 
     it "includes a live custom domain alongside the subdomain" do
       creator = create(:user, username: "jane")
-      create(:custom_domain, user: creator, domain: "store.example.com")
+      create(:custom_domain, :verified_with_certificate, user: creator, domain: "store.example.com")
 
       expect(creator.reload.custom_html_store_hostnames).to match_array(
         [URI("#{PROTOCOL}://#{creator.subdomain}").host, "store.example.com"]
       )
     end
 
+    it "leaves out a custom domain that has not been verified" do
+      creator = create(:user, username: "joan")
+      create(:custom_domain, user: creator, domain: "unproven.example.com").set_ssl_certificate_issued_at!
+
+      expect(creator.reload.custom_html_store_hostnames).not_to include("unproven.example.com")
+    end
+
+    it "leaves out a verified custom domain whose SSL certificate has gone stale" do
+      creator = create(:user, username: "joyce")
+      create(:custom_domain, :verified_with_certificate, user: creator, domain: "expired.example.com")
+        .update!(ssl_certificate_issued_at: 2.weeks.ago)
+
+      expect(creator.reload.custom_html_store_hostnames).not_to include("expired.example.com")
+    end
+
     it "leaves out a deleted custom domain" do
       creator = create(:user, username: "jess")
-      create(:custom_domain, user: creator, domain: "gone.example.com").mark_deleted!
+      create(:custom_domain, :verified_with_certificate, user: creator, domain: "gone.example.com").mark_deleted!
 
       expect(creator.reload.custom_html_store_hostnames).not_to include("gone.example.com")
     end

@@ -91,11 +91,22 @@ describe LinksController, :vcr, type: :controller do
       end
 
       it "allowlists the seller's live custom domain alongside their subdomain" do
-        create(:custom_domain, user: seller, domain: "shop.example.com")
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
 
         get :show, params: { id: product.unique_permalink }
 
         expect(response.body).to include("shop.example.com")
+      end
+
+      it "does not allowlist a custom domain the seller never verified" do
+        create(:custom_domain, user: seller, domain: "unproven.example.com")
+
+        get :show, params: { id: product.unique_permalink }
+
+        # Anyone can type a domain they don't own into the custom-domain field.
+        # Until DNS verification passes, sending a visitor's tab there would be
+        # navigating them to a host the seller hasn't shown they control.
+        expect(response.body).not_to include("unproven.example.com")
       end
 
       it "never allowlists a shared Gumroad host" do

@@ -575,7 +575,7 @@ describe ProductPresenter do
 
     describe "custom_html_store_hostnames" do
       it "lists the seller's own hosts so the landing-page preview can check where a link goes" do
-        create(:custom_domain, user: product.user, domain: "store.example.com")
+        create(:custom_domain, :verified_with_certificate, user: product.user, domain: "store.example.com")
         product.user.reload
 
         expect(presenter.edit_props[:custom_html_store_hostnames]).to match_array(

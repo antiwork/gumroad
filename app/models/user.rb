@@ -1014,10 +1014,17 @@ class User < ApplicationRecord
   # gumroad.com paths. Living on the model means the public product wrapper and
   # the editor's landing-page preview decide from the same list instead of each
   # rebuilding it and drifting apart.
+  #
+  # A custom domain only counts once it is active — DNS verified and holding a
+  # current SSL certificate, the same bar UrlService uses before it will build
+  # any custom-domain URL. Anyone can type a domain they don't own into the
+  # custom-domain field and the record sticks around whether verification
+  # succeeded or not, so trusting mere presence would let a seller's HTML send
+  # a visitor's tab to a host they never proved they control.
   def custom_html_store_hostnames
     hostnames = []
     hostnames << URI("#{PROTOCOL}://#{subdomain}").host if subdomain.present?
-    hostnames << custom_domain.domain if custom_domain&.domain.present?
+    hostnames << custom_domain.domain if custom_domain&.active?
     hostnames.compact.uniq
   end
 
