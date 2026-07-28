@@ -90,6 +90,11 @@ retry_stripe_rejected_payout_setups:
   class: RetryStripeRejectedPayoutSetupsJob
   queue: low
   description: Weekly re-attempt of Stripe payout setup for sellers with rejected postal codes / bank accounts
+release_chargeback_rate_payout_pauses:
+  cron: "30 7 * * *" # UTC 07:30 daily, before the 08:00 daily payouts job so a released seller is paid the same day
+  class: ReleaseChargebackRatePayoutPausesJob
+  queue: low
+  description: Lifts automatic chargeback-rate payout holds for sellers whose rate is back under the limit
 expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker
