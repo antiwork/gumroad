@@ -27,10 +27,8 @@
 # rate-limit-shaped failure into the gem's existing retry path, on a wider
 # budget than the gem's own retries get.
 #
-# The wider budget is scoped to throttled requests rather than set globally
-# (Stripe.max_network_retries / max_network_retry_delay are left alone). Setting
-# it globally would also stretch the gem's retries for timeouts, 409 conflicts
-# and 500s, so an unrelated failure could hold a spec in backoff for a minute.
+# That wider budget is scoped to throttled requests rather than set on Stripe's
+# global configuration — see MAX_RETRIES below for why.
 #
 # This replaces the old StripeRetryHelper, which wrapped Stripe::Account.create
 # and Stripe::Account.create_person only, and re-raised anything whose message
@@ -49,9 +47,10 @@ module StripeTestRateLimitRetries
   # fallback, after checking the structured fields.
   RATE_LIMIT_MESSAGE = /rate limit|too many requests|creating accounts too quickly/i
 
-  # Retry budget for THROTTLED requests only. Attempt delays follow the gem's own
-  # schedule (0.5s doubling, capped at MAX_RETRY_DELAY), so the worst case is
-  # 0.5 + 1 + 2 + 4 + 8 + 16 + 16 + 16 = 63.5 seconds across eight attempts.
+  # Retry budget for THROTTLED requests only: eight retries, so nine HTTP
+  # attempts. Delays before each retry follow the gem's own schedule (0.5s
+  # doubling, capped at MAX_RETRY_DELAY), so the worst case is
+  # 0.5 + 1 + 2 + 4 + 8 + 16 + 16 + 16 = 63.5 seconds of waiting.
   #
   # That is deliberately generous rather than minimal. The helper this file
   # replaces allowed roughly 134 seconds, and it did so specifically for
@@ -80,12 +79,13 @@ module StripeTestRateLimitRetries
   def should_retry?(error, num_retries:, config: Stripe.config)
     if rate_limited?(error) && !replaying_a_cassette?
       if num_retries < MAX_RETRIES
-        Thread.current[BACKING_OFF_FOR_RATE_LIMIT] = true
         # The gem retries silently. Without a line here, a CI shard spending a
         # minute waiting out the shared Stripe test account looks like a slow
-        # spec to whoever is reading the log.
+        # spec to whoever is reading the log. Warn before claiming the wider
+        # budget, so a failure to write the log cannot strand the flag set.
         warn "[Stripe] rate limited — the shared Stripe test account is throttling us. " \
-             "Waiting and retrying (attempt #{num_retries + 1} of #{MAX_RETRIES}): #{error.message}"
+             "Waiting and retrying (retry #{num_retries + 1} of #{MAX_RETRIES}): #{error.message}"
+        Thread.current[BACKING_OFF_FOR_RATE_LIMIT] = true
         return true
       end
 

@@ -13,6 +13,18 @@ describe "Stripe rate-limit retries in the test environment" do
   # clear it rather than letting it leak into whatever runs next.
   after { Thread.current[StripeTestRateLimitRetries::BACKING_OFF_FOR_RATE_LIMIT] = nil }
 
+  # should_retry? warns to stderr whenever it decides to wait out a rate limit.
+  # That line is for whoever reads a CI log; here it is just noise, so route
+  # calls through this helper and let the two examples further down assert the
+  # wording.
+  def should_retry?(error, num_retries:)
+    original_stderr = $stderr
+    $stderr = StringIO.new
+    Stripe::StripeClient.should_retry?(error, num_retries:)
+  ensure
+    $stderr = original_stderr
+  end
+
   def stripe_error(klass, message, status: nil, code: nil, headers: {})
     # Stripe::InvalidRequestError takes the offending parameter name as a
     # positional argument; the other error classes take the message alone.
@@ -27,7 +39,7 @@ describe "Stripe rate-limit retries in the test environment" do
     it "retries a Stripe::RateLimitError" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
-      expect(Stripe::StripeClient.should_retry?(error, num_retries: 0)).to be true
+      expect(should_retry?(error, num_retries: 0)).to be true
     end
 
     it "retries a 429 that arrives as a generic error without a rate-limit code" do
@@ -35,7 +47,7 @@ describe "Stripe rate-limit retries in the test environment" do
       # PaymentIntent.create with a 429 but no machine-readable rate-limit code.
       error = stripe_error(Stripe::InvalidRequestError, "Request rate limit exceeded", status: 429)
 
-      expect(Stripe::StripeClient.should_retry?(error, num_retries: 0)).to be true
+      expect(should_retry?(error, num_retries: 0)).to be true
     end
 
     it "retries account-creation throttling, which carries no status at all" do
@@ -43,7 +55,7 @@ describe "Stripe rate-limit retries in the test environment" do
       # the message text, which is why it needs the message fallback.
       error = stripe_error(Stripe::InvalidRequestError, "You are creating accounts too quickly")
 
-      expect(Stripe::StripeClient.should_retry?(error, num_retries: 0)).to be true
+      expect(should_retry?(error, num_retries: 0)).to be true
     end
 
     it "retries even when Stripe asks callers not to, because the contention is our own shards" do
@@ -54,14 +66,14 @@ describe "Stripe rate-limit retries in the test environment" do
         headers: { "stripe-should-retry" => "false" }
       )
 
-      expect(Stripe::StripeClient.should_retry?(error, num_retries: 0)).to be true
+      expect(should_retry?(error, num_retries: 0)).to be true
     end
 
     it "stops once the retry budget is used up" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
       expect(
-        Stripe::StripeClient.should_retry?(error, num_retries: StripeTestRateLimitRetries::MAX_RETRIES)
+        should_retry?(error, num_retries: StripeTestRateLimitRetries::MAX_RETRIES)
       ).to be_falsey
     end
 
@@ -72,7 +84,7 @@ describe "Stripe rate-limit retries in the test environment" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
       VCR.use_cassette("stripe_rate_limit_retries_guard", record: :none, allow_unused_http_interactions: true) do
-        expect(Stripe::StripeClient.should_retry?(error, num_retries: 0)).to be_falsey
+        expect(should_retry?(error, num_retries: 0)).to be_falsey
       end
     end
 
@@ -81,19 +93,44 @@ describe "Stripe rate-limit retries in the test environment" do
       bad_request = stripe_error(Stripe::InvalidRequestError, "No such customer", status: 400)
 
       # The gem answers these with nil rather than false, so assert falsiness.
-      expect(Stripe::StripeClient.should_retry?(card_error, num_retries: 0)).to be_falsey
-      expect(Stripe::StripeClient.should_retry?(bad_request, num_retries: 0)).to be_falsey
+      expect(should_retry?(card_error, num_retries: 0)).to be_falsey
+      expect(should_retry?(bad_request, num_retries: 0)).to be_falsey
     end
 
     it "leaves the gem's own retry rules in place" do
       server_error = stripe_error(Stripe::APIError, "Something went wrong", status: 500)
 
-      expect(Stripe::StripeClient.should_retry?(server_error, num_retries: 0)).to be true
+      expect(should_retry?(server_error, num_retries: 0)).to be true
+    end
+  end
+
+  describe "what it reports to the log" do
+    it "says it is waiting, and which retry this is" do
+      error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+
+      expect { Stripe::StripeClient.should_retry?(error, num_retries: 2) }
+        .to output(/rate limited.*Waiting and retrying \(retry 3 of 8\)/m).to_stderr
+    end
+
+    it "says it is giving up once the budget is gone, rather than claiming success" do
+      # The line this replaces fired on every request with a retry behind it,
+      # including ones that had just failed for good and ones the gem retried
+      # for a network error, and called all of them rate-limited successes.
+      error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+
+      expect { Stripe::StripeClient.should_retry?(error, num_retries: StripeTestRateLimitRetries::MAX_RETRIES) }
+        .to output(/still rate limited after 8 retries, giving up/).to_stderr
+    end
+
+    it "stays quiet about failures that have nothing to do with rate limiting" do
+      server_error = stripe_error(Stripe::APIError, "Something went wrong", status: 500)
+
+      expect { Stripe::StripeClient.should_retry?(server_error, num_retries: 0) }.not_to output.to_stderr
     end
   end
 
   describe "the retry budget" do
-    it "allows eight attempts capped at sixteen seconds each" do
+    it "allows eight retries capped at sixteen seconds of waiting each" do
       # Pinned literally rather than derived, so that changing the budget has to
       # change this spec deliberately.
       expect(StripeTestRateLimitRetries::MAX_RETRIES).to eq(8)
@@ -112,12 +149,12 @@ describe "Stripe rate-limit retries in the test environment" do
     it "retries a rate limit past the point where the global budget would stop" do
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
-      expect(Stripe::StripeClient.should_retry?(error, num_retries: Stripe.max_network_retries + 1)).to be true
+      expect(should_retry?(error, num_retries: Stripe.max_network_retries + 1)).to be true
     end
 
     it "sleeps past the global delay cap while backing off a rate limit" do
       rate_limit = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
-      Stripe::StripeClient.should_retry?(rate_limit, num_retries: 5)
+      should_retry?(rate_limit, num_retries: 5)
 
       # Sixth attempt: 0.5 * 2**5 = 16s, which the global cap of 2s would have
       # clamped. The gem jitters the value into (sleep/2, sleep], so assert the
@@ -130,7 +167,7 @@ describe "Stripe rate-limit retries in the test environment" do
 
     it "does not let the wider cap outlive the sleep it was granted for" do
       rate_limit = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
-      Stripe::StripeClient.should_retry?(rate_limit, num_retries: 5)
+      should_retry?(rate_limit, num_retries: 5)
       Stripe::StripeClient.sleep_time(6)
 
       # A second sleep with no fresh rate limit behind it — a timeout retry on
@@ -139,8 +176,12 @@ describe "Stripe rate-limit retries in the test environment" do
     end
 
     it "leaves the delay cap alone for failures that are not rate limits" do
+      # Start from a rate limit, so the wider cap really is claimed, and check
+      # that the next decision — a server error — hands it back.
+      rate_limit = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
       server_error = stripe_error(Stripe::APIError, "Something went wrong", status: 500)
-      Stripe::StripeClient.should_retry?(server_error, num_retries: 0)
+      should_retry?(rate_limit, num_retries: 5)
+      should_retry?(server_error, num_retries: 0)
 
       expect(Stripe::StripeClient.sleep_time(6)).to be <= Stripe.config.max_network_retry_delay
     end
