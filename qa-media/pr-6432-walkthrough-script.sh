@@ -33,14 +33,14 @@ sleep 1
 bundle exec rspec spec/models/rich_content_spec.rb \
   -e "when the foreign file has been soft-deleted" \
   --format documentation --no-profile 2>&1 \
-  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2
 
 printf "%b\n" ""
 printf "%b\n" "=== Product editor save boundary removes only the stored dead embed ==="
 test_line="$(grep -n 'PUT update removes a stale dead cross-product file embed' test/controllers/links_controller_test.rb | cut -d: -f1)"
 bundle exec rails test "test/controllers/links_controller_test.rb:$test_line" 2>&1 \
-  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2
 
 printf "%b\n" ""
@@ -48,7 +48,7 @@ printf "%b\n" "=== Variant API round trip also removes the stale file link ==="
 bundle exec rspec spec/controllers/api/v2/variants_controller_spec.rb \
   -e "removes a soft-deleted foreign embed and its stale variant file link" \
   --format documentation --no-profile 2>&1 \
-  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2
 
 printf "%b\n" ""
@@ -58,7 +58,7 @@ bundle exec rspec spec/controllers/api/v2/links_controller_spec.rb \
   spec/services/product_duplicator_service_spec.rb \
   -e "drops a stale dead foreign embed when copying stored content" \
   --format documentation --no-profile 2>&1 \
-  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2
 
 printf "%b\n" ""
@@ -66,5 +66,5 @@ printf "%b\n" "=== Full group, including the cases that must STILL be rejected =
 bundle exec rspec spec/models/rich_content_spec.rb \
   -e "rejecting cross-product file embeds" \
   --format documentation --no-profile 2>&1 \
-  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 3

@@ -165,7 +165,8 @@ class RichContent < ApplicationRecord
   #
   # A soft-deleted foreign file delivers nothing: the editor renders its embed as
   # nothing at all, so there is no node for the seller to click and remove. Those
-  # are dead content and get dropped on save (see #drop_dead_cross_product_file_embeds).
+  # are dead content and get dropped at product-save boundaries (see
+  # #remove_stale_dead_cross_product_file_embeds).
   # An alive foreign file is the case #5416 was written to stop, and it stays a
   # hard validation failure. It may still be content the seller meant to include,
   # so silently deleting it would discard that intent.
