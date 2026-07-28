@@ -43,6 +43,9 @@ fi
 
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 MERGE_BASE=""
+# Absolute path to the checkout we're running in. Needed so the merge-base
+# worktree can borrow this checkout's node_modules (it has none of its own).
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 LOCAL_CHANGED_CODE=$({ git diff --name-only HEAD 2>/dev/null; git diff --name-only --cached 2>/dev/null; } \
   | sort -u | grep -E '\.(rb|ts|tsx|js|jsx)$' || true)
@@ -114,7 +117,11 @@ CACHE_FILE="$CACHE_DIR/${DIFF_HASH:0:16}.json"
 # ── All spec files ──
 
 ALL_SPECS=$(find spec -name "*_spec.rb" -type f 2>/dev/null | sort)
-TOTAL_SPECS=$(echo "$ALL_SPECS" | wc -l | tr -d ' ')
+# Colocated Vitest tests. The planner is allowed to pick these for front-end
+# changes, so they have to be part of the inventory it sees and of the runner.
+ALL_JS_TESTS=$(find app/javascript -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) 2>/dev/null | sort)
+ALL_TESTS=$(printf '%s\n%s\n' "$ALL_SPECS" "$ALL_JS_TESTS" | grep -v '^$' | sort -u)
+TOTAL_SPECS=$(echo "$ALL_TESTS" | grep -c . | tr -d ' ')
 
 # ── AI planning (cached if available) ──
 
@@ -128,7 +135,7 @@ else
     NF==1 { print $1 }
   ' | sort -u | head -30)
 
-  SPEC_TREE=$(echo "$ALL_SPECS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
+  SPEC_TREE=$(echo "$ALL_TESTS" | awk -F/ '{dir=$1; for(i=2;i<NF;i++) dir=dir"/"$i; dirs[dir]=dirs[dir]" "$NF} END {for(d in dirs) print d": "dirs[d]}' | sort)
 
   PROMPT="You are a senior Rails engineer planning test execution for a code change.
 
@@ -168,6 +175,9 @@ Return a JSON object with this exact structure:
 Rules:
 - Each milestone's tests are ADDITIONAL, not cumulative.
 - Use exact file paths from the spec tree.
+- The tree contains two kinds of tests: RSpec files under spec/ and colocated
+  Vitest files under app/javascript/ (*.test.ts / *.test.tsx). Both are runnable;
+  pick whichever actually covers the changed code.
 - The last milestone can use \"ALL_REMAINING\" to mean everything else.
 - Confidence values must be strictly increasing.
 - You MUST include a 99 milestone and a 100 milestone.
@@ -242,26 +252,42 @@ pluralize() {
   if [[ $n -eq 1 ]]; then echo "$n $word"; else echo "$n ${word}s"; fi
 }
 
-# Heuristic: returns 0 (true) if this spec failure is likely pre-existing —
-# i.e., neither the spec file nor its source counterpart is in the diff.
-# Returns 1 (false) if the diff plausibly caused it.
-is_likely_preexisting() {
-  local spec_file=$1
-  spec_file="${spec_file#./}"
+# Front-end tests live next to the component they cover and run under Vitest.
+# The .test suffix is required: handed a plain source file, Vitest collects
+# nothing and exits 0, which the gate would misread as a passing test.
+is_js_test() {
+  case "$1" in
+    app/javascript/*.test.ts | app/javascript/*.test.tsx) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
-  if echo "$CHANGED_ALL" | grep -qxF "$spec_file"; then
+is_rspec_test() {
+  case "$1" in
+    spec/*_spec.rb) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Runnable = exists and has a known runner. Anything else (a source file, a
+# renamed spec) is dropped rather than handed to a runner that finds no tests.
+is_runnable_test() {
+  local file=$1
+  [[ -f "$file" ]] || return 1
+  is_js_test "$file" || is_rspec_test "$file"
+}
+
+run_test_file() {
+  local file=$1
+  if is_js_test "$file"; then
+    npx vitest run --reporter dot "$file"
+  elif is_rspec_test "$file"; then
+    bundle exec rspec --format progress --no-color "$file"
+  else
+    # Unreachable via the milestone filter; loud rather than silently passing.
+    echo "not a recognized test file: $file" >&2
     return 1
   fi
-
-  local module="${spec_file#spec/}"
-  module="${module%_spec.rb}"
-  local basename="${module##*/}"
-
-  if echo "$CHANGED_ALL" | grep -qE "(^|/)${basename}\.(rb|ts|tsx|js|jsx)$"; then
-    return 1
-  fi
-
-  return 0
 }
 
 # Worktree state for merge-base verification (cleaned up on exit/interrupt)
@@ -274,6 +300,120 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
+# Did this Vitest run actually execute test cases? A run that executed tests
+# prints a tally ("Tests  1 failed | 1 passed (2)"); one that died during setup
+# or collection prints none, and its nonzero exit says nothing about the test.
+# Vitest colours the summary even through a pipe, so strip escapes before
+# matching or an anchored pattern never matches.
+vitest_executed_tests() {
+  local output=$1
+  local plain tally
+  plain=$(echo "$output" | sed $'s/\033\\[[0-9;]*[A-Za-z]//g')
+  # The summary line is "  Tests  <...>"; grab whatever follows.
+  tally=$(echo "$plain" | grep -E '^[[:space:]]*Tests[[:space:]]' | tail -1)
+  [[ -z "$tally" ]] && return 1
+  # "no tests" means the file was found but nothing in it ran.
+  echo "$tally" | grep -qE '(^|[[:space:]])no tests([[:space:]]|$)' && return 1
+  # Anything with a real count (failed/passed/skipped/todo) means it ran.
+  echo "$tally" | grep -qE '[0-9]+[[:space:]]+(failed|passed|skipped|todo)'
+}
+
+# Files that decide what ends up in node_modules. Beyond the manifests: this
+# repo's postinstall runs patch-package, so a file under patches/ rewrites an
+# installed dependency with no manifest change. Any of these makes the
+# installed tree branch-specific.
+INSTALL_INPUT_RE='^(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|\.npmrc|patches/.+|.+/package\.json)$'
+
+# Install-time inputs this branch touches. Untracked files count too: a new
+# patch already installed is invisible to `git diff` but present in node_modules.
+changed_install_inputs() {
+  {
+    printf '%s\n' "$CHANGED_ALL"
+    git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null
+  } | grep -v '^$' | sort -u | grep -E "$INSTALL_INPUT_RE" || true
+}
+
+# Replay a failing Vitest file on merge-base to decide pre-existing vs
+# regression. The worktree has no node_modules, and installing one costs
+# minutes, so it borrows this checkout's — sound only while both sides would
+# install the same tree, hence the install-input bail-out below.
+#
+# Returns: 0 = confirmed pre-existing (red on merge-base too)
+#          1 = real regression (green on merge-base, red on HEAD)
+#          2 = couldn't verify
+verify_js_preexisting_on_merge_base() {
+  local test_file=$1
+  local head_output=${2:-}
+  JS_REGRESSION_KIND=""
+  JS_UNVERIFIABLE_REASON=""
+
+  # Dependency drift would make the borrowed node_modules the wrong answer.
+  local drifted_inputs
+  drifted_inputs=$(changed_install_inputs)
+  if [[ -n "$drifted_inputs" ]]; then
+    JS_UNVERIFIABLE_REASON="install-time inputs changed on this branch ($(echo "$drifted_inputs" | tr '\n' ' ' | sed 's/ *$//')), so this checkout's node_modules is not the tree merge-base would install"
+    return 2
+  fi
+
+  if [[ ! -d "$REPO_ROOT/node_modules" ]]; then
+    JS_UNVERIFIABLE_REASON="no node_modules in this checkout to lend the merge-base worktree (run npm ci)"
+    return 2
+  fi
+
+  WORKTREE_DIR=$(mktemp -d -t test-confidence-base-js.XXXXXX)
+  if ! git worktree add -q --detach "$WORKTREE_DIR" "$MERGE_BASE" 2>/dev/null; then
+    rm -rf "$WORKTREE_DIR"
+    WORKTREE_DIR=""
+    JS_UNVERIFIABLE_REASON="could not create a merge-base worktree"
+    return 2
+  fi
+
+  local rc=2
+  # The test file may not exist on merge-base at all (it's new on this branch).
+  # A test that didn't exist before can't be pre-existing — if it's failing now
+  # that's on this branch.
+  if [[ ! -f "$WORKTREE_DIR/$test_file" ]]; then
+    rc=1
+    JS_REGRESSION_KIND="new"
+  else
+    ln -s "$REPO_ROOT/node_modules" "$WORKTREE_DIR/node_modules" 2>/dev/null || true
+    if [[ ! -e "$WORKTREE_DIR/node_modules" ]]; then
+      rc=2
+      JS_UNVERIFIABLE_REASON="could not link node_modules into the merge-base worktree"
+    else
+      local rerun_rc=0
+      local rerun_output=""
+      rerun_output=$( cd "$WORKTREE_DIR" && npx vitest run --reporter dot "$test_file" 2>&1 ) || rerun_rc=$?
+
+      if [[ $rerun_rc -eq 0 ]]; then
+        rc=1   # green on merge-base, red on HEAD → this branch broke it
+        JS_REGRESSION_KIND="replayed"
+      elif vitest_executed_tests "$rerun_output"; then
+        rc=0   # red on both, and we know tests really ran → pre-existing
+      elif vitest_executed_tests "$head_output"; then
+        # Ran on HEAD but Vitest couldn't start on merge-base (= main, green in
+        # CI). Anomalous rather than informative, and the shape a broken config
+        # takes — so halt and point the reader at the config, not their diff.
+        rc=1
+        JS_REGRESSION_KIND="unreplayable"
+      else
+        # Neither side executed anything, so the replay learned nothing. That is
+        # not evidence, and must not license a "pre-existing" verdict.
+        rc=2
+        JS_UNVERIFIABLE_REASON="Vitest executed no tests on either side, so nothing was learned about this failure"
+      fi
+    fi
+  fi
+
+  # Remove the symlink before the worktree goes away so nothing can follow it
+  # into the real node_modules.
+  rm -f "$WORKTREE_DIR/node_modules" 2>/dev/null || true
+  git worktree remove --force "$WORKTREE_DIR" >/dev/null 2>&1 || rm -rf "$WORKTREE_DIR"
+  WORKTREE_DIR=""
+
+  return $rc
+}
+
 # Verify a heuristic "pre-existing" verdict by re-running the failing examples
 # on merge-base in a temporary worktree.
 #
@@ -282,6 +422,23 @@ trap cleanup_worktree EXIT INT TERM
 #          2 = couldn't verify (no merge-base, schema/dep drift, parse failure)
 verify_preexisting_on_merge_base() {
   local rspec_output=$1
+  local spec_file=${2:-}
+
+  # Front-end tests need their own replay: the RSpec failure-id parsing below
+  # finds nothing in Vitest output and returns "inconclusive", which the caller
+  # treats as pre-existing — waving through real regressions. Replaying is also
+  # the only way to catch an unchanged test broken by a changed dependency
+  # (Input.tsx breaking InputGroup.test.tsx — no shared basename to match on).
+  if [[ -n "$spec_file" ]] && is_js_test "$spec_file"; then
+    if [[ -z "$MERGE_BASE" ]]; then
+      JS_REGRESSION_KIND=""
+      JS_UNVERIFIABLE_REASON="no merge-base commit to replay against"
+      return 2
+    fi
+    verify_js_preexisting_on_merge_base "$spec_file" "$rspec_output"
+    local js_rc=$?
+    return $js_rc
+  fi
 
   [[ -z "$MERGE_BASE" ]] && return 2
 
@@ -342,11 +499,32 @@ for (( m=0; m<MILESTONES; m++ )); do
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
     echo "   ${CONF}%  ←  remaining tests"
   else
-    NAMES=$(echo "$TESTS_JSON" | grep "spec/")
-    N=$(echo "$NAMES" | wc -l | tr -d ' ')
+    # The header must show what will actually RUN, so it applies the same
+    # runnability filter as the loop below; otherwise an unrunnable planned path
+    # is displayed as a test and overstates what the gate verified.
+    #
+    # Every `|| true` here guards `set -e`: a milestone can legitimately have
+    # nothing runnable, and both a non-matching grep -c and a while-loop whose
+    # last iteration returned non-zero would otherwise abort the script.
+    NAMES=$(echo "$TESTS_JSON" | while IFS= read -r t; do
+      is_runnable_test "$t" && echo "$t"
+    done) || true
+    SKIPPED_NAMES=$(echo "$TESTS_JSON" | while IFS= read -r t; do
+      [[ -z "$t" ]] && continue
+      is_runnable_test "$t" || echo "$t"
+    done) || true
+    N=$(echo "$NAMES" | grep -c . | tr -d ' ' || true)
+    [[ -z "$N" ]] && N=0
     echo "   ${CONF}%  ←  $(pluralize $N test)"
     echo "$NAMES" | while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
       echo "          ${name#spec/}"
+    done
+    # Show what the plan asked for but cannot run, so a shrunken milestone is
+    # never a silent gap between planned and actual coverage.
+    echo "$SKIPPED_NAMES" | while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      echo "          ⚠ discarded (not a runnable test file): $name"
     done
   fi
 done
@@ -383,17 +561,48 @@ for (( m=0; m<MILESTONES; m++ )); do
   TESTS_JSON=$(jq -r ".milestones[$m].tests[]" "$PLAN_FILE" 2>/dev/null)
 
   if echo "$TESTS_JSON" | grep -q "ALL_REMAINING"; then
-    MILESTONE_TESTS=$(echo "$ALL_SPECS" | while IFS= read -r s; do
+    PLAN_IS_ALL_REMAINING=true
+    PLANNED_RUNNABLE=0
+    DISCARDED=()
+    MILESTONE_TESTS=$(echo "$ALL_TESTS" | while IFS= read -r s; do
       grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || echo "$s"
     done)
   else
-    MILESTONE_TESTS=$(echo "$TESTS_JSON" | while IFS= read -r s; do
-      [[ -f "$s" ]] && ! grep -qxF "$s" "$SEEN_RUN" 2>/dev/null && echo "$s"
+    PLAN_IS_ALL_REMAINING=false
+    PLANNED_RUNNABLE=0
+    DISCARDED=()
+    RUNNABLE_PLANNED=()
+    while IFS= read -r s; do
+      [[ -z "$s" ]] && continue
+      if is_runnable_test "$s"; then
+        RUNNABLE_PLANNED+=("$s")
+      else
+        DISCARDED+=("$s")
+      fi
+    done <<< "$TESTS_JSON"
+    PLANNED_RUNNABLE=${#RUNNABLE_PLANNED[@]}
+    MILESTONE_TESTS=$(for s in ${RUNNABLE_PLANNED[@]+"${RUNNABLE_PLANNED[@]}"}; do
+      grep -qxF "$s" "$SEEN_RUN" 2>/dev/null || printf '%s\n' "$s"
     done)
   fi
 
-  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c "spec/" 2>/dev/null || true)
+  # A milestone that discarded planned paths covered less than the plan said, and
+  # the confidence number is the only thing anyone reads — so say so out loud.
+  if [[ ${#DISCARDED[@]} -gt 0 ]]; then
+    for d in "${DISCARDED[@]}"; do
+      echo "  ⚠ ${CONF}% milestone: discarded planned path (not a runnable test file): $d"
+    done
+  fi
+
+  MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c . 2>/dev/null || true)
   if [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]]; then
+    # Nothing left to run here. Advancing confidence is only honest if the tests
+    # ran — now, or in an earlier milestone via the SEEN_RUN dedupe. If the plan
+    # named nothing runnable, zero tests back this number, so don't claim it.
+    if [[ "$PLAN_IS_ALL_REMAINING" != true && "$PLANNED_RUNNABLE" -eq 0 ]]; then
+      echo "  ⚠ ${CONF}% not claimed — no runnable test in this milestone's plan; confidence stays at ${CURRENT_CONFIDENCE}%"
+      continue
+    fi
     CURRENT_CONFIDENCE=$CONF
     continue
   fi
@@ -412,7 +621,7 @@ for (( m=0; m<MILESTONES; m++ )); do
     [[ -z "$spec" ]] && continue
     echo "$spec" >> "$SEEN_RUN"
 
-    if output=$(bundle exec rspec --format progress --no-color "$spec" 2>&1); then
+    if output=$(run_test_file "$spec" 2>&1); then
       PASSED=$((PASSED + 1))
       MILESTONE_PASSED=$((MILESTONE_PASSED + 1))
       elapsed=$(( $(date +%s) - START ))
@@ -428,24 +637,40 @@ for (( m=0; m<MILESTONES; m++ )); do
           "$bar" "$CONF" "$MILESTONE_PASSED" "$MILESTONE_COUNT" "$elapsed" "${spec#spec/}"
 
         set +e
-        verify_preexisting_on_merge_base "$output"
+        verify_preexisting_on_merge_base "$output" "$spec"
         verify_rc=$?
         set -e
 
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
-          1) verdict="cross-file regression" ;;
+          1)
+            # A test that never existed on merge-base can't be cross-file; it is
+            # simply failing on this branch.
+            if is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "new" ]]; then
+              verdict="regression"
+            elif is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "unreplayable" ]]; then
+              verdict="unverifiable regression"
+            else
+              verdict="cross-file regression"
+            fi
+            ;;
           2)
-            # Merge-base verification couldn't run (e.g. pending migration).
-            # Fall back to heuristic — if the source file isn't in the diff,
-            # it's almost certainly pre-existing. If it IS in the diff but
-            # we can't verify, still treat as pre-existing to avoid blocking.
-            verdict="likely pre-existing (unverified)"
+            if is_js_test "$spec"; then
+              # No replay means no evidence, and there is no cheap substitute:
+              # a filename guess cannot see a shared-dependency break. So halt
+              # and report what would make the replay available.
+              verdict="unverifiable regression"
+            else
+              # RSpec keeps its heuristic fallback: verification is skipped for
+              # known-divergent states (pending migration, changed Gemfile.lock)
+              # where merge-base would fail for reasons unrelated to the test.
+              verdict="likely pre-existing (unverified)"
+            fi
             ;;
         esac
       fi
 
-      if [[ "$verdict" == "regression" || "$verdict" == "cross-file regression" ]]; then
+      if [[ "$verdict" == "regression" || "$verdict" == "cross-file regression" || "$verdict" == "unverifiable regression" ]]; then
         FAILED=$((FAILED + 1))
         echo ""
         echo ""
@@ -454,6 +679,21 @@ for (( m=0; m<MILESTONES; m++ )); do
           echo "    ❌ FAILED (cross-file regression) — $spec"
           echo "  ───────────────────────────────────────────────────"
           echo "    These examples pass on merge-base but fail on your branch."
+        elif [[ "$verdict" == "unverifiable regression" ]]; then
+          echo "    ❌ FAILED (could not verify against merge-base) — $spec"
+          echo "  ───────────────────────────────────────────────────"
+          if [[ "${JS_REGRESSION_KIND:-}" == "unreplayable" ]]; then
+            echo "    This test ran on your branch but Vitest could not start at"
+            echo "    all on merge-base, so there is no evidence the failure is"
+            echo "    pre-existing. Check your Vitest config and setup files."
+          else
+            echo "    The merge-base replay could not run, so there is no"
+            echo "    evidence this failure is pre-existing rather than caused"
+            echo "    by your branch."
+            if [[ -n "${JS_UNVERIFIABLE_REASON:-}" ]]; then
+              echo "    Reason: ${JS_UNVERIFIABLE_REASON}"
+            fi
+          fi
         else
           echo "    ❌ FAILED — $spec"
         fi
