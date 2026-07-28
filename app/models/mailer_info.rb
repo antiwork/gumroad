@@ -72,7 +72,10 @@ module MailerInfo
   # our SendGrid mail without issue, so we pin them to SendGrid instead of
   # letting the random provider split pick Resend.
   # See https://github.com/antiwork/gumroad-private/issues/1462
-  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[web.de gmx.de gmx.net gmx.com gmx.at gmx.ch].freeze
+  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[
+    web.de
+    gmx.de gmx.net gmx.com gmx.at gmx.ch gmx.us gmx.fr gmx.es gmx.co.uk
+  ].freeze
 
   # `to` accepts whatever a mailer passes as the `to:` header: a single email
   # string (possibly in "Name <email>" form) or an array of them.

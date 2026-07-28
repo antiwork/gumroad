@@ -190,6 +190,62 @@ describe PostEmailApi do
         PostEmailApi.process(**args)
       end
     end
+
+    # web.de and GMX policy-reject everything Resend sends us from, so those
+    # recipients receive nothing at all unless they are steered to SendGrid.
+    # See https://github.com/antiwork/gumroad-private/issues/1462
+    context "when some recipients are at a United Internet domain (web.de/GMX)" do
+      let(:blocked_recipients) { [{ email: "buyer@web.de" }, { email: "buyer@gmx.net" }] }
+      let(:other_recipients) { [{ email: "buyer@gumroad-example.com" }] }
+      let(:recipients) { other_recipients + blocked_recipients }
+
+      before do
+        allow(Feature).to receive(:inactive?).with(:use_resend_for_post_emails, seller).and_return(false)
+      end
+
+      context "on the normal split path" do
+        before do
+          # Force the Router towards Resend so the only thing that can send a
+          # recipient to SendGrid is the recipient-domain override itself.
+          allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
+          allow(Feature).to receive(:active?).with(:force_resend_for_post_emails, seller).and_return(false)
+        end
+
+        it "sends the blocked recipients via SendGrid and the rest via Resend" do
+          expect(PostResendApi).to receive(:process).with(args.merge(recipients: other_recipients))
+          expect(PostSendgridApi).to receive(:process).with(args.merge(recipients: blocked_recipients))
+
+          PostEmailApi.process(**args)
+        end
+      end
+
+      context "on the force_resend_for_post_emails path" do
+        before do
+          allow(Feature).to receive(:active?).with(:force_resend_for_post_emails, seller).and_return(true)
+        end
+
+        it "still routes the blocked recipients via SendGrid" do
+          expect(PostResendApi).to receive(:process).with(args.merge(recipients: other_recipients))
+          expect(PostSendgridApi).to receive(:process).with(args.merge(recipients: blocked_recipients))
+
+          PostEmailApi.process(**args)
+        end
+
+        it "does not call SendGrid when no recipient is at a blocked domain" do
+          expect(PostResendApi).to receive(:process).with(args.merge(recipients: other_recipients))
+          expect(PostSendgridApi).not_to receive(:process)
+
+          PostEmailApi.process(**args.merge(recipients: other_recipients))
+        end
+
+        it "does not call Resend when every recipient is at a blocked domain" do
+          expect(PostSendgridApi).to receive(:process).with(args.merge(recipients: blocked_recipients))
+          expect(PostResendApi).not_to receive(:process)
+
+          PostEmailApi.process(**args.merge(recipients: blocked_recipients))
+        end
+      end
+    end
   end
 
   describe ".max_recipients" do
