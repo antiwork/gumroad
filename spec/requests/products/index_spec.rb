@@ -83,6 +83,19 @@ describe "Products Page Scenario", type: :system, js: true do
         expect(page).to have_current_path(products_path)
         expect(windows.size).to eq(2)
       end
+
+      # The memberships table above the products table has the same name-cell structure, and a
+      # seller with memberships hits the same dead space. Both tables are covered so the fix cannot
+      # regress on one of them.
+      it "navigates when the empty space beside a membership name is clicked" do
+        membership = create(:subscription_product, user: seller, name: "Club")
+        visit(products_path)
+
+        name_cell = find_product_row(membership).find(:table_cell, "Name")
+        name_cell.click(x: (name_cell.native.size[:width] / 2) - 5, y: 0)
+
+        expect(page).to have_current_path(edit_link_path(membership))
+      end
     end
   end
 

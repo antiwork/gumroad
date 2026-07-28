@@ -169,7 +169,7 @@ createInertiaApp({
   // flash. Prefetch requests never show the bar at all — Inertia sets `showProgress: false` on
   // them internally. `showSpinner: false` keeps it to the thin top bar with no corner spinner.
   progress: {
-    color: "#ff90e8", // Gumroad pink, legible against both the light and dark page backgrounds.
+    color: "var(--color-pink)", // Gumroad pink; the token lives in stylesheets/tailwind.css.
     delay: 250,
     showSpinner: false,
   },
