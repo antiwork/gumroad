@@ -576,9 +576,20 @@ class Checkout::BuyerCurrencyQuote
     # mid-deploy or after this change is rolled back. The older code reads these fields at the
     # top level and fails the payment outright if they are missing, and single-seller carts are
     # all of today's buyer-currency traffic, so leaving them out would break live checkouts on
-    # rollback. Multi-charge carts cannot have a meaningful flat shape, but they also cannot
-    # occur until the multi-seller flag is ramped, by which point this code is long deployed.
-    # Once that ramp is complete this duplication can go.
+    # rollback. Once that ramp is complete this duplication can go.
+    #
+    # A MULTI-charge cart has no meaningful flat shape (there is no one seller or one amount to
+    # put at the top level), and it does not need one. If this change is rolled back while the
+    # multi-seller ramp is on, the older code never looks at the token's shape at all: its
+    # BuyerCurrencyEligibility#decision rejects any order spanning several sellers with
+    # `:multi_seller_checkout` before verification runs, and Charge::CreateService then fails
+    # the charge closed because a token was submitted. So an in-flight multi-seller checkout
+    # gets the "the local-currency price changed or expired, please review the updated total"
+    # message rather than a payment at the wrong amount — the same outcome as pulling the flag
+    # mid-checkout, and the outcome this lane wants either way. The checkout re-quotes on that
+    # error, the rolled-back surcharge endpoint withholds a quote for a multi-seller cart, and
+    # the buyer completes in canonical US dollars. Adding a flat shape here could not improve
+    # on that: it would only be read by code that has already refused the cart.
     def signed_token(buyer_currency:, charge_quotes:)
       charges = charge_quotes.map do |charge_quote|
         {

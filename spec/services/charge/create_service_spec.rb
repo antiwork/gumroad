@@ -684,6 +684,98 @@ describe Charge::CreateService, :vcr do
       end
     end
 
+    it "fails a multi-seller charge closed when the lane is withdrawn between quote and charge" do
+      # The safety property behind both mid-checkout flag pulls and a rollback of this change.
+      #
+      # A multi-seller token is only readable by code that has this change: it has no flat
+      # top-level amount. That is safe because any server WITHOUT this change refuses a
+      # multi-seller order at eligibility (`:multi_seller_checkout`) before it ever looks at
+      # the token, and Charge::CreateService then fails the charge closed because a token was
+      # submitted. Pulling the ramp flag mid-checkout takes the identical path, which is what
+      # this exercises: the buyer is asked to review the updated total and never charged
+      # canonical US dollars against a local-currency display.
+      sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false, check_merchant_account_is_linked: true, disable_buyer_currency_rounding: true) }
+      sellers.each do |seller|
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+      end
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow(StripeFxQuote).to receive(:create).and_return(
+        StripeFxQuote::Quote.new(id: "fxq_withdrawn", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      )
+
+      order = create(:order)
+      merchant_accounts = sellers.each_with_index.map do |seller, index|
+        create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_withdrawn_#{index}")
+      end
+      products = sellers.each_with_index.map { |seller, index| create(:product, user: seller, price_cents: [10_00, 5_00][index]) }
+      purchases = products.each_with_index.map do |product, index|
+        purchase = create(:purchase,
+                          link: product,
+                          seller: sellers[index],
+                          merchant_account: merchant_accounts[index],
+                          purchase_state: "in_progress",
+                          price_cents: product.price_cents,
+                          total_transaction_cents: product.price_cents,
+                          ip_address: "203.0.113.1")
+        order.purchases << purchase
+        purchase
+      end
+      stripe_chargeable = instance_double(StripeChargeablePaymentMethod)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp", get_chargeable_for: stripe_chargeable)
+
+      # A genuinely signed multi-seller token, minted while the lane was on — the thing that is
+      # in flight in a browser when the lane goes away underneath it.
+      quote_line_items = products.map do |product|
+        Checkout::BuyerCurrencyQuote::LineItem.new(
+          permalink: product.unique_permalink,
+          product:,
+          price_cents: product.price_cents,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0
+        )
+      end
+      quote = Checkout::BuyerCurrencyQuote.create(line_items: quote_line_items, canonical_total_cents: 15_00, ip: "203.0.113.1")
+      expect(quote.token).to be_present
+      expect(quote.charges.length).to eq(2)
+
+      # Now the lane is withdrawn: a pulled ramp flag, or a rolled-back server whose
+      # eligibility refuses every multi-seller order. Same code path either way.
+      sellers.each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+
+      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+      purchases.each_with_index do |purchase, index|
+        Charge::CreateService.new(order:,
+                                  seller: sellers[index],
+                                  merchant_account: merchant_accounts[index],
+                                  chargeable:,
+                                  purchases: [purchase],
+                                  amount_cents: purchase.total_transaction_cents,
+                                  gumroad_amount_cents: 1_00,
+                                  setup_future_charges: false,
+                                  off_session: true,
+                                  statement_description: sellers[index].name_or_username,
+                                  params: { buyer_currency_quote: quote.token }).perform
+      end
+
+      purchases.each do |purchase|
+        expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+        expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      end
+    ensure
+      (sellers || []).each do |seller|
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+      end
+    end
+
     {
       "native PayPal" => PaypalChargeProcessor.charge_processor_id,
       "Braintree PayPal" => BraintreeChargeProcessor.charge_processor_id,
