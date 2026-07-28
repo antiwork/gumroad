@@ -62,9 +62,15 @@ class Subscription < ApplicationRecord
   has_one :original_purchase, -> { is_original_subscription_purchase.not_is_archived_original_subscription_purchase }, class_name: "Purchase"
   has_one :true_original_purchase, -> { is_original_subscription_purchase.order(:id) }, class_name: "Purchase"
   has_one :last_successful_purchase, -> { successful.order(created_at: :desc) }, class_name: "Purchase"
-  # Set once at signup when the buyer is billed in their own currency; absent for the
-  # USD-billed majority. See SubscriptionPresentment for why the amount is fixed.
-  has_one :subscription_presentment
+  # Present only when the buyer is billed in their own currency; absent for the USD-billed
+  # majority. One row per fixing rather than one per subscription, because a price change
+  # mid-subscription re-fixes the buyer-currency amount and each fixing keeps the rate it was
+  # made at. See SubscriptionPresentment for why the amount is fixed at all.
+  has_many :subscription_presentments, dependent: :destroy
+  # The amount a charge should read: the most recent fixing that has taken effect.
+  has_one :current_subscription_presentment,
+          -> { where(effective_from: ..Time.current).order(effective_from: :desc, id: :desc) },
+          class_name: "SubscriptionPresentment"
   has_many :url_redirects
   has_many :payment_options
   has_many :subscription_plan_changes

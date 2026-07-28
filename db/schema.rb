@@ -2463,12 +2463,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000013) do
 
   create_table "subscription_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "subscription_id", null: false
+    t.string "processor", null: false
     t.string "presentment_currency", null: false
     t.bigint "presentment_price_cents", null: false
-    t.decimal "signup_exchange_rate", precision: 20, scale: 10, null: false
+    t.decimal "signup_currency_units_per_usd", precision: 30, scale: 15, null: false
+    t.datetime "effective_from", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["subscription_id"], name: "index_subscription_presentments_on_subscription_id", unique: true
+    t.index ["subscription_id", "effective_from"], name: "index_subscription_presentments_on_subscription_and_effective"
+    t.index ["subscription_id"], name: "index_subscription_presentments_on_subscription_id"
   end
 
   create_table "subscriptions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
