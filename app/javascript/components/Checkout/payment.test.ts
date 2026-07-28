@@ -744,10 +744,25 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
 
-  it("ignores the quote when the server did not choose the presentment lane", () => {
+  it("follows a quote that arrives after the page was rendered without the presentment lane", () => {
+    // The server computes `buyer_currency_presentment` once at page load and no cart edit
+    // refreshes it, so a cart that becomes quotable mid-session (removing one seller's item from
+    // a multi-seller cart leaves a single-seller cart, and only single-seller carts are quoted)
+    // arrives here with the flag false and a live quote. The element must follow the quote: the
+    // displayed totals already do, and a wallet sheet reads the element's mounted amount, so a
+    // canonical mount here would have the buyer approve dollars and be charged the local total.
     const s = state({ surcharges: loadedSurchargesWithQuote });
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 1_625 });
+    expect(getStripePaymentElementAmount(s)).toBe(1_625);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("stays canonical on the CardElement lane even with a live quote", () => {
+    // CardElement never mounts an amount, so there is nothing to keep in step with the quote;
+    // that lane's presentment is settled server-side at charge time.
+    const s = state({ checkoutPayment: cardElementConfig, surcharges: loadedSurchargesWithQuote });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_300);
+    expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 
   it("returns null until surcharges load", () => {

@@ -201,7 +201,6 @@ const CheckoutIndexPage = () => {
       cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
       willSaveCard: state.willSaveCard,
       paymentMethod: state.paymentMethod,
-      checkoutPayment: state.checkoutPayment,
     },
   );
   // The method-forced listed-currency lane, for the large-tip confirmation below and for the tip
@@ -436,7 +435,6 @@ const CheckoutIndexPage = () => {
             cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
             willSaveCard: state.willSaveCard,
             paymentMethod: state.paymentMethod,
-            checkoutPayment: state.checkoutPayment,
           },
         ),
         lineItems: (() => {

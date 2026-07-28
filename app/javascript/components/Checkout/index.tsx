@@ -232,7 +232,6 @@ export const Checkout = ({
       cartPermalinks: cart.items.map((item) => item.product.permalink),
       willSaveCard: state.willSaveCard,
       paymentMethod: state.paymentMethod,
-      checkoutPayment: state.checkoutPayment,
     },
   );
   // The buyer-currency amounts every row of the table renders from, so the visible numbers

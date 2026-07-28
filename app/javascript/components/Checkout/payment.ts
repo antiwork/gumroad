@@ -429,16 +429,25 @@ export function getStripePaymentElementAmount(state: State) {
 }
 
 // The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.
-// Non-null only when the server chose the lane (buyer_currency_presentment on the server-confirm
-// Payment Element config) AND the surcharge response carries a usable FX quote for this checkout.
-// Both the element mount and the charge derive from that one quote — the element shows the
-// buyer the exact local-currency amount whose signed token the server verifies at charge time.
-// When the quote is missing or suppressed (expired/errored quote, or the buyer chose to save
-// the card, which PR 1 forces onto the canonical USD charge path), this returns null and the
-// element mounts canonical USD — matching the canonical charge the fallback performs.
+// Non-null when the surcharge response carries a usable FX quote for this checkout and the
+// checkout is on the server-confirm Payment Element, which is the lane that can mount a
+// non-canonical currency. Both the element mount and the charge derive from that one quote — the
+// element shows the buyer the exact local-currency amount whose signed token the server verifies
+// at charge time. When the quote is missing or suppressed (expired/errored quote, or the buyer
+// chose to save the card, which PR 1 forces onto the canonical USD charge path), this returns
+// null and the element mounts canonical USD — matching the canonical charge the fallback performs.
+//
+// Deliberately keyed on the LIVE quote rather than on the server's `buyer_currency_presentment`
+// flag. That flag is computed once when the page renders and no cart edit refreshes it, so a cart
+// that becomes quotable mid-session (removing one seller's item from a multi-seller cart makes it
+// single-seller, and only single-seller carts are quoted) would otherwise keep an element mounted
+// in dollars while the totals moved to the buyer's currency — and a wallet sheet reads the
+// element's mounted amount, so the buyer would approve dollars and be charged the local total.
+// Following the quote keeps the element, the displayed totals and the charge on the same basis
+// however the cart got into that shape. Changing currency remounts the element (it is part of the
+// Elements provider key), which is exactly the behaviour needed here.
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {
   if (state.checkoutPayment.integration !== "payment_element") return null;
-  if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
   if (state.surcharges.type !== "loaded") return null;
 
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
@@ -463,7 +472,13 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
 export function getStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration !== "payment_element") return null;
   const elementsOptions = state.checkoutPayment.elements_options;
-  if (!elementsOptions.buyer_currency_presentment) return elementsOptions.currency;
+  // Only a checkout that could carry a quote has an unknowable currency mid-refresh, and only
+  // then is returning null right (it makes PaymentElementInput hold the last mounted currency
+  // instead of remounting to canonical and wiping entered card details). A cart the server
+  // rendered canonically may still acquire a quote from a cart edit — see the presentment helper
+  // above — so "could carry a quote" means the flag OR a live quote, not the flag alone.
+  const mayPresent = elementsOptions.buyer_currency_presentment || getStripePaymentElementPresentment(state) !== null;
+  if (!mayPresent) return elementsOptions.currency;
   if (state.surcharges.type !== "loaded") return null;
   return getStripePaymentElementPresentment(state)?.currency ?? elementsOptions.currency;
 }
