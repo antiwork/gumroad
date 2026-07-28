@@ -100,8 +100,15 @@ class FollowersController < ApplicationController
       # seller's own subscribe page, which does render a challenge, so a real
       # person can still finish subscribing in one more click.
       subscribe_url = custom_domain_subscribe_url(host: followed_user.subdomain_with_protocol) if followed_user.subdomain.present?
-      message = "Please subscribe from #{followed_user.name_or_username}'s Gumroad page so we can confirm you're not a bot."
-      return render json: { success: false, message: }, status: :unprocessable_entity if request.format.json?
+      message = "Please subscribe from #{followed_user.name_or_username}'s subscribe page so we can confirm you're not a bot."
+      # The JSON callers render the message as plain text with no link element:
+      # the custom-HTML follow bridge relays it into a sandboxed page that can't
+      # be handed markup. Put the destination in the sentence for them, or the
+      # visitor is told to go somewhere without being told where.
+      if request.format.json?
+        message = "#{message} #{subscribe_url}" if subscribe_url.present?
+        return render json: { success: false, message: }, status: :unprocessable_entity
+      end
 
       return render inertia: "Followers/FromEmbedForm", props: { success: false, message:, subscribe_url: }
     end

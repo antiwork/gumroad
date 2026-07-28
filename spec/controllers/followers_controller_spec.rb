@@ -362,12 +362,15 @@ describe FollowersController, inertia: true do
           end.to_not have_enqueued_mail(FollowerMailer, :confirm_follower)
         end
 
-        it "returns 422 with the same message for the custom-page follow bridge" do
+        it "returns 422 with the destination in the message for the custom-page follow bridge" do
           post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id }, format: :json
 
           expect(response).to have_http_status(:unprocessable_entity)
           expect(response.parsed_body["success"]).to be(false)
           expect(response.parsed_body["message"]).to include(unreviewed_seller.name_or_username)
+          # The bridge relays this as plain text into a sandboxed page, so the URL
+          # has to be in the sentence — there is no link element to render.
+          expect(response.parsed_body["message"]).to include(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
         end
       end
     end
