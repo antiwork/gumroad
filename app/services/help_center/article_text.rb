@@ -16,8 +16,10 @@
 # hundreds of kilobytes long). None of that helps a language model, and the base64 alone would
 # blow past any sane response size.
 module HelpCenter::ArticleText
-  # Upper bound on the plain text returned for one article. The longest articles are long because
-  # of embedded images, which we drop, so real prose lands far below this; the cap only guards
+  # Upper bound on the plain text RETURNED for one article. Applied when the text is handed out,
+  # not when it is cached, so a term deep in a long article is still findable by search (see
+  # #search) even though a reader gets a capped excerpt. The longest articles are long because of
+  # embedded images, which we drop, so real prose lands well below this; the cap only guards
   # against an unusually long article filling the agent's context.
   MAX_LENGTH = 12_000
 
@@ -26,19 +28,28 @@ module HelpCenter::ArticleText
 
   module_function
 
-  # The article rendered to plain text, with paragraphs and list items on their own lines.
-  # Cached because rendering the ERB and parsing the HTML costs real time. The deploy revision is
-  # part of the key: the articles are code, so the only way one changes is a deploy, and without
-  # the revision an edited article would keep serving its pre-edit text from the cache forever —
-  # exactly the staleness this endpoint exists to eliminate. (SellerProfile#custom_styles solves
-  # the same problem with a hand-bumped version suffix, which is easy to forget.)
-  def self.for(article)
+  # The article as plain text for a reader, capped at MAX_LENGTH with a pointer to the live page.
+  def for(article)
+    plain_text(article).truncate(
+      MAX_LENGTH,
+      omission: "\n\n[Article truncated. Read the rest at #{article_url(article)}]"
+    )
+  end
+
+  # The article's COMPLETE plain text, cached. Rendering the ERB and parsing the HTML costs real
+  # time, and search reads every article, so this has to be cheap on the second call. The deploy
+  # revision is part of the key: the articles are code, so the only way one changes is a deploy,
+  # and without the revision an edited article could keep serving its pre-edit text — exactly the
+  # staleness these endpoints exist to remove. (Production already namespaces the whole cache by
+  # revision; keying it here means development and any other environment behave the same way.)
+  def plain_text(article)
     Rails.cache.fetch("help_center/article_text/#{cache_version}/#{article.slug}") { render_plain_text(article) }
   end
 
   # Identifies the deployed code, so a deploy that edits an article invalidates its cached text.
-  # REVISION is the deployed git sha in staging and production; elsewhere it is a fixed string, so
-  # development and test fall back to the directory's own mtime and pick up local edits at once.
+  # REVISION is the deployed git sha in staging and production; elsewhere it is a fixed sentinel
+  # ("no-revision"), so development and test fall back to the content directory's own mtime and
+  # pick up a local edit at once.
   def cache_version
     return REVISION if defined?(REVISION) && REVISION.present? && REVISION != "no-revision"
 
@@ -70,7 +81,7 @@ module HelpCenter::ArticleText
       heading = "#{article.title} #{article.description}".downcase
       next headline_hits << summary(article) if terms.all? { |term| heading.include?(term) }
 
-      full = "#{heading} #{self.for(article).downcase}"
+      full = "#{heading} #{plain_text(article).downcase}"
       body_hits << summary(article) if terms.all? { |term| full.include?(term) }
     end
 
@@ -84,8 +95,12 @@ module HelpCenter::ArticleText
       description: article.description,
       category: article.category&.title,
       audience: article.category&.audience,
-      url: "#{PROTOCOL}://#{DOMAIN}/help/article/#{article.slug}",
+      url: article_url(article),
     }
+  end
+
+  def article_url(article)
+    "#{PROTOCOL}://#{DOMAIN}/help/article/#{article.slug}"
   end
 
   def render_plain_text(article)
@@ -96,7 +111,6 @@ module HelpCenter::ArticleText
     # into one run-on sentence that reads as a single unrelated phrase.
     document.css("p, li, h1, h2, h3, h4, h5, h6, tr, div, br").each { |node| node.add_next_sibling("\n") }
 
-    text = document.text.gsub(/[ \t]+/, " ").gsub(/ ?\n ?/, "\n").gsub(/\n{3,}/, "\n\n").strip
-    text.truncate(MAX_LENGTH, omission: "\n\n[Article truncated. Read the rest at #{PROTOCOL}://#{DOMAIN}/help/article/#{article.slug}]")
+    document.text.gsub(/[ \t]+/, " ").gsub(/ ?\n ?/, "\n").gsub(/\n{3,}/, "\n\n").strip
   end
 end

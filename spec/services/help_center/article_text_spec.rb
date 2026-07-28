@@ -31,13 +31,20 @@ describe HelpCenter::ArticleText do
 
     it "caps the length and points at the live article when it truncates" do
       stub_const("#{described_class}::MAX_LENGTH", 200)
-      # Cache key is per-slug, so clear it or the uncapped text from an earlier example is returned.
-      Rails.cache.clear
 
       text = described_class.for(article)
 
       expect(text.length).to be <= 200
       expect(text).to include("/help/article/124-your-gumroad-profile-page")
+    end
+
+    # The cap applies when the text is handed out, never to what is cached, so search can still
+    # find a term that sits past the cap in a long article.
+    it "caches the full text so a capped read does not shrink what search can see" do
+      stub_const("#{described_class}::MAX_LENGTH", 200)
+
+      expect(described_class.for(article).length).to be <= 200
+      expect(described_class.plain_text(article).length).to be > 200
     end
 
     it "reads every article without raising" do

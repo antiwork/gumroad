@@ -153,7 +153,8 @@ class Api::V2::UsersController < Api::V2::BaseController
   # support changes them by request — but they were previously invisible to any API caller, which
   # left the store agent unable to see a theme the seller could plainly see on their own pages.
   # The theme is not profile-page-only: the same values render into the stylesheet served with the
-  # storefront, every product page, posts, and emails.
+  # storefront, every product page, the pages buyers see for what they bought, posts, and the
+  # emails a seller sends to their own audience — see THEME_SURFACES.
   def theme
     profile = current_resource_owner.seller_profile
 

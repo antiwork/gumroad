@@ -237,6 +237,11 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/legacy setting/)
         # Route the ask to support rather than reaching for a custom page as a colour workaround.
         expect(captured[:system]).to match(/Gumroad support applies those/)
+        # ...and the authoring rule further down must not contradict that by sending an appearance
+        # request into a full-page rewrite, which is how gumroad-private#984 happened.
+        expect(captured[:system]).to match(/NO custom HTML page yet and wants a custom page/)
+        expect(captured[:system]).to match(/never author a whole custom page as a way to change a colour/)
+        expect(captured[:system]).not_to match(/NO custom HTML page yet and wants an appearance change/)
       end
 
       # Follow-up to gumroad-private#984: with the rules above in place, the agent authored a
