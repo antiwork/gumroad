@@ -15,6 +15,10 @@ class Checkout::BuyerCurrencyEligibility
     "ideal" => Currency::EUR,
     "bancontact" => Currency::EUR,
     "upi" => Currency::INR,
+    # Pix is Brazil's instant-payment scheme and Stripe only accepts it on BRL payment
+    # intents — creating one in any other currency is rejected outright ("Payments with pix
+    # support the following currencies: brl", verified against our live platform account).
+    "pix" => Currency::BRL,
   }.freeze
 
   # Per-method production launch flags for the forced-currency local methods. Stripe test
@@ -27,6 +31,7 @@ class Checkout::BuyerCurrencyEligibility
     "ideal" => :checkout_local_method_ideal,
     "bancontact" => :checkout_local_method_bancontact,
     "upi" => :checkout_local_method_upi,
+    "pix" => :checkout_local_method_pix,
   }.freeze
 
   # `direct_listed_amount` is only set by the method-forced mode: true means the

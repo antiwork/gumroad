@@ -14,7 +14,7 @@ class StripeDeferredPaymentIntent
 
   def initialize(merchant_account:, amount_cents:, amount_for_gumroad_cents:, reference:, description:,
                  idempotency_key:, payment_method_types:, currency:, statement_description: nil,
-                 transfer_group: nil, metadata: nil, stripe_fx_quote_id: nil)
+                 transfer_group: nil, metadata: nil, stripe_fx_quote_id: nil, payment_method_options: nil)
     @merchant_account = merchant_account
     @amount_cents = amount_cents
     @amount_for_gumroad_cents = amount_for_gumroad_cents
@@ -27,6 +27,11 @@ class StripeDeferredPaymentIntent
     @transfer_group = transfer_group
     @metadata = metadata
     @stripe_fx_quote_id = stripe_fx_quote_id
+    # Per-method configuration Stripe requires at intent CREATE time for some payment methods
+    # (today: Pix's IOF handling and QR expiry — see Order::PreparePaymentIntentService). Only
+    # ever set for methods listed in payment_method_types; Stripe rejects options for a method
+    # the intent doesn't offer.
+    @payment_method_options = payment_method_options
   end
 
   def create
@@ -39,7 +44,7 @@ class StripeDeferredPaymentIntent
   private
     attr_reader :merchant_account, :amount_cents, :amount_for_gumroad_cents, :reference, :description,
                 :idempotency_key, :payment_method_types, :currency, :statement_description, :transfer_group, :metadata,
-                :stripe_fx_quote_id
+                :stripe_fx_quote_id, :payment_method_options
 
     def intent_params
       params = {
@@ -50,6 +55,7 @@ class StripeDeferredPaymentIntent
         payment_method_types:,
       }
       params[:fx_quote] = stripe_fx_quote_id if stripe_fx_quote_id.present?
+      params[:payment_method_options] = payment_method_options if payment_method_options.present?
       params[:transfer_group] = transfer_group if transfer_group.present?
       params[:statement_descriptor_suffix] = statement_descriptor_suffix if statement_descriptor_suffix.present?
       params.merge!(StripeIntentChargeRouting.fee_params(merchant_account:, amount_cents:, amount_for_gumroad_cents:, currency:, reference:))
