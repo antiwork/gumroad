@@ -186,11 +186,10 @@ describe Ai::StoreAgentService do
       # Regression for gumroad-private#984: the agent invented dashboard settings screens
       # ("Settings > Profile pickers") that don't exist, admitted it was "guessing at the UI",
       # and looped on "confirm the change" without ever staging one. The system prompt must
-      # tell the model what is actually possible: no dashboard visibility, no self-serve
-      # appearance settings, custom HTML is the only appearance surface, a brand-new page must
+      # tell the model what is actually possible: no dashboard visibility, a brand-new page must
       # carry the whole storefront, and "prepared for confirmation" claims require a real
       # api_write in the same reply.
-      it "teaches the model what is possible: no dashboard visibility, no appearance settings, no phantom confirmations" do
+      it "teaches the model what is possible: no dashboard visibility, no phantom confirmations" do
         captured = nil
         allow(client).to receive(:messages) do |args|
           captured = args
@@ -200,12 +199,49 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "hi" }])
 
         expect(captured[:system]).to include("cannot see the creator's dashboard")
-        expect(captured[:system]).to include("NO self-serve settings")
-        expect(captured[:system]).to include("never direct them to dashboard settings that don't exist")
+        expect(captured[:system]).to match(/no self-serve\s+fonts-and-colors screen/)
+        expect(captured[:system]).to include("never send the creator to a screen you are not certain exists")
         expect(captured[:system]).to include(%(<script id="gumroad-data"))
         expect(captured[:system]).to match(/never hard-code the product list/)
         expect(captured[:system]).to match(/Never publish a page that drops the creator's products/)
         expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
+      end
+
+      # Regression for gumroad-private#1463: asked whether product pages could be styled like the
+      # storefront, the agent said no — product pages "aren't customizable", there is "no endpoint
+      # and no dashboard setting" for their colours — while the seller's product pages were already
+      # rendering their chosen colours from the store theme. When the seller corrected it, the agent
+      # argued and invented a "legacy per-product setting" to explain what it could not read. Three
+      # things have to be in the prompt: the theme's real reach, "no tool for it" is not "product
+      # can't do it", and the creator's observation of their own store wins.
+      it "teaches the model that the store theme reaches product pages and that a creator's own observation wins" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        # The theme's real reach, and the exact false claim it must never repeat.
+        expect(captured[:system]).to include("every product page")
+        expect(captured[:system]).to match(/never tell a creator\s+their product pages can't be styled/)
+        expect(captured[:system]).to include("get_user_theme")
+        # A missing tool is not a missing feature.
+        expect(captured[:system]).to match(/"I have no endpoint for this" is NEVER the\s+same statement as "Gumroad cannot do this"/)
+        # Documentation to check against, instead of guessing.
+        expect(captured[:system]).to include("search_help_articles")
+        expect(captured[:system]).to match(/Before you tell the creator that something is not possible/)
+        # Don't argue with the seller, and don't invent an explanation for what you can't see.
+        expect(captured[:system]).to match(/Never\s+argue with an observation about their own pages/)
+        expect(captured[:system]).to match(/legacy setting/)
+        # Route the ask to support rather than reaching for a custom page as a colour workaround.
+        expect(captured[:system]).to match(/Gumroad support applies those/)
+        # ...and the authoring rule further down must not contradict that by sending an appearance
+        # request into a full-page rewrite, which is how gumroad-private#984 happened.
+        expect(captured[:system]).to match(/NO custom HTML page yet and wants a custom page/)
+        expect(captured[:system]).to match(/never author a whole custom page as a way to change a colour/)
+        expect(captured[:system]).not_to match(/NO custom HTML page yet and wants an appearance change/)
       end
 
       # Follow-up to gumroad-private#984: with the rules above in place, the agent authored a
