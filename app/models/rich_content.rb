@@ -113,14 +113,11 @@ class RichContent < ApplicationRecord
 
   validates :entity, presence: true
   validates :description, json: { schema: DESCRIPTION_JSON_SCHEMA, message: :invalid }
-  # Runs BEFORE the validation below so a page carrying only dead cross-product
-  # embeds saves cleanly instead of failing forever — see the method for why.
-  before_validation :drop_dead_cross_product_file_embeds, if: :will_save_change_to_description?
   validate :embedded_files_belong_to_product, if: :will_save_change_to_description?
   validate :link_hrefs_use_permitted_schemes, if: :will_save_change_to_description?
 
   def embedded_product_file_ids_in_order
-    description.flat_map { select_file_embed_ids(_1) }.compact.uniq
+    embedded_product_file_ids_in(description)
   end
 
   # True when the page carries anything a buyer could actually see. A page whose
@@ -154,8 +151,8 @@ class RichContent < ApplicationRecord
     entity.is_a?(Link) ? entity : entity.try(:link)
   end
 
-  def cross_product_file_embed_ids
-    embedded_ids = embedded_product_file_ids_in_order
+  def cross_product_file_embed_ids(nodes = description)
+    embedded_ids = embedded_product_file_ids_in(nodes)
     return [] if embedded_ids.empty?
 
     product = owning_product
@@ -172,8 +169,8 @@ class RichContent < ApplicationRecord
   # An alive foreign file is the case #5416 was written to stop, and it stays a
   # hard validation failure. It may still be content the seller meant to include,
   # so silently deleting it would discard that intent.
-  def cross_product_file_embeds_by_liveness
-    foreign_ids = cross_product_file_embed_ids
+  def cross_product_file_embeds_by_liveness(nodes = description)
+    foreign_ids = cross_product_file_embed_ids(nodes)
     return { alive: [], dead: [] } if foreign_ids.empty?
 
     alive_ids = ProductFile.alive.where(id: foreign_ids).pluck(:id)
@@ -195,6 +192,33 @@ class RichContent < ApplicationRecord
         node
       end
     end
+  end
+
+  # Product-save paths call this after assigning the submitted description and
+  # before saving. It deliberately is not an Active Record callback: cleanup of
+  # legacy data must happen only at the save boundaries that opted into it.
+  #
+  # Only file ids already present in the stored description are eligible. A new
+  # page, or an existing page newly submitted with a dead foreign file, must
+  # still fail the ownership validation rather than silently discard input.
+  def remove_stale_dead_cross_product_file_embeds
+    cleaned_description = description_without_stale_dead_cross_product_file_embeds
+    self.description = cleaned_description if cleaned_description != description
+  end
+
+  # Trusted copy paths use the cleaned value when moving a stored page into a
+  # new record. The persisted source, not the new destination, establishes
+  # which dead foreign ids are legacy content and therefore safe to remove.
+  def description_without_stale_dead_cross_product_file_embeds
+    return description unless persisted? && description.is_a?(Array)
+
+    stored_description = attribute_in_database("description")
+    return description unless stored_description.is_a?(Array)
+
+    dead_ids = cross_product_file_embeds_by_liveness(stored_description)[:dead]
+    return description if dead_ids.empty?
+
+    self.class.reject_file_embeds(description, dead_ids.to_set)
   end
 
   def custom_field_nodes
@@ -277,34 +301,8 @@ class RichContent < ApplicationRecord
       canonicalized[/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, 1]&.downcase
     end
 
-    # A cross-product embed pointing at a SOFT-DELETED file is unfixable from the
-    # seller's side, so it must not block the save.
-    #
-    # #5416 added the validation below to stop products embedding another product's
-    # files. That was right for new content, but it also applies to rows written
-    # before it merged — and those rows already exist (usually from copy-pasting a
-    # content page between two products before the editor resolved copied embeds).
-    # When the foreign file has since been soft-deleted, the embed renders as
-    # nothing in the editor, so the seller sees no node to delete and every save of
-    # that product fails permanently with an error naming an obfuscated file ID.
-    # One seller lost the ability to edit two products entirely this way
-    # (Helper 98aed6e0).
-    #
-    # Dropping the node is safe precisely because the file is gone: a soft-deleted
-    # ProductFile delivers nothing to buyers, so the embed was already dead
-    # content. This is the same remediation Onetime::RemoveCrossProductFileEmbeds
-    # performs in bulk, applied lazily when the seller next saves.
-    #
-    # Alive foreign files are deliberately not dropped here. They may still be
-    # content the seller meant to include, so they keep failing validation rather
-    # than being silently deleted.
-    def drop_dead_cross_product_file_embeds
-      return unless description.is_a?(Array)
-
-      dead_ids = cross_product_file_embeds_by_liveness[:dead]
-      return if dead_ids.empty?
-
-      self.description = self.class.reject_file_embeds(description, dead_ids.to_set)
+    def embedded_product_file_ids_in(nodes)
+      Array(nodes).flat_map { select_file_embed_ids(_1) }.compact.uniq
     end
 
     def embedded_files_belong_to_product

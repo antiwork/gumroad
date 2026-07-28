@@ -27,12 +27,19 @@ git --no-pager diff "$base_ref"...HEAD -- app/models/rich_content.rb
 sleep 2
 
 printf "%b\n" ""
-printf "%b\n" "=== Reproducing the seller's dead end, then the fix, on persisted records ==="
+printf "%b\n" "=== Reproducing the seller's dead end, then the narrow fix, on persisted records ==="
 printf "%b\n" "(product A owns a file, B embeds it, the file is soft-deleted -> B is unsaveable)"
 sleep 1
 bundle exec rspec spec/models/rich_content_spec.rb \
   -e "when the foreign file has been soft-deleted" \
   --format documentation --no-profile 2>&1 \
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+sleep 2
+
+printf "%b\n" ""
+printf "%b\n" "=== Product editor save boundary removes only the stored dead embed ==="
+test_line="$(grep -n 'PUT update removes a stale dead cross-product file embed' test/controllers/links_controller_test.rb | cut -d: -f1)"
+bundle exec rails test "test/controllers/links_controller_test.rb:$test_line" 2>&1 \
   | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2
 

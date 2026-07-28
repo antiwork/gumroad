@@ -467,6 +467,26 @@ describe Api::V2::VariantsController do
           expect(@variant.reload.product_files.pluck(:id)).to eq([own_file.id])
         end
 
+        it "rejects a newly submitted soft-deleted foreign embed" do
+          foreign_product = create(:product, user: @user)
+          dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+
+          put @action, params: @params.merge(
+            rich_content: [
+              {
+                title: "New page",
+                description: { type: "doc", content: [
+                  { type: "fileEmbed", attrs: { id: dead_foreign_file.external_id, uid: SecureRandom.uuid } }
+                ] }
+              }
+            ]
+          )
+
+          expect(response.parsed_body["success"]).to eq false
+          expect(response.parsed_body["message"]).to include("not belonging to this product")
+          expect(@variant.reload.alive_rich_contents).to be_empty
+        end
+
         it "rejects file embeds referencing deleted files" do
           deleted_file = create(:product_file, link: @product)
           deleted_file.mark_deleted!

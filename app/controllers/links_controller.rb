@@ -531,7 +531,9 @@ class LinksController < ApplicationController
         rich_content.each.with_index do |product_rich_content, index|
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
           product_rich_content[:description] = SaveContentUpsellsService.new(seller: @product.user, content: product_rich_content[:description], old_content: rich_content.description || []).from_rich_content
-          rich_content.update!(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
+          rich_content.assign_attributes(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
+          rich_content.remove_stale_dead_cross_product_file_embeds
+          rich_content.save!
           rich_contents_to_keep << rich_content
           # A page submitted under an id the server didn't know was just
           # created with a canonical id — report the mapping so the editor's

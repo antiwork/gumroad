@@ -500,7 +500,9 @@ class Product::VariantCategoryUpdaterService
           content: variant_rich_content[:description] || variant_rich_content[:content],
           old_content: rich_content.description || []
         ).from_rich_content
-        rich_content.update!(title: variant_rich_content[:title].presence, description: variant_rich_content[:description].presence || [], position: index)
+        rich_content.assign_attributes(title: variant_rich_content[:title].presence, description: variant_rich_content[:description].presence || [], position: index)
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        rich_content.save!
         rich_contents_to_keep << rich_content
         # A page submitted under an id the server didn't know was just created
         # with a canonical id — report the mapping so the editor's next save

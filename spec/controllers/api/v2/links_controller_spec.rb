@@ -1902,6 +1902,22 @@ describe Api::V2::LinksController do
           expect(variant2.reload.alive_rich_contents.count).to eq 0
         end
 
+        it "drops a stale dead foreign embed when copying variant content to shared content" do
+          variant1
+          foreign_product = create(:product, user: @user)
+          dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+          paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+          dead_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+          source = build(:rich_content, entity: variant1, description: [paragraph, dead_embed])
+          source.save!(validate: false)
+          @product.update!(has_same_rich_content_for_all_variants: false)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(@product.reload.alive_rich_contents.sole.description).to eq([paragraph])
+        end
+
         it "rejects switching to shared when multiple variants have distinct content" do
           variant1
           variant2
@@ -1961,6 +1977,22 @@ describe Api::V2::LinksController do
           expect(variant1.reload.alive_rich_contents.count).to eq 1
           expect(variant1.alive_rich_contents.first.title).to eq "Shared Page"
           expect(variant2.reload.alive_rich_contents.count).to eq 0
+        end
+
+        it "drops a stale dead foreign embed when copying shared content to a variant" do
+          variant1
+          foreign_product = create(:product, user: @user)
+          dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+          paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+          dead_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+          source = build(:rich_content, entity: @product, description: [paragraph, dead_embed])
+          source.save!(validate: false)
+          @product.update!(has_same_rich_content_for_all_variants: true)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: false)
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(variant1.reload.alive_rich_contents.sole.description).to eq([paragraph])
         end
 
         it "does not seed non-first variants with the product file HABTM when switching to per-variant" do

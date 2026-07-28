@@ -142,10 +142,11 @@ describe RichContent do
         rich_content
       end
 
-      it "drops the dead embed on save instead of blocking it" do
+      it "drops a stale dead embed at the product-save boundary" do
         rich_content = persist_with_foreign_embed([embed(own_file), embed(dead_foreign_file)])
 
         rich_content.description = [embed(own_file), embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "An unrelated edit" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
         expect(rich_content.save).to be(true)
 
         # The seller's own file and their new edit both survive; only the dead
@@ -158,6 +159,7 @@ describe RichContent do
         rich_content = persist_with_foreign_embed([embed(dead_foreign_file)])
 
         rich_content.description = [embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
         expect(rich_content.save).to be(true)
         expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([])
       end
@@ -167,6 +169,7 @@ describe RichContent do
         rich_content = persist_with_foreign_embed([group])
 
         rich_content.description = [group.merge("attrs" => group["attrs"].merge("name" => "Renamed"))]
+        rich_content.remove_stale_dead_cross_product_file_embeds
         expect(rich_content.save).to be(true)
         expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
       end
@@ -179,12 +182,24 @@ describe RichContent do
         rich_content = persist_with_foreign_embed([embed(dead_foreign_file), embed(alive_foreign_file)])
 
         rich_content.description = [embed(dead_foreign_file), embed(alive_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
         expect(rich_content.save).to be(false)
         expect(rich_content.errors.full_messages.first).to include(alive_foreign_file.name_displayable)
         expect(rich_content.errors.full_messages.first).not_to include(dead_foreign_file.name_displayable)
-        # The callback may clean the in-memory candidate, but a rejected save must
+        # The explicit cleanup changes the in-memory candidate, but a rejected save must
         # not persist a partial cleanup.
         expect(rich_content.reload.embedded_product_file_ids_in_order).to match_array([dead_foreign_file.id, alive_foreign_file.id])
+      end
+
+      it "does not drop a newly submitted dead foreign embed" do
+        rich_content = create(:product_rich_content, entity: product, description: [embed(own_file)])
+
+        rich_content.description = [embed(own_file), embed(dead_foreign_file)]
+        rich_content.remove_stale_dead_cross_product_file_embeds
+
+        expect(rich_content.save).to be(false)
+        expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
+        expect(rich_content.embedded_product_file_ids_in_order).to include(dead_foreign_file.id)
       end
 
       it "drops the dead embed for a variant's content page too" do
@@ -193,6 +208,7 @@ describe RichContent do
         rich_content.save!(validate: false)
 
         rich_content.description = [embed(own_file), embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
         expect(rich_content.save).to be(true)
         expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
       end

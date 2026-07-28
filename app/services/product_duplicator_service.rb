@@ -322,7 +322,7 @@ class ProductDuplicatorService
       original_entity.alive_rich_contents.find_each do |original_entity_rich_content|
         duplicate_entity_rich_content = original_entity_rich_content.dup
         duplicate_entity_rich_content.entity = duplicate_entity
-        duplicate_entity_rich_content.description = remap_file_embed_ids_in_rich_content(duplicate_entity_rich_content.description)
+        duplicate_entity_rich_content.description = remap_file_embed_ids_in_rich_content(original_entity_rich_content.description_without_stale_dead_cross_product_file_embeds)
         duplicate_entity_rich_content.save!
       end
     end
