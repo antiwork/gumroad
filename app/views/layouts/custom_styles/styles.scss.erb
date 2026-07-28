@@ -8,11 +8,11 @@
 
 :root {
   --accent: #{split-color(<%= highlight_color %>)};
-  --contrast-accent: #{split-color(if(lightness(<%= highlight_color %>) < 55%, #fff, #000))};
+  --contrast-accent: #{split-color(<%= text_color_on_highlight %>)};
   --font-family: <%= font_family %>;
-  --color: #{split-color(if(lightness(<%= background_color %>) < 55%, #fff, #000))};
+  --color: #{split-color(<%= text_color_on_background %>)};
     --primary: var(--color);
-  --contrast-primary: #{split-color(if(lightness(<%= background_color %>) < 55%, #000, #fff))};
+  --contrast-primary: #{split-color(<%= text_color_on_primary %>)};
   --filled: #{split-color(<%= background_color %>)};
   --contrast-filled: var(--color);
   --body-bg: <%= background_color %>;
@@ -22,6 +22,6 @@
 
 body {
   background-color: <%= background_color %>;
-  color: #{if(lightness(<%= background_color %>) < 55%, #fff, #000)};
+  color: <%= text_color_on_background %>;
   font-family: <%= font_family %>;
 }

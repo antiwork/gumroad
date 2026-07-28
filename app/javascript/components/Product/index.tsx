@@ -64,6 +64,7 @@ import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
+import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/components/Product/pricing";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { SubscriptionChoiceModal } from "$app/components/Product/SubscriptionChoiceModal";
@@ -214,12 +215,6 @@ export type WishlistForProduct = Wishlist & {
   selections_in_wishlist: { variant_id: string | null; recurrence: string | null; rent: boolean; quantity: number }[];
 };
 
-export const getStandalonePrice = (product: Product) =>
-  product.bundle_products.reduce(
-    (totalStandalonePrice, bundleProduct) => totalStandalonePrice + bundleProduct.price,
-    0,
-  );
-
 const formatDiscountAmount = (discount: Discount, buyerLocalContext: BuyerLocalCurrencyContext) => {
   if (discount.type === "percent") {
     return discount.tiered && discount.min_percents !== undefined && discount.max_percents !== undefined
@@ -320,7 +315,7 @@ export const Product = ({
 
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
-  const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity } = selectionAttributes;
+  const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity, selectedOption } = selectionAttributes;
   React.useEffect(() => {
     if (maxQuantity !== null && selection.quantity > maxQuantity)
       setSelection?.({ ...selection, quantity: maxQuantity });
@@ -357,6 +352,12 @@ export const Product = ({
 
   const isBundle = product.bundle_products.length > 0;
   if (isBundle) basePriceCents = getStandalonePrice(product);
+  // What the price tag and the contents list below strike through as the
+  // "original price". Usually the same standalone sum, but on a bundle tier
+  // that costs extra there is no honest comparison to draw, so this is null
+  // and nothing is struck through. Kept separate from basePriceCents, which
+  // also drives whether the price tag renders at all.
+  const comparisonPriceCents = isBundle ? getBundleComparisonPriceCents(product, selectedOption) : basePriceCents;
 
   const validate = () => {
     if (isPWYW && (selection.price.value === null || selection.price.value < discountedPriceCents)) {
@@ -421,7 +422,11 @@ export const Product = ({
             <div className="px-6 py-4 outline outline-offset-0 outline-border">
               <PriceTag
                 currencyCode={product.currency_code}
-                oldPrice={discountedPriceCents < basePriceCents ? basePriceCents : undefined}
+                oldPrice={
+                  comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents
+                    ? comparisonPriceCents
+                    : undefined
+                }
                 price={discountedPriceCents}
                 url={product.long_url}
                 isPayWhatYouWant={!!product.pwyw}
@@ -518,7 +523,11 @@ export const Product = ({
                     </CartItemMain>
                     <CartItemEnd className="flex-row items-start gap-4 p-4">
                       <span className="current-price" aria-label="Price">
-                        {discountedPriceCents < basePriceCents ? <s>{price}</s> : price}
+                        {comparisonPriceCents !== null && discountedPriceCents < comparisonPriceCents ? (
+                          <s>{price}</s>
+                        ) : (
+                          price
+                        )}
                       </span>
                     </CartItemEnd>
                   </CartItem>
