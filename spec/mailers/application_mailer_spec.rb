@@ -45,5 +45,30 @@ describe ApplicationMailer do
         expect(mail.delivery_method.settings).to include(options)
       end
     end
+
+    describe "email provider header attribution" do
+      # The X-GUM-Email-Provider header is derived from the SMTP address the
+      # message will actually be sent through (see set_custom_headers), so it
+      # must stay correct both when the Router picks Resend and when a
+      # recipient-domain override (e.g. web.de/GMX, issue #1462) forces SendGrid.
+      # Header assignment happens in the overridden #process, so these tests
+      # invoke the mailer through the class (as production code does) rather
+      # than calling the instance method directly.
+      it "attributes the email to SendGrid when the delivery method is SendGrid" do
+        options = MailerInfo::DeliveryMethod.options(domain: :gumroad, email_provider: MailerInfo::EMAIL_PROVIDER_SENDGRID)
+        allow(MailerInfo).to receive(:random_delivery_method_options).and_return(options)
+
+        mail = described_class.test_email.message
+        expect(mail.header[MailerInfo.header_name(:email_provider)].value).to eq(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      end
+
+      it "attributes the email to Resend when the delivery method is Resend" do
+        options = MailerInfo::DeliveryMethod.options(domain: :gumroad, email_provider: MailerInfo::EMAIL_PROVIDER_RESEND)
+        allow(MailerInfo).to receive(:random_delivery_method_options).and_return(options)
+
+        mail = described_class.test_email.message
+        expect(mail.header[MailerInfo.header_name(:email_provider)].value).to eq(MailerInfo::EMAIL_PROVIDER_RESEND)
+      end
+    end
   end
 end

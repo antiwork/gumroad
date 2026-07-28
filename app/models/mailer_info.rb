@@ -63,12 +63,37 @@ module MailerInfo
     decrypt(header_value)
   end
 
+  # Recipient domains operated by United Internet, which runs web.de and GMX —
+  # together Germany's two largest consumer mail providers. United Internet
+  # policy-blocks the Amazon SES IP range that Resend sends from: every send
+  # bounces with "550 Reject due to policy restrictions" (their code r1102),
+  # so a buyer at these domains who gets routed to Resend pays and never
+  # receives their receipt or download link. The very same addresses accept
+  # our SendGrid mail without issue, so we pin them to SendGrid instead of
+  # letting the random provider split pick Resend.
+  # See https://github.com/antiwork/gumroad-private/issues/1462
+  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[web.de gmx.de gmx.net gmx.com gmx.at gmx.ch].freeze
+
+  # `to` accepts whatever a mailer passes as the `to:` header: a single email
+  # string (possibly in "Name <email>" form) or an array of them.
+  def force_sendgrid_for_recipients?(to)
+    Array(to).compact.any? do |recipient|
+      domain = recipient.to_s.split("@").last.to_s.delete_suffix(">").strip.downcase
+      UNITED_INTERNET_RECIPIENT_DOMAINS.include?(domain)
+    end
+  end
+
   def random_email_provider(domain)
     MailerInfo::Router.determine_email_provider(domain)
   end
 
-  def random_delivery_method_options(domain:, seller: nil)
-    MailerInfo::DeliveryMethod.options(domain:, email_provider: random_email_provider(domain), seller:)
+  # `to` is the recipient(s) of the email being built. When any recipient is
+  # at a domain that rejects Resend's sending IPs (see
+  # UNITED_INTERNET_RECIPIENT_DOMAINS above), we bypass the random
+  # SendGrid/Resend split and force SendGrid so the email actually arrives.
+  def random_delivery_method_options(domain:, seller: nil, to: nil)
+    email_provider = force_sendgrid_for_recipients?(to) ? EMAIL_PROVIDER_SENDGRID : random_email_provider(domain)
+    MailerInfo::DeliveryMethod.options(domain:, email_provider:, seller:)
   end
 
   def default_delivery_method_options(domain:)

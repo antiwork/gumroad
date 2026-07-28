@@ -52,6 +52,35 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    # United Internet (web.de/GMX) policy-blocks the SES IPs Resend sends from,
+    # so receipts to buyers there must always go via SendGrid — even when the
+    # Router would have picked Resend. See gumroad-private#1462.
+    context "when the buyer is at a United Internet domain (web.de/GMX)" do
+      it "delivers via SendGrid even when the Router would pick Resend, and attributes the header to SendGrid" do
+        allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
+
+        purchase = create(:purchase, email: "buyer@web.de")
+        purchase.create_url_redirect!
+
+        mail = CustomerMailer.receipt(purchase.id)
+        expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
+        expect(mail.header[MailerInfo.header_name(:email_provider)].value).to eq(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      end
+    end
+
+    context "when the buyer is not at a United Internet domain" do
+      it "uses the provider the Router picks and attributes the header accordingly" do
+        allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
+
+        purchase = create(:purchase, email: "buyer@gmail.com")
+        purchase.create_url_redirect!
+
+        mail = CustomerMailer.receipt(purchase.id)
+        expect(mail.delivery_method.settings[:address]).to eq(RESEND_SMTP_ADDRESS)
+        expect(mail.header[MailerInfo.header_name(:email_provider)].value).to eq(MailerInfo::EMAIL_PROVIDER_RESEND)
+      end
+    end
+
     context "when user name contains special characters" do
       before do
         @user = create(:user)

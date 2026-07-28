@@ -28,7 +28,7 @@ class CustomerMailer < ApplicationMailer
       to: last_chargeable.orderable.email,
       from: from_email_address_with_name(last_chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       subject: "Receipts for Purchases",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: last_chargeable.orderable.email)
     )
   end
 
@@ -54,7 +54,7 @@ class CustomerMailer < ApplicationMailer
       reply_to: @chargeable.support_email,
       subject: @receipt_presenter.mail_subject,
       template_name: is_receipt_for_gift_receiver ? "gift_receiver_receipt" : "receipt",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller, to: @chargeable.orderable.email)
     )
   end
 
@@ -77,7 +77,7 @@ class CustomerMailer < ApplicationMailer
       reply_to: @chargeable.support_email,
       subject: "Your invoice from #{@chargeable.seller.name_or_username}",
       template_name: "auto_invoice",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller, to: @chargeable.orderable.email)
     )
   end
 
@@ -108,7 +108,7 @@ class CustomerMailer < ApplicationMailer
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: @product.support_email_or_default,
       subject: "You pre-ordered #{@product.name}!",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: email)
     )
   end
 
@@ -136,7 +136,7 @@ class CustomerMailer < ApplicationMailer
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: @product.user.support_or_form_email,
       subject: "You have been refunded.",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: email)
     )
   end
 
@@ -168,7 +168,7 @@ class CustomerMailer < ApplicationMailer
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: from_email_address_with_name(@product.user.name, @product.user.email),
       subject: "You have been #{@refund_type} refunded.",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: email)
     )
   end
 
@@ -239,7 +239,7 @@ class CustomerMailer < ApplicationMailer
       to: purchase.email,
       from: "noreply@#{CUSTOMERS_MAIL_DOMAIN}",
       subject: "Your purchase with PayPal failed.",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: purchase.email)
     )
   end
 
@@ -255,7 +255,7 @@ class CustomerMailer < ApplicationMailer
       from: from_email_address_with_name(seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: seller.support_or_form_email,
       subject: @subscription.is_installment_plan? ? "Your installment plan has been restarted." : "Your subscription has been restarted.",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller, to: @subscription.email)
     )
   end
 
@@ -319,7 +319,7 @@ class CustomerMailer < ApplicationMailer
       to: cart.user&.email.presence || cart.email,
       subject:,
       from: "Gumroad <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: (cart.user&.email.presence || cart.email))
     )
   end
 
@@ -335,7 +335,7 @@ class CustomerMailer < ApplicationMailer
       subject: "#{@seller_presenter[:name]} responded to your review",
       from: from_email_address_with_name(seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: seller.support_or_form_email,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: review.purchase.email)
     )
   end
 
@@ -356,7 +356,7 @@ class CustomerMailer < ApplicationMailer
       from: from_email_address_with_name(@product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: @product.support_email_or_default,
       subject: "Your files are ready for download!",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: @purchase.email)
     )
   end
 
