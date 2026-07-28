@@ -332,10 +332,23 @@ class SettingsPresenter
     # The bank-account counterpart of postal_code_rejected_by_stripe?. Returns the newest payout
     # note describing a rejection of the bank details the seller currently has saved, or nil.
     #
-    # Freshness is anchored on the active bank account's own created_at rather than on the
-    # compliance info: entering different bank details creates a NEW BankAccount row, so a note
-    # older than that row is about details the seller has already replaced and must not be shown.
+    # Freshness is anchored on the active bank account's own created_at: entering different bank
+    # details creates a NEW BankAccount row (UpdatePayoutMethod replaces rather than edits, even
+    # for identical digits), so a note older than that row is about details the seller has already
+    # replaced and must not be blamed.
+    #
+    # No alive bank account means no rejected details to complain about, so the banner stays hidden.
+    # Every path that records one of these notes has a bank row saved at the time, so the nil case
+    # is really the seller having LEFT bank payouts — switching to PayPal deletes the bank row
+    # (UpdatePayoutMethod#process_payment_address_params) and nothing ever soft-deletes the note,
+    # because notes are only cleared on a SUCCESSFUL sync. Defaulting to "show" there would give a
+    # seller with working PayPal payouts a permanent banner demanding they fix a bank account they
+    # deliberately removed, which is exactly where the terminal-rejection email sends people who
+    # have no second bank account to offer.
     def current_bank_sync_failure_note
+      bank_account = seller.active_bank_account
+      return nil if bank_account.nil?
+
       note = seller.comments
             .with_type_payout_note
             .alive
@@ -345,10 +358,8 @@ class SettingsPresenter
             .first
       return nil if note.nil?
 
-      bank_account = seller.active_bank_account
-      return note if bank_account.nil? || note.created_at >= bank_account.created_at
-
-      nil
+      # An equal timestamp still counts: the note is always written after the row it describes.
+      note.created_at >= bank_account.created_at ? note : nil
     end
 
     def country_code_for_compliance_field(field, user_compliance_info)
@@ -483,7 +494,10 @@ class SettingsPresenter
         elsif StripeMerchantAccountManager.bank_details_format_rejection_note?(bank_note)
           "Our payment partner couldn't accept your bank details as entered. Please double-check your account and bank code and re-save them. Waiting won't clear this one."
         else
-          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it every few days for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
+          # Wording matches the email (ContactingCreatorMailer#invalid_bank_account): the sweep is
+          # weekly (RetryStripeRejectedPayoutSetupsJob, Mondays), so promising anything faster
+          # would be a promise we don't keep.
+          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
         end
         compliance_actions << { message: bank_message, href: nil }
       end

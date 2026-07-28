@@ -142,10 +142,12 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your last week."
   end
 
-  # rejection_kind distinguishes a bank-code FORMAT rejection (the value can never be accepted
-  # as typed, so the seller has to correct it) from a directory miss (the bank or branch may
-  # simply not be in our payment partner's records yet, which waiting can fix). The two cases
-  # need opposite advice, so the template branches on it. stripe_error_message is Stripe's own
+  # rejection_kind tells the template which of three stories to tell, because they need opposite
+  # advice: a FORMAT rejection means the value can never be accepted as typed and the seller has to
+  # correct it; a TERMINAL rejection means our payment partner refuses that account outright
+  # (payouts to it failed before, or the bank cannot receive payouts) so only a DIFFERENT account
+  # will do; and nil means a directory miss, where the bank or branch may simply not be in the
+  # partner's records yet and waiting can genuinely fix it. stripe_error_message is Stripe's own
   # message, which for format rejections names the expected format for the seller's country —
   # the single most actionable thing we can tell them.
   def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil)
