@@ -59,26 +59,29 @@ describe "Products Page Scenario", type: :system, js: true do
         visit(products_path)
 
         name_cell = find_product_row(product).find(:table_cell, "Name")
-        width = name_cell.native.size[:width]
-        height = name_cell.native.size[:height]
-        # Five pixels in from the cell's right edge: past the end of "Kit", still inside the cell.
-        name_cell.click(x: width - 5, y: height / 2)
+        # Capybara's `w3c_click_offset` defaults to true, so click offsets are measured from the
+        # element's CENTER, not its top-left. Aim five pixels short of the cell's right edge, which
+        # is (width / 2) to the right of centre — far past the end of "Kit", still inside the cell.
+        name_cell.click(x: (name_cell.native.size[:width] / 2) - 5, y: 0)
 
         expect(page).to have_current_path(edit_link_path(product))
       end
 
       # The storefront URL under the name opens the public product page in a new tab. It sits on top
       # of the edit-link overlay, so a click on the URL text itself must still hit the URL link
-      # rather than being swallowed by the overlay behind it.
+      # rather than being swallowed by the overlay behind it. Asserting only that we stayed on
+      # /products would pass even if the click hit nothing at all — the new tab is the thing that
+      # proves the click landed on the URL link, since nothing else in the row opens one.
       it "still opens the storefront URL when the URL line under the name is clicked" do
         product = create(:product, user: seller)
         visit(products_path)
 
         within find_product_row(product) do
-          find("a", text: product.long_url.sub(%r{\Ahttps?://}, "")).click
+          find("a", text: product.long_url(include_protocol: false)).click
         end
 
         expect(page).to have_current_path(products_path)
+        expect(windows.size).to eq(2)
       end
     end
   end
