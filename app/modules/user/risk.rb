@@ -288,6 +288,35 @@ module User::Risk
     recent_failed_purchases: "pause_payouts_for_seller_based_on_recent_failures",
   }.freeze
 
+  # Of the three system comment authors above, only these two actually pause payouts.
+  # `recent_failed_purchases` writes the same kind of comment but deliberately leaves payouts
+  # alone (see Purchase::Blockable — it only flags the account for review), so it must never be
+  # read as "this is why payouts are paused".
+  SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS = SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS
+    .values_at(:repeated_failed_payouts, :high_chargeback_rate).freeze
+
+  # Comment left when the automatic re-check (ReleaseChargebackRatePayoutPausesJob) lifts a hold.
+  CHARGEBACK_RATE_PAYOUT_RESUME_COMMENT_AUTHOR = "release_payouts_for_seller_based_on_chargeback_rate"
+
+  # True when this account's payouts are currently held by the automatic chargeback-rate check
+  # (Purchase::Blockable#pause_payouts_for_seller_based_on_chargeback_rate!) rather than by an
+  # admin, by Stripe, by the seller themselves, or by the repeated-failed-payouts check.
+  #
+  # Both of the pausing checks write a probation comment and both set the pause source to
+  # "system", so the source column alone can't tell them apart — the most recent comment from a
+  # pausing author is what identifies the current hold.
+  def payouts_paused_for_chargeback_rate?
+    return false unless payouts_paused_internally?
+    return false unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
+
+    last_pausing_author = comments.with_type_on_probation
+                                  .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
+                                  .order(:created_at, :id)
+                                  .last&.author_name
+
+    last_pausing_author == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+  end
+
   # Admin-callable: lifts an automatic refund-policy enforcement (see
   # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).
   # The seller keeps whatever refund period they currently have, but can pick
