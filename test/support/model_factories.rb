@@ -810,6 +810,29 @@ module ModelFactories
     affiliate
   end
 
+  # A credit recording what an affiliate earned on one sale (mirrors the
+  # :affiliate_credit factory).
+  #
+  # Built with `new` + `save!` rather than `AffiliateCredit.create!`: that class
+  # method is overridden with a completely different signature (it derives the
+  # amounts and basis points from a purchase and a balance), so calling it here
+  # would raise on unknown keywords. FactoryBot builds the record the same way.
+  #
+  # Like the factory, affiliate_user defaults to a fresh user rather than the
+  # affiliate's own user — several callers rely on being able to credit someone
+  # unrelated to the affiliate record.
+  def create_affiliate_credit(purchase: nil, affiliate: nil, affiliate_user: nil, **attrs)
+    purchase ||= create_purchase
+    AffiliateCredit.new({
+      basis_points: 300,
+      affiliate: affiliate || create_direct_affiliate(seller: purchase.seller),
+      affiliate_user: affiliate_user || create_affiliate_user,
+      purchase:,
+      seller: purchase.seller,
+      link: purchase.link,
+    }.merge(attrs)).tap(&:save!)
+  end
+
   def create_product_affiliate(product:, affiliate:, **attrs)
     ProductAffiliate.create!({ product:, affiliate:, affiliate_basis_points: 30_00 }.merge(attrs))
   end
