@@ -163,6 +163,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   checkoutPaymentStale: false,
+  resumeSubmitAfterCheckoutPayment: false,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   paypalClientId: "",
@@ -935,6 +936,117 @@ describe("reduceCheckoutState", () => {
 
       expect(stale.checkoutPaymentStale).toBe(true);
       expect(isSubmitDisabled(stale)).toBe(true);
+    });
+
+    // Refusing the submit is only half the job: the offer pipeline's "validate" is the last step of
+    // accepting a cross-sell, so if the refusal ended there the buyer would sit on the checkout page
+    // with no feedback and no purchase after confirming one. The refused submit is resumed when the
+    // refreshed configuration lands.
+    describe("resuming a submit that was refused for staleness", () => {
+      it("finishes the submit once the refreshed configuration lands", () => {
+        // Exactly the acceptOffer sequence: invalidate synchronously, then dispatch "validate".
+        const stale = reduceCheckoutState(state({ status: { type: "offering" } }), {
+          type: "invalidate-checkout-payment",
+        });
+        const refused = reduceCheckoutState(stale, { type: "validate" });
+        expect(refused.status).toEqual({ type: "input", errors: new Set() });
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(true);
+
+        const refreshed = reduceCheckoutState(refused, {
+          type: "update-checkout-payment",
+          checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        });
+
+        // The purchase carries on through the element built for the cart the buyer actually has.
+        expect(refreshed.status).toEqual({ type: "validating" });
+        expect(refreshed.checkoutPayment).toEqual(buyerCurrencyPresentmentPaymentElementConfig);
+        expect(refreshed.checkoutPaymentStale).toBe(false);
+        expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(false);
+      });
+
+      it("does not resume a submit the buyer never made", () => {
+        // A plain cart edit with no submit behind it must not turn into a payment when the
+        // configuration comes back.
+        const stale = reduceCheckoutState(state(), { type: "invalidate-checkout-payment" });
+
+        const refreshed = reduceCheckoutState(stale, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
+      });
+
+      it("drops a pending resume when the cart is edited again", () => {
+        // The resume is only ever meant to finish the submit the buyer confirmed. If they changed
+        // the cart after that, finishing it later would place an order they never pressed Pay for.
+        const refused = reduceCheckoutState(
+          reduceCheckoutState(state({ status: { type: "offering" } }), { type: "invalidate-checkout-payment" }),
+          { type: "validate" },
+        );
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(true);
+
+        const editedAgain = reduceCheckoutState(refused, { type: "invalidate-checkout-payment" });
+        const refreshed = reduceCheckoutState(editedAgain, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
+      });
+
+      it("drops a pending resume when the submit is cancelled", () => {
+        const refused = reduceCheckoutState(
+          reduceCheckoutState(state({ status: { type: "offering" } }), { type: "invalidate-checkout-payment" }),
+          { type: "validate" },
+        );
+
+        const cancelled = reduceCheckoutState(refused, { type: "cancel" });
+        const refreshed = reduceCheckoutState(cancelled, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
+      });
+
+      it("does not resume while surcharges are unloaded, leaving that retry to the refetch path", () => {
+        // Surcharges have their own refetch-and-retry path; re-submitting here would race it and
+        // could pay on a total the buyer never saw.
+        const stale = reduceCheckoutState(state({ status: { type: "offering" }, surcharges: { type: "pending" } }), {
+          type: "invalidate-checkout-payment",
+        });
+        const refused = reduceCheckoutState(stale, { type: "validate" });
+        // Staleness was not the sole reason for the refusal, so no resume is armed.
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(false);
+
+        const refreshed = reduceCheckoutState(refused, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
+      });
+
+      it("surfaces validation errors instead of paying when the resumed form is incomplete", () => {
+        // A resumed submit is not a free pass: it re-runs the same field validation a fresh submit
+        // would, so an incomplete form lands back on "input" with the fields flagged rather than
+        // proceeding to payment. (Missing ZIP on a US digital cart is one such field.)
+        const refused = reduceCheckoutState(
+          reduceCheckoutState(state({ status: { type: "offering" }, zipCode: "" }), {
+            type: "invalidate-checkout-payment",
+          }),
+          { type: "validate" },
+        );
+
+        const refreshed = reduceCheckoutState(refused, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status.type).toBe("input");
+        if (refreshed.status.type === "input") expect(refreshed.status.errors).toContain("zipCode");
+      });
     });
   });
 
