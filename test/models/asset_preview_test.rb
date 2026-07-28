@@ -8,15 +8,19 @@ require "test_helper"
 # metadata is injected by AssetPreviewAnalysisStub instead of shelling out to the
 # analyzer on every create.
 #
-# Storage: the RSpec suite runs against MinIO (S3), so several of its assertions
-# match the S3 public-URL shape (AWS_S3_ENDPOINT/S3_BUCKET/<key>). The Minitest
-# job has no MinIO and uses a local Disk service, where file.url is a signed URL
+# Storage: the RSpec suite runs every example against MinIO (S3), so several of
+# its assertions match the S3 public-URL shape (AWS_S3_ENDPOINT/S3_BUCKET/<key>).
+# Here the default service is a local Disk one — attaching a file shouldn't cost
+# a network round-trip in the ~2,600-test suite — where file.url is a signed URL
 # that base64-encodes the key. Those URL-shape assertions are rewritten to
 # service-agnostic checks of the same behavior (a file/variant is attached; url
-# picks the retina variant for images, the original for gifs/videos). The two
-# `#url=` tests that download from a MinIO URL, and the two poster tests that
-# would run a real ffmpeg preview, keep their coverage where feasible and are
-# otherwise documented as skips.
+# picks the retina variant for images, the original for gifs/videos).
+#
+# The two `#url=` download tests are the exception: their subject IS the S3
+# round-trip, so they opt into the MinIO-backed service with `with_real_s3` (the
+# CI job runs MinIO as of #6205). The only test here that still skips is the MOV
+# metadata canary, and it skips on the ffprobe binary being absent rather than on
+# anything about this suite — so it runs locally and anywhere ffmpeg is installed.
 #
 # oembed lookups replay the RSpec cassettes via the VCR bridge (test/support/vcr.rb).
 class AssetPreviewTest < ActiveSupport::TestCase
@@ -238,8 +242,45 @@ class AssetPreviewTest < ActiveSupport::TestCase
     end
   end
 
-  test "url= downloads and attaches a public URL (incl. square-bracket encoding)" do
-    skip "the two public-URL cases download from the MinIO S3 endpoint, which the lightweight Minitest CI job doesn't run (and SsrfFilter blocks the localhost address); the assertions also match the S3 URL shape rather than the Disk service's"
+  # These two cover `url=`'s download-and-attach path against real object
+  # storage, which is what a seller pasting an image URL into the editor does.
+  # The CI job runs MinIO as of #6205, so both cases run for real: the source
+  # object is uploaded to the bucket first, then handed to the model as a URL.
+  test "url= downloads a public URL and attaches it to the S3 service" do
+    with_real_s3 do
+      asset_preview = create_asset_preview
+      source_url = upload_public_fixture("test.png", key: "specs/test-#{unique_suffix}.png", content_type: "image/png")
+
+      with_downloadable_url(source_url) do
+        asset_preview.url = source_url
+        asset_preview.analyze_file
+        asset_preview.save!
+      end
+
+      assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.file.key}", asset_preview.file.url
+      assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.retina_variant.key}", asset_preview.retina_variant.url
+    end
+  end
+
+  # Square brackets are legal in an S3 key but not in a URI, so the editor sends
+  # them percent-encoded. `url=` has to parse that without raising and still
+  # download the object — an unescaped bracket used to blow up URI.parse.
+  test "url= downloads a public URL whose key contains encoded square brackets" do
+    with_real_s3 do
+      asset_preview = create_asset_preview
+      key = "specs/test-small+with+[square+brackets]-#{unique_suffix}.jpg"
+      source_url = upload_public_fixture("test-small+with+[square+brackets].jpg", key:, content_type: "image/jpeg")
+      encoded_url = source_url.sub("[", "%5B").sub("]", "%5D")
+
+      with_downloadable_url(encoded_url) do
+        asset_preview.url = encoded_url
+        asset_preview.analyze_file
+        asset_preview.save!
+      end
+
+      assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.file.key}", asset_preview.file.url
+      assert_match "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{asset_preview.retina_variant.key}", asset_preview.retina_variant.url
+    end
   end
 
   # --- guid ------------------------------------------------------------------
@@ -541,5 +582,36 @@ class AssetPreviewTest < ActiveSupport::TestCase
     # tests set the oembed hash on it directly.
     def build_unsaved_asset_preview
       AssetPreview.new(link: create_product)
+    end
+
+    # Puts a fixture file in the storage bucket under a key we choose and returns
+    # its public URL, which is what `url=` is then given.
+    #
+    # The RSpec lane gets these objects from the `copyfixturefiles` container in
+    # docker-compose-test-and-ci.yml; the Minitest job provisions empty buckets,
+    # so the test supplies its own object. Choosing the key is the point for the
+    # square-bracket case — ActiveStorage's own keys are random alphanumerics and
+    # could never reproduce it. Only call this inside `with_real_s3`, where
+    # ActiveStorage::Blob.service is the S3 service.
+    def upload_public_fixture(filename, key:, content_type:)
+      File.open(Rails.root.join("spec/support/fixtures", filename)) do |file|
+        ActiveStorage::Blob.service.upload(key, file, content_type:)
+      end
+      "#{AWS_S3_ENDPOINT}/#{PUBLIC_STORAGE_S3_BUCKET}/#{key}"
+    end
+
+    # Lets `url=` download from MinIO, which lives on localhost in test.
+    #
+    # SsrfFilter refuses loopback and private addresses, which is exactly what the
+    # SSRF tests above assert it still does — so rather than disabling the filter
+    # for the whole suite (spec_helper.rb stubs it globally for every example),
+    # fetch the object here and hand the response to the one call under test. The
+    # code path being exercised is everything `url=` does around the fetch:
+    # escaping, parsing, attaching and analyzing.
+    def with_downloadable_url(url)
+      response = HTTParty.get(url)
+      assert_equal 200, response.code, "fixture object should be publicly readable at #{url}"
+      SsrfFilter.stubs(:get).returns(response)
+      yield
     end
 end

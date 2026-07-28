@@ -10,6 +10,9 @@ require "test_helper"
 class LinkTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
   include ActionMailer::TestHelper
+  # Used by one test (total_usd_cents_earned_by_user), which turns the real
+  # cluster on for its own duration and restores the stub in an ensure block.
+  include RealElasticsearchBridge
 
   # The licensed-permalink tests seed force_product_id_timestamp in Redis, which
   # (unlike the DB) isn't rolled back between tests. Clear it so it can't leak
@@ -764,8 +767,37 @@ class LinkTest < ActiveSupport::TestCase
     assert product.reload.transcode_videos_on_purchase?
   end
 
-  test "adding and analyzing a video on a published product triggers transcoding" do
-    skip "exercises ProductFile#analyze's transcoding trigger, which needs FFMPEG::Movie + S3 doubles; belongs to product_file coverage"
+  # The other tests here transcode as a side effect of publish!. This one covers
+  # the opposite order — the product is already live and a video is added to it
+  # afterwards, so the transcode is triggered by the file finishing its analysis
+  # rather than by the publish. It stands in for a seller adding a video to a
+  # product that's already for sale.
+  #
+  # ProductFile#analyze reads the object out of S3 and probes it with ffmpeg, and
+  # neither belongs in this test: stub the S3 object (content length, plus a `get`
+  # that writes an empty download target) and the ffmpeg probe with the dimensions
+  # a transcodable video would report. What's left under test is the product's
+  # decision to enqueue.
+  test "analyzing a video added to an already-published product enqueues transcoding" do
+    _, product = publish_context
+    product.publish!
+    Link.any_instance.stubs(:auto_transcode_videos?).returns(true)
+
+    movie = stub(duration: 13, frame_rate: 60, height: 240, width: 320, bitrate: 125_779)
+    FFMPEG::Movie.stubs(:new).returns(movie)
+    s3_object = stub(content_length: 10_000)
+    s3_object.stubs(:get).with { |options| options[:response_target].present? }.returns(true)
+
+    video_file = create_product_file(
+      link: product, url: "#{S3_BASE_URL}specs/chapter2.mp4", filetype: "mp4", filegroup: "video"
+    )
+    video_file.stubs(:s3_object).returns(s3_object)
+    video_file.stubs(:confirm_s3_key!)
+    TranscodeVideoForStreamingWorker.jobs.clear
+
+    video_file.analyze
+
+    assert_equal [video_file.id], TranscodeVideoForStreamingWorker.jobs.map { |job| job["args"].first }
   end
 
   # --- publish!: merchant account enforcement --------------------------------
@@ -1824,10 +1856,61 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "#{product.user.subdomain}/l/#{product.general_permalink}", product.long_url(include_protocol: false)
   end
 
-  # --- .total_usd_cents_earned_by_user (documented skip) ---------------------
+  # --- .total_usd_cents_earned_by_user ---------------------------------------
 
+  # The only test in this class that needs a real Elasticsearch cluster: the
+  # method under test is nothing but four aggregations over the purchase index
+  # (see Product::Stats), so the harness's canned zero responses would make it
+  # return 0 no matter what the data says. The CI job runs Elasticsearch as of
+  # #6205, so this can index for real instead of being skipped.
+  #
+  # `import` is used rather than running the indexer inline: with Sidekiq in fake
+  # mode nothing else writes to the cluster, so the only documents in the
+  # namespaced index are the ones this test puts there.
   test "total_usd_cents_earned_by_user sums earnings across owned and affiliated products" do
-    skip "needs :sidekiq_inline + a live Elasticsearch index for affiliate-credit rollups; the Minitest harness stubs EsClient"
+    install_real_elasticsearch!([Purchase])
+
+    user = create_user
+
+    # A product the user sells. Their earnings are the sales total minus whatever
+    # affiliates took (amount + fee), so the two credits below reduce it.
+    own_product = create_product(user:)
+    create_purchase(link: own_product, seller: user, price_cents: 100)
+    create_affiliate_credit(purchase: create_purchase(link: own_product, seller: user, price_cents: 200))
+    create_affiliate_credit(
+      purchase: create_purchase(link: own_product, seller: user, price_cents: 300),
+      amount_cents: 75, fee_cents: 12
+    )
+
+    # A product someone else sells that the user is an affiliate on. Here their
+    # earnings are only their own credits — amount plus the fee split.
+    affiliated_product = create_product
+    create_affiliate_credit(
+      purchase: create_purchase(link: affiliated_product, price_cents: 400),
+      affiliate_user: user, amount_cents: 150
+    )
+    create_affiliate_credit(
+      purchase: create_purchase(link: affiliated_product, price_cents: 500),
+      affiliate_user: user, amount_cents: 225
+    )
+    create_affiliate_credit(
+      purchase: create_purchase(link: affiliated_product, price_cents: 700),
+      affiliate_user: user, amount_cents: 305, fee_cents: 45
+    )
+    # A different affiliate's credit on the same product must not count towards
+    # this user's total.
+    create_affiliate_credit(
+      purchase: create_purchase(link: affiliated_product, price_cents: 600),
+      affiliate_user: create_user, amount_cents: 300
+    )
+
+    index_model_records(Purchase)
+
+    assert_equal 513.0, own_product.total_usd_cents_earned_by_user(user)
+    assert_equal 725.0, affiliated_product.total_usd_cents_earned_by_user(user)
+    assert_equal 0.0, own_product.total_usd_cents_earned_by_user(create_user)
+  ensure
+    restore_fake_elasticsearch!
   end
 
   # --- #release_custom_permalink_if_possible ---------------------------------
@@ -2532,7 +2615,11 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   test "product_cached_values returns all cached values, expired or not" do
-    skip "ProductCachedValue#assign_cached_values computes monthly_recurring_revenue from Elasticsearch on create, which the stubbed-ES Minitest harness can't satisfy"
+    product = create_product
+    fresh_value = create_product_cached_value(product:)
+    expired_value = create_product_cached_value(product:, expired: true)
+
+    assert_equal [fresh_value, expired_value].sort_by(&:id), product.reload.product_cached_values.sort_by(&:id)
   end
 
   test "affiliate associations split direct and global affiliates" do
