@@ -43,6 +43,16 @@ export const LandingPagePreview = ({ uniquePermalink }: { uniquePermalink: strin
         params = undefined;
       } else if (typia.is<{ type: "gumroad:checkout"; params?: Record<string, unknown> }>(e.data)) {
         params = e.data.params;
+      } else if (typia.is<{ type: "gumroad:navigate"; url: string }>(e.data)) {
+        // A link to one of the seller's own Gumroad pages. In production the
+        // wrapper navigates the buyer's tab; here we open a new tab for the
+        // same reason checkout does — so the seller isn't yanked out of the
+        // editor. Only same-origin destinations, since the iframe content is
+        // seller-authored.
+        const destination = new URL(e.data.url, window.location.origin);
+        if (destination.origin !== window.location.origin) return;
+        window.open(destination.href, "_blank", "noopener");
+        return;
       } else {
         return;
       }

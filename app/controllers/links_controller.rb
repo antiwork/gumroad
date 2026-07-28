@@ -1586,9 +1586,29 @@ class LinksController < ApplicationController
                 parent.postMessage({type:"gumroad:checkout",params:params},"*");
               }, true);
             </script>
+            #{custom_html_navigation_bridge_script(allowed_hostnames: product_store_hostnames)}
           </body>
         </html>
       HTML
+    end
+
+    # Hostnames the product landing page's navigation bridge accepts as "this
+    # seller's own store". Same shape as the profile's allowlist (see
+    # UsersController#profile_store_hostnames): only hosts this seller
+    # controls, never a shared Gumroad host, so the sandboxed seller HTML can
+    # never navigate the visitor's tab to arbitrary gumroad.com paths. Product
+    # links the seller writes point at their subdomain (Link#long_url), so a
+    # visitor browsing the custom domain still needs the subdomain
+    # allowlisted for those links to bridge.
+    def product_store_hostnames
+      user = @product&.user
+      return [] if user.nil?
+
+      hostnames = []
+      hostnames << request.host unless VALID_REQUEST_HOSTS.include?(request.host)
+      hostnames << URI("#{PROTOCOL}://#{user.subdomain}").host if user.subdomain.present?
+      hostnames << user.custom_domain.domain if user.custom_domain&.domain.present?
+      hostnames.compact.uniq
     end
 
     # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin
@@ -1596,12 +1616,19 @@ class LinksController < ApplicationController
     # `allow-top-navigation`: the seller's HTML must never navigate the buyer's
     # tab (that would let a malicious onclick redirect to a phishing site with
     # gumroad.com still in the URL bar). Instead the buy button posts a message
-    # to this wrapper, which navigates to the one checkout URL we control here.
+    # to this wrapper, which navigates to the one checkout URL we control here,
+    # and links to the seller's own Gumroad pages post `gumroad:navigate`,
+    # which this wrapper re-validates against the seller's own hostnames
+    # before navigating the top-level window. Without that second bridge a
+    # plain in-page link to the seller's storefront or another of their
+    # products could only work as `target="_blank"` — anything same-tab was
+    # blocked by the sandbox and the visitor landed on an error page.
     def custom_html_wrapper_document(product, nonce:, offer_code: nil)
       iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing/embed")
       checkout_params = { wanted: true }
       checkout_params[:code] = offer_code if offer_code.present?
       checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
+      store_hostnames_js = ERB::Util.json_escape(product_store_hostnames.to_json)
       title = ERB::Util.h(product.name.to_s)
       canonical = ERB::Util.h(product.long_url.to_s)
       # The wrapper is what search engines see at the canonical /l/<permalink>
@@ -1677,6 +1704,11 @@ class LinksController < ApplicationController
             <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
               var frame = document.getElementById("gumroad-landing-frame");
               var BASE_CHECKOUT = #{checkout_url_js};
+              // Hosts this seller controls. A "gumroad:navigate" message is only
+              // honored for these, so the untrusted iframe can never send the
+              // visitor's tab off to a phishing site with gumroad.com still in
+              // the URL bar.
+              var STORE_HOSTNAMES = #{store_hostnames_js};
               // Whitelist the selection-state keys the checkout already accepts on the
               // URL (see LinksController#show). The iframe is opaque-origin and untrusted,
               // so anything not in this list is ignored even if the buy button claims it.
@@ -1700,6 +1732,19 @@ class LinksController < ApplicationController
                 // Structured form: {type:"gumroad:checkout", params:{variant,quantity,price,recurrence}}.
                 if (e.data && typeof e.data === "object" && e.data.type === "gumroad:checkout") {
                   window.location.href = buildCheckoutUrl(BASE_CHECKOUT, e.data.params);
+                  return;
+                }
+                // Same-tab navigation to the seller's own Gumroad pages (their
+                // storefront, their other products). The sandbox deliberately
+                // withholds top-level navigation from the iframe, so a plain
+                // link inside the page can't do this itself — it asks here and
+                // we re-validate the destination.
+                if (e.data && typeof e.data === "object" && e.data.type === "gumroad:navigate" && typeof e.data.url === "string") {
+                  var url;
+                  try { url = new URL(e.data.url, window.location.href); } catch (_err) { return; }
+                  if (url.protocol !== "https:" && url.protocol !== "http:") return;
+                  if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
+                  window.location.href = url.href;
                 }
               });
             </script>
