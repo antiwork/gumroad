@@ -106,12 +106,37 @@ describe PdfStampingService::Stamp do
         outlines[:Count].to_i
       end
 
+      # A bookmark is only useful if it still points at a page, so check the first entry's title and
+      # that its destination resolves to a real page object, not just that the outline tree exists.
+      def first_outline_entry(path)
+        reader = PDF::Reader.new(path)
+        catalog = reader.objects.deref(reader.objects.trailer[:Root])
+        outlines = reader.objects.deref(catalog[:Outlines])
+        first = reader.objects.deref(outlines[:First])
+        destination = reader.objects.deref(first[:Dest])
+        target = destination.is_a?(Array) ? reader.objects.deref(destination.first) : nil
+        [decode_pdf_text(first[:Title]), target && target[:Type]]
+      end
+
+      # PDF text strings are either PDFDocEncoded or UTF-16BE with a byte-order mark; Prawn writes
+      # the latter, so decode it rather than comparing raw bytes.
+      def decode_pdf_text(value)
+        bytes = value.to_s.dup.force_encoding(Encoding::BINARY)
+        return bytes.byteslice(2..).force_encoding(Encoding::UTF_16BE).encode(Encoding::UTF_8) if bytes.start_with?("\xFE\xFF".b)
+
+        bytes.force_encoding(Encoding::UTF_8)
+      end
+
       it "preserves the bookmarks and the document metadata" do
         expect(outline_entry_count(fixture_path.to_s)).to eq(5)
 
         stamped_path = described_class.perform!(product_file:, watermark_text:)
 
         expect(outline_entry_count(stamped_path)).to eq(5)
+
+        title, destination_type = first_outline_entry(stamped_path)
+        expect(title).to eq("Chapter 1")
+        expect(destination_type).to eq(:Page)
 
         info = PDF::Reader.new(stamped_path).info
         expect(info[:Title]).to eq("Book With Bookmarks")
@@ -160,17 +185,19 @@ describe PdfStampingService::Stamp do
         end
       end
 
-      context "when pdftk command fails" do
+      context "when the stamping command fails" do
         before do
+          # `exitstatus` drives the success check now, because qpdf uses exit 3 for "recovered from
+          # problems but wrote valid output". 2 is a genuine failure.
           allow(Open3).to receive(:capture3).and_return(
-            ["stdout message", "stderr line1\nstderr line2", OpenStruct.new(success?: false)]
+            ["stdout message", "stderr line1\nstderr line2", OpenStruct.new(success?: false, exitstatus: 2)]
           )
           allow(Rails.logger).to receive(:error)
         end
 
         it "logs and raises PdfStampingService::Stamp::Error" do
           expect(Rails.logger).to receive(:error).with(
-            /\[PdfStampingService::Stamp.apply_watermark!\] Failed to execute command: pdftk/
+            /\[PdfStampingService::Stamp.apply_watermark!\] Failed to execute command: qpdf/
           )
           expect(Rails.logger).to receive(:error).with(
             "[PdfStampingService::Stamp.apply_watermark!] STDOUT: stdout message"

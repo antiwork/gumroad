@@ -41,6 +41,9 @@ module PdfStampingService::Stamp
     ensure
       File.unlink(watermark_pdf_path) if File.exist?(watermark_pdf_path.to_s)
       File.unlink(decrypted_pdf_path) if decrypted_pdf_path && File.exist?(decrypted_pdf_path)
+      # If stamping raised, qpdf may still have written a partial output file. Nothing will ever read
+      # it (perform! only returns the path on success), so clean it up instead of leaving it in tmp.
+      File.unlink(stamped_pdf_path) if $! && stamped_pdf_path && File.exist?(stamped_pdf_path.to_s)
     end
   end
 
@@ -104,34 +107,32 @@ module PdfStampingService::Stamp
 
       pdf.image("#{Rails.root}/public/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 24)
 
-      # We only want the buyer's details on page 1, but we still generate a watermark with one page
-      # per page of the original document: pages 2..N are deliberately left blank.
-      #
-      # Why: `pdftk multistamp` overlays stamp-page-N onto document-page-N, so blank filler pages
-      # leave pages 2..N visually untouched. That lets us stamp in a SINGLE pdftk pass over the whole
-      # document. The alternative (splitting the PDF, stamping page 1, then concatenating the pieces
-      # back with `cat`) destroys the document outline, i.e. the heading bookmarks, along with the
-      # Title/Author metadata, because pdftk's `cat` does not carry those structures across. That
-      # regression was reported by a creator whose technical book lost its whole navigation tree
-      # (see PR #4206, which introduced the split for performance reasons).
-      #
-      # Padding here keeps both properties: only page 1 is marked, and bookmarks/metadata survive.
-      (reader.page_count - 1).times { pdf.start_new_page }
-
       pdf.render_file(watermark_pdf_path)
       watermark_pdf_path
     end
 
+    # Overlays the single-page watermark onto page 1 of the document, leaving every other page and
+    # the document's structure alone.
+    #
+    # We use `qpdf --overlay --to=1` rather than pdftk here. Stamping used to extract page 1 with
+    # `pdftk cat 1`, stamp it, extract pages 2-end, then concatenate the pieces back together. That
+    # rebuild silently threw away the document outline (the heading bookmarks readers use to
+    # navigate a long book) and the Title/Author metadata, because pdftk's `cat` does not carry
+    # those structures across. A creator reported their technical book arriving with its whole
+    # navigation tree missing, which left them choosing between stamped copies and a usable book.
+    #
+    # qpdf edits the existing document in place instead of rebuilding it from pieces, so the
+    # outline, metadata, per-page sizes and rotation all survive, and `--to=1` restricts the visible
+    # stamp to the first page (matching the behaviour #4206 introduced for performance).
     def apply_watermark!(original_pdf_path_shellescaped, watermark_pdf_path_shellescaped, stamped_pdf_path_shellescaped)
-      # A single multistamp pass over the whole document. The watermark has a blank page for every
-      # page after the first, so only page 1 ends up marked (see create_watermark_pdf! for why we
-      # must avoid splitting and re-concatenating the document here).
-      run_pdftk!("pdftk #{original_pdf_path_shellescaped} multistamp #{watermark_pdf_path_shellescaped} output #{stamped_pdf_path_shellescaped}")
+      run_stamping_command!("qpdf #{original_pdf_path_shellescaped} --overlay #{watermark_pdf_path_shellescaped} --to=1 -- #{stamped_pdf_path_shellescaped}")
     end
 
-    def run_pdftk!(command)
+    def run_stamping_command!(command)
       stdout, stderr, status = Open3.capture3(command)
-      return if status.success?
+      # qpdf exits 3 when it recovered from problems in the source PDF (a damaged xref table, say)
+      # but still wrote valid output, so treat that as success like the decrypt step already does.
+      return if QPDF_SUCCESS_EXIT_CODES.include?(status.exitstatus)
 
       Rails.logger.error("[#{name}.apply_watermark!] Failed to execute command: #{command}")
       Rails.logger.error("[#{name}.apply_watermark!] STDOUT: #{stdout}")
