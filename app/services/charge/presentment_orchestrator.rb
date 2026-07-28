@@ -88,7 +88,7 @@ class Charge::PresentmentOrchestrator
           presentment_total_cents: allocation.presentment_total_cents,
           presentment_gumroad_amount_cents: allocation.presentment_gumroad_amount_cents
         )
-        record_subscription_presentment!(allocation:, presentment_currency:, fx_rate:)
+        record_later_charge_presentment!(allocation:, presentment_currency:, fx_rate:)
       end
 
       charge_presentment
@@ -110,7 +110,7 @@ class Charge::PresentmentOrchestrator
   # `presentment_price_cents` deliberately stores the PRICE component, not the total: tax and
   # shipping are recomputed per renewal from the member's current address, so storing a total
   # would freeze figures that are supposed to move.
-  def self.record_subscription_presentment!(allocation:, presentment_currency:, fx_rate:)
+  def self.record_later_charge_presentment!(allocation:, presentment_currency:, fx_rate:)
     purchase = allocation.purchase
     subscription = purchase.subscription
     return if subscription.blank?
@@ -119,14 +119,14 @@ class Charge::PresentmentOrchestrator
     # A renewal reuses the stored amount; only the first charge establishes it.
     return unless purchase.is_original_subscription_purchase?
     return if allocation.presentment_price_cents.to_i <= 0
-    return if subscription.subscription_presentments.exists?
+    return if subscription.later_charge_presentments.exists?
 
     # DIRECTION MATTERS. The Stripe quote's fx_rate is USD per unit of the presentment
     # currency (minted from_currency: EUR, to_currency: USD), while this column stores units
     # of the presentment currency per US dollar — the reciprocal, matching what
     # CurrencyHelper#get_rate returns. Storing fx_rate directly would invert every drift
     # figure computed from these rows.
-    subscription.subscription_presentments.create!(
+    subscription.later_charge_presentments.create!(
       processor: StripeChargeProcessor.charge_processor_id,
       presentment_currency:,
       presentment_price_cents: allocation.presentment_price_cents,

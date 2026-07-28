@@ -124,7 +124,7 @@ class Subscription::PresentmentRenewal
     # purchase (RecurringChargeWorker charges one subscription), so anything else is a shape
     # this service has not reasoned about and must not guess at.
     #
-    # Reads current_subscription_presentment, not the whole collection: fixings are immutable
+    # Reads current_later_charge_presentment, not the whole collection: fixings are immutable
     # and effective-dated, so the newest one that has taken effect is the amount to charge. A
     # future-dated fixing (a scheduled price change) deliberately does not apply yet.
     def stored_presentment
@@ -134,7 +134,7 @@ class Subscription::PresentmentRenewal
       return if purchase.subscription.blank?
       return if purchase.is_original_subscription_purchase?
 
-      purchase.subscription.current_subscription_presentment
+      purchase.subscription.current_later_charge_presentment
     end
 
     # Everything on the renewal except the price: tax and shipping, which are recomputed each

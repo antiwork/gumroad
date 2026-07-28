@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
+describe Charge::PresentmentOrchestrator, ".record_later_charge_presentment!" do
   let(:seller) { create(:user) }
   let(:product) { create(:membership_product, user: seller, price_cents: 1000) }
   let(:subscription) { create(:subscription, link: product, user: create(:user)) }
@@ -21,7 +21,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
   end
 
   def record(purchase, price_cents: 899, fx_rate: 0.9)
-    described_class.record_subscription_presentment!(
+    described_class.record_later_charge_presentment!(
       allocation: allocation_for(purchase, price_cents:),
       presentment_currency: "eur",
       fx_rate:
@@ -34,7 +34,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(signup)
 
-    stored = subscription.reload.current_subscription_presentment
+    stored = subscription.reload.current_later_charge_presentment
     expect(stored).to be_present
     expect(stored.presentment_currency).to eq("eur")
     expect(stored.presentment_price_cents).to eq(899)
@@ -52,9 +52,9 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
     allocation.presentment_seller_tax_cents = 150
     allocation.presentment_total_cents = 1049
 
-    described_class.record_subscription_presentment!(allocation:, presentment_currency: "eur", fx_rate: 0.9)
+    described_class.record_later_charge_presentment!(allocation:, presentment_currency: "eur", fx_rate: 0.9)
 
-    expect(subscription.reload.current_subscription_presentment.presentment_price_cents).to eq(899)
+    expect(subscription.reload.current_later_charge_presentment.presentment_price_cents).to eq(899)
   end
 
   it "is idempotent so a retried charge does not violate the unique index" do
@@ -65,7 +65,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
     expect { record(signup, price_cents: 1234) }.not_to raise_error
 
     # The first write wins: a retry must not silently reprice an existing subscription.
-    expect(subscription.reload.current_subscription_presentment.presentment_price_cents).to eq(899)
+    expect(subscription.reload.current_later_charge_presentment.presentment_price_cents).to eq(899)
   end
 
   it "does not write for a renewal, which reuses the stored amount rather than setting it" do
@@ -78,13 +78,13 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(renewal)
 
-    expect(subscription.reload.current_subscription_presentment).to be_nil
+    expect(subscription.reload.current_later_charge_presentment).to be_nil
   end
 
   it "does not write for a non-subscription purchase" do
     one_off = create(:purchase, link: create(:product, user: seller), seller:)
 
-    expect { record(one_off) }.not_to change(SubscriptionPresentment, :count)
+    expect { record(one_off) }.not_to change(LaterChargePresentment, :count)
   end
 
   it "does not write without an fx rate, which would leave drift unattributable" do
@@ -93,7 +93,7 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(signup, fx_rate: nil)
 
-    expect(subscription.reload.current_subscription_presentment).to be_nil
+    expect(subscription.reload.current_later_charge_presentment).to be_nil
   end
 
   it "does not write a non-positive price, which the model would reject anyway" do
@@ -102,6 +102,6 @@ describe Charge::PresentmentOrchestrator, ".record_subscription_presentment!" do
 
     record(signup, price_cents: 0)
 
-    expect(subscription.reload.current_subscription_presentment).to be_nil
+    expect(subscription.reload.current_later_charge_presentment).to be_nil
   end
 end

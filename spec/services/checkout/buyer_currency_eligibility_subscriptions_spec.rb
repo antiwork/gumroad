@@ -104,14 +104,14 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
     end
 
     it "opens for a renewal that has a stored amount" do
-      create(:subscription_presentment, subscription:, presentment_currency: "eur",
+      create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
                                         presentment_price_cents: 899, signup_currency_units_per_usd: BigDecimal("1.111111111111111"))
 
       expect(eligibility(purchases: [renewal]).send(:subscription_renewal_with_stored_amount?)).to be(true)
     end
 
     it "does not consult the ramp flag, so pulling it never orphans an existing member" do
-      create(:subscription_presentment, subscription:, presentment_currency: "eur",
+      create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
                                         presentment_price_cents: 899, signup_currency_units_per_usd: BigDecimal("1.111111111111111"))
       Feature.deactivate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
 

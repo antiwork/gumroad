@@ -23,7 +23,7 @@ describe Subscription::PresentmentRenewal do
   # EUR 8.99 stored at signup, signup rate 1.111... EUR per USD (the reciprocal of a 0.9
   # USD-per-EUR quote). Dated in the past so the newest-effective ordering is deterministic.
   let!(:stored) do
-    create(:subscription_presentment, subscription:, presentment_currency: "eur",
+    create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
                                       presentment_price_cents: 899,
                                       signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
                                       effective_from: 30.days.ago)
@@ -52,7 +52,7 @@ describe Subscription::PresentmentRenewal do
   end
 
   it "reads the newest fixing that has taken effect, so a price change is honoured" do
-    create(:subscription_presentment, subscription:, presentment_currency: "eur",
+    create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
                                       presentment_price_cents: 1299,
                                       effective_from: 1.hour.ago)
 
@@ -60,7 +60,7 @@ describe Subscription::PresentmentRenewal do
   end
 
   it "ignores a future-dated fixing, so a scheduled price change does not bill early" do
-    create(:subscription_presentment, subscription:, presentment_currency: "eur",
+    create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
                                       presentment_price_cents: 1299,
                                       effective_from: 3.days.from_now)
 
