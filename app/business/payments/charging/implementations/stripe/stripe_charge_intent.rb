@@ -28,6 +28,19 @@ class StripeChargeIntent < ChargeIntent
     payment_intent.status == StripeIntentStatus::PROCESSING
   end
 
+  # An asynchronous, customer-initiated payment (Pix) that the buyer has not paid yet: Stripe
+  # handed them a QR code / copy-paste key and the intent stays in requires_action until they pay
+  # in their banking app or the key expires. This is NOT a failure — the browser's confirm call
+  # returning simply means the buyer closed the QR modal, and they can still pay. Finalizers must
+  # therefore leave the purchase in progress and report it as pending (see
+  # Purchase::FinalizeConfirmedChargeService); the payment_intent.succeeded /
+  # payment_intent.payment_failed webhooks are the source of truth for the durable outcome.
+  def awaiting_customer_initiated_payment?
+    return false unless payment_intent.status == StripeIntentStatus::REQUIRES_ACTION
+
+    payment_intent.next_action&.type.in?(StripeIntentStatus::ASYNCHRONOUS_CUSTOMER_INITIATED_ACTION_TYPES)
+  end
+
   private
     def load_charge(payment_intent, merchant_account)
       # TODO:: Remove the `|| payment_intent.charges.first&.id` part below
