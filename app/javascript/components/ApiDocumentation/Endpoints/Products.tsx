@@ -92,6 +92,10 @@ const CustomHtmlDocumentation = () => (
         A successful <code>PUT</code> also returns <code>previous_custom_html</code> (the prior value, for one-step
         rollback) and the live <code>landing_url</code>.
       </li>
+      <li>
+        Links to your own Gumroad pages (your storefront, your other products) navigate the visitor's tab as ordinary
+        links — no <code>target="_blank"</code> needed. Links to other sites still open in a new tab.
+      </li>
       <li>Only the latest version is stored — there's no history, so keep your source under version control.</li>
       <li>The HTML is capped at 500,000 characters.</li>
       <li>

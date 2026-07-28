@@ -136,9 +136,27 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
 
   const titleRef = React.useRef<HTMLInputElement>(null);
 
-  React.useEffect(() => {
-    if (Object.keys(errors).length > 0) form.clearErrors();
-  }, [data]);
+  // Clear the error for the field the user just edited, from inside the same event that changed it.
+  // This used to be an effect that wiped every error whenever `data` changed. Because effects run
+  // after the render, that clear could still be pending when the next "Add link" click ran its own
+  // validation: the click would set a fresh "Must be present" error and the queued clear would then
+  // wipe it, so the field never turned red. That interleaving is the flake in
+  // spec/requests/analytics/utm_links_spec.rb "shows validation errors" (issue #6487).
+  //
+  // Read the errors through a ref rather than the closed-over value, because one caller (the
+  // permalink refresh below) runs in an async callback whose closure was captured before the
+  // request started, and by then the error state may have moved on.
+  const errorsRef = React.useRef(errors);
+  errorsRef.current = errors;
+
+  // Skipping the call when nothing is set matters: clearErrors always produces a new errors object,
+  // which would re-fire the scroll effect below on every keystroke.
+  const clearFieldErrors = (...attrNames: FieldAttrName[]) => {
+    const keys = attrNames
+      .map((attrName) => `utm_link.${attrName}` as const)
+      .filter((key) => errorsRef.current[key] !== undefined);
+    if (keys.length > 0) form.clearErrors(...keys);
+  };
 
   React.useLayoutEffect(() => {
     if (Object.keys(errors).length > 0) {
@@ -192,6 +210,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
         if (newPermalink) {
           setShortUrl((shortUrl) => ({ ...shortUrl, permalink: newPermalink }));
           setData("utm_link.permalink", newPermalink);
+          clearFieldErrors("permalink");
         }
       },
       onError: () => {
@@ -296,7 +315,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               type="text"
               value={data.utm_link.title}
               ref={titleRef}
-              onChange={(e) => setData("utm_link.title", e.target.value)}
+              onChange={(e) => {
+                setData("utm_link.title", e.target.value);
+                clearFieldErrors("title");
+              }}
             />
             {getFieldError("title") ? <FieldsetDescription>{getFieldError("title")}</FieldsetDescription> : null}
           </Fieldset>
@@ -318,6 +340,7 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 setDestination(newDest);
                 const { target_resource_type, target_resource_id } = computeTargetResource(newDest);
                 setData("utm_link", { ...data.utm_link, target_resource_type, target_resource_id });
+                clearFieldErrors("target_resource_id", "target_resource_type");
               }}
             />
             {getFieldError("target_resource_id") || getFieldError("target_resource_type") ? (
@@ -385,7 +408,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 id={`${uid}-source`}
                 baseOptionValues={context.utm_fields_values.sources}
                 value={data.utm_link.utm_source}
-                onChange={(value) => setData("utm_link.utm_source", value)}
+                onChange={(value) => {
+                  setData("utm_link.utm_source", value);
+                  clearFieldErrors("utm_source");
+                }}
               />
               {getFieldError("utm_source") ? (
                 <FieldsetDescription>{getFieldError("utm_source")}</FieldsetDescription>
@@ -401,7 +427,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
                 id={`${uid}-medium`}
                 baseOptionValues={context.utm_fields_values.mediums}
                 value={data.utm_link.utm_medium}
-                onChange={(value) => setData("utm_link.utm_medium", value)}
+                onChange={(value) => {
+                  setData("utm_link.utm_medium", value);
+                  clearFieldErrors("utm_medium");
+                }}
               />
               {getFieldError("utm_medium") ? (
                 <FieldsetDescription>{getFieldError("utm_medium")}</FieldsetDescription>
@@ -418,7 +447,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               id={`${uid}-campaign`}
               baseOptionValues={context.utm_fields_values.campaigns}
               value={data.utm_link.utm_campaign}
-              onChange={(value) => setData("utm_link.utm_campaign", value)}
+              onChange={(value) => {
+                setData("utm_link.utm_campaign", value);
+                clearFieldErrors("utm_campaign");
+              }}
             />
             {getFieldError("utm_campaign") ? (
               <FieldsetDescription>{getFieldError("utm_campaign")}</FieldsetDescription>
@@ -434,7 +466,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               id={`${uid}-term`}
               baseOptionValues={context.utm_fields_values.terms}
               value={data.utm_link.utm_term}
-              onChange={(value) => setData("utm_link.utm_term", value)}
+              onChange={(value) => {
+                setData("utm_link.utm_term", value);
+                clearFieldErrors("utm_term");
+              }}
             />
             {getFieldError("utm_term") ? (
               <FieldsetDescription>{getFieldError("utm_term")}</FieldsetDescription>
@@ -450,7 +485,10 @@ export const UtmLinkForm = (pageProps: UtmLinkFormProps | UtmLinkEditProps) => {
               id={`${uid}-content`}
               baseOptionValues={context.utm_fields_values.contents}
               value={data.utm_link.utm_content}
-              onChange={(value) => setData("utm_link.utm_content", value)}
+              onChange={(value) => {
+                setData("utm_link.utm_content", value);
+                clearFieldErrors("utm_content");
+              }}
             />
             {getFieldError("utm_content") ? (
               <FieldsetDescription>{getFieldError("utm_content")}</FieldsetDescription>

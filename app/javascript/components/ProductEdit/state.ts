@@ -285,6 +285,10 @@ export const ProductEditContext = React.createContext<{
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
   customHtmlPagesEnabled: boolean;
+  // Hostnames this seller controls (their subdomain, their live custom domain).
+  // The landing-page preview only follows a navigation request from the
+  // sandboxed seller HTML when the destination is one of these.
+  customHtmlStoreHostnames: string[];
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

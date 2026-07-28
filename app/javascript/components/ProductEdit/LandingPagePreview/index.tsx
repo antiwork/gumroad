@@ -28,7 +28,13 @@ const buildCheckoutUrl = (uniquePermalink: string, params: Record<string, unknow
   return url.pathname + url.search;
 };
 
-export const LandingPagePreview = ({ uniquePermalink }: { uniquePermalink: string }) => {
+export const LandingPagePreview = ({
+  uniquePermalink,
+  storeHostnames,
+}: {
+  uniquePermalink: string;
+  storeHostnames: string[];
+}) => {
   const frameRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
@@ -43,6 +49,29 @@ export const LandingPagePreview = ({ uniquePermalink }: { uniquePermalink: strin
         params = undefined;
       } else if (typia.is<{ type: "gumroad:checkout"; params?: Record<string, unknown> }>(e.data)) {
         params = e.data.params;
+      } else if (typia.is<{ type: "gumroad:navigate"; url: string }>(e.data)) {
+        // A link to one of the seller's own Gumroad pages. In production the
+        // trusted wrapper navigates the buyer's tab after checking the URL
+        // against the seller's own hostnames. Here the seller is previewing
+        // their own page from the editor, so open a new tab for the same
+        // reason checkout does — so they aren't yanked out of the editor.
+        //
+        // The message is only as trustworthy as the HTML that sent it, which
+        // the seller wrote, so apply the same two checks the public wrapper
+        // does: http(s) only (a page can't turn a click into javascript:/data:)
+        // and the destination host must be one the seller controls. Without the
+        // host check any script on the page could pop open an arbitrary site
+        // from inside the Gumroad dashboard.
+        let destination;
+        try {
+          destination = new URL(e.data.url, window.location.origin);
+        } catch {
+          return;
+        }
+        if (destination.protocol !== "https:" && destination.protocol !== "http:") return;
+        if (!storeHostnames.includes(destination.hostname)) return;
+        window.open(destination.href, "_blank", "noopener");
+        return;
       } else {
         return;
       }
@@ -51,7 +80,7 @@ export const LandingPagePreview = ({ uniquePermalink }: { uniquePermalink: strin
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [uniquePermalink]);
+  }, [uniquePermalink, storeHostnames]);
 
   return (
     <iframe

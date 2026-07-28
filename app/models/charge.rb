@@ -67,6 +67,13 @@ class Charge < ApplicationRecord
       update!(processor_fee_cents:)
 
       purchases = charged_purchases.to_a
+      # This splits Stripe's fee across the purchases in the charge by weight, so the weights
+      # and the weight total only have to share a denomination with each other, not with the
+      # fee being split. They do: both are canonical US dollar cents. The result is a pure
+      # ratio, which is why this stays correct on a buyer-currency (presentment) charge whose
+      # processor fee arrives in the buyer's currency. The fee's own currency is recorded on
+      # the charge's `processor_fee_currency` column by the processor-details sync that calls
+      # this method, rather than being inferred from these numbers.
       allocated_fees = self.class.allocate_by_largest_remainder(
         processor_fee_cents,
         purchases.map(&:total_transaction_cents),
@@ -85,6 +92,10 @@ class Charge < ApplicationRecord
   # cents are handed out one at a time to the shares with the largest
   # fractional remainders, tie-broken by position so the result is
   # deterministic. Returns an array aligned with +weights+.
+  #
+  # This is currency-agnostic on purpose: it never interprets any argument as money, only as
+  # integers to divide proportionally. Callers may therefore pass a total in one currency and
+  # weights in another, so long as the weights share a denomination with +weight_total+.
   def self.allocate_by_largest_remainder(total_cents, weights, weight_total)
     return weights.map { 0 } if weight_total.to_i == 0
 

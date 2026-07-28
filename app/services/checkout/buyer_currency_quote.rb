@@ -108,6 +108,10 @@ class Checkout::BuyerCurrencyQuote
     raise InvalidToken, "seller mismatch" unless payload.fetch("seller_id") == seller.id
     raise InvalidToken, "merchant account mismatch" unless payload.fetch("merchant_account_id") == merchant_account.id
     raise InvalidToken, "currency mismatch" unless payload.fetch("currency") == currency.to_s
+    # Both sides of this comparison are Gumroad's own canonical US dollar cents — the figure
+    # signed into the quote and the figure recomputed at checkout — never Stripe's
+    # buyer-currency amount. That is what lets it demand exact equality rather than a
+    # tolerance: there is no exchange rate between the two sides to round. Keep it exact.
     raise InvalidToken, "total mismatch" unless payload.fetch("canonical_total_cents") == canonical_total_cents.to_i
     raise InvalidToken, "stripe account mismatch" unless payload.fetch("stripe_account_id") == merchant_account.charge_processor_merchant_id
     raise InvalidToken, "line items mismatch" unless payload.fetch("canonical_line_items") == normalize_canonical_line_items(canonical_line_items)
