@@ -287,6 +287,12 @@ const CheckoutIndexPage = () => {
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
     cartForm.setData({ cart: newCart });
+    // Synchronously, not via the passive effect below: completeOffer can dispatch "validate" in
+    // the same tick, and a passive invalidation would run after it — submitting through a payment
+    // configuration computed for the pre-offer cart. An accepted offer changes the cart's items,
+    // so it can change the lane (a bundle's listed currency, a recurring tier) exactly like any
+    // other edit.
+    dispatch({ type: "invalidate-checkout-payment" });
     if (surchargesIfAccepted)
       dispatch({
         type: "update-products",
@@ -680,6 +686,12 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment"],
       preserveUrl: true,
       preserveScroll: true,
+      // A save that never returns usable props would otherwise leave the configuration marked
+      // stale forever, stranding Pay disabled until the buyer edits the cart again or reloads.
+      // Clearing the flag on failure re-enables Pay against the configuration already on screen,
+      // which is the pre-edit one — acceptable because a failed save also means the edit did not
+      // persist, so that configuration still describes the cart the server knows about.
+      onError: () => dispatch({ type: "update-checkout-payment", checkoutPayment: checkout_payment }),
     });
   }, cart_save_debounce_ms);
 
@@ -696,14 +708,36 @@ const CheckoutIndexPage = () => {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
   }, [cartForm.data.cart]);
-  // The cart changed, so the payment configuration on screen was computed for the previous cart.
-  // Mark it stale (Pay stays disabled) until the save above returns the recomputed one. Skipping
-  // the very first render: the configuration the server rendered the page with already describes
-  // this cart.
-  useOnChange(() => dispatch({ type: "invalidate-checkout-payment" }), [cartForm.data.cart]);
-  // The recomputed configuration, from the save's partial reload. Inertia replaces the prop with
-  // a new object on every response, so this also clears the stale flag when the lane did not
-  // actually change.
+  // The cart changed in a way that can move it to a different payment lane, so the configuration
+  // on screen was computed for the previous cart. Mark it stale (Pay stays disabled) until the
+  // save above returns the recomputed one.
+  //
+  // Keyed on the items' lane-relevant fields rather than the cart object, because the cart object
+  // also carries things the payment lane does not depend on — the buyer's email is written into it
+  // on every keystroke (see the effect below), and invalidating on that would disable Pay while
+  // someone types their address. These are the fields Checkout::StripePaymentPresenter reads to
+  // choose the lane: which seller each item belongs to, the price, whether it recurs or pays in
+  // installments, preorder/free-trial status, the native type, and the listed currency.
+  const paymentLaneCartKey = cartForm.data.cart.items
+    .map((item) =>
+      [
+        item.product.creator.id,
+        item.product.permalink,
+        item.option_id ?? "",
+        item.quantity,
+        item.price,
+        item.recurrence ?? "",
+        item.pay_in_installments,
+        item.product.is_preorder,
+        item.product.free_trial !== null,
+        item.product.native_type,
+        item.product.currency_code,
+      ].join(":"),
+    )
+    .join("|");
+  useOnChange(() => dispatch({ type: "invalidate-checkout-payment" }), [paymentLaneCartKey]);
+  // The recomputed configuration, from the save's partial reload. Inertia builds a fresh props
+  // object for every response, so this also clears the stale flag when the lane did not change.
   useOnChange(
     () => dispatch({ type: "update-checkout-payment", checkoutPayment: checkout_payment }),
     [checkout_payment],

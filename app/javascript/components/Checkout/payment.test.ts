@@ -885,6 +885,46 @@ describe("reduceCheckoutState", () => {
       expect(refreshed.checkoutPaymentStale).toBe(false);
       expect(isSubmitDisabled(refreshed)).toBe(false);
     });
+
+    it("refuses to validate while the configuration is stale, cancelling back to input", () => {
+      // Accepting the final cross-sell dispatches "validate" in the same tick as the cart change,
+      // so a passive invalidation would land too late. acceptOffer invalidates synchronously and
+      // this refusal is what makes that meaningful: without it the offer pipeline would submit
+      // through an element configured for the pre-offer cart.
+      const stale = reduceCheckoutState(state({ status: { type: "offering" } }), {
+        type: "invalidate-checkout-payment",
+      });
+
+      const next = reduceCheckoutState(stale, { type: "validate" });
+
+      // Back to input rather than stranded in a processing status with the button disabled.
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    it("refuses to start a card payment while the configuration is stale", () => {
+      const stale = reduceCheckoutState(state({ status: { type: "validating" } }), {
+        type: "invalidate-checkout-payment",
+      });
+
+      const next = reduceCheckoutState(stale, { type: "start-payment" });
+
+      expect(next.status).toEqual({ type: "input", errors: new Set() });
+    });
+
+    it("ignores a refreshed configuration that arrives mid-payment", () => {
+      // Past "input" the mounted element has been handed to Stripe. Swapping the configuration
+      // could remount it under an in-progress tokenization, or move the charged amount out from
+      // under a wallet sheet the buyer already approved.
+      const starting = state({ status: { type: "starting" } });
+
+      const next = reduceCheckoutState(starting, {
+        type: "update-checkout-payment",
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      });
+
+      expect(next.checkoutPayment).toBe(starting.checkoutPayment);
+      expect(next.status).toEqual({ type: "starting" });
+    });
   });
 
   it("stores the save-card intent without invalidating loaded surcharges", () => {

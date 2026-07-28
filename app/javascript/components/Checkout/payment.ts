@@ -908,8 +908,11 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // Same stale-total refusal as "offer". The offer pipeline dispatches "validate" from the
       // "offering" status, so the refusal must cancel back to "input" (not bail silently) —
       // otherwise the checkout would be stranded in a processing state with the button disabled.
-      if (state.surcharges.type !== "loaded") {
+      if (state.surcharges.type !== "loaded" || state.checkoutPaymentStale) {
         // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
+        // checkoutPaymentStale is refused for the same reason as unloaded surcharges: paying now
+        // would pay through an element configured for the cart as it was before the edit. Accepting
+        // an offer invalidates synchronously (see acceptOffer) precisely so this refusal sees it.
         if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
         state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
         return;
@@ -927,8 +930,10 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // longer matches the totals the buyer confirmed. Card payments only, same reasoning as
       // the invalidation cancel above: other methods never attach the quote token, and the
       // wallet sheet manages its own mid-payment state.
-      if (state.paymentMethod === "card" && state.surcharges.type !== "loaded") {
+      if (state.paymentMethod === "card" && (state.surcharges.type !== "loaded" || state.checkoutPaymentStale)) {
         // Same error-recovery and error-preservation reasoning as the "offer" refusal above.
+        // checkoutPaymentStale joins the condition for the same reason it does in "validate":
+        // the element on screen may have been configured for a different cart.
         if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
         state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
         return;
@@ -985,6 +990,19 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.checkoutPaymentStale = true;
       break;
     case "update-checkout-payment":
+      // Only while the buyer is still filling the form in. Once the payment pipeline has started,
+      // the mounted element has been handed to Stripe: PaymentForm reads this configuration to
+      // decide what to render and how to tokenize, so swapping it mid-flight could remount the
+      // element under an in-progress tokenization, or move the charged amount out from under a
+      // wallet sheet the buyer has already approved. The same reasoning the total-affecting
+      // "set-value" and "update-products" cases use to leave a started payment alone.
+      //
+      // Dropping the update is safe because it cannot be the stale-making edit's own refresh: a
+      // cart edit resets the pipeline to "input" (see "update-products" above), so a response
+      // arriving past "input" belongs to a cart the buyer already committed to paying for. The
+      // stale flag is deliberately left as-is — if it was set, Pay stays blocked until a refresh
+      // lands in "input", which is the fail-closed direction.
+      if (state.status.type !== "input") return;
       state.checkoutPayment = action.checkoutPayment;
       state.checkoutPaymentStale = false;
       break;
