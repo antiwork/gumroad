@@ -59,7 +59,16 @@ class Checkout::StripePaymentPresenter
     # CardElement candidates keep wallets suppressed: that lane never mounts a Payment Element,
     # so a wallet there is the Payment Request Button, whose sheet is built from the canonical USD
     # total and cannot show the buyer-currency total the cart displays.
-    disable_wallets = checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
+    #
+    # Only when the cart can actually be quoted, though. A cart spanning more than one seller is
+    # never quoted at all — Checkout::BuyerCurrencyQuote#create requires a single seller, because
+    # the order pipeline creates one charge per seller and a quote locks one total for one
+    # PaymentIntent. With no quote the checkout shows canonical USD totals and the charge takes
+    # canonical USD, so there is nothing for a wallet sheet to disagree with. Suppressing wallets
+    # on those carts removed Apple Pay and Google Pay from multi-seller checkouts that had them
+    # before buyer-currency presentment existed, for no safety benefit.
+    disable_wallets = single_seller_cart?(checkout_items) &&
+      checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
@@ -112,6 +121,15 @@ class Checkout::StripePaymentPresenter
 
     def sellers
       @sellers ||= items.map { _1[:seller] }.uniq
+    end
+
+    # Whether every item in the cart belongs to the same seller. Buyer-currency presentment is a
+    # single-seller feature end to end — the quote endpoint, the element shape, and the charge-time
+    # eligibility service all require it — so this is the gate that says whether presentment is
+    # even in play for a cart. Takes items explicitly because `props` computes it before the
+    # memoized `items` reader is otherwise consulted, and both see the same list.
+    def single_seller_cart?(checkout_items)
+      checkout_items.map { _1[:seller] }.uniq.one?
     end
 
     def card_element_props(fallback_reason, disable_wallets:)
@@ -349,7 +367,7 @@ class Checkout::StripePaymentPresenter
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
-      if items.any? { buyer_currency_presentment_candidate?(_1) }
+      if single_seller_cart?(items) && items.any? { buyer_currency_presentment_candidate?(_1) }
         # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
         # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
         # presentment. Two shapes now stay on the Payment Element:
@@ -367,6 +385,13 @@ class Checkout::StripePaymentPresenter
         # card shape (2) runs in live mode since the production rollout; the method-forced
         # shape (1) runs in live mode only when the resolver exposes a launched local method
         # whose Connect-account capabilities can accept the product's forced currency.
+        #
+        # Multi-seller carts are excluded from the gate entirely (the single_seller_cart? check
+        # above) rather than being sent to CardElement as unsupported. Presentment is never in
+        # play for them — the quote endpoint refuses to mint a quote for a cart spanning sellers,
+        # so the checkout shows canonical USD and the charge takes canonical USD — and routing
+        # them to CardElement only cost them the Payment Element (and with it Apple Pay and
+        # Google Pay) that they had before presentment existed.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported

@@ -268,34 +268,64 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "falls back to CardElement for a presentment-candidate cart spanning multiple sellers" do
+  it "keeps the canonical USD Payment Element, wallets included, for a presentment-candidate cart spanning multiple sellers" do
     sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
     buyer_currency_display = {
       display_mode: "buyer_local",
       buyer_currency_shown: Currency::CAD,
     }
-    # Two sellers means two charges (two PaymentIntents), but the quote locks a single
-    # cart total for a single intent — the multi-seller boundary the charge path does
-    # not support — so the cart keeps riding CardElement and charges canonical USD.
+    # Two sellers means two charges (two PaymentIntents), and the quote endpoint refuses to
+    # mint a quote for a cart spanning sellers, so there is no buyer-currency presentment to
+    # protect here: the checkout displays canonical USD and the charge takes canonical USD.
+    # The cart therefore keeps the ordinary USD Payment Element with its wallet rows, exactly
+    # as it did before buyer-currency presentment existed.
     add_products = sellers.map do |seller|
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
     expect(stripe_payment_props(add_products:)).to eq(
-      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
-      fallback_reason: "buyer_currency_presentment_unsupported",
-      disable_wallets: true,
-      request_apple_pay_merchant_tokens: false,
-      payment_element_wallets: false,
-      flat_payment_methods: false,
-      elements_options: nil,
+      payment_element_props(payment_element_wallets: true)
     )
   ensure
     (sellers || []).each do |seller|
+      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    end
+  end
+
+  it "keeps wallets off the Payment Element for a single-seller presentment-candidate cart" do
+    # The counterpart of the multi-seller case above, pinning that the narrowing is about
+    # multi-seller carts specifically and not a blanket re-enable: a single-seller candidate
+    # really can be quoted, so its wallets stay gated behind the presentment wallet ramp
+    # (exercised in full by the "wallets on the buyer-currency presentment lane" block above).
+    seller = create(:user, disable_buyer_local_currency: false)
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+    Feature.activate_user(:buyer_local_currency, seller)
+    Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    add_products = [
+      checkout_product_for(
+        create(:product, user: seller, price_cents: 1234),
+        buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }
+      )
+    ]
+
+    props = stripe_payment_props(add_products:)
+
+    expect(props[:disable_wallets]).to be(true)
+    expect(props[:payment_element_wallets]).to be(false)
+  ensure
+    if seller
+      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     end
