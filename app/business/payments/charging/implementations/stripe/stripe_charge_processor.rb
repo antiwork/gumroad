@@ -250,11 +250,23 @@ class StripeChargeProcessor
                                        transfer_group: nil, off_session: true, setup_future_charges: false, mandate_options: nil,
                                        mandate_expected: false,
                                        processor_amount_cents: nil, processor_currency: nil,
-                                       processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil, idempotency_key: nil)
+                                       processor_gumroad_amount_cents: nil,
+                                       processor_connect_gumroad_amount_cents: nil,
+                                       processor_connect_seller_amount_cents: nil,
+                                       stripe_fx_quote_id: nil, idempotency_key: nil)
     should_setup_future_usage = setup_future_charges && !off_session # attempting to set up future usage during an off-session charge will result in an invalid request
     charge_amount_cents = processor_amount_cents || amount_cents
     charge_currency = processor_currency || Currency::USD
     charge_gumroad_amount_cents = processor_gumroad_amount_cents || amount_for_gumroad_cents
+    # Connect-leg amounts (Gumroad's application fee / the seller's destination transfer)
+    # converted at Stripe's own settlement rate (base_rate) rather than the locked
+    # buyer-facing rate. Stripe settles those legs at base_rate, so denominating them at
+    # the buyer rate drifts the settled USD figures by the FX-fee spread (~1.1%). When the
+    # quote carried no base_rate these stay nil and the legs fall back to the buyer-rate
+    # amounts — exactly the pre-base_rate behaviour. The buyer's charge amount
+    # (charge_amount_cents) always keeps the locked buyer rate.
+    connect_gumroad_amount_cents = processor_connect_gumroad_amount_cents || charge_gumroad_amount_cents
+    connect_seller_amount_cents = processor_connect_seller_amount_cents || (charge_amount_cents - charge_gumroad_amount_cents)
 
     params = {
       amount: charge_amount_cents,
@@ -332,8 +344,10 @@ class StripeChargeProcessor
         # Stripe caps a direct charge's application fee at the collected amount, so an exactly
         # zero seller balance is valid. It does reject an application fee above the charge, which
         # is the negative-proceeds case we must stop before submitting the PaymentIntent.
-        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_gumroad_amount_cents, currency: charge_currency, reference:)
-        params[:application_fee_amount] = charge_gumroad_amount_cents
+        # Validated against the base_rate-converted fee actually submitted below, not the
+        # buyer-rate figure, so the guard and the request can never disagree.
+        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: connect_gumroad_amount_cents, currency: charge_currency, reference:)
+        params[:application_fee_amount] = connect_gumroad_amount_cents
         payment_intent = Stripe::PaymentIntent.create(params, stripe_options.merge(stripe_account: merchant_account.charge_processor_merchant_id))
       elsif merchant_account.user
         if merchant_account.charge_processor_merchant_id.blank?
@@ -345,8 +359,10 @@ class StripeChargeProcessor
         # that with `parameter_invalid_integer` on `transfer_data[amount]` BEFORE the card
         # attaches, which buyers saw as an unexplained "temporary problem" error. Fail fast with
         # a clear buyer-facing error instead of submitting a request we know Stripe will refuse.
-        seller_transfer_amount_cents = charge_amount_cents - charge_gumroad_amount_cents
-        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_gumroad_amount_cents, currency: charge_currency, reference:)
+        # The transfer is denominated at Stripe's base_rate (see connect_seller_amount_cents
+        # above); validate against the amount actually submitted so guard and request agree.
+        seller_transfer_amount_cents = connect_seller_amount_cents
+        StripeIntentChargeRouting.validate_seller_proceeds!(merchant_account:, amount_cents: charge_amount_cents, amount_for_gumroad_cents: charge_amount_cents - seller_transfer_amount_cents, currency: charge_currency, reference:)
         params[:transfer_data] = {
           destination: merchant_account.charge_processor_merchant_id,
           amount: seller_transfer_amount_cents

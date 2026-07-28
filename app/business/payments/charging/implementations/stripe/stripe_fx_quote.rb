@@ -23,7 +23,14 @@ class StripeFxQuote
   READ_TIMEOUT_SECONDS = 5
   WRITE_TIMEOUT_SECONDS = 2
 
-  Quote = Struct.new(:id, :expires_at, :fx_rate, keyword_init: true)
+  # fx_rate is the locked, buyer-facing exchange rate (Stripe's `rates.<from>.exchange_rate`,
+  # which includes Stripe's FX fee and the lock-duration premium). base_rate is Stripe's own
+  # settlement rate for the same pair (`rates.<from>.rate_details.base_rate`, the rate with no
+  # FX fee applied). The distinction matters for Connect legs: Stripe settles application fees
+  # and destination transfers at base_rate, not at the locked buyer-facing rate, so amounts for
+  # those legs must be converted with base_rate to land on the intended USD figures. base_rate
+  # is nil when Stripe omits rate_details (callers must fall back to fx_rate-derived amounts).
+  Quote = Struct.new(:id, :expires_at, :fx_rate, :base_rate, keyword_init: true)
 
   def self.create(to_currency:, from_currency:, stripe_account_id:)
     new.create(to_currency:, from_currency:, stripe_account_id:)
@@ -75,10 +82,13 @@ class StripeFxQuote
               "FX quote settles in #{actual_to_currency.presence || "unknown"}, expected #{to_currency}"
       end
 
+      rate_data = rate_data_for(data.fetch(:rates), from_currency:)
+
       Quote.new(
         id: data.fetch(:id),
         expires_at: parsed_expires_at(data.fetch(:lock_expires_at)),
-        fx_rate: parsed_rate(data.fetch(:rates), from_currency:)
+        fx_rate: parsed_rate(rate_data),
+        base_rate: parsed_base_rate(rate_data)
       )
     end
 
@@ -88,9 +98,29 @@ class StripeFxQuote
       Time.zone.parse(expires_at.to_s)
     end
 
-    def parsed_rate(rates, from_currency:)
-      rate_data = rates.fetch(from_currency.to_sym) { rates.fetch(from_currency) }
+    def rate_data_for(rates, from_currency:)
+      rates.fetch(from_currency.to_sym) { rates.fetch(from_currency) }
+    end
+
+    def parsed_rate(rate_data)
       rate = rate_data.is_a?(Hash) ? rate_data.fetch(:exchange_rate) { rate_data.fetch("exchange_rate") } : rate_data
       BigDecimal(rate.to_s)
+    end
+
+    # Stripe's settlement rate lives under rate_details, alongside the buyer-facing
+    # exchange_rate parsed above:
+    #   "rates": { "eur": { "exchange_rate": 1.06053, "rate_details": { "base_rate": 1.08295, ... } } }
+    # Older cached quotes (minted before this field was read) and any response where Stripe
+    # omits rate_details yield nil, which callers treat as "convert at fx_rate as before".
+    def parsed_base_rate(rate_data)
+      return nil unless rate_data.is_a?(Hash)
+
+      rate_details = rate_data[:rate_details] || rate_data["rate_details"]
+      return nil unless rate_details.is_a?(Hash)
+
+      base_rate = rate_details[:base_rate] || rate_details["base_rate"]
+      return nil if base_rate.nil?
+
+      BigDecimal(base_rate.to_s)
     end
 end

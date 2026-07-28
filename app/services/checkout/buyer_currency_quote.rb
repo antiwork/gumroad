@@ -14,6 +14,7 @@ class Checkout::BuyerCurrencyQuote
                       :presentment_total_cents,
                       :rounding_delta_cents,
                       :fx_rate,
+                      :base_rate,
                       :stripe_fx_quote_id,
                       :stripe_fx_quote_expires_at,
                       :line_allocations,
@@ -125,6 +126,11 @@ class Checkout::BuyerCurrencyQuote
       # token in flight across the deploy must still verify: no key means no rounding.
       rounding_delta_cents: payload["rounding_delta_cents"].to_i,
       fx_rate: BigDecimal(payload.fetch("fx_rate")),
+      # Stripe's settlement rate for the Connect legs (see StripeFxQuote::Quote). Older
+      # tokens (minted before base_rate was signed in) and quotes where Stripe omitted
+      # rate_details carry no value; nil tells the charge to fall back to fx_rate-derived
+      # Connect amounts, exactly today's behaviour.
+      base_rate: payload["base_rate"].present? ? BigDecimal(payload["base_rate"]) : nil,
       stripe_fx_quote_id: payload.fetch("stripe_fx_quote_id"),
       stripe_fx_quote_expires_at: Time.zone.parse(payload.fetch("stripe_fx_quote_expires_at"))
     )
@@ -291,6 +297,7 @@ class Checkout::BuyerCurrencyQuote
       presentment_total_cents:,
       rounding_delta_cents: rounding.delta_cents,
       fx_rate: quote.fx_rate,
+      base_rate: quote.base_rate,
       stripe_fx_quote_id: quote.id,
       stripe_fx_quote_expires_at: quote.expires_at,
       # Built from the EXACT converted total plus the rounding difference, so the tax the
@@ -418,6 +425,11 @@ class Checkout::BuyerCurrencyQuote
           stripe_fx_quote_id: quote.id,
           stripe_fx_quote_expires_at: quote.expires_at.iso8601,
           fx_rate: quote.fx_rate.to_s("F"),
+          # Stripe's settlement rate for the Connect legs (fee/transfer), signed alongside
+          # the buyer-facing rate so the charge converts both from the same locked quote.
+          # Omitted (nil-valued key) when Stripe returned no rate_details; verify! then
+          # yields a nil base_rate and the charge keeps today's fx_rate-based amounts.
+          base_rate: quote.base_rate&.to_s("F"),
         }
       )
     end

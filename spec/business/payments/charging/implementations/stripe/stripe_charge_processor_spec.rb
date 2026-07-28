@@ -763,6 +763,144 @@ describe StripeChargeProcessor, :vcr do
       expect(charge_intent.processing?).to eq(true)
     end
 
+    it "denominates the direct-charge application fee at the base_rate-converted amount while the buyer amount keeps the locked rate" do
+      # The buyer pays the fx_rate-locked CA$12.50, but Stripe settles the fee leg at its
+      # own base_rate, so the fee must be submitted as the base_rate conversion (CA$3.70
+      # here) rather than the buyer-rate CA$3.75 — otherwise Gumroad's settled USD fee
+      # drifts by the FX-fee spread.
+      merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: "acct_presentment")
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_presentment",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(
+          amount: 12_50,
+          currency: Currency::CAD,
+          application_fee_amount: 3_70,
+          fx_quote: "fxq_test"
+        ),
+        hash_including(stripe_account: "acct_presentment")
+      ).and_return(payment_intent)
+
+      subject.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        "reference",
+        "test description",
+        processor_amount_cents: 12_50,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: 3_75,
+        processor_connect_gumroad_amount_cents: 3_70,
+        stripe_fx_quote_id: "fxq_test"
+      )
+    end
+
+    it "keeps the buyer-rate application fee when no base_rate-converted amount is given" do
+      # Older cached quotes/tokens carry no base_rate; the fee leg must then be exactly
+      # what it was before this field existed, not a crash or a wrong number.
+      merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: "acct_presentment")
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_presentment",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(amount: 12_50, application_fee_amount: 3_75, fx_quote: "fxq_test"),
+        hash_including(stripe_account: "acct_presentment")
+      ).and_return(payment_intent)
+
+      subject.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        "reference",
+        "test description",
+        processor_amount_cents: 12_50,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: 3_75,
+        stripe_fx_quote_id: "fxq_test"
+      )
+    end
+
+    it "denominates the destination transfer at the base_rate-converted seller amount while the buyer amount keeps the locked rate" do
+      # Destination-charge counterpart of the fee-leg case: the seller's transfer settles
+      # at Stripe's base_rate, so it is submitted as the base_rate conversion of the
+      # seller's canonical USD proceeds (CA$8.64 here) instead of the buyer-rate
+      # remainder CA$8.75. The buyer's charge amount stays the locked CA$12.50.
+      merchant_account = create(:merchant_account, user: create(:user),
+                                                   charge_processor_id: described_class.charge_processor_id,
+                                                   charge_processor_merchant_id: "acct_managed_presentment")
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_presentment_destination",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(
+          amount: 12_50,
+          currency: Currency::CAD,
+          transfer_data: { destination: "acct_managed_presentment", amount: 8_64 },
+          fx_quote: "fxq_test"
+        ),
+        hash_including(stripe_version: StripeFxQuote::API_VERSION)
+      ).and_return(payment_intent)
+
+      subject.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        "reference",
+        "test description",
+        processor_amount_cents: 12_50,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: 3_75,
+        processor_connect_seller_amount_cents: 8_64,
+        stripe_fx_quote_id: "fxq_test"
+      )
+    end
+
+    it "keeps the buyer-rate destination transfer when no base_rate-converted amount is given" do
+      merchant_account = create(:merchant_account, user: create(:user),
+                                                   charge_processor_id: described_class.charge_processor_id,
+                                                   charge_processor_merchant_id: "acct_managed_presentment")
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_presentment_destination",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+
+      expect(Stripe::PaymentIntent).to receive(:create).with(
+        hash_including(
+          amount: 12_50,
+          transfer_data: { destination: "acct_managed_presentment", amount: 8_75 },
+          fx_quote: "fxq_test"
+        ),
+        hash_including(stripe_version: StripeFxQuote::API_VERSION)
+      ).and_return(payment_intent)
+
+      subject.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        10_00,
+        3_00,
+        "reference",
+        "test description",
+        processor_amount_cents: 12_50,
+        processor_currency: Currency::CAD,
+        processor_gumroad_amount_cents: 3_75,
+        stripe_fx_quote_id: "fxq_test"
+      )
+    end
+
     it "allows a direct-charge payment intent when Gumroad's fee equals the whole total" do
       merchant_account = create(:merchant_account_stripe_connect, user: create(:user), charge_processor_merchant_id: "acct_presentment")
       payment_intent = Stripe::PaymentIntent.construct_from(

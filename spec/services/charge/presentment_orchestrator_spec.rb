@@ -66,6 +66,35 @@ describe Charge::PresentmentOrchestrator do
                                                     presentment_gumroad_amount_cents: 3_75)
   end
 
+  it "converts the Connect fee and transfer legs at Stripe's base_rate while the buyer total keeps the locked rate" do
+    # The quote locked the buyer at 0.8 USD per CAD unit, but Stripe settles the Connect
+    # legs at its fee-free base_rate. At 0.81: Gumroad's $3.00 fee leg is 300/0.81 ≈ CA$3.70
+    # (not the buyer-rate CA$3.75) and the seller's $7.00 transfer leg is 700/0.81 ≈ CA$8.64
+    # (not the buyer-rate CA$8.75). The buyer's charge amount must stay the locked CA$12.50.
+    locked_quote.base_rate = BigDecimal("0.81")
+
+    expect(result).to have_attributes(processor_amount_cents: 12_50,
+                                      processor_gumroad_amount_cents: 3_75,
+                                      processor_connect_gumroad_amount_cents: 3_70,
+                                      processor_connect_seller_amount_cents: 8_64,
+                                      stripe_fx_quote_id: "fxq_locked")
+    # The buyer-facing snapshots (receipts, accounting) are unchanged by the Connect-leg fix.
+    expect(charge.reload.charge_presentment).to have_attributes(presentment_total_cents: 12_50,
+                                                                presentment_gumroad_amount_cents: 3_75)
+  end
+
+  it "leaves the Connect leg amounts nil when the locked quote carries no base_rate" do
+    # Older tokens (minted before base_rate was signed in) and Stripe responses without
+    # rate_details have no settlement rate to convert with; the charge processor then
+    # falls back to the buyer-rate amounts — today's exact behaviour — rather than guess.
+    locked_quote.base_rate = nil
+
+    expect(result).to have_attributes(processor_amount_cents: 12_50,
+                                      processor_gumroad_amount_cents: 3_75,
+                                      processor_connect_gumroad_amount_cents: nil,
+                                      processor_connect_seller_amount_cents: nil)
+  end
+
   it "charges the locked quote total verbatim rather than reconverting the canonical amount" do
     locked_quote.presentment_total_cents = 12_51
 

@@ -10,7 +10,10 @@ describe StripeFxQuote do
       lock_expires_at: 1.hour.from_now.to_i,
       to_currency: "usd",
       rates: {
-        cad: { exchange_rate: "0.800000000000000" }
+        cad: {
+          exchange_rate: "0.800000000000000",
+          rate_details: { base_rate: "0.809000000000000", fx_fee_rate: "0.02" }
+        }
       }
     }
 
@@ -32,8 +35,26 @@ describe StripeFxQuote do
 
     quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
 
-    expect(quote).to have_attributes(id: "fxq_test", fx_rate: BigDecimal("0.8"))
+    expect(quote).to have_attributes(id: "fxq_test", fx_rate: BigDecimal("0.8"), base_rate: BigDecimal("0.809"))
     expect(quote.expires_at).to be_within(1.second).of(Time.zone.at(response.data[:lock_expires_at]))
+  end
+
+  it "returns a nil base_rate when Stripe omits rate_details, so callers fall back to fx_rate" do
+    response = Stripe::StripeResponse.new
+    response.data = {
+      id: "fxq_test",
+      lock_expires_at: 1.hour.from_now.to_i,
+      to_currency: "usd",
+      rates: {
+        cad: { exchange_rate: "0.800000000000000" }
+      }
+    }
+    allow(Stripe).to receive(:raw_request).and_return(response)
+
+    quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
+
+    expect(quote.fx_rate).to eq(BigDecimal("0.8"))
+    expect(quote.base_rate).to be_nil
   end
 
   it "creates platform-account quotes without Stripe-Account options" do

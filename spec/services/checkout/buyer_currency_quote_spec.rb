@@ -66,6 +66,30 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result.token).to be_present
     end
 
+    it "carries Stripe's base_rate from the FX quote and signs it through the token round trip" do
+      # The charge converts the Connect fee/transfer legs at Stripe's settlement rate
+      # (base_rate), so it must survive the signed token exactly like the buyer-facing rate.
+      stripe_fx_quote.base_rate = BigDecimal("0.809")
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result.base_rate).to eq(BigDecimal("0.809"))
+
+      verified = described_class.verify!(token: result.token, seller:, merchant_account:, currency: Currency::CAD, canonical_total_cents: 10_00, canonical_line_items: canonical_line_items_for(product))
+      expect(verified.base_rate).to eq(BigDecimal("0.809"))
+    end
+
+    it "verifies a token with no base_rate to a nil base_rate so the charge keeps today's Connect amounts" do
+      # Quotes where Stripe omitted rate_details (and tokens minted before base_rate was
+      # signed in) must still verify, with nil telling the charge to fall back.
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result.base_rate).to be_nil
+
+      verified = described_class.verify!(token: result.token, seller:, merchant_account:, currency: Currency::CAD, canonical_total_cents: 10_00, canonical_line_items: canonical_line_items_for(product))
+      expect(verified.base_rate).to be_nil
+    end
+
     context "with price-ending mirroring on (the default for sellers charging in the buyer's currency)" do
       let(:seller) { create(:user, disable_buyer_local_currency: false) }
 

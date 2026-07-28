@@ -15,6 +15,8 @@ class Charge::PresentmentOrchestrator
   Result = Struct.new(:processor_amount_cents,
                       :processor_currency,
                       :processor_gumroad_amount_cents,
+                      :processor_connect_gumroad_amount_cents,
+                      :processor_connect_seller_amount_cents,
                       :stripe_fx_quote_id,
                       keyword_init: true)
 
@@ -146,10 +148,15 @@ class Charge::PresentmentOrchestrator
       rounding_delta_cents: rounding_delta_cents
     )
 
+    connect_gumroad_amount_cents, connect_seller_amount_cents =
+      connect_leg_amounts(presentment_total_cents, rounding_delta_cents)
+
     Result.new(
       processor_amount_cents: presentment_total_cents,
       processor_currency: eligibility_decision.currency,
       processor_gumroad_amount_cents: presentment_gumroad_amount_cents,
+      processor_connect_gumroad_amount_cents: connect_gumroad_amount_cents,
+      processor_connect_seller_amount_cents: connect_seller_amount_cents,
       stripe_fx_quote_id: locked_quote.stripe_fx_quote_id
     )
   rescue StandardError => e
@@ -164,6 +171,36 @@ class Charge::PresentmentOrchestrator
   end
 
   private
+    # Amounts for the Stripe Connect legs of the presentment charge — Gumroad's
+    # application fee on a direct charge, or the seller's destination transfer on a
+    # Gumroad-managed account — converted at Stripe's own settlement rate (base_rate)
+    # instead of the locked buyer-facing rate (fx_rate).
+    #
+    # Why the two rates differ: the fx_rate the buyer's total was locked at includes
+    # Stripe's FX fee and the lock-duration premium, but Stripe settles the Connect legs
+    # of the charge at its fee-free base_rate. Denominating a leg at fx_rate therefore
+    # lands on the wrong USD figure by the FX-fee spread (~1.1%) once Stripe converts it.
+    # The buyer's charge amount is untouched — they confirmed the fx_rate total and must
+    # be charged exactly that — only the fee/transfer split inside it moves.
+    #
+    # Returns [nil, nil] when the quote carries no base_rate (a token minted before
+    # base_rate was signed in, or a Stripe response without rate_details), which tells
+    # the charge processor to keep today's fx_rate-derived amounts rather than guess.
+    def connect_leg_amounts(presentment_total_cents, rounding_delta_cents)
+      base_rate = locked_quote.respond_to?(:base_rate) ? locked_quote.base_rate : nil
+      return [nil, nil] if base_rate.blank? || !base_rate.positive?
+
+      # Gumroad still absorbs the whole rounding difference (a presentment-currency
+      # amount, so it is added after the conversion), mirroring the fx_rate split above.
+      connect_gumroad_amount_cents = (
+        presentment_cents_for(gumroad_amount_cents, base_rate) + rounding_delta_cents
+      ).clamp(0, presentment_total_cents)
+      connect_seller_amount_cents = presentment_cents_for(amount_cents - gumroad_amount_cents, base_rate)
+        .clamp(0, presentment_total_cents)
+
+      [connect_gumroad_amount_cents, connect_seller_amount_cents]
+    end
+
     # Whether Gumroad's share of THIS charge really covers a round-down, checked against
     # the fee that was actually computed on the purchases rather than the fee the quote
     # predicted.

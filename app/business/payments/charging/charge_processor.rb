@@ -137,7 +137,10 @@ module ChargeProcessor
                                             off_session: true, setup_future_charges: false, mandate_options: nil,
                                             mandate_expected: false,
                                             processor_amount_cents: nil, processor_currency: nil,
-                                            processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil,
+                                            processor_gumroad_amount_cents: nil,
+                                            processor_connect_gumroad_amount_cents: nil,
+                                            processor_connect_seller_amount_cents: nil,
+                                            stripe_fx_quote_id: nil,
                                             idempotency_key: nil)
     charge_processor = get_charge_processor(merchant_account.charge_processor_id)
     chargeable_for_charge_processor = chargeable.get_chargeable_for(merchant_account.charge_processor_id)
@@ -153,6 +156,8 @@ module ChargeProcessor
     charge_options[:processor_amount_cents] = processor_amount_cents unless processor_amount_cents.nil?
     charge_options[:processor_currency] = processor_currency unless processor_currency.nil?
     charge_options[:processor_gumroad_amount_cents] = processor_gumroad_amount_cents unless processor_gumroad_amount_cents.nil?
+    charge_options[:processor_connect_gumroad_amount_cents] = processor_connect_gumroad_amount_cents unless processor_connect_gumroad_amount_cents.nil?
+    charge_options[:processor_connect_seller_amount_cents] = processor_connect_seller_amount_cents unless processor_connect_seller_amount_cents.nil?
     charge_options[:stripe_fx_quote_id] = stripe_fx_quote_id if stripe_fx_quote_id.present?
     charge_options[:idempotency_key] = idempotency_key if idempotency_key.present?
 

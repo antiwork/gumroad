@@ -325,7 +325,16 @@ class Charge::CreateService
       processor_currency: presentment_result.processor_currency,
       processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
       stripe_fx_quote_id: presentment_result.stripe_fx_quote_id,
-    }
+    }.tap do |args|
+      # Only present when the locked quote carried Stripe's base_rate; absent, the
+      # processor derives the Connect legs from the buyer-rate amounts as before.
+      if presentment_result.processor_connect_gumroad_amount_cents.present?
+        args[:processor_connect_gumroad_amount_cents] = presentment_result.processor_connect_gumroad_amount_cents
+      end
+      if presentment_result.processor_connect_seller_amount_cents.present?
+        args[:processor_connect_seller_amount_cents] = presentment_result.processor_connect_seller_amount_cents
+      end
+    end
   end
 
   def locked_buyer_currency_quote!(quote_token, eligibility_decision)
