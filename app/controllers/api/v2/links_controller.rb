@@ -926,7 +926,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     def canonicalize_rich_contents(entity)
       entity.alive_rich_contents.sort_by(&:position).map do |rc|
-        [rc.title, strip_upsell_ids(rc.description)]
+        [rc.title, strip_upsell_ids(rc.description_without_stale_dead_cross_product_file_embeds)]
       end
     end
 

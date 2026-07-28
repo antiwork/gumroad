@@ -73,6 +73,7 @@ printf "%b\n" ""
 printf "%b\n" "=== Trusted stored-content copies prune stale embeds and empty groups explicitly ==="
 bundle exec rspec spec/controllers/api/v2/links_controller_spec.rb \
   -e "drops a stale dead foreign embed when copying" \
+  -e "treats stale dead foreign embeds as absent when comparing variant content" \
   spec/services/product_duplicator_service_spec.rb \
   -e "prunes a file embed group whose only child is a stale dead foreign embed" \
   --format documentation --no-profile 2>&1 \

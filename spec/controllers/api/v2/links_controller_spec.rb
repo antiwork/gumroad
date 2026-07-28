@@ -1918,6 +1918,26 @@ describe Api::V2::LinksController do
           expect(@product.reload.alive_rich_contents.sole.description).to eq([paragraph])
         end
 
+        it "treats stale dead foreign embeds as absent when comparing variant content" do
+          variant1
+          variant2
+          foreign_product = create(:product, user: @user)
+          dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+          paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+          dead_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+          stale_page = build(:rich_content, entity: variant1, title: "Same page", description: [paragraph, dead_embed], position: 0)
+          stale_page.save!(validate: false)
+          create(:rich_content, entity: variant2, title: "Same page", description: [paragraph], position: 0)
+          @product.update!(has_same_rich_content_for_all_variants: false)
+
+          put @action, params: @params.merge(has_same_rich_content_for_all_variants: true)
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(@product.reload.alive_rich_contents.sole.description).to eq([paragraph])
+          expect(variant1.reload.alive_rich_contents).to be_empty
+          expect(variant2.reload.alive_rich_contents).to be_empty
+        end
+
         it "rejects switching to shared when multiple variants have distinct content" do
           variant1
           variant2
