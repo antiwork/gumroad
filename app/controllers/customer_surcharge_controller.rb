@@ -88,10 +88,17 @@ class CustomerSurchargeController < ApplicationController
         currency: quote.currency,
         canonical_total_cents: quote.canonical_total_cents,
         presentment_total_cents: quote.presentment_total_cents,
-        # Exact minor-unit rate from the locked quote, not a ratio of already-rounded
-        # totals — client-side line conversions inherit the ratio's rounding error.
-        rate: (BigDecimal(subunit_to_unit(quote.currency)) / (subunit_to_unit(Currency::USD) * quote.fx_rate)).to_f,
+        # What one canonical US dollar cent is worth in the buyer's currency. Derived from
+        # the locked totals rather than from an FX rate, because a cart spanning several
+        # sellers holds one locked quote per seller and their rates need not be identical
+        # (Stripe mints each against a different connected account). The browser uses this
+        # only for the two amounts it still converts itself — the discount row and the tip
+        # the buyer types; every amount that is actually charged comes from the per-line
+        # allocations below.
+        rate: quote.display_rate.to_f,
         subunit_to_unit: subunit_to_unit(quote.currency),
+        # The soonest expiry among the cart's locked quotes, so the checkout treats itself as
+        # only as fresh as its earliest-lapsing amount.
         expires_at: quote.stripe_fx_quote_expires_at.iso8601,
         # The server-owned split of the locked total across the cart lines, in request
         # order. The checkout renders these amounts verbatim (rather than converting each

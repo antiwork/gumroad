@@ -8,14 +8,22 @@ class Checkout::BuyerCurrencyQuote
   # line_allocations is only present on freshly created quotes (it drives the checkout
   # display); verified tokens don't carry it because the charge re-derives the allocation
   # from its purchases with the same shared code (Charge::PresentmentAllocator).
+  #
+  # A created quote covers the whole cart, which can be several prospective charges (one per
+  # seller), so its totals are cart-wide sums and `charges` holds the per-charge detail.
+  # A VERIFIED quote is always about one charge, so `verify!` fills the per-charge fields
+  # (`fx_rate`, `stripe_fx_quote_id`, the totals) with that charge's own figures and leaves
+  # `charges` empty.
   Result = Struct.new(:token,
                       :currency,
                       :canonical_total_cents,
                       :presentment_total_cents,
                       :rounding_delta_cents,
                       :fx_rate,
+                      :display_rate,
                       :stripe_fx_quote_id,
                       :stripe_fx_quote_expires_at,
+                      :charges,
                       :line_allocations,
                       keyword_init: true) do
     def id
@@ -95,41 +103,82 @@ class Checkout::BuyerCurrencyQuote
                               :presentment_total_cents,
                               keyword_init: true)
 
+  # One prospective charge's locked quote: everything the charge path needs to price the
+  # PaymentIntent it will create for ONE seller. A cart holding items from several sellers
+  # becomes several of these, because the order pipeline creates one charge (one
+  # PaymentIntent) per seller and Stripe binds an FX quote to the account the intent is
+  # created on — so a single quote could not price more than one of them.
+  ChargeQuote = Struct.new(:seller,
+                           :merchant_account,
+                           :canonical_total_cents,
+                           :presentment_total_cents,
+                           :rounding_delta_cents,
+                           :fx_rate,
+                           :stripe_fx_quote_id,
+                           :stripe_fx_quote_expires_at,
+                           :canonical_line_items,
+                           :line_allocations,
+                           keyword_init: true)
+
   TOKEN_PURPOSE = :buyer_currency_quote
 
   def self.create(line_items:, canonical_total_cents:, ip:)
     new(line_items:, canonical_total_cents:, ip:).create
   end
 
+  # Verifies the quote token submitted with a checkout against ONE charge: this seller, this
+  # merchant account, this charge's canonical total and its own line items. A multi-seller
+  # cart signs one token carrying an entry per prospective charge, so each charge picks its
+  # own entry here and is held to exactly the same equality checks a single-seller charge has
+  # always been held to. Nothing is verified across charges: each locked entry stands alone,
+  # which is what lets one intent per seller be created and confirmed independently.
   def self.verify!(token:, seller:, merchant_account:, currency:, canonical_total_cents:, canonical_line_items:)
     payload = verifier.verify(token)
+    charge_payload = charge_payload_for(payload, seller)
 
-    raise InvalidToken, "expired buyer currency quote" if Time.zone.parse(payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
-    raise InvalidToken, "seller mismatch" unless payload.fetch("seller_id") == seller.id
-    raise InvalidToken, "merchant account mismatch" unless payload.fetch("merchant_account_id") == merchant_account.id
+    raise InvalidToken, "expired buyer currency quote" if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
+    raise InvalidToken, "seller mismatch" unless charge_payload.fetch("seller_id") == seller.id
+    raise InvalidToken, "merchant account mismatch" unless charge_payload.fetch("merchant_account_id") == merchant_account.id
     raise InvalidToken, "currency mismatch" unless payload.fetch("currency") == currency.to_s
     # Both sides of this comparison are Gumroad's own canonical US dollar cents — the figure
     # signed into the quote and the figure recomputed at checkout — never Stripe's
     # buyer-currency amount. That is what lets it demand exact equality rather than a
     # tolerance: there is no exchange rate between the two sides to round. Keep it exact.
-    raise InvalidToken, "total mismatch" unless payload.fetch("canonical_total_cents") == canonical_total_cents.to_i
-    raise InvalidToken, "stripe account mismatch" unless payload.fetch("stripe_account_id") == merchant_account.charge_processor_merchant_id
-    raise InvalidToken, "line items mismatch" unless payload.fetch("canonical_line_items") == normalize_canonical_line_items(canonical_line_items)
+    #
+    # On a multi-seller cart this is the total of THIS charge, not the cart: the cart total
+    # the buyer confirmed is the sum of the per-charge totals signed into the same token, so
+    # holding every charge to its own locked figure is what makes the sum hold too.
+    raise InvalidToken, "total mismatch" unless charge_payload.fetch("canonical_total_cents") == canonical_total_cents.to_i
+    raise InvalidToken, "stripe account mismatch" unless charge_payload.fetch("stripe_account_id") == merchant_account.charge_processor_merchant_id
+    raise InvalidToken, "line items mismatch" unless charge_payload.fetch("canonical_line_items") == normalize_canonical_line_items(canonical_line_items)
 
     Result.new(
       token:,
       currency: payload.fetch("currency"),
-      canonical_total_cents: payload.fetch("canonical_total_cents"),
-      presentment_total_cents: payload.fetch("presentment_total_cents"),
+      canonical_total_cents: charge_payload.fetch("canonical_total_cents"),
+      presentment_total_cents: charge_payload.fetch("presentment_total_cents"),
       # Older tokens (minted before price-ending mirroring shipped) have no delta key, and a
       # token in flight across the deploy must still verify: no key means no rounding.
-      rounding_delta_cents: payload["rounding_delta_cents"].to_i,
-      fx_rate: BigDecimal(payload.fetch("fx_rate")),
-      stripe_fx_quote_id: payload.fetch("stripe_fx_quote_id"),
-      stripe_fx_quote_expires_at: Time.zone.parse(payload.fetch("stripe_fx_quote_expires_at"))
+      rounding_delta_cents: charge_payload["rounding_delta_cents"].to_i,
+      fx_rate: BigDecimal(charge_payload.fetch("fx_rate")),
+      stripe_fx_quote_id: charge_payload.fetch("stripe_fx_quote_id"),
+      stripe_fx_quote_expires_at: Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at"))
     )
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError => e
     raise InvalidToken, e.message
+  end
+
+  # Picks this seller's charge entry out of a verified token payload.
+  #
+  # Tokens carry a `charges` array (one entry per prospective charge). Tokens signed before
+  # multi-seller quoting shipped are flat — the per-charge fields sit at the top level —
+  # and a checkout page loaded just before a deploy submits one just after it, so those
+  # must keep verifying rather than failing the buyer's payment: read the flat payload as a
+  # single-charge list.
+  def self.charge_payload_for(payload, seller)
+    charge_payloads = payload["charges"].presence || [payload]
+    charge_payloads.find { |charge_payload| charge_payload["seller_id"] == seller.id } ||
+      raise(InvalidToken, "quote covers no charge for this seller")
   end
 
   def self.verifier
@@ -139,7 +188,7 @@ class Checkout::BuyerCurrencyQuote
   def self.normalize_canonical_line_items(line_items)
     line_items.map { |line_item| [line_item.fetch(:permalink).to_s, line_item.fetch(:total_cents).to_i] }
   end
-  private_class_method :verifier, :normalize_canonical_line_items
+  private_class_method :verifier, :normalize_canonical_line_items, :charge_payload_for
 
   attr_reader :line_items, :canonical_total_cents, :ip
 
@@ -168,25 +217,32 @@ class Checkout::BuyerCurrencyQuote
     # depend on every caller doing that: fall back to canonical USD instead of raising.
     return if products.any?(&:nil?)
 
-    # A quote locks one total for one PaymentIntent, but the order pipeline creates one
-    # charge (one PaymentIntent) per seller. A cart spanning several sellers would need
-    # the locked cart total split across several intents — how to do that atomically is
-    # Open Question 9 on issue #5419 — so those carts fall back to canonical USD.
-    # Compare ids rather than loading a User row per cart line (an N+1 on this hot,
-    # debounced endpoint) — the single-seller gate only needs identity.
-    return unless products.map(&:user_id).uniq.one?
+    # One FX quote can only price one PaymentIntent, and the order pipeline creates one
+    # PaymentIntent per seller — so a cart holding items from several sellers is quoted
+    # once PER SELLER, here, before the buyer is shown any total. Grouping by seller id
+    # rather than loading a User row per cart line keeps this hot, debounced endpoint off
+    # an N+1; the User rows are loaded once per group below.
+    #
+    # Every group must be quotable or the whole cart falls back to canonical US dollars
+    # (any `return` below). Quoting part of a cart would show the buyer a total that mixes
+    # local-currency lines with dollar lines, and no single figure could then be both the
+    # amount displayed and the amount charged.
+    line_items_by_seller = self.line_items_by_seller
+    sellers_by_id = User.where(id: line_items_by_seller.keys).index_by(&:id)
+    return unless sellers_by_id.length == line_items_by_seller.length
 
-    seller = products.first.user
-    return unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+    sellers = line_items_by_seller.keys.map { sellers_by_id.fetch(_1) }
+    return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
+    # Multi-seller carts have their own ramp on top of the buyer-currency flags, so this
+    # lane can be turned on and rolled back without touching single-seller checkouts. A
+    # cart falls back unless EVERY seller in it is ramped: one seller opting in must not
+    # change how another seller's items are priced.
+    return if sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(sellers)
 
-    merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
-                       MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-    return unless merchant_account&.stripe_charge_processor?
-    return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
-    # The quote locks the whole cart total, so every item must individually support
+    # The quote locks each charge's total, so every item must individually support
     # presentment; one unsupported item (whose charge amount could differ from the total
     # the quote locked) means the whole cart falls back to canonical USD. The buyer's
     # currency is known by this point because one of the product gates depends on it.
@@ -241,71 +297,48 @@ class Checkout::BuyerCurrencyQuote
        line_items.any? { |line| line.tip_cents.to_i.positive? || line.shipping_cents.to_i.positive? }
       return
     end
-    # Checked last because the marker is scoped to the presentment currency: a mismatch
-    # learned for EUR must not suppress quoting for GBP buyers of the same seller.
-    return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
 
-    quote = StripeFxQuote.create(
-      to_currency: Currency::USD,
-      from_currency: buyer_currency,
-      stripe_account_id: merchant_account.charge_processor_merchant_id
-    )
-    converted_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
-    # Give the converted total the same price ending the seller chose in USD ($9.99 →
-    # €8,99, $10 → €9), HERE, before the token is signed, so the rounded amount is the one
-    # the checkout displays, the buyer confirms, and the charge uses. Rounding any later
-    # would charge an amount the buyer never saw.
-    rounding = if Checkout::PresentmentRounding.enabled_for?(seller)
-      Checkout::PresentmentRounding.round(
-        presentment_total_cents: converted_total_cents,
-        canonical_total_cents:,
-        currency: buyer_currency,
-        # A round-down comes out of Gumroad's share of the charge, never the seller's, so
-        # cap it at the presentment value of the fee we know Gumroad collects on this cart.
-        max_downward_cents: presentment_cents_for(
-          Checkout::PresentmentRounding.absorbable_gumroad_cents(
-            seller:,
-            canonical_price_and_tip_cents: line_items.sum { _1.price_cents + _1.tip_cents },
-            merchant_account:
-          ),
-          quote.fx_rate,
-          buyer_currency
-        )
-      )
-    else
-      Checkout::PresentmentRounding::Result.new(presentment_total_cents: converted_total_cents, delta_cents: 0)
+    charge_quotes = line_items_by_seller.map do |seller_id, seller_line_items|
+      charge_quote_for(seller: sellers_by_id.fetch(seller_id), line_items: seller_line_items, buyer_currency:)
     end
-    presentment_total_cents = rounding.presentment_total_cents
+    # A single unquotable charge takes the whole cart back to canonical US dollars, for the
+    # same reason the gates above do: a cart cannot honestly show one total made of local
+    # currency for some sellers and dollars for others.
+    return if charge_quotes.any?(&:nil?)
+
+    presentment_total_cents = charge_quotes.sum(&:presentment_total_cents)
 
     Result.new(
-      token: signed_token(
-        seller:,
-        merchant_account:,
-        buyer_currency:,
-        quote:,
-        presentment_total_cents:,
-        rounding_delta_cents: rounding.delta_cents
-      ),
+      token: signed_token(buyer_currency:, charge_quotes:),
       currency: buyer_currency,
       canonical_total_cents:,
       presentment_total_cents:,
-      rounding_delta_cents: rounding.delta_cents,
-      fx_rate: quote.fx_rate,
-      stripe_fx_quote_id: quote.id,
-      stripe_fx_quote_expires_at: quote.expires_at,
-      # Built from the EXACT converted total plus the rounding difference, so the tax the
-      # checkout displays is the true converted tax and the cosmetic difference shows up on
-      # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
-      line_allocations: line_allocations_for(converted_total_cents, rounding.delta_cents)
+      rounding_delta_cents: charge_quotes.sum(&:rounding_delta_cents),
+      # What one canonical US dollar cent is worth in the buyer's currency, for the cosmetic
+      # conversions the browser still does itself (the discount row, and the tip amount the
+      # buyer types). Derived from the locked totals rather than from any one charge's FX
+      # rate, because a multi-seller cart holds one quote per charge and their rates need
+      # not be identical — Stripe mints each against a different connected account. Every
+      # amount that is actually charged comes from the per-charge allocations below, never
+      # from this rate.
+      display_rate: BigDecimal(presentment_total_cents) / canonical_total_cents,
+      # The earliest expiry across the cart's quotes: the checkout is only as fresh as its
+      # soonest-expiring locked amount, and letting the browser believe otherwise would
+      # leave it submitting a token one of whose charges has already lapsed.
+      stripe_fx_quote_expires_at: charge_quotes.map(&:stripe_fx_quote_expires_at).min,
+      charges: charge_quotes,
+      # In cart order, so the checkout can render each row against the line the buyer sees
+      # — the per-seller grouping above is an implementation detail of how the charges are
+      # priced and must not reorder the cart.
+      line_allocations: line_allocations_in_request_order(charge_quotes)
     )
   rescue StripeFxQuote::SettlementCurrencyMismatch => e
-    # Expected condition, not a defect: the account settles this currency in itself
+    # Expected condition, not a defect: an account settles this currency in itself
     # (Stripe multi-currency settlement) even though our stored merchant_account.currency
     # said USD. Fall back to the canonical USD checkout quietly — no Sentry notification.
-    # Record the mismatch for this currency on the merchant account so subsequent
-    # checkouts in it skip the doomed FX-quote round trip entirely (issue #6011); other
-    # currencies keep quoting.
-    record_settlement_currency_mismatch(merchant_account, buyer_currency)
+    # The marker is recorded against the specific account that rejected the quote (see
+    # #charge_quote_for) so subsequent checkouts for that seller skip the doomed FX-quote
+    # round trip entirely (issue #6011); other sellers and currencies keep quoting.
     Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
     nil
   rescue StandardError => e
@@ -319,6 +352,12 @@ class Checkout::BuyerCurrencyQuote
   end
 
   private
+    # The cart's lines grouped by which seller they belong to. Each group becomes one charge
+    # (one PaymentIntent) at order time, so each group is quoted separately.
+    def line_items_by_seller
+      @line_items_by_seller ||= line_items.group_by { _1.product.user_id }
+    end
+
     # Persists the learned mismatch (issue #6011). A persistence failure here must never
     # break the checkout that is already falling back — worst case the next checkout pays
     # the FX-quote latency again.
@@ -328,7 +367,101 @@ class Checkout::BuyerCurrencyQuote
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
     end
 
-    # Splits the presentment amounts across the cart lines with the SAME shared
+    # Mints ONE charge's locked quote: the amount this seller's PaymentIntent will be created
+    # for, in the buyer's currency, plus the split of it across that seller's cart lines.
+    #
+    # This is the whole of the atomicity answer for multi-seller carts. Nothing is shared
+    # between charges: each has its own Stripe FX quote (Stripe binds a quote to the account
+    # the intent is created on, so it could not be otherwise), its own rounding, and its own
+    # line allocation. The buyer's displayed cart total is the sum of these locked amounts,
+    # so every charge independently satisfies "charged equals displayed" — and their sum does
+    # too, without any cross-charge commit. That is exactly the guarantee a multi-seller cart
+    # has always had in dollars, where a cart is already several independent PaymentIntents.
+    #
+    # Returns nil when this seller cannot be quoted, which takes the whole cart back to
+    # canonical US dollars (see the caller).
+    def charge_quote_for(seller:, line_items:, buyer_currency:)
+      merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+                         MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      return unless merchant_account&.stripe_charge_processor?
+      return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
+      # Checked per charge, and last, because the learned mismatch marker is scoped to both
+      # the account and the presentment currency: a mismatch learned for one seller's EUR
+      # must not suppress quoting for a different seller, or for the same seller's GBP.
+      return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
+
+      canonical_total_cents = line_items.sum(&:canonical_total_cents)
+      return unless canonical_total_cents.positive?
+
+      quote = begin
+        StripeFxQuote.create(
+          to_currency: Currency::USD,
+          from_currency: buyer_currency,
+          stripe_account_id: merchant_account.charge_processor_merchant_id
+        )
+      rescue StripeFxQuote::SettlementCurrencyMismatch
+        # Record which account rejected the currency so the next checkout for that seller
+        # skips the doomed round trip, then re-raise: #create turns it into the quiet
+        # cart-wide canonical-USD fallback.
+        record_settlement_currency_mismatch(merchant_account, buyer_currency)
+        raise
+      end
+      converted_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
+      # Give the converted total the same price ending the seller chose in USD ($9.99 →
+      # €8,99, $10 → €9), HERE, before the token is signed, so the rounded amount is the one
+      # the checkout displays, the buyer confirms, and the charge uses. Rounding any later
+      # would charge an amount the buyer never saw. Applied per charge because the setting is
+      # the seller's own, and because the rounding difference is booked against Gumroad's
+      # share of THAT charge.
+      rounding = if Checkout::PresentmentRounding.enabled_for?(seller)
+        Checkout::PresentmentRounding.round(
+          presentment_total_cents: converted_total_cents,
+          canonical_total_cents:,
+          currency: buyer_currency,
+          # A round-down comes out of Gumroad's share of the charge, never the seller's, so
+          # cap it at the presentment value of the fee we know Gumroad collects on this
+          # seller's lines.
+          max_downward_cents: presentment_cents_for(
+            Checkout::PresentmentRounding.absorbable_gumroad_cents(
+              seller:,
+              canonical_price_and_tip_cents: line_items.sum { _1.price_cents + _1.tip_cents },
+              merchant_account:
+            ),
+            quote.fx_rate,
+            buyer_currency
+          )
+        )
+      else
+        Checkout::PresentmentRounding::Result.new(presentment_total_cents: converted_total_cents, delta_cents: 0)
+      end
+
+      ChargeQuote.new(
+        seller:,
+        merchant_account:,
+        canonical_total_cents:,
+        presentment_total_cents: rounding.presentment_total_cents,
+        rounding_delta_cents: rounding.delta_cents,
+        fx_rate: quote.fx_rate,
+        stripe_fx_quote_id: quote.id,
+        stripe_fx_quote_expires_at: quote.expires_at,
+        # The total alone cannot distinguish two paid carts whose lines changed but still
+        # add up to the same amount. Bind the ordered paid-line identities and totals so
+        # charge-time allocation cannot persist a different split from what checkout showed.
+        # Free lines are omitted because Order::ChargeService completes them before building
+        # the paid purchase list, and they can only receive a zero-cent allocation.
+        canonical_line_items: line_items.filter_map do |line_item|
+          next if line_item.canonical_total_cents.zero?
+
+          [line_item.permalink.to_s, line_item.canonical_total_cents.to_i]
+        end,
+        # Built from the EXACT converted total plus the rounding difference, so the tax the
+        # checkout displays is the true converted tax and the cosmetic difference shows up on
+        # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
+        line_allocations: line_allocations_for(line_items, converted_total_cents, rounding.delta_cents)
+      )
+    end
+
+    # Splits one charge's presentment amounts across its cart lines with the SAME shared
     # largest-remainder code the charge later uses to persist purchase presentment rows
     # (Charge::PresentmentAllocator). The browser renders these amounts verbatim instead of
     # converting each line itself, so the line items the buyer sees always sum to the locked
@@ -340,11 +473,11 @@ class Checkout::BuyerCurrencyQuote
     # A raise from the allocator (a difference with no non-tax component to carry it) is
     # caught by #create's rescue, which drops the whole cart back to canonical USD — a
     # cosmetic price ending must never break a checkout.
-    def line_allocations_for(converted_total_cents, rounding_delta_cents)
+    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents)
       Charge::PresentmentAllocator.allocate_lines(
         presentment_total_cents: converted_total_cents,
         rounding_delta_cents:,
-        lines: line_items.map do |line_item|
+        lines: charge_line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,
             canonical_component_cents: line_item.canonical_component_cents
@@ -354,7 +487,7 @@ class Checkout::BuyerCurrencyQuote
         component_shares = line_allocation.presentment_component_cents
 
         LineAllocation.new(
-          permalink: line_items[index].permalink,
+          permalink: charge_line_items[index].permalink,
           presentment_price_cents: component_shares[0],
           presentment_tip_cents: component_shares[1],
           presentment_seller_tax_cents: component_shares[2],
@@ -363,6 +496,22 @@ class Checkout::BuyerCurrencyQuote
           presentment_total_cents: line_allocation.presentment_total_cents
         )
       end
+    end
+
+    # The cart's line allocations back in the order the request listed them. The charges are
+    # built per seller, so their allocations arrive grouped by seller; the checkout matches
+    # allocations to cart rows positionally, so handing it the grouped order would pair each
+    # row with another row's amount on any cart whose sellers interleave.
+    #
+    # Keyed on the identity of the line-item object each allocation was built from rather
+    # than on its permalink, because a cart can legitimately hold two rows for the same
+    # product (different variants), and those must not collapse to one allocation.
+    def line_allocations_in_request_order(charge_quotes)
+      allocations_by_line_item = charge_quotes.each_with_object({}) do |charge_quote, mapping|
+        charge_line_items = line_items_by_seller.fetch(charge_quote.seller.id)
+        charge_line_items.each_with_index { |line_item, index| mapping[line_item.object_id] = charge_quote.line_allocations[index] }
+      end
+      line_items.filter_map { allocations_by_line_item[_1.object_id] }
     end
 
     # What the seller priced the product in has no bearing on what the buyer should be
@@ -392,32 +541,34 @@ class Checkout::BuyerCurrencyQuote
       true
     end
 
-    def signed_token(seller:, merchant_account:, buyer_currency:, quote:, presentment_total_cents:, rounding_delta_cents:)
+    # Signs one token covering every charge the cart will produce. The buyer's currency is
+    # cart-wide (it comes from their location), so it sits at the top level; everything that
+    # is per-charge lives in `charges`, and the charge path picks its own entry out by seller.
+    #
+    # One token rather than one per charge because the browser submits one order: a token per
+    # charge would need the client to route them to the right purchases, which is exactly the
+    # kind of thing the server must not delegate to a buyer-controlled request.
+    def signed_token(buyer_currency:, charge_quotes:)
       self.class.send(:verifier).generate(
         {
-          seller_id: seller.id,
-          merchant_account_id: merchant_account.id,
-          stripe_account_id: merchant_account.charge_processor_merchant_id,
           currency: buyer_currency,
-          canonical_total_cents:,
-          # The total alone cannot distinguish two paid carts whose lines changed but still
-          # add up to the same amount. Bind the ordered paid-line identities and totals so
-          # charge-time allocation cannot persist a different split from what checkout showed.
-          # Free lines are omitted because Order::ChargeService completes them before building
-          # the paid purchase list, and they can only receive a zero-cent allocation.
-          canonical_line_items: line_items.filter_map do |line_item|
-            next if line_item.canonical_total_cents.zero?
-
-            [line_item.permalink.to_s, line_item.canonical_total_cents.to_i]
+          charges: charge_quotes.map do |charge_quote|
+            {
+              seller_id: charge_quote.seller.id,
+              merchant_account_id: charge_quote.merchant_account.id,
+              stripe_account_id: charge_quote.merchant_account.charge_processor_merchant_id,
+              canonical_total_cents: charge_quote.canonical_total_cents,
+              canonical_line_items: charge_quote.canonical_line_items,
+              presentment_total_cents: charge_quote.presentment_total_cents,
+              # How far the rounding moved the amount, signed into the token so the charge
+              # can book the difference against Gumroad's share without re-deriving it (and
+              # so a seller's setting flipping mid-checkout can't change the split).
+              rounding_delta_cents: charge_quote.rounding_delta_cents,
+              stripe_fx_quote_id: charge_quote.stripe_fx_quote_id,
+              stripe_fx_quote_expires_at: charge_quote.stripe_fx_quote_expires_at.iso8601,
+              fx_rate: charge_quote.fx_rate.to_s("F"),
+            }
           end,
-          presentment_total_cents:,
-          # How far the rounding moved the amount, signed into the token so the charge
-          # can book the difference against Gumroad's share without re-deriving it (and
-          # so a seller's setting flipping mid-checkout can't change the split).
-          rounding_delta_cents:,
-          stripe_fx_quote_id: quote.id,
-          stripe_fx_quote_expires_at: quote.expires_at.iso8601,
-          fx_rate: quote.fx_rate.to_s("F"),
         }
       )
     end

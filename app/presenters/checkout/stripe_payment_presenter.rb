@@ -418,14 +418,18 @@ class Checkout::StripePaymentPresenter
 
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
-    # one-time, non-commission items that all belong to ONE seller and are each a
-    # presentment candidate (candidate? already covers the seller's flags and an active
-    # buyer-local display). One seller matters because the order pipeline creates one
-    # charge per seller, and the quote locks the cart total for a single PaymentIntent —
-    # multi-seller carts would need that one locked total split across several intents (Open
-    # Question 9 on issue #5419), so they stay on CardElement. Products that offer installments
-    # stay on CardElement even when the buyer chooses a one-time purchase because quote creation
-    # cannot see that choice and rejects the product.
+    # one-time, non-commission items that are each a presentment candidate (candidate? already
+    # covers the seller's flags and an active buyer-local display). Products that offer
+    # installments stay on CardElement even when the buyer chooses a one-time purchase because
+    # quote creation cannot see that choice and rejects the product.
+    #
+    # A cart may span several sellers. The order pipeline turns it into one charge per seller,
+    # and the surcharge endpoint locks one quote per prospective charge before the buyer is
+    # shown a total, so each charge is priced from its own locked amount and the cart total is
+    # their sum — no locked figure is ever split across intents. Every seller in the cart must
+    # be in the multi-seller ramp (Checkout::BuyerCurrencyEligibility.multi_seller_enabled?),
+    # which is the same predicate the quote service and the charge path apply, so the surface
+    # the buyer sees and the charge the server will accept cannot disagree.
     #
     # There is deliberately no condition on the currency the SELLER priced in. The quote
     # converts the cart's canonical USD total into the buyer's currency, which works the same
@@ -442,10 +446,12 @@ class Checkout::StripePaymentPresenter
     # element mints supports just as well.
     def buyer_currency_presentment_element_shape?(items)
       return false if items.empty?
-      return false unless items.map { _1[:seller] }.uniq.one?
 
-      # The quote locks the whole cart total, so every item must individually pass the
-      # presentment gates: one unsupported item means the charge path could not honor the
+      cart_sellers = items.map { _1[:seller] }.uniq
+      return false if cart_sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(cart_sellers)
+
+      # Each charge's quote locks that charge's total, so every item must individually pass the
+      # presentment gates: one unsupported item means the charge path could not honor its
       # locked total, and the whole cart falls back.
       items.all? do |item|
         buyer_currency_presentment_candidate?(item) &&

@@ -269,19 +269,55 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  it "falls back for orders spanning multiple sellers" do
+  context "with an order spanning several sellers" do
     # ChargeService creates one charge per seller, so this service only ever sees one
     # seller's purchases — the multi-seller signal lives on the order.
-    other_seller = create(:user)
-    other_seller_purchase = create(:purchase,
-                                   link: create(:product, user: other_seller),
-                                   seller: other_seller,
-                                   purchase_state: "in_progress")
-    order.purchases << purchase
-    order.purchases << other_seller_purchase
+    let(:other_seller) { create(:user) }
+    let!(:other_seller_purchase) do
+      create(:purchase,
+             link: create(:product, user: other_seller),
+             seller: other_seller,
+             purchase_state: "in_progress")
+    end
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:multi_seller_checkout)
+    before do
+      order.purchases << purchase
+      order.purchases << other_seller_purchase
+    end
+
+    it "is eligible when every seller in the order is in the multi-seller ramp" do
+      # Each charge is priced from its own entry in the quote token, locked before the buyer
+      # saw a total, so nothing needs splitting across intents.
+      [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+
+      expect(decision).to be_eligible
+      expect(decision.currency).to eq(Currency::CAD)
+    ensure
+      [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+    end
+
+    it "falls back when any seller in the order is outside the ramp" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:multi_seller_checkout)
+    ensure
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+    end
+
+    it "is eligible for the off-session charge a multi-seller cart performs" do
+      # A multi-seller checkout charges off-session by design: the browser collects a reusable
+      # payment method once and each seller's charge is confirmed against it server-side. The
+      # buyer is present for that, so presentment is safe — unlike a renewal months later.
+      [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+
+      decision = described_class.new(order:, seller:, merchant_account:, chargeable:, purchases:, params:,
+                                     setup_future_charges: false, off_session: true).decision
+
+      expect(decision).to be_eligible
+    ensure
+      [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+    end
   end
 
   it "allows a purchase priced in a currency that is neither USD nor the buyer's own" do
