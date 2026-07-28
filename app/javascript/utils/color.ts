@@ -146,6 +146,22 @@ export const getContrastColor = (background: string) => {
 };
 
 /**
+ * Mixes a hex colour `step`/255 of the way toward black (for white text) or toward white (for black
+ * text). Exported only so a test can show the chosen step is minimal by checking the step below it
+ * fails; production code should call getAccessibleAccent.
+ */
+export const shiftAccentBrightness = (hex: string, whiteText: boolean, step: number) => {
+  const rgb = parseHex(hex);
+  return rgb === null ? null : toHex(shiftBrightness(rgb, whiteText, step));
+};
+
+/** The smallest step getAccessibleAccent would use for this text colour. Exported for the same reason. */
+export const accentBrightnessShiftFor = (hex: string, whiteText: boolean) => {
+  const rgb = parseHex(hex);
+  return rgb === null ? null : brightnessShiftFor(rgb, whiteText);
+};
+
+/**
  * Returns the pair to actually render for an accent area that contains text: the accent colour to
  * fill with, and the text colour to put on it.
  *

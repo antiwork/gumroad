@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 
 import {
   WCAG_AA_NORMAL_TEXT,
+  accentBrightnessShiftFor,
   getAccessibleAccent,
   getContrastColor,
   getContrastRatio,
   hexToRgb,
+  shiftAccentBrightness,
 } from "$app/utils/color";
 
 // The shared server/browser fixture. It lives under spec/ because the Ruby suite asserts the same
@@ -128,19 +130,19 @@ describe("getAccessibleAccent", () => {
   });
 
   it("changes the accent by the smallest amount that clears the floor", () => {
-    // One step less darkening must fail, so the result is provably minimal rather than sufficient.
+    // Provably minimal rather than merely sufficient: the step below the one chosen must fail. Uses
+    // the same mixing function the implementation uses, so "one step less" is genuinely the candidate
+    // the search rejected rather than a nearby colour that happens to fail.
     for (const hex of ["#ff0000", "#009a49"]) {
       const pair = getAccessibleAccent(hex);
+      const whiteText = pair.text === "#ffffff";
+      const chosenStep = accentBrightnessShiftFor(hex, whiteText) ?? 0;
+
+      expect(chosenStep, `${hex} needed no adjustment, so this case proves nothing`).toBeGreaterThan(0);
+      expect(pair.accent).toBe(shiftAccentBrightness(hex, whiteText, chosenStep));
       expect(ratio(pair)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
 
-      const channels = (value: string) =>
-        [value.substring(1, 3), value.substring(3, 5), value.substring(5, 7)].map((c) => parseInt(c, 16));
-      const original = channels(hex);
-      const oneStepLess = `#${channels(pair.accent)
-        .map((channel, index) => (channel === original[index] ? channel : channel + 1))
-        .map((channel) => channel.toString(16).padStart(2, "0"))
-        .join("")}`;
-
+      const oneStepLess = shiftAccentBrightness(hex, whiteText, chosenStep - 1) ?? "";
       expect(
         getContrastRatio(oneStepLess, pair.text) ?? 0,
         `${oneStepLess} already passes, so ${pair.accent} is not minimal for ${hex}`,
@@ -198,6 +200,58 @@ describe("getAccessibleAccent", () => {
     expect(getAccessibleAccent("#000")).toStrictEqual(getAccessibleAccent("#000000"));
   });
 
+  it("moves the contrast ratio in one direction only, so the search's answer is the minimum", () => {
+    // The binary search assumes monotonicity: mixing steadily toward black (with white text) or
+    // toward white (with black text) only ever increases contrast against that text colour. Channel
+    // flooring could in principle break that, so walk every step on colours spanning the space.
+    for (const hex of ["#ff0000", "#009a49", "#0087ff", "#7b2ff7", "#123456", "#abcdef"]) {
+      for (const whiteText of [true, false]) {
+        const text = whiteText ? "#ffffff" : "#000000";
+        const ratios = Array.from(
+          { length: 256 },
+          (_, step) => getContrastRatio(shiftAccentBrightness(hex, whiteText, step) ?? "", text) ?? 0,
+        );
+        const drops = ratios
+          .slice(1)
+          .map((after, index) => ({ before: ratios[index] ?? 0, after }))
+          .filter(({ before, after }) => after < before - 1e-9);
+
+        expect(drops, `${hex} with ${text} text is not monotone`).toHaveLength(0);
+      }
+    }
+  });
+
+  it("trims exactly the whitespace the server implementation trims", () => {
+    // Ruby's String#strip removes only ASCII whitespace, so contrast_color.rb strips this same
+    // character class explicitly. A disagreement means a stored value carrying a non-breaking space
+    // or byte-order mark parses here and falls back to the default on the live storefront.
+    const javascriptTrimCharacters = [
+      "\u0009",
+      "\u000a",
+      "\u000b",
+      "\u000c",
+      "\u000d",
+      "\u0020",
+      "\u00a0",
+      "\u1680",
+      "\u2000",
+      "\u2009",
+      "\u2028",
+      "\u2029",
+      "\u202f",
+      "\u205f",
+      "\u3000",
+      "\ufeff",
+    ];
+
+    for (const character of javascriptTrimCharacters) {
+      expect(
+        getAccessibleAccent(`${character}#ff0000${character}`),
+        `U+${character.charCodeAt(0).toString(16).padStart(4, "0")} was not trimmed`,
+      ).toStrictEqual({ accent: "#ee0000", text: "#ffffff" });
+    }
+  });
+
   it("falls back to a readable pair rather than throwing on a value that isn't a hex colour", () => {
     for (const invalid of ["", "red", "#ffff", "#gggggg", "#19ff1d; }"]) {
       expect(getAccessibleAccent(invalid)).toStrictEqual({ accent: "#000000", text: "#ffffff" });
@@ -207,7 +261,9 @@ describe("getAccessibleAccent", () => {
   it("matches the server implementation on every colour in the shared fixture", () => {
     // lib/utilities/contrast_color.rb renders the live storefront CSS while this renders the editor
     // preview, so any divergence shows a seller one colour while setting up and another on their
-    // store. Both suites assert this same file; contrast_color_spec.rb is the other half.
+    // store. The fixture was generated from the Ruby side, which is what makes THIS half the
+    // load-bearing one: it holds the browser to the server's answers. contrast_color_spec.rb asserts
+    // the same file so a Ruby change cannot quietly rewrite the contract instead.
     expect(accentContrastPairs.length).toBeGreaterThanOrEqual(40);
     for (const expected of accentContrastPairs) {
       expect(getAccessibleAccent(expected.input), `pair for ${expected.input}`).toStrictEqual({

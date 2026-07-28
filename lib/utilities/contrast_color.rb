@@ -251,7 +251,12 @@ module ContrastColor
   # raw SQL all bypass that — and the SCSS `lightness()` function this replaced understood 3-digit
   # hex natively. Rejecting it here would have quietly changed the colour on any row holding one.
   def self.parse(hex_color)
-    value = hex_color.to_s.strip
+    # A Unicode-aware strip rather than String#strip, so this matches JavaScript's String#trim,
+    # which the browser implementation uses: strip only removes ASCII whitespace, while trim also
+    # removes a non-breaking space or a byte-order mark. A stored value carrying one of those
+    # (reachable only via update_column or raw SQL, since the validator rejects it) would otherwise
+    # parse in the editor and fall back to the invalid-value default on the server.
+    value = hex_color.to_s.gsub(/\A[[:space:]\u{feff}]+|[[:space:]\u{feff}]+\z/, "")
     return [value[1, 2], value[3, 2], value[5, 2]].map { _1.to_i(16) } if value.match?(/\A#[0-9a-f]{6}\z/i)
     # In the 3-digit form each digit is doubled, so #f0a means the same colour as #ff00aa.
     return value[1..].chars.map { (_1 * 2).to_i(16) } if value.match?(/\A#[0-9a-f]{3}\z/i)

@@ -273,6 +273,23 @@ describe ContrastColor do
       expect(described_class.accessible_accent("#000")).to eq(described_class.accessible_accent("#000000"))
     end
 
+    it "trims exactly the whitespace JavaScript's String#trim removes" do
+      # The browser half of this pair trims with String#trim, which removes more than Ruby's
+      # String#strip does — a non-breaking space or a byte-order mark included. If the two disagree,
+      # a stored value carrying one (reachable via update_column or raw SQL, which skip the
+      # validator) parses in the editor and falls back to the default on the live storefront.
+      javascript_trim_characters = [
+        "\u0009", "\u000a", "\u000b", "\u000c", "\u000d", "\u0020", "\u00a0", "\u1680",
+        "\u2000", "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007",
+        "\u2008", "\u2009", "\u200a", "\u2028", "\u2029", "\u202f", "\u205f", "\u3000", "\ufeff"
+      ]
+
+      javascript_trim_characters.each do |character|
+        expect(described_class.accessible_accent("#{character}#ff0000#{character}"))
+          .to eq(accent: "#ee0000", text: "#ffffff"), "U+#{format('%04X', character.ord)} was not trimmed"
+      end
+    end
+
     it "falls back to a readable pair rather than raising on a value that isn't a hex colour" do
       ["", nil, "red", "#ffff", "#gggggg"].each do |invalid|
         expect(described_class.accessible_accent(invalid)).to eq(accent: "#000000", text: "#ffffff")

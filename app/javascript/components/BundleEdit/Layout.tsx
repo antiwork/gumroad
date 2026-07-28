@@ -232,6 +232,7 @@ export const BundleEditLayout = ({
                   "--color-border": "rgb(var(--color) / var(--border-alpha))",
                   "--color-accent": "rgb(var(--accent))",
                   "--color-accent-foreground": "rgb(var(--contrast-accent))",
+                  "--color-accent-plain": "rgb(var(--accent-plain))",
                   "--color-primary": "rgb(var(--primary))",
                   "--color-primary-foreground": "rgb(var(--contrast-primary))",
                   "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
