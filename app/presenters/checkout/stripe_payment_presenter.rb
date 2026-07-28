@@ -585,10 +585,17 @@ class Checkout::StripePaymentPresenter
           # CheckoutPresenter#product_common on every add_products entry.
           product_currency: product[:currency_code].to_s.downcase.presence,
           ppp_discounted: product[:ppp_details].present?,
-          # CheckoutPresenter#product_common sets pwyw on every add_products entry when the
-          # product (or, for a tiered membership, the selected tier) lets the buyer name their
-          # own price, which is the case fallback_reason_for must not read as "free".
-          has_customizable_price: product[:pwyw].present?
+          # Whether the buyer can still name their own price, which fallback_reason_for must not
+          # read as "free". Two sources are needed because `pwyw` is NOT tier-aware: for a tiered
+          # membership `Product::Prices#set_customizable_price` returns early and never sets the
+          # product-level column (the TIER carries the flag via Variant::Prices), so
+          # CheckoutPresenter#product_common emits `pwyw: nil` for every membership. The options
+          # each carry `is_pwyw` from BaseVariant#to_option, so checking them too makes this agree
+          # with `Link#has_customizable_price_option?` — the predicate the cart path uses. Without
+          # the options check a $0 PWYW membership tier opened via /checkout?product=… still fell
+          # back to CardElement while the same product from a saved cart did not.
+          has_customizable_price: product[:pwyw].present? ||
+            product[:options].to_a.any? { _1[:is_pwyw] }
         )
       end
     end

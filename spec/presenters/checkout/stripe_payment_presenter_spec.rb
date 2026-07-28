@@ -4,7 +4,8 @@ describe Checkout::StripePaymentPresenter do
   def checkout_product_for(product, price: product.price_cents, recurrence: nil, pay_in_installments: false,
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
                            native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil,
-                           pwyw: product.customizable_price? ? { suggested_price_cents: product.suggested_price_cents } : nil)
+                           pwyw: product.customizable_price? ? { suggested_price_cents: product.suggested_price_cents } : nil,
+                           options: product.options)
     {
       product: {
         creator: { id: product.user.external_id },
@@ -17,6 +18,10 @@ describe Checkout::StripePaymentPresenter do
         # the presenter reads it so a pay-what-you-want cart listed from zero is not mistaken
         # for a free one before the buyer has entered an amount.
         pwyw:,
+        # Also set by product_common. Each option carries is_pwyw from BaseVariant#to_option,
+        # which is the only tier-aware signal on this payload: `pwyw` above reads the
+        # product-level column, and that column is never set for a tiered membership.
+        options:,
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
@@ -639,6 +644,27 @@ describe Checkout::StripePaymentPresenter do
 
     expect(stripe_payment_props(add_products: [checkout_product_for(free_product, price: 0, pwyw: nil)]))
       .to eq(card_element_fallback("not_charged"))
+  end
+
+  # A tiered membership never carries the pay-what-you-want flag on the product itself:
+  # Product::Prices#set_customizable_price returns early for tiered memberships and the TIER
+  # carries it instead, so CheckoutPresenter#product_common emits `pwyw: nil` for every
+  # membership. Reading only `pwyw` therefore left the primary buy flow (/checkout?product=…)
+  # on the legacy CardElement for exactly the products this fix is about, while the same
+  # product reached from a saved cart got the Payment Element. Pins the tier-aware read.
+  it "keeps the Payment Element for a membership whose tier is pay-what-you-want" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    tier = membership.tiers.first
+    tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(membership.customizable_price).to be_falsey
+    expect(membership.has_customizable_price_option?).to be(true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0)]))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
   end
 
   # A cart mixing a free product with a pay-what-you-want one can still be paid, so the
