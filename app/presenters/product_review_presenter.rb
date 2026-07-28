@@ -26,6 +26,10 @@ class ProductReviewPresenter
           name: purchase.full_name.presence || "Anonymous",
         },
       purchase_id: purchase.external_id,
+      # `is_new` only says whether the review is recent. The timestamp itself is what a creator
+      # building their own product page needs to sort reviews or print "reviewed on ...", so it is
+      # returned alongside it rather than being derived away.
+      created_at: product_review.created_at.iso8601,
       is_new: product_review.created_at > 1.month.ago,
       response: product_review.response.present? ?
         {

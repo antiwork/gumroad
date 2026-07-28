@@ -58,6 +58,7 @@ export type Review = {
   message: string | null;
   rater: { name: string; avatar_url: string };
   purchase_id: string;
+  created_at: string;
   is_new: boolean;
   response: {
     message: string;

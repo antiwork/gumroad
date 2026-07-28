@@ -52,6 +52,16 @@ export const CopyToClipboard = ({
       <span ref={ref} className="contents" onClick={(e) => e.stopPropagation()}>
         {children}
       </span>
+      {/*
+        Sighted users learn the copy succeeded from the tooltip flipping to copiedTooltip. That text
+        reaches assistive tech through aria-describedby, and changing the content of an
+        already-referenced description is not an announced event, so screen-reader users got no
+        confirmation at all. This live region carries the same wording as a real announcement. It is
+        empty until a copy succeeds so nothing is read out on render.
+      */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {status === "copied" ? copiedTooltip : ""}
+      </span>
     </WithTooltip>
   );
 };
