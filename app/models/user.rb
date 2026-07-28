@@ -374,6 +374,14 @@ class User < ApplicationRecord
   state_machine(:user_risk_state, initial: :not_reviewed) do
     before_transition any => %i[flagged_for_fraud flagged_for_tos_violation suspended_for_fraud suspended_for_tos_violation],
                       :do => :not_verified?
+
+    # Clearing a suspension is a much bigger deal than clearing a flag: it puts the
+    # seller's products back on sale. Callers have to say they mean it by passing
+    # `clear_suspension: true`, so a routine "this account looks fine" review can't
+    # undo a suspension it never looked at. Registered on every transition into
+    # compliant (not just the ones out of a suspended state) because the object in
+    # memory can be older than the row — see User::Risk#refuse_unauthorized_suspension_clear.
+    before_transition any => :compliant, :do => :refuse_unauthorized_suspension_clear
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
     after_transition any => %i[on_probation compliant not_reviewed flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],

@@ -105,7 +105,11 @@ class Admin::UsersController < Admin::BaseController
   end
 
   def mark_compliant
-    @user.mark_compliant!(author_id: current_user.id)
+    # A human clicking this button in the admin panel is a deliberate decision, including
+    # when the account is suspended — the button is only shown to admins looking at that
+    # account. The automated lanes are the ones that must not clear a suspension by
+    # accident; see User::Risk#refuse_unauthorized_suspension_clear.
+    @user.mark_compliant!(author_id: current_user.id, clear_suspension: true)
     render json: { success: true }
   end
 
