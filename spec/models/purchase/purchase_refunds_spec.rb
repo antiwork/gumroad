@@ -1529,6 +1529,69 @@ describe "PurchaseRefunds", :vcr do
 
       purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
     end
+
+    # gumroad-private#1328 A3. The excess to reverse is the seller's canonical USD balance
+    # debit, while Stripe denominates transfer reversals in the transfer's own currency.
+    # These specs pin both halves of the fix: the USD path keeps sending the exact same
+    # number as before, and a non-USD transfer fails closed instead of pulling that USD
+    # number out of the creator's account reinterpreted as buyer-currency cents.
+    context "currency handling of the reversal amount" do
+      let(:purchase) { create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s") }
+      let(:refund) { create(:refund, purchase:, processor_refund_id: "re_2MlrJr9e1RjUNIyY0dzjVFPd") }
+
+      before do
+        allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+        allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+
+        BalanceTransaction.create!(
+          user: purchase.seller,
+          merchant_account: purchase.merchant_account,
+          refund:,
+          dispute: nil,
+          issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -367),
+          holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -492, net_cents: -492),
+          update_user_balance: purchase.charged_using_gumroad_merchant_account?
+        )
+
+        allow(Stripe::Charge).to receive(:retrieve).with(purchase.stripe_transaction_id).and_return(double(transfer: "tr_test_123"))
+      end
+
+      def stub_transfer(currency:, already_reversed_cents:)
+        reversal = double(source_refund: refund.processor_refund_id, amount: -already_reversed_cents)
+        double(id: "tr_test_123", currency:, reversals: double(data: [reversal]))
+      end
+
+      it "reverses the USD excess on a USD transfer, exactly as before" do
+        transfer = stub_transfer(currency: "usd", already_reversed_cents: 100)
+        allow(Stripe::Transfer).to receive(:retrieve).with(id: "tr_test_123").and_return(transfer)
+
+        transfer_reversal = double(destination_payment_refund: "re_dest_1")
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_test_123", { amount: 267 }).and_return(transfer_reversal)
+        allow(Stripe::Refund).to receive(:retrieve)
+          .with("re_dest_1", stripe_account: purchase.merchant_account.charge_processor_merchant_id)
+          .and_return(double(balance_transaction: "txn_dest_1"))
+        allow(Stripe::BalanceTransaction).to receive(:retrieve)
+          .with("txn_dest_1", stripe_account: purchase.merchant_account.charge_processor_merchant_id)
+          .and_return(double(net: -360))
+
+        expect(Credit).to receive(:create_for_partial_refund_transfer_reversal!)
+          .with(amount_cents_usd: -267, amount_cents_holding_currency: -360, merchant_account: purchase.merchant_account)
+
+        purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+      end
+
+      it "fails closed on a non-USD transfer instead of reversing a USD figure in the transfer's currency" do
+        transfer = stub_transfer(currency: "eur", already_reversed_cents: 100)
+        allow(Stripe::Transfer).to receive(:retrieve).with(id: "tr_test_123").and_return(transfer)
+
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect(Credit).not_to receive(:create_for_partial_refund_transfer_reversal!)
+
+        expect do
+          purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+        end.to raise_error(/denominated in eur/)
+      end
+    end
   end
 
   describe "refund subscription purchase" do
@@ -2369,6 +2432,42 @@ describe "PurchaseRefunds", :vcr do
       expect(Stripe::Transfer).to receive(:list).and_call_original
 
       purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+    end
+
+    # gumroad-private#1328 A4. amount_refundable_cents is canonical USD, while Stripe
+    # denominates reversal amounts in the transfer's own currency. The dispute-win
+    # transfer is always created in USD today, so the USD path must keep sending the
+    # exact same number as before — and a transfer in any other currency must fail
+    # closed instead of reversing that USD number reinterpreted as foreign cents.
+    context "currency handling of the reversal amount" do
+      let(:merchant_account) { create(:merchant_account, charge_processor_merchant_id: "acct_1MABWa2noRrbY6cK") }
+      let(:purchase) { create(:purchase, link: create(:product, user: merchant_account.user), merchant_account:) }
+      let!(:dispute) { create(:dispute, purchase:, state: "won", won_at: Time.at(1669749973).utc, charge_processor_dispute_id: "dp_test_123") }
+
+      def stub_transfer_list(currency:)
+        transfer = double(id: "tr_dispute_win_1", currency:)
+        allow(transfer).to receive(:[]).with("description").and_return("Dispute dp_test_123 won.")
+        allow(Stripe::Transfer).to receive(:list).and_return([transfer])
+        transfer
+      end
+
+      it "reverses the canonical amount on a USD transfer, exactly as before" do
+        stub_transfer_list(currency: "usd")
+
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_dispute_win_1", { amount: purchase.amount_refundable_cents })
+
+        purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+      end
+
+      it "fails closed on a non-USD transfer instead of reversing a USD figure in the transfer's currency" do
+        stub_transfer_list(currency: "eur")
+
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        expect do
+          purchase.send(:reverse_the_transfer_made_for_dispute_win!)
+        end.to raise_error(/denominated in eur/)
+      end
     end
   end
 

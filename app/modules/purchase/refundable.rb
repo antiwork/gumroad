@@ -613,7 +613,25 @@ class Purchase
 
       transfers = Stripe::Transfer.list({ destination: merchant_account.charge_processor_merchant_id, created: { gte: dispute.won_at.to_i - 60000 },  limit: 100 })
       transfer = transfers.select { |tr| tr["description"]&.include?("Dispute #{dispute.charge_processor_dispute_id} won") }.first
-      Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents }) if transfer.present?
+      return unless transfer.present?
+
+      # Stripe denominates reversal amounts in the transfer's own currency, while
+      # amount_refundable_cents is canonical USD. The dispute-win transfer is created in
+      # USD (StripeTransferInternallyToCreator via the dispute-reinstated webhook handler
+      # always passes Currency::USD), so sending the canonical figure is correct — but
+      # only as long as that assumption holds. If the transfer we found is in any other
+      # currency (a buyer-currency presentment charge would make this mistake easy to
+      # introduce upstream), the canonical USD number would be reinterpreted in that
+      # currency and reverse the wrong amount of real money from the creator's account.
+      # Fail closed instead of guessing (gumroad-private#1328 A4).
+      if transfer.currency != Currency::USD
+        raise "Cannot reverse dispute-win transfer #{transfer.id} for purchase #{id}: " \
+              "the transfer is denominated in #{transfer.currency}, but the reversal amount " \
+              "(amount_refundable_cents) is canonical USD. Reverse it manually with a " \
+              "#{transfer.currency}-denominated amount."
+      end
+
+      Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents })
     end
 
     def debit_processor_fee_from_merchant_account!(refund)
@@ -641,6 +659,26 @@ class Purchase
 
       stripe_charge = Stripe::Charge.retrieve(refund.purchase.stripe_transaction_id)
       transfer = Stripe::Transfer.retrieve(id: stripe_charge.transfer)
+
+      # Everything below mixes our canonical USD cents with Stripe amounts that are
+      # denominated in the transfer's currency: amount_cents_to_be_reversed_usd (the
+      # seller's balance debit) is canonical USD, while the reversal amounts already on
+      # the transfer — and the amount Stripe expects for a new reversal — are in the
+      # currency of the original charge. Those are the same currency only when the charge
+      # was made in USD. For a buyer-currency presentment charge (say euros), comparing
+      # the two would misjudge whether an excess exists, and the reversal we create would
+      # pull `reversal_amount_cents_usd` euro cents — not USD cents — out of the
+      # creator's account: real money, wrong amount. The seller-net excess in the buyer's
+      # currency is not stored anywhere (refund presentment snapshots record gross
+      # components only), so there is no correct figure to send; fail closed rather than
+      # guess or convert at the live rate (gumroad-private#1328 A3).
+      if transfer.currency != Currency::USD
+        raise "Cannot reverse excess amount from transfer #{transfer.id} for refund #{refund.id}: " \
+              "the transfer is denominated in #{transfer.currency}, but the excess " \
+              "(the seller's balance debit) is canonical USD. Reconcile it manually with a " \
+              "#{transfer.currency}-denominated amount."
+      end
+
       amount_cents_already_reversed_usd = transfer.reversals.data.find { |d| d.source_refund == refund.processor_refund_id }.amount.abs
 
       return unless amount_cents_already_reversed_usd < amount_cents_to_be_reversed_usd
