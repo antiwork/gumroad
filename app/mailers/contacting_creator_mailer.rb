@@ -156,11 +156,14 @@ class ContactingCreatorMailer < ApplicationMailer
     # this particular account. Telling these sellers to check for typos or to wait is what
     # kept one of them re-saving a correct account for three months (gumroad-private#1476).
     @account_blocked = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED
+    @terminal_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL
     @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
     @subject = if @account_blocked
       "Please add a different bank account for payouts."
     elsif @format_rejected
       "Your bank details need correcting for payouts."
+    elsif @terminal_rejected
+      "We need a different bank account for your payouts."
     else
       "We couldn't verify your bank account yet."
     end

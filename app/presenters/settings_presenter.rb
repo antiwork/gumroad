@@ -329,6 +329,28 @@ class SettingsPresenter
       compliance_info.nil? || note.created_at >= compliance_info.created_at
     end
 
+    # The bank-account counterpart of postal_code_rejected_by_stripe?. Returns the newest payout
+    # note describing a rejection of the bank details the seller currently has saved, or nil.
+    #
+    # Freshness is anchored on the active bank account's own created_at rather than on the
+    # compliance info: entering different bank details creates a NEW BankAccount row, so a note
+    # older than that row is about details the seller has already replaced and must not be shown.
+    def current_bank_sync_failure_note
+      note = seller.comments
+            .with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .where("content LIKE ?", "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%")
+            .order(created_at: :desc, id: :desc)
+            .first
+      return nil if note.nil?
+
+      bank_account = seller.active_bank_account
+      return note if bank_account.nil? || note.created_at >= bank_account.created_at
+
+      nil
+    end
+
     def country_code_for_compliance_field(field, user_compliance_info)
       case field
       when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
@@ -446,6 +468,24 @@ class SettingsPresenter
           message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it every few days for up to #{weeks} weeks.",
           href: nil,
         }
+      end
+
+      # Same asynchronous-rejection problem as the postal code above, for the bank details. Stripe
+      # can refuse the account the seller saved (payouts to it failed before, or the bank can't
+      # receive payouts) and the settings page still reports a clean save, so the seller has no way
+      # to learn that this account will never work — they wait, and on a paid product the publish
+      # button stays blocked with a "connect a payment method" error that looks unrelated. The note
+      # self-heals the same way: it is soft-deleted once a bank sync succeeds, and
+      # current_bank_sync_failure_note ignores notes older than the currently saved bank account.
+      if stripe_account.blank? && (bank_note = current_bank_sync_failure_note)
+        bank_message = if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
+          "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
+        elsif StripeMerchantAccountManager.bank_details_format_rejection_note?(bank_note)
+          "Our payment partner couldn't accept your bank details as entered. Please double-check your account and bank code and re-save them. Waiting won't clear this one."
+        else
+          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it every few days for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
+        end
+        compliance_actions << { message: bank_message, href: nil }
       end
 
       gumroad_status = if is_under_review && !is_suspended

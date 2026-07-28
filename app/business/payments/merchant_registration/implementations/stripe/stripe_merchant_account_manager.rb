@@ -17,13 +17,17 @@ module StripeMerchantAccountManager
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
 
-  # Stripe rejects bank details for two very different reasons, and sellers need different
+  # Stripe rejects bank details for three very different reasons, and sellers need different
   # advice for each:
   #
   # * FORMAT rejections — the bank/routing code cannot be accepted as typed (wrong length,
   #   lowercase, spaces, a branch suffix the country's format doesn't allow). Nothing changes
   #   over time, so re-sending the same stored value can never succeed: only the seller
   #   re-entering the code fixes it.
+  # * TERMINAL rejections — the details are well-formed and the bank is known, but Stripe
+  #   refuses this particular account outright (payouts to it have failed before, or the bank
+  #   itself is outside payout coverage). Correcting a digit cannot help and neither can
+  #   waiting: the seller has to nominate a DIFFERENT account.
   # * DIRECTORY misses — the code looks well-formed but the bank or branch isn't in Stripe's
   #   records yet (common for newly opened accounts and recently added branches). These can
   #   genuinely start working on their own, which is what the weekly automated re-check is for.
@@ -46,12 +50,26 @@ module StripeMerchantAccountManager
   # classification: no automated retries, and an email that says so.
   BANK_ACCOUNT_BLOCKED_MESSAGE = /because it is on your block list/i
 
+  # Terminal rejections are the ones where the account itself is refused rather than the way it
+  # was typed. `bank_account_unusable` is Stripe's code for "payments or payouts on this account
+  # failed before"; the message patterns cover the same condition on error shapes that carry no
+  # code, plus banks Stripe cannot pay out to at all.
+  BANK_DETAILS_TERMINAL_REJECTION_CODES = %w[bank_account_unusable].freeze
+  BANK_DETAILS_TERMINAL_REJECTION_MESSAGE = Regexp.union(
+    /previous payments or payouts failed/i,
+    /previous attempts to deliver payouts/i,
+    /doesn't appear to support payouts/i,
+    /unable to support this bank/i
+  )
+
   # Passed to ContactingCreatorMailer#invalid_bank_account so the email can tell the seller
-  # whether waiting might help (directory miss) or whether they must re-enter the code (format).
+  # whether waiting might help (directory miss), whether they must re-enter the code (format),
+  # or whether they need a different bank account entirely (terminal).
   BANK_REJECTION_KIND_FORMAT = "format_rejected"
   # As above, but for a block-listed external account: the seller must use a different account,
   # because correcting or re-entering this one can never succeed.
   BANK_REJECTION_KIND_BLOCKED = "account_blocked"
+  BANK_REJECTION_KIND_TERMINAL = "terminal_rejected"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
   # Prefix for the breadcrumb left when Stripe rejects account creation or an account update
   # for a reason we do not handle specifically. See record_account_rejection_note below.
@@ -852,11 +870,7 @@ module StripeMerchantAccountManager
     # cover older rejection shapes that carry no code or param.
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       if notify
-        rejection_kind = if bank_account_blocked?(e)
-          BANK_REJECTION_KIND_BLOCKED
-        elsif bank_details_format_rejection?(e)
-          BANK_REJECTION_KIND_FORMAT
-        end
+        rejection_kind = bank_rejection_kind_for(e)
         ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
         mark_bank_sync_note_seller_notified!(failure_note)
       end
@@ -912,6 +926,19 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
+  # Which "we can't use this bank account" story the seller should be told, or nil when it's the
+  # directory-miss case the default email copy already describes.
+  #
+  # Order matters. A block is the narrowest claim — Stripe named this one account — so it is
+  # asked first. Terminal outranks format because Stripe reuses format codes for accounts it
+  # refuses outright, and telling that seller to re-type digits is an infinite loop.
+  def self.bank_rejection_kind_for(error)
+    return BANK_REJECTION_KIND_BLOCKED if bank_account_blocked?(error)
+    return BANK_REJECTION_KIND_TERMINAL if bank_details_terminal_rejection?(error)
+    return BANK_REJECTION_KIND_FORMAT if bank_details_format_rejection?(error)
+    nil
+  end
+
   # True when Stripe rejected the bank/routing code on FORMAT grounds, i.e. the value as typed
   # can never be accepted (see BANK_DETAILS_FORMAT_REJECTION_CODES above). Waiting cannot fix
   # these, so the seller must re-enter the code — the email and the automated retry loop both
@@ -919,6 +946,23 @@ module StripeMerchantAccountManager
   def self.bank_details_format_rejection?(error)
     code = error.respond_to?(:code) ? error.code : nil
     format_rejection_signals?(code:, message: error.message.to_s)
+  end
+
+  # True when Stripe refused the account itself rather than the way it was typed — payouts to it
+  # have failed before, or the bank cannot receive payouts at all. Re-entering the same details
+  # and waiting are both dead ends, so the seller has to supply a different account. Kept
+  # separate from bank_details_format_rejection? because the advice differs: "fix your code"
+  # would send the seller in circles on an account that can never be accepted.
+  def self.bank_details_terminal_rejection?(error)
+    code = error.respond_to?(:code) ? error.code : nil
+    terminal_rejection_signals?(code:, message: error.message.to_s)
+  end
+
+  # Same question as bank_details_terminal_rejection?, answered from the payout-note breadcrumb
+  # rather than a live Stripe error. Reads the note the same way the format classifier does.
+  def self.bank_details_terminal_rejection_note?(note)
+    code, message = bank_sync_note_error_details(note)
+    terminal_rejection_signals?(code:, message:)
   end
 
   # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb
@@ -956,14 +1000,29 @@ module StripeMerchantAccountManager
     if json_data.key?("stripe_error_message")
       [json_data["stripe_error_code"], json_data["stripe_error_message"].to_s]
     else
-      [BANK_DETAILS_FORMAT_REJECTION_CODES.find { |code| content.include?(code) }, content]
+      # Older notes carry no structured fields, so the only thing to read is the human-readable
+      # content, which embeds the code followed by a truncated message. Search every code either
+      # classifier cares about — searching only one list would make the other one blind to old notes.
+      known_codes = BANK_DETAILS_FORMAT_REJECTION_CODES + BANK_DETAILS_TERMINAL_REJECTION_CODES
+      [known_codes.find { |code| content.include?(code) }, content]
     end
   end
 
   def self.format_rejection_signals?(code:, message:)
     return false if message.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+    # A terminal rejection can share a code with a format rejection (Stripe reuses
+    # account_number_invalid for "this account previously failed"), and telling that seller to
+    # re-type their digits would loop them forever. Terminal wins.
+    return false if terminal_rejection_signals?(code:, message:)
 
     code.to_s.in?(BANK_DETAILS_FORMAT_REJECTION_CODES) || message.match?(BANK_DETAILS_FORMAT_REJECTION_MESSAGE)
+  end
+
+  def self.terminal_rejection_signals?(code:, message:)
+    # Unlike a format rejection, a directory miss does not override this: "we couldn't find the
+    # bank" is a waiting problem, but it never carries a terminal code or message, so there is
+    # nothing to disambiguate here.
+    code.to_s.in?(BANK_DETAILS_TERMINAL_REJECTION_CODES) || message.match?(BANK_DETAILS_TERMINAL_REJECTION_MESSAGE)
   end
 
   # False when the note was recorded without the seller being emailed about it — account
