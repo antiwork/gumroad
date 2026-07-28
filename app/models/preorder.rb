@@ -3,6 +3,9 @@
 class Preorder < ApplicationRecord
   include ExternalId
   include AfterCommitEverywhere
+  # A preorder authorises at checkout and charges on release day, so the amount it charges is a
+  # later charge in the sense of gumroad-private#1322.
+  include HasLaterChargePresentments
 
   belongs_to :preorder_link, optional: true
   belongs_to :seller, class_name: "User", optional: true

@@ -2,6 +2,10 @@
 
 class Commission < ApplicationRecord
   include ExternalId
+  # A commission takes a deposit at checkout and the balance later, when the seller marks the
+  # work complete — so the balance payment is a later charge in the sense of
+  # gumroad-private#1322.
+  include HasLaterChargePresentments
 
   COMMISSION_DEPOSIT_PROPORTION = 0.5
   STATUSES = ["in_progress", "completed", "cancelled"].freeze

@@ -15,6 +15,9 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  # Memberships AND installment plans are both Subscriptions internally, so this one include
+  # covers two of the four product types in gumroad-private#1322.
+  include HasLaterChargePresentments
   extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
@@ -62,15 +65,6 @@ class Subscription < ApplicationRecord
   has_one :original_purchase, -> { is_original_subscription_purchase.not_is_archived_original_subscription_purchase }, class_name: "Purchase"
   has_one :true_original_purchase, -> { is_original_subscription_purchase.order(:id) }, class_name: "Purchase"
   has_one :last_successful_purchase, -> { successful.order(created_at: :desc) }, class_name: "Purchase"
-  # Present only when the buyer is billed in their own currency; absent for the USD-billed
-  # majority. One row per fixing rather than one per subscription, because a price change
-  # mid-subscription re-fixes the buyer-currency amount and each fixing keeps the rate it was
-  # made at. See SubscriptionPresentment for why the amount is fixed at all.
-  has_many :subscription_presentments, dependent: :destroy
-  # The amount a charge should read: the most recent fixing that has taken effect.
-  has_one :current_subscription_presentment,
-          -> { where(effective_from: ..Time.current).order(effective_from: :desc, id: :desc) },
-          class_name: "SubscriptionPresentment"
   has_many :url_redirects
   has_many :payment_options
   has_many :subscription_plan_changes
