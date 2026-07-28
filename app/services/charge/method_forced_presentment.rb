@@ -94,7 +94,7 @@ class Charge::MethodForcedPresentment
     # destination charge is the platform account rather than the seller's.
     begin
       Checkout::BuyerCurrencyEligibility
-        .fx_quote_merchant_account(merchant_account, seller:)
+        .fx_quote_merchant_account(merchant_account)
         &.record_settlement_currency_mismatch!(forced_currency || Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type))
     rescue StandardError => persistence_error
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{persistence_error.class} #{persistence_error.message}")
@@ -222,7 +222,7 @@ class Charge::MethodForcedPresentment
       # card lane uses, and the same account this lane's settlement gate already checks
       # (Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account). Minting here and
       # creating the intent elsewhere would have Stripe reject the quote.
-      quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account, seller:)
+      quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
       return nil if quote_merchant_account.blank?
 
       # Kill switch for the destination-charge shape. Measured before this PR: destination

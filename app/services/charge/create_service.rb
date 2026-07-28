@@ -367,7 +367,7 @@ class Charge::CreateService
   # checkout probes Stripe again.
   def record_settlement_currency_mismatch(currency)
     Checkout::BuyerCurrencyEligibility
-      .fx_quote_merchant_account(merchant_account, seller:)
+      .fx_quote_merchant_account(merchant_account)
       &.record_settlement_currency_mismatch!(currency)
   rescue StandardError => e
     Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")

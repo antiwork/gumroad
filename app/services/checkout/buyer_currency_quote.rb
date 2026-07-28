@@ -244,7 +244,7 @@ class Checkout::BuyerCurrencyQuote
     # The quote must be minted on the account the PaymentIntent will be created on, which
     # for a destination charge is the Gumroad platform account rather than the seller's
     # connected account (see Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account).
-    quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account, seller:)
+    quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
     return if quote_merchant_account.blank?
 
     quote = StripeFxQuote.create(

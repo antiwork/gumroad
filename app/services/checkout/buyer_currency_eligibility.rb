@@ -171,10 +171,7 @@ class Checkout::BuyerCurrencyEligibility
   # whether the CARD lane may quote a destination charge at all (see
   # #supported_merchant_account?), and while it is off no card checkout reaches here with
   # a destination charge, so nothing about the card lane changes.
-  #
-  # `seller` is unused today and kept only so callers do not have to change if a future
-  # ramp needs to consult it.
-  def self.fx_quote_merchant_account(merchant_account, seller: nil)
+  def self.fx_quote_merchant_account(merchant_account)
     settlement_merchant_account(merchant_account)
   end
 
@@ -228,7 +225,7 @@ class Checkout::BuyerCurrencyEligibility
     # to the connected account is a second, separate conversion that no FX quote covers. A
     # seller settling in euros can therefore be quoted safely — their euros come from the
     # transfer, not from this charge.
-    quote_account = fx_quote_merchant_account(merchant_account, seller:)
+    quote_account = fx_quote_merchant_account(merchant_account)
     return false unless usd_holding_merchant_account?(quote_account)
 
     # The stored currency answers the wrong question for accounts with Stripe

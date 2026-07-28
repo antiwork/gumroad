@@ -351,7 +351,7 @@ describe Checkout::BuyerCurrencyEligibility do
       # flag, and its intent is created on the platform account either way. Returning the
       # seller's account here would mint that lane's quote in a different account from its
       # intent, which Stripe rejects.
-      expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(platform_merchant_account)
+      expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(platform_merchant_account)
     end
 
     it "declares the seller's account as the quote's transfer destination" do
@@ -384,7 +384,7 @@ describe Checkout::BuyerCurrencyEligibility do
       end
 
       it "quotes against the platform account, which is where the intent is created" do
-        expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(platform_merchant_account)
+        expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(platform_merchant_account)
       end
 
       it "stays eligible when the seller's own account settles in a non-USD currency" do
@@ -424,10 +424,10 @@ describe Checkout::BuyerCurrencyEligibility do
     it "still quotes against the seller's own connected account" do
       # A direct charge creates the intent on the seller's account, so nothing about the
       # destination lane may move the quote off it — with the ramp flag on or off.
-      expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(merchant_account)
+      expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(merchant_account)
 
       Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
-      expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(merchant_account)
+      expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(merchant_account)
     ensure
       Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
     end
