@@ -28,6 +28,10 @@ class ReleaseChargebackRatePayoutPauseForSellerJob
     # The rate comes from an Elasticsearch aggregation, which can take long enough that an admin
     # pauses, suspends, or closes the account in between. Re-check every guard against a locked,
     # freshly-read row so this job can never clear a hold that was put there after it started.
+    #
+    # The lock also serializes against the two automatic pause writers: each sets the flag and
+    # writes its identifying comment in one transaction, so this SELECT ... FOR UPDATE waits for
+    # that transaction to commit and can never observe a hold whose comment has not landed yet.
     user.with_lock do
       next unless releasable?(user)
 
