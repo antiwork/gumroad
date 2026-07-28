@@ -366,6 +366,12 @@ describe BalanceTransaction, :vcr do
           # #prepare_payment_and_set_amount, which refuses to sum holding_amount_cents across
           # balances whose holding_currency differs from the payout currency — and it fails the
           # *whole* payment, taking the seller's correctly-labelled USD balances down with it.
+          #
+          # Both balances go into one payout so the guard itself decides which is acceptable. The
+          # row carrying whatever currency this code produced must stay out of the rejected list,
+          # which is what makes this example fail if that currency ever goes back to being the
+          # buyer's. Asserting against a hardcoded EUR row alone could not do that: it would hold
+          # no matter what the code under test returned.
           it "produces a currency the payout's holding-currency guard accepts" do
             seller = create(:user)
             # The plain :merchant_account factory, not :merchant_account_stripe — the latter calls the
@@ -373,25 +379,25 @@ describe BalanceTransaction, :vcr do
             # no need for. All that matters is that the seller resolves to a USD payout destination.
             create(:merchant_account, user: seller, currency: Currency::USD)
 
-            mislabelled = create(:balance, user: seller, merchant_account:,
+            as_booked = create(:balance, user: seller, merchant_account:, date: Date.yesterday,
+                                         currency: Currency::USD, holding_currency: amount.currency,
+                                         holding_amount_cents: amount.gross_cents)
+            mislabelled = create(:balance, user: seller, merchant_account:, date: Date.today,
                                            currency: Currency::USD, holding_currency: Currency::EUR,
                                            holding_amount_cents: amount.gross_cents)
 
             payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE)
-            errors = StripePayoutProcessor.prepare_payment_and_set_amount(payment, [mislabelled])
+            errors = StripePayoutProcessor.prepare_payment_and_set_amount(payment, [as_booked, mislabelled])
 
-            # What the incident looked like: the buyer's currency on a Gumroad-held balance fails the
-            # payout outright.
-            expect(errors).to be_present
-            expect(errors.first).to include("holding_currency that does not match the payout currency")
+            # What the incident looked like: one Gumroad-held row in the buyer's currency fails the
+            # payout outright. The guard returns here, before any Stripe transfer is attempted.
             expect(payment.failure_reason).to eq(Payment::FailureReason::CURRENCY_MISMATCH)
+            expect(errors.first).to include("holding_currency that does not match the payout currency")
 
-            # And the fix: the currency this code now produces is exactly the one the guard demands,
-            # so a balance carrying it is never among the rows rejected above. The success direction
-            # is asserted by the sibling example rather than by running the payout to completion,
-            # which would pull in the Stripe transfer that happens well after this decision.
-            expect(amount.currency).to eq(Currency::USD)
-            expect(Currency::EUR).not_to eq(amount.currency)
+            # And the fix: the rejected list names the buyer-currency row and nothing else, so the
+            # currency this code now produces is one the payout accepts. The whole bracketed list is
+            # matched because a bare id would also match as a substring of a longer id.
+            expect(errors.first).to include("balances [#{mislabelled.id}] have")
           end
         end
 
