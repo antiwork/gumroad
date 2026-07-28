@@ -124,6 +124,15 @@ class PurchasesController < ApplicationController
 
     Purchase.where(email: @purchase.email, seller_id: @purchase.seller_id, can_contact: false).find_each do |purchase|
       purchase.update!(can_contact: true)
+    rescue ActiveRecord::RecordInvalid
+      # Mirrors `Purchase#unsubscribe_buyer`. Some old purchase rows no longer pass today's
+      # validations, and letting one of them raise here would abort the loop and leave the
+      # buyer's remaining rows marked uncontactable — a half-resubscribed state that keeps
+      # them out of the creator's audience.
+      Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Re-subscribing the buyer without running validations."
+
+      purchase.can_contact = true
+      purchase.save(validate: false)
     end
     @subscribed = true
   end
