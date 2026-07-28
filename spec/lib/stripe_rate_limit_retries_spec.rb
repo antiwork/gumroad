@@ -86,21 +86,23 @@ describe "Stripe rate-limit retries in the test environment" do
   end
 
   describe "the retry budget" do
-    it "allows six attempts capped at four seconds each" do
+    it "allows eight attempts capped at sixteen seconds each" do
       # Pinned literally rather than read back from Stripe's config, so that
       # changing the budget has to change this spec deliberately.
-      expect(Stripe.max_network_retries).to eq(6)
-      expect(Stripe.max_network_retry_delay).to eq(4)
+      expect(Stripe.max_network_retries).to eq(8)
+      expect(Stripe.max_network_retry_delay).to eq(16)
     end
 
-    it "keeps the worst-case wait to well under half a minute" do
-      # The helper this replaced could sleep ~134s inside one example. Sum the
-      # gem's own backoff schedule to prove the replacement cannot.
+    it "leaves enough room to outlast account-creation throttling" do
+      # The helper this replaced allowed roughly 134s specifically because
+      # account-creation throttling has a longer window than the per-second
+      # request-rate bucket. Sum the gem's own backoff schedule to prove the
+      # replacement stays in that ballpark rather than expiring early.
       worst_case = (1..Stripe.max_network_retries).sum do |attempt|
         [Stripe.initial_network_retry_delay * (2**(attempt - 1)), Stripe.max_network_retry_delay].min
       end
 
-      expect(worst_case).to be < 30
+      expect(worst_case).to be > 60
     end
   end
 end

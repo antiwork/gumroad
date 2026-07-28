@@ -27,11 +27,15 @@
 # rate-limit-shaped failure into the gem's existing retry path.
 #
 # This replaces the old StripeRetryHelper, which wrapped Stripe::Account.create
-# only and re-raised anything whose message did not say "creating accounts too
-# quickly". That is why the 429s coming out of Stripe::Customer.create and
-# Stripe::PaymentIntent.create went straight through it and reddened builds. It
-# also slept up to ~134 seconds inside a single example; the bounded backoff
-# configured below caps the worst case at ~15 seconds.
+# and Stripe::Account.create_person only, and re-raised anything whose message
+# did not say "creating accounts too quickly". That is why the 429s coming out of
+# Stripe::Customer.create and Stripe::PaymentIntent.create went straight through
+# it and reddened builds.
+#
+# What this does NOT cover: :js specs drive Stripe Elements in the browser, so
+# card tokenization goes Chrome → Stripe directly and the Ruby gem never sees it.
+# A rate limit on that path is out of reach here. Both observed failure shapes
+# were server-side, so this addresses what actually broke.
 module StripeTestRateLimitRetries
   # Stripe does not always set an HTTP status or a machine-readable code on
   # these: account-creation throttling arrives as a Stripe::InvalidRequestError
@@ -73,12 +77,31 @@ end
 
 Stripe::StripeClient.singleton_class.prepend(StripeTestRateLimitRetries)
 
-# Retry budget for the test environment. The worst case is
-# 0.5 + 1 + 2 + 4 + 4 + 4 ≈ 15.5s of sleeping, spread over six attempts, versus
-# the ~134s the old helper could spend on a single call. Production keeps the
-# value set in config/initializers/003_stripe.rb.
+# Retry budget for the test environment. Attempt delays follow the gem's own
+# schedule (0.5s doubling, capped), so the worst case is
+# 0.5 + 1 + 2 + 4 + 8 + 16 + 16 + 16 = 63.5 seconds across eight attempts.
+#
+# That is deliberately generous rather than minimal. The helper this replaces
+# allowed roughly 134 seconds, and it did so specifically for account-creation
+# throttling, whose window is longer than the per-second request-rate bucket. A
+# budget short enough to expire inside that window would fail the build for the
+# reason this file exists to prevent. In exchange the budget is now a hard
+# ceiling on the whole suite rather than per-call, applies only when a request
+# is actually being throttled, and costs nothing on a healthy run.
+#
+# Production keeps the value set in config/initializers/003_stripe.rb.
 #
 # The delay cap has no module-level writer on Stripe (the gem only delegates the
 # reader), so it is set on the configuration object directly.
-Stripe.max_network_retries = 6
-Stripe.config.max_network_retry_delay = 4
+Stripe.max_network_retries = 8
+Stripe.config.max_network_retry_delay = 16
+
+# The gem retries silently. The helper this replaces printed a line per retry,
+# and losing that would make a CI shard quietly spending a minute on rate limits
+# invisible to whoever is reading the log. Report any request that needed a
+# retry, once, when it finishes.
+Stripe::Instrumentation.subscribe(:request_end, :stripe_rate_limit_retry_logging) do |event|
+  next unless event.num_retries.to_i.positive?
+
+  warn "[Stripe] #{event.method.to_s.upcase} #{event.path} succeeded after #{event.num_retries} retry/retries — the shared Stripe test account is rate limiting."
+end
