@@ -6,14 +6,10 @@ class CreateLaterChargePresentments < ActiveRecord::Migration[7.1]
       # Polymorphic because four different things control a charge that happens after checkout,
       # and they share nothing else: a Subscription (memberships and installment plans, which are
       # subscriptions internally), a Preorder (charged on release day), and a Commission (the
-      # balance payment when the seller marks the work complete). Each owns the buyer-currency
-      # amount its own later charges are billed in. See LaterChargePresentment.
+      # balance payment when the seller marks the work complete).
       #
-      # Not unique on the owner: the amount legitimately gets re-fixed mid-life (a membership
-      # upgrade, a quantity change, an expiring fixed-duration discount), and each fixing keeps
-      # the rate it was made at. Rows are immutable and effective-dated so the drift Gumroad
-      # absorbs stays measurable against the right baseline; updating one row in place would
-      # overwrite it.
+      # Deliberately NOT unique on the owner — rows are immutable and effective-dated, one per
+      # fixing. See LaterChargePresentment for why.
       t.references :owner, polymorphic: true, null: false, index: false
       t.string :processor, null: false
       t.string :presentment_currency, null: false

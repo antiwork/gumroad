@@ -42,6 +42,11 @@ class LaterChargePresentment < ApplicationRecord
 
   belongs_to :owner, polymorphic: true
 
+  # Stored lowercase so a currency comparison against any other presentment table matches.
+  # charge_presentments rows are lowercase and Checkout::BuyerCurrencyEligibility only ever
+  # produces lowercase, so a mixed-case row here would silently fail to join with either.
+  normalizes :presentment_currency, with: -> (currency) { currency&.downcase }
+
   validates :owner_type, inclusion: { in: OWNER_TYPES, message: "does not have later charges to present" }
   validates :processor, presence: true
   validates :presentment_currency, presence: true
@@ -98,8 +103,11 @@ class LaterChargePresentment < ApplicationRecord
     def usd_cents_for(units_per_usd)
       return nil if units_per_usd.blank?
 
-      rate = BigDecimal(units_per_usd.to_s)
-      return nil unless rate.positive?
+      # `exception: false` because this method promises nil for an unusable rate, and the rate can
+      # arrive as a String from CurrencyHelper#get_rate (which reads a cache) — a garbage cached
+      # value should make a reporting figure unanswerable, not raise out of a report.
+      rate = BigDecimal(units_per_usd.to_s, exception: false)
+      return nil if rate.nil? || !rate.positive?
 
       get_usd_cents(presentment_currency, presentment_price_cents, rate:)
     end

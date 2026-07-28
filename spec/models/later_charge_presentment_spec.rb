@@ -22,13 +22,22 @@ describe LaterChargePresentment do
       expect(presentment.errors[:presentment_currency]).to include("is the canonical currency, so there is nothing to present")
     end
 
+    # twd rather than a stubbed currency: Stripe genuinely only accepts New Taiwan dollars in
+    # amounts divisible by 100, so this exercises the real gate and would catch a drift in
+    # StripeChargeProcessor::AMOUNT_DIVISIBLE_BY_100_CURRENCIES that a stub would hide.
     it "rejects a currency Stripe cannot charge in minor units" do
-      allow(StripeChargeProcessor).to receive(:charge_minor_units_compatible?).with("eur").and_return(false)
-
-      presentment = build(:later_charge_presentment, owner: subscription, presentment_currency: "eur")
+      presentment = build(:later_charge_presentment, owner: subscription, presentment_currency: "twd")
 
       expect(presentment).not_to be_valid
       expect(presentment.errors[:presentment_currency]).to include("cannot be charged in minor units by Stripe")
+    end
+
+    # A mixed-case row would fail to match a lowercase charge_presentments row in any comparison,
+    # so the currency is normalized rather than merely accepted.
+    it "stores the currency lowercase however it was given" do
+      presentment = create(:later_charge_presentment, owner: subscription, presentment_currency: "EUR")
+
+      expect(presentment.reload.presentment_currency).to eq("eur")
     end
 
     it "rejects a zero amount, which would mean billing the buyer nothing every period" do
@@ -56,10 +65,6 @@ describe LaterChargePresentment do
   # The four product types in gumroad-private#1322 reduce to three owners, because memberships
   # and installment plans are both Subscriptions internally.
   describe "owners" do
-    it "accepts a membership subscription" do
-      expect(build(:later_charge_presentment, owner: subscription)).to be_valid
-    end
-
     it "accepts an installment plan, which is a subscription with the flag set" do
       plan = create(:subscription, link: create(:product, :with_installment_plan), is_installment_plan: true)
 
@@ -151,7 +156,7 @@ describe LaterChargePresentment do
 
     it "is nil when there is no fixing, so the charge falls back to canonical dollars" do
       expect(subscription.fixed_later_charge_price_cents).to be_nil
-      expect(subscription.later_charge_presentment_currency).to be_nil
+      expect(subscription.current_later_charge_presentment).to be_nil
     end
   end
 
@@ -199,6 +204,13 @@ describe LaterChargePresentment do
       expect(presentment.usd_drift_cents(nil)).to be_nil
       expect(presentment.usd_drift_cents(BigDecimal("0"))).to be_nil
       expect(presentment.usd_drift_cents(BigDecimal("-1"))).to be_nil
+    end
+
+    # CurrencyHelper#get_rate reads a cache and hands back a String, so a corrupted entry reaches
+    # here as garbage. A reporting figure must go unanswerable, not raise out of the report.
+    it "returns nil rather than raising on a rate that is not a number at all" do
+      expect(presentment.usd_drift_cents("not a rate")).to be_nil
+      expect(presentment.usd_drift_cents("NaN")).to be_nil
     end
 
     it "measures drift on a single-unit currency in USD cents" do

@@ -26,12 +26,10 @@ module HasLaterChargePresentments
   # The buyer-currency amount to bill on a later charge, or nil when there is none and the charge
   # should fall back to canonical US dollars. Deliberately does NOT consult a current exchange
   # rate: the stored amount is what the buyer agreed to and is authoritative.
+  #
+  # A caller needing the currency too should read `current_later_charge_presentment` and take both
+  # off one record rather than asking twice.
   def fixed_later_charge_price_cents
     current_later_charge_presentment&.presentment_price_cents
-  end
-
-  # The currency a later charge should present in, or nil when it should bill canonical dollars.
-  def later_charge_presentment_currency
-    current_later_charge_presentment&.presentment_currency
   end
 end
