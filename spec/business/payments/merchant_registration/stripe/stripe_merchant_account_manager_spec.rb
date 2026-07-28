@@ -10842,7 +10842,13 @@ describe StripeMerchantAccountManager, :vcr do
               }
             end
 
-            it "pauses payouts, records the Stripe reason as a comment, and notifies the creator by email if payouts are disabled due to info requirement" do
+            # Time is frozen because the assertion below checks the exact timestamp the
+            # debounced email job is scheduled for. The matcher truncates both the job's
+            # scheduled time and its own expected time to whole seconds, so if the clock
+            # crosses a second boundary between the code enqueueing the job and the matcher
+            # recomputing the expected time, the two differ by one and the test fails at
+            # random. Freezing time makes both sides read the same clock.
+            it "pauses payouts, records the Stripe reason as a comment, and notifies the creator by email if payouts are disabled due to info requirement", :freeze_time do
               expect(user.reload.payouts_paused_internally?).to be false
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
 
@@ -10863,6 +10869,14 @@ describe StripeMerchantAccountManager, :vcr do
               expect(comment).to be_present
               expect(comment.content).to include("requirements.past_due")
               expect(user.payouts_paused_for_reason).to eq(comment.content)
+            end
+
+            # The assertions above take the expected delay from the constant itself, so they
+            # would still pass if the debounce window shrank to nothing. This pins the actual
+            # value, because the window's length is the whole point: it has to be long enough
+            # to outlast a routine Stripe re-verification that resolves on its own.
+            it "waits half an hour before emailing, so a verification blip that resolves itself never emails the seller" do
+              expect(described_class::PAYOUTS_PAUSE_EMAIL_DEBOUNCE_DELAY).to eq(30.minutes)
             end
 
             it "applies the pause under a user lock and refreshes the merchant account so concurrent webhooks are serialized" do
@@ -11146,7 +11160,9 @@ describe StripeMerchantAccountManager, :vcr do
                 stripe_event["data"]["object"]["requirements"]["past_due"] = []
               end
 
-              it "sends the under-review email for a non-rejected reason with no outstanding requirements" do
+              # Frozen for the same reason as the past_due case above: the matcher compares
+              # the job's scheduled-at timestamp against a freshly computed one.
+              it "sends the under-review email for a non-rejected reason with no outstanding requirements", :freeze_time do
                 stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
 
                 described_class.handle_stripe_event(stripe_event)

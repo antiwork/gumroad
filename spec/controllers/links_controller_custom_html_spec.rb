@@ -70,6 +70,57 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to include(%(ALLOWED_CHECKOUT_KEYS = ["variant","option","quantity","price","recurrence"]))
     end
 
+    describe "same-tab navigation to the seller's own pages" do
+      it "installs the validating gumroad:navigate listener in the trusted wrapper" do
+        get :show, params: { id: product.unique_permalink }
+
+        # The sandbox blocks the iframe from navigating the top-level window, so
+        # a plain link to the seller's storefront used to dead-end on an error
+        # page unless the seller added target="_blank". The bridge lets the
+        # trusted wrapper do the navigation after re-validating the hostname.
+        expect(response.body).to include('e.data.type === "gumroad:navigate"')
+        expect(response.body).to include("STORE_HOSTNAMES.indexOf(url.hostname) === -1")
+        expect(response.body).to include(%(STORE_HOSTNAMES = ["#{URI.parse(seller.subdomain_with_protocol).host}"]))
+      end
+
+      it "injects the click bridge into the sandboxed landing document" do
+        get :landing_iframe_content, params: { id: product.unique_permalink }
+
+        expect(response.body).to include("data-gumroad-navigation-bridge")
+        expect(response.body).to include('type: "gumroad:navigate"')
+      end
+
+      it "allowlists the seller's live custom domain alongside their subdomain" do
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+
+        get :show, params: { id: product.unique_permalink }
+
+        expect(response.body).to include("shop.example.com")
+      end
+
+      it "does not allowlist a custom domain the seller never verified" do
+        create(:custom_domain, user: seller, domain: "unproven.example.com")
+
+        get :show, params: { id: product.unique_permalink }
+
+        # Anyone can type a domain they don't own into the custom-domain field.
+        # Until DNS verification passes, sending a visitor's tab there would be
+        # navigating them to a host the seller hasn't shown they control.
+        expect(response.body).not_to include("unproven.example.com")
+      end
+
+      it "never allowlists a shared Gumroad host" do
+        @request.host = VALID_REQUEST_HOSTS.first
+
+        get :show, params: { id: product.unique_permalink }
+
+        # request.host is only trusted when it is one of the seller's own hosts.
+        # Otherwise a seller's HTML could navigate the visitor's tab to any
+        # gumroad.com path, which is exactly what the sandbox prevents.
+        expect(response.body).not_to include(%("#{VALID_REQUEST_HOSTS.first}"))
+      end
+    end
+
     describe "social share image meta tags" do
       it "omits og:image and twitter:image when the product has no thumbnail or cover" do
         get :show, params: { id: product.unique_permalink }

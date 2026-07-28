@@ -1016,6 +1016,29 @@ class User < ApplicationRecord
     "#{PROTOCOL}://#{subdomain_url}"
   end
 
+  # The hostnames this seller controls: their Gumroad subdomain and their live
+  # custom domain. Custom-HTML pages run inside a sandboxed iframe that cannot
+  # navigate the top-level window on its own; it asks the trusted page around it
+  # to do so, and that page only agrees when the destination is one of these
+  # hosts. Shared Gumroad hosts (gumroad.com and friends) are deliberately
+  # absent, so seller-authored HTML can never walk a visitor around arbitrary
+  # gumroad.com paths. Living on the model means the public product wrapper and
+  # the editor's landing-page preview decide from the same list instead of each
+  # rebuilding it and drifting apart.
+  #
+  # A custom domain only counts once it is active — DNS verified and holding a
+  # current SSL certificate, the same bar UrlService uses before it will build
+  # any custom-domain URL. Anyone can type a domain they don't own into the
+  # custom-domain field and the record sticks around whether verification
+  # succeeded or not, so trusting mere presence would let a seller's HTML send
+  # a visitor's tab to a host they never proved they control.
+  def custom_html_store_hostnames
+    hostnames = []
+    hostnames << URI("#{PROTOCOL}://#{subdomain}").host if subdomain.present?
+    hostnames << custom_domain.domain if custom_domain&.active?
+    hostnames.compact.uniq
+  end
+
   def auto_transcode_videos?
     tier >= TIER_3
   end

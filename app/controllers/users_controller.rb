@@ -239,8 +239,7 @@ class UsersController < ApplicationController
       # navigate the visitor's tab to arbitrary gumroad.com paths — the
       # allowlist must only ever contain hosts this seller controls.
       hostnames << request.host unless VALID_REQUEST_HOSTS.include?(request.host)
-      hostnames << URI("#{PROTOCOL}://#{user.subdomain}").host if user.subdomain.present?
-      hostnames << user.custom_domain.domain if user.custom_domain&.domain.present?
+      hostnames.concat(user.custom_html_store_hostnames)
       hostnames.compact.uniq
     end
 
