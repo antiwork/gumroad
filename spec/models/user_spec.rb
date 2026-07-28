@@ -2146,20 +2146,23 @@ describe User, :vcr do
       end
 
       it "re-enables all the sellers related accounts if the seller is marked compliant" do
-        user_3 = create(:user, payment_address: "sameuser@gmail.com", user_risk_state: "suspended_for_fraud")
+        # Suspended the way the cascade does it, which is the only case the release side
+        # covers — an account suspended on its own merits stays suspended.
+        user_3 = create(:user, payment_address: "sameuser@gmail.com")
+        user_3.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
         expect(@user).to receive(:enable_sellers_other_accounts).and_call_original
         @user_2.flag_for_fraud(author_id: @admin_user.id)
-        @user_2.suspend_for_fraud(author_id: @admin_user.id)
+        @user_2.suspend_for_fraud(author_name: "suspend_sellers_other_accounts", content: "cascade")
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@user_2.reload.suspended?).to be(true)
         expect(@user_2.comments.count).to eq(2)
         expect(user_3.reload.suspended?).to be(true)
 
-        @user.mark_compliant(author_id: @admin_user.id)
+        @user.mark_compliant(author_id: @admin_user.id, clear_suspension: true)
         expect(user_3.reload.compliant?).to be(true)
         expect(@user_2.reload.compliant?).to be(true)
-        expect(user_3.comments.count).to eq(1)
+        expect(user_3.comments.count).to eq(2)
         expect(@user_2.comments.count).to eq(3)
         expect(@user.comments.count).to eq(3)
       end
@@ -2170,7 +2173,7 @@ describe User, :vcr do
         expect(@product_1.reload.banned_at).to_not be(nil)
         expect(@product_2.reload.banned_at).to_not be(nil)
 
-        @user.mark_compliant(author_id: @admin_user.id)
+        @user.mark_compliant(author_id: @admin_user.id, clear_suspension: true)
         expect(@product_1.reload.banned_at).to be(nil)
         expect(@product_2.reload.banned_at).to be(nil)
       end
@@ -2184,7 +2187,7 @@ describe User, :vcr do
       end
 
       it "adds user's subdomain to stripe_apple_pay_domains when marked compliant" do
-        @user.mark_compliant(author_id: @admin_user.id)
+        @user.mark_compliant(author_id: @admin_user.id, clear_suspension: true)
         expect(CreateStripeApplePayDomainWorker).to have_enqueued_sidekiq_job(@user.id)
       end
     end

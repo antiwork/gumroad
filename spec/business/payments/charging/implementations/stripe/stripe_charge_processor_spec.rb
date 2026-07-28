@@ -4069,4 +4069,52 @@ describe StripeChargeProcessor, :vcr do
       end
     end
   end
+
+  # gumroad-private#1328 A2. This helper decides the `gumroad_amount` flow-of-funds leg on a
+  # dispute-won event. It shipped inverted once: the presentment snapshot already stores
+  # Gumroad's cut, but the code subtracted it from the charge total, which yields the SELLER's
+  # share under a `gumroad_amount` label. These pin the direction of each branch.
+  describe ".presentment_gumroad_amount_for" do
+    let(:stripe_charge) { double(id: "ch_test", currency: "eur", amount: 1874) }
+    # `canonical_seller_cents` is what the caller passes: charged_amount_cents minus
+    # charged_gumroad_amount_cents, i.e. the seller's share in canonical USD.
+    let(:canonical_seller_cents) { 1800 }
+
+    context "when the charge has a presentment snapshot" do
+      let(:chargeable) { double(presentment_currency: "eur", presentment_gumroad_amount_cents: 187) }
+
+      it "books the snapshot's Gumroad amount as-is, in the presentment currency" do
+        amount = StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents)
+
+        expect(amount.currency).to eq("eur")
+        # Not 1874 - 187 = 1687, which is the SELLER's share.
+        expect(amount.cents).to eq(187)
+      end
+
+      it "raises when the snapshot has a currency but no Gumroad amount" do
+        chargeable = double(presentment_currency: "eur", presentment_gumroad_amount_cents: nil)
+
+        expect { StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents) }
+          .to raise_error(/no presentment Gumroad amount/)
+      end
+    end
+
+    context "when the charge has no presentment snapshot" do
+      let(:chargeable) { double(presentment_currency: nil, presentment_gumroad_amount_cents: nil) }
+
+      it "keeps the historical subtraction for a charge genuinely made in USD" do
+        usd_charge = double(id: "ch_usd", currency: "usd", amount: 2000)
+
+        amount = StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, usd_charge, canonical_seller_cents)
+
+        expect(amount.currency).to eq("usd")
+        expect(amount.cents).to eq(200)
+      end
+
+      it "raises for a non-USD charge rather than mixing currencies" do
+        expect { StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents) }
+          .to raise_error(/no presentment snapshot/)
+      end
+    end
+  end
 end
