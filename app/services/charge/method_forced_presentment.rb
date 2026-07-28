@@ -90,8 +90,12 @@ class Charge::MethodForcedPresentment
     # this currency on the merchant account so subsequent checkouts in it skip the doomed
     # FX-quote round trip entirely (issue #6011) — other currencies keep quoting. A
     # persistence failure must never break the charge that is already falling back.
+    # Recorded on the account the quote was minted on (see #quoted_result), which for a
+    # destination charge is the platform account rather than the seller's.
     begin
-      merchant_account&.record_settlement_currency_mismatch!(forced_currency || Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type))
+      Checkout::BuyerCurrencyEligibility
+        .fx_quote_merchant_account(merchant_account, seller:)
+        &.record_settlement_currency_mismatch!(forced_currency || Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type))
     rescue StandardError => persistence_error
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{persistence_error.class} #{persistence_error.message}")
     end
@@ -213,10 +217,18 @@ class Charge::MethodForcedPresentment
     # the currency) and convert the canonical USD totals through it.
     def quoted_result(decision)
       currency = decision.currency
+      # Minted on the account the intent is created on, which for a destination charge is
+      # the Gumroad platform account rather than the seller's — the same routing rule the
+      # card lane uses, and the same account this lane's settlement gate already checks
+      # (Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account). Minting here and
+      # creating the intent elsewhere would have Stripe reject the quote.
+      quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account, seller:)
+      return nil if quote_merchant_account.blank?
+
       quote = StripeFxQuote.create(
         to_currency: Currency::USD,
         from_currency: currency,
-        stripe_account_id: merchant_account.charge_processor_merchant_id
+        stripe_account_id: quote_merchant_account.charge_processor_merchant_id
       )
 
       presentment_total_cents = presentment_cents_for(amount_cents, quote.fx_rate, currency)
