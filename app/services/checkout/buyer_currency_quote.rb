@@ -169,18 +169,24 @@ class Checkout::BuyerCurrencyQuote
     merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
                        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
     return unless merchant_account&.stripe_charge_processor?
-    return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
+    return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
     buyer_currency = buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
     # Checked last because the marker is scoped to the presentment currency: a mismatch
     # learned for EUR must not suppress quoting for GBP buyers of the same seller.
-    return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
+    return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
+
+    # The quote must be minted on the account the PaymentIntent will be created on, which
+    # for a destination charge is the Gumroad platform account rather than the seller's
+    # connected account (see Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account).
+    quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account, seller:)
+    return if quote_merchant_account.blank?
 
     quote = StripeFxQuote.create(
       to_currency: Currency::USD,
       from_currency: buyer_currency,
-      stripe_account_id: merchant_account.charge_processor_merchant_id
+      stripe_account_id: quote_merchant_account.charge_processor_merchant_id
     )
     converted_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
     # Give the converted total the same price ending the seller chose in USD ($9.99 →
@@ -234,10 +240,12 @@ class Checkout::BuyerCurrencyQuote
     # Expected condition, not a defect: the account settles this currency in itself
     # (Stripe multi-currency settlement) even though our stored merchant_account.currency
     # said USD. Fall back to the canonical USD checkout quietly — no Sentry notification.
-    # Record the mismatch for this currency on the merchant account so subsequent
-    # checkouts in it skip the doomed FX-quote round trip entirely (issue #6011); other
-    # currencies keep quoting.
-    record_settlement_currency_mismatch(merchant_account, buyer_currency)
+    # Record the mismatch for this currency on the account the quote was MINTED on (issue
+    # #6011) so subsequent checkouts in it skip the doomed FX-quote round trip entirely;
+    # other currencies keep quoting. On a destination charge that is the platform account,
+    # which is correct — the rejection was the platform's, and every seller quoting through
+    # it would hit the same wall.
+    record_settlement_currency_mismatch(quote_merchant_account || merchant_account, buyer_currency)
     Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
     nil
   rescue StandardError => e

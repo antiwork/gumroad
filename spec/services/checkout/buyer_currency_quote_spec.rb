@@ -406,6 +406,51 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect(result).to be_nil
     end
+
+    context "destination charges" do
+      # A Gumroad-managed Stripe Custom account: owned by the seller, but Stripe creates
+      # the PaymentIntent on the platform account and transfers to this one afterwards.
+      let!(:seller_merchant_account) do
+        seller.update!(check_merchant_account_is_linked: true)
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_seller_custom", currency: Currency::USD)
+      end
+
+      it "returns nil while the destination-charge ramp flag is off" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")).to be_nil
+      end
+
+      context "with the destination-charge ramp flag on" do
+        before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+        after { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+
+        it "mints the quote on the platform account, not the seller's" do
+          # The intent for a destination charge is created on the platform account, and a
+          # quote is only honoured in the account context that minted it.
+          expect(StripeFxQuote).to receive(:create).with(
+            to_currency: Currency::USD,
+            from_currency: Currency::CAD,
+            stripe_account_id: merchant_account.charge_processor_merchant_id
+          ).and_return(stripe_fx_quote)
+
+          result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+          expect(result).to have_attributes(currency: Currency::CAD, stripe_fx_quote_id: "fxq_test")
+        end
+
+        it "records a settlement mismatch on the platform account, which is the one that rejected it" do
+          allow(StripeFxQuote).to receive(:create).and_raise(
+            StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+          )
+
+          described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD)).to be(true)
+          expect(seller_merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD)).to be(false)
+        end
+      end
+    end
   end
 
   describe ".verify!" do

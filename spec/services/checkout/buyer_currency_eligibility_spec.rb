@@ -317,6 +317,85 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_charge_model)
   end
 
+  describe "destination charges" do
+    # A Gumroad-managed Stripe Custom account: it belongs to a user (so it is not the
+    # platform row) but it is not a Stripe Connect account either, so Stripe charges it
+    # with a destination charge — the PaymentIntent is created on the platform account and
+    # this account receives transfer_data[destination].
+    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
+    # The platform row is seeded in the test database; MerchantAccount.gumroad returns the
+    # first one, so use that rather than creating a second row the lookup would not find.
+    let!(:platform_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).tap do |account|
+        account.update!(charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+      end
+    end
+
+    it "falls back while the destination-charge ramp flag is off" do
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:unsupported_charge_model)
+    end
+
+    context "with the destination-charge ramp flag on" do
+      before { Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+      after { Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+
+      it "is eligible" do
+        expect(decision).to be_eligible
+        expect(decision.currency).to eq(Currency::CAD)
+        expect(decision.fallback_reason).to be_nil
+      end
+
+      it "quotes against the platform account, which is where the intent is created" do
+        expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(platform_merchant_account)
+      end
+
+      it "stays eligible when the seller's own account settles in a non-USD currency" do
+        # The charge converts the buyer's currency to the PLATFORM's settlement currency;
+        # the seller's euros come from the later transfer, which no FX quote covers.
+        merchant_account.update!(currency: Currency::EUR)
+
+        expect(decision).to be_eligible
+        expect(decision.currency).to eq(Currency::CAD)
+      end
+
+      it "falls back when the PLATFORM account settles the buyer's currency in itself" do
+        platform_merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+
+        expect(decision).not_to be_eligible
+        expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+      end
+
+      it "ignores a mismatch marker on the seller's own account" do
+        # The seller's account never mints the quote for this charge model, so a marker
+        # learned there says nothing about whether this charge can be quoted.
+        merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+
+        expect(decision).to be_eligible
+      end
+    end
+  end
+
+  describe "direct charges" do
+    it "still quotes against the seller's own connected account" do
+      # A direct charge creates the intent on the seller's account, so nothing about the
+      # destination lane may move the quote off it — with the ramp flag on or off.
+      expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(merchant_account)
+
+      Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+      expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(merchant_account)
+    ensure
+      Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+    end
+
+    it "still falls back when the seller's own account settles the buyer's currency in itself" do
+      merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+  end
+
   describe "#method_forced_decision" do
     let(:payment_method) { "ideal" }
 

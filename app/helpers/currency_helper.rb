@@ -206,11 +206,11 @@ module CurrencyHelper
     merchant_account = buyer_currency_merchant_account(seller)
     return false if merchant_account.blank?
     return false unless merchant_account.stripe_charge_processor?
-    return false unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
+    return false unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
 
     # Accounts that settle this currency in itself rather than USD reject the FX quote the
     # charge needs, so a local price shown for them always ends up charged in USD.
-    Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
+    Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
   end
 
   # The product-shape half of the gate, kept in step with

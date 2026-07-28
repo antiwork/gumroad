@@ -359,10 +359,16 @@ class Charge::CreateService
   # Persists the learned settlement-currency mismatch (issue #6011) so subsequent checkouts
   # for this seller skip the doomed FX-quote round trip for this presentment currency and
   # present canonical USD (other currencies keep quoting — Stripe settlement is configured
-  # per currency). A persistence failure must never mask the buyer-facing error handling
-  # that is already in progress — worst case the next checkout probes Stripe again.
+  # per currency). Recorded on the account the quote was minted on, which for a destination
+  # charge is the Gumroad platform account rather than the seller's connected account (see
+  # Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account) — the rejection came from
+  # that account, so that is where the marker belongs. A persistence failure must never mask
+  # the buyer-facing error handling that is already in progress — worst case the next
+  # checkout probes Stripe again.
   def record_settlement_currency_mismatch(currency)
-    merchant_account&.record_settlement_currency_mismatch!(currency)
+    Checkout::BuyerCurrencyEligibility
+      .fx_quote_merchant_account(merchant_account, seller:)
+      &.record_settlement_currency_mismatch!(currency)
   rescue StandardError => e
     Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
   end
