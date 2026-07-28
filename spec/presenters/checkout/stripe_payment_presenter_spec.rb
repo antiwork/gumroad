@@ -301,10 +301,11 @@ describe Checkout::StripePaymentPresenter do
   end
 
   it "keeps wallets off the Payment Element for a single-seller presentment-candidate cart" do
-    # The counterpart of the multi-seller case above, pinning that the narrowing is about
-    # multi-seller carts specifically and not a blanket re-enable: a single-seller candidate
-    # really can be quoted, so its wallets stay gated behind the presentment wallet ramp
-    # (exercised in full by the "wallets on the buyer-currency presentment lane" block above).
+    # A single-seller candidate really can be quoted, so it keeps the presentment element with
+    # wallets gated behind the presentment wallet ramp — the narrowing above must not read as a
+    # blanket re-enable. Note this cart takes the presentment-element lane, where disable_wallets
+    # comes from that ramp rather than from the narrowed gate itself; the single-seller coverage
+    # of the narrowed gate is the CardElement-fallback spec earlier in this file.
     seller = create(:user, disable_buyer_local_currency: false)
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)

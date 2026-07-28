@@ -67,8 +67,7 @@ class Checkout::StripePaymentPresenter
     # canonical USD, so there is nothing for a wallet sheet to disagree with. Suppressing wallets
     # on those carts removed Apple Pay and Google Pay from multi-seller checkouts that had them
     # before buyer-currency presentment existed, for no safety benefit.
-    disable_wallets = single_seller_cart?(checkout_items) &&
-      checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
+    disable_wallets = sellers.one? && checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
@@ -121,15 +120,6 @@ class Checkout::StripePaymentPresenter
 
     def sellers
       @sellers ||= items.map { _1[:seller] }.uniq
-    end
-
-    # Whether every item in the cart belongs to the same seller. Buyer-currency presentment is a
-    # single-seller feature end to end — the quote endpoint, the element shape, and the charge-time
-    # eligibility service all require it — so this is the gate that says whether presentment is
-    # even in play for a cart. Takes items explicitly because `props` computes it before the
-    # memoized `items` reader is otherwise consulted, and both see the same list.
-    def single_seller_cart?(checkout_items)
-      checkout_items.map { _1[:seller] }.uniq.one?
     end
 
     def card_element_props(fallback_reason, disable_wallets:)
@@ -367,7 +357,11 @@ class Checkout::StripePaymentPresenter
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
-      if single_seller_cart?(items) && items.any? { buyer_currency_presentment_candidate?(_1) }
+      # Single-seller only: buyer-currency presentment is a single-seller feature end to end (the
+      # quote endpoint, the element shape, and the charge-time eligibility service all require
+      # one seller), so a multi-seller cart can never be quoted and must not be judged against a
+      # presentment gate at all. See the note in `props` above.
+      if sellers.one? && items.any? { buyer_currency_presentment_candidate?(_1) }
         # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
         # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
         # presentment. Two shapes now stay on the Payment Element:
