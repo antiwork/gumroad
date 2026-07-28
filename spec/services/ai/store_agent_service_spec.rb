@@ -580,21 +580,39 @@ describe Ai::StoreAgentService do
         expect(replies).to be_empty
       end
 
-      it "tells the model exactly what went wrong so it can correct itself" do
+      it "tells the model exactly what went wrong and returns the model's honest correction" do
         captured = []
-        replies = [text_result("Staged. Confirm that card."), text_result("Nothing is staged — want me to prepare it?")]
+        # A model that complies with the correction says so plainly. That reply is truthful with no
+        # proposed action, so it must reach the seller unchanged — if the guard flagged it too, the
+        # correction branch could never succeed and every phantom claim would end in the fallback.
+        correction_reply = "Nothing is prepared right now — want me to set that discount up?"
+        replies = [text_result("Staged. Confirm that card."), text_result(correction_reply)]
         allow(client).to receive(:messages) do |args|
           captured = args[:messages]
           replies.shift
         end
 
-        service.respond(messages: [{ role: "user", content: "make a 20% code" }])
+        result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
+        expect(result[:reply]).to eq(correction_reply)
         expect(captured.last[:role]).to eq("user")
         expect(captured.last[:content]).to eq(described_class::STAGED_CLAIM_CORRECTION)
         # The model's own false claim is replayed as the assistant turn it is, so the correction
         # reads as a response to it.
         expect(captured[-2]).to eq(role: "assistant", content: "Staged. Confirm that card.")
+      end
+
+      it "does not ask for a correction the guard would reject" do
+        # The correction tells the model what to say when it can't stage the change. If that wording
+        # itself tripped the guard, a compliant model would be silenced.
+        compliant = [
+          "No change is prepared and I'm not waiting on you.",
+          "Nothing is prepared — I couldn't set that up.",
+        ]
+        compliant.each do |reply|
+          expect(described_class::STAGED_CLAIM_PATTERNS.any? { |p| reply.match?(p) } &&
+                 described_class::NEGATED_STAGING_PATTERNS.none? { |p| reply.match?(p) }).to be(false), reply
+        end
       end
 
       it "gives up honestly rather than repeating the false claim" do
@@ -609,9 +627,14 @@ describe Ai::StoreAgentService do
         expect(described_class::STAGED_CLAIM_PATTERNS.any? { |p| described_class::NOTHING_STAGED_REPLY.match?(p) }).to be(false)
       end
 
-      it "reports the give-up case so the rate is visible outside a database read" do
+      it "reports every occurrence so the rate is visible outside a database read" do
         allow(client).to receive(:messages).and_return(text_result("Staged. Confirm that card."))
-        expect(ErrorNotifier).to receive(:notify).with(/claimed a staged change with no proposed action/, hash_including(:reply))
+        # Both the retry and the give-up report, under one fixed message so Sentry groups them: a
+        # phantom claim on the last tool iteration never reaches the give-up branch, and reporting
+        # only that branch would undercount exactly the long turns most likely to produce one.
+        expect(ErrorNotifier).to receive(:notify)
+          .with("Store agent claimed a staged change with no proposed action", hash_including(:reply, :outcome))
+          .twice
 
         service.respond(messages: [{ role: "user", content: "make a 20% code" }])
       end
@@ -626,18 +649,49 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action]).to include(type: "api_write")
       end
 
-      it "does not flag replies that merely discuss confirming or offer to prepare something" do
+      it "leaves truthful replies that use the same words alone" do
+        # A match REPLACES the model's reply, so a false positive tells the seller a change doesn't
+        # exist when it does — worse than the phantom claim. Every one of these is truthful with no
+        # proposed action this turn, and none may be swallowed.
         innocuous = [
+          # offers and explanations
           "Want me to prepare that discount for you?",
           "I've prepared a summary of your sales for the month.",
           "Any change I make needs your confirmation before it takes effect.",
+          "Changes get staged for you to review before anything goes live.",
+          # negations — replacing these would contradict the model's own honest answer
+          "Nothing is staged right now.",
+          "No change is prepared yet — tell me what you'd like and I'll set it up.",
+          "That isn't staged, so there's nothing waiting on you.",
+          # already-applied — the fallback would falsely claim the change never happened
+          "You already confirmed that discount, so it's live now.",
+          "That change was already applied.",
+          # a card on an EARLIER message can genuinely still be pending
+          "The confirm button is on my earlier message — scroll up to that card.",
           "You have 3 products.",
         ]
 
         innocuous.each do |reply|
           allow(client).to receive(:messages).and_return(text_result(reply))
           result = service.respond(messages: [{ role: "user", content: "hi" }])
-          expect(result[:reply]).to eq(reply)
+          expect(result[:reply]).to eq(reply), "swallowed a truthful reply: #{reply}"
+        end
+      end
+
+      it "still catches the phantom shapes seen in production" do
+        # Sampled from real ai_messages rows whose metadata carried no proposed_action.
+        phantoms = [
+          "Staged. Confirm that card and the header grid becomes a three-column layout.",
+          "Staged now. The card with a confirm button should appear in this chat.",
+          "I've prepared that change for your confirmation.",
+          "That's staged and ready to confirm.",
+          "Fresh confirm card on this message.",
+        ]
+
+        phantoms.each do |reply|
+          allow(client).to receive(:messages).and_return(text_result(reply))
+          result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+          expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY), "missed a phantom claim: #{reply}"
         end
       end
     end

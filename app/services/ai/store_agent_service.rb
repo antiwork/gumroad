@@ -52,33 +52,54 @@ class Ai::StoreAgentService
   # with an honest ask to scope the request down instead of streaming garbage or raising.
   TRUNCATED_REPLY = "That's too much for me to handle in one go — try asking me to change or " \
                     "summarize a smaller section, and I'll take it from there."
-  # Phrases a reply uses when it asserts a change is staged and waiting for the creator to confirm.
-  # A reply like this is only TRUE when this same turn produced a proposed action: the confirmation
-  # card the creator is told to click is rendered from that action, so with no action there is no
-  # card and the creator is hunting a button that cannot exist. The model does occasionally write
-  # the claim without calling api_write (roughly one staging claim in seven, measured in
-  # production), which reads to the creator as the agent lying to them.
+  # Phrases a reply uses when it asserts THIS turn staged a change for the creator to confirm. Such
+  # a reply is only TRUE when this same turn produced a proposed action: the confirmation card the
+  # creator is told to click is rendered from that action, so with no action there is no card and
+  # the creator is hunting a button that cannot exist. The model does occasionally write the claim
+  # without calling api_write (roughly one staging claim in seven, measured in production), which
+  # reads to the creator as the agent lying to them.
   #
-  # Each pattern deliberately requires an ASSERTION that a staged change or its card exists — an
-  # offer ("want me to prepare that?") or an explanation of how confirming works must not match,
-  # because in those replies the absence of a card is correct. NOTHING_STAGED_REPLY below must
-  # never match either, so the recovery reply can't be detected as a phantom claim itself.
+  # Precision matters more than recall here, because a match REPLACES the model's reply: a truthful
+  # reply wrongly matched would tell the creator a change doesn't exist when it does. So every
+  # pattern requires an assertion that a change was JUST staged, offers ("want me to prepare
+  # that?") and general explanations of how confirming works do not match, NEGATED_STAGING_PATTERNS
+  # below excuses the negated and already-applied forms plain word-matching would catch, and none of
+  # this class's own canned replies may match or the guard would flag its own output.
   STAGED_CLAIM_PATTERNS = [
-    # "Staged." / "Staged now." / "I've staged that" / "the staged change card"
-    /\bstaged\b/i,
+    # "I've staged that" / "It's staged and ready" / "That's now staged"
+    /\b(?:i'?ve|i have|it'?s|it is|that'?s|this is|has been|now)\s+(?:just\s+|now\s+|been\s+)*staged\b/i,
+    # "Staged." / "Staged now, confirm it" — the terse opener the production replies used
+    /\bstaged\s*(?:now\b|and\b|—|-|\.|,|!)/i,
     # "I've prepared that discount for your confirmation", "I've set it up — confirm it and I'll
     # apply it". Only counts when confirmation language rides along in the same sentence: "I've
     # prepared a summary of your sales" is a legitimate reply with nothing to confirm.
     /\bi'?ve (?:prepared|queued|set up|lined up)\b[^.!?]*\bconfirm/i,
-    # "ready for you to confirm", "ready to confirm"
     /\bready (?:for you )?to confirm\b/i,
-    /\bawaiting your confirmation\b/i,
-    # "the confirm button is already there", "a confirm card should appear in this chat",
-    # "the confirmation card sits underneath that message"
-    /\bconfirm(?:ation)? (?:card|button)\b[^.!?]*\b(?:is|are|was|should|will|appears?|shows?|sits|there|above|below|in this chat|on (?:that|this|the) message)\b/i,
-    # "Fresh confirm card on this message." — no verb, but still asserts the card exists
-    /\bconfirm(?:ation)? (?:card|button)\b[^.!?]*\b(?:on|under|underneath|beneath) (?:that|this|the)\b/i,
-    /\bconfirm (?:it|that|this|the change) (?:below|above|in this chat|on the card)\b/i,
+    # "Fresh confirm card on this message.", "the confirm button is below"
+    /\bconfirm(?:ation)? (?:card|button)\b[^.!?]*\b(?:on|below|beneath|underneath) (?:this message|this|the)\b/i,
+    /\bconfirm (?:it|that|this|the change) (?:below|on the card)\b/i,
+  ].freeze
+  # Deliberate scope limit: only a claim about a change staged in THIS turn is matched, because that
+  # is the only thing the service can verify. A reply pointing at an EARLIER message's card ("scroll
+  # up, the confirm button is there") is left alone — an earlier proposal may genuinely still be
+  # pending, since a creator can scroll back and confirm an older card, and the transcript replayed
+  # to the model carries no metadata, so the service cannot tell from here. That case is addressed in
+  # the prompt instead: believe a creator who says they see no card, and re-stage.
+  # Forms that use the same vocabulary while asserting the OPPOSITE, describing a change that
+  # already went through, or explaining how the product works in general. "Nothing is staged", "no
+  # change is prepared yet", "you already confirmed that discount", "changes get staged for you to
+  # review first" are all truthful replies with no proposed action this turn — replacing them would
+  # tell the creator a change never existed when it did, or describe the product wrongly. Checked
+  # first, so a reply matching any of these is never treated as a phantom claim.
+  #
+  # Note what is deliberately absent: a bare "already". "The confirm button is already there —
+  # scroll up" is among the most common phantom replies in production, so "already" only excuses a
+  # reply when it is about a change that already completed.
+  NEGATED_STAGING_PATTERNS = [
+    /\b(?:nothing|nothing'?s|no change|none of)\b[^.!?]*\b(?:staged|prepared|confirm)/i,
+    /\b(?:isn'?t|aren'?t|wasn'?t|hasn'?t|haven'?t|not|never|no longer)\s+(?:yet\s+|been\s+)*(?:staged|prepared|waiting)\b/i,
+    /\balready (?:confirmed|applied|live|done|went through|been applied)\b/i,
+    /\b(?:get|gets|would be|will be|would get)\s+staged\b/i,
   ].freeze
 
   # How many times we re-ask the model to actually stage the change it claimed to have staged
@@ -89,9 +110,10 @@ class Ai::StoreAgentService
   # either make the call for real or correct itself. Phrased as the tool-protocol fact it is.
   STAGED_CLAIM_CORRECTION = <<~TEXT.strip
     Your last reply told the creator a change is staged and waiting for their confirmation, but you
-    did not call api_write in that reply, so nothing is staged and no confirmation card exists for
-    them to click. If the change should be staged, call api_write now with the exact change. If you
-    cannot stage it, say plainly that nothing is staged and do not refer the creator to a card.
+    did not call api_write in that reply, so no change was prepared and no confirmation card exists
+    for them to click. If the change should be prepared, call api_write now with the exact change.
+    If you cannot, say plainly that no change is prepared and you are not waiting on them, and do
+    not refer the creator to a card.
   TEXT
   # What the creator sees when the model still won't stage the change it keeps claiming to have
   # staged. Better an honest failure they can retry than a confident instruction to click a button
@@ -470,6 +492,10 @@ class Ai::StoreAgentService
     def phantom_staged_claim?(reply:, proposed_action:)
       return false if proposed_action.present?
       return false if reply.blank?
+      # Checked first: a reply that says nothing is staged, that a change already went through, or
+      # that explains how confirming works in general is truthful with no proposed action, and must
+      # never be replaced.
+      return false if NEGATED_STAGING_PATTERNS.any? { |pattern| reply.match?(pattern) }
 
       STAGED_CLAIM_PATTERNS.any? { |pattern| reply.match?(pattern) }
     end
@@ -484,18 +510,21 @@ class Ai::StoreAgentService
     end
 
     # Before this, a phantom staging claim was invisible outside a database read: no metric, no log
-    # line, nothing to alert on. Log it (and report the retry-exhausted case as an error) so the
-    # rate is trackable and a regression shows up without anyone querying ai_messages by hand. The
-    # reply text is truncated and no creator data is included beyond the reply's opening words.
+    # line, nothing to alert on. Log and report it so the rate is trackable and a regression shows up
+    # without anyone querying ai_messages by hand.
     def log_phantom_staged_claim(reply:, retrying:)
-      outcome = retrying ? "retrying" : "gave up, told the seller nothing was staged"
+      outcome = retrying ? "retrying" : "gave up, told the seller nothing was prepared"
       Rails.logger.warn("Store agent claimed a staged change with no proposed action (#{outcome}): #{reply.to_s.truncate(200)}")
-      return if retrying
-
-      # A fixed message string keeps every occurrence grouped as one Sentry issue (the reply text
-      # would otherwise split it into hundreds); the sample reply rides along as context.
+      # Report BOTH the retry and the give-up, under one fixed message string so every occurrence
+      # groups as a single Sentry issue. Reporting only the give-up would undercount: a phantom claim
+      # on the last tool iteration consumes the retry and then falls out of the loop into the
+      # tool-cap reply, so its give-up branch never runs — and a long paginating turn is exactly
+      # where a phantom claim is most likely.
       ErrorNotifier.notify(
         "Store agent claimed a staged change with no proposed action",
+        outcome:,
+        # The reply's opening words. These can name a product or price the creator already sees in
+        # their own chat; nothing is included that isn't in the reply text itself.
         reply: reply.to_s.truncate(200),
       )
     end
