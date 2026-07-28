@@ -1889,14 +1889,13 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
         expect(create_args[:currency]).to eq(Currency::BRL)
         expect(create_args[:payment_method_types]).to include("pix")
-        # amount_includes_iof=always is what keeps the buyer's banking-app amount equal to the
-        # listed R$100.00 — Stripe's default would mark it up 3.5% for Brazil's IOF tax.
         expect(create_args[:amount_cents]).to eq(100_00)
+        # The charge is created on the seller's own Brazilian Stripe account, so the payment is
+        # domestic: no foreign exchange, therefore no IOF for Stripe to price. amount_includes_iof
+        # is left off entirely rather than sent — the fee side already declines to bill it (asserted
+        # below), and the two must agree.
         expect(create_args[:payment_method_options]).to eq(
-          pix: {
-            amount_includes_iof: described_class::PIX_AMOUNT_INCLUDES_IOF,
-            expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS,
-          }
+          pix: { expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS }
         )
 
         # The method must be seeded onto the purchase before fees are recomputed, so that fee logic
@@ -1914,6 +1913,34 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
         expected_variable_fee_cents = (purchase.price_cents * Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 1000.0).round
         expect(purchase.fee_cents).to eq(expected_variable_fee_cents + Purchase::GUMROAD_FIXED_FEE_CENTS)
+      end
+
+      # The counterpart to the direct-charge case above: on a Gumroad-held account the money leaves
+      # Brazil, the payment is cross-border, IOF applies, and the option must be sent — otherwise
+      # Stripe's default marks the buyer's amount up by the tax and the banking-app total stops
+      # matching the price checkout quoted. This is what all Pix traffic looks like today.
+      it "sends amount_includes_iof and bills the IOF fee when the Pix charge is created on a Gumroad-held account" do
+        connect_account.mark_deleted!
+        seller.reload
+
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_gumroad")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_options]).to eq(
+          pix: {
+            expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS,
+            amount_includes_iof: described_class::PIX_AMOUNT_INCLUDES_IOF,
+          }
+        )
+
+        purchase = order.purchases.first.reload
+        expect(purchase.card_type).to eq(CardType::PIX)
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(true)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(Purchase::PIX_IOF_FEE_PER_THOUSAND)
       end
 
       it "sends no payment_method_options and no IOF fee for a card confirm on the same BRL element" do
