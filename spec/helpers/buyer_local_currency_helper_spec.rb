@@ -271,6 +271,25 @@ describe CurrencyHelper do
       3.times { helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4") }
     end
 
+    # A US buyer looking at a product priced in another currency is charged in USD, converted
+    # with the same cached rate this display path reads, so the converted USD price shown is
+    # the amount charged. That is the one conversion the non-USD-pricing guard must let past.
+    it "still shows a US buyer the converted USD price of a product priced in another currency" do
+      product.alive_prices.update_all(currency: "gbp")
+      product.update!(price_currency_type: "gbp")
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("usd")
+      allow(helper).to receive(:buyer_local_currency_rate).and_call_original
+      allow(helper).to receive(:cached_usd_rate).with("usd").and_return(BigDecimal("1"))
+      allow(helper).to receive(:cached_usd_rate).with("gbp").and_return(BigDecimal("0.8"))
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "usd")
+      # 1000 GBP cents at 0.8 GBP per USD is 1250 USD cents, which is also what
+      # get_usd_cents computes for the charge.
+      expect(props[:buyer_local_price_cents]).to eq(helper.get_usd_cents("gbp", 1000, rate: BigDecimal("0.8")))
+    end
+
     # Checkout refuses to quote these product shapes (Checkout::BuyerCurrencyQuote#quotable_product?),
     # so it charges canonical USD for them. Showing a converted price here would put the same
     # unexplained change between the product page and the total that this gate exists to prevent.

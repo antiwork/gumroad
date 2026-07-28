@@ -183,9 +183,15 @@ module CurrencyHelper
   # local price becomes a promise.
   def buyer_currency_settleable?(seller:, buyer_currency:, product:, product_currency:)
     return true unless Feature.active?(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-    # The charge path only presents in the buyer's currency for USD-priced products. A product
-    # priced in anything else is charged its listed price converted to USD (a plain card charge
-    # is created in USD; only the method-forced lanes such as iDEAL charge in the listed
+    # A buyer whose own currency is USD is the one case where converting a non-USD-priced
+    # product is safe, because USD is what the charge uses anyway: a plain card charge is
+    # created in USD and the listed price is converted with the same cached rate this display
+    # path reads, so the preview equals the amount charged. Allow it before the USD-pricing
+    # guard below, which would otherwise hide the one converted price we do honour.
+    return true if buyer_currency.to_s.downcase == Currency::USD
+    # Past this point the buyer's currency is not USD, and the charge path only presents in it
+    # for USD-priced products. A product priced in anything else is charged its listed price
+    # converted to USD (only the method-forced lanes such as iDEAL charge in the listed
     # currency), so a price converted into the buyer's currency is never what is charged.
     return false unless product_currency.to_s.downcase == Currency::USD
     # The same product shapes Checkout::BuyerCurrencyQuote#quotable_product? refuses to quote.
