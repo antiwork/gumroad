@@ -199,7 +199,7 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "hi" }])
 
         expect(captured[:system]).to include("cannot see the creator's dashboard")
-        expect(captured[:system]).to include("no self-serve fonts-and-colors screen")
+        expect(captured[:system]).to match(/no self-serve\s+fonts-and-colors screen/)
         expect(captured[:system]).to include("never send the creator to a screen you are not certain exists")
         expect(captured[:system]).to include(%(<script id="gumroad-data"))
         expect(captured[:system]).to match(/never hard-code the product list/)

@@ -1,11 +1,20 @@
 # frozen_string_literal: true
 
 class Api::V2::UsersController < Api::V2::BaseController
-  # Where the SellerProfile theme columns actually render. Listed in the theme response because the
-  # single most costly wrong belief about this feature is that it only styles the profile page: it
-  # styles product pages too, and an agent that assumes otherwise contradicts a seller who is
-  # looking straight at their own themed product page.
-  THEME_SURFACES = ["storefront profile page", "product pages", "posts", "emails"].freeze
+  # Where the SellerProfile theme columns actually render, verified against every caller of
+  # SellerProfile#custom_styles. Listed in the theme response because the single most costly wrong
+  # belief about this feature is that it only styles the profile page: it styles product pages too,
+  # and an agent that assumes otherwise contradicts a seller who is looking straight at their own
+  # themed product page. Note the deliberate narrowness on emails — only the posts a seller sends
+  # to their audience carry the theme; Gumroad's own transactional mail (receipts and the like)
+  # does not.
+  THEME_SURFACES = [
+    "storefront profile page",
+    "product pages",
+    "the pages buyers see for products they bought",
+    "posts",
+    "the emails a seller sends to their audience",
+  ].freeze
 
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :theme]
   before_action(only: [:update, :update_custom_html, :edit_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }

@@ -72,12 +72,56 @@ describe HelpCenter::ArticleText do
       expect(described_class.search("PROFILE").map { |a| a[:slug] }).to include("124-your-gumroad-profile-page")
     end
 
+    # The whole point is answering "what does Gumroad say about X". Almost every word a caller
+    # would search sits in an article's BODY rather than its headline, and a title-only search
+    # returning nothing reads as "Gumroad has nothing on this" — the wrong answer this endpoint
+    # exists to prevent. "theme" appears in no title or description.
+    it "matches words that appear only in the article body" do
+      expect(HelpCenter::Article.all.none? { |a| "#{a.title} #{a.description}".downcase.include?("theme") }).to be(true)
+
+      expect(described_class.search("theme").map { |a| a[:slug] }).to include("124-your-gumroad-profile-page")
+    end
+
+    it "ranks a headline match ahead of a body-only match" do
+      results = described_class.search("payout").map { |a| a[:slug] }
+      headline_match = HelpCenter::Article.all.find { |a| "#{a.title} #{a.description}".downcase.include?("payout") }
+
+      expect(results.length).to be > 1
+      expect(results.first).to eq(headline_match.slug)
+    end
+
     it "returns the full index for a blank query" do
       expect(described_class.search("  ").length).to eq(HelpCenter::Article.count)
     end
 
     it "returns nothing for a query that matches no article" do
       expect(described_class.search("zzzzz-not-a-real-topic")).to eq([])
+    end
+  end
+
+  describe ".cache_version" do
+    # The articles are code, so an article only changes on deploy — and without the deployed
+    # revision in the key, an edited article would serve its pre-edit text from the cache forever.
+    it "uses the deployed revision so a deploy that edits an article invalidates its cached text" do
+      stub_const("REVISION", "abc123def")
+
+      expect(described_class.cache_version).to eq("abc123def")
+    end
+
+    it "falls back to the content directory's mtime when there is no deployed revision" do
+      stub_const("REVISION", "no-revision")
+
+      expect(described_class.cache_version).to start_with("dev-")
+    end
+
+    it "keys the cached text by version, so two revisions cannot share an entry" do
+      stub_const("REVISION", "revision-one")
+      described_class.for(article)
+
+      expect(Rails.cache.exist?("help_center/article_text/revision-one/#{article.slug}")).to be(true)
+
+      stub_const("REVISION", "revision-two")
+      expect(Rails.cache.exist?("help_center/article_text/revision-two/#{article.slug}")).to be(false)
     end
   end
 end

@@ -27,10 +27,24 @@ module HelpCenter::ArticleText
   module_function
 
   # The article rendered to plain text, with paragraphs and list items on their own lines.
-  # Cached because rendering the ERB and parsing the HTML costs real time and the content only
-  # changes when the partial itself is edited and deployed.
-  def for(article)
-    Rails.cache.fetch("help_center/article_text/v1/#{article.slug}") { render_plain_text(article) }
+  # Cached because rendering the ERB and parsing the HTML costs real time. The deploy revision is
+  # part of the key: the articles are code, so the only way one changes is a deploy, and without
+  # the revision an edited article would keep serving its pre-edit text from the cache forever —
+  # exactly the staleness this endpoint exists to eliminate. (SellerProfile#custom_styles solves
+  # the same problem with a hand-bumped version suffix, which is easy to forget.)
+  def self.for(article)
+    Rails.cache.fetch("help_center/article_text/#{cache_version}/#{article.slug}") { render_plain_text(article) }
+  end
+
+  # Identifies the deployed code, so a deploy that edits an article invalidates its cached text.
+  # REVISION is the deployed git sha in staging and production; elsewhere it is a fixed string, so
+  # development and test fall back to the directory's own mtime and pick up local edits at once.
+  def cache_version
+    return REVISION if defined?(REVISION) && REVISION.present? && REVISION != "no-revision"
+
+    "dev-#{File.mtime(Rails.root.join('app/views/help_center/articles/contents')).to_i}"
+  rescue SystemCallError
+    "dev"
   end
 
   # A compact listing of every article: what it is called, what it covers, and the slug the
@@ -39,19 +53,28 @@ module HelpCenter::ArticleText
     HelpCenter::Article.all.map { |article| summary(article) }
   end
 
-  # Articles whose title or description matches every whitespace-separated term in `query`
-  # (case-insensitive), so "product page colors" narrows rather than widens the result. Matching
-  # deliberately looks at the title and description only, not the full body: descriptions are the
-  # article's own opening lines, and searching 100+ full articles per query would be far more
-  # expensive than the caller reading the one or two that look right.
+  # Articles matching every whitespace-separated term in `query` (case-insensitively), so
+  # "product page colors" narrows rather than widens the result.
+  #
+  # Matching covers the article's full text, not just its title and description. That costs more —
+  # it renders every article once, then reads them from the cache — but title-only matching made
+  # the endpoint useless for the thing it exists for: a caller searching a word that appears in the
+  # body but not the headline ("theme", "payout schedule") got zero results and would reasonably
+  # conclude Gumroad has nothing to say about it, which is the exact wrong answer this endpoint was
+  # added to prevent. Titles and descriptions still rank first so the closest match leads.
   def search(query)
     terms = query.to_s.downcase.split(/\s+/).reject(&:blank?)
     return index if terms.empty?
 
-    HelpCenter::Article.all.filter_map do |article|
-      haystack = "#{article.title} #{article.description}".downcase
-      summary(article) if terms.all? { |term| haystack.include?(term) }
+    headline, body = HelpCenter::Article.all.each_with_object([[], []]) do |article, (headline_hits, body_hits)|
+      heading = "#{article.title} #{article.description}".downcase
+      next headline_hits << summary(article) if terms.all? { |term| heading.include?(term) }
+
+      full = "#{heading} #{self.for(article).downcase}"
+      body_hits << summary(article) if terms.all? { |term| full.include?(term) }
     end
+
+    headline + body
   end
 
   def summary(article)

@@ -48,6 +48,15 @@ describe Api::V2::UsersController, "GET 'theme'" do
       expect(response.parsed_body["theme"]["applies_to"]).to include("product pages")
     end
 
+    # Only the posts a seller sends to their audience carry the theme; Gumroad's own transactional
+    # mail (receipts, and so on) does not, so the list must not say a bare "emails".
+    it "does not claim the theme covers Gumroad's own transactional email" do
+      get :theme, params: { access_token: token.token }
+
+      expect(response.parsed_body["theme"]["applies_to"]).not_to include("emails")
+      expect(response.parsed_body["theme"]["applies_to"]).to include("the emails a seller sends to their audience")
+    end
+
     it "says the seller cannot change the theme themselves and points at support" do
       get :theme, params: { access_token: token.token }
 
