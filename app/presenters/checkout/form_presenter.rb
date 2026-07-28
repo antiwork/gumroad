@@ -62,6 +62,7 @@ class Checkout::FormPresenter
         needs_email_confirmation: paypal_merchant_account.present? && paypal_merchant_account.meta.present? && paypal_merchant_account.meta["isEmailConfirmed"] == "false",
         paypal_disconnect_allowed: seller.paypal_disconnect_allowed?,
         paypal_disconnect_removes_payout_rail: seller.paypal_disconnect_removes_payout_rail?,
+        paypal_disconnect_blocks_publishing: seller.paypal_disconnect_blocks_publishing?,
         # Which payout method the seller should be pointed at if disconnecting would leave them
         # with none. Sellers in countries we can pay out to a local bank account only get the bank
         # account option; everyone else sets a PayPal payout email. This mirrors what payout

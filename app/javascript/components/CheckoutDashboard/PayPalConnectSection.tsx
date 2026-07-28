@@ -23,6 +23,7 @@ export type PayPalConnect = {
   allow_paypal_connect: boolean;
   paypal_disconnect_allowed: boolean;
   paypal_disconnect_removes_payout_rail: boolean;
+  paypal_disconnect_blocks_publishing: boolean;
   payout_setup_method: "bank_account" | "paypal_email";
 };
 
@@ -140,14 +141,18 @@ const PayPalConnectSection = ({
             >
               <p>
                 You are currently paid out to the PayPal account connected here. Disconnecting it removes your only
-                payout method, so your payouts will stop and you will not be able to publish products until you set up
-                another one.
+                payout method, so your payouts will stop
+                {paypalConnect.paypal_disconnect_blocks_publishing
+                  ? " and you will not be able to publish products"
+                  : ""}{" "}
+                until you set up another one.
               </p>
               <p>
                 {paypalConnect.payout_setup_method === "bank_account"
-                  ? "In your country payouts go to a bank account, so add your bank account in payout settings to keep getting paid."
-                  : "Add your PayPal payout email in payout settings to keep getting paid."}{" "}
-                You will not be able to reconnect PayPal here until you have done that.
+                  ? "In your country payouts go to a bank account, so add your bank account in your "
+                  : "Add your PayPal payout email in your "}
+                <a href={Routes.settings_payments_path()}>payout settings</a> to keep getting paid. You will not be able
+                to reconnect PayPal here until you have done that.
               </p>
             </Modal>
             {!paypalConnect.paypal_disconnect_allowed ? (

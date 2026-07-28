@@ -38,11 +38,25 @@ class User
     # the moment the account is disconnected, and because connecting PayPal requires payout
     # information to already exist (paypal_connect_allowed?), the seller cannot reconnect to undo
     # it. Support has had to restore the payout email by hand, so warn before the click instead.
+    #
+    # The cheap attribute check comes first so sellers who already have a payout email saved — the
+    # common case — never pay for the merchant account lookups.
     def paypal_disconnect_removes_payout_rail?
-      has_paypal_account_connected? &&
-        payment_address.blank? &&
+      payment_address.blank? &&
         active_bank_account.blank? &&
-        !has_stripe_account_connected?
+        !has_stripe_account_connected? &&
+        has_paypal_account_connected?
+    end
+
+    # True when that same disconnect would also stop the seller publishing products. Publishing
+    # accepts a couple of things payouts do not (a Gumroad-managed Stripe account, or being a team
+    # member), so it is a strictly narrower group than the one above and the warning should only
+    # claim it when it holds. Mirrors can_publish_products? with the PayPal term removed.
+    def paypal_disconnect_blocks_publishing?
+      paypal_disconnect_removes_payout_rail? &&
+        !is_team_member? &&
+        stripe_account.blank? &&
+        stripe_connect_account.blank?
     end
 
     def can_setup_bank_payouts?
