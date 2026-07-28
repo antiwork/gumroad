@@ -37,6 +37,22 @@ describe "Settings mobile app WebView authentication", type: :request, inertia: 
     end
   end
 
+  context "when the token's user previously invalidated active sessions" do
+    let(:user) { create(:named_seller, last_active_sessions_invalidated_at: 1.month.ago) }
+
+    it "keeps the newly established WebView session authenticated" do
+      get settings_payments_path, params: { display: "mobile_app", access_token: access_token.token, mobile_token: }, headers: { "X-Inertia" => "true" }
+
+      expect(response).to have_http_status(:ok)
+      expect(inertia_props["is_mobile_app_web_view"]).to eq(true)
+
+      get settings_payments_path, headers: { "X-Inertia" => "true" }
+
+      expect(response).to have_http_status(:ok)
+      expect(inertia_props["is_mobile_app_web_view"]).to eq(true)
+    end
+  end
+
   context "without an access_token" do
     it "does not sign the user in and redirects to login" do
       get settings_payments_path
