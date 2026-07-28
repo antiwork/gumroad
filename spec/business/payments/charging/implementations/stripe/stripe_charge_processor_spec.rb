@@ -3647,6 +3647,102 @@ describe StripeChargeProcessor, :vcr do
         described_class.debit_stripe_account_for_refund_fee(credit:)
       end
     end
+
+    describe "currency conversion of the reversal amount" do
+      # The retained fee (credit.amount_cents) is in USD cents, but Stripe transfer
+      # reversals are denominated in the transfer's own currency. These specs pin the
+      # conversion at each of the two reversal sites (internal transfer, and >120-day-old
+      # sale transfer), plus the unchanged USD-transfer behaviour.
+      before do
+        # Stub the rate lookup directly (rather than seeding the Redis-backed rate cache
+        # like the Australia backtax specs do) so the expected converted amounts don't
+        # depend on shared Redis state.
+        allow(described_class).to receive(:get_rate).with("cad").and_return("1.33")
+
+        @cad_merchant_account = create(:merchant_account, charge_processor_merchant_id: "acct_1MdcadS4gcql7bLm", country: "CA", currency: "cad")
+      end
+
+      def stub_reversal_follow_up_calls(transfer_reversal_id:, net:)
+        transfer_reversal = double(id: transfer_reversal_id, destination_payment_refund: "re_1")
+        destination_refund = double(balance_transaction: "txn_1")
+        expect(Stripe::Refund).to receive(:retrieve)
+                                    .with("re_1", hash_including(stripe_account: @cad_merchant_account.charge_processor_merchant_id))
+                                    .and_return(destination_refund)
+        expect(Stripe::BalanceTransaction).to receive(:retrieve)
+                                                .with("txn_1", hash_including(stripe_account: @cad_merchant_account.charge_processor_merchant_id))
+                                                .and_return(double(net:))
+        transfer_reversal
+      end
+
+      it "converts the owed USD amount into the transfer's currency when reversing a non-USD internal transfer" do
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_cad_1")
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: create(:refund))
+
+        transfer = double(id: "tr_cad_1", amount: 2000, amount_reversed: 0, currency: "cad")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_1").and_return(transfer)
+
+        # 1000 USD cents * 1.33 = 1330 CAD cents, not the raw USD figure.
+        transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_1", net: -1330)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_1", { amount: 1330 }).and_return(transfer_reversal)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+        expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_1")
+      end
+
+      it "skips a non-USD internal transfer whose remaining amount covers the USD figure but not the converted amount" do
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_cad_small")
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_cad_big")
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: create(:refund))
+
+        # 1100 CAD cents remaining would wrongly pass a comparison against 1000 USD cents,
+        # but cannot cover the 1330 CAD cents actually owed.
+        small_transfer = double(id: "tr_cad_small", amount: 1100, amount_reversed: 0, currency: "cad")
+        big_transfer = double(id: "tr_cad_big", amount: 2000, amount_reversed: 0, currency: "cad")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_small").and_return(small_transfer)
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_big").and_return(big_transfer)
+
+        transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_2", net: -1330)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_big", { amount: 1330 }).and_return(transfer_reversal)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+      end
+
+      it "converts the owed USD amount when reversing a non-USD sale transfer older than 120 days" do
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: create(:refund))
+
+        old_transfer = double(id: "tr_cad_old", amount: 2000, amount_reversed: 0, currency: "cad")
+        expect(Stripe::Transfer).to receive(:list)
+                                      .with(hash_including(destination: @cad_merchant_account.charge_processor_merchant_id))
+                                      .and_return([old_transfer])
+
+        transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_3", net: -1330)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_old", { amount: 1330 }).and_return(transfer_reversal)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+        expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_3")
+      end
+
+      it "reverses the raw USD amount when the transfer is denominated in USD" do
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_usd_1")
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: create(:refund))
+
+        transfer = double(id: "tr_usd_1", amount: 2000, amount_reversed: 0, currency: "usd")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_usd_1").and_return(transfer)
+
+        transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_4", net: -1330)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_usd_1", { amount: 1000 }).and_return(transfer_reversal)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+      end
+    end
   end
 
   describe ".debit_stripe_account_for_australia_backtaxes" do
@@ -3722,6 +3818,29 @@ describe StripeChargeProcessor, :vcr do
           stripe_object_available_double = double(currency: "cad", amount: 1000)
           stripe_object_pending_double = double(currency: "cad", amount: 995)
           @stripe_balance = double(available: [stripe_object_available_double], pending: [stripe_object_pending_double])
+        end
+
+        it "does not debit when the balance clears the local-currency check but not the converted USD check" do
+          # 1350 Canadian cents is more than the 1330 Canadian cents owed, so the first
+          # check passes. Converted at 1.33 it is about 1015 US cents, and after the 5%
+          # conversion buffer about 964 — less than the 1000 US cents owed, so the creator
+          # does not actually have the funds and nothing should be reversed.
+          credit = create(:credit, user: @merchant_account.user, amount_cents: -1000, merchant_account_id: @merchant_account.id, backtax_agreement: create(:backtax_agreement))
+          create(:payment_completed, user: @merchant_account.user,
+                                     stripe_connect_account_id: @merchant_account.charge_processor_merchant_id,
+                                     stripe_internal_transfer_id: "tr_123")
+
+          stripe_balance = double(available: [double(currency: "cad", amount: 1350)],
+                                  pending: [double(currency: "cad", amount: 0)])
+          expect(Stripe::Balance).to receive(:retrieve).with(hash_including({ stripe_account: @merchant_account.charge_processor_merchant_id })).and_return(stripe_balance)
+          expect(Stripe::Transfer).to_not receive(:retrieve)
+          expect(Stripe::Transfer).to_not receive(:create_reversal)
+
+          expect do
+            described_class.debit_stripe_account_for_australia_backtaxes(credit:)
+          end.to_not change { BacktaxCollection.count }
+
+          expect(credit.backtax_agreement.reload.collected).to eq(false)
         end
 
         it "creates a reversal from a single past internal transfer" do
@@ -4066,6 +4185,54 @@ describe StripeChargeProcessor, :vcr do
 
           expect(credit.backtax_agreement.collected).to eq(true)
         end
+      end
+    end
+  end
+
+  # gumroad-private#1328 A2. This helper decides the `gumroad_amount` flow-of-funds leg on a
+  # dispute-won event. It shipped inverted once: the presentment snapshot already stores
+  # Gumroad's cut, but the code subtracted it from the charge total, which yields the SELLER's
+  # share under a `gumroad_amount` label. These pin the direction of each branch.
+  describe ".presentment_gumroad_amount_for" do
+    let(:stripe_charge) { double(id: "ch_test", currency: "eur", amount: 1874) }
+    # `canonical_seller_cents` is what the caller passes: charged_amount_cents minus
+    # charged_gumroad_amount_cents, i.e. the seller's share in canonical USD.
+    let(:canonical_seller_cents) { 1800 }
+
+    context "when the charge has a presentment snapshot" do
+      let(:chargeable) { double(presentment_currency: "eur", presentment_gumroad_amount_cents: 187) }
+
+      it "books the snapshot's Gumroad amount as-is, in the presentment currency" do
+        amount = StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents)
+
+        expect(amount.currency).to eq("eur")
+        # Not 1874 - 187 = 1687, which is the SELLER's share.
+        expect(amount.cents).to eq(187)
+      end
+
+      it "raises when the snapshot has a currency but no Gumroad amount" do
+        chargeable = double(presentment_currency: "eur", presentment_gumroad_amount_cents: nil)
+
+        expect { StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents) }
+          .to raise_error(/no presentment Gumroad amount/)
+      end
+    end
+
+    context "when the charge has no presentment snapshot" do
+      let(:chargeable) { double(presentment_currency: nil, presentment_gumroad_amount_cents: nil) }
+
+      it "keeps the historical subtraction for a charge genuinely made in USD" do
+        usd_charge = double(id: "ch_usd", currency: "usd", amount: 2000)
+
+        amount = StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, usd_charge, canonical_seller_cents)
+
+        expect(amount.currency).to eq("usd")
+        expect(amount.cents).to eq(200)
+      end
+
+      it "raises for a non-USD charge rather than mixing currencies" do
+        expect { StripeChargeProcessor.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents) }
+          .to raise_error(/no presentment snapshot/)
       end
     end
   end

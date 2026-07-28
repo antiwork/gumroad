@@ -339,6 +339,12 @@ class Purchase::HandleFailedRefundService
       # purchase lock second would still see the first worker's refund as effective
       # and persist stale flags. FOR UPDATE always reads the latest committed rows.
       other_refunds = purchase.refunds.effective.where.not(id: refund.id).lock
+      # `Refund#amount_cents` and `#gumroad_tax_cents` are canonical US dollar cents, the same
+      # denomination as `purchase.total_transaction_cents`, on a buyer-currency (presentment)
+      # purchase as well as a plain USD one. The amount the buyer actually saw refunded in
+      # their own currency is kept on the refund's separate presentment fields and is
+      # deliberately not consulted here — mixing it in would compare euros against dollars and
+      # flip a partially-refunded purchase to fully refunded, or the reverse.
       other_refunded_cents = other_refunds.sum(:amount_cents) +
                              other_refunds.sum(:gumroad_tax_cents)
       purchase.stripe_refunded = other_refunded_cents >= purchase.total_transaction_cents

@@ -2122,7 +2122,7 @@ describe User, :vcr do
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@product_1.reload.banned_at).to_not be(nil)
         expect(@product_2.reload.banned_at).to_not be(nil)
-        @user.put_on_probation(author_id: @admin_user.id)
+        @user.put_on_probation(author_id: @admin_user.id, clear_suspension: true)
         expect(@user.on_probation?).to be(true)
         expect(@product_1.reload.banned_at).to be(nil)
       end
@@ -2146,20 +2146,23 @@ describe User, :vcr do
       end
 
       it "re-enables all the sellers related accounts if the seller is marked compliant" do
-        user_3 = create(:user, payment_address: "sameuser@gmail.com", user_risk_state: "suspended_for_fraud")
+        # Suspended the way the cascade does it, which is the only case the release side
+        # covers — an account suspended on its own merits stays suspended.
+        user_3 = create(:user, payment_address: "sameuser@gmail.com")
+        user_3.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
         expect(@user).to receive(:enable_sellers_other_accounts).and_call_original
         @user_2.flag_for_fraud(author_id: @admin_user.id)
-        @user_2.suspend_for_fraud(author_id: @admin_user.id)
+        @user_2.suspend_for_fraud(author_name: "suspend_sellers_other_accounts", content: "cascade")
         @user.flag_for_fraud(author_id: @admin_user.id)
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@user_2.reload.suspended?).to be(true)
         expect(@user_2.comments.count).to eq(2)
         expect(user_3.reload.suspended?).to be(true)
 
-        @user.mark_compliant(author_id: @admin_user.id)
+        @user.mark_compliant(author_id: @admin_user.id, clear_suspension: true)
         expect(user_3.reload.compliant?).to be(true)
         expect(@user_2.reload.compliant?).to be(true)
-        expect(user_3.comments.count).to eq(1)
+        expect(user_3.comments.count).to eq(2)
         expect(@user_2.comments.count).to eq(3)
         expect(@user.comments.count).to eq(3)
       end
@@ -2170,7 +2173,7 @@ describe User, :vcr do
         expect(@product_1.reload.banned_at).to_not be(nil)
         expect(@product_2.reload.banned_at).to_not be(nil)
 
-        @user.mark_compliant(author_id: @admin_user.id)
+        @user.mark_compliant(author_id: @admin_user.id, clear_suspension: true)
         expect(@product_1.reload.banned_at).to be(nil)
         expect(@product_2.reload.banned_at).to be(nil)
       end
@@ -2184,7 +2187,7 @@ describe User, :vcr do
       end
 
       it "adds user's subdomain to stripe_apple_pay_domains when marked compliant" do
-        @user.mark_compliant(author_id: @admin_user.id)
+        @user.mark_compliant(author_id: @admin_user.id, clear_suspension: true)
         expect(CreateStripeApplePayDomainWorker).to have_enqueued_sidekiq_job(@user.id)
       end
     end
@@ -2960,6 +2963,68 @@ describe User, :vcr do
       allow_any_instance_of(User).to receive(:active_subscribers?).with(charge_processor_id: PaypalChargeProcessor.charge_processor_id).and_return(true)
       allow_any_instance_of(User).to receive(:active_preorders?).with(charge_processor_id: PaypalChargeProcessor.charge_processor_id).and_return(true)
       expect(creator.paypal_disconnect_allowed?).to be(false)
+    end
+  end
+
+  describe "#paypal_disconnect_removes_payout_rail?" do
+    it "returns true when the connected PayPal account is the seller's only payout method" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(true)
+    end
+
+    it "returns false when no PayPal account is connected" do
+      expect(create(:user, payment_address: nil).paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+
+    it "returns false when the seller has a PayPal payout email saved" do
+      creator = create(:user, payment_address: "payouts@example.com")
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+
+    it "returns false when the seller has a bank account" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+      create(:ach_account, user: creator)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+
+    it "returns false when the seller has a Stripe Connect account" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+      create(:merchant_account_stripe_connect, user: creator)
+      allow(creator).to receive(:merchant_migration_enabled?).and_return(true)
+
+      expect(creator.paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+  end
+
+  describe "#paypal_disconnect_blocks_publishing?" do
+    it "returns true when the connected PayPal account is also the only thing letting them publish" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_blocks_publishing?).to be(true)
+    end
+
+    it "returns false when the seller has a Gumroad-managed Stripe account, which still allows publishing" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+      create(:merchant_account, user: creator)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(true)
+      expect(creator.paypal_disconnect_blocks_publishing?).to be(false)
+    end
+
+    it "returns false when the payout rail is not at risk in the first place" do
+      creator = create(:user, payment_address: "payouts@example.com")
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_blocks_publishing?).to be(false)
     end
   end
 

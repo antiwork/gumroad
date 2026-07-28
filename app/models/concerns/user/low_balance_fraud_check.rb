@@ -42,6 +42,9 @@ module User::LowBalanceFraudCheck
   def check_for_high_balance_and_remove_low_balance_probation!
     return unless unpaid_balance_cents >= HIGH_BALANCE_THRESHOLD
     return unless on_probation?
+    # A suspension written while this job was in flight outranks a balance recovery: this
+    # lane knows nothing about why the account was suspended, so it must never lift it.
+    return if suspended?
 
     probation_comment = most_recent_low_balance_probation_comment
     return if probation_comment.nil?
@@ -63,10 +66,26 @@ module User::LowBalanceFraudCheck
 
   private
     def disable_refunds_and_put_on_probation!
-      disable_refunds!
+      # Both writes have to land together or neither does. `disable_refunds!` saves
+      # immediately, while the probation transition can be refused after the fact by
+      # User::Risk#refuse_unauthorized_suspension_clear when the row turns out to be
+      # suspended (this lane decides whether to act by reading `suspended?` off an
+      # in-memory copy, so a suspension can land in between). Without the transaction
+      # the refusal would leave the account with refunds disabled by a workflow that
+      # is explicitly meant to skip suspended accounts, blocking refunds nobody
+      # decided to block.
+      transaction do
+        disable_refunds!
 
-      content = "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity"
-      self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+        content = "Probated (payouts suspended) automatically on #{Time.current.to_fs(:formatted_date_full_month)} because of suspicious refund activity"
+        self.put_on_probation(author_name: LOW_BALANCE_FRAUD_CHECK_AUTHOR_NAME, content:)
+      end
+    rescue User::Risk::SuspensionClearNotAuthorizedError
+      # The row was suspended by someone else while this check was in flight. That
+      # decision outranks a low-balance probation, and the transaction above has
+      # already rolled the refund flag back, so there is nothing left to do. Reload
+      # so the caller's copy stops disagreeing with the row.
+      reload
     end
 
     def recently_probated_for_low_balance?

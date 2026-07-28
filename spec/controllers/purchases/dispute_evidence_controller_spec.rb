@@ -170,5 +170,36 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
         expect(flash[:alert]).to eq("Cancellation rebuttal is too long (maximum is 3000 characters)")
       end
     end
+
+    # A suspension can land in the middle of the 72-hour evidence window. The
+    # dispute still has to be answered on its own merits, so the submit must go
+    # through even though the generic `check_suspended` filter would otherwise
+    # block every non-GET request from a suspended user.
+    context "when the seller is signed in and suspended" do
+      let(:seller) { purchase.seller }
+
+      before do
+        seller.update!(user_risk_state: "compliant")
+        seller.suspend_for_tos_violation!(author_id: create(:admin_user).id)
+        sign_in(seller)
+        # Suspension bumps `last_active_sessions_invalidated_at`, so a session
+        # that predates it gets signed out by `invalidate_session_if_necessary`.
+        # Stamp the session as fresh to model a seller who logged back in after
+        # being suspended, which is when `check_suspended` actually applies.
+        request.env["warden"].session["last_sign_in_at"] = DateTime.current.to_i
+      end
+
+      it "still accepts the evidence submission" do
+        put :update, params: {
+          purchase_id: purchase.external_id,
+          dispute_evidence: { reason_for_winning: "The buyer downloaded and used the product." }
+        }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.reason_for_winning).to eq("The buyer downloaded and used the product.")
+        expect(dispute_evidence.seller_submitted?).to be(true)
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      end
+    end
   end
 end

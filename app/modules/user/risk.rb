@@ -3,12 +3,24 @@
 module User::Risk
   extend ActiveSupport::Concern
 
+  # Raised when something tries to clear a suspension without saying it means to.
+  # See #refuse_unauthorized_suspension_clear.
+  class SuspensionClearNotAuthorizedError < StandardError; end
+
   PAYMENT_REMINDER_RISK_STATES = %w[flagged_for_tos_violation not_reviewed compliant].freeze
   SUSPENDED_STATES = %w[suspended_for_tos_violation suspended_for_fraud].freeze
   INCREMENTAL_ENQUEUE_BALANCE = 100_00
   PROBATION_WITH_REMINDER_DAYS = 30
   PROBATION_REVIEW_DAYS = 2
-  MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 3.0
+  # Above this share of lifetime unrefunded sales volume lost to standing chargebacks, we hold the
+  # seller's payouts automatically. 1% is the rate card networks treat as the healthy ceiling — Visa
+  # and Mastercard both start monitoring a merchant around there — so it is the number we actually
+  # want sellers to stay under, and holding at 3% meant a seller could sit at triple the healthy
+  # rate indefinitely with payouts flowing.
+  #
+  # This is the same 1% used for automatic refund-policy enforcement below, but measured
+  # differently: this one is a share of DOLLAR VOLUME, that one is a share of unique BUYERS.
+  MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 1.0
 
   # Thresholds for automatically forcing a buyer-friendly refund policy on a seller.
   # The dispute rate here is a rate of UNIQUE BUYERS (buyers with a standing chargeback /
@@ -143,11 +155,28 @@ module User::Risk
     enable_accounts_with_same_stripe_fingerprint
   end
 
+  # True when the most recent suspension on this account was written by the account cascade
+  # (SuspendAccountsWithPaymentAddressWorker suspends siblings under that author name) rather
+  # than by a review of this account on its own merits.
+  #
+  # Called from inside the compliant transition while the row is locked, never from the
+  # cascade itself — see #release_cascade_suspended_sibling for why.
+  def suspended_by_account_cascade?
+    last_suspension = comments
+      .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
+      .order(:created_at, :id)
+      .last
+
+    last_suspension&.author_name == "suspend_sellers_other_accounts"
+  end
+
+  # These two mirror suspend_sellers_other_accounts: when an account is cleared, the sibling
+  # accounts that were auto-suspended alongside it are cleared too.
   def enable_accounts_with_same_payment_address
     return if payment_address.blank?
 
     User.where(payment_address:).where.not(id:).each do |user|
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+      release_cascade_suspended_sibling(user, "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})")
     end
   end
 
@@ -163,8 +192,35 @@ module User::Risk
 
     User.where(id: user_ids_with_same_fingerprint).each do |user|
       matching_fingerprint = (fingerprints & user.alive_bank_accounts.pluck(:stripe_fingerprint)).first
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts)
+      release_cascade_suspended_sibling(user, "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})")
     end
+  end
+
+  # Releases one sibling account.
+  #
+  # The cascade may only undo its own work. The suspend side skips accounts that are already
+  # suspended (`User.not_suspended`), so an account suspended on its own merits never entered
+  # the cascade and must not be released by it — that suspension was a separate decision that
+  # nobody here has reviewed.
+  #
+  # Asking "did the cascade suspend this sibling?" here would be asking too early: another
+  # enforcement lane can suspend the sibling in the moment between the answer and the write,
+  # and the write would then clear a suspension the answer never saw. So we pass the question
+  # instead of the answer — `clear_suspension: :if_suspended_by_account_cascade` — and the
+  # transition resolves it while holding the row lock.
+  #
+  # A refusal means another lane owns this sibling's suspension; it stays suspended and the
+  # remaining siblings are still processed. Nothing has been written at the point the
+  # transition refuses, so there is no partial update to unwind.
+  def release_cascade_suspended_sibling(user, content)
+    user.mark_compliant!(
+      author_name: "enable_sellers_other_accounts",
+      content:,
+      skip_transition_callback: :enable_sellers_other_accounts,
+      clear_suspension: :if_suspended_by_account_cascade
+    )
+  rescue SuspensionClearNotAuthorizedError
+    nil
   end
 
   def unblock_seller_ip!
@@ -197,6 +253,49 @@ module User::Risk
       .last
 
     last_suspension_comment&.author_id.present?
+  end
+
+  # A suspension is only ever cleared on purpose. Anything moving an account to compliant
+  # has to pass `clear_suspension: true` when the account is actually suspended, to say that
+  # it looked at the suspension and still means to lift it.
+  #
+  # Without this, any review that ends in "this account looks fine" silently un-suspends a
+  # seller. That happened: a seller was suspended for selling pirated content, and 106
+  # seconds later an unrelated first-payout review — which only looks at financial signals
+  # like chargebacks and refunds, and had no idea a suspension had just been written —
+  # marked the same account compliant. The products went back on sale and the account sold
+  # for another eight days before anyone noticed.
+  #
+  # The state the caller thinks the account is in can be stale (that's the whole shape of
+  # the bug: the losing lane loaded the account before the suspension was written), so the
+  # check reads the row inside the transition's own transaction with a row lock rather than
+  # trusting the attribute in memory. The lock also serializes two lanes racing on the same
+  # account, so the second one sees the first one's suspension instead of overwriting it.
+  def refuse_unauthorized_suspension_clear(transition)
+    return true if new_record?
+
+    persisted_risk_state = self.class.where(id:).lock.pick(:user_risk_state)
+    return true unless SUSPENDED_STATES.include?(persisted_risk_state)
+
+    params = transition.args.first || {}
+    unless suspension_clear_authorized?(params[:clear_suspension])
+      raise SuspensionClearNotAuthorizedError,
+            "refusing to clear #{persisted_risk_state}: the caller did not authorize clearing this suspension"
+    end
+
+    true
+  end
+
+  # `clear_suspension` is either an unconditional yes (a human admin, or an internal-API
+  # caller who passed clear_suspension=true) or the account cascade's conditional yes,
+  # `:if_suspended_by_account_cascade`. The conditional form is resolved here rather than at
+  # the call site because only here are we holding the row lock: the ownership question and
+  # the write that depends on the answer have to be the same moment, or a suspension landing
+  # in between gets cleared by an authorization that never saw it.
+  def suspension_clear_authorized?(clear_suspension)
+    return suspended_by_account_cascade? if clear_suspension == :if_suspended_by_account_cascade
+
+    !!clear_suspension
   end
 
   def add_user_comment(transition)
@@ -287,6 +386,43 @@ module User::Risk
     high_chargeback_rate: "pause_payouts_for_seller_based_on_chargeback_rate",
     recent_failed_purchases: "pause_payouts_for_seller_based_on_recent_failures",
   }.freeze
+
+  # Of the three system comment authors above, only these two actually pause payouts.
+  # `recent_failed_purchases` writes the same kind of comment but deliberately leaves payouts
+  # alone (see Purchase::Blockable — it only flags the account for review), so it must never be
+  # read as "this is why payouts are paused".
+  SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS = SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS
+    .values_at(:repeated_failed_payouts, :high_chargeback_rate).freeze
+
+  # Comment left when the automatic re-check (ReleaseChargebackRatePayoutPausesJob) lifts a hold.
+  CHARGEBACK_RATE_PAYOUT_RESUME_COMMENT_AUTHOR = "release_payouts_for_seller_based_on_chargeback_rate"
+
+  # True when this account's payouts are currently held by the automatic chargeback-rate check
+  # (Purchase::Blockable#pause_payouts_for_seller_based_on_chargeback_rate!) rather than by an
+  # admin, by Stripe, by the seller themselves, or by the repeated-failed-payouts check.
+  #
+  # Both of the pausing checks write a probation comment and both set the pause source to
+  # "system", so the source column alone can't tell them apart — the most recent comment from a
+  # pausing author is what identifies the current hold.
+  #
+  # This deliberately does NOT filter to alive comments, and must not be "cleaned up" to. A
+  # soft-deleted newer comment from the other pausing check still suppresses the answer here,
+  # which is the safe direction: the worst case is that an account keeps a hold an admin can lift
+  # by hand. Filtering to alive would let deleting a comment turn an older chargeback comment into
+  # the apparent current hold and release payouts on an account paused for a different reason.
+  # The candidate scan in ReleaseChargebackRatePayoutPausesJob does filter to alive, so a retracted
+  # chargeback comment simply stops being auto-released — the same fail-closed direction.
+  def payouts_paused_for_chargeback_rate?
+    return false unless payouts_paused_internally?
+    return false unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
+
+    last_pausing_author = comments.with_type_on_probation
+                                  .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
+                                  .order(:created_at, :id)
+                                  .last&.author_name
+
+    last_pausing_author == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+  end
 
   # Admin-callable: lifts an automatic refund-policy enforcement (see
   # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!).

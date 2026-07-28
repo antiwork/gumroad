@@ -374,6 +374,25 @@ class User < ApplicationRecord
   state_machine(:user_risk_state, initial: :not_reviewed) do
     before_transition any => %i[flagged_for_fraud flagged_for_tos_violation suspended_for_fraud suspended_for_tos_violation],
                       :do => :not_verified?
+
+    # Clearing a suspension is a much bigger deal than clearing a flag: it puts the
+    # seller's products back on sale. Callers have to say they mean it by passing
+    # `clear_suspension: true`, so a routine "this account looks fine" review can't
+    # undo a suspension it never looked at. Registered on every transition into
+    # compliant (not just the ones out of a suspended state) because the object in
+    # memory can be older than the row — see User::Risk#refuse_unauthorized_suspension_clear.
+    #
+    # `on_probation` and `not_reviewed` need the same guard, because compliant is not
+    # the only way out of a suspension. Probation re-enables the seller's links exactly
+    # like compliant does (see the enable_links_and_tell_chat transition below), and
+    # not_reviewed drops the account back to its initial state, so either one silently
+    # undoes a suspension the caller never looked at. The realistic path is not a human
+    # in the admin UI: LowBalanceFraudCheck#disable_refunds_and_put_on_probation! decides
+    # whether to act by reading `suspended?` off an in-memory copy, which is precisely
+    # the stale read this guard exists to defeat — by the time it writes, the row may
+    # have been suspended by someone else.
+    before_transition any => %i[compliant on_probation not_reviewed],
+                      :do => :refuse_unauthorized_suspension_clear
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
     after_transition any => %i[on_probation compliant not_reviewed flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],

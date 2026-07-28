@@ -522,20 +522,29 @@ class StripeChargeProcessor
     return if credit.fee_retention_refund&.debited_stripe_transfer.present?
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
-    amount_cents = credit.amount_cents.abs
+    usd_amount_cents = credit.amount_cents.abs
+
+    # The fee being recovered (credit.amount_cents) is always in USD cents, but Stripe
+    # transfer reversals are denominated in the transfer's own currency. Internal payout
+    # transfers are created in USD, while older sale transfers to these non-US
+    # Gumroad-managed accounts may be in the account's local currency (see the note in
+    # debit_stripe_account_for_australia_backtaxes, which handles the same situation).
+    # Convert the owed USD amount into each candidate transfer's currency before comparing
+    # against its remaining balance and before reversing — otherwise we would reverse the
+    # raw USD figure in a foreign currency, debiting the creator the wrong amount.
+    amount_to_reverse_for = ->(transfer) { usd_cents_to_currency(transfer.currency, usd_amount_cents) }
 
     # First, try and reverse an internal transfer made from gumroad platform account
     # to the connect account, if possible.
-    transfers = credit.user.payments.completed
-                      .where(stripe_connect_account_id: stripe_account_id)
-                      .order(:created_at)
-                      .pluck(:stripe_internal_transfer_id)
-    transfer_id = transfers.compact_blank.find do |tr_id|
-      tr = Stripe::Transfer.retrieve(tr_id) rescue nil
-      tr.present? && (tr.amount - tr.amount_reversed > amount_cents)
-    end
-    if transfer_id.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer_id, { amount: amount_cents })
+    transfer_ids = credit.user.payments.completed
+                         .where(stripe_connect_account_id: stripe_account_id)
+                         .order(:created_at)
+                         .pluck(:stripe_internal_transfer_id)
+    transfer = transfer_ids.compact_blank.lazy
+                           .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
+                           .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+    if transfer.present?
+      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
       refund = credit.fee_retention_refund
       refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
@@ -551,10 +560,10 @@ class StripeChargeProcessor
     # reverse these transfers.
     transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
     transfer = transfers.find do |tr|
-      tr.present? && (tr.amount - tr.amount_reversed > amount_cents)
+      tr.present? && (tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr))
     end
     if transfer.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_cents })
+      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
       refund = credit.fee_retention_refund
       refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
@@ -610,6 +619,23 @@ class StripeChargeProcessor
 
     stripe_balance_amount = stripe_available_object.amount + stripe_pending_object.amount
 
+    # NOTE on currencies: stripe_balance_amount is denominated in the merchant account's own
+    # currency (stripe_currency), while owed_amount_cents_usd is USD. The US branch below
+    # compares them directly WITHOUT conversion, which is only correct because a US account's
+    # currency here is guaranteed to be "usd":
+    #   * Only Gumroad-controlled custom Stripe accounts reach this point — the
+    #     holder_of_funds == HolderOfFunds::STRIPE guard above excludes creator-owned Stripe
+    #     Connect accounts (see StripeChargeProcessor.holder_of_funds).
+    #   * Those accounts get their currency at creation from Country#payout_currency, which
+    #     for the US resolves (via Country#default_currency) to USD
+    #     (StripeMerchantAccountManager.create_account).
+    #   * Afterwards, currency is only ever rewritten together with country from the same
+    #     Stripe account object (StripeMerchantAccountManager's account.updated handling),
+    #     and Stripe only pays out US accounts in USD, so country == "US" implies
+    #     default_currency == "usd".
+    # If any of that stops holding, the US branch must convert the owed amount like the
+    # else branch does (usd_cents_to_currency) before comparing — otherwise it would compare
+    # cents across two different currencies and could debit the wrong amount.
     if credit.merchant_account.country == Compliance::Countries::USA.alpha2
       # Avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
       return unless stripe_balance_amount > owed_amount_cents_usd
@@ -645,9 +671,13 @@ class StripeChargeProcessor
       return unless stripe_balance_amount > owed_amount_in_currency
 
       # Determine the stripe balance amount in usd.
+      # stripe_balance_amount was summed from the balance entries whose currency is the
+      # merchant account's own currency (stripe_currency) a few lines above, so it has to be
+      # converted from that currency — passing "usd" here would return the local-currency
+      # figure unchanged and treat, say, 84,000 rupees as 84,000 US cents.
       # Reduce that amount by 5%, as a buffer for possible currency conversion inaccuracies.
       # Then, avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
-      stripe_balance_amount_cents_usd = get_usd_cents("usd", stripe_balance_amount)
+      stripe_balance_amount_cents_usd = get_usd_cents(stripe_currency, stripe_balance_amount)
       stripe_balance_amount_cents_usd_reduced_by_five_percent = (stripe_balance_amount_cents_usd - (5.0 / 100) * stripe_balance_amount_cents_usd).round
       return unless stripe_balance_amount_cents_usd_reduced_by_five_percent > owed_amount_cents_usd
 
@@ -1117,6 +1147,20 @@ class StripeChargeProcessor
     chargeable = Charge::Chargeable.find_by_processor_transaction_id!(stripe_charge.id)
     amount_cents = chargeable.charged_amount_cents - chargeable.charged_gumroad_amount_cents
 
+    # Resolve Gumroad's share BEFORE moving any money. `presentment_gumroad_amount_for`
+    # deliberately raises rather than book a mixed-currency figure, and the transfer below
+    # has no idempotency key while this runs in HandleStripeEventWorker (`retry: 10`). If
+    # the raise came after the transfer, every retry would re-send the creator the full
+    # seller share — up to 11 duplicate transfers before the job reached the dead set.
+    gumroad_amount = if stripe_charge.application_fee.present?
+      FlowOfFunds::Amount.new(
+        currency: stripe_charge.application_fee.currency,
+        cents: stripe_charge.application_fee.amount_refunded
+      )
+    else
+      presentment_gumroad_amount_for(chargeable, stripe_charge, amount_cents)
+    end
+
     stripe_transfer = StripeTransferInternallyToCreator.transfer_funds_to_account(
       message_why: "Dispute #{stripe_dispute.id} won",
       stripe_account_id: stripe_charge.destination,
@@ -1145,14 +1189,6 @@ class StripeChargeProcessor
       { stripe_account: stripe_transfer.destination }
     )
 
-    gumroad_amount = stripe_charge.application_fee.present? ?
-                       FlowOfFunds::Amount.new(
-                         currency: stripe_charge.application_fee.currency,
-                         cents: stripe_charge.application_fee.amount_refunded) :
-                       FlowOfFunds::Amount.new(
-                         currency: stripe_charge.currency,
-                         cents: stripe_charge.amount - amount_cents)
-
     merchant_account_gross_amount = FlowOfFunds::Amount.new(
       currency: destination_payment.balance_transaction.currency,
       cents: destination_payment.balance_transaction.amount
@@ -1168,6 +1204,48 @@ class StripeChargeProcessor
       merchant_account_gross_amount:,
       merchant_account_net_amount:
     )
+  end
+
+  # Gumroad's share of a disputed charge, expressed in the charge's own currency.
+  #
+  # For a buyer-currency presentment charge the snapshot already recorded this amount in the
+  # currency Stripe charged, so read it from there. For a canonical USD charge there is no
+  # snapshot and the historical subtraction is correct, because both sides really are USD.
+  #
+  # Failing closed matters here: this number becomes a balance-transaction amount on a
+  # dispute-won event, so a non-USD charge whose snapshot is missing must raise rather than
+  # silently book a mixed-currency figure (gumroad-private#1328 A2).
+  #
+  # Note the asymmetry between the two branches, which is the whole point of the helper:
+  # `canonical_seller_cents` is the SELLER's share (`charged_amount_cents -
+  # charged_gumroad_amount_cents`), so the USD branch has to subtract it from the total to
+  # arrive at Gumroad's cut. The presentment snapshot already stores Gumroad's cut directly
+  # (`PurchasePresentment#presentment_gumroad_amount_cents`, validated never to exceed the
+  # presentment total), so that branch must use it AS-IS. Subtracting it would yield the
+  # seller's share under a `gumroad_amount` label.
+  def self.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents)
+    presentment_currency = chargeable.presentment_currency
+
+    if presentment_currency.blank?
+      # A non-USD charge with no presentment snapshot is the exact mixed-currency case A2
+      # exists to eliminate: `stripe_charge.amount` would be in the buyer's currency while
+      # `canonical_seller_cents` is USD, and the result would be labelled as the charge's
+      # currency. There is no correct number to book, so refuse.
+      unless stripe_charge.currency.to_s.casecmp?(Currency::USD)
+        raise "Charge #{stripe_charge.id} is in #{stripe_charge.currency} but has no presentment snapshot; " \
+              "cannot compute Gumroad's share without mixing currencies"
+      end
+
+      return FlowOfFunds::Amount.new(
+        currency: stripe_charge.currency,
+        cents: stripe_charge.amount - canonical_seller_cents
+      )
+    end
+
+    presentment_cents = chargeable.presentment_gumroad_amount_cents
+    raise "Presentment charge #{stripe_charge.id} has a presentment currency but no presentment Gumroad amount" if presentment_cents.nil?
+
+    FlowOfFunds::Amount.new(currency: presentment_currency, cents: presentment_cents)
   end
 
   def transaction_url(charge_id)
