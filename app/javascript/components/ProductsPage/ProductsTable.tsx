@@ -107,26 +107,40 @@ export const ProductsPageProductsTable = (props: {
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
               />
-              <TableCell hideLabel>
+              {/* The name cell is `relative` so the product link inside it can stretch to fill the
+                  whole cell (see the `absolute inset-0` overlay below). Before this, only the bold
+                  name text itself was clickable, which is a small target — sellers reported that
+                  clicking a product row "does nothing" when they had in fact tapped the dead space
+                  beside the name (gumroad-private#1469). Making the entire cell clickable is as far
+                  as we can widen it without nesting links: Safari doesn't support
+                  `position: relative` on <tr>, so the row itself can't be the link, and the Sales
+                  cell has its own link to the customers page. */}
+              <TableCell hideLabel className="relative">
                 <div>
-                  {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   {product.can_edit ? (
                     <Link href={product.edit_url} style={{ textDecoration: "none" }}>
+                      {/* This empty overlay is what widens the hit area: it stretches the
+                          surrounding link over the full cell, including the padding and the empty
+                          space to the right of a short product name. It sits behind the two
+                          positioned links below, so the storefront URL link still wins a tap on
+                          its own text. */}
+                      <span className="absolute inset-0" aria-hidden="true" />
                       {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
                           (gumroad-private#1259; same fix as the product page in #6190). */}
-                      <h4 className="font-bold" dir="auto">
+                      <h4 className="relative font-bold" dir="auto">
                         {product.name}
                       </h4>
                     </Link>
                   ) : (
                     <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
-                      <h4 className="font-bold" dir="auto">
+                      <span className="absolute inset-0" aria-hidden="true" />
+                      <h4 className="relative font-bold" dir="auto">
                         {product.name}
                       </h4>
                     </a>
                   )}
 
-                  <Link href={product.url} title={product.url} target="_blank" rel="noreferrer">
+                  <Link href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative">
                     <small className="block">{product.url_without_protocol}</small>
                   </Link>
                 </div>

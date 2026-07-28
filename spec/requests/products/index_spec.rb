@@ -48,6 +48,38 @@ describe "Products Page Scenario", type: :system, js: true do
 
         expect(page).to have_current_path(edit_link_path(product))
       end
+
+      # Sellers repeatedly reported that clicking a product in this table "does nothing"
+      # (gumroad-private#1469). The cause was that only the bold name text was clickable, so a click
+      # anywhere else in the cell — which visually reads as part of the same target — did nothing at
+      # all. Clicking well to the right of the name text must now navigate too.
+      it "navigates when the empty space beside the product name is clicked" do
+        # A short name leaves a wide stretch of empty cell to its right to aim at.
+        product = create(:product, user: seller, name: "Kit")
+        visit(products_path)
+
+        name_cell = find_product_row(product).find(:table_cell, "Name")
+        width = name_cell.native.size[:width]
+        height = name_cell.native.size[:height]
+        # Five pixels in from the cell's right edge: past the end of "Kit", still inside the cell.
+        name_cell.click(x: width - 5, y: height / 2)
+
+        expect(page).to have_current_path(edit_link_path(product))
+      end
+
+      # The storefront URL under the name opens the public product page in a new tab. It sits on top
+      # of the edit-link overlay, so a click on the URL text itself must still hit the URL link
+      # rather than being swallowed by the overlay behind it.
+      it "still opens the storefront URL when the URL line under the name is clicked" do
+        product = create(:product, user: seller)
+        visit(products_path)
+
+        within find_product_row(product) do
+          find("a", text: product.long_url.sub(%r{\Ahttps?://}, "")).click
+        end
+
+        expect(page).to have_current_path(products_path)
+      end
     end
   end
 
