@@ -60,7 +60,7 @@ function Stream() {
     // leaving the video element and its listeners attached for the rest of the page's life.
     let isCancelled = false;
     let playerToRemove: jwplayer.JWPlayer | undefined;
-    let cancelTracking: (() => void) | undefined;
+    let flushTracking: (() => void) | undefined;
 
     const createPlayer = async () => {
       if (!containerRef.current) return;
@@ -119,7 +119,7 @@ function Stream() {
       };
 
       const throttledTrackMediaLocation = throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY_MS);
-      cancelTracking = () => throttledTrackMediaLocation.cancel();
+      flushTracking = () => throttledTrackMediaLocation.flush();
 
       player.on("ready", () => {
         player.playlistItem(index_to_play);
@@ -175,9 +175,12 @@ function Stream() {
 
     return () => {
       isCancelled = true;
-      // Cancel first: a pending throttled call would otherwise fire a tracking request for a
-      // player that is about to be destroyed.
-      cancelTracking?.();
+      // Flush rather than cancel. lodash throttle defaults to trailing: true, so before this
+      // change a pending position write still fired after the buyer navigated away — cancelling
+      // it would silently lose up to LOCATION_TRACK_EVENT_DELAY_MS (10s) of watch progress, and
+      // the buyer would resume earlier than where they actually stopped. trackMediaLocationChanged
+      // is a plain fetch, so it completes independently of this component.
+      flushTracking?.();
       // remove() detaches JW Player's own event handlers and DOM, which is what stops the
       // "time" handler from continuing to run against an unmounted component.
       playerToRemove?.remove();
