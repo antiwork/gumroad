@@ -331,4 +331,37 @@ describe Charge::MethodForcedPresentment do
       expect { result }.to change { merchant_account.reload.settlement_currency_mismatch_active?("eur") }.from(false).to(true)
     end
   end
+
+  describe "destination charge with the card lane's ramp flag off" do
+    # A Gumroad-managed Stripe Custom account: it belongs to a user, so it is not the
+    # platform row, but it is not a Stripe Connect account either — Stripe charges it with
+    # a destination charge, creating the PaymentIntent on the Gumroad platform account.
+    # This lane has accepted that charge model since before the card lane's ramp flag
+    # existed, so it must route its quote to the platform account with the flag off.
+    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
+    let!(:platform_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+        account.update!(charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+      end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+    end
+
+    it "mints the quote on the platform account, which is where the intent is created" do
+      allow(StripeFxQuote).to receive(:create).and_return(
+        StripeFxQuote::Quote.new(id: "fxq_destination", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25"))
+      )
+
+      expect(result.stripe_fx_quote_id).to eq("fxq_destination")
+      expect(StripeFxQuote).to have_received(:create)
+        .with(to_currency: Currency::USD, from_currency: Currency::EUR, stripe_account_id: "acct_gumroad_platform")
+    end
+
+    it "records a settlement-currency mismatch on the platform account rather than the seller's" do
+      allow(StripeFxQuote).to receive(:create).and_raise(
+        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in eur, expected usd"
+      )
+
+      expect { result }.to change { platform_merchant_account.reload.settlement_currency_mismatch_active?("eur") }.from(false).to(true)
+      expect(merchant_account.reload.settlement_currency_mismatch_active?("eur")).to be(false)
+    end
+  end
 end

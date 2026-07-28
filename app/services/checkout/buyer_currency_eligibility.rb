@@ -160,12 +160,19 @@ class Checkout::BuyerCurrencyEligibility
   # before the destination lane existed) would mint the quote in one account and create the
   # intent in another, and Stripe would reject it.
   #
-  # A destination charge is the only shape where the two accounts differ, and quoting one
-  # at all is what the ramp flag governs — so while the flag is off this returns the
-  # account the code has always used and no existing lane changes behaviour.
+  # This routing is deliberately NOT gated on the destination-charge ramp flag. Which
+  # account a quote must be minted on is a fact about how Stripe creates the intent, not
+  # a rollout choice: the forced-currency lane (iDEAL/Bancontact/UPI/Pix) has accepted
+  # destination charges since before this flag existed, so gating the routing would leave
+  # that lane minting a quote on the seller's Custom account for an intent created on the
+  # platform account — the exact cross-account pairing Stripe rejects. The flag governs
+  # whether the CARD lane may quote a destination charge at all (see
+  # #supported_merchant_account?), and while it is off no card checkout reaches here with
+  # a destination charge, so nothing about the card lane changes.
+  #
+  # `seller` is unused today and kept only so callers do not have to change if a future
+  # ramp needs to consult it.
   def self.fx_quote_merchant_account(merchant_account, seller: nil)
-    return merchant_account unless destination_charge_quotes_enabled?(seller)
-
     settlement_merchant_account(merchant_account)
   end
 

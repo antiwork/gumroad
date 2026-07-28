@@ -323,17 +323,28 @@ describe Checkout::BuyerCurrencyEligibility do
     # with a destination charge — the PaymentIntent is created on the platform account and
     # this account receives transfer_data[destination].
     let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
-    # The platform row is seeded in the test database; MerchantAccount.gumroad returns the
-    # first one, so use that rather than creating a second row the lookup would not find.
+    # MerchantAccount.gumroad is the platform row (the one with no user). It is normally
+    # seeded in the test database; create it when a fresh database has not been seeded, so
+    # the lookup the production code makes finds the same row these examples assert on.
     let!(:platform_merchant_account) do
-      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).tap do |account|
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
         account.update!(charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
-      end
+      end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
     end
 
     it "falls back while the destination-charge ramp flag is off" do
       expect(decision).not_to be_eligible
       expect(decision.fallback_reason).to eq(:unsupported_charge_model)
+    end
+
+    it "still routes the quote to the platform account while the ramp flag is off" do
+      # The ramp flag decides whether the CARD lane may quote a destination charge at all.
+      # It cannot decide WHICH account a quote is minted on: the forced-currency lane
+      # (iDEAL/Bancontact/UPI/Pix) already accepts destination charges regardless of this
+      # flag, and its intent is created on the platform account either way. Returning the
+      # seller's account here would mint that lane's quote in a different account from its
+      # intent, which Stripe rejects.
+      expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(platform_merchant_account)
     end
 
     context "with the destination-charge ramp flag on" do
