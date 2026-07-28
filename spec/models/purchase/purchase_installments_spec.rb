@@ -63,6 +63,39 @@ describe "PurchaseInstallments", :vcr do
       expect(posts.first.message).to eq("full message body")
     end
 
+    it "returns fully-loaded records for emailed seller posts" do
+      # Same slim-then-reload split as the profile-only seller posts above: the
+      # buyer-filter pass runs on slim rows so the join against email_infos does
+      # not drag every post's LONGTEXT message body along, and the records handed
+      # back must still be full rows. A slim row would raise
+      # MissingAttributeError as soon as a serializer read `message`.
+      purchase = create(:free_purchase)
+      post = create(:seller_installment, seller: purchase.seller, published_at: 10.minutes.ago,
+                                         message: "emailed message body")
+      create(:creator_contacting_customers_email_info_sent, purchase:, installment: post)
+
+      posts = Purchase.product_installments(purchase_ids: [purchase.id])
+
+      expect(posts).to eq([post])
+      expect(posts.first.message).to eq("emailed message body")
+      # The email_infos timestamps are what the final sort orders on, so they
+      # have to survive the reload alongside the full installment columns.
+      expect(posts.first.sent_at).to be_present
+    end
+
+    it "keeps emailed seller posts the buyer's filters reject out of the results" do
+      # The filter pass decides from slim rows; only the survivors are reloaded.
+      # A post targeted at a product this buyer never bought must be dropped by
+      # that pass rather than reappearing via the reload.
+      purchase = create(:free_purchase)
+      other_product = create(:product, user: purchase.seller)
+      rejected_post = create(:seller_installment, seller: purchase.seller, published_at: 10.minutes.ago,
+                                                  bought_products: [other_product.unique_permalink])
+      create(:creator_contacting_customers_email_info_sent, purchase:, installment: rejected_post)
+
+      expect(Purchase.product_installments(purchase_ids: [purchase.id])).to be_empty
+    end
+
     context "when purchased product(s) have should_show_all_posts enabled" do
       let(:enabled_product) { create(:product, should_show_all_posts: true) }
       let(:enabled_product_variant) { create(:variant, variant_category: create(:variant_category, link: enabled_product)) }

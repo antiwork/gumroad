@@ -126,6 +126,17 @@ module Ai::StoreAgentApiCatalog
     ep("enable_product", :put, "/products/:id/enable", "Publish a product so it is available for sale.", scope: "edit_products", path_params: %w[id]),
     ep("disable_product", :put, "/products/:id/disable", "Unpublish a product so it is no longer for sale.", scope: "edit_products", path_params: %w[id]),
 
+    # ---- Product custom landing pages ----
+    # A product's landing page is a separate surface from the profile page (see the /user/custom_html
+    # endpoints above): it replaces the product's native page at /l/..., native price and buy button
+    # included. That's why the update summary carries the buy-element warning — a page without one
+    # makes the product unpurchasable, a sharper failure than a bad profile page. update_product
+    # deliberately does NOT accept custom_html, so every full-page write flows through the id whose
+    # summary carries that warning.
+    ep("get_product_custom_html", :get, "/products/:id/custom_html", "Get a product's custom landing page HTML (the /l/ page buyers see). has_landing_page says whether a custom page is currently published; when it is false the product serves its native Gumroad page.", read: true, scope: "view_sales", path_params: %w[id]),
+    ep("update_product_custom_html", :put, "/products/:id", "Replace a product's ENTIRE custom landing page with a new page (or clear it by sending blank custom_html, restoring the native product page). Destructive: anything not included in custom_html is lost. A published page REPLACES the product's native page — price and buy button included — so the page MUST contain a buy element like <a data-gumroad-action=\"buy\">Buy now</a>; publishing HTML without one makes the product unpurchasable. The server fills elements marked data-gumroad-field=\"name\", \"price\", or \"description\" with live product values on every render. Product pages do NOT receive the gumroad-data JSON (that exists only on profile pages). Only use this to author a brand-new page; to change part of an existing page, use edit_product_custom_html.", scope: "edit_products", path_params: %w[id], params: %w[custom_html]),
+    ep("edit_product_custom_html", :post, "/products/:id/custom_html/edit", "Make a targeted edit to a product's existing custom landing page: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_product_custom_html when a page already exists. Keep the page's buy element intact — a page without one makes the product unpurchasable.", scope: "edit_products", path_params: %w[id], params: %w[find replace]),
+
     # ---- Custom fields (per product) ----
     ep("list_custom_fields", :get, "/products/:link_id/custom_fields", "List a product's custom fields.", read: true, scope: "view_sales", path_params: %w[link_id]),
     ep("create_custom_field", :post, "/products/:link_id/custom_fields", "Add a custom field to a product.", scope: "edit_products",

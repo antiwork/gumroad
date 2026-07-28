@@ -6,6 +6,7 @@ import {
   createPaymentElementConfirmationToken,
   paymentElementBillingDetails,
   paymentElementBillingDetailsCollection,
+  paymentElementRequiresFullName,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
 
@@ -161,20 +162,47 @@ describe("pendingSubmit reuse (wallet click-time elements.submit)", () => {
 });
 
 describe("paymentElementBillingDetailsCollection", () => {
-  it("routes wallets to element, UPI on digital carts to element-address, everything else to form", () => {
+  it("routes wallets to element, UPI on digital carts to element-full, everything else to form", () => {
     expect(paymentElementBillingDetailsCollection("apple_pay", false)).toBe("element");
     expect(paymentElementBillingDetailsCollection("google_pay", false)).toBe("element");
     expect(paymentElementBillingDetailsCollection("apple_pay", true)).toBe("element");
     // UPI confirms require billing_details.name + a full street address, which the digital
-    // checkout form never collects — the element must gather the address itself
+    // checkout form never collects — the element gathers name + address itself
     // (gumroad-private#933)...
-    expect(paymentElementBillingDetailsCollection("upi", false)).toBe("element-address");
+    expect(paymentElementBillingDetailsCollection("upi", false)).toBe("element-full");
     // ...but shippable carts already collect a full address in checkout's own form, so nothing
     // extra should be asked for inside the element.
     expect(paymentElementBillingDetailsCollection("upi", true)).toBe("form");
     expect(paymentElementBillingDetailsCollection("card", false)).toBe("form");
     expect(paymentElementBillingDetailsCollection("link", false)).toBe("form");
     expect(paymentElementBillingDetailsCollection("ideal", false)).toBe("form");
+  });
+});
+
+describe("paymentElementRequiresFullName", () => {
+  // Checkout only asks for the buyer's full name when it needs it, so digital carts leave it
+  // empty. Stripe refuses to confirm UPI and Pix without billing_details.name, and dropping
+  // either from this list brings back the failure mode from the July 2026 UPI ramp-down: the
+  // confirm fails server-side with parameter_missing and the buyer sees a generic error they
+  // cannot act on. Everything else must stay out, or checkout would demand a name it does not
+  // need.
+  it("requires a full name for UPI and Pix, and for nothing else", () => {
+    expect(paymentElementRequiresFullName("upi")).toBe(true);
+    expect(paymentElementRequiresFullName("pix")).toBe(true);
+    expect(paymentElementRequiresFullName("card")).toBe(false);
+    expect(paymentElementRequiresFullName("link")).toBe(false);
+    expect(paymentElementRequiresFullName("ideal")).toBe(false);
+    expect(paymentElementRequiresFullName("apple_pay")).toBe(false);
+    expect(paymentElementRequiresFullName("google_pay")).toBe(false);
+  });
+
+  // UPI on a shippable cart is the case the old guard missed: it read the billing-details
+  // collection mode, which is "form" there rather than "element-address", so the name check
+  // never ran. Checkout's shipping form already requires a full name, so nothing changes for
+  // the buyer — but the requirement is a property of the payment method, not of the cart.
+  it("does not depend on whether the cart needs shipping", () => {
+    expect(paymentElementBillingDetailsCollection("upi", true)).toBe("form");
+    expect(paymentElementRequiresFullName("upi")).toBe(true);
   });
 });
 
@@ -190,32 +218,114 @@ describe("element-collected billing details (wallets, UPI)", () => {
     expect(createConfirmationToken).toHaveBeenCalledWith({ elements });
   });
 
-  it("createPaymentElementConfirmationToken passes only the form-owned fields for element-address collection (UPI)", async () => {
+  it("createPaymentElementConfirmationToken passes the form's email and name for element-full collection (UPI)", async () => {
     const { stripe, elements, createConfirmationToken } = buildStripeFixture();
 
     const result = await createPaymentElementConfirmationToken({
       ...walletCardData(stripe, elements),
-      billingDetailsCollection: "element-address",
+      billingDetailsCollection: "element-full",
     });
 
     expect(result.status).toBe("success");
-    // Email/name/country come from checkout's form (the element doesn't render them); the
-    // street-address fields the buyer typed into the element must survive, so no city/state/
-    // ZIP/line overrides are passed — the form's US ZIP field in particular must never clobber
-    // the element-collected postal code.
+    // The element's pane collected the full street address itself — email and name, which
+    // checkout's form still owns (the pane's name field is pinned to "never"), are passed
+    // alongside. No country/address overrides: they would clobber what the buyer typed into
+    // the pane.
     expect(createConfirmationToken).toHaveBeenCalledWith({
       elements,
       params: {
         payment_method_data: {
+          billing_details: { email: "buyer@example.com", name: "Buyer Name", phone: null },
+        },
+      },
+    });
+  });
+
+  it("createPaymentElementConfirmationToken reports the pane-collected billing details for element-full collection (UPI)", async () => {
+    const { stripe, elements } = buildStripeFixture();
+    stripe.createConfirmationToken = vi.fn().mockResolvedValue({
+      confirmationToken: {
+        id: "ctoken_upi",
+        payment_method_preview: {
+          type: "upi",
           billing_details: {
-            email: "buyer@example.com",
-            name: "Buyer Name",
-            phone: null,
-            address: { country: "US" },
+            name: "UPI Buyer",
+            address: { country: "IN", postal_code: "560001", state: "KA" },
           },
         },
       },
     });
+
+    const result = await createPaymentElementConfirmationToken({
+      ...walletCardData(stripe, elements),
+      billingDetailsCollection: "element-full",
+    });
+
+    // Checkout adopts both values because its own name and country fields are hidden for the
+    // selection. The name reaches purchase.full_name and the address becomes the tax location.
+    expect(result).toMatchObject({
+      status: "success",
+      elementBillingAddress: { country: "IN", postal_code: "560001", state: "KA" },
+      elementBillingFullName: "UPI Buyer",
+    });
+  });
+
+  it("createPaymentElementConfirmationToken reports no element billing details for form collection", async () => {
+    const { stripe, elements } = buildStripeFixture();
+
+    const result = await createPaymentElementConfirmationToken(walletCardData(stripe, elements));
+
+    // Wallet/card/form selections keep their existing tax-location sources (the wallet details
+    // path and checkout's own form respectively) — the element-address adoption is exclusive
+    // to element-full.
+    expect(result).toMatchObject({
+      status: "success",
+      elementBillingAddress: null,
+      elementBillingFullName: null,
+    });
+  });
+
+  it("preparePaymentElementPaymentMethodData surfaces the pane-collected billing details for element-full collection (UPI, server-confirm)", async () => {
+    const { stripe, elements } = buildStripeFixture();
+    stripe.createPaymentMethod = vi.fn().mockResolvedValue({
+      paymentMethod: {
+        id: "pm_upi",
+        type: "upi",
+        billing_details: {
+          name: "UPI Buyer",
+          address: { country: "IN", postal_code: "560001", state: "KA" },
+        },
+      },
+    });
+
+    const result = await preparePaymentElementPaymentMethodData({
+      ...walletCardData(stripe, elements),
+      billingDetailsCollection: "element-full",
+    });
+
+    // The server-confirm lane must adopt the pane's name and address too. Otherwise the purchase
+    // would lose its full_name and proceed on the stale GeoIP location because checkout hides
+    // its own fields for this selection.
+    expect(result).toMatchObject({
+      status: "success",
+      elementBillingAddress: { country: "IN", postal_code: "560001", state: "KA" },
+      elementBillingFullName: "UPI Buyer",
+    });
+  });
+
+  it("preparePaymentElementPaymentMethodData omits element billing details outside element-full collection", async () => {
+    const { stripe, elements } = buildStripeFixture();
+
+    const result = await preparePaymentElementPaymentMethodData({
+      ...walletCardData(stripe, elements),
+      billingDetailsCollection: "form",
+    });
+
+    expect(result.status).toBe("success");
+    // Omitted entirely (never null) so spreading these params into server requests stays
+    // unchanged for card payments — same contract as the `wallet` key.
+    expect("elementBillingAddress" in result).toBe(false);
+    expect("elementBillingFullName" in result).toBe(false);
   });
 
   it("createPaymentElementConfirmationToken passes the checkout form's billing details for card payments", async () => {

@@ -15,6 +15,10 @@ class Checkout::BuyerCurrencyEligibility
     "ideal" => Currency::EUR,
     "bancontact" => Currency::EUR,
     "upi" => Currency::INR,
+    # Pix is Brazil's instant-payment scheme and Stripe only accepts it on BRL payment
+    # intents — creating one in any other currency is rejected outright ("Payments with pix
+    # support the following currencies: brl", verified against our live platform account).
+    "pix" => Currency::BRL,
   }.freeze
 
   # Per-method production launch flags for the forced-currency local methods. Stripe test
@@ -27,6 +31,7 @@ class Checkout::BuyerCurrencyEligibility
     "ideal" => :checkout_local_method_ideal,
     "bancontact" => :checkout_local_method_bancontact,
     "upi" => :checkout_local_method_upi,
+    "pix" => :checkout_local_method_pix,
   }.freeze
 
   # `direct_listed_amount` is only set by the method-forced mode: true means the
@@ -100,6 +105,12 @@ class Checkout::BuyerCurrencyEligibility
   def self.usd_settling_merchant_account?(merchant_account, presentment_currency:)
     return false unless usd_holding_merchant_account?(merchant_account)
 
+    # Deliberately asked of the SELLER's account rather than the account the intent is
+    # created on (unlike usd_holding_settlement_account?). This predicate guards the
+    # FX-quote paths, and StripeFxQuote mints the quote with the seller's connected
+    # account as `Stripe-Account`, so the seller's own settlement configuration is the
+    # one that decides whether the quote is accepted.
+    #
     # The stored currency answers the wrong question for accounts with Stripe
     # multi-currency settlement enabled: it mirrors Stripe's default_currency ("usd"),
     # but the payment intent's settlement currency can still differ per intent — and
@@ -126,6 +137,41 @@ class Checkout::BuyerCurrencyEligibility
   # gumroad-private#933).
   def self.usd_holding_merchant_account?(merchant_account)
     merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
+  end
+
+  # The account a PaymentIntent for this seller is actually CREATED on — which is the
+  # account whose settlement currency Stripe applies to the intent.
+  #
+  # Gumroad charges sellers two different ways (see StripeChargeProcessor):
+  #
+  #   Stripe Connect sellers (direct charges): the intent is created ON the seller's own
+  #   connected account, so that account's settlement currency is the one that matters.
+  #
+  #   Everyone else (destination charges): the intent is created on the GUMROAD PLATFORM
+  #   account, which holds USD, and the seller's account only appears as
+  #   `transfer_data[destination]` — it receives a transfer after the charge settles. The
+  #   destination account's own balance currency does not constrain what currency the
+  #   intent may be created in, so reading it here withholds payment methods a checkout
+  #   could complete perfectly well. Reading it hid UPI from the seller in
+  #   gumroad-private#1409 — an Indian seller pricing in rupees for an Indian buyer, the
+  #   exact shape UPI exists for.
+  #
+  # Returns nil only if the platform account row is missing, which callers treat as
+  # "cannot verify settlement" and fail closed.
+  def self.settlement_merchant_account(merchant_account)
+    return merchant_account if merchant_account.blank? || merchant_account.is_a_stripe_connect_account?
+
+    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+  end
+
+  # usd_holding_merchant_account? asked of the account the intent is created on, rather
+  # than of whichever account happens to be attached to the purchase. See
+  # settlement_merchant_account above for why those differ for destination charges.
+  def self.usd_holding_settlement_account?(merchant_account)
+    settlement_account = settlement_merchant_account(merchant_account)
+    return false if settlement_account.blank?
+
+    usd_holding_merchant_account?(settlement_account)
   end
 
   def self.stripe_test_mode?
@@ -199,7 +245,7 @@ class Checkout::BuyerCurrencyEligibility
   # a currency (card/Link) when they are picked on a Payment Element that was MOUNTED in
   # a forced currency: the ConfirmationToken inherits the element's currency, so the
   # intent must be created in it no matter which method the buyer chose. The presenter
-  # only mounts a forced-currency element for a product priced in that currency
+  # only mounts a forced-currency element for carts priced uniformly in that currency
   # (method_forced_shape?), so these checkouts land in the direct-listed-amount case.
   #
   # This mode intentionally does not look at the buyer's GeoIP location or at the
@@ -220,7 +266,7 @@ class Checkout::BuyerCurrencyEligibility
     # the element is available (some launched method forces the element's currency).
     return fallback(:method_not_launched) unless method_forced_mode_allowed?(payment_method, forced_currency)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
-    return fallback(:unsupported_charge_model) unless supported_charge_model?
+    return fallback(:unsupported_charge_model) unless supported_forced_currency_charge_model?
     # Only the stored-currency (USD-holding) half of the settlement question is a
     # blanket gate here. The learned per-currency mismatch marker is NOT: it predicts
     # FX-quote rejection, which only matters on the quoted (USD-priced) case below.
@@ -229,25 +275,33 @@ class Checkout::BuyerCurrencyEligibility
     # once that method's capabilities make the account settle the currency in itself
     # (2026-07-23 iDEAL dark-ramp, gumroad-private#933) — so it must not withhold the
     # method.
-    return fallback(:unsupported_settlement_currency) unless self.class.usd_holding_merchant_account?(merchant_account)
+    #
+    # The question is asked of the account the intent is CREATED on, which for a
+    # destination charge is the Gumroad platform account, not the seller's own account
+    # (see settlement_merchant_account). Asking it of the seller's account instead used
+    # to hide UPI from every seller whose Stripe balance settles in rupees — the exact
+    # seller UPI exists for (gumroad-private#1409).
+    return fallback(:unsupported_settlement_currency) unless self.class.usd_holding_settlement_account?(merchant_account)
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
-    return fallback(:multi_item_checkout) unless purchases.one?
+    return fallback(:no_purchases) if purchases.empty?
 
-    purchase = purchases.first
-    return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
+    product_currencies = []
+    purchases.each do |purchase|
+      return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
 
-    product_currency = purchase.link.price_currency_type.to_s.downcase
-    # Two supported pricing cases:
-    #   1. Product priced in the forced currency itself (e.g. an EUR-priced
-    #      product paid with iDEAL) — charge the listed amount directly, no FX
-    #      quote needed.
-    #   2. Product priced in USD — the charge path converts through an FX quote.
-    # Any other product currency cannot be presented in the forced currency.
-    priced_in_forced_currency = product_currency == forced_currency
-    unless priced_in_forced_currency || product_currency == Currency::USD
-      return fallback(:unsupported_product_currency)
+      product_currency = purchase.link.price_currency_type.to_s.downcase
+      product_currencies << product_currency
+      # Multi-line forced-currency presentment is currently limited to the direct-listed-amount
+      # case, where every line is already priced in the forced currency and no FX quote is needed.
+      # USD-priced single-line checkouts keep the existing quote path; mixed direct/quoted carts need
+      # the per-line quote basis tracked in gumroad-private#1298 before they can be safe.
+      unless product_currency == forced_currency || (purchases.one? && product_currency == Currency::USD)
+        return fallback(:unsupported_product_currency)
+      end
     end
+
+    priced_in_forced_currency = product_currencies.all? { _1 == forced_currency }
 
     # The USD-priced case converts through a Stripe FX quote (forced currency -> USD),
     # which is exactly the call a fresh mismatch marker predicts Stripe will reject —
@@ -299,6 +353,28 @@ class Checkout::BuyerCurrencyEligibility
 
     def supported_charge_model?
       self.class.supported_merchant_account?(merchant_account)
+    end
+
+    # The forced-currency lane's charge-model gate. Broader than supported_charge_model?
+    # (which the card lane keeps) by exactly one case: a seller with a Gumroad-managed
+    # Stripe Custom account.
+    #
+    # That seller is charged with a DESTINATION charge — StripeChargeProcessor creates
+    # the PaymentIntent on the Gumroad platform account and passes their account as
+    # `transfer_data[destination]` — which is the same intent shape as a seller with no
+    # Stripe account at all, and that case is already supported here. The two are
+    # indistinguishable from Stripe's point of view, so treating one as unsupported only
+    # withheld local payment methods from checkouts that could complete.
+    #
+    # The card lane is deliberately NOT widened: it converts through an FX quote minted
+    # against the seller's own account, so the seller's account model genuinely matters
+    # there. This lane charges the product's listed price in the currency it is already
+    # priced in (or quotes separately, guarded by usd_settling_merchant_account?).
+    def supported_forced_currency_charge_model?
+      return false if merchant_account.blank?
+
+      merchant_account.is_a_stripe_connect_account? ||
+        self.class.settlement_merchant_account(merchant_account)&.is_managed_by_gumroad? || false
     end
 
     def wallet_type

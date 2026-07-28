@@ -291,7 +291,12 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def create_gift
-      raise Purchase::PurchaseInvalid, "Test gift purchases have not been enabled yet." if buyer == product.user
+      # A seller buying their own product can only ever be a test purchase, and test purchases were
+      # never built for gifts, so this case has to be rejected. The message names what the seller
+      # actually did and points at the supported way to give a product away, because the old wording
+      # ("Test gift purchases have not been enabled yet.") described an internal capability and read
+      # as a flag we could switch on for them, which generated support tickets asking us to do that.
+      raise Purchase::PurchaseInvalid, "You can't gift your own product. To give it away for free, create a 100% off discount code under Checkout > Discounts and share the checkout link." if buyer == product.user
       raise Purchase::PurchaseInvalid, "You cannot gift a product to yourself. Please try gifting to another email." if giftee_email == purchase_params[:email]
       raise Purchase::PurchaseInvalid, "Gift purchases cannot be on installment plans." if params[:pay_in_installments]
 

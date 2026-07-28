@@ -132,6 +132,39 @@ describe Purchase::PresentmentRefund do
 
       expect(described_class.new(purchase:, canonical_gross_refund_cents: 20).tax_only_result).to be_nil
     end
+
+    # The compliance invariant behind buyer-currency VAT invoices: the buyer-currency tax
+    # figure printed on the invoice is what a tax authority reads, so a standalone VAT
+    # refund must send back exactly that amount, not a re-derived or canonical figure.
+    it "sends exactly the buyer-currency tax amount the invoice claims" do
+      # This purchase is deliberately persisted without validation (no real charge), so
+      # skip validations here too.
+      purchase.was_purchase_taxable = true
+      purchase.gumroad_tax_cents = 20
+      purchase.save!(validate: false)
+      invoiced_tax_cents = purchase.buyer_presentment_non_refunded_tax_cents
+      refund_amount_cents = described_class
+                              .new(purchase:, canonical_gross_refund_cents: purchase.gumroad_tax_refundable_cents)
+                              .tax_only_result
+                              .presentment_amount_cents
+
+      # 5 seller tax + 20 Gumroad tax are both on the invoice's single tax line, but only
+      # the Gumroad-remitted 20 is ours to refund; the seller's 5 stays with the seller.
+      expect(invoiced_tax_cents).to eq(25)
+      expect(refund_amount_cents).to eq(20)
+      expect(purchase.purchase_presentment.presentment_gumroad_tax_cents).to eq(refund_amount_cents)
+
+      # And once that refund is recorded, the invoice stops claiming the refunded portion.
+      refund = build(:refund, purchase:, total_transaction_cents: 20, amount_cents: 0, gumroad_tax_cents: 20)
+      refund.presentment_currency = Currency::CAD
+      refund.presentment_amount_cents = refund_amount_cents
+      refund.presentment_gumroad_tax_cents = refund_amount_cents
+      purchase.refunds << refund
+      purchase.reload
+
+      expect(purchase.buyer_presentment_non_refunded_tax_cents).to eq(invoiced_tax_cents - refund_amount_cents)
+      expect(purchase.buyer_presentment_non_refunded_total_cents).to eq(135 - refund_amount_cents)
+    end
   end
 
   describe ".from_presentment_amount" do

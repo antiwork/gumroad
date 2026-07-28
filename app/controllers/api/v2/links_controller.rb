@@ -27,12 +27,13 @@ class Api::V2::LinksController < Api::V2::BaseController
     { variant_categories_alive: [{ alive_variants: :alive_rich_contents }] },
   ]).freeze
 
-  before_action(only: [:show, :index]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
-  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html]) { doorkeeper_authorize! :edit_products }
+  before_action(only: [:show, :index, :custom_html]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
+  before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html]) { doorkeeper_authorize! :edit_products }
   before_action :reject_unsupported_upload_fields, only: [:update, :create]
   before_action :resolve_category_param, only: [:update, :create]
-  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html]
-  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html]
+  before_action :set_link_id_to_id, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html]
+  before_action :fetch_product, only: [:show, :update, :disable, :enable, :destroy, :preview_custom_html, :custom_html, :edit_custom_html]
+  before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :edit_custom_html]
 
   def index
     products = current_resource_owner.products.visible.includes(
@@ -505,9 +506,62 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
   end
 
+  # GET the product's custom landing page HTML. has_landing_page lets the agent decide whether it's
+  # editing an existing page or authoring a new one; landing_url is where the page serves once
+  # published. Mirrors GET /v2/user/custom_html, minus that endpoint's rendered_html: a profile
+  # without a custom page still has a standalone default document to hand back as a starting point
+  # (Pages::DefaultProfileDocument), but a product's native page is the React product page, which
+  # has no server-side standalone render to offer.
+  def custom_html
+    render_response(true, custom_html: @product.custom_html, has_landing_page: @product.custom_html.present?, landing_url: @product.long_url)
+  end
+
+  # POST a targeted edit to the product's custom landing page: replaces exactly one occurrence of
+  # the `find` snippet with `replace`, re-sanitizes the WHOLE spliced document, and saves. Mirrors
+  # POST /v2/user/custom_html/edit — the matching rules, error copy, and blank-unpublish behavior
+  # all live in Pages::CustomHtmlWriter so the two surfaces can't drift. The one product-specific
+  # addition is the buy-affordance warning: unlike a profile, a product page replaces the native
+  # buy button, so an edit that leaves the page without a buy element gets the same warning the
+  # full update returns.
+  def edit_custom_html
+    find = params[:find]
+    replace = params[:replace]
+    unless find.is_a?(String) && find.present?
+      return render_response(false, message: "find is required and must be a non-empty string copied exactly from the current custom HTML.")
+    end
+    unless replace.is_a?(String)
+      return render_response(false, message: "replace is required and must be a string (use \"\" to delete the snippet).")
+    end
+
+    begin
+      result = Pages::CustomHtmlWriter.edit!(@product, find:, replace:)
+    rescue ActiveRecord::RecordInvalid => e
+      object = e.record
+      return (object == @product || object.nil?) ? error_with_product(@product) : render_response(false, message: object.errors.full_messages.to_sentence)
+    end
+
+    return render_response(false, message: result.error) unless result.success?
+
+    additional_info = { custom_html: result.custom_html, previous_custom_html: result.previous_custom_html, sanitization_report: result.sanitization_report, landing_url: @product.long_url }
+    # An edit that empties the page unpublishes it and the native page (with its own buy button)
+    # returns, so only a still-published page can be missing a buy element.
+    if result.custom_html.present? && (warning = custom_html_buy_affordance_warning(result.custom_html))
+      additional_info[:warning] = warning
+    end
+    render_response(true, additional_info)
+  end
+
   private
     def success_with_product(product = nil)
       success_with_object(:product, product)
+    end
+
+    # Same gate the inline custom_html paths (update / preview_custom_html) apply; a before_action
+    # for the dedicated page endpoints so they can't be reached at all while the feature is off.
+    def ensure_custom_html_pages_enabled
+      return if Feature.active?(:custom_html_pages, current_resource_owner)
+
+      render_response(false, message: "You do not have access to custom HTML pages.")
     end
 
     # Validates the product-level refund policy params shared by create and

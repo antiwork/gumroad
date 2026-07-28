@@ -16,6 +16,29 @@ module StripeMerchantAccountManager
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
+
+  # Stripe rejects bank details for two very different reasons, and sellers need different
+  # advice for each:
+  #
+  # * FORMAT rejections — the bank/routing code cannot be accepted as typed (wrong length,
+  #   lowercase, spaces, a branch suffix the country's format doesn't allow). Nothing changes
+  #   over time, so re-sending the same stored value can never succeed: only the seller
+  #   re-entering the code fixes it.
+  # * DIRECTORY misses — the code looks well-formed but the bank or branch isn't in Stripe's
+  #   records yet (common for newly opened accounts and recently added branches). These can
+  #   genuinely start working on their own, which is what the weekly automated re-check is for.
+  #
+  # Stripe signals format rejections with these error codes, and (on older error shapes that
+  # carry no code) with the messages matched by BANK_DETAILS_FORMAT_REJECTION_MESSAGE. Stripe
+  # sometimes reuses the same codes for a directory miss, so DIRECTORY_MISS_MESSAGE wins:
+  # "we don't know this bank yet" is a waiting problem, not a typo problem.
+  BANK_DETAILS_FORMAT_REJECTION_CODES = %w[routing_number_invalid account_number_invalid].freeze
+  BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
+  BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
+
+  # Passed to ContactingCreatorMailer#invalid_bank_account so the email can tell the seller
+  # whether waiting might help (directory miss) or whether they must re-enter the code (format).
+  BANK_REJECTION_KIND_FORMAT = "format_rejected"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
 
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
@@ -443,7 +466,7 @@ module StripeMerchantAccountManager
       ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
     end
-    record_bank_sync_failure_note(user, e) if notify
+    failure_note = record_bank_sync_failure_note(user, e) if notify
     # bank_account_invalid_error? recognizes rejections of the seller's bank details themselves
     # (unknown bank for a BIC or routing code, invalid account number). Stripe marks these via
     # the error's code or param (for example param "bank_account[routing_number]" on "We
@@ -452,7 +475,11 @@ module StripeMerchantAccountManager
     # recorded above, so they must not page Sentry. The message-string checks that follow
     # cover older rejection shapes that carry no code or param.
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
-      ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
+      if notify
+        rejection_kind = bank_details_format_rejection?(e) ? BANK_REJECTION_KIND_FORMAT : nil
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
+        mark_bank_sync_note_seller_notified!(failure_note)
+      end
       return :invalid_bank_account
     end
 
@@ -460,6 +487,8 @@ module StripeMerchantAccountManager
     :stripe_invalid_request
   rescue Stripe::CardError => e
     record_bank_sync_failure_note(user, e) if notify
+    # A CardError here means the debit card used for payouts was declined by the network, not
+    # that a bank code was mistyped, so this is never a format rejection.
     ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
     :card_not_supported
   rescue Stripe::StripeError => e
@@ -469,12 +498,83 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
+  # Returns the note so callers that go on to email the seller can mark it — see
+  # mark_bank_sync_note_seller_notified!. The structured json_data fields are what the
+  # classifiers read; the human-readable content is for support staff reading the account.
   def self.record_bank_sync_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
-    user.add_payout_note(content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+    message = error.message.to_s
+    note = user.add_payout_note(
+      content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{message.truncate(200)}",
+      seller_visible: false
+    )
+    note.json_data["stripe_error_code"] = code
+    note.json_data["stripe_error_message"] = message
+    note.save!
+    note
   rescue => e
     Rails.logger.error "Failed to record payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+    nil
+  end
+
+  # Records on the note that the seller has already been told about this rejection. The
+  # automated retry loop reads this before abandoning a note: an unmarked note (one recorded
+  # by account creation, which re-raises instead of emailing, or one recorded before this
+  # field existed) means the seller has heard nothing and must be emailed first.
+  def self.mark_bank_sync_note_seller_notified!(note)
+    return if note.nil?
+
+    note.json_data["seller_notified"] = true
+    note.save!
+  rescue => e
+    Rails.logger.error "Failed to mark bank sync note #{note&.id} as notified: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # True when Stripe rejected the bank/routing code on FORMAT grounds, i.e. the value as typed
+  # can never be accepted (see BANK_DETAILS_FORMAT_REJECTION_CODES above). Waiting cannot fix
+  # these, so the seller must re-enter the code — the email and the automated retry loop both
+  # behave differently for them.
+  def self.bank_details_format_rejection?(error)
+    code = error.respond_to?(:code) ? error.code : nil
+    format_rejection_signals?(code:, message: error.message.to_s)
+  end
+
+  # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb
+  # rather than a live Stripe error. Notes recorded since this classifier existed carry the
+  # error code and full message in json_data; older notes only have the human-readable content
+  # ("Stripe bank sync failed: <code> — <message truncated to 200 chars>"), so fall back to
+  # sniffing that text. The fallback is why the truncation matters: a directory-miss phrase
+  # sitting past 200 chars would be invisible, which is another reason to prefer the fields.
+  def self.bank_details_format_rejection_note?(note)
+    code, message = bank_sync_note_error_details(note)
+    format_rejection_signals?(code:, message:)
+  end
+
+  def self.bank_sync_note_error_details(note)
+    json_data = note.respond_to?(:json_data) ? note.json_data : {}
+    content = note.respond_to?(:content) ? note.content.to_s : note.to_s
+
+    if json_data.key?("stripe_error_message")
+      [json_data["stripe_error_code"], json_data["stripe_error_message"].to_s]
+    else
+      [BANK_DETAILS_FORMAT_REJECTION_CODES.find { |code| content.include?(code) }, content]
+    end
+  end
+
+  def self.format_rejection_signals?(code:, message:)
+    return false if message.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+
+    code.to_s.in?(BANK_DETAILS_FORMAT_REJECTION_CODES) || message.match?(BANK_DETAILS_FORMAT_REJECTION_MESSAGE)
+  end
+
+  # False when the note was recorded without the seller being emailed about it — account
+  # creation records a note and re-raises rather than emailing, and notes predating this
+  # field carry no answer either way. The retry loop must email before it abandons such a
+  # note, otherwise the seller is never told their bank code needs correcting.
+  def self.bank_sync_note_seller_notified?(note)
+    note.respond_to?(:json_data) && note.json_data["seller_notified"] == true
   end
 
   private_class_method
@@ -603,7 +703,10 @@ module StripeMerchantAccountManager
   private_class_method
   def self.record_postal_code_failure_note(user, error)
     code = error.respond_to?(:code) ? error.code : nil
-    user.add_payout_note(content: "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}")
+    user.add_payout_note(
+      content: "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{error.message.to_s.truncate(200)}",
+      seller_visible: false
+    )
   rescue => e
     Rails.logger.error "Failed to record postal-code payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)

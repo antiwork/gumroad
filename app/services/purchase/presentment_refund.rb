@@ -37,6 +37,13 @@ class Purchase::PresentmentRefund
   # actually refunded, derive the canonical (USD) gross refund cents for the canonical
   # refund/balance records plus the presentment snapshot to persist on the refund.
   # Returns nil when no consistent derivation is possible, so callers fail closed.
+  #
+  # Every balance here is the PURCHASE's, never the charge's. On a multi-item cart one
+  # PaymentIntent covers several purchases, each with its own purchase_presentment row
+  # against the shared charge_presentment, so a refund aimed at one line must clamp to
+  # that line's presentment cents. Clamping against the charge total instead would let a
+  # refund of one item send back money for the whole cart — Stripe would accept it,
+  # because the charge really does hold that much.
   def self.from_presentment_amount(purchase:, presentment_amount_cents:)
     presentment = purchase.purchase_presentment
     presentment_amount_cents = presentment_amount_cents.to_i

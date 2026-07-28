@@ -516,9 +516,14 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
   describe "GET missed_posts" do
     before do
       @product = create(:product, user: seller)
-      @post1 = create(:installment, link: @product, published_at: Time.current)
-      @post2 = create(:installment, link: @product, published_at: Time.current)
-      @post3 = create(:installment, link: @product, published_at: Time.current)
+      # installments.published_at is a DATETIME with no sub-second precision, so
+      # three posts created with Time.current usually share one timestamp and fall
+      # back to the id tiebreak, but land out of order whenever creation happens to
+      # straddle a second boundary. Pin distinct timestamps (oldest to newest) so the
+      # newest-first ordering this endpoint promises is asserted deterministically.
+      @post1 = create(:installment, link: @product, published_at: 3.days.ago)
+      @post2 = create(:installment, link: @product, published_at: 2.days.ago)
+      @post3 = create(:installment, link: @product, published_at: 1.day.ago)
       @unpublished_post = create(:installment, link: @product)
       @purchase = create(:purchase, link: @product)
       create(:creator_contacting_customers_email_info_delivered, installment: @post1, purchase: @purchase)
@@ -535,12 +540,12 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       get :missed_posts, params: { purchase_id: @purchase.external_id, purchase_email: @purchase.email }
       expect(response).to be_successful
       expect(response.parsed_body.count).to eq(2)
-      expect(response.parsed_body[0]["name"]).to eq(@post2.name)
-      expect(response.parsed_body[0]["published_at"].to_date).to eq(@post2.published_at.to_date)
-      expect(response.parsed_body[0]["url"]).to eq(custom_domain_view_post_url(host: seller.subdomain_with_protocol, slug: @post2.slug))
-      expect(response.parsed_body[1]["name"]).to eq(@post3.name)
-      expect(response.parsed_body[1]["published_at"].to_date).to eq(@post3.published_at.to_date)
-      expect(response.parsed_body[1]["url"]).to eq(custom_domain_view_post_url(host: seller.subdomain_with_protocol, slug: @post3.slug))
+      expect(response.parsed_body[0]["name"]).to eq(@post3.name)
+      expect(response.parsed_body[0]["published_at"].to_date).to eq(@post3.published_at.to_date)
+      expect(response.parsed_body[0]["url"]).to eq(custom_domain_view_post_url(host: seller.subdomain_with_protocol, slug: @post3.slug))
+      expect(response.parsed_body[1]["name"]).to eq(@post2.name)
+      expect(response.parsed_body[1]["published_at"].to_date).to eq(@post2.published_at.to_date)
+      expect(response.parsed_body[1]["url"]).to eq(custom_domain_view_post_url(host: seller.subdomain_with_protocol, slug: @post2.slug))
       expect(response.parsed_body[2]).to eq(nil)
     end
 

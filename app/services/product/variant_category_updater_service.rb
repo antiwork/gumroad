@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context, :contract
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -39,7 +39,10 @@ class Product::VariantCategoryUpdaterService
   # rather than read from a global, so the services stay usable outside a
   # request (backfills, console, tests). Defaults to empty: a caller that
   # doesn't know the actor still deletes normally, it just records less.
-  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {})
+  # +contract+ - optional Product::SaveContract (gumroad-private#1379). Only the
+  # product editor's save path supplies one; nil means the legacy diff-derived
+  # behaviour, so every other caller is unchanged by construction.
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {}, contract: nil)
     @product = product
     @category_params = category_params
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
@@ -50,6 +53,7 @@ class Product::VariantCategoryUpdaterService
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {} }
     @deletion_audit_context = deletion_audit_context || {}
+    @contract = contract
   end
 
   # Blocks deleting variants the seller has invested in — ones that carry
@@ -119,16 +123,39 @@ class Product::VariantCategoryUpdaterService
   def perform
     if category_params[:id].present?
       self.variant_category = variant_categories.find_by_external_id(category_params[:id])
+      # Remembered before the update below blanks it. The "grouping wasn't
+      # submitted" call carries no name, because historically it only ever ran
+      # as a prelude to sweeping the whole grouping — blanking the title was
+      # how that route marked the grouping gone. Under the contract the same
+      # call can now be a partial deletion that leaves the grouping alive, and
+      # the name has to survive that. See the restore below.
+      original_title = variant_category.title
       variant_category.update(title: category_params[:title])
     else
       self.variant_category = variant_categories.build(title: category_params[:title])
     end
 
     if category_params[:options].nil?
-      self.class.ensure_deletion_intent!(product:, variants: variant_category.variants.alive.to_a, confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
-      deleted_variant_external_ids = batch_delete_variants(variant_category.variants)
-      category_was_deleted = variant_category.title.blank?
+      # Product::SaveContract, Rule 2, applied to the widest deletion route in
+      # the editor. `options: nil` means "this grouping wasn't submitted", and
+      # historically that swept every version in it. Under the contract a save
+      # that names specific ids must remove only those, and a save that names
+      # none must remove nothing at all — otherwise an explicit one-version
+      # deletion arriving with an empty `variants` collection would take the
+      # whole grouping with it.
+      variants_to_delete = contract_scoped_category_deletions(variant_category.variants)
+      self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
+      deleted_variant_external_ids = batch_delete_variants(variants_to_delete)
+      # The grouping itself only goes away when nothing is left in it. With the
+      # contract off this is the same condition as before (the sweep deletes
+      # everything, so nothing is alive), but a contract-scoped partial deletion
+      # must leave the category standing for the versions that survive.
+      category_was_deleted = variant_category.title.blank? && !variant_category.variants.alive.exists?
       variant_category.mark_deleted! if category_was_deleted
+      # The grouping survived a route that assumed it would not, so give the
+      # seller their name back. Unreachable with the contract off: there the
+      # sweep always empties the grouping, so it is always deleted here.
+      variant_category.update(title: original_title) if !category_was_deleted && variant_category.title.blank? && original_title.present?
       record_deletion_audit(
         route: ProductVariantDeletionAudit::EDITOR_CATEGORY_OMITTED,
         deleted_variant_external_ids:,
@@ -156,6 +183,7 @@ class Product::VariantCategoryUpdaterService
                                               subscription_price_change_effective_date: option[:subscription_price_change_effective_date],
                                               subscription_price_change_message: option[:subscription_price_change_message])
           save_integrations(variant, option)
+          visited_variant_external_ids << variant.external_id
           save_rich_content(variant, option)
           variant.product_files = ProductFile.find(variant.alive_rich_contents.flat_map { _1.embedded_product_file_ids_in_order }.uniq)
           save_recurring_prices!(variant, option) if is_tiered_membership && has_variant_recurrences?
@@ -176,7 +204,13 @@ class Product::VariantCategoryUpdaterService
         id_mappings[:variants][option[:client_id]] = variant.external_id if option[:id].blank? && option[:client_id].present?
       end
 
-      variants_to_delete = existing_variants - keep_variants
+      # Product::SaveContract, Rule 2. `existing - keep` infers deletion from
+      # what the payload failed to mention; the contract replaces that with what
+      # the client explicitly asked to remove. Under the contract, a version
+      # missing from the payload is "no statement", not "delete me" — which is
+      # what a stale tab, a truncated body, or a dropped malformed field
+      # produces.
+      variants_to_delete = contract_scoped_variant_deletions(existing_variants - keep_variants, existing_variants)
       self.class.ensure_deletion_intent!(product:, variants: variants_to_delete.select(&:alive?), confirmed_removed_variant_ids:, diagnostics: deletion_guard_diagnostics)
       record_deletion_audit(
         route: ProductVariantDeletionAudit::EDITOR_VARIANTS_DIFFED,
@@ -184,11 +218,83 @@ class Product::VariantCategoryUpdaterService
       )
     end
 
+    apply_unvisited_variant_scoped_deletions
+
     variant_category.save!
     variant_category
   end
 
   private
+    # Version-scoped deletions (today: a version's integrations) name their
+    # owner directly, so the payload can ask to disconnect an integration from
+    # a version the `variants` list never mentions — a version the seller
+    # didn't re-submit, or one living in a grouping the editor doesn't render
+    # at all. Those versions are never visited by the loop above, which is
+    # where `save_integrations` runs, so the request used to return success
+    # while the integration stayed connected.
+    #
+    # This sweeps up exactly those: alive versions of THIS grouping that the
+    # contract names as deletion owners and that the save has not already
+    # visited. Nothing here can delete anything the payload didn't name — the
+    # ids come from `variant_deleted_ids`, which is already freshness-gated.
+    def apply_unvisited_variant_scoped_deletions
+      return unless contract&.enforced?
+
+      owner_ids = contract.variant_deletion_owner_ids - visited_variant_external_ids
+      return if owner_ids.empty?
+
+      variant_category.variants.alive.each do |variant|
+        next unless owner_ids.include?(variant.external_id)
+
+        apply_variant_scoped_integration_deletions(variant)
+      end
+    end
+
+    # External ids of the versions the save actually walked through this run.
+    # Only those had `save_integrations` applied to them.
+    def visited_variant_external_ids
+      @_visited_variant_external_ids ||= []
+    end
+
+    # The `options: nil` route — "this grouping wasn't submitted at all" —
+    # scoped to what the contract authorises.
+    #
+    # With no contract, or with the flag off, this returns the whole grouping,
+    # which is the legacy sweep unchanged. With the contract enforced the sweep
+    # is only reachable through an explicit clear-all; a request naming specific
+    # ids removes exactly those, and a request naming nothing removes nothing.
+    # Without this the controller's explicit-deletion path would fall into the
+    # branch below and delete every version in the first category while the
+    # seller had asked for one.
+    def contract_scoped_category_deletions(variants)
+      return variants unless contract&.enforced?
+
+      existing_variants = variants.to_a
+      return existing_variants if contract.cleared?(:variants)
+
+      ids = contract.deleted_ids(:variants)
+      return [] if ids.empty?
+
+      existing_variants.select { ids.include?(_1.external_id) }
+    end
+
+    # Narrows a diff-derived deletion set to what the contract authorises.
+    # Returns the diff untouched when no contract is supplied or the flag is
+    # off, so non-editor callers and the disabled path are byte-identical.
+    #
+    # A clear-all deletes from the PRE-SAVE set, not the diff, so it means
+    # "everything that existed when the editor loaded" and cannot sweep up a
+    # variant this same request just created.
+    def contract_scoped_variant_deletions(diff_deletions, existing_variants)
+      return diff_deletions unless contract&.enforced?
+      return existing_variants if contract.cleared?(:variants)
+
+      ids = contract.deleted_ids(:variants)
+      return [] if ids.empty?
+
+      existing_variants.select { ids.include?(_1.external_id) }
+    end
+
     # Records a successful deletion for the audit trail. Never raises: see
     # ProductVariantDeletionAudit.
     def record_deletion_audit(route:, deleted_variant_external_ids: [], deleted_variant_category_external_ids: [])
@@ -266,15 +372,50 @@ class Product::VariantCategoryUpdaterService
       end
     end
 
+    # Integrations enabled on a VERSION, as opposed to on the product.
+    #
+    # The checkbox model here is genuinely different from the product-level
+    # integrations collection: the payload states the full enabled set for the
+    # version, so "absent from the set" is how the editor has always expressed
+    # "unchecked". That is a real statement, not an omission — but only when the
+    # version actually submitted its integrations. When it did not, the
+    # subtraction below reads "no integrations submitted" as "uncheck them all"
+    # and silently tears down every version-level integration on the product.
+    #
+    # Scoped rather than excluded: the reviewer was right that leaving variant
+    # integrations outside the contract needs a human ruling, so this brings
+    # them in on the conservative reading — an unsubmitted `integrations` key
+    # means no change, and an explicitly submitted set still behaves exactly as
+    # it does today.
     def save_integrations(variant, option)
       enabled_integrations = []
 
       Integration::ALL_NAMES.each do |name|
         integration = product.find_integration_by_name(name)
+        # `option[:integrations]` is client-controlled and may be any shape at
+        # all. `dig` on a String raises TypeError (String has no #dig), which
+        # inside the seller's save turns a malformed payload into a failed save
+        # — so establish the shape before reading it rather than rescuing after.
+        submitted = option[:integrations]
+        enabled = submitted.respond_to?(:dig) ? submitted.dig(name) : nil
         # TODO: :product_edit_react cleanup
-        if (option.dig(:integrations, name) == "1" || option.dig(:integrations, name) == true) && integration.present?
+        if (enabled == "1" || enabled == true) && integration.present?
           enabled_integrations << integration
         end
+      end
+
+      if contract&.enforced?
+        # Under the contract a version's integrations are removed only when the
+        # payload names them for THIS version (owner-scoped, see
+        # SaveContract#variant_deleted_ids). The submitted checkbox map is a
+        # statement about what should be ON; it is not evidence that anything
+        # missing from it was deliberately turned off, and treating it that way
+        # let a stale tab silently disconnect an integration another tab had
+        # just enabled — the join is not something the old flat contract or the
+        # revision token could see.
+        apply_variant_scoped_integration_deletions(variant)
+        variant.active_integrations << enabled_integrations - variant.active_integrations
+        return
       end
 
       deleted_integrations = variant.active_integrations - enabled_integrations
@@ -282,8 +423,74 @@ class Product::VariantCategoryUpdaterService
       variant.active_integrations << enabled_integrations - variant.active_integrations
     end
 
+    # Disconnects exactly the integrations the payload named for this version.
+    # Split out of save_integrations because it also has to run for versions
+    # the save never walked through — see
+    # apply_unvisited_variant_scoped_deletions.
+    def apply_variant_scoped_integration_deletions(variant)
+      names_to_delete = contract.variant_deleted_ids(variant.external_id, :integrations)
+      return if names_to_delete.empty?
+
+      deleted_integrations = variant.active_integrations.select { _1.name.in?(names_to_delete) }
+      variant.live_base_variant_integrations.where(integration: deleted_integrations).map(&:mark_deleted!)
+    end
+
+    # Did this version's payload actually carry a rich_content statement?
+    #
+    # An empty array IS a statement in the same sense the top-level contract
+    # means it — and, exactly as
+    # there, it does not authorise deletion on its own: emptying a version's
+    # pages requires naming them or clearing the collection.
+    #
+    # A String is accepted only when it actually parses as a JSON array: the
+    # editor legitimately sends this collection pre-serialized, but unparseable
+    # junk is a malformed payload, and treating it as a statement means
+    # `JSON.parse` raises mid-save and fails the seller's whole save.
+    def variant_submitted_rich_content?(option)
+      value = option[:rich_content]
+      return true if value.is_a?(Array)
+      return false unless value.is_a?(String) && value.present?
+
+      parsed_variant_rich_content(value).is_a?(Array)
+    end
+
+    # Parses the pre-serialized form, returning nil rather than raising when the
+    # payload is not valid JSON.
+    def parsed_variant_rich_content(value)
+      JSON.parse(value, symbolize_names: true)
+    rescue JSON::ParserError
+      nil
+    end
+
+    # Narrows a diff-derived page deletion set to what the contract authorises.
+    # Returns the diff untouched when no contract is supplied or the flag is
+    # off, so behaviour is unchanged until the rollout reaches a seller.
+    def contract_scoped_rich_content_deletions(diff_deletions, existing_rich_contents)
+      return diff_deletions unless contract&.enforced?
+      return existing_rich_contents if contract.cleared?(:rich_content)
+
+      ids = contract.deleted_ids(:rich_content)
+      return [] if ids.empty?
+
+      existing_rich_contents.select { ids.include?(_1.external_id) }
+    end
+
     def save_rich_content(variant, option)
-      variant_rich_contents = option[:rich_content].is_a?(Array) ? option[:rich_content] : JSON.parse(option[:rich_content].presence || "[]", symbolize_names: true) || []
+      # Product::SaveContract, Rule 1, applied to VERSION-level pages.
+      #
+      # The parse below turns an absent or malformed `rich_content` key into
+      # `[]`, and the diff further down then reads that as "delete every page on
+      # this version". Version-level pages are the product's actual content, so
+      # this is the same wipe-by-omission as the product-level collection and
+      # has to answer to the same rule.
+      submitted = variant_submitted_rich_content?(option)
+      return if contract&.enforced? && !submitted
+
+      variant_rich_contents = if option[:rich_content].is_a?(Array)
+        option[:rich_content]
+      else
+        parsed_variant_rich_content(option[:rich_content].presence || "[]") || []
+      end
       rich_contents_to_keep = []
       existing_rich_contents = variant.alive_rich_contents.to_a
       variant_rich_contents.each.with_index do |variant_rich_content, index|
@@ -302,6 +509,9 @@ class Product::VariantCategoryUpdaterService
       end
       rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
         .reject { preserved_rich_content_ids.include?(_1.external_id) }
+      # Under the contract the diff stops being deletion authority: a page goes
+      # only when the client named it, or asked to clear the collection.
+      rich_contents_to_delete = contract_scoped_rich_content_deletions(rich_contents_to_delete, existing_rich_contents)
       Product::RichContentDeletionGuard.ensure_intent!(
         product:,
         rich_contents_to_delete:,

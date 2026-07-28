@@ -307,6 +307,60 @@ describe PayoutsHelper do
       end
     end
 
+    describe "internal payout notes" do
+      let(:user) { create(:user) }
+      let(:seller_facing_note) { "Payout on June 12, 2026 was skipped because a bank account wasn't added at the time." }
+
+      it "does not show a note that was recorded as internal" do
+        user.add_payout_note(content: "Something only support should read.", seller_visible: false)
+
+        expect(self.payout_period_data(user)[:payout_note]).to be_nil
+      end
+
+      it "does not show the notes the automated payout-setup retry writes" do
+        [
+          RetryStripeRejectedPayoutSetupForSellerJob::RESOLVED_NOTE,
+          RetryStripeRejectedPayoutSetupForSellerJob::GAVE_UP_NOTE,
+          RetryStripeRejectedPayoutSetupForSellerJob::SWITCHED_OFF_STRIPE_NOTE,
+          RetryStripeRejectedPayoutSetupForSellerJob::CONNECTED_STRIPE_NOTE,
+          RetryStripeRejectedPayoutSetupForSellerJob::ACCOUNT_BLOCKED_NOTE,
+          RetryStripeRejectedPayoutSetupForSellerJob::BANK_FORMAT_REJECTION_NOTE,
+        ].each do |content|
+          note = user.add_payout_note(content:, seller_visible: false)
+
+          expect(self.payout_period_data(user)[:payout_note]).to be_nil, "expected #{content.inspect} not to be shown"
+
+          note.mark_deleted!
+        end
+      end
+
+      it "does not show legacy internal notes that predate the seller_visible flag" do
+        # Notes written before the flag existed have no value stored, so visibility falls back to
+        # recognising the internal note shapes we used to write.
+        note = user.add_payout_note(content: RetryStripeRejectedPayoutSetupForSellerJob::BANK_FORMAT_REJECTION_NOTE)
+        note.update!(json_data: {})
+
+        expect(note.reload.json_data[PayoutNoteVisibility::SELLER_VISIBLE_FLAG]).to be_nil
+        expect(self.payout_period_data(user)[:payout_note]).to be_nil
+      end
+
+      it "shows the newest seller-facing note even when internal notes were written after it" do
+        user.add_payout_note(content: seller_facing_note)
+        user.add_payout_note(content: RetryStripeRejectedPayoutSetupForSellerJob::ACCOUNT_BLOCKED_NOTE, seller_visible: false)
+
+        expect(self.payout_period_data(user)[:payout_note]).to eq(seller_facing_note)
+      end
+
+      it "stops looking once the seller-facing note is buried under too many internal notes" do
+        user.add_payout_note(content: seller_facing_note)
+        (PayoutsHelper::MAX_PAYOUT_NOTES_SCANNED_FOR_BANNER + 1).times do
+          user.add_payout_note(content: "Stripe bank sync failed: routing_number_invalid — nope", seller_visible: false)
+        end
+
+        expect(self.payout_period_data(user)[:payout_note]).to be_nil
+      end
+    end
+
     it "shows payout data without payout given and no previous payouts" do
       travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
         user = create(:user)

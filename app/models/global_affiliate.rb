@@ -22,6 +22,18 @@ class GlobalAffiliate < Affiliate
       !product.user.has_brazilian_stripe_connect_account?
   end
 
+  # A seller can leave the Gumroad Affiliate Program at any time. That opt-out has to reach
+  # renewals of memberships that were referred before they opted out, otherwise the setting
+  # silently does nothing for the sales it matters most on: the seller keeps paying 10% every
+  # month on a referral they can no longer opt out of, with no way to break the link. We
+  # deliberately do NOT re-check the other purchase-time conditions here (whether the product is
+  # still on Discover, or whether the buyer happens to be the affiliate) — those describe how the
+  # referral was made, and re-judging them years later would strip commission the affiliate
+  # legitimately earned.
+  def eligible_for_credit_on_renewal?(product:)
+    eligible_for_credit? && !product.user.disable_global_affiliate && !product.user.has_brazilian_stripe_connect_account?
+  end
+
   private
     def set_affiliate_basis_points
       self.affiliate_basis_points = AFFILIATE_BASIS_POINTS

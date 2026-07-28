@@ -15,7 +15,7 @@
 # AgentConversationPersistence), so a conversation started on the web resumes on mobile and vice
 # versa — one shared transcript per seller, whichever surface they pick up.
 class Api::Mobile::AgentController < Api::Mobile::BaseController
-  include Throttling
+  include AgentRequestThrottling
   include AgentConversationPersistence
 
   before_action { doorkeeper_authorize! :mobile_api }
@@ -30,10 +30,6 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
   rescue_from ActiveRecord::RecordNotFound do
     render json: { success: false, error: "That conversation could not be found." }, status: :not_found
   end
-
-  AGENT_REQUESTS_PER_PERIOD = 30
-  AGENT_REQUESTS_PERIOD_WINDOW = 1.hour
-  private_constant :AGENT_REQUESTS_PER_PERIOD, :AGENT_REQUESTS_PERIOD_WINDOW
 
   # GET /mobile/agent/meta
   def meta
@@ -221,9 +217,8 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
     end
 
     def throttle_agent_requests
-      key = RedisKey.agent_request_throttle(seller.id)
       # `throttle!` renders a 429 when the limit is exceeded; Rails halts before_actions once a
       # response is performed.
-      throttle!(key:, limit: AGENT_REQUESTS_PER_PERIOD, period: AGENT_REQUESTS_PERIOD_WINDOW)
+      throttle_agent_requests_for(seller.id)
     end
 end

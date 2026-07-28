@@ -13,7 +13,7 @@ import {
   recurrenceIds,
   recurrenceLabels,
 } from "$app/utils/recurringPricing";
-import { assertResponseError, request } from "$app/utils/request";
+import { assertResponseError, RateLimitError, request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import Errors from "$app/components/Form/Errors";
@@ -218,7 +218,11 @@ const NewProductPage = () => {
       }
     } catch (e) {
       assertResponseError(e);
-      showAlert("Failed to generate product details", "error");
+      if (e instanceof RateLimitError) {
+        showAlert(e.message, "warning");
+      } else {
+        showAlert("Failed to generate product details", "error");
+      }
     } finally {
       setIsGeneratingUsingAi(false);
     }

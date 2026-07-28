@@ -24,7 +24,7 @@ describe Checkout::PaymentMethodResolver do
 
       it "resolves the full inline dynamic method set as eligible" do
         expect(resolve.eligible_payment_method_types)
-          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay])
+          .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay])
       end
 
       it "enables the launched methods on Stripe for a US buyer, gating the rest behind later units" do
@@ -82,7 +82,7 @@ describe Checkout::PaymentMethodResolver do
       end
 
       it "still gates the remaining redirect methods behind later units" do
-        expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "upi")
+        expect(resolve.payment_method_types).not_to include("klarna", "afterpay_clearpay", "affirm", "ideal", "bancontact", "upi", "pix")
       end
 
       context "with the Klarna launch flag (checkout_local_method_klarna) active for the seller" do
@@ -96,7 +96,7 @@ describe Checkout::PaymentMethodResolver do
 
         it "keeps the eligible policy set unchanged — the flag only widens the launched set" do
           expect(resolve(buyer_country: "US", cart_total_usd_cents: 10_00).eligible_payment_method_types)
-            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay])
+            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay])
         end
 
         it "drops Klarna for a non-US buyer — v1 offers it on the USD lane to US buyers only" do
@@ -214,7 +214,7 @@ describe Checkout::PaymentMethodResolver do
 
         it "keeps the eligible policy set unchanged — the flag only widens the launched set" do
           expect(resolve(buyer_country: "US").eligible_payment_method_types)
-            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay])
+            .to eq(%w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay])
         end
 
         it "offers Alipay to a non-US buyer — unlike Klarna it carries no buyer-country lock, and most of the target cohort buys from outside mainland China" do
@@ -358,6 +358,15 @@ describe Checkout::PaymentMethodResolver do
           expect(methods).not_to include("bancontact")
         end
 
+        it "launches Bancontact in live mode when its per-method launch flag is on, without pulling iDEAL along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_bancontact, seller)
+
+          methods = resolve(cart_product_currency: "eur").payment_method_types
+          expect(methods).to include("bancontact")
+          expect(methods).not_to include("ideal")
+        end
+
         # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): the
         # EUR mismatch marker is the expected steady state once iDEAL/SEPA capabilities
         # make the account settle EUR in EUR, and the resolver only offers these methods
@@ -377,6 +386,31 @@ describe Checkout::PaymentMethodResolver do
           platform_merchant_account.update!(currency: Currency::CAD)
 
           expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).not_to include("ideal")
+        end
+
+        # gumroad-private#1409: a seller who is not a Stripe Connect seller is charged
+        # with a DESTINATION charge — the intent is created on the Gumroad platform
+        # account (which holds USD) and their own account only receives the transfer.
+        # Their account's balance currency therefore does not constrain the intent's
+        # currency, and reading it withheld UPI from the reporting seller (a GBP-settling
+        # Gumroad-managed account selling an INR-priced product to an Indian buyer).
+        it "offers a launched forced-currency method to a destination-charge seller whose own account settles in a non-USD currency" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+          create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::GBP, country: "GB")
+
+          expect(resolve(buyer_country: "IN", cart_product_currency: "inr").payment_method_types).to include("upi")
+        end
+
+        it "still withholds a launched forced-currency method from a DIRECT-charge (Stripe Connect) seller whose own account settles in a non-USD currency — that intent really is created on their account" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          connect_seller = create(:user, check_merchant_account_is_linked: true)
+          create(:merchant_account_stripe_connect, user: connect_seller, currency: Currency::GBP, country: "GB")
+          Feature.activate_user(:buyer_currency_charging, connect_seller)
+          Feature.activate_user(:buyer_local_currency, connect_seller)
+          Feature.activate_user(:checkout_local_method_upi, connect_seller)
+
+          expect(resolve(sellers: [connect_seller], buyer_country: "IN", cart_product_currency: "inr").payment_method_types).not_to include("upi")
         end
 
         it "keeps a launched forced-currency method when the charged account's mismatch is for another currency" do
@@ -408,6 +442,51 @@ describe Checkout::PaymentMethodResolver do
           Feature.activate_user(:checkout_local_method_upi, seller)
 
           expect(resolve(buyer_country: "IN", cart_product_currency: "inr", ppp_discounted: true).payment_method_types).to include("upi")
+        end
+
+        it "launches Pix in live mode when its per-method launch flag is on for a Brazilian buyer, without pulling other local methods along" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          methods = resolve(buyer_country: "BR", cart_product_currency: "brl").payment_method_types
+          expect(methods).to include("pix")
+          expect(methods).not_to include("ideal", "bancontact", "upi")
+        end
+
+        it "keeps launched Pix off non-Brazil buyers even when the cart is priced in BRL" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          expect(resolve(buyer_country: "US", cart_product_currency: "brl").payment_method_types).not_to include("pix")
+        end
+
+        it "keeps launched Pix off a Brazilian buyer whose cart is not priced in BRL — Stripe only accepts Pix on BRL intents" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          expect(resolve(buyer_country: "BR", cart_product_currency: "usd").payment_method_types).not_to include("pix")
+        end
+
+        it "keeps Pix off a BRL cart from Brazil while its launch flag is off, even with other local methods launched" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_upi, seller)
+
+          expect(resolve(buyer_country: "BR", cart_product_currency: "brl").payment_method_types).not_to include("pix")
+        end
+
+        it "retains launched Pix on a PPP-discounted BRL checkout from Brazil — region-locked methods pass the U13 matrix" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          expect(resolve(buyer_country: "BR", cart_product_currency: "brl", ppp_discounted: true).payment_method_types).to include("pix")
+        end
+
+        it "never offers Pix on a recurring cart — Pix is buyer-present, one-time only" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          Feature.activate_user(:checkout_local_method_pix, seller)
+
+          resolution = resolve(buyer_country: "BR", cart_product_currency: "brl", recurring: true)
+          expect(resolution.eligible_payment_method_types).not_to include("pix")
         end
 
         it "keeps a launched method off carts not priced in its forced currency, even in live mode" do
@@ -467,6 +546,28 @@ describe Checkout::PaymentMethodResolver do
 
         expect(eligible).not_to include("afterpay_clearpay", "affirm", "upi")
         expect(eligible).to include("card", "link")
+      end
+
+      # A euro-priced membership must never claim iDEAL or Bancontact: both are single bank
+      # approvals, and collecting renewals off them would need a SEPA Direct Debit mandate
+      # checkout doesn't ask for. Recurring carts fall back to Lane A before a Stripe method
+      # list is built, so this only shows up in the logged eligible-policy set today — but that
+      # set is what later units intersect with, so it must not claim a method that can't renew.
+      it "disables the EUR bank methods on recurring carts — a membership can't be renewed off a one-shot bank approval" do
+        eligible = resolve(recurring: true).eligible_payment_method_types
+
+        expect(eligible).not_to include("ideal", "bancontact")
+      end
+
+      it "keeps a launched Bancontact off a recurring EUR cart entirely" do
+        Feature.activate_user(:buyer_currency_charging, seller)
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(:checkout_local_method_bancontact, seller)
+
+        resolution = resolve(recurring: true, cart_product_currency: "eur")
+
+        expect(resolution.eligible_payment_method_types).not_to include("bancontact")
+        expect(resolution.payment_method_types).to be_nil
       end
 
       it "stays on Lane A because subscription setup on the client-confirmed path is deferred" do

@@ -3,6 +3,7 @@ import typia from "typia";
 
 import {
   CardPaymentMethodParams,
+  ElementCollectedBillingAddress,
   PaymentRequestPaymentMethodParams,
   ReusableCardPaymentMethodParams,
   ReusablePaymentRequestPaymentMethodParams,
@@ -82,31 +83,47 @@ export const isWalletPaymentElementType = (type: string) => WALLET_PAYMENT_ELEME
 // - "element": the element supplies everything and tokenization passes no override. Wallets
 //   only — the Apple Pay / Google Pay sheet carries the buyer's verified billing details, and
 //   nothing extra is rendered on the page.
-// - "element-address": the element renders ONLY the street-address fields; checkout's form
-//   still owns email, name, and country. UPI on non-shippable carts: Stripe requires
-//   `billing_details.name` and a full street address to confirm a UPI payment, and the digital
-//   checkout form only collects email + name (+ ZIP for US buyers) — with every field pinned
-//   to "never" the confirm always failed server-side with `parameter_missing` and buyers could
-//   never complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). Flipping
-//   the whole block to "auto" instead would have Stripe re-ask for name and country inside the
-//   UPI pane, duplicating checkout's own fields — so only the address fields our form doesn't
-//   have are element-collected, and tokenization passes the form's email/name/country alongside.
-export type PaymentElementBillingDetailsCollection = "form" | "element" | "element-address";
+// - "element-full": the element renders every billing field EXCEPT email — name and the full
+//   street address — and checkout's own form hides its Full name and Country fields while this
+//   mode is active (see SharedInputs in PaymentForm.tsx) so nothing is asked for twice. UPI on
+//   non-shippable carts: Stripe requires `billing_details.name` and a full street address to
+//   confirm a UPI payment, and the digital checkout form only collects email + name (+ ZIP for
+//   US buyers) — with every field pinned to "never" the confirm always failed server-side with
+//   `parameter_missing` and buyers could never complete a UPI purchase (the July 2026 UPI
+//   ramp-down, gumroad-private#933). Email stays in checkout's form (it is the receipt/delivery
+//   contact, not just a billing field, and Stripe does not need it to confirm UPI) and is
+//   passed alongside at tokenization; everything else comes from Stripe's localized, validated
+//   pane.
+export type PaymentElementBillingDetailsCollection = "form" | "element" | "element-full";
 export const paymentElementBillingDetailsCollection = (
   type: string,
   hasShippingCart: boolean,
 ): PaymentElementBillingDetailsCollection => {
   if (isWalletPaymentElementType(type)) return "element";
-  if (type === "upi" && !hasShippingCart) return "element-address";
+  if (type === "upi" && !hasShippingCart) return "element-full";
   return "form";
 };
+
+// Payment methods Stripe refuses to confirm without `billing_details.name`. Checkout only asks
+// for the full name when it needs it (digital carts don't), so selecting one of these rows has
+// to require it — otherwise the confirm fails server-side with `parameter_missing` and the buyer
+// sees a generic error they can't act on (the July 2026 UPI ramp-down, gumroad-private#933).
+// Pix additionally needs the buyer's Brazilian tax id (CPF/CNPJ), but that is a Pix-specific
+// field the Payment Element renders and collects inside its own pane, not part of
+// billing_details, so checkout has no field to add for it.
+const PAYMENT_ELEMENT_TYPES_REQUIRING_FULL_NAME = ["upi", "pix"];
+export const paymentElementRequiresFullName = (type: string) =>
+  PAYMENT_ELEMENT_TYPES_REQUIRING_FULL_NAME.includes(type);
 
 // Client-side details about the wallet that paid through the Payment Element, read off the
 // tokenized PaymentMethod (or ConfirmationToken preview). The billing address feeds the
 // tax-location logic in checkout (the wallet sheet is the buyer's source of truth for wallet
 // payments), and the wallet type is reported to the server for analytics.
 type WalletPaymentMethodPayload = {
-  billing_details?: { address?: { country: string | null; postal_code: string | null; state: string | null } | null };
+  billing_details?: {
+    name?: string | null;
+    address?: { country: string | null; postal_code: string | null; state: string | null } | null;
+  };
   card?: { wallet?: Record<string, unknown> | null } | null;
 };
 const walletPaymentMethodDetails = (paymentMethod: WalletPaymentMethodPayload): WalletPaymentMethodDetails | null => {
@@ -127,6 +144,28 @@ const walletPaymentMethodDetails = (paymentMethod: WalletPaymentMethodPayload): 
       : null,
   };
 };
+
+// The billing address the buyer typed into the element's own pane when the element collected
+// the full billing details for a non-wallet selection ("element-full" — UPI on digital carts).
+// Adopted as checkout's tax location, mirroring the wallet path: for these selections the
+// element's pane, not checkout's (hidden) form fields, is the buyer's source of truth.
+const elementCollectedBillingAddress = (
+  collection: PaymentElementBillingDetailsCollection,
+  paymentMethod: WalletPaymentMethodPayload,
+): ElementCollectedBillingAddress | null => {
+  if (collection !== "element-full") return null;
+  const address = paymentMethod.billing_details?.address;
+  return address ? { country: address.country, postal_code: address.postal_code, state: address.state } : null;
+};
+
+// The name on the tokenized payment method in element-full mode. The pane's name field is
+// pinned to "never" and tokenization passes checkout's own form name, so normally this echoes
+// state.fullName back — kept so the purchase record always carries whatever name actually
+// landed on the PaymentMethod.
+const elementCollectedBillingFullName = (
+  collection: PaymentElementBillingDetailsCollection,
+  paymentMethod: WalletPaymentMethodPayload,
+): string | null => (collection === "element-full" ? (paymentMethod.billing_details?.name ?? null) : null);
 
 type PaymentElementBillingDetailsData = Pick<
   PaymentElementCardData,
@@ -152,22 +191,19 @@ export const paymentElementBillingDetails = (cardData: PaymentElementBillingDeta
 // - "form": the full checkout-form values — required, because every element field is "never".
 // - "element": no override at all — the wallet sheet's verified details must survive, and
 //   passing any value would clobber them on the resulting PaymentMethod.
-// - "element-address": only the fields checkout's form still owns (email, name, country) —
-//   Stripe merges these with the street-address fields the element collected. The form's
-//   city/state/ZIP are NOT passed: for US buyers the form shows a ZIP field, and overriding
-//   the element-collected postal code with it would corrupt the address the buyer typed into
-//   the element's pane.
+// - "element-full": the email and name — the fields checkout's form still owns on this mode
+//   (the Full name field stays visible for UPI; only the street-address fields moved into the
+//   element's pane — see paymentElementBillingDetailsCollection). Stripe requires
+//   billing_details.name to confirm UPI and the pane's name field is pinned to "never", so the
+//   override must carry it, exactly like "form" mode. No country or address components are
+//   passed: the buyer typed those into the element's pane, and overriding them with the form's
+//   — possibly stale — values would corrupt what the buyer actually entered.
 const paymentElementBillingDetailsOverride = (cardData: PaymentElementCardData) => {
   switch (cardData.billingDetailsCollection) {
     case "element":
       return null;
-    case "element-address":
-      return {
-        email: cardData.email,
-        name: cardData.fullName || null,
-        phone: null,
-        address: { country: cardData.country || null },
-      };
+    case "element-full":
+      return { email: cardData.email, name: cardData.fullName || null, phone: null };
     case "form":
       return paymentElementBillingDetails(cardData);
   }
@@ -205,6 +241,14 @@ export const preparePaymentElementPaymentMethodData = async (
   }
 
   const walletDetails = walletPaymentMethodDetails(paymentMethodResult.paymentMethod);
+  const elementBillingAddress = elementCollectedBillingAddress(
+    cardData.billingDetailsCollection,
+    paymentMethodResult.paymentMethod,
+  );
+  const elementBillingFullName = elementCollectedBillingFullName(
+    cardData.billingDetailsCollection,
+    paymentMethodResult.paymentMethod,
+  );
   return {
     ...cardPaymentMethodParams(paymentMethodResult.paymentMethod),
     // When a wallet paid, surface its type and billing address so checkout can update the tax
@@ -212,6 +256,11 @@ export const preparePaymentElementPaymentMethodData = async (
     // The key is omitted entirely for card payments so the params object — which callers
     // spread into server requests (see prepareFutureCharges) — is unchanged for them.
     ...(walletDetails ? { wallet: walletDetails } : {}),
+    // Same for the address and name the element's own pane collected ("element-full" — UPI on
+    // digital carts): surface them so the server-confirm lane can update checkout's tax
+    // location, preserve the purchase name, and run the held-payment total check.
+    ...(elementBillingAddress ? { elementBillingAddress } : {}),
+    ...(elementBillingFullName ? { elementBillingFullName } : {}),
   };
 };
 
@@ -221,6 +270,10 @@ export type PaymentElementConfirmationTokenResult =
       confirmationTokenId: string;
       cardCountry: string | null;
       wallet: WalletPaymentMethodDetails | null;
+      // The address and name the buyer typed into the element's pane when it collected the full
+      // billing details itself ("element-full" — UPI on digital carts); null otherwise.
+      elementBillingAddress: ElementCollectedBillingAddress | null;
+      elementBillingFullName: string | null;
     }
   | StripeErrorParams;
 
@@ -237,7 +290,7 @@ export const createPaymentElementConfirmationToken = async (
 
   // Same billing-details collection rules as preparePaymentElementPaymentMethodData above (see
   // paymentElementBillingDetailsOverride): full form values for cards, none for wallets, and
-  // email/name/country only for UPI where the element collected the street address.
+  // email only for UPI where the element collected the name and address itself.
   const confirmationBillingDetailsOverride = paymentElementBillingDetailsOverride(cardData);
   const result = await cardData.stripe.createConfirmationToken({
     elements: cardData.elements,
@@ -255,6 +308,14 @@ export const createPaymentElementConfirmationToken = async (
     confirmationTokenId: result.confirmationToken.id,
     cardCountry: result.confirmationToken.payment_method_preview.card?.country ?? null,
     wallet: walletPaymentMethodDetails(result.confirmationToken.payment_method_preview),
+    elementBillingAddress: elementCollectedBillingAddress(
+      cardData.billingDetailsCollection,
+      result.confirmationToken.payment_method_preview,
+    ),
+    elementBillingFullName: elementCollectedBillingFullName(
+      cardData.billingDetailsCollection,
+      result.confirmationToken.payment_method_preview,
+    ),
   };
 };
 
@@ -326,11 +387,16 @@ export const prepareFutureCharges = async <
 >(
   data: PrepareFutureChargesRequest<CardParams>,
 ): Promise<PrepareFutureChargesResponse<CardParams>> => {
-  // The wallet details on the card params are client-side context (checkout tax location and
-  // the wallet_type reported with the purchase) — the setup-intent endpoint has no contract for
-  // them, so keep them out of the request body while preserving them on the returned reusable
-  // params, which the purchase submission still needs.
-  const { wallet: _wallet, ...setupIntentCardParams } = data.cardParams;
+  // The wallet details and element-collected billing details on the card params are client-side
+  // context (checkout's buyer/tax details and the wallet_type reported with the purchase). The
+  // setup-intent endpoint has no contract for them, so keep them out of the request body while
+  // preserving them on the returned reusable params, which purchase submission still needs.
+  const {
+    wallet: _wallet,
+    elementBillingAddress: _elementBillingAddress,
+    elementBillingFullName: _elementBillingFullName,
+    ...setupIntentCardParams
+  } = data.cardParams;
   const response = await request({
     method: "POST",
     url: Routes.stripe_setup_intents_path(),

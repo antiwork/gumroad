@@ -19,8 +19,10 @@ import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
+import { dispatchMediaPlaybackState } from "$app/utils/media_playback";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
+import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { AudioPlayerContainer } from "$app/components/DownloadPage/AudioPlayerContainer";
@@ -74,6 +76,11 @@ export type FileItem = {
   pdf_stamp_enabled: boolean;
   processing: boolean;
   thumbnail_url: string | null;
+  // Pixel dimensions of the video, when we know them. Used to shape the player
+  // frame to the file's real aspect ratio; null for non-video files and for
+  // older uploads whose dimensions were never recorded.
+  width?: number | null;
+  height?: number | null;
   isbn?: string | null;
 };
 export type FolderItem = {
@@ -643,7 +650,17 @@ const VideoEmbedPreview = ({
   const throttledTrackMediaLocation = React.useCallback(throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY), []);
   React.useEffect(() => {
     if (!mediaUrls.length || !isVideoPlayerShowing) return;
+    // Setting up the player is asynchronous (the library is fetched on first use), so the embed
+    // can be hidden or unmounted before setup finishes. Anything that runs after that point
+    // belongs to a player the buyer can no longer see, and must not tell the page a video is
+    // playing — that would leave the page's position poll stopped with nothing playing.
+    let isCurrentPlayer = true;
+    const publishPlaybackState = (isPlaying: boolean) => {
+      if (!isCurrentPlayer) return;
+      dispatchMediaPlaybackState(videoPlayerId, isPlaying);
+    };
     void createJWPlayer(videoPlayerId, {
+      ...videoPlayerAspectRatio(file),
       playlist: [
         {
           sources: mediaUrls.map((url) => ({ file: url })),
@@ -658,10 +675,17 @@ const VideoEmbedPreview = ({
         },
       ],
     }).then((player) => {
+      // A player finished loading after its embed went away: throw it away instead of wiring
+      // up callbacks that would report playback for something nobody is watching.
+      if (!isCurrentPlayer) return;
       let initialSeekDone = false;
       player
         .on("ready", () => player.play())
         .on("play", () => {
+          // Tells the page a video is playing so it can pause its own position poll — the
+          // player already reports the position below. See utils/media_playback.ts.
+          publishPlaybackState(true);
+
           if (initialSeekDone) return;
 
           void createConsumptionEvent({
@@ -674,14 +698,24 @@ const VideoEmbedPreview = ({
           player.seek(resumeLocation);
           initialSeekDone = true;
         })
+        .on("pause", () => publishPlaybackState(false))
+        .on("error", () => publishPlaybackState(false))
         .on("seek", (event) => trackMediaLocation(event.offset))
         .on("time", (event) => throttledTrackMediaLocation(event.position))
         .on("complete", () => {
           throttledTrackMediaLocation.cancel();
           trackMediaLocation(file.content_length ?? duration);
+          publishPlaybackState(false);
           setIsVideoPlayerShowing(false);
         });
     });
+
+    // The player is torn down whenever this embed stops being shown (and on unmount), so make
+    // sure the page never stays in the "video playing" state with no player around.
+    return () => {
+      isCurrentPlayer = false;
+      dispatchMediaPlaybackState(videoPlayerId, false);
+    };
   }, [isVideoPlayerShowing]);
 
   const startPlaying = async () => {
@@ -705,18 +739,29 @@ const VideoEmbedPreview = ({
     }
   }, [autoPlay]);
 
+  const frameStyle = videoFrameStyle(file);
+
   return isVideoPlayerShowing ? (
-    <div className={classNames("preview", className)}>
+    <div className={classNames("preview", className)} style={frameStyle}>
       <div id={videoPlayerId}></div>
     </div>
   ) : (
-    <figure className={classNames("preview", className)}>
+    <figure className={classNames("preview", className)} style={frameStyle}>
       <img
         src={file.thumbnail_url ?? thumbnailPlaceholder}
         style={{
           position: "absolute",
           height: "100%",
-          objectFit: "cover",
+          // Constrain the still to the frame in both axes. Height alone was
+          // enough while every frame was 16:9 like the images themselves, but a
+          // portrait frame is narrower than a landscape still, which would then
+          // spill out past the row's edges.
+          width: "100%",
+          // Only a portrait box needs the whole still shown: "cover" there
+          // would crop the top and bottom off the subject. Landscape and
+          // unknown-dimension boxes keep cropping to fill, so a thumbnail that
+          // does not match the video's ratio looks exactly as it does today.
+          objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />

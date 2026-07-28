@@ -234,6 +234,38 @@ describe StripeCharge, :vcr do
       end
     end
 
+    describe "with a stripe charge paid with Bancontact" do
+      let(:stripe_charge_hash) do
+        {
+          id: "ch_test_bancontact",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          currency: "eur",
+          amount: 15_00,
+          payment_method_details: { type: "bancontact", bancontact: { bank_code: "GKCC", bank_name: "Belfius" } },
+          billing_details: { address: { postal_code: "1000" } },
+          payment_method: "pm_test_bancontact",
+          outcome: { risk_level: "normal" },
+        }
+      end
+
+      let(:stripe_charge_balance_transaction) do
+        {
+          currency: "eur",
+          amount: 15_00,
+          fee_details: [{ type: "stripe_fee", currency: "eur", amount: 35 }],
+        }
+      end
+
+      let(:subject) { described_class.new(Stripe::Charge.construct_from(stripe_charge_hash), stripe_charge_balance_transaction, nil, nil, nil) }
+
+      it "records the real method type instead of a generic card" do
+        expect(subject.card_type).to eq(CardType::BANCONTACT)
+        expect(subject.payment_method_type).to eq("bancontact")
+      end
+    end
+
     describe "with a stripe charge paid with Klarna" do
       let(:stripe_charge_hash) do
         {

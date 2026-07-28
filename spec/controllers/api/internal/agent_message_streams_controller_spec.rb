@@ -3,6 +3,7 @@
 require "spec_helper"
 require "shared_examples/authentication_required"
 require "shared_examples/authorize_called"
+require "shared_examples/explained_agent_rate_limit"
 
 describe Api::Internal::AgentMessageStreamsController do
   let(:seller) { create(:named_seller) }
@@ -253,6 +254,13 @@ describe Api::Internal::AgentMessageStreamsController do
 
         expect(response).to have_http_status(:too_many_requests)
         expect(response.headers["Retry-After"]).to be_present
+      end
+
+      it_behaves_like "an explained agent rate limit" do
+        subject do
+          exhaust_agent_request_throttle(throttle_key)
+          post :create, params: valid_params, format: :json
+        end
       end
     end
   end
