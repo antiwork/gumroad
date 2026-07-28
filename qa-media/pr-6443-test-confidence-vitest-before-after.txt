@@ -421,3 +421,87 @@ app/javascript/components/Search.test.tsx is already red on merge-base
 
 All round-5 fixtures reverted; `git status` shows only bin/test-confidence and
 this transcript.
+
+
+════════════════════════════════════════════════════════════════════════════
+ROUND 6 — Greptile P1: branch patches contaminate the merge-base replay
+════════════════════════════════════════════════════════════════════════════
+
+The finding: the replay borrows this checkout's node_modules and only checked
+package.json / package-lock.json for drift. But this repo's postinstall is
+`patch-package && ts-patch install -s`, so a file under patches/ rewrites the
+installed copy of a dependency with neither manifest changing. A test broken by
+a branch-only patch then fails on BOTH sides and is filed as pre-existing.
+
+FIXTURE (reproduces the bot's scenario before touching the script):
+  - node_modules/class-variance-authority/dist/index.mjs edited in place so
+    cva() returns "" — the same effect patch-package would have had.
+  - patches/class-variance-authority+0.7.1.patch added (the install-time input).
+  - package.json and package-lock.json left untouched — that is the whole point.
+  - Branch edit: a comment appended to app/javascript/components/ui/Fieldset.tsx.
+  - Cached plan pinned to app/javascript/components/ui/InputGroup.test.tsx
+    (2 of 3 assertions fail with the contaminated dependency).
+
+BEFORE (the reviewed commit, 48952c8):
+
+    99%  ←  1 test
+           app/javascript/components/ui/InputGroup.test.tsx
+    ⚠ confirmed pre-existing: app/javascript/components/ui/InputGroup.test.tsx
+    ✅ 99% confidence — 0 tests passed in 8s
+       (1 failure pre-existing, skipped)
+       Safe to commit.
+  EXIT_CODE: 0
+
+A dependency broken by this branch, waved through as "confirmed pre-existing" —
+and "confirmed" is the worst part, because the replay really did run; it just
+ran against the branch's own contaminated tree.
+
+AFTER:
+
+    ❌ FAILED (could not verify against merge-base) —
+       app/javascript/components/ui/InputGroup.test.tsx
+    Reason: install-time inputs changed on this branch
+       (patches/class-variance-authority+0.7.1.patch), so this checkout's
+       node_modules is not the tree merge-base would install
+  EXIT_CODE: 1
+
+The drift guard now covers everything that decides what lands inside
+node_modules, not just the two manifests:
+
+  package.json, package-lock.json, npm-shrinkwrap.json, yarn.lock,
+  pnpm-lock.yaml, .npmrc, patches/**, and any nested */package.json
+
+Untracked files count too. A new patch file that has already been installed is
+invisible to `git diff`, so `git ls-files --others --exclude-standard` is folded
+into the check — otherwise the very first run after adding a patch, which is
+exactly when the tree is contaminated, would sail through the guard.
+
+CONTROL 1 — the guard keys on the install-time INPUT, not on the state of
+node_modules itself. With the same contaminated dependency but the patch file
+deleted, the gate cannot know the tree drifted and goes back to trusting the
+replay. That is a real remaining limit — a node_modules hand-edited by
+something other than a tracked install-time input is undetectable from git —
+but it is not reachable through a branch, which is what this gate judges. What
+must hold is that the guard does not latch on and halt forever once it has
+fired:
+
+    ⚠ confirmed pre-existing: app/javascript/components/ui/InputGroup.test.tsx
+    ✅ 99% confidence — Safe to commit.
+  EXIT_CODE: 0
+
+CONTROL 2 — a genuinely pre-existing failure is still SKIPPED. Dependency tree
+pristine (node_modules restored, no patches/ change),
+app/javascript/components/Search.test.tsx already red on merge-base
+(3 failed | 10 passed):
+
+    ⚠ confirmed pre-existing: app/javascript/components/Search.test.tsx
+    ✅ 99% confidence — Safe to commit.
+  EXIT_CODE: 0
+
+  $ bash -n bin/test-confidence                 # clean
+  $ shellcheck -S error bin/test-confidence     # clean
+
+All round-6 fixtures reverted: patch file deleted, node_modules copy of
+class-variance-authority restored from its pre-fixture backup and re-verified
+green (3 passed), Fieldset.tsx checked out, tmp/test-confidence removed.
+`git status` shows only bin/test-confidence and this transcript.

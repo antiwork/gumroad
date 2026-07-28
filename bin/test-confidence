@@ -337,12 +337,30 @@ vitest_executed_tests() {
   echo "$tally" | grep -qE '[0-9]+[[:space:]]+(failed|passed|skipped|todo)'
 }
 
+# Files whose contents decide what actually ends up inside node_modules. The
+# manifests are the obvious ones, but this repo's postinstall runs
+# `patch-package`, so a file under patches/ rewrites the installed copy of a
+# dependency without either manifest changing. .npmrc picks the registry and
+# install flags, and a package.json in a nested directory does the same job as
+# the root one. Anything on this list makes the installed tree branch-specific.
+INSTALL_INPUT_RE='^(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|\.npmrc|patches/.+|.+/package\.json)$'
+
+# Install-time inputs this branch touches, one per line (empty if none).
+# Untracked files count too: a new patch that has already been installed is
+# invisible to `git diff` but very much present in node_modules.
+changed_install_inputs() {
+  {
+    printf '%s\n' "$CHANGED_ALL"
+    git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null
+  } | grep -v '^$' | sort -u | grep -E "$INSTALL_INPUT_RE" || true
+}
+
 # Replay a failing Vitest file on merge-base to decide pre-existing vs regression.
 #
 # The merge-base worktree has no node_modules of its own and installing one
-# would cost minutes, so we symlink this checkout's. That's sound as long as
-# the dependency set is the same on both sides, which is why a changed
-# package-lock.json bails out as inconclusive instead.
+# would cost minutes, so we symlink this checkout's. That's sound only while
+# both sides would install the same tree, which is why any change to an
+# install-time input bails out as inconclusive instead.
 #
 # Returns: 0 = confirmed pre-existing (red on merge-base too)
 #          1 = real regression (green on merge-base, red on HEAD)
@@ -354,8 +372,10 @@ verify_js_preexisting_on_merge_base() {
   JS_UNVERIFIABLE_REASON=""
 
   # Dependency drift would make the borrowed node_modules the wrong answer.
-  if echo "$CHANGED_ALL" | grep -qxF 'package-lock.json' || echo "$CHANGED_ALL" | grep -qxF 'package.json'; then
-    JS_UNVERIFIABLE_REASON="package.json/package-lock.json changed on this branch, so this checkout's node_modules is not the dependency set merge-base would install"
+  local drifted_inputs
+  drifted_inputs=$(changed_install_inputs)
+  if [[ -n "$drifted_inputs" ]]; then
+    JS_UNVERIFIABLE_REASON="install-time inputs changed on this branch ($(echo "$drifted_inputs" | tr '\n' ' ' | sed 's/ *$//')), so this checkout's node_modules is not the tree merge-base would install"
     return 2
   fi
 
