@@ -341,15 +341,17 @@ describe TaxRemittances::StageQuarterlyDrafts do
 
       # A failed attempt is retryable, so staging tries to create the next attempt — but a live row
       # appearing underneath it means someone else got there first.
-      allow(TaxRemittance).to receive(:create!)
-        .and_raise(ActiveRecord::RecordNotUnique.new("duplicate key"))
-      allow(TaxRemittance).to receive(:where).and_call_original
-      allow(TaxRemittance).to receive(:where)
-        .with(hash_including(:authority, :period))
-        .and_return(instance_double(ActiveRecord::Relation).tap do |relation|
-          allow(relation).to receive(:where).and_return(relation)
-          allow(relation).to receive_messages(not: relation, first: nil, exists?: true, maximum: 1)
-        end)
+      #
+      # The concurrent writer is simulated inside the `create!` stub rather than by stubbing the
+      # lookup queries: the row it lands is a real one, so the service's own re-check does real SQL
+      # and we are testing the branch the way production reaches it. Flipping only *this* filing's
+      # rows keeps the other authority on the same path instead of turning its skip into an
+      # "already staged" one.
+      allow(TaxRemittance).to receive(:create!) do |attributes|
+        TaxRemittance.where(authority: attributes[:authority], period: attributes[:period])
+                     .update_all(status: "pending_approval")
+        raise ActiveRecord::RecordNotUnique, "duplicate key"
+      end
 
       service = described_class.new(period).process
 
