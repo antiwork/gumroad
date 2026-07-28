@@ -56,7 +56,10 @@ describe Charge::MethodForcedPresentment do
                                         stripe_fx_quote_id: "fxq_forced")
 
       expect(StripeFxQuote).to have_received(:create)
-        .with(to_currency: Currency::USD, from_currency: Currency::EUR, stripe_account_id: merchant_account.charge_processor_merchant_id)
+        .with(to_currency: Currency::USD,
+              from_currency: Currency::EUR,
+              stripe_account_id: merchant_account.charge_processor_merchant_id,
+              destination_account_id: nil)
 
       charge_presentment = charge.reload.charge_presentment
       expect(charge_presentment).to have_attributes(processor: StripeChargeProcessor.charge_processor_id,
@@ -332,12 +335,10 @@ describe Charge::MethodForcedPresentment do
     end
   end
 
-  describe "destination charge with the card lane's ramp flag off" do
+  describe "destination charge" do
     # A Gumroad-managed Stripe Custom account: it belongs to a user, so it is not the
     # platform row, but it is not a Stripe Connect account either — Stripe charges it with
     # a destination charge, creating the PaymentIntent on the Gumroad platform account.
-    # This lane has accepted that charge model since before the card lane's ramp flag
-    # existed, so it must route its quote to the platform account with the flag off.
     let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
     let!(:platform_merchant_account) do
       MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
@@ -345,23 +346,43 @@ describe Charge::MethodForcedPresentment do
       end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
     end
 
-    it "mints the quote on the platform account, which is where the intent is created" do
-      allow(StripeFxQuote).to receive(:create).and_return(
-        StripeFxQuote::Quote.new(id: "fxq_destination", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25"))
-      )
+    # Destination charges have never minted an FX quote in production, so quoting one is new
+    # behaviour against real money and is gated on the same ramp flag as the card lane. With
+    # the flag off this lane must keep doing exactly what it does today: fall back to the
+    # canonical USD intent without calling Stripe at all.
+    it "falls back to the canonical USD intent while the ramp flag is off" do
+      allow(StripeFxQuote).to receive(:create)
 
-      expect(result.stripe_fx_quote_id).to eq("fxq_destination")
-      expect(StripeFxQuote).to have_received(:create)
-        .with(to_currency: Currency::USD, from_currency: Currency::EUR, stripe_account_id: "acct_gumroad_platform")
+      expect(result).to be_nil
+      expect(StripeFxQuote).not_to have_received(:create)
     end
 
-    it "records a settlement-currency mismatch on the platform account rather than the seller's" do
-      allow(StripeFxQuote).to receive(:create).and_raise(
-        StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in eur, expected usd"
-      )
+    context "when the destination-charge ramp flag is on" do
+      before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::DESTINATION_CHARGE_FEATURE_NAME, seller) }
 
-      expect { result }.to change { platform_merchant_account.reload.settlement_currency_mismatch_active?("eur") }.from(false).to(true)
-      expect(merchant_account.reload.settlement_currency_mismatch_active?("eur")).to be(false)
+      it "mints the quote on the platform account, which is where the intent is created" do
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(id: "fxq_destination", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25"))
+        )
+
+        expect(result.stripe_fx_quote_id).to eq("fxq_destination")
+        expect(StripeFxQuote).to have_received(:create)
+          .with(to_currency: Currency::USD,
+                from_currency: Currency::EUR,
+                stripe_account_id: "acct_gumroad_platform",
+                # The intent for a destination charge carries transfer_data[destination], and
+                # Stripe refuses a quote that does not name the same account.
+                destination_account_id: merchant_account.charge_processor_merchant_id)
+      end
+
+      it "records a settlement-currency mismatch on the platform account rather than the seller's" do
+        allow(StripeFxQuote).to receive(:create).and_raise(
+          StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in eur, expected usd"
+        )
+
+        expect { result }.to change { platform_merchant_account.reload.settlement_currency_mismatch_active?("eur") }.from(false).to(true)
+        expect(merchant_account.reload.settlement_currency_mismatch_active?("eur")).to be(false)
+      end
     end
   end
 end

@@ -225,10 +225,29 @@ class Charge::MethodForcedPresentment
       quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account, seller:)
       return nil if quote_merchant_account.blank?
 
+      # Kill switch for the destination-charge shape. Measured before this PR: destination
+      # charges have never minted an FX quote (0 of 463 charge_presentments in 14 days carry
+      # a stripe_fx_quote_id, against 3,577 of 4,328 overall), so the first time this lane
+      # quotes a destination charge is the first time the platform-minted-quote-plus-declared-
+      # destination pairing is exercised against real money. Returning nil falls back to the
+      # canonical USD intent, which is exactly what these charges do today, so with the flag
+      # off this lane behaves as it does on main and the ramp is reversible without a revert.
+      # The ROUTING above is deliberately not gated (see fx_quote_merchant_account) — gating
+      # which account a quote is minted on would preserve a cross-account pairing Stripe
+      # rejects; what is gated here is whether to attempt the quote at all.
+      if Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account).present? &&
+         !Checkout::BuyerCurrencyEligibility.destination_charge_quotes_enabled?(seller)
+        Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: destination charge quoting disabled")
+        return nil
+      end
+
       quote = StripeFxQuote.create(
         to_currency: Currency::USD,
         from_currency: currency,
-        stripe_account_id: quote_merchant_account.charge_processor_merchant_id
+        stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
+        # Declared up front because Stripe matches the quote's destination against the
+        # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
+        destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
       )
 
       presentment_total_cents = presentment_cents_for(amount_cents, quote.fx_rate, currency)
