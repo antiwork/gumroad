@@ -244,6 +244,38 @@ describe Charge::Disputable, :vcr do
       expect(paypal_charge.formatted_disputed_amount).to eq("$20")
       expect(braintree_charge.formatted_disputed_amount).to eq("$30")
     end
+
+    # gumroad-private#1328 A5. The card network and the issuing bank hold the transaction in the
+    # currency the buyer was charged, as does the buyer's own statement. Submitting only our
+    # canonical USD figure invites a reviewer to read the amounts as mismatched, in a document
+    # whose whole purpose is winning the money back.
+    context "for a buyer-currency presentment charge" do
+      it "leads with the presentment amount and keeps the canonical figure alongside it" do
+        create(:purchase_presentment,
+               purchase: stripe_purchase,
+               presentment_currency: Currency::CAD,
+               presentment_price_cents: 13_50,
+               presentment_gumroad_tax_cents: 0,
+               presentment_total_cents: 13_50)
+        stripe_purchase.association(:purchase_presentment).reset
+
+        expect(stripe_purchase.formatted_disputed_amount).to eq("CAD$13.50 ($10)")
+      end
+
+      it "uses the charge's own presentment snapshot for a combined charge" do
+        create(:charge_presentment,
+               charge: stripe_charge,
+               presentment_currency: Currency::EUR,
+               presentment_total_cents: 9_25)
+        stripe_charge.association(:charge_presentment).reset
+
+        expect(stripe_charge.formatted_disputed_amount).to eq("€9.25 ($10)")
+      end
+
+      it "falls back to the canonical amount when there is no presentment snapshot" do
+        expect(stripe_purchase.formatted_disputed_amount).to eq("$10")
+      end
+    end
   end
 
   describe "#customer_email" do
