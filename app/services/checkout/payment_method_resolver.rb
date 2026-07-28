@@ -493,40 +493,27 @@ class Checkout::PaymentMethodResolver
       end
       return [] if methods_for_cart_currency.empty?
 
-      # The prepare-time eligibility check rejects a forced-currency intent when the
-      # account doesn't HOLD USD (stored-currency check). Mirror only that half here.
-      # Deliberately NOT the marker-aware usd_settling_merchant_account?: the methods
-      # this resolver offers are always the direct-listed-amount shape (the whole cart
-      # priced in the forced currency — the select above), which charges the listed
-      # price with no FX quote, so the learned mismatch marker is irrelevant to them.
-      # Gating on the marker here is what made iDEAL disappear platform-wide on
-      # 2026-07-23: enabling the iDEAL/SEPA capabilities made the platform account
-      # settle EUR in EUR, the EUR marker was recorded, and the tab never rendered for
-      # any Gumroad-managed seller (gumroad-private#933).
-      return [] unless forced_currency_settlement_supported?
+      # No settlement gate here. The methods this resolver offers are always the
+      # direct-listed-amount shape (the whole cart priced in the forced currency — the
+      # select above), which charges the listed price with no FX quote anywhere, so no
+      # property of the charging account's balance currency can make the charge fail.
+      # Stripe is happy to create a EUR intent on a EUR-settling account; the per-account
+      # capability intersection further down (account_supported_methods) is what actually
+      # establishes the account can take the method.
+      #
+      # Two narrower versions of this gate were removed in turn, both because they hid
+      # methods from checkouts that could complete: the marker-aware
+      # usd_settling_merchant_account? made iDEAL disappear platform-wide on 2026-07-23
+      # (enabling the iDEAL/SEPA capabilities made the platform account settle EUR in EUR,
+      # so the EUR marker was recorded — gumroad-private#933), and the stored-currency
+      # usd_holding_settlement_account? that replaced it still withheld the methods from
+      # every Stripe Connect seller settling in euros, which is most eurozone sellers and
+      # the majority of the lane's addressable volume (gumroad-private#1442).
 
       methods_for_cart_currency.select do |method|
         Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
           Checkout::BuyerCurrencyEligibility.local_method_launched?(method, sellers.first)
       end
-    end
-
-    def forced_currency_settlement_supported?
-      seller = sellers.first
-      merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
-                         MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-      return false if merchant_account.blank?
-
-      # Asked of the account the PaymentIntent is CREATED on. Only a Stripe Connect
-      # (direct-charge) seller is charged on their own account; every other seller is
-      # charged on the Gumroad platform account with their account as the transfer
-      # destination, and a destination account's balance currency does not restrict the
-      # currency of the intent (verified against Stripe: an INR/UPI intent and an
-      # EUR/iDEAL intent both create and confirm with a GBP-settling destination).
-      # Reading the destination account's currency here is what hid UPI from the seller
-      # in gumroad-private#1409 and from every other seller whose Gumroad-managed Stripe
-      # account settles in a non-USD currency.
-      Checkout::BuyerCurrencyEligibility.usd_holding_settlement_account?(merchant_account)
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify

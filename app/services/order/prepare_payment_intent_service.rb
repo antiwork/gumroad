@@ -332,15 +332,40 @@ class Order::PreparePaymentIntentService
     # Per-method options Stripe wants at intent CREATE time. Only sent when the buyer actually
     # picked Pix — Stripe rejects options for a method the intent doesn't list, and the previewed
     # method is what decides whether pix rides this intent at all.
+    #
+    # amount_includes_iof only makes sense on a cross-border Pix payment. IOF is a Brazilian tax on
+    # transactions that involve foreign exchange, so it applies when the money leaves Brazil to a
+    # Gumroad-held account abroad; that is the case the option exists for (it tells Stripe to bill
+    # the buyer exactly the listed price and take the tax out of what settles to us — see
+    # Purchase::PIX_IOF_FEE_PER_THOUSAND). When the charge is created directly on a seller's own
+    # Brazilian Stripe account the payment never crosses a border, there is no foreign exchange and
+    # therefore no IOF, and Purchase#pix_iof_fee_per_thousand already declines to bill the seller
+    # for it. Sending the option on that intent would be asking Stripe to price a tax that does not
+    # exist, and an option Stripe does not accept makes the whole intent create fail — which takes
+    # card down with it for that checkout, the failure shape from gumroad-private#1026. So the
+    # option is scoped to the same condition the fee is: charges on a Gumroad-held account. Nothing
+    # changes for today's traffic, where every Pix intent is created on the platform account; this
+    # is the gate that keeps that true once a Brazilian connected account can reach Pix
+    # (gumroad-private#1442 widened the settlement gate that used to make it unreachable).
+    #
+    # expires_after_seconds is unconditional: it is a property of how long we are willing to hold
+    # the purchase open, not of who settles the money.
     def pix_payment_method_options
       return nil unless pix_selected?
 
-      {
-        pix: {
-          amount_includes_iof: PIX_AMOUNT_INCLUDES_IOF,
-          expires_after_seconds: PIX_EXPIRES_AFTER_SECONDS,
-        },
-      }
+      pix_options = { expires_after_seconds: PIX_EXPIRES_AFTER_SECONDS }
+      pix_options[:amount_includes_iof] = PIX_AMOUNT_INCLUDES_IOF if pix_iof_applies?
+
+      { pix: pix_options }
+    end
+
+    # True when the Pix charge is created on an account Gumroad holds, which is what makes the
+    # payment cross-border and so subject to IOF. Mirrors Purchase#charged_using_gumroad_merchant_account?
+    # for the merchant account this intent is being created on, so the option and the fee can never
+    # disagree about whether the tax applies. A missing merchant account means the platform account,
+    # which is Gumroad-held.
+    def pix_iof_applies?
+      !merchant_account&.is_a_stripe_connect_account?
     end
 
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at

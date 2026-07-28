@@ -553,19 +553,32 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.currency).to eq(Currency::EUR)
     end
 
-    it "withholds the method for merchant accounts that settle in a non-USD currency, even for EUR-priced products" do
+    # gumroad-private#1442. A product priced in the method's forced currency is charged
+    # at its listed price with no FX quote, so the charging account's own balance
+    # currency has no bearing on whether the charge can succeed — a EUR intent on a
+    # EUR-settling Belgian account is the most natural shape there is. Requiring US
+    # dollars here withheld iDEAL and Bancontact from most eurozone sellers.
+    it "allows the method for merchant accounts that settle in a non-USD currency when the product is priced in the forced currency" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      merchant_account.update!(currency: Currency::EUR)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+      expect(forced_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "allows the method for a merchant account settling in a third currency, unrelated to the forced one" do
       purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
       merchant_account.update!(currency: Currency::CAD)
 
-      expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
     end
 
     # gumroad-private#1409. The default merchant_account in this spec is a Stripe Connect
-    # (direct-charge) account, so the test above is about the account the intent is
-    # genuinely created on. A destination-charge seller is different: the intent is
+    # (direct-charge) account. A destination-charge seller is different: the intent is
     # created on the Gumroad platform account and their own account merely receives the
-    # transfer afterwards, so their balance currency must not withhold the method.
+    # transfer afterwards.
     it "keeps the method available for a destination-charge seller whose own account settles in a non-USD currency" do
       platform_merchant_account.update!(currency: Currency::USD)
       destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::GBP, country: "GB")
@@ -585,7 +598,7 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(upi_decision.direct_listed_amount?).to eq(true)
     end
 
-    it "withholds the method when the Gumroad platform account the destination charge is created on holds a non-USD balance" do
+    it "keeps the method available when the Gumroad platform account the destination charge is created on holds a non-USD balance" do
       platform_merchant_account.update!(currency: Currency::CAD)
       destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
       purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR), merchant_account: destination_merchant_account)
@@ -599,8 +612,8 @@ describe Checkout::BuyerCurrencyEligibility do
                                                  setup_future_charges:,
                                                  off_session:).method_forced_decision(payment_method:)
 
-      expect(destination_decision).not_to be_eligible
-      expect(destination_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+      expect(destination_decision).to be_eligible
+      expect(destination_decision.currency).to eq(Currency::EUR)
     end
 
     # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): enabling
@@ -629,6 +642,18 @@ describe Checkout::BuyerCurrencyEligibility do
 
       expect(forced_decision).to be_eligible
       expect(forced_decision.direct_listed_amount?).to eq(false)
+    end
+
+    # The quoted (USD-priced) case still asks BOTH halves of the settlement question, and
+    # this pins the half that does not depend on a learned mismatch marker: an account
+    # whose stored balance currency is not US dollars cannot be quoted from the forced
+    # currency into USD, so the method has to stay withheld there even though the
+    # direct-listed lane above no longer cares about the same account's currency.
+    it "withholds the method for a USD-priced product when the account holds a non-USD balance and no mismatch marker is set" do
+      merchant_account.update!(currency: Currency::EUR)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
     end
 
     it "withholds the method for future-charge setups such as save-card checkouts" do
