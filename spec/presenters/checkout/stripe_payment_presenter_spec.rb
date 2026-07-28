@@ -331,6 +331,36 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
+  it "keeps the Payment Request Button on a multi-seller candidate cart that falls back to CardElement for another reason" do
+    # The other half of the narrowing. A multi-seller cart no longer falls back for
+    # "buyer_currency_presentment_unsupported", but it can still land on CardElement for an
+    # unrelated reason — here, one seller is not in the Payment Element rollout. On that lane the
+    # wallet surface is the Payment Request Button, whose sheet shows the canonical USD total.
+    # That is exactly what this cart charges (no quote is minted across sellers), so the button
+    # must stay: suppressing it would keep taking Apple Pay and Google Pay away.
+    sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    add_products = sellers.each_with_index.map do |seller, index|
+      # Only the first seller is in the Payment Element rollout, so the cart falls back.
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller) if index.zero?
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      checkout_product_for(
+        create(:product, user: seller, price_cents: 1234),
+        buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }
+      )
+    end
+
+    expect(stripe_payment_props(add_products:))
+      .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+  ensure
+    (sellers || []).each do |seller|
+      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    end
+  end
+
   it "falls back to CardElement when any item in a multi-item candidate cart fails a presentment gate" do
     seller = create(:user, disable_buyer_local_currency: false)
     product = create(:product, user: seller, price_cents: 1234)
