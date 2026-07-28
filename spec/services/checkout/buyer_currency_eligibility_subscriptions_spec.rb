@@ -149,6 +149,30 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
       expect(eligibility(purchases: [one_off]).send(:subscription_setup_in_ramp?)).to be(false)
     end
 
+    it "stays closed for an installment payment, which is recurring but charges one instalment" do
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+      installment = create(:membership_purchase, link: membership, seller:, subscription:,
+                                                 is_original_subscription_purchase: true)
+      # is_installment_payment is a flag bit rather than a column, so it cannot be written
+      # with update_columns.
+      allow(installment).to receive(:is_installment_payment?).and_return(true)
+
+      expect(eligibility(purchases: [installment]).send(:subscription_setup_in_ramp?)).to be(false)
+    end
+
+    it "stays closed for a free-trial membership, whose first charge is nothing" do
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+      signup = create(:membership_purchase, link: membership, seller:, subscription:,
+                                            is_original_subscription_purchase: true)
+      # Stubbed on the association the service actually reads (purchase.link), rather than
+      # any_instance, so the stub cannot leak into sibling examples that expect a plain
+      # membership to be eligible.
+      allow(signup).to receive(:link).and_return(membership)
+      allow(membership).to receive(:free_trial_enabled?).and_return(true)
+
+      expect(eligibility(purchases: [signup]).send(:subscription_setup_in_ramp?)).to be(false)
+    end
+
     it "stays closed for a cart mixing a membership with a one-off" do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       signup = create(:membership_purchase, link: membership, seller:, subscription:,

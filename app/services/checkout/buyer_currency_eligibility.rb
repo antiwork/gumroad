@@ -481,7 +481,20 @@ class Checkout::BuyerCurrencyEligibility
       return false if purchases.blank?
       return false unless self.class.subscriptions_enabled?(seller)
 
-      purchases.all? { |purchase| purchase.link.is_recurring_billing? && !purchase.is_preorder_authorization? }
+      purchases.all? do |purchase|
+        # An installment plan is `is_recurring_billing?` too, and it also sets
+        # setup_future_charges, so without this it would slip through the lift. Its first
+        # charge is one installment rather than the locked total, and #unsupported_product_type?
+        # rejects it further down — but it must not reach this gate looking like a membership
+        # signup, or the fallback the buyer gets is attributed to the wrong reason and the
+        # ordering here becomes the only thing keeping it out.
+        purchase.link.is_recurring_billing? &&
+          !purchase.is_installment_payment? &&
+          purchase.link.installment_plan.blank? &&
+          !purchase.link.free_trial_enabled? &&
+          !purchase.is_commission_deposit_purchase? &&
+          !purchase.is_preorder_authorization?
+      end
     end
 
     # True only for a renewal that already has a stored fixed amount to charge.
