@@ -2,17 +2,30 @@
 
 # Charges a membership renewal the fixed buyer-currency amount stored at signup.
 #
-# The lane this fills. A card checkout presents in the buyer's currency by verifying a signed
-# quote the buyer confirmed in the browser (Charge::PresentmentOrchestrator). A renewal has no
-# browser and no quote token: it runs off-session from RecurringChargeWorker, so there is
-# nothing for the buyer to confirm and nothing to verify against. Without this service the
-# renewal falls through Charge::CreateService#buyer_currency_presentment_processor_args with
-# no token and charges canonical USD — which is exactly the bug this closes: a member who
-# agreed to EUR 9.99/month would be billed ~$10.79 at a rate that moves every month.
+# ⛔ NOT WIRED UP YET — THIS SERVICE IS UNREACHABLE FROM A REAL RENEWAL. Verified 2026-07-28
+# by an adversarial pre-merge review, then confirmed by tracing the entry points. A renewal
+# runs RecurringChargeWorker -> Subscription#charge! (subscription.rb:404) ->
+# #process_purchase! -> Purchase#process! -> Purchase#create_charge_intent
+# (purchase.rb:4244), which calls ChargeProcessor.create_payment_intent_or_charge! DIRECTLY.
+# It never touches Charge::CreateService, whose only caller is Order::ChargeService:216 —
+# the checkout path. So every renewal still charges canonical US dollars today no matter what
+# is stored, and the read below only runs for a multi-seller checkout cart, whose purchases
+# are all original signups and are rejected by #stored_presentment.
+#
+# Do NOT flip :buyer_currency_subscriptions until this is hooked into
+# Purchase#create_charge_intent (or renewals are routed through the combined-charge
+# pipeline): the signup gates ARE live, so a member would confirm a EUR price at checkout
+# and then be billed a floating dollar amount every period — worse than not presenting at
+# all, because the local price becomes a promise Gumroad does not keep.
+#
+# The lane this is meant to fill. A card checkout presents in the buyer's currency by
+# verifying a signed quote the buyer confirmed in the browser
+# (Charge::PresentmentOrchestrator). A renewal has no browser and no quote token, so there is
+# nothing for the buyer to confirm and nothing to verify against.
 #
 # What is fixed and what is not (gumroad-private#1322, ruled 2026-07-28):
 #
-#   * FIXED — the PRICE. Read from SubscriptionPresentment, never re-derived from a current
+#   * FIXED — the PRICE. Read from the stored fixing, never re-derived from a current
 #     rate. A EUR 9.99 member pays EUR 9.99 every month, exactly as a USD member pays $10.
 #     Gumroad absorbs the FX drift; #usd_drift_cents makes it attributable per subscription
 #     rather than emergent in the margin.

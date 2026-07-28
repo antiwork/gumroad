@@ -18,9 +18,24 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
       expect(described_class.subscriptions_enabled?(seller)).to be(false)
     end
 
-    it "is true once the subscription ramp flag is on" do
+    it "stays false even with every flag on, because the lane is not wired up yet" do
+      # The renewal half is unreachable and the signup write can never fire (see
+      # SUBSCRIPTION_LANE_WIRED_UP). Until both land, no flag combination may open this lane:
+      # a member who confirmed a local price at checkout would be billed floating dollars.
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
 
+      expect(described_class::SUBSCRIPTION_LANE_WIRED_UP).to be(false)
+      expect(described_class.subscriptions_enabled?(seller)).to be(false)
+    end
+
+    it "would require the ramp flag too once the lane is wired up" do
+      # Pins the flag check itself so removing SUBSCRIPTION_LANE_WIRED_UP cannot silently open
+      # the lane to every seller.
+      stub_const("#{described_class}::SUBSCRIPTION_LANE_WIRED_UP", true)
+
+      expect(described_class.subscriptions_enabled?(seller)).to be(false)
+
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       expect(described_class.subscriptions_enabled?(seller)).to be(true)
     end
 
@@ -39,7 +54,14 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
       expect(unquotable.send(:unquotable_product?, membership)).to be(true)
     end
 
-    it "makes a plain membership quotable once the ramp is on" do
+    it "keeps memberships unquotable even with the ramp flag on, while the lane is unwired" do
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+
+      expect(unquotable.send(:unquotable_product?, membership)).to be(true)
+    end
+
+    it "makes a plain membership quotable once the lane is wired up and the ramp is on" do
+      stub_const("#{described_class}::SUBSCRIPTION_LANE_WIRED_UP", true)
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
 
       expect(unquotable.send(:unquotable_product?, membership)).to be(false)
@@ -62,6 +84,7 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
 
   describe "the quote-time mirror" do
     it "stays in lockstep with the charge-time gate for memberships" do
+      stub_const("#{described_class}::SUBSCRIPTION_LANE_WIRED_UP", true)
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
 
       quote_side = Checkout::BuyerCurrencyQuote.send(:new, line_items: [], canonical_total_cents: 1000, ip: "1.2.3.4")
@@ -127,7 +150,8 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
                                  purchases:, params: {}, setup_future_charges: true, off_session: false)
     end
 
-    it "opens for a membership signup once the ramp is on" do
+    it "opens for a membership signup once the lane is wired up and the ramp is on" do
+      stub_const("#{described_class}::SUBSCRIPTION_LANE_WIRED_UP", true)
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       signup = create(:membership_purchase, link: membership, seller:, subscription:,
                                             is_original_subscription_purchase: true)

@@ -107,15 +107,32 @@ class Checkout::BuyerCurrencyEligibility
 
   # Whether this seller's memberships may be charged in the buyer's own currency.
   #
-  # Its own ramp, on top of seller_enabled?, because a membership is the first shape where
-  # the buyer-currency amount outlives the checkout that agreed it: the signup stores a
-  # fixed presentment amount (SubscriptionPresentment) and every renewal charges that same
-  # amount, so Gumroad absorbs the FX drift between renewals (gumroad-private#1322, ruled
-  # 2026-07-28). Pulling this flag stops NEW memberships entering the lane; it deliberately
-  # does not orphan existing ones, because a subscription that already stored an amount must
-  # keep charging it — see Subscription::PresentmentRenewal.
+  # ⛔ HARD-DISABLED. Returns false unconditionally until the renewal half is wired up.
+  #
+  # A membership is the first shape where the buyer-currency amount outlives the checkout that
+  # agreed it: the signup fixes an amount and every later charge must reuse it. Both halves have
+  # to be live together or the feature is worse than its absence — a member who confirms
+  # EUR 9.99/month and is then billed a floating dollar amount every period was misled by the
+  # checkout, whereas a member shown dollars throughout was not.
+  #
+  # Today only the SIGNUP half can run. An adversarial review on 2026-07-28 established, and
+  # tracing the entry points confirmed, that (a) Subscription::PresentmentRenewal is unreachable
+  # because renewals go Purchase#create_charge_intent -> ChargeProcessor directly and never enter
+  # Charge::CreateService, and (b) Charge::PresentmentOrchestrator.record_later_charge_presentment!
+  # can never write, because Purchase::BaseService#create_subscription runs from
+  # MarkSuccessfulService AFTER the charge succeeds, so purchase.subscription is still nil while
+  # the processor args are being built. Flipping the flag in that state gives exactly the
+  # mismatch above, and every spec stays green because none of them drive a real charge.
+  #
+  # Remove this constant (and the guard below) in the PR that wires both halves up — and only
+  # alongside an integration test that drives Order::ChargeService with a membership and asserts a
+  # fixing row exists, plus one that drives RecurringChargeWorker and asserts the renewal presents.
+  # gumroad-private#1322.
+  SUBSCRIPTION_LANE_WIRED_UP = false
+
   def self.subscriptions_enabled?(seller)
-    seller.present? &&
+    SUBSCRIPTION_LANE_WIRED_UP &&
+      seller.present? &&
       seller_enabled?(seller) &&
       Feature.active?(SUBSCRIPTION_FEATURE_NAME, seller)
   end
