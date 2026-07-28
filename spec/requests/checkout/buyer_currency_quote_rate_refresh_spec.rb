@@ -1,0 +1,87 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+# A local-currency quote is signed against a total the browser computes from the exchange rate
+# that was in the page props when the checkout rendered. UpdateCurrenciesWorker rewrites that
+# stored rate every hour, and purchase creation recomputes the canonical total at the charge-time
+# rate, so a checkout left open across an hourly tick fails Checkout::BuyerCurrencyQuote.verify!
+# with "total mismatch".
+#
+# Before this change the retry could not recover: the page rebuilt its products from the same
+# in-memory cart, carrying the same stale rate, so every retry minted a token for the same
+# rejected total and the buyer was stuck until they reloaded the page by hand. The checkout now
+# re-fetches the cart props, adopts the server's current rate, and re-quotes — so the second Pay
+# goes through.
+describe "Buyer-currency quote recovery after the stored rate moves (#6484)", type: :system, js: true do
+  include CurrencyHelper
+
+  # The product is priced in EUR, which is what puts a render-time exchange rate into the page
+  # props: CheckoutPresenter derives `exchange_rate` from the stored rate for the listed currency,
+  # and the browser converts to canonical USD with it before posting.
+  let(:render_time_eur_rate) { 0.9 }
+  let(:charge_time_eur_rate) { 0.8 }
+
+  let(:france) do
+    GeoIp::Result.new(
+      country_name: "France", country_code: "FR", region_name: "IDF",
+      city_name: "Paris", postal_code: "75001", latitude: nil, longitude: nil
+    )
+  end
+
+  before do
+    allow(GeoIp).to receive(:lookup).and_return(france)
+    # Only the FX-quote boundary is stubbed; the surcharge request, the token, the display, and
+    # the charge all run for real.
+    allow(StripeFxQuote).to receive(:create).and_return(
+      StripeFxQuote::Quote.new(id: "fxq_rate_refresh", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.1"))
+    )
+
+    @original_eur_rate = currency_namespace.get("EUR")
+    currency_namespace.set("EUR", render_time_eur_rate)
+
+    @seller = create(:user_with_compliance_info, disable_buyer_local_currency: false)
+    Feature.activate_user(:buyer_local_currency, @seller)
+    Feature.activate_user(:buyer_currency_charging, @seller)
+    # Rounding has its own spec; opting out keeps the totals here equal to the plain conversion so
+    # this spec is only about which rate the retry uses.
+    @seller.update!(disable_buyer_currency_rounding: true)
+    @product = create(:product, user: @seller, price_cents: 10_00, price_currency_type: "eur")
+  end
+
+  after do
+    currency_namespace.set("EUR", @original_eur_rate)
+    Feature.deactivate_user(:buyer_local_currency, @seller)
+    Feature.deactivate_user(:buyer_currency_charging, @seller)
+  end
+
+  it "refreshes the rate and completes the purchase on the retry instead of rejecting forever" do
+    visit "/l/#{@product.unique_permalink}"
+    add_to_cart(@product)
+
+    fill_checkout_form(@product, email: "buyer@example.com")
+
+    # Stand in for the hourly UpdateCurrenciesWorker tick landing while this checkout is open.
+    # The page keeps the rate it rendered with, so the total it has already signed no longer
+    # matches what purchase creation will compute.
+    currency_namespace.set("EUR", charge_time_eur_rate)
+
+    # First attempt: the server refuses the quote and the checkout says so, without charging.
+    expect do
+      click_on "Pay", exact: true
+      expect(page).to have_alert(text: "local-currency price", wait: 30)
+    end.not_to change { @product.sales.successful.count }
+
+    # Second attempt: the recovery has re-fetched the cart props and re-quoted on the current
+    # rate, so the same click now succeeds.
+    expect do
+      click_on "Pay", exact: true
+      expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 60)
+    end.to change { @product.sales.successful.count }.by(1)
+
+    purchase = @product.sales.successful.last
+    # The charge went through at the refreshed rate, which is the whole point: a purchase created
+    # on the stale rate would carry the pre-tick USD total.
+    expect(purchase.total_transaction_cents).to eq((10_00 / charge_time_eur_rate).round)
+  end
+end
