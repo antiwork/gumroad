@@ -117,7 +117,7 @@ class RichContent < ApplicationRecord
   validate :link_hrefs_use_permitted_schemes, if: :will_save_change_to_description?
 
   def embedded_product_file_ids_in_order
-    description.flat_map { select_file_embed_ids(_1) }.compact.uniq
+    embedded_product_file_ids_in(description)
   end
 
   # True when the page carries anything a buyer could actually see. A page whose
@@ -151,14 +151,31 @@ class RichContent < ApplicationRecord
     entity.is_a?(Link) ? entity : entity.try(:link)
   end
 
-  def cross_product_file_embed_ids
-    embedded_ids = embedded_product_file_ids_in_order
+  def cross_product_file_embed_ids(nodes = description)
+    embedded_ids = embedded_product_file_ids_in(nodes)
     return [] if embedded_ids.empty?
 
     product = owning_product
     return [] if product.nil?
 
     ProductFile.where(id: embedded_ids).where.not(link_id: product.id).pluck(:id)
+  end
+
+  # Cross-product embeds split by whether the file they point at is still alive.
+  #
+  # A soft-deleted foreign file delivers nothing: the editor renders its embed as
+  # nothing at all, so there is no node for the seller to click and remove. Those
+  # are dead content and get dropped at product-save boundaries (see
+  # #remove_stale_dead_cross_product_file_embeds).
+  # An alive foreign file is the case #5416 was written to stop, and it stays a
+  # hard validation failure. It may still be content the seller meant to include,
+  # so silently deleting it would discard that intent.
+  def cross_product_file_embeds_by_liveness(nodes = description)
+    foreign_ids = cross_product_file_embed_ids(nodes)
+    return { alive: [], dead: [] } if foreign_ids.empty?
+
+    alive_ids = ProductFile.alive.where(id: foreign_ids).pluck(:id)
+    { alive: alive_ids, dead: foreign_ids - alive_ids }
   end
 
   def self.reject_file_embeds(nodes, product_file_ids)
@@ -176,6 +193,57 @@ class RichContent < ApplicationRecord
         node
       end
     end
+  end
+
+  # Product-save paths call this after assigning the submitted description and
+  # before saving. It deliberately is not an Active Record callback: cleanup of
+  # legacy data must happen only at the save boundaries that opted into it.
+  #
+  # For an existing page, only file ids already present in its stored
+  # description are eligible. A new destination page may instead receive ids
+  # proven to come from another stored page in the same product. The dashboard
+  # needs that narrow exception when it moves a page between shared and
+  # per-version content or copies one version's pages to another; both flows
+  # create destination records. A new page without that server-verified
+  # provenance still fails ownership validation rather than silently
+  # discarding input.
+  #
+  # Returns the external ids it removed so an interactive caller can reconcile
+  # its in-memory document with the value that was actually saved. Without
+  # that, the editor resubmits the invisible node and its next save fails.
+  def remove_stale_dead_cross_product_file_embeds(legacy_dead_file_ids: [])
+    removable_ids = persisted? ? stored_stale_dead_cross_product_file_embed_ids : Array(legacy_dead_file_ids)
+    return [] if removable_ids.empty?
+
+    cleaned_description = self.class.reject_file_embeds(description, removable_ids.to_set)
+    return [] if cleaned_description == description
+
+    removed_ids = embedded_product_file_ids_in(description) - embedded_product_file_ids_in(cleaned_description)
+    self.description = cleaned_description
+    removed_ids.map { ObfuscateIds.encrypt(_1) }
+  end
+
+  # Trusted copy paths use the cleaned value when moving a stored page into a
+  # new record. The persisted source, not the new destination, establishes
+  # which dead foreign ids are legacy content and therefore safe to remove.
+  def description_without_stale_dead_cross_product_file_embeds
+    dead_ids = stored_stale_dead_cross_product_file_embed_ids
+    return description if dead_ids.empty?
+
+    self.class.reject_file_embeds(description, dead_ids.to_set)
+  end
+
+  # Captures the dead foreign ids from the database value, not from the
+  # submitted candidate. Save coordinators use this before mutating any pages
+  # so a copy still has valid provenance even if its source page is repaired
+  # earlier in the same transaction.
+  def stored_stale_dead_cross_product_file_embed_ids
+    return [] unless persisted? && description.is_a?(Array)
+
+    stored_description = attribute_in_database("description")
+    return [] unless stored_description.is_a?(Array)
+
+    cross_product_file_embeds_by_liveness(stored_description)[:dead]
   end
 
   def custom_field_nodes
@@ -258,14 +326,37 @@ class RichContent < ApplicationRecord
       canonicalized[/\A([a-zA-Z][a-zA-Z0-9+.-]*):/, 1]&.downcase
     end
 
+    def embedded_product_file_ids_in(nodes)
+      Array(nodes).flat_map { select_file_embed_ids(_1) }.compact.uniq
+    end
+
     def embedded_files_belong_to_product
       return unless description.is_a?(Array)
 
       foreign_ids = cross_product_file_embed_ids
       return if foreign_ids.empty?
 
-      external_ids = foreign_ids.map { ObfuscateIds.encrypt(_1) }
-      errors.add(:base, "File embeds reference files not belonging to this product: #{external_ids.join(", ")}")
+      errors.add(:base, "File embeds reference files not belonging to this product: #{cross_product_file_embed_error_details(foreign_ids)}")
+    end
+
+    # Names same-seller files and their products so the seller can identify the
+    # source. Keep the opaque ID for another seller's file and for products with
+    # product-scoped collaborators: this model does not know which actor caused
+    # validation, and a collaborator who can edit this product may not access
+    # the seller's other products.
+    def cross_product_file_embed_error_details(foreign_ids)
+      product = owning_product
+      files_by_id = ProductFile.where(id: foreign_ids).includes(:link).index_by(&:id)
+      names_are_safe = product.present? && !product.confirmed_collaborators.alive.exists?
+
+      foreign_ids.map do |file_id|
+        file = files_by_id[file_id]
+        next ObfuscateIds.encrypt(file_id) if file.nil? || file.link&.user_id != product&.user_id || !names_are_safe
+
+        label = file.name_displayable.presence || ObfuscateIds.encrypt(file.id)
+        owner = file.link&.name.presence
+        owner.present? ? "#{label} (from \"#{owner}\")" : label
+      end.join(", ")
     end
 
     def select_file_embed_ids(node)

@@ -70,6 +70,24 @@ export type DeletionSources = {
   }[];
 };
 
+// A page moved between shared and per-version scopes is represented by a new
+// destination row plus an explicit deletion of its stored source. If the
+// seller removes the destination variant before saving, the page carrying that
+// move marker disappears from product state. Promote the marker into the
+// durable confirmed-removal list at the same moment as the variant removal so
+// the save cannot lose the source-row deletion intent.
+export const confirmRichContentMoveSourceDeletions = (
+  product: Pick<DeletionSources, "confirmed_removed_rich_content_ids">,
+  pages: { move_source_id?: string }[],
+): void => {
+  const moveSourceIds = pages.flatMap((page) => (page.move_source_id ? [page.move_source_id] : []));
+  if (moveSourceIds.length === 0) return;
+
+  product.confirmed_removed_rich_content_ids = [
+    ...new Set([...(product.confirmed_removed_rich_content_ids ?? []), ...moveSourceIds]),
+  ];
+};
+
 // `clear_all` is deliberately not derived either. An empty collection in state
 // means "this session has none loaded", which is not the same as "the seller
 // emptied it" — that distinction is the whole point. A caller that genuinely

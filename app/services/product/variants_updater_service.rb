@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Product::VariantsUpdaterService
-  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context, :contract
+  attr_reader :product, :skus_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :legacy_dead_file_embed_ids_by_rich_content_id, :deletion_audit_context, :contract
   attr_accessor :variants_params
 
   delegate :price_currency_type,
@@ -31,12 +31,14 @@ class Product::VariantsUpdaterService
   # mutated anything, attached to every blocked-save notification.
   # id_mappings: per-request accumulator of client id → canonical server id for
   # newly created variants and pages, returned to the editor after the save.
+  # legacy_dead_file_embed_ids_by_rich_content_id: a pre-mutation snapshot used
+  # to repair destination pages created by editor move/copy flows.
   # deletion_audit_context: :actor_user_id, :request_id and :revision_token for
   # the deletion audit trail (ProductVariantDeletionAudit), threaded down rather
   # than read from a global so these services still work off-request.
   # +contract+ - optional Product::SaveContract (gumroad-private#1379), supplied
   # only by the editor's save path. nil preserves the legacy behaviour.
-  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {}, contract: nil)
+  def initialize(product:, variants_params:, skus_params: {}, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, legacy_dead_file_embed_ids_by_rich_content_id: {}, deletion_audit_context: {}, contract: nil)
     @product = product
     @variants_params = variants_params
     @skus_params = skus_params.values
@@ -46,7 +48,8 @@ class Product::VariantsUpdaterService
     @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
-    @id_mappings = id_mappings || { variants: {}, rich_content: {} }
+    @id_mappings = id_mappings || { variants: {}, rich_content: {}, removed_file_embeds: {} }
+    @legacy_dead_file_embed_ids_by_rich_content_id = legacy_dead_file_embed_ids_by_rich_content_id
     @deletion_audit_context = deletion_audit_context || {}
     @contract = contract
   end
@@ -69,6 +72,7 @@ class Product::VariantsUpdaterService
         rewrite_budget:,
         deletion_guard_diagnostics:,
         id_mappings:,
+        legacy_dead_file_embed_ids_by_rich_content_id:,
         deletion_audit_context:
       )
       variant_category = variant_category_updater.perform
