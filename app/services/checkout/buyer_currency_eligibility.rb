@@ -5,6 +5,18 @@ class Checkout::BuyerCurrencyEligibility
 
   FEATURE_NAME = :buyer_currency_charging
 
+  # The two per-seller rollout flags that decide whether a wallet (Apple Pay / Google Pay)
+  # may pay a buyer-currency checkout. They live here, next to FEATURE_NAME, because this
+  # service is what the charge path consults — the presenter reads the same constants for
+  # its render-time decision, so the surface a buyer sees and the charge the server accepts
+  # can never be gated on different flags.
+  #
+  # PAYMENT_ELEMENT_WALLETS_FEATURE_NAME is checkout's general "wallets render inside the
+  # Payment Element" flag; WALLETS_FEATURE_NAME is this lane's own ramp, so wallets can be
+  # pulled from buyer-currency checkouts alone without taking them off every other checkout.
+  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
+  WALLETS_FEATURE_NAME = :buyer_currency_wallets
+
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
   # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
@@ -77,6 +89,15 @@ class Checkout::BuyerCurrencyEligibility
       Feature.active?(FEATURE_NAME, seller) &&
       Feature.active?(:buyer_local_currency, seller) &&
       !seller.disable_buyer_local_currency?
+  end
+
+  # Whether this seller's buyer-currency checkouts may take wallet payments at all. Seller must
+  # be in the general Payment Element wallet rollout AND in this lane's own ramp; pulling either
+  # flag stops wallets here, and pulling only the lane flag leaves every other checkout alone.
+  def self.wallets_enabled?(seller)
+    seller.present? &&
+      Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller) &&
+      Feature.active?(WALLETS_FEATURE_NAME, seller)
   end
 
   def self.buyer_presentment_display?(buyer_currency_display)
@@ -188,6 +209,7 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
+    return fallback(:wallet_payment_request) if wallet_type.present? && !wallet_lane_allowed?
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?
@@ -369,6 +391,33 @@ class Checkout::BuyerCurrencyEligibility
 
       merchant_account.is_a_stripe_connect_account? ||
         self.class.settlement_merchant_account(merchant_account)&.is_managed_by_gumroad? || false
+    end
+
+    # True when this wallet payment is one the server is willing to price in the buyer's
+    # currency. Two conditions, and both are things the client cannot assert for itself:
+    #
+    #   1. The seller is in both wallet rollout flags. Without this the kill switch is
+    #      render-time only — a checkout page loaded while the flags were on would keep its
+    #      wallet rows and still complete a buyer-currency wallet charge after the flags were
+    #      pulled, which is exactly what an emergency ramp-down needs to stop.
+    #
+    #   2. The wallet came from the Payment Element, not the deprecated Payment Request
+    #      Button. The element's wallet sheet quotes the locked buyer-currency total the cart
+    #      shows (both are mounted from the same FX quote), while the Payment Request Button's
+    #      sheet is built from the canonical USD total — charging that buyer in local currency
+    #      would charge an amount they never saw. The Payment Request Button cannot reach this
+    #      path today (it is suppressed at render and selecting it withholds the quote token),
+    #      so this is the server-side backstop for a client that stops honoring either rule.
+    #
+    # PurchasePaymentFlow#payment_details_source_for treats the same param as the wallet
+    # surface signal, so the recorded surface and the charge decision read one input.
+    def wallet_lane_allowed?
+      self.class.wallets_enabled?(seller) &&
+        params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+    end
+
+    def wallet_type
+      params[:wallet_type]
     end
 
     # True when the order's purchases span more than one seller — i.e. the order produces

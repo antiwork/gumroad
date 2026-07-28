@@ -180,21 +180,63 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::JPY)
   end
 
-  # Wallet payments are no longer refused. The Payment Request Button is deliberately not
-  # special-cased even though its sheet shows canonical USD: it cannot reach a presentment
-  # checkout at all. It is suppressed whenever the Payment Element renders wallets
-  # (PaymentForm.tsx passes `disable_wallets || payment_element_wallets` as its disabled
-  # flag), and selecting it sets checkout's paymentMethod to "stripePaymentRequest", which
-  # makes getCheckoutBuyerCurrencyDisplay return null — so no quote token is ever issued for
-  # one. Gumroad is migrating fully to Payment Element wallets, so this case is being retired
-  # rather than guarded.
-  it "allows a wallet payment" do
-    params[:wallet_type] = "apple_pay"
-    params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+  # Wallet payments are accepted, but only from the surface whose sheet quotes the locked
+  # buyer-currency total (the Payment Element) and only while the seller is in both wallet
+  # rollout flags. The Payment Request Button's sheet is built from the canonical USD total,
+  # and it cannot reach a presentment checkout today anyway — it is suppressed whenever the
+  # Payment Element renders wallets (PaymentForm.tsx passes `disable_wallets ||
+  # payment_element_wallets` as its disabled flag), and selecting it sets checkout's
+  # paymentMethod to "stripePaymentRequest", which makes getCheckoutBuyerCurrencyDisplay
+  # return null so no quote token is issued. The gate below is the server-side backstop for
+  # both rules, so pulling a flag stops in-flight wallet charges instead of only removing the
+  # rows from newly rendered pages.
+  context "wallet payments" do
+    before do
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::WALLETS_FEATURE_NAME, seller)
+      params[:wallet_type] = "apple_pay"
+      params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+    end
 
-    expect(decision).to be_eligible
-    expect(decision.currency).to eq(Currency::CAD)
-    expect(decision.fallback_reason).to be_nil
+    after do
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.deactivate_user(described_class::WALLETS_FEATURE_NAME, seller)
+    end
+
+    it "allows a Payment Element wallet payment when both rollout flags are active" do
+      expect(decision).to be_eligible
+      expect(decision.currency).to eq(Currency::CAD)
+      expect(decision.fallback_reason).to be_nil
+    end
+
+    it "refuses the wallet payment once the lane's ramp flag is pulled" do
+      Feature.deactivate_user(described_class::WALLETS_FEATURE_NAME, seller)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    end
+
+    it "refuses the wallet payment once the general wallet flag is pulled" do
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    end
+
+    it "refuses a wallet payment that does not come from the Payment Element" do
+      params[:payment_details_source] = nil
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    end
+
+    it "still allows a non-wallet payment when the wallet flags are off" do
+      Feature.deactivate_user(described_class::WALLETS_FEATURE_NAME, seller)
+      params[:wallet_type] = nil
+
+      expect(decision).to be_eligible
+      expect(decision.fallback_reason).to be_nil
+    end
   end
 
   it "falls back for future-charge card setups such as save-card checkouts" do

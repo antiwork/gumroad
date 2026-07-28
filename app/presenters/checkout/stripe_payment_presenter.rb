@@ -14,13 +14,17 @@ class Checkout::StripePaymentPresenter
   # When active for every seller in the cart, the Payment Element renders Apple Pay / Google Pay
   # natively (instead of the deprecated Payment Request Button rendering them next to it) and the
   # Payment Request Button is not mounted for that cart. Rollout flag for antiwork/gumroad#5768.
-  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
+  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME
   # Ramp flag for wallets on the buyer-currency (FX-quoted) presentment lane, gumroad-private#1436.
   # Separate from PAYMENT_ELEMENT_WALLETS_FEATURE_NAME (at 100% since July 2026) because this lane
   # has a distinct risk: the wallet sheet quotes a locked local-currency total from an FX quote, so
   # it needs its own kill switch that does not take wallets off every other checkout with it.
   # Keyed per seller and ANDed with the general wallet flag — a seller must be in BOTH.
-  BUYER_CURRENCY_WALLETS_FEATURE_NAME = :buyer_currency_wallets
+  #
+  # Both names are borrowed from Checkout::BuyerCurrencyEligibility, which owns them, so the
+  # wallet rows this presenter renders and the wallet charges that service accepts can never
+  # end up reading different flags.
+  BUYER_CURRENCY_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
@@ -213,9 +217,12 @@ class Checkout::StripePaymentPresenter
     # in the general wallet rollout AND this lane's ramp before their buyer-currency checkouts
     # offer a wallet. That means ramping the general flag down still removes wallets everywhere,
     # while this flag scopes an emergency ramp-down to presentment carts only.
+    #
+    # The per-seller answer comes from Checkout::BuyerCurrencyEligibility.wallets_enabled?, the
+    # same predicate the charge path applies to an incoming wallet payment, so the surface and
+    # the charge decision cannot drift apart.
     def buyer_currency_wallets?
-      payment_element_wallets? &&
-        sellers.all? { Feature.active?(BUYER_CURRENCY_WALLETS_FEATURE_NAME, _1) }
+      sellers.present? && sellers.all? { Checkout::BuyerCurrencyEligibility.wallets_enabled?(_1) }
     end
 
     # Whether the checkout renders the flat payment-methods list (the Payment Element's
