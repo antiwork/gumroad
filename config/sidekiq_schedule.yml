@@ -31,6 +31,10 @@ fight_purchase_chargebacks_worker:
   cron: "0 * * * *" # Every hour
   class: FightDisputesJob
   description: Enqueues jobs to fight disputes for purchases
+create_missing_dispute_evidence:
+  cron: "20 */6 * * *" # Every 6 hours
+  class: CreateMissingDisputeEvidenceJob
+  description: Backstop for open disputes that ended up with no evidence record, so none reaches its deadline unanswered
 sync_stuck_purchases:
   cron: "0 */6 * * *" # Every 6 hours
   class: SyncStuckPurchasesJob
