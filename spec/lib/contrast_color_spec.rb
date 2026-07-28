@@ -35,8 +35,18 @@ describe ContrastColor do
       expect(described_class.for("  #19ff1d  ")).to eq("#000000")
     end
 
+    it "handles the 3-digit hex form the same way as its 6-digit equivalent" do
+      # The colour column is only validated on normal saves, so `update_attribute` and friends can
+      # store a 3-digit value — and the SCSS `lightness()` this replaced understood that form. If
+      # it fell through to the invalid-value fallback, a black background would silently get black
+      # text on it.
+      expect(described_class.for("#000")).to eq(described_class.for("#000000")).and eq("#ffffff")
+      expect(described_class.for("#fff")).to eq(described_class.for("#ffffff")).and eq("#000000")
+      expect(described_class.for("#f0a")).to eq(described_class.for("#ff00aa"))
+    end
+
     it "falls back to black rather than raising on a value that isn't a hex colour" do
-      ["", nil, "red", "#fff", "#gggggg", "#19ff1d; }"].each do |invalid|
+      ["", nil, "red", "#ffff", "#gggggg", "#19ff1d; }"].each do |invalid|
         expect(described_class.for(invalid)).to eq("#000000")
       end
     end

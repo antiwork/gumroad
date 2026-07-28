@@ -76,12 +76,19 @@ module ContrastColor
     (lighter + 0.05) / (darker + 0.05)
   end
 
-  # Returns [r, g, b] with each channel 0-255, or nil if the value isn't a #rrggbb hex colour.
+  # Returns [r, g, b] with each channel 0-255, or nil if the value isn't a hex colour.
+  #
+  # Both the 6-digit (#rrggbb) and 3-digit (#rgb) forms are accepted. The 3-digit form matters
+  # because the column is only validated on normal saves — `update_attribute`, `update_column` and
+  # raw SQL all bypass that — and the SCSS `lightness()` function this replaced understood 3-digit
+  # hex natively. Rejecting it here would have quietly changed the colour on any row holding one.
   def self.parse(hex_color)
     value = hex_color.to_s.strip
-    return nil unless value.match?(/\A#[0-9a-f]{6}\z/i)
+    return [value[1, 2], value[3, 2], value[5, 2]].map { _1.to_i(16) } if value.match?(/\A#[0-9a-f]{6}\z/i)
+    # In the 3-digit form each digit is doubled, so #f0a means the same colour as #ff00aa.
+    return value[1..].chars.map { (_1 * 2).to_i(16) } if value.match?(/\A#[0-9a-f]{3}\z/i)
 
-    [value[1, 2], value[3, 2], value[5, 2]].map { _1.to_i(16) }
+    nil
   end
 
   private_class_method :parse
