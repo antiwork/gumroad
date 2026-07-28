@@ -3674,10 +3674,17 @@ class Purchase < ApplicationRecord
     # the combined charge amount; this purchase takes its own share by index.
     #
     # The weights are canonical US dollar cents while the amounts being split come from the
-    # processor and may be in the buyer's currency on a presentment charge. That mismatch is
-    # harmless because the weights are only ever used as a ratio against each other. It is
-    # also not currently exercised: buyer-currency charges are single-purchase today, so a
-    # presentment charge does not reach the combined-charge split at all.
+    # processor and may be in the buyer's currency on a buyer-currency (presentment) charge.
+    # That mismatch is harmless because the weights are only ever used as a ratio against each
+    # other: each weight is a purchase's canonical total and the divisor is the charge's
+    # canonical total, so the ratio carries no denomination of its own and applying it to a
+    # buyer-currency amount is correct. The split also preserves whatever currency the
+    # combined flow of funds arrived in, rather than relabelling it as dollars.
+    #
+    # This is load-bearing, not theoretical. A multi-item cart from one seller is a single
+    # buyer-currency charge covering several purchases (Charge::PresentmentAllocator splits the
+    # presentment total across them), and every checkout purchase is part of a combined charge,
+    # so those purchases do reach this split with buyer-currency amounts.
     transaction_weights = charge_purchases.map(&:total_transaction_cents)
     gumroad_weights = charge_purchases.map(&:total_transaction_amount_for_gumroad_cents)
     seller_weights = charge_purchases.map { |purchase| purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents }

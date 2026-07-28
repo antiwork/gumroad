@@ -71,8 +71,9 @@ class Charge < ApplicationRecord
       # and the weight total only have to share a denomination with each other, not with the
       # fee being split. They do: both are canonical US dollar cents. The result is a pure
       # ratio, which is why this stays correct on a buyer-currency (presentment) charge whose
-      # processor fee arrives in the buyer's currency. The fee's own currency is preserved on
-      # the stored column rather than inferred from these numbers.
+      # processor fee arrives in the buyer's currency. The fee's own currency is recorded on
+      # the charge's `processor_fee_currency` column by the processor-details sync that calls
+      # this method, rather than being inferred from these numbers.
       allocated_fees = self.class.allocate_by_largest_remainder(
         processor_fee_cents,
         purchases.map(&:total_transaction_cents),
