@@ -18,40 +18,48 @@ class SalesRelatedProductsInfo < ApplicationRecord
     retry
   end
 
+  # How many (smaller_product_id, larger_product_id) pairs a single statement may touch.
+  # Keeping statements small matters beyond the primary: production replicates with
+  # binlog_format = MIXED, so a deterministic multi-row statement is re-executed verbatim
+  # on every replica by a single applier thread. One oversized statement once stalled
+  # replication for hours (see gumroad-private#1353), which is why this path was disabled.
+  UPDATE_SALES_COUNTS_SLICE_SIZE = 100
+
   def self.update_sales_counts(product_id:, related_product_ids:, increment:)
     return if related_product_ids.empty?
     raise ArgumentError, "product_id must be an integer" unless product_id.is_a?(Integer)
     raise ArgumentError, "related_product_ids must be an array of integers" unless related_product_ids.all? { _1.is_a?(Integer) }
 
-    now_string = %("#{Time.current.to_fs(:db)}")
+    now_string = connection.quote(Time.current.to_fs(:db))
+    # A pair we've never seen starts at 1 for an increment. For a decrement (e.g. a refund)
+    # it starts at 0, not -1: a refund for a pair we never counted means the pair simply has
+    # no sales. This mirrors what the previous read-then-update-then-insert code did.
+    new_row_sales_count = increment ? 1 : 0
     sales_count_change = increment ? 1 : -1
 
-    # Update existing
-    larger_ids, smaller_ids = related_product_ids.partition { _1 > product_id }
-    existing = where(smaller_product_id: product_id, larger_product_id: larger_ids)
-      .or(where(smaller_product_id: smaller_ids, larger_product_id: product_id))
-      .pluck(:id, :smaller_product_id, :larger_product_id)
+    # Deduplicate before upserting: a duplicate id in the input must not double-count.
+    # The old implementation got this for free (a second INSERT IGNORE for the same pair
+    # was a no-op), so we preserve that behavior explicitly here.
+    ids = related_product_ids.uniq - [product_id]
 
-    where(id: existing.map(&:first))
-      .in_batches(of: 1_000)
-      .update_all("sales_count = sales_count + #{sales_count_change}, updated_at = #{now_string}")
+    # A single upsert per slice replaces the old SELECT ids -> UPDATE ... WHERE id IN (...)
+    # -> INSERT IGNORE sequence. The upsert is keyed off the unique index on
+    # (smaller_product_id, larger_product_id), which closes the read-then-write race and,
+    # more importantly, removes the unbounded `id IN (...)` UPDATE whose replication cost
+    # is what got this collection path disabled (gumroad-private#1353 / #1406).
+    ids.each_slice(UPDATE_SALES_COUNTS_SLICE_SIZE) do |ids_slice|
+      values_sql = ids_slice.map do |related_product_id|
+        smaller_id, larger_id = [product_id, related_product_id].minmax
+        "(#{smaller_id}, #{larger_id}, #{new_row_sales_count}, #{now_string}, #{now_string})"
+      end.join(", ")
 
-    # Insert remaining
-    remaining = related_product_ids - existing.map { [_2, _3] }.flatten.uniq - [product_id]
-    return if remaining.empty?
-
-    new_sales_count = increment ? 1 : 0
-    remaining.each_slice(100) do |remaining_slice|
-      inserts_sql = remaining_slice.map do |related_product_id|
-        smaller_id, larger_id = [product_id, related_product_id].sort
-        [smaller_id, larger_id, new_sales_count, now_string, now_string].join(", ")
-      end.map { "(#{_1})" }.join(", ")
-
-      query = <<~SQL
-        INSERT IGNORE INTO #{table_name} (smaller_product_id, larger_product_id, sales_count, created_at, updated_at)
-        VALUES #{inserts_sql};
+      connection.execute(<<~SQL.squish)
+        INSERT INTO #{table_name} (smaller_product_id, larger_product_id, sales_count, created_at, updated_at)
+        VALUES #{values_sql}
+        ON DUPLICATE KEY UPDATE
+          sales_count = sales_count + #{sales_count_change},
+          updated_at = VALUES(updated_at)
       SQL
-      ApplicationRecord.connection.execute(query)
     end
   end
 

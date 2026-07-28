@@ -40,6 +40,30 @@ describe UpdateSalesRelatedProductsInfosJob do
       end
     end
 
+    context "when the buyer owns more products than the per-purchase limit" do
+      it "only counts the most recently purchased products and bounds the fan-out" do
+        stub_const("#{described_class}::RELATED_PRODUCTS_PER_PURCHASE_LIMIT", 2)
+
+        older_product = create(:product, user: seller)
+        middle_product = create(:product, user: seller)
+        newest_product = create(:product, user: seller)
+        create(:purchase, link: older_product, email: "shared@gumroad.com")
+        create(:purchase, link: middle_product, email: "shared@gumroad.com")
+        create(:purchase, link: newest_product, email: "shared@gumroad.com")
+
+        expect do
+          described_class.new.perform(create(:purchase, link: product1, email: "shared@gumroad.com").id)
+        end.to change(SalesRelatedProductsInfo, :count).by(2)
+
+        # only the 2 most recent purchases are paired with the new sale; older ones are skipped
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, newest_product.id).sales_count).to eq(1)
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, middle_product.id).sales_count).to eq(1)
+
+        # cache-refresh fan-out is capped too: purchased product + 2 related, not N+1
+        expect(UpdateCachedSalesRelatedProductsInfosJob.jobs.count).to eq(3)
+      end
+    end
+
     context "when a SalesRelatedProductsInfo record doesn't exist" do
       it "creates a SalesRelatedProductsInfo record with sales_count set to 1" do
         expect do

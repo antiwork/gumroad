@@ -53,6 +53,50 @@ describe SalesRelatedProductsInfo do
       # created record
       expect(described_class.find_by(smaller_product: products[1], larger_product: products[4]).sales_count).to eq(0)
     end
+
+    it "does not double-count duplicate related product ids" do
+      products = create_list(:product, 2)
+
+      described_class.update_sales_counts(product_id: products[0].id, related_product_ids: [products[1].id, products[1].id], increment: true)
+
+      expect(described_class.find_by(smaller_product: products[0], larger_product: products[1]).sales_count).to eq(1)
+    end
+
+    it "ignores the product's own id in related_product_ids" do
+      products = create_list(:product, 2)
+
+      expect do
+        described_class.update_sales_counts(product_id: products[0].id, related_product_ids: [products[0].id, products[1].id], increment: true)
+      end.to change(described_class, :count).by(1)
+
+      expect(described_class.find_by(smaller_product: products[0], larger_product: products[1]).sales_count).to eq(1)
+    end
+
+    it "bounds each SQL statement to UPDATE_SALES_COUNTS_SLICE_SIZE pairs" do
+      stub_const("#{described_class}::UPDATE_SALES_COUNTS_SLICE_SIZE", 2)
+      products = create_list(:product, 6)
+      create(:sales_related_products_info, smaller_product: products[0], larger_product: products[1], sales_count: 5)
+
+      insert_statements = []
+      original_execute = described_class.connection.method(:execute)
+      allow(described_class.connection).to receive(:execute) do |sql, *args|
+        insert_statements << sql if sql.include?("ON DUPLICATE KEY UPDATE")
+        original_execute.call(sql, *args)
+      end
+
+      described_class.update_sales_counts(product_id: products[0].id, related_product_ids: products.drop(1).map(&:id), increment: true)
+
+      # 5 related products with a slice size of 2 => 3 statements, none carrying more than 2 row tuples
+      expect(insert_statements.size).to eq(3)
+      rows_per_statement = insert_statements.map { |sql| sql.scan(/\(\d+, \d+, \d+,/).size }
+      expect(rows_per_statement).to eq([2, 2, 1])
+
+      # existing row incremented, new rows created at 1 — the upsert handles both in one statement
+      expect(described_class.find_by(smaller_product: products[0], larger_product: products[1]).sales_count).to eq(6)
+      products.drop(2).each do |related_product|
+        expect(described_class.find_by(smaller_product: products[0], larger_product: related_product).sales_count).to eq(1)
+      end
+    end
   end
 
   describe ".related_products" do
