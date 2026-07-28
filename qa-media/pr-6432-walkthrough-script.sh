@@ -1,6 +1,9 @@
 #!/bin/bash
+set -euo pipefail
+
 export TERM=xterm-256color GIT_PAGER=cat PAGER=cat
-cd /tmp/gr-1413-embeds
+cd "$(git rev-parse --show-toplevel)"
+base_ref="${1:-origin/main}"
 
 printf "%b\n" "=== gp#1413 — a pre-#5416 cross-product fileEmbed permanently blocks every save ==="
 sleep 1
@@ -12,23 +15,31 @@ printf "%b\n" "embed renders as nothing, so the seller has no node to remove and
 sleep 2
 printf "%b\n" ""
 printf "%b\n" "--- The validation as it stands on main ---"
-git --no-pager show origin/main:app/models/rich_content.rb | sed -n '255,270p'
+git --no-pager show "$base_ref":app/models/rich_content.rb | sed -n '/def embedded_files_belong_to_product/,/^    end$/p'
 sleep 2
 
 printf "%b\n" ""
 printf "%b\n" "=== The change ==="
-git --no-pager diff --stat
+git --no-pager diff --stat "$base_ref"...HEAD
 sleep 1
 printf "%b\n" ""
-git --no-pager diff -- app/models/rich_content.rb
+git --no-pager diff "$base_ref"...HEAD -- app/models/rich_content.rb
 sleep 2
 
 printf "%b\n" ""
-printf "%b\n" "=== Reproducing the seller's dead end, then the fix, on real records ==="
+printf "%b\n" "=== Reproducing the seller's dead end, then the fix, on persisted records ==="
 printf "%b\n" "(product A owns a file, B embeds it, the file is soft-deleted -> B is unsaveable)"
 sleep 1
 bundle exec rspec spec/models/rich_content_spec.rb \
   -e "when the foreign file has been soft-deleted" \
+  --format documentation --no-profile 2>&1 \
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+sleep 2
+
+printf "%b\n" ""
+printf "%b\n" "=== Variant API round trip also removes the stale file link ==="
+bundle exec rspec spec/controllers/api/v2/variants_controller_spec.rb \
+  -e "removes a soft-deleted foreign embed and its stale variant file link" \
   --format documentation --no-profile 2>&1 \
   | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2

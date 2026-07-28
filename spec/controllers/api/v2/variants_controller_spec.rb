@@ -437,6 +437,36 @@ describe Api::V2::VariantsController do
           expect(response.parsed_body["message"]).to include("not belonging to this product")
         end
 
+        it "removes a soft-deleted foreign embed and its stale variant file link" do
+          own_file = create(:product_file, link: @product)
+          Aws::S3::Resource.new.bucket(S3_BUCKET).object(own_file.s3_key).put(body: "test content")
+          foreign_product = create(:product, user: @user)
+          dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+          own_embed = { "type" => "fileEmbed", "attrs" => { "id" => own_file.external_id, "uid" => SecureRandom.uuid } }
+          dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+          rich_content = create(:rich_content, entity: @variant, title: "Page", description: [own_embed])
+          rich_content.update_column(:description, [own_embed, dead_foreign_embed])
+          @variant.product_files << [own_file, dead_foreign_file]
+
+          put @action, params: @params.merge(
+            rich_content: [
+              {
+                id: rich_content.external_id,
+                title: "Updated page",
+                description: { type: "doc", content: [
+                  own_embed,
+                  dead_foreign_embed,
+                  { type: "paragraph", content: [{ type: "text", text: "Edit" }] }
+                ] }
+              }
+            ]
+          )
+
+          expect(response.parsed_body["success"]).to eq true
+          expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+          expect(@variant.reload.product_files.pluck(:id)).to eq([own_file.id])
+        end
+
         it "rejects file embeds referencing deleted files" do
           deleted_file = create(:product_file, link: @product)
           deleted_file.mark_deleted!

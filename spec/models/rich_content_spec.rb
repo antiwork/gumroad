@@ -77,7 +77,7 @@ describe RichContent do
   describe "rejecting cross-product file embeds" do
     let(:product) { create(:product) }
     let(:own_file) { create(:product_file, link: product) }
-    let(:foreign_file) { create(:product_file, link: create(:product)) }
+    let(:foreign_file) { create(:product_file, link: create(:product, user: product.user)) }
 
     def embed(file)
       { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
@@ -91,6 +91,17 @@ describe RichContent do
       # obfuscated id, which is not visible anywhere in the seller's UI.
       expect(rich_content.errors.full_messages.first).to include(foreign_file.name_displayable)
       expect(rich_content.errors.full_messages.first).to include(foreign_file.link.name)
+    end
+
+    it "does not expose another seller's file or product names" do
+      other_product = create(:product, name: "Private product")
+      other_seller_file = create(:product_file, link: other_product, display_name: "Private file")
+      rich_content = build(:product_rich_content, entity: product, description: [embed(other_seller_file)])
+
+      expect(rich_content).to be_invalid
+      expect(rich_content.errors.full_messages.first).to include(other_seller_file.external_id)
+      expect(rich_content.errors.full_messages.first).not_to include(other_seller_file.name_displayable)
+      expect(rich_content.errors.full_messages.first).not_to include(other_product.name)
     end
 
     it "rejects a variant's content embedding a file owned by another product" do
@@ -162,15 +173,18 @@ describe RichContent do
 
       it "still rejects an ALIVE foreign embed on the same page" do
         # Only dead embeds are safe to drop silently. An alive foreign file is
-        # visible to the seller and may be content they meant to deliver, so it
-        # stays a validation failure rather than being deleted for them.
-        alive_foreign_file = create(:product_file, link: create(:product))
+        # still content the seller may have meant to include, so it stays a
+        # validation failure rather than being deleted for them.
+        alive_foreign_file = create(:product_file, link: create(:product, user: product.user))
         rich_content = persist_with_foreign_embed([embed(dead_foreign_file), embed(alive_foreign_file)])
 
         rich_content.description = [embed(dead_foreign_file), embed(alive_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit" }] }]
         expect(rich_content.save).to be(false)
         expect(rich_content.errors.full_messages.first).to include(alive_foreign_file.name_displayable)
         expect(rich_content.errors.full_messages.first).not_to include(dead_foreign_file.name_displayable)
+        # The callback may clean the in-memory candidate, but a rejected save must
+        # not persist a partial cleanup.
+        expect(rich_content.reload.embedded_product_file_ids_in_order).to match_array([dead_foreign_file.id, alive_foreign_file.id])
       end
 
       it "drops the dead embed for a variant's content page too" do
