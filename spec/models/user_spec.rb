@@ -2966,6 +2966,68 @@ describe User, :vcr do
     end
   end
 
+  describe "#paypal_disconnect_removes_payout_rail?" do
+    it "returns true when the connected PayPal account is the seller's only payout method" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(true)
+    end
+
+    it "returns false when no PayPal account is connected" do
+      expect(create(:user, payment_address: nil).paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+
+    it "returns false when the seller has a PayPal payout email saved" do
+      creator = create(:user, payment_address: "payouts@example.com")
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+
+    it "returns false when the seller has a bank account" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+      create(:ach_account, user: creator)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+
+    it "returns false when the seller has a Stripe Connect account" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+      create(:merchant_account_stripe_connect, user: creator)
+      allow(creator).to receive(:merchant_migration_enabled?).and_return(true)
+
+      expect(creator.paypal_disconnect_removes_payout_rail?).to be(false)
+    end
+  end
+
+  describe "#paypal_disconnect_blocks_publishing?" do
+    it "returns true when the connected PayPal account is also the only thing letting them publish" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_blocks_publishing?).to be(true)
+    end
+
+    it "returns false when the seller has a Gumroad-managed Stripe account, which still allows publishing" do
+      creator = create(:user, payment_address: nil)
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+      create(:merchant_account, user: creator)
+
+      expect(creator.reload.paypal_disconnect_removes_payout_rail?).to be(true)
+      expect(creator.paypal_disconnect_blocks_publishing?).to be(false)
+    end
+
+    it "returns false when the payout rail is not at risk in the first place" do
+      creator = create(:user, payment_address: "payouts@example.com")
+      create(:merchant_account_paypal, user: creator, charge_processor_verified_at: Time.current)
+
+      expect(creator.reload.paypal_disconnect_blocks_publishing?).to be(false)
+    end
+  end
+
   describe "#stripe_account" do
     it "returns the custom stripe connect account which is managed by gumroad if present" do
       creator = create(:user)
