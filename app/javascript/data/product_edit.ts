@@ -1,4 +1,5 @@
 import { Editor, findChildren } from "@tiptap/core";
+import { EditorState, Transaction } from "@tiptap/pm/state";
 import typia from "typia";
 
 import { buildDeletionOperations } from "$app/data/product_save_contract";
@@ -18,6 +19,10 @@ export type SaveProductResponse = {
   // server's content deletion guard and duplicates variants).
   variant_id_mappings?: Record<string, string>;
   rich_content_id_mappings?: Record<string, string>;
+  // Canonical page id → file external ids removed while repairing legacy
+  // content. The editor removes the same invisible nodes from its live state,
+  // otherwise its next save would resubmit them as newly introduced embeds.
+  rich_content_removed_file_embed_ids?: Record<string, string[]>;
   // Canonical external id → fresh post-save snapshot timestamp for every
   // alive page/variant. The editor adopts these so its next save echoes the
   // timestamps this save produced — otherwise the second save of a session
@@ -73,6 +78,250 @@ export const filesForSave = <T extends { id: string }>(
   keepAllFiles: boolean,
 ) => (keepAllFiles ? files : files.filter((file) => embeddedFileIds.has(file.id)));
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+const stripUpsellIds = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(stripUpsellIds);
+  if (!isRecord(value)) return value;
+
+  const cloned = { ...value };
+  if (cloned.type === "upsellCard" && isRecord(cloned.attrs)) {
+    cloned.attrs = { ...cloned.attrs, id: null };
+  }
+  if ("content" in cloned) cloned.content = stripUpsellIds(cloned.content);
+  return cloned;
+};
+
+export const copyRichContentPages = (
+  pages: Product["rich_content"],
+  generateId: () => string,
+  updatedAt = new Date().toISOString(),
+): Product["rich_content"] =>
+  pages.map((page) => {
+    const stripped = stripUpsellIds(page.description);
+    const sourceId = page.source_id ?? (page.newlyAdded ? undefined : page.id);
+    return {
+      id: generateId(),
+      newlyAdded: true,
+      ...(sourceId ? { source_id: sourceId } : {}),
+      ...(page.newlyAdded ? { copy_parent_id: page.id } : {}),
+      title: page.title,
+      description: stripped !== null && typeof stripped === "object" ? stripped : page.description,
+      updated_at: updatedAt,
+    };
+  });
+
+const hasMoveSourceScope = (page: Product["rich_content"][number]) =>
+  Object.prototype.hasOwnProperty.call(page, "move_source_scope");
+
+// Moves pages between the shared scope (null) and a version scope (its id).
+// The marker records explicit user intent without authorising a deletion yet:
+// reversing the toggle cancels it, while a save turns move_source_id into the
+// exact source-row deletion. A page that has never been saved has no source
+// row, so it records the scope transition but not a deletion id.
+export const prepareRichContentPagesForMove = (
+  pages: Product["rich_content"],
+  sourceScope: string | null,
+  destinationScope: string | null,
+): Product["rich_content"] =>
+  pages.map((page) => {
+    const moved = { ...page };
+    if (hasMoveSourceScope(page) && page.move_source_scope === destinationScope) {
+      const moveSourceId = moved.move_source_id;
+      delete moved.move_source_scope;
+      delete moved.move_source_id;
+      if (moveSourceId && moved.source_id === moveSourceId) delete moved.source_id;
+      return moved;
+    }
+
+    if (!hasMoveSourceScope(page)) {
+      moved.move_source_scope = sourceScope;
+      if (!moved.newlyAdded) {
+        moved.move_source_id = moved.id;
+        moved.source_id = moved.id;
+      }
+    }
+    return moved;
+  });
+
+export const richContentMoveSourceIds = (product: Pick<Product, "rich_content" | "variants">): string[] => [
+  ...new Set(
+    [...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)].flatMap((page) =>
+      page.move_source_id ? [page.move_source_id] : [],
+    ),
+  ),
+];
+
+export const removedFileEmbedIdsForPage = (
+  page: Product["rich_content"][number] | undefined,
+  removedIdsByPage: Record<string, string[]>,
+): string[] | undefined =>
+  page ? (removedIdsByPage[page.id] ?? (page.source_id ? removedIdsByPage[page.source_id] : undefined)) : undefined;
+
+export const reconcileConfirmedRemovalIds = (
+  currentIds: string[],
+  sentIds: ReadonlySet<string>,
+  idMappings: Record<string, string> | undefined,
+): string[] => [...new Set(currentIds.filter((id) => !sentIds.has(id)).map((id) => idMappings?.[id] ?? id))];
+
+export const resolveServerIdMapping = (id: string, idMappings: Record<string, string>): string => {
+  let resolved = id;
+  const seen = new Set<string>();
+  while (!seen.has(resolved)) {
+    const next = idMappings[resolved];
+    if (!next) break;
+    seen.add(resolved);
+    resolved = next;
+  }
+  return resolved;
+};
+
+export const canonicalRichContentScope = (
+  scope: string | null | undefined,
+  variantIdMappings: Record<string, string>,
+): string | null | undefined => (typeof scope === "string" ? (variantIdMappings[scope] ?? scope) : scope);
+
+export const applyRichContentPageSaveResponse = (
+  page: Product["rich_content"][number],
+  response: SaveProductResponse,
+  sentPage: Product["rich_content"][number] = page,
+  currentScope?: string | null,
+  sentScope?: string | null,
+): void => {
+  const originalId = page.id;
+  const wasNewlyAdded = page.newlyAdded;
+  const currentMoveWasSent =
+    hasMoveSourceScope(page) &&
+    hasMoveSourceScope(sentPage) &&
+    page.move_source_scope === sentPage.move_source_scope &&
+    page.move_source_id === sentPage.move_source_id;
+  const hasScopeContext = currentScope !== undefined && sentScope !== undefined;
+  const movedAfterRequest = hasScopeContext && currentScope !== sentScope;
+  const mappedSourceId = page.source_id ? response.rich_content_id_mappings?.[page.source_id] : undefined;
+  if (mappedSourceId) page.source_id = mappedSourceId;
+  const mappedCopyParentId = page.copy_parent_id ? response.rich_content_id_mappings?.[page.copy_parent_id] : undefined;
+  if (mappedCopyParentId) {
+    page.source_id = mappedCopyParentId;
+    delete page.copy_parent_id;
+  }
+  const mappedMoveSourceId = page.move_source_id ? response.rich_content_id_mappings?.[page.move_source_id] : undefined;
+  if (mappedMoveSourceId) page.move_source_id = mappedMoveSourceId;
+  const mappedMoveSourceScope =
+    typeof page.move_source_scope === "string" ? response.variant_id_mappings?.[page.move_source_scope] : undefined;
+  if (mappedMoveSourceScope) page.move_source_scope = mappedMoveSourceScope;
+  const canonicalId = response.rich_content_id_mappings?.[originalId];
+  if (canonicalId) {
+    page.id = canonicalId;
+    delete page.newlyAdded;
+    if (movedAfterRequest) {
+      // This response committed the page in sentScope, but the seller moved it
+      // again while the request was running. The row just created is now the
+      // exact source the next save must remove.
+      page.move_source_scope = sentScope;
+      page.move_source_id = canonicalId;
+      page.source_id = canonicalId;
+      delete page.copy_parent_id;
+    } else if (hasScopeContext || currentMoveWasSent) {
+      // This response committed the destination and deleted its source.
+      // Matching owner scopes also cover a toggle away and back while the save
+      // ran: the canonical row already exists in the final scope, so no
+      // follow-up move remains.
+      delete page.move_source_scope;
+      delete page.move_source_id;
+      delete page.source_id;
+      delete page.copy_parent_id;
+    } else if (hasMoveSourceScope(page) && wasNewlyAdded) {
+      // The page was created in its original scope by this request, then moved
+      // while the request was in flight. Its canonical id is now the source
+      // the next save must delete.
+      page.move_source_id = canonicalId;
+      page.source_id = canonicalId;
+      delete page.copy_parent_id;
+    } else if (page.source_id === sentPage.source_id) {
+      // A copied page's source id is temporary proof for this creation. Clear
+      // it only when the completed request carried the same proof; an in-flight
+      // copy or move must keep its own provenance for the next save.
+      delete page.source_id;
+      delete page.copy_parent_id;
+    }
+  }
+
+  const removedIds = removedFileEmbedIdsForPage(page, response.rich_content_removed_file_embed_ids ?? {});
+  if (removedIds?.length) {
+    page.description = removeFileEmbedsFromRichContent(page.description, new Set(removedIds));
+  }
+  const timestamp = response.rich_content_updated_at?.[page.id];
+  if (timestamp) page.updated_at = timestamp;
+};
+
+const removeFileEmbeds = (value: unknown, fileIds: Set<string>): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((child) => removeFileEmbeds(child, fileIds)).filter((child) => child !== null);
+  }
+  if (!isRecord(value)) return value;
+
+  if (
+    value.type === "fileEmbed" &&
+    isRecord(value.attrs) &&
+    typeof value.attrs.id === "string" &&
+    fileIds.has(value.attrs.id)
+  ) {
+    return null;
+  }
+
+  if (!Array.isArray(value.content)) return value;
+
+  const content = value.content.map((child) => removeFileEmbeds(child, fileIds)).filter((child) => child !== null);
+  if (value.type === "fileEmbedGroup" && content.length === 0) return null;
+
+  return { ...value, content };
+};
+
+export const removeFileEmbedsFromRichContent = (description: object, fileIds: Set<string>): object => {
+  const cleaned = removeFileEmbeds(description, fileIds);
+  return isRecord(cleaned) ? cleaned : description;
+};
+
+export const buildRichContentReconciliationTransaction = (
+  state: EditorState,
+  removedFileIds: Set<string>,
+): Transaction => {
+  const deletions: { from: number; to: number }[] = [];
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === "fileEmbedGroup") {
+      const removeWholeGroup =
+        node.childCount > 0 &&
+        Array.from({ length: node.childCount }, (_, index) => node.child(index)).every(
+          (child) => child.type.name === FileEmbed.name && removedFileIds.has(String(child.attrs.id)),
+        );
+      if (removeWholeGroup) {
+        deletions.push({ from: pos, to: pos + node.nodeSize });
+        return false;
+      }
+    }
+
+    if (node.type.name === FileEmbed.name && removedFileIds.has(String(node.attrs.id))) {
+      deletions.push({ from: pos, to: pos + node.nodeSize });
+      return false;
+    }
+
+    return true;
+  });
+
+  const transaction = state.tr;
+  for (const deletion of deletions.sort((left, right) => right.from - left.from)) {
+    transaction.delete(deletion.from, deletion.to);
+  }
+  transaction.setMeta("addToHistory", false);
+  transaction.setMeta("preventUpdate", true);
+  return transaction;
+};
+
+export const reconcileMountedEditorFileEmbeds = (editor: Editor, removedFileIds: string[]): void => {
+  const transaction = buildRichContentReconciliationTransaction(editor.state, new Set(removedFileIds));
+  if (transaction.docChanged) editor.view.dispatch(transaction);
+};
+
 export const saveProduct = async (
   permalink: string,
   id: string,
@@ -124,6 +373,11 @@ export const saveProduct = async (
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       preserved_rich_content_ids: product.preserved_rich_content_ids ?? [],
+      // Lets the server distinguish this provenance-aware payload from a save
+      // sent by an editor tab that was already open when provenance shipped.
+      // The compatibility path for those older tabs can then stay narrow and
+      // disappear once no such sessions remain.
+      rich_content_provenance_version: 1,
       // The save contract (gumroad-private#1379). Sent on every save; the
       // server ignores both unless the :product_editor_save_contract flag is on
       // for this seller, so this is inert until the rollout enables it.
