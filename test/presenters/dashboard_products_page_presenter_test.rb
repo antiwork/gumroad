@@ -23,7 +23,11 @@ require "test_helper"
 # RSpec's stub_const so that a handful of products spans several pages; the
 # Minitest equivalent is with_const_on (test/support/constant_stubbing_helpers).
 class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
-  include Rails.application.routes.url_helpers
+  # Route helpers come from ModelFactories#routes, NOT from
+  # `include Rails.application.routes.url_helpers` — that include defines
+  # `test_pings_path`/`test_pings_url` (config/routes.rb has a test_pings
+  # resource), and Minitest runs every method matching /^test_/ as a test, so
+  # the class silently gains two always-passing zero-assertion tests.
 
   setup do
     @seller = users(:named_seller)
@@ -109,7 +113,7 @@ class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
     assert_props({
                    "id" => product.id,
                    "name" => "normal_product",
-                   "edit_url" => edit_link_path(product),
+                   "edit_url" => routes.edit_link_path(product),
                    "is_duplicating" => false,
                    "is_unpublished" => false,
                    "permalink" => product.unique_permalink,
@@ -183,7 +187,7 @@ class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
     assert_props({
                    "id" => membership.id,
                    "name" => "normal_membership",
-                   "edit_url" => edit_link_path(membership),
+                   "edit_url" => routes.edit_link_path(membership),
                    "is_duplicating" => false,
                    "is_unpublished" => false,
                    "permalink" => membership.unique_permalink,
@@ -401,7 +405,7 @@ class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
     assert_props({
                    "id" => archived_product.id,
                    "name" => "archived_product",
-                   "edit_url" => edit_link_path(archived_product),
+                   "edit_url" => routes.edit_link_path(archived_product),
                    "is_duplicating" => archived_product.is_duplicating?,
                    "is_unpublished" => archived_product.draft? || archived_product.purchase_disabled_at?,
                    "permalink" => archived_product.unique_permalink,
@@ -461,7 +465,7 @@ class DashboardProductsPagePresenterTest < ActiveSupport::TestCase
     assert_props({
                    "id" => archived_membership.id,
                    "name" => "archived_membership",
-                   "edit_url" => edit_link_path(archived_membership),
+                   "edit_url" => routes.edit_link_path(archived_membership),
                    "is_duplicating" => archived_membership.is_duplicating?,
                    "is_unpublished" => archived_membership.draft? || archived_membership.purchase_disabled_at?,
                    "permalink" => archived_membership.unique_permalink,
