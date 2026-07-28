@@ -148,6 +148,25 @@ module ModelFactories
     product
   end
 
+  # A pay-what-you-want tiered membership (mirrors
+  # :membership_product_with_preset_tiered_pwyw_pricing): both tiers priced at
+  # $500 with a $600 suggested price across every recurrence, and the first tier
+  # accepting a custom price.
+  def create_membership_product_with_preset_tiered_pwyw_pricing(user: nil, **attrs)
+    product = create_membership_product(user:, **attrs)
+    tier_category = product.tier_category
+    first_tier = tier_category.variants.first
+    first_tier.update!(name: "First Tier", customizable_price: true)
+    second_tier = create_variant(variant_category: tier_category, name: "Second Tier")
+    recurrence_values = BasePrice::Recurrence.all.index_with do |_recurrence_key|
+      { enabled: true, price: "500", suggested_price: "600" }
+    end
+    first_tier.save_recurring_prices!(recurrence_values)
+    second_tier.save_recurring_prices!(recurrence_values)
+    product.tiers.reload
+    product
+  end
+
   # A physical product (mirrors the :is_physical trait): shipping + a default SKU.
   def create_physical_product(user: nil, **attrs)
     product = create_product(user:, **attrs)
