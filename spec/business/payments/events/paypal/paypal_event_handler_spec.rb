@@ -31,7 +31,10 @@ describe PaypalEventHandler do
     context "when event is from paypal legacy API" do
       let(:event_info) { { "txn_type" => "masspay" } }
 
-      it do
+      # Frozen because the assertion checks the exact time the job is scheduled for, and the
+      # matcher truncates both that time and its own expected time to whole seconds — so a
+      # clock tick across a second boundary in between fails the test at random.
+      it "schedules the event for processing ten minutes out", :freeze_time do
         described_class.new(event_info).schedule_paypal_event_processing
         expect(HandlePaypalEventWorker).to have_enqueued_sidekiq_job(event_info).in(10.minutes)
       end
