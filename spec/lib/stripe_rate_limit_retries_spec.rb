@@ -58,6 +58,17 @@ describe "Stripe rate-limit retries in the test environment" do
       expect(Stripe::StripeClient.should_retry?(error, num_retries: Stripe.max_network_retries)).to be false
     end
 
+    it "does not retry a rate limit that came out of a VCR cassette" do
+      # A dozen cassettes in spec/support/fixtures replay a recorded 429. There
+      # is no live Stripe to back off from there, and a retry would ask VCR for
+      # an interaction it has already played, which raises.
+      error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+
+      VCR.use_cassette("stripe_rate_limit_retries_guard", record: :none, allow_unused_http_interactions: true) do
+        expect(Stripe::StripeClient.should_retry?(error, num_retries: 0)).to be_falsey
+      end
+    end
+
     it "does not retry unrelated Stripe errors" do
       card_error = Stripe::CardError.new("Your card was declined", "number", http_status: 402)
       bad_request = stripe_error(Stripe::InvalidRequestError, "No such customer", status: 400)
@@ -75,6 +86,13 @@ describe "Stripe rate-limit retries in the test environment" do
   end
 
   describe "the retry budget" do
+    it "allows six attempts capped at four seconds each" do
+      # Pinned literally rather than read back from Stripe's config, so that
+      # changing the budget has to change this spec deliberately.
+      expect(Stripe.max_network_retries).to eq(6)
+      expect(Stripe.max_network_retry_delay).to eq(4)
+    end
+
     it "keeps the worst-case wait to well under half a minute" do
       # The helper this replaced could sleep ~134s inside one example. Sum the
       # gem's own backoff schedule to prove the replacement cannot.

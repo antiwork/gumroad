@@ -40,7 +40,7 @@ module StripeTestRateLimitRetries
   RATE_LIMIT_MESSAGE = /rate limit|too many requests|creating accounts too quickly/i
 
   def should_retry?(error, num_retries:, config: Stripe.config)
-    return true if num_retries < config.max_network_retries && rate_limited?(error)
+    return true if num_retries < config.max_network_retries && rate_limited?(error) && !replaying_a_cassette?
 
     super
   end
@@ -55,6 +55,19 @@ module StripeTestRateLimitRetries
       else
         false
       end
+    end
+
+    # Under VCR there is no live Stripe to back off from: the 429 came out of a
+    # recorded cassette, and a dozen cassettes in spec/support/fixtures do
+    # contain one. Retrying would sleep for nothing and then ask VCR for an
+    # interaction it has already played, which raises instead of replaying. The
+    # helper this file replaces had the same guard, for the same reason.
+    def replaying_a_cassette?
+      defined?(VCR) && VCR.current_cassette.present?
+    rescue StandardError
+      # If VCR itself cannot answer, assume a cassette is in play: declining to
+      # retry only restores the Stripe gem's own default behaviour.
+      true
     end
 end
 
