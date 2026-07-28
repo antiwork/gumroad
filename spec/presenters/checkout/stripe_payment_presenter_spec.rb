@@ -859,6 +859,55 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
+  # A membership cart line with no tier recorded must not fall back to the product-wide tier scan.
+  # Link#has_customizable_price_option? answers "does ANY alive tier allow naming a price", which is
+  # exactly the product-wide question the selected-tier read exists to stop asking: an unrelated
+  # pay-what-you-want tier would speak for a line that selected none, suppress the not_charged
+  # classification, and mount the Payment Element on a checkout that charges nothing. A membership's
+  # price can only be named through a tier, so no tier means no pending amount.
+  it "still falls back to CardElement when a saved cart line on a mixed membership has no tier" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    membership.tiers.first.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    # The fixture must genuinely disagree with the (absent) line tier, or this example cannot
+    # distinguish the scoped read from the product-wide one.
+    expect(membership.has_customizable_price_option?).to be(true)
+
+    cart = create(:cart)
+    create(:cart_product, cart:, product: membership, option: nil, price: 0)
+
+    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The same rule on the add_products path, whose payload records the selected tier as option_id.
+  # A membership with no option_id must not consult the whole option list for the same reason, and
+  # must not trust the product-level pwyw field either — that column can be stale-true on a
+  # membership (see the buyer_can_name_price? comment).
+  it "still falls back to CardElement when a membership is added with no tier selected" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    membership.tiers.first.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(membership.has_customizable_price_option?).to be(true)
+    expect(membership.options.any? { _1[:is_pwyw] }).to be(true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: nil)]))
+      .to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
   # A cart mixing a free product with a pay-what-you-want one can still be paid, so the
   # presence of one free line must not drag the whole cart back to the legacy surface.
   it "keeps the Payment Element when a free line shares the cart with a pay-what-you-want line" do
