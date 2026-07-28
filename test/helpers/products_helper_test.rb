@@ -257,7 +257,14 @@ class ProductsHelperSortAndPaginateTest < ActionView::TestCase
   include RealElasticsearchBridge
 
   setup do
-    install_real_elasticsearch!([Link])
+    # Purchase is in the list even though nothing here queries it directly:
+    # indexing a Link computes total_usd_cents (Product::Searchable
+    # #build_search_property), which searches the purchases index. Without
+    # Purchase namespaced, that read goes to an unnamespaced `purchases` index —
+    # absent on CI (404 on index_model_records) and, locally, your actual
+    # development index. This is the "pass every model whose index the test can
+    # touch" rule in RealElasticsearchBridge.
+    install_real_elasticsearch!([Link, Purchase])
 
     @seller = create_recommendable_user
     # Prices ascend p1 < p3 < p2 < p4 so the price ordering differs from the
