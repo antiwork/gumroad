@@ -47,6 +47,9 @@ export const Navigation = () => (
             <a href="#thumbnails">Thumbnails</a>
           </li>
           <li>
+            <a href="#media">Media library</a>
+          </li>
+          <li>
             <a href="#variant-categories">Variant categories</a>
           </li>
           <li>
