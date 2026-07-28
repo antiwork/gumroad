@@ -563,7 +563,7 @@ class Order::PreparePaymentIntentService
     # Every other method (card, Link, the wallets) inherits whatever currency the Payment Element
     # was mounted in when the browser minted the ConfirmationToken, so the ELEMENT decides. The
     # browser tells us which currency that was (payment_element_mount_currency), and we follow it:
-    # a Element mounted in dollars gets the canonical USD intent even on a cart priced in euros,
+    # an Element mounted in dollars gets the canonical USD intent even on a cart priced in euros,
     # and an Element mounted in euros gets the euro intent. Following the browser matters because
     # the two sides compute the currency at different moments — the checkout page computes it when
     # it renders and this service recomputes it when the buyer pays — and anything feeding the
