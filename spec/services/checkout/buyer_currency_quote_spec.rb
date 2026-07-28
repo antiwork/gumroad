@@ -70,6 +70,18 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result.token).to be_present
     end
 
+    it "reports the exact rate from the locked quote when the cart is one charge" do
+      # A cart of one charge has one Stripe rate, so the browser gets that rate rather than a
+      # ratio of totals that were each already rounded to the cent. At $3.34 the ratio would be
+      # 1.2514970, and a CA$10.00 tip typed against it would store 799 canonical cents instead
+      # of 800.
+      product.update!(price_cents: 3_34)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 3_34, ip: "24.48.0.1")
+
+      expect(result.display_rate).to eq(BigDecimal("1.25"))
+    end
+
     it "signs a single-charge quote in the flat shape too, so a rollback can still verify it" do
       # The charge path this token may meet is not necessarily the one that minted it: during a
       # deploy, and for as long as a rollback is possible, it can be read by code that predates

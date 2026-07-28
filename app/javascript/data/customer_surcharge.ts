@@ -33,12 +33,14 @@ export type SurchargesResponse = {
     presentment_total_cents: number;
     // What one canonical US dollar cent is worth in the buyer's currency, used only for the
     // amounts the browser still converts itself (the discount row and the tip the buyer types).
-    // Derived by the server from the locked totals rather than from a single exchange rate,
-    // because a cart spanning several sellers locks one quote per seller and their rates need
-    // not be identical. Every amount that is actually charged comes from line_allocations.
+    // A single-seller cart reports the exact rate from its one locked quote; a cart spanning
+    // several sellers locks one quote per seller whose rates need not be identical, so it
+    // reports what the locked totals imply instead. Every amount that is actually charged comes
+    // from line_allocations.
     rate: number;
     subunit_to_unit: number;
-    // The soonest expiry among the cart's locked quotes.
+    // The soonest expiry among the cart's locked quotes. Nothing in the checkout reads this
+    // today; it is here so the response cannot overstate how long the quote is good for.
     expires_at: string;
     // The server-owned split of the locked presentment total across the request's product
     // lines, in request order, computed with the same largest-remainder rounding the charge
