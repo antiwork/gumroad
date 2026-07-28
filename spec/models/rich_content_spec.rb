@@ -104,6 +104,17 @@ describe RichContent do
       expect(rich_content.errors.full_messages.first).not_to include(other_product.name)
     end
 
+    it "does not expose the seller's other file or product names to a product collaborator" do
+      collaborator = create(:collaborator, seller: product.user, apply_to_all_products: false)
+      create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 30_00)
+      rich_content = build(:product_rich_content, entity: product, description: [embed(foreign_file)])
+
+      expect(rich_content).to be_invalid
+      expect(rich_content.errors.full_messages.first).to include(foreign_file.external_id)
+      expect(rich_content.errors.full_messages.first).not_to include(foreign_file.name_displayable)
+      expect(rich_content.errors.full_messages.first).not_to include(foreign_file.link.name)
+    end
+
     it "rejects a variant's content embedding a file owned by another product" do
       variant = create(:variant, variant_category: create(:variant_category, link: product))
       rich_content = build(:rich_content, entity: variant, description: [embed(own_file), embed(foreign_file)])
@@ -202,6 +213,23 @@ describe RichContent do
         expect(rich_content.save).to be(false)
         expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
         expect(rich_content.embedded_product_file_ids_in_order).to include(dead_foreign_file.id)
+      end
+
+      it "drops a dead embed from a new destination only with stored source provenance" do
+        source = persist_with_foreign_embed([embed(dead_foreign_file)])
+        destination = build(
+          :product_rich_content,
+          entity: product,
+          description: [embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Copied" }] }]
+        )
+
+        removed_file_ids = destination.remove_stale_dead_cross_product_file_embeds(
+          legacy_dead_file_ids: source.stored_stale_dead_cross_product_file_embed_ids
+        )
+
+        expect(removed_file_ids).to eq([dead_foreign_file.external_id])
+        expect(destination.save).to be(true)
+        expect(destination.reload.embedded_product_file_ids_in_order).to eq([])
       end
 
       it "drops the dead embed for a variant's content page too" do

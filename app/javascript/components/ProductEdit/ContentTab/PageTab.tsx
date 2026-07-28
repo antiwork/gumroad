@@ -15,6 +15,24 @@ import { Menu, MenuItem } from "$app/components/ui/Menu";
 
 export type Page = {
   id: string;
+  // Client-only until the first successful save. This distinguishes a page
+  // that has no source row yet from a stored page whose move must delete its
+  // old row.
+  newlyAdded?: boolean;
+  // Set only while copying a stored page to a new destination. The server uses
+  // it to prove that dead foreign embeds in the new page are legacy content,
+  // then the post-save reconciliation clears it.
+  source_id?: string;
+  // Client-only immediate parent for a copy made from another unsaved copy.
+  // When that parent save returns, its id mapping rebases source_id to the
+  // newly stored row.
+  copy_parent_id?: string;
+  // Client-only move intent. A scope toggle moves a page by creating a row in
+  // the destination and deleting its stored source. Keeping the source scope
+  // lets the inverse toggle cancel that intent before save; keeping the source
+  // id lets the save contract name exactly the row to delete.
+  move_source_scope?: string | null;
+  move_source_id?: string;
   title: string | null;
   description: object;
   updated_at: string;

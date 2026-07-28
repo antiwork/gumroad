@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronUp, LayersAlt, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
+import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
+
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -38,10 +40,12 @@ export const VersionsEditor = ({
   // Records that the seller explicitly confirmed removing this version, so the
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (version: Version) => {
-    if (!version.newlyAdded)
-      updateProduct((product) => {
+    updateProduct((product) => {
+      if (!version.newlyAdded) {
         product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), version.id];
-      });
+      }
+      confirmRichContentMoveSourceDeletions(product, version.rich_content);
+    });
     onChange(versions.filter(({ id }) => id !== version.id));
   };
 

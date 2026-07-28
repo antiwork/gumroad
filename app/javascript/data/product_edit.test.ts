@@ -4,9 +4,17 @@ import { EditorState, TextSelection } from "@tiptap/pm/state";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyRichContentPageSaveResponse,
   buildRichContentReconciliationTransaction,
+  canonicalRichContentScope,
+  copyRichContentPages,
   filesForSave,
+  prepareRichContentPagesForMove,
+  reconcileConfirmedRemovalIds,
   removeFileEmbedsFromRichContent,
+  removedFileEmbedIdsForPage,
+  resolveServerIdMapping,
+  richContentMoveSourceIds,
 } from "$app/data/product_edit";
 
 vi.mock("@tiptap/core", () => ({
@@ -28,6 +36,271 @@ describe("filesForSave", () => {
     expect(filesForSave(editorFiles, new Set(), false)).toEqual([]);
     expect(editorFiles).toEqual([file]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([file]);
+  });
+});
+
+describe("copyRichContentPages", () => {
+  it("keeps stored source ids while assigning new page ids and clearing copied upsell ids", () => {
+    const pages = [
+      {
+        id: "source-page",
+        title: "Source",
+        updated_at: "2026-07-28T00:00:00.000Z",
+        description: {
+          type: "doc",
+          content: [
+            { type: "upsellCard", attrs: { id: "stored-upsell" } },
+            { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
+          ],
+        },
+      },
+    ];
+
+    expect(copyRichContentPages(pages, () => "new-page", "2026-07-28T01:00:00.000Z")).toEqual([
+      {
+        id: "new-page",
+        newlyAdded: true,
+        source_id: "source-page",
+        title: "Source",
+        updated_at: "2026-07-28T01:00:00.000Z",
+        description: {
+          type: "doc",
+          content: [
+            { type: "upsellCard", attrs: { id: null } },
+            { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
+          ],
+        },
+      },
+    ]);
+
+    const firstCopy = copyRichContentPages(pages, () => "first-copy")[0];
+    if (!firstCopy) throw new Error("Expected the first copy");
+    const secondCopy = copyRichContentPages([firstCopy], () => "second-copy")[0];
+    if (!secondCopy) throw new Error("Expected the chained copy");
+    expect(secondCopy.source_id).toBe("source-page");
+    expect(secondCopy.copy_parent_id).toBe("first-copy");
+
+    const unsavedCopy = copyRichContentPages([{ ...pages[0], id: "unsaved", newlyAdded: true }], () => "copy");
+    expect(unsavedCopy[0]?.source_id).toBeUndefined();
+    expect(unsavedCopy[0]?.copy_parent_id).toBe("unsaved");
+  });
+
+  it("clears saved provenance and reconciles an in-flight copy through its source", () => {
+    const savedCopy = {
+      id: "sent-client-id",
+      newlyAdded: true,
+      source_id: "source-page",
+      title: "Saved",
+      updated_at: "before",
+      description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "remove" } }] },
+    };
+    const inFlightCopy = {
+      id: "later-client-id",
+      source_id: "source-page",
+      title: "Not sent",
+      updated_at: "before",
+      description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "remove" } }] },
+    };
+    const response = {
+      rich_content_id_mappings: { "sent-client-id": "canonical-id" },
+      rich_content_removed_file_embed_ids: { "canonical-id": ["remove"], "source-page": ["remove"] },
+      rich_content_updated_at: { "canonical-id": "after" },
+    };
+
+    applyRichContentPageSaveResponse(savedCopy, response);
+    applyRichContentPageSaveResponse(inFlightCopy, response);
+
+    expect(savedCopy).toEqual({
+      id: "canonical-id",
+      title: "Saved",
+      updated_at: "after",
+      description: { type: "doc", content: [] },
+    });
+    expect(inFlightCopy).toEqual({
+      id: "later-client-id",
+      source_id: "source-page",
+      title: "Not sent",
+      updated_at: "before",
+      description: { type: "doc", content: [] },
+    });
+  });
+
+  it("rebases an in-flight chained copy to the parent row the response just created", () => {
+    const sentParent = {
+      id: "parent-client-id",
+      newlyAdded: true,
+      source_id: "original-source",
+      title: "Parent copy",
+      updated_at: "before",
+      description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "remove" } }] },
+    };
+    const descendant = copyRichContentPages([sentParent], () => "descendant-client-id")[0];
+    if (!descendant) throw new Error("Expected the descendant copy");
+    const response = {
+      rich_content_id_mappings: { "parent-client-id": "canonical-parent" },
+      rich_content_removed_file_embed_ids: { "canonical-parent": ["remove"] },
+    };
+
+    applyRichContentPageSaveResponse(sentParent, response);
+    applyRichContentPageSaveResponse(descendant, response);
+
+    expect(descendant).toMatchObject({
+      id: "descendant-client-id",
+      newlyAdded: true,
+      source_id: "canonical-parent",
+      description: { type: "doc", content: [] },
+    });
+    expect(descendant.copy_parent_id).toBeUndefined();
+  });
+});
+
+describe("prepareRichContentPagesForMove", () => {
+  const storedPage = {
+    id: "stored-page",
+    title: "Stored",
+    updated_at: "2026-07-28T00:00:00.000Z",
+    description: { type: "doc", content: [{ type: "paragraph" }] },
+  };
+
+  it("cancels a move when the page returns to its original scope before save", () => {
+    const movedToVersion = prepareRichContentPagesForMove([storedPage], null, "version-1");
+    expect(movedToVersion[0]).toMatchObject({
+      source_id: "stored-page",
+      move_source_id: "stored-page",
+      move_source_scope: null,
+    });
+    expect(richContentMoveSourceIds({ rich_content: movedToVersion, variants: [] })).toEqual(["stored-page"]);
+
+    const restoredToShared = prepareRichContentPagesForMove(movedToVersion, "version-1", null);
+    expect(restoredToShared).toEqual([storedPage]);
+    expect(richContentMoveSourceIds({ rich_content: restoredToShared, variants: [] })).toEqual([]);
+  });
+
+  it("keeps the original source when repeated toggles end in a different version", () => {
+    const movedToShared = prepareRichContentPagesForMove([storedPage], "version-2", null);
+    const movedToFirstVersion = prepareRichContentPagesForMove(movedToShared, null, "version-1");
+
+    expect(movedToFirstVersion[0]).toMatchObject({
+      source_id: "stored-page",
+      move_source_id: "stored-page",
+      move_source_scope: "version-2",
+    });
+  });
+
+  it("does not delete a source row for a page that has never been saved", () => {
+    const newPage = { ...storedPage, id: "client-id", newlyAdded: true };
+    const moved = prepareRichContentPagesForMove([newPage], null, "version-1");
+
+    expect(moved[0]).toMatchObject({ newlyAdded: true, move_source_scope: null });
+    expect(moved[0]?.move_source_id).toBeUndefined();
+    expect(richContentMoveSourceIds({ rich_content: moved, variants: [] })).toEqual([]);
+  });
+
+  it("adopts a canonical source for a move made while the page-creation save was in flight", () => {
+    const sentPage = { ...storedPage, id: "client-id", newlyAdded: true };
+    const currentPage = prepareRichContentPagesForMove([sentPage], null, "version-1")[0];
+    if (!currentPage) throw new Error("Expected the moved page");
+
+    applyRichContentPageSaveResponse(
+      currentPage,
+      { rich_content_id_mappings: { "client-id": "canonical-source" } },
+      sentPage,
+    );
+
+    expect(currentPage).toMatchObject({
+      id: "canonical-source",
+      source_id: "canonical-source",
+      move_source_id: "canonical-source",
+      move_source_scope: null,
+    });
+    expect(currentPage.newlyAdded).toBeUndefined();
+    expect(richContentMoveSourceIds({ rich_content: [currentPage], variants: [] })).toEqual(["canonical-source"]);
+
+    const sentMove = { ...currentPage };
+    applyRichContentPageSaveResponse(
+      currentPage,
+      { rich_content_id_mappings: { "canonical-source": "canonical-destination" } },
+      sentMove,
+    );
+    expect(currentPage).toEqual({ ...storedPage, id: "canonical-destination" });
+  });
+
+  it("keeps a follow-up move made while the first move save was in flight", () => {
+    const sentMove = prepareRichContentPagesForMove([storedPage], null, "version-1")[0];
+    if (!sentMove) throw new Error("Expected the sent move");
+    const currentPage = prepareRichContentPagesForMove([sentMove], "version-1", null)[0];
+    if (!currentPage) throw new Error("Expected the follow-up move");
+
+    applyRichContentPageSaveResponse(
+      currentPage,
+      { rich_content_id_mappings: { "stored-page": "version-row" } },
+      sentMove,
+      null,
+      "version-1",
+    );
+    expect(currentPage).toMatchObject({
+      id: "version-row",
+      source_id: "version-row",
+      move_source_id: "version-row",
+      move_source_scope: "version-1",
+    });
+
+    const sentFollowUp = { ...currentPage };
+    applyRichContentPageSaveResponse(
+      currentPage,
+      { rich_content_id_mappings: { "version-row": "shared-row" } },
+      sentFollowUp,
+      null,
+      null,
+    );
+    expect(currentPage).toEqual({ ...storedPage, id: "shared-row" });
+  });
+});
+
+describe("overlapping save reconciliation", () => {
+  it("follows canonical ID chains after repeated saved moves", () => {
+    expect(resolveServerIdMapping("first", { first: "second", second: "third" })).toBe("third");
+    expect(resolveServerIdMapping("first", { first: "second", second: "first" })).toBe("first");
+
+    const variantMappings = { "client-variant": "colliding-external-id" };
+    const pageMappings = { "colliding-external-id": "moved-page-id" };
+    expect(resolveServerIdMapping("client-variant", variantMappings)).toBe("colliding-external-id");
+    expect(resolveServerIdMapping("colliding-external-id", pageMappings)).toBe("moved-page-id");
+  });
+
+  it("canonicalizes a sent variant scope even when the current page is shared", () => {
+    expect(canonicalRichContentScope("client-variant", { "client-variant": "canonical-variant" })).toBe(
+      "canonical-variant",
+    );
+    expect(canonicalRichContentScope(null, { "client-variant": "canonical-variant" })).toBeNull();
+  });
+
+  it("remaps a pending deletion recorded after the request began", () => {
+    expect(reconcileConfirmedRemovalIds(["client-id"], new Set(), { "client-id": "canonical-id" })).toEqual([
+      "canonical-id",
+    ]);
+    expect(reconcileConfirmedRemovalIds(["sent-id", "later-id"], new Set(["sent-id"]), undefined)).toEqual([
+      "later-id",
+    ]);
+  });
+
+  it("remaps and reconciles a copy whose source moved while the save was in flight", () => {
+    const page = {
+      id: "later-copy",
+      newlyAdded: true,
+      source_id: "stored-source",
+      title: "Copy",
+      updated_at: "before",
+      description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "dead-file" } }] },
+    };
+
+    applyRichContentPageSaveResponse(page, {
+      rich_content_id_mappings: { "stored-source": "moved-source" },
+      rich_content_removed_file_embed_ids: { "moved-source": ["dead-file"] },
+    });
+    expect(page.source_id).toBe("moved-source");
+    expect(page.description).toEqual({ type: "doc", content: [] });
+    expect(removedFileEmbedIdsForPage(page, { "moved-source": ["dead-file"] })).toEqual(["dead-file"]);
   });
 });
 

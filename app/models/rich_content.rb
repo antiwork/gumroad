@@ -199,15 +199,23 @@ class RichContent < ApplicationRecord
   # before saving. It deliberately is not an Active Record callback: cleanup of
   # legacy data must happen only at the save boundaries that opted into it.
   #
-  # Only file ids already present in the stored description are eligible. A new
-  # page, or an existing page newly submitted with a dead foreign file, must
-  # still fail the ownership validation rather than silently discard input.
+  # For an existing page, only file ids already present in its stored
+  # description are eligible. A new destination page may instead receive ids
+  # proven to come from another stored page in the same product. The dashboard
+  # needs that narrow exception when it moves a page between shared and
+  # per-version content or copies one version's pages to another; both flows
+  # create destination records. A new page without that server-verified
+  # provenance still fails ownership validation rather than silently
+  # discarding input.
   #
   # Returns the external ids it removed so an interactive caller can reconcile
   # its in-memory document with the value that was actually saved. Without
   # that, the editor resubmits the invisible node and its next save fails.
-  def remove_stale_dead_cross_product_file_embeds
-    cleaned_description = description_without_stale_dead_cross_product_file_embeds
+  def remove_stale_dead_cross_product_file_embeds(legacy_dead_file_ids: [])
+    removable_ids = persisted? ? stored_stale_dead_cross_product_file_embed_ids : Array(legacy_dead_file_ids)
+    return [] if removable_ids.empty?
+
+    cleaned_description = self.class.reject_file_embeds(description, removable_ids.to_set)
     return [] if cleaned_description == description
 
     removed_ids = embedded_product_file_ids_in(description) - embedded_product_file_ids_in(cleaned_description)
@@ -219,15 +227,23 @@ class RichContent < ApplicationRecord
   # new record. The persisted source, not the new destination, establishes
   # which dead foreign ids are legacy content and therefore safe to remove.
   def description_without_stale_dead_cross_product_file_embeds
-    return description unless persisted? && description.is_a?(Array)
-
-    stored_description = attribute_in_database("description")
-    return description unless stored_description.is_a?(Array)
-
-    dead_ids = cross_product_file_embeds_by_liveness(stored_description)[:dead]
+    dead_ids = stored_stale_dead_cross_product_file_embed_ids
     return description if dead_ids.empty?
 
     self.class.reject_file_embeds(description, dead_ids.to_set)
+  end
+
+  # Captures the dead foreign ids from the database value, not from the
+  # submitted candidate. Save coordinators use this before mutating any pages
+  # so a copy still has valid provenance even if its source page is repaired
+  # earlier in the same transaction.
+  def stored_stale_dead_cross_product_file_embed_ids
+    return [] unless persisted? && description.is_a?(Array)
+
+    stored_description = attribute_in_database("description")
+    return [] unless stored_description.is_a?(Array)
+
+    cross_product_file_embeds_by_liveness(stored_description)[:dead]
   end
 
   def custom_field_nodes
@@ -324,15 +340,18 @@ class RichContent < ApplicationRecord
     end
 
     # Names same-seller files and their products so the seller can identify the
-    # source. For another seller's file, keep the opaque ID: edit access to one
-    # product must not reveal private file or product names from another account.
+    # source. Keep the opaque ID for another seller's file and for products with
+    # product-scoped collaborators: this model does not know which actor caused
+    # validation, and a collaborator who can edit this product may not access
+    # the seller's other products.
     def cross_product_file_embed_error_details(foreign_ids)
       product = owning_product
       files_by_id = ProductFile.where(id: foreign_ids).includes(:link).index_by(&:id)
+      names_are_safe = product.present? && !product.confirmed_collaborators.alive.exists?
 
       foreign_ids.map do |file_id|
         file = files_by_id[file_id]
-        next ObfuscateIds.encrypt(file_id) if file.nil? || file.link&.user_id != product&.user_id
+        next ObfuscateIds.encrypt(file_id) if file.nil? || file.link&.user_id != product&.user_id || !names_are_safe
 
         label = file.name_displayable.presence || ObfuscateIds.encrypt(file.id)
         owner = file.link&.name.presence

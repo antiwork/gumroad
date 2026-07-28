@@ -44,6 +44,16 @@ bundle exec rails test "test/controllers/links_controller_test.rb:$test_line" 2>
 sleep 2
 
 printf "%b\n" ""
+printf "%b\n" "=== Tabs opened before provenance shipped still move and copy safely ==="
+printf "%b\n" "Marker-less moves are inferred only when a stored page changes owner scope."
+printf "%b\n" "Marker-less copies can remove only dead IDs proven to exist in this product's stored pages."
+printf "%b\n" "A provenance-aware request without that proof still fails ownership validation."
+bundle exec rails test test/controllers/links_controller_test.rb \
+  -n '/(infers a stale-embed move from an already-open editor tab|repairs a stale embed copied by an already-open editor tab|does not apply old-tab copy fallback|moving a shared page to a version|moving a version page to shared content)/' 2>&1 \
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+sleep 2
+
+printf "%b\n" ""
 printf "%b\n" "=== Browser state removes the reported node and preserves every other edit ==="
 npx vitest run app/javascript/data/product_edit.test.ts 2>&1 \
   | grep -vE "^$|^ RUN |^   Start at|^   Duration"

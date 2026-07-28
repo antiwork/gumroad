@@ -1074,6 +1074,186 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal %w[First\ edit Second\ edit], rich_content.description.filter_map { _1.dig("content", 0, "text") }
   end
 
+  test "PUT update infers a stale-embed move from an already-open editor tab" do
+    category = create_variant_category(link: @product, title: "Versions")
+    version = create_variant(variant_category: category, name: "Version 1")
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+    source = create_product_rich_content(entity: @product, description: [paragraph])
+    source.update_column(:description, [dead_foreign_embed, paragraph])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [{
+        id: version.external_id,
+        name: version.name,
+        rich_content: [{
+          id: source.external_id,
+          title: "Moved page",
+          description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+        }]
+      }]
+    ), format: :json
+
+    assert_response :success
+    destination = version.reload.alive_rich_contents.sole
+    assert_equal [paragraph], destination.description
+    assert_equal true, source.reload.deleted?
+    assert_equal [dead_foreign_file.external_id],
+                 response.parsed_body.dig("rich_content_removed_file_embed_ids", destination.external_id)
+  end
+
+  test "PUT update repairs a stale embed when copying a page between versions" do
+    category = create_variant_category(link: @product, title: "Versions")
+    source_version = create_variant(variant_category: category, name: "Source")
+    destination_version = create_variant(variant_category: category, name: "Destination")
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+    source = create_rich_content(entity: source_version, description: [paragraph])
+    source.update_column(:description, [dead_foreign_embed, paragraph])
+    client_page_id = SecureRandom.uuid
+    @product.update!(has_same_rich_content_for_all_variants: false)
+
+    post :update, params: @params.merge(
+      rich_content_provenance_version: 1,
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [
+        {
+          id: source_version.external_id,
+          name: source_version.name,
+          rich_content: [{
+            id: source.external_id,
+            title: "Source page",
+            description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+          }]
+        },
+        {
+          id: destination_version.external_id,
+          name: destination_version.name,
+          rich_content: [{
+            id: client_page_id,
+            source_id: source.external_id,
+            title: "Copied page",
+            description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+          }]
+        }
+      ]
+    ), format: :json
+
+    assert_response :success
+    destination = destination_version.reload.alive_rich_contents.sole
+    assert_equal [paragraph], source.reload.description
+    assert_equal [paragraph], destination.description
+    assert_equal destination.external_id, response.parsed_body.dig("rich_content_id_mappings", client_page_id)
+    assert_equal [dead_foreign_file.external_id],
+                 response.parsed_body.dig("rich_content_removed_file_embed_ids", destination.external_id)
+  end
+
+  test "PUT update repairs a stale embed copied by an already-open editor tab" do
+    category = create_variant_category(link: @product, title: "Versions")
+    source_version = create_variant(variant_category: category, name: "Source")
+    destination_version = create_variant(variant_category: category, name: "Destination")
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+    source = create_rich_content(entity: source_version, description: [paragraph])
+    source.update_column(:description, [dead_foreign_embed, paragraph])
+    client_page_id = SecureRandom.uuid
+    @product.update!(has_same_rich_content_for_all_variants: false)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [
+        {
+          id: source_version.external_id,
+          name: source_version.name,
+          rich_content: [{
+            id: source.external_id,
+            title: "Source page",
+            description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+          }]
+        },
+        {
+          id: destination_version.external_id,
+          name: destination_version.name,
+          rich_content: [{
+            id: client_page_id,
+            title: "Copied page",
+            description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+          }]
+        }
+      ]
+    ), format: :json
+
+    assert_response :success
+    destination = destination_version.reload.alive_rich_contents.sole
+    assert_equal [paragraph], source.reload.description
+    assert_equal [paragraph], destination.description
+    assert_equal destination.external_id, response.parsed_body.dig("rich_content_id_mappings", client_page_id)
+    assert_equal [dead_foreign_file.external_id],
+                 response.parsed_body.dig("rich_content_removed_file_embed_ids", destination.external_id)
+  end
+
+  test "PUT update does not apply old-tab copy fallback to a provenance-aware request" do
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    source = create_product_rich_content(entity: @product, description: [])
+    source.update_column(:description, [dead_foreign_embed])
+
+    post :update, params: @params.merge(
+      rich_content_provenance_version: 1,
+      rich_content: [
+        {
+          id: source.external_id,
+          title: "Source page",
+          description: { type: "doc", content: [dead_foreign_embed] }
+        },
+        {
+          id: SecureRandom.uuid,
+          title: "Unproven copy",
+          description: { type: "doc", content: [dead_foreign_embed] }
+        }
+      ]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error_message"], "not belonging to this product"
+    assert_equal [dead_foreign_file.id], source.reload.embedded_product_file_ids_in_order
+    assert_equal 1, @product.reload.alive_rich_contents.count
+  end
+
+  test "PUT update does not accept stale-embed provenance from another product" do
+    source_product = create_product(user: @seller)
+    file_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: file_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    source = create_product_rich_content(entity: source_product, description: [])
+    source.update_column(:description, [dead_foreign_embed])
+
+    post :update, params: @params.merge(
+      rich_content: [{
+        id: SecureRandom.uuid,
+        source_id: source.external_id,
+        title: "Invalid copy",
+        description: { type: "doc", content: [dead_foreign_embed] }
+      }]
+    ), format: :json
+
+    assert_response :unprocessable_entity
+    assert_includes response.parsed_body["error_message"], "not belonging to this product"
+    assert_equal 0, @product.reload.alive_rich_contents.count
+  end
+
   test "POST publish includes error_message when publishing and user email is empty" do
     @seller.email = ""
     @seller.save(validate: false)
@@ -6778,6 +6958,66 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not removed.reload.alive?
     assert kept.reload.alive?
+  end
+
+  test "flag on: moving a shared page to a version deletes its source and repairs its stale embed" do
+    enable_contract!
+    version = create_variant(variant_category: @category, name: "Version 1")
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+    source = create_product_rich_content(entity: @product, description: [paragraph])
+    source.update_column(:description, [dead_foreign_embed, paragraph])
+    @product.update!(has_same_rich_content_for_all_variants: true)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: false,
+      rich_content: [],
+      variants: [{
+        id: version.external_id,
+        name: version.name,
+        rich_content: [{
+          id: source.external_id,
+          title: "Moved page",
+          description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+        }]
+      }],
+      editor_revision: current_revision,
+    ), format: :json
+
+    assert_response :success
+    assert_not source.reload.alive?
+    assert_equal 0, @product.reload.alive_rich_contents.count
+    assert_equal [paragraph], version.reload.alive_rich_contents.sole.description
+  end
+
+  test "flag on: moving a version page to shared content deletes its source and repairs its stale embed" do
+    enable_contract!
+    version = create_variant(variant_category: @category, name: "Version 1")
+    foreign_product = create_product(user: @seller)
+    dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
+    dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+    source = create_rich_content(entity: version, description: [paragraph])
+    source.update_column(:description, [dead_foreign_embed, paragraph])
+    @product.update!(has_same_rich_content_for_all_variants: false)
+
+    post :update, params: @params.merge(
+      has_same_rich_content_for_all_variants: true,
+      rich_content: [{
+        id: source.external_id,
+        title: "Moved page",
+        description: { type: "doc", content: [dead_foreign_embed, paragraph] }
+      }],
+      variants: [{ id: version.external_id, name: version.name, rich_content: [] }],
+      editor_revision: current_revision,
+    ), format: :json
+
+    assert_response :success
+    assert_not source.reload.alive?
+    assert_equal 0, version.reload.alive_rich_contents.count
+    assert_equal [paragraph], @product.reload.alive_rich_contents.sole.description
   end
 
   test "flag on: an explicit clear-all plus a fresh revision deletes every variant" do

@@ -411,6 +411,10 @@ class LinksController < ApplicationController
         # describe the committed pre-save state.
         deletion_guard_diagnostics
 
+        # A later page move/copy needs provenance from the committed state,
+        # even if this same transaction repairs or deletes its source first.
+        legacy_dead_file_embed_ids_by_rich_content_id
+
         # Build the save contract NOW, before anything is written
         # (gumroad-private#1379). Its freshness check compares the client's
         # revision token against the product's current fingerprint, and the
@@ -485,7 +489,8 @@ class LinksController < ApplicationController
           :default_offer_code_id,
           :confirmed_removed_variant_ids,
           :confirmed_removed_rich_content_ids,
-          :preserved_rich_content_ids
+          :preserved_rich_content_ids,
+          :rich_content_provenance_version
         ))
         @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
         @product.skus_enabled = false
@@ -532,7 +537,10 @@ class LinksController < ApplicationController
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
           product_rich_content[:description] = SaveContentUpsellsService.new(seller: @product.user, content: product_rich_content[:description], old_content: rich_content.description || []).from_rich_content
           rich_content.assign_attributes(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
-          removed_file_embed_ids = rich_content.remove_stale_dead_cross_product_file_embeds
+          legacy_source_id = product_rich_content[:source_id].presence || product_rich_content[:id]
+          removed_file_embed_ids = rich_content.remove_stale_dead_cross_product_file_embeds(
+            legacy_dead_file_ids: legacy_dead_file_embed_ids_by_rich_content_id[legacy_source_id]
+          )
           rich_content.save!
           rich_contents_to_keep << rich_content
           save_id_mappings[:removed_file_embeds][rich_content.external_id] = removed_file_embed_ids if removed_file_embed_ids.any?
@@ -848,8 +856,8 @@ class LinksController < ApplicationController
     # Parameters#to_unsafe_h.symbolize_keys re-stringifies NESTED keys, so the
     # contract must be handed plain, deeply-symbolized hashes.
     def product_save_contract
-      @_product_save_contract ||= Product::SaveContract.new(
-        params: product_permitted_params.to_h.deep_symbolize_keys.merge(
+      @_product_save_contract ||= begin
+        contract_params = product_permitted_params.to_h.deep_symbolize_keys.merge(
           params.permit(
             :editor_revision,
             deletion_operations: {
@@ -863,9 +871,24 @@ class LinksController < ApplicationController
               cleared_collections: [],
             }
           ).to_h.deep_symbolize_keys
-        ).deep_merge(variant_scoped_deletion_params),
-        product: @product
-      )
+        ).deep_merge(variant_scoped_deletion_params)
+
+        # Tabs opened before provenance support represented a cross-scope move
+        # by reusing the stored page id at its destination, without naming the
+        # source deletion. The submitted id and changed owner scope prove that
+        # move from the locked pre-save state. Add only that source row to the
+        # deletion request; with the save contract enforced, a missing or stale
+        # revision then fails before mutation instead of leaving two copies.
+        inferred_move_ids = legacy_inferred_moved_rich_content_external_ids
+        if inferred_move_ids.any?
+          contract_params[:deletion_operations] ||= {}
+          contract_params[:deletion_operations][:deleted_ids] ||= {}
+          requested_ids = Array(contract_params.dig(:deletion_operations, :deleted_ids, :rich_content))
+          contract_params[:deletion_operations][:deleted_ids][:rich_content] = (requested_ids | inferred_move_ids)
+        end
+
+        Product::SaveContract.new(params: contract_params, product: @product)
+      end
     end
 
     # Version-scoped deletion operations, permitted separately because their
@@ -1064,6 +1087,7 @@ class LinksController < ApplicationController
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
+          legacy_dead_file_embed_ids_by_rich_content_id:,
           deletion_audit_context:,
           contract: product_save_contract,
         ).perform
@@ -1084,6 +1108,7 @@ class LinksController < ApplicationController
           rewrite_budget: page_rewrite_budget,
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
+          legacy_dead_file_embed_ids_by_rich_content_id:,
           deletion_audit_context:,
           contract: product_save_contract,
         ).perform
@@ -1296,6 +1321,185 @@ class LinksController < ApplicationController
     # instead of re-creating them (which would trip the deletion guards).
     def save_id_mappings
       @_save_id_mappings ||= { variants: {}, rich_content: {}, removed_file_embeds: {} }
+    end
+
+    # Snapshot stored move/copy provenance before this save can repair or
+    # delete a source page. Current clients name the source explicitly. For a
+    # marker-less request from a tab opened before provenance support, a reused
+    # stored id proves a move; a new id can prove a copy only by intersecting
+    # its submitted dead embeds with dead embeds already stored in this
+    # product. That compatibility scan never admits an alive foreign file or a
+    # dead id absent from this product's stored content.
+    #
+    # The current protocol queries only named sources. The bounded legacy copy
+    # fallback loads the product's pages in batches, not once per version or
+    # page. Every ownership check comes from the locked pre-save state, so a
+    # client cannot cite another product's page as cleanup authority.
+    def legacy_dead_file_embed_ids_by_rich_content_id
+      @_legacy_dead_file_embed_ids_by_rich_content_id ||= begin
+        source_external_ids = submitted_legacy_rich_content_source_external_ids
+        source_pages_by_external_id = owned_submitted_rich_content_pages_by_external_id.slice(*source_external_ids)
+        legacy_destinations = legacy_unknown_rich_content_destinations
+        provenance_pages = source_pages_by_external_id.values
+        if legacy_destinations.any?
+          provenance_pages |= all_owned_alive_rich_content_pages
+        end
+
+        embedded_file_ids_by_page = provenance_pages.to_h do |page|
+          [page.external_id, page.embedded_product_file_ids_in_order]
+        end
+        embedded_file_ids = embedded_file_ids_by_page.values.flatten.uniq
+        dead_foreign_file_ids = ProductFile
+          .deleted
+          .where(id: embedded_file_ids)
+          .where.not(link_id: @product.id)
+          .pluck(:id)
+          .to_set
+
+        dead_file_ids_by_page = embedded_file_ids_by_page.transform_values do |file_ids|
+          file_ids.select { dead_foreign_file_ids.include?(_1) }
+        end
+        result = source_pages_by_external_id.transform_values do |page|
+          dead_file_ids_by_page.fetch(page.external_id, [])
+        end
+
+        if legacy_destinations.any?
+          stored_dead_file_ids = dead_file_ids_by_page.values.flatten.to_set
+          legacy_destinations.each do |reference|
+            page_id = reference[:page][:id].presence
+            next if page_id.nil?
+
+            submitted_file_ids = embedded_file_ids_in_submitted_page(reference[:page])
+            removable_file_ids = submitted_file_ids.select { stored_dead_file_ids.include?(_1) }
+            result[page_id] = (Array(result[page_id]) | removable_file_ids) if removable_file_ids.any?
+          end
+        end
+
+        result
+      end
+    end
+
+    # `source_id` is the current editor's explicit move/copy provenance. A
+    # marker-less editor may instead prove a move by submitting a stored page
+    # id under a different owner scope. The confirmed-id fallback remains for
+    # the intermediate client that confirmed the source deletion but did not
+    # yet send source_id.
+    def submitted_legacy_rich_content_source_external_ids
+      confirmed_ids = confirmed_removed_rich_content_ids.to_set
+
+      (
+        submitted_rich_content_page_references.filter_map do |reference|
+          page = reference[:page]
+          page[:source_id].presence || page[:id].presence_in(confirmed_ids)
+        end +
+        legacy_inferred_moved_rich_content_external_ids
+      ).uniq
+    end
+
+    def rich_content_provenance_aware_request?
+      params[:rich_content_provenance_version].to_i >= 1
+    end
+
+    def submitted_rich_content_page_references
+      @_submitted_rich_content_page_references ||= begin
+        references = Array.wrap(product_permitted_params[:rich_content]).map do |page|
+          { page:, destination_entity_type: "Link", destination_entity_id: @product.id }
+        end
+
+        Array.wrap(product_permitted_params[:variants]).each do |variant|
+          destination_variant_id = decrypt_rich_content_external_id(variant[:id])
+          Array.wrap(variant[:rich_content]).each do |page|
+            references << {
+              page:,
+              destination_entity_type: "BaseVariant",
+              destination_entity_id: destination_variant_id,
+            }
+          end
+        end
+        references
+      end
+    end
+
+    # Resolves submitted ids and explicit source ids in one batch, then keeps
+    # only pages owned by this product. Client-generated UUIDs are skipped
+    # without asking the id cipher to decrypt and log them.
+    def owned_submitted_rich_content_pages_by_external_id
+      @_owned_submitted_rich_content_pages_by_external_id ||= begin
+        external_ids = submitted_rich_content_page_references.flat_map do |reference|
+          [reference[:page][:id], reference[:page][:source_id]]
+        end.compact.uniq
+        ids_by_external_id = external_ids.index_with do |external_id|
+          decrypt_rich_content_external_id(external_id)
+        end.compact
+        pages_by_id = RichContent.alive.where(id: ids_by_external_id.values).index_by(&:id)
+
+        ids_by_external_id.each_with_object({}) do |(external_id, id), result|
+          page = pages_by_id[id]
+          result[external_id] = page if page.present? && owned_rich_content_page?(page)
+        end
+      end
+    end
+
+    def legacy_inferred_moved_rich_content_external_ids
+      @_legacy_inferred_moved_rich_content_external_ids ||=
+        if rich_content_provenance_aware_request?
+          []
+        else
+          submitted_rich_content_page_references.filter_map do |reference|
+            page = reference[:page]
+            next if page[:source_id].present?
+
+            stored_page = owned_submitted_rich_content_pages_by_external_id[page[:id]]
+            next if stored_page.nil?
+            next if stored_page.entity_type == reference[:destination_entity_type] &&
+              stored_page.entity_id == reference[:destination_entity_id]
+
+            stored_page.external_id
+          end.uniq
+        end
+    end
+
+    # An old copy used a client-generated destination id and carried no source
+    # id. It reaches the bounded all-pages compatibility scan only when the
+    # destination id does not address an existing page owned by this product.
+    def legacy_unknown_rich_content_destinations
+      return [] if rich_content_provenance_aware_request?
+
+      submitted_rich_content_page_references.select do |reference|
+        page = reference[:page]
+        page[:source_id].blank? &&
+          page[:id].present? &&
+          owned_submitted_rich_content_pages_by_external_id[page[:id]].nil?
+      end
+    end
+
+    def all_owned_alive_rich_content_pages
+      @_all_owned_alive_rich_content_pages ||= begin
+        product_pages = RichContent.alive.where(entity_type: "Link", entity_id: @product.id)
+        variant_pages = RichContent.alive.where(entity_type: "BaseVariant", entity_id: owned_alive_variant_ids)
+        product_pages.or(variant_pages).to_a
+      end
+    end
+
+    def owned_rich_content_page?(page)
+      (page.entity_type == "Link" && page.entity_id == @product.id) ||
+        (page.entity_type == "BaseVariant" && owned_alive_variant_ids.include?(page.entity_id))
+    end
+
+    def owned_alive_variant_ids
+      @_owned_alive_variant_ids ||= @product.alive_variants.pluck(:id).to_set
+    end
+
+    def decrypt_rich_content_external_id(value)
+      external_id = value.to_s
+      return unless external_id.match?(/\A[A-Za-z0-9_-]{22}==\z/)
+
+      ObfuscateIds.decrypt(external_id)
+    end
+
+    def embedded_file_ids_in_submitted_page(page)
+      nodes = page.dig(:description, :content)
+      RichContent.new(description: Array(nodes).as_json).embedded_product_file_ids_in_order
     end
 
     def save_id_mappings_response

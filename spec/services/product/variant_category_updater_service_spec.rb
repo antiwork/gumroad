@@ -289,6 +289,35 @@ describe Product::VariantCategoryUpdaterService do
       end
     end
 
+    context "when variant rich content has a malformed collection shape" do
+      before do
+        @product = create(:product)
+        @variant_category = create(:variant_category, link: @product)
+        @variant = create(:variant, variant_category: @variant_category)
+      end
+
+      it "treats serialized scalars, serialized objects, and non-string values as an empty collection" do
+        ['"text"', '{"page":1}', { page: 1 }, 123].each do |malformed_rich_content|
+          expect do
+            Product::VariantCategoryUpdaterService.new(
+              product: @product,
+              category_params: {
+                id: @variant_category.external_id,
+                title: @variant_category.title,
+                options: [{
+                  id: @variant.external_id,
+                  name: @variant.name,
+                  rich_content: malformed_rich_content,
+                }]
+              }
+            ).perform
+          end.not_to raise_error
+        end
+
+        expect(@variant.reload.alive_rich_contents).to be_empty
+      end
+    end
+
     context "when clearing all options from a category" do
       before do
         @product = create(:product)

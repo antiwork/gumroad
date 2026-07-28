@@ -3,7 +3,7 @@
 class Product::VariantCategoryUpdaterService
   include CurrencyHelper
 
-  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :deletion_audit_context, :contract
+  attr_reader :product, :category_params, :confirmed_removed_variant_ids, :payload_page_ids, :confirmed_removed_rich_content_ids, :preserved_rich_content_ids, :rewrite_budget, :deletion_guard_diagnostics, :id_mappings, :legacy_dead_file_embed_ids_by_rich_content_id, :deletion_audit_context, :contract
   attr_accessor :variant_category
 
   delegate :price_currency_type,
@@ -32,6 +32,9 @@ class Product::VariantCategoryUpdaterService
   # to canonical variant/page ids and records file embeds removed from stored
   # pages, so the editor's next save addresses the same records and sends the
   # same content the server persisted.
+  # legacy_dead_file_embed_ids_by_rich_content_id: a pre-mutation snapshot of
+  # dead foreign ids in this product's stored pages. New destination pages use
+  # it only when their payload identifies a stored source page.
   # deletion_audit_context: who and which request is deleting, for the audit
   # trail (ProductVariantDeletionAudit). Carries :actor_user_id, :request_id and
   # :revision_token. Passed down the same way as deletion_guard_diagnostics
@@ -41,7 +44,7 @@ class Product::VariantCategoryUpdaterService
   # +contract+ - optional Product::SaveContract (gumroad-private#1379). Only the
   # product editor's save path supplies one; nil means the legacy diff-derived
   # behaviour, so every other caller is unchanged by construction.
-  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, deletion_audit_context: {}, contract: nil)
+  def initialize(product:, category_params:, confirmed_removed_variant_ids: [], payload_page_ids: [], confirmed_removed_rich_content_ids: [], preserved_rich_content_ids: [], rewrite_budget: {}, deletion_guard_diagnostics: {}, id_mappings: nil, legacy_dead_file_embed_ids_by_rich_content_id: {}, deletion_audit_context: {}, contract: nil)
     @product = product
     @category_params = category_params
     @confirmed_removed_variant_ids = Array.wrap(confirmed_removed_variant_ids)
@@ -51,6 +54,7 @@ class Product::VariantCategoryUpdaterService
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
     @id_mappings = id_mappings || { variants: {}, rich_content: {}, removed_file_embeds: {} }
+    @legacy_dead_file_embed_ids_by_rich_content_id = legacy_dead_file_embed_ids_by_rich_content_id
     @deletion_audit_context = deletion_audit_context || {}
     @contract = contract
   end
@@ -434,25 +438,6 @@ class Product::VariantCategoryUpdaterService
       variant.live_base_variant_integrations.where(integration: deleted_integrations).map(&:mark_deleted!)
     end
 
-    # Did this version's payload actually carry a rich_content statement?
-    #
-    # An empty array IS a statement in the same sense the top-level contract
-    # means it — and, exactly as
-    # there, it does not authorise deletion on its own: emptying a version's
-    # pages requires naming them or clearing the collection.
-    #
-    # A String is accepted only when it actually parses as a JSON array: the
-    # editor legitimately sends this collection pre-serialized, but unparseable
-    # junk is a malformed payload, and treating it as a statement means
-    # `JSON.parse` raises mid-save and fails the seller's whole save.
-    def variant_submitted_rich_content?(option)
-      value = option[:rich_content]
-      return true if value.is_a?(Array)
-      return false unless value.is_a?(String) && value.present?
-
-      parsed_variant_rich_content(value).is_a?(Array)
-    end
-
     # Parses the pre-serialized form, returning nil rather than raising when the
     # payload is not valid JSON.
     def parsed_variant_rich_content(value)
@@ -466,29 +451,35 @@ class Product::VariantCategoryUpdaterService
     # off, so behaviour is unchanged until the rollout reaches a seller.
     def contract_scoped_rich_content_deletions(diff_deletions, existing_rich_contents)
       return diff_deletions unless contract&.enforced?
-      return existing_rich_contents if contract.cleared?(:rich_content)
+      if contract.cleared?(:rich_content)
+        return existing_rich_contents.reject { preserved_rich_content_ids.include?(_1.external_id) }
+      end
 
       ids = contract.deleted_ids(:rich_content)
       return [] if ids.empty?
 
       existing_rich_contents.select { ids.include?(_1.external_id) }
+        .reject { preserved_rich_content_ids.include?(_1.external_id) }
     end
 
     def save_rich_content(variant, option)
       # Product::SaveContract, Rule 1, applied to VERSION-level pages.
       #
       # The parse below turns an absent or malformed `rich_content` key into
-      # `[]`, and the diff further down then reads that as "delete every page on
-      # this version". Version-level pages are the product's actual content, so
-      # this is the same wipe-by-omission as the product-level collection and
-      # has to answer to the same rule.
-      submitted = variant_submitted_rich_content?(option)
-      return if contract&.enforced? && !submitted
-
-      variant_rich_contents = if option[:rich_content].is_a?(Array)
-        option[:rich_content]
+      # `[]`, and the diff further down reads that as "delete every page on this
+      # version". Under the contract the diff has no deletion authority, so an
+      # absent collection still changes nothing. We must keep evaluating it,
+      # though: an empty array can disappear in request encoding, and an
+      # explicit fresh deletion (such as moving a version page to shared
+      # content) still has to remove the named source row.
+      submitted_rich_content = option[:rich_content]
+      variant_rich_contents = if submitted_rich_content.is_a?(Array)
+        submitted_rich_content
+      elsif submitted_rich_content.is_a?(String)
+        parsed = parsed_variant_rich_content(submitted_rich_content)
+        parsed.is_a?(Array) ? parsed : []
       else
-        parsed_variant_rich_content(option[:rich_content].presence || "[]") || []
+        []
       end
       rich_contents_to_keep = []
       existing_rich_contents = variant.alive_rich_contents.to_a
@@ -500,7 +491,10 @@ class Product::VariantCategoryUpdaterService
           old_content: rich_content.description || []
         ).from_rich_content
         rich_content.assign_attributes(title: variant_rich_content[:title].presence, description: variant_rich_content[:description].presence || [], position: index)
-        removed_file_embed_ids = rich_content.remove_stale_dead_cross_product_file_embeds
+        legacy_source_id = variant_rich_content[:source_id].presence || variant_rich_content[:id]
+        removed_file_embed_ids = rich_content.remove_stale_dead_cross_product_file_embeds(
+          legacy_dead_file_ids: legacy_dead_file_embed_ids_by_rich_content_id[legacy_source_id]
+        )
         rich_content.save!
         rich_contents_to_keep << rich_content
         id_mappings[:removed_file_embeds][rich_content.external_id] = removed_file_embed_ids if removed_file_embed_ids.any?
