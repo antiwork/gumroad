@@ -106,7 +106,8 @@ class Checkout::BuyerCurrencyEligibility
     return false unless usd_holding_merchant_account?(merchant_account)
 
     # Deliberately asked of the SELLER's account rather than the account the intent is
-    # created on (unlike usd_holding_settlement_account?). This predicate guards the
+    # created on (those differ for a destination charge, where the intent is created on
+    # the Gumroad platform account). This predicate guards the
     # FX-quote paths, and StripeFxQuote mints the quote with the seller's connected
     # account as `Stripe-Account`, so the seller's own settlement configuration is the
     # one that decides whether the quote is accepted.
@@ -266,10 +267,13 @@ class Checkout::BuyerCurrencyEligibility
     # thing capping this lane: it withheld iDEAL/Bancontact from every Stripe Connect seller
     # settling in euros — precisely the sellers those methods exist for (gumroad-private#1442).
     #
-    # Balances stay correct without it: the balance layer records the charge in the account's
-    # own holding currency (see BalanceTransaction.create!'s merchant_account_gross_amount
-    # branch), which for an EUR-settling account paid in EUR is a native, conversion-free
-    # match rather than the USD-intent-on-EUR-account shape we already run today.
+    # Gumroad's own ledger stays correct without it. For a Stripe Connect seller the money
+    # never passes through a Gumroad-held balance at all: the charge lands directly in the
+    # seller's own Stripe account, and Purchase#increment_sellers_balance! /
+    # #process_refund_or_chargeback_for_purchase_balance both return early unless
+    # `charged_using_gumroad_merchant_account?` (Purchase#1178), so no seller Balance row in
+    # any currency is written for these charges — there is nothing for a non-USD settlement
+    # currency to corrupt. Payouts for such sellers are made by Stripe itself, not by us.
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?

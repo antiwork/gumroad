@@ -592,6 +592,18 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.direct_listed_amount?).to eq(false)
     end
 
+    # The quoted (USD-priced) case still asks BOTH halves of the settlement question, and
+    # this pins the half that does not depend on a learned mismatch marker: an account
+    # whose stored balance currency is not US dollars cannot be quoted from the forced
+    # currency into USD, so the method has to stay withheld there even though the
+    # direct-listed lane above no longer cares about the same account's currency.
+    it "withholds the method for a USD-priced product when the account holds a non-USD balance and no mismatch marker is set" do
+      merchant_account.update!(currency: Currency::EUR)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+
     it "withholds the method for future-charge setups such as save-card checkouts" do
       save_card_decision = described_class.new(order:,
                                                seller:,
