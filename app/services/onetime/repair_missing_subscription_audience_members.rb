@@ -11,8 +11,13 @@
 # represented there, and rebuilds the row from live state. It is idempotent: rebuilding an
 # already-correct row is a no-op, so it is safe to re-run.
 #
-#   Onetime::RepairMissingSubscriptionAudienceMembers.process              # repair
-#   Onetime::RepairMissingSubscriptionAudienceMembers.process(dry_run: true) # report only
+# The scope filters on `flags` bit operations and on `can_contact`, neither of which is indexed,
+# so an unscoped run range-scans the whole purchases table in batches. Prefer running it one
+# seller at a time when you already know which sellers are affected.
+#
+#   Onetime::RepairMissingSubscriptionAudienceMembers.process(seller_id: 123, dry_run: true)
+#   Onetime::RepairMissingSubscriptionAudienceMembers.process(seller_id: 123)
+#   Onetime::RepairMissingSubscriptionAudienceMembers.process(dry_run: true) # whole table, slow
 class Onetime::RepairMissingSubscriptionAudienceMembers
   BATCH_SIZE = 1_000
 
@@ -30,16 +35,19 @@ class Onetime::RepairMissingSubscriptionAudienceMembers
     scanned = 0
     repaired = 0
 
-    scope.find_each(batch_size:) do |purchase|
-      scanned += 1
-      next unless purchase.should_be_audience_member?
-      next if represented_in_audience?(purchase)
+    scope.find_in_batches(batch_size:) do |purchases|
+      # Once per batch rather than once per write: the scan itself is the expensive part, and a
+      # batch that repairs nothing still reads a batch's worth of rows off the replica.
+      ReplicaLagWatcher.watch unless dry_run
 
-      repaired += 1
-      next if dry_run
+      purchases.each do |purchase|
+        scanned += 1
+        next unless purchase.should_be_audience_member?
+        next if represented_in_audience?(purchase)
 
-      ReplicaLagWatcher.watch
-      purchase.rebuild_audience_member_details
+        repaired += 1
+        purchase.rebuild_audience_member_details unless dry_run
+      end
     end
 
     Rails.logger.info(

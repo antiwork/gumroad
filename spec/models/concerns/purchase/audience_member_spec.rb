@@ -61,9 +61,25 @@ RSpec.describe Purchase::AudienceMember do
     it "does not resurrect a row for a buyer who is still unsubscribed" do
       original_purchase.unsubscribe_buyer
 
-      original_purchase.reload.update!(can_contact: false)
+      # Save a change to another attribute the callback watches, with can_contact still false.
+      # Re-saving can_contact: false alone would be a no-op save, so the callback would bail at
+      # its first guard and the example would pass without exercising anything.
+      original_purchase.reload.update!(is_access_revoked: true)
+
+      expect(original_purchase.reload.can_contact?).to be(false)
+      expect(audience_member_for(original_purchase)).to be_nil
+    end
+
+    it "does not pay for a rebuild when the buyer is being unsubscribed" do
+      # Rebuilding is self-correcting, so an unsubscribe would still end up with the right
+      # (absent) row — but it would re-read every purchase the buyer has to get there. The
+      # can_contact? condition keeps the expensive path on the re-subscribe side only.
+      allow(AudienceMember).to receive(:find_or_initialize_by).and_call_original
+
+      original_purchase.unsubscribe_buyer
 
       expect(audience_member_for(original_purchase)).to be_nil
+      expect(AudienceMember).not_to have_received(:find_or_initialize_by)
     end
   end
 
