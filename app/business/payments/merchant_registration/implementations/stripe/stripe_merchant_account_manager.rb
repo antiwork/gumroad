@@ -253,9 +253,17 @@ module StripeMerchantAccountManager
   # rejections are excluded because they each already record a more specific note (and the
   # postal-code one drives the weekly automatic retry), so adding a second note for them would
   # only duplicate what support already sees.
+  #
+  # Only InvalidRequestError counts, matching the update path in UpdateUserComplianceInfo. That is
+  # the class Stripe uses when it actually objected to something the seller submitted, which is the
+  # only case where "Stripe rejected your payout setup" is a true statement. The other StripeError
+  # subclasses are our problem, not the seller's: APIConnectionError, RateLimitError and
+  # AuthenticationError mean the request never got a verdict, so recording a rejection note for
+  # them would tell support a transient outage was the seller's data being refused and send them
+  # looking for a bad field that does not exist.
   private_class_method
   def self.undiagnosed_stripe_rejection?(error)
-    return false unless error.is_a?(Stripe::StripeError)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
 
     !postal_code_invalid_error?(error) && !bank_account_invalid_error?(error)
   end

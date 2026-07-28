@@ -134,6 +134,37 @@ describe StripeMerchantAccountManager do
       end
     end
 
+    # A note saying "Stripe rejected your payout setup" is only true when Stripe actually looked at
+    # the seller's data and objected. If the request never reached Stripe, or Stripe throttled us, or
+    # our own API key was wrong, then nothing about the seller was refused — writing a rejection note
+    # anyway would send support hunting for a bad field that does not exist, on an account that may
+    # well succeed on the next attempt. These errors are ours to fix, so they belong in Sentry (which
+    # already gets them) and not on the seller's account.
+    context "when the Stripe call fails without Stripe reaching a verdict" do
+      transient_failures = {
+        "a connection failure" => -> { Stripe::APIConnectionError.new("Unexpected error communicating with Stripe") },
+        "rate limiting" => -> { Stripe::RateLimitError.new("Too many requests") },
+        "a bad API key" => -> { Stripe::AuthenticationError.new("Invalid API Key provided") },
+      }
+
+      transient_failures.each do |description, build_error|
+        context "on #{description}" do
+          before do
+            allow(Stripe::Account).to receive(:create).and_raise(build_error.call)
+            allow(ErrorNotifier).to receive(:notify)
+          end
+
+          it "records no rejection note and re-raises" do
+            expect do
+              described_class.create_account(user, passphrase:)
+            end.to raise_error(build_error.call.class)
+
+            expect(rejection_notes).to be_empty
+          end
+        end
+      end
+    end
+
     context "when the breadcrumb itself fails to save" do
       before do
         allow(Stripe::Account).to receive(:create).and_raise(
