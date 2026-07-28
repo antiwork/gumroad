@@ -47,6 +47,15 @@ class TaxRemittances::StageQuarterlyDrafts
   end
 
   def process
+    # Reset the result accumulators, not just initialize them. Calling process twice on the same
+    # instance previously appended the second run's results to the first's, so a caller who retried
+    # after a transient failure would read a `created` list containing rows that run had not created
+    # — and a staging report showing a filing staged twice. Each call now reports only its own work.
+    @created = []
+    @refreshed = []
+    @skipped = []
+    @orphaned_drafts = []
+
     calculator.process
 
     calculator.liabilities.each do |liability|
@@ -125,11 +134,23 @@ class TaxRemittances::StageQuarterlyDrafts
 
       @created << remittance
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
-      # A concurrent run (or a human staging by hand) won the race for this
-      # filing. The unique index and the single-live-attempt validation make
-      # that harmless — the other row exists and is the one to use — so report
-      # it as a skip rather than failing the whole quarter's staging.
-      @skipped << { authority: liability.authority, reason: "raced by a concurrent write (#{e.class.name})" }
+      # Only call this a race if a competing row actually turned up. Both exceptions here have two
+      # very different causes: another run (or a human staging by hand) genuinely beat us to this
+      # filing, or the row we built simply fails its own validations. Reporting the second as
+      # "raced by a concurrent write" hid real, repeatable staging bugs behind a reason a reviewer
+      # is meant to shrug at — the filing would go unstaged every run with nothing in the report
+      # to say why. Re-check for the live row before deciding which of the two happened.
+      competing = TaxRemittance.where(authority: liability.authority, period:)
+                               .where.not(status: TaxRemittance::RETRYABLE_STATUSES)
+                               .exists?
+
+      @skipped << if competing
+        { authority: liability.authority, reason: "raced by a concurrent write (#{e.class.name})" }
+      else
+        # No competing row, so nothing raced us and the next run will fail identically. Surface it
+        # as the validation failure it is, with the message, so it can be fixed rather than ignored.
+        { authority: liability.authority, reason: "could not stage draft (#{e.class.name}: #{e.message})" }
+      end
     end
 
     # An existing live attempt: bring an untouched draft back in line with the
@@ -230,11 +251,21 @@ class TaxRemittances::StageQuarterlyDrafts
     def draft_notes(liability)
       "Staged from collected tax for #{period}. " \
       "Sales #{usd(liability.sales_tax_cents)}, " \
-      "refunds -#{usd(liability.refunded_tax_cents)}, " \
-      "chargebacks -#{usd(liability.chargeback_tax_cents)}, " \
+      "refunds #{signed_deduction(liability.refunded_tax_cents)}, " \
+      "chargebacks #{signed_deduction(liability.chargeback_tax_cents)}, " \
       "net #{usd(liability.tax_collected_cents)}. " \
       "Countries: #{liability.country_codes.join(', ')}. " \
       "Amount is USD; local-currency amount and transfer ID recorded after payment."
+    end
+
+    # Refunds and chargebacks are deductions, so they read with a leading minus. But either can
+    # arrive net-negative for a quarter — a chargeback reversal in this quarter against a chargeback
+    # booked in an earlier one adds the tax back, which is a deduction of a negative amount. Writing
+    # a bare "-" in front of that produced notes reading "chargebacks -$-5.00", which a human
+    # reconciling a filing has to stop and decode. Flip the sign into the number instead so the
+    # deduction always reads as one signed figure.
+    def signed_deduction(cents)
+      cents.negative? ? "+#{usd(cents.abs)}" : "-#{usd(cents)}"
     end
 
     def usd(cents)

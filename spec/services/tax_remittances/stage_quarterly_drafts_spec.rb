@@ -72,6 +72,27 @@ describe TaxRemittances::StageQuarterlyDrafts do
     expect(oss.notes).to include("DE, FR")
   end
 
+  # A deduction of a negative amount is a real quarter shape: a chargeback reversal landing this
+  # quarter against a chargeback booked in an earlier one adds the tax back, so chargebacks net
+  # below zero. The note used to hardcode a leading minus and render "chargebacks -$-5.00", which
+  # a human reconciling a filing has to stop and decode before they can trust the figure.
+  it "renders a negative deduction as one signed figure, not a double negative" do
+    service = described_class.new(period)
+    liability = Struct.new(:authority, :jurisdiction, :currency, :sales_tax_cents, :refunded_tax_cents,
+                           :chargeback_tax_cents, :tax_collected_cents, :country_codes, keyword_init: true)
+                     .new(authority: "Australian Taxation Office", jurisdiction: "AU", currency: "AUD",
+                          sales_tax_cents: 10_00, refunded_tax_cents: 0, chargeback_tax_cents: -5_00,
+                          tax_collected_cents: 15_00, country_codes: ["AU"])
+
+    notes = service.send(:draft_notes, liability)
+
+    expect(notes).to include("chargebacks +$5.00")
+    expect(notes).not_to include("-$-")
+    # The ordinary positive deduction still reads as a subtraction.
+    expect(service.send(:draft_notes, liability.tap { _1.chargeback_tax_cents = 5_00 }))
+      .to include("chargebacks -$5.00")
+  end
+
   describe "re-running" do
     # Safe to run repeatedly as a quarter closes: a filing that already has a
     # draft must not get a second one.
@@ -275,6 +296,64 @@ describe TaxRemittances::StageQuarterlyDrafts do
       # The failed attempt is preserved rather than overwritten.
       expect(TaxRemittance.where(authority: "Australian Taxation Office", period:).pluck(:status))
         .to match_array(%w[failed draft])
+    end
+    # A caller that retries after a transient failure must be able to trust the report it reads.
+    # The result lists used to be built in the constructor and only appended to, so a second
+    # process call returned the first run's rows alongside its own — a staging report claiming a
+    # filing was created twice when it was created once.
+    it "reports only the work of the latest run when reused" do
+      service = described_class.new(period)
+      service.process
+
+      expect(service.created.size).to eq(2)
+
+      service.process
+
+      # Nothing new to create the second time round, so both filings are skipped as already staged
+      # and the created list from the first pass is gone rather than carried forward.
+      expect(service.created).to be_empty
+      expect(service.skipped.size).to eq(2)
+      expect(TaxRemittance.for_period(period).count).to eq(2)
+    end
+
+    # "raced by a concurrent write" is a reason a reviewer is meant to shrug at, so an ordinary
+    # validation failure wearing it would leave the filing unstaged every single run with nothing
+    # in the report explaining why.
+    it "reports a validation failure as itself, not as a race" do
+      allow(TaxRemittance).to receive(:create!)
+        .and_raise(ActiveRecord::RecordInvalid.new(TaxRemittance.new))
+
+      service = described_class.new(period).process
+
+      expect(service.created).to be_empty
+      expect(service.skipped.size).to eq(2)
+      service.skipped.each do |skip|
+        expect(skip[:reason]).to include("could not stage draft")
+        expect(skip[:reason]).not_to include("raced by a concurrent write")
+      end
+    end
+
+    # And the genuine race still reads as one: a live row for this filing exists, so whoever created
+    # it is the one to use and there is nothing here for a human to fix.
+    it "still reports a real race as a race" do
+      described_class.new(period).process
+      TaxRemittance.for_period(period).update_all(status: "failed")
+
+      # A failed attempt is retryable, so staging tries to create the next attempt — but a live row
+      # appearing underneath it means someone else got there first.
+      allow(TaxRemittance).to receive(:create!)
+        .and_raise(ActiveRecord::RecordNotUnique.new("duplicate key"))
+      allow(TaxRemittance).to receive(:where).and_call_original
+      allow(TaxRemittance).to receive(:where)
+        .with(hash_including(:authority, :period))
+        .and_return(instance_double(ActiveRecord::Relation).tap do |relation|
+          allow(relation).to receive(:where).and_return(relation)
+          allow(relation).to receive_messages(not: relation, first: nil, exists?: true, maximum: 1)
+        end)
+
+      service = described_class.new(period).process
+
+      expect(service.skipped.map { _1[:reason] }).to all(include("raced by a concurrent write"))
     end
   end
 
