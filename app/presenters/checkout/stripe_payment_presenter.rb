@@ -544,7 +544,7 @@ class Checkout::StripePaymentPresenter
     def cart_items
       return [] if cart.blank?
 
-      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(product: [:user, :installment_plan]).map do |cart_product|
+      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(:option, product: [:user, :installment_plan]).map do |cart_product|
         product = cart_product.product
         item(
           seller: product.user,
@@ -559,7 +559,7 @@ class Checkout::StripePaymentPresenter
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
           product_currency: product.price_currency_type.to_s.downcase,
           ppp_discounted: product.ppp_details(ip).present?,
-          has_customizable_price: product.has_customizable_price_option?
+          has_customizable_price: cart_line_buyer_can_name_price?(cart_product)
         )
       end
     end
@@ -588,6 +588,30 @@ class Checkout::StripePaymentPresenter
           has_customizable_price: buyer_can_name_price?(checkout_product)
         )
       end
+    end
+
+    # The saved-cart twin of buyer_can_name_price? below. A cart line records the tier the buyer
+    # picked in `option`, so the same rule applies: what decides whether a price is still unknown
+    # is the SELECTED tier, not whether the membership happens to offer a pay-what-you-want tier
+    # somewhere. `Link#has_customizable_price_option?` answers the latter — it scans every alive
+    # tier — so a cart line on a free non-pay-what-you-want tier of a membership that also sells a
+    # pay-what-you-want tier reported a customizable price, suppressed the "not_charged"
+    # classification, and mounted the Payment Element on a checkout that charges nothing.
+    #
+    # Only a TIERED MEMBERSHIP's option carries the flag. `Variant::Prices#set_customizable_price`
+    # returns early for anything else, so an ordinary product's variants always read false even
+    # when the product itself is pay-what-you-want — reading the option there would wrongly call a
+    # real pay-what-you-want cart free. For those, and for a line with no option at all, the
+    # product's own `customizable_price` column is authoritative, which is exactly what
+    # has_customizable_price_option? falls back to.
+    def cart_line_buyer_can_name_price?(cart_product)
+      product = cart_product.product
+      return product.has_customizable_price_option? unless product.is_tiered_membership?
+
+      option = cart_product.option
+      return product.has_customizable_price_option? if option.blank?
+
+      option.customizable_price?
     end
 
     # Whether the buyer can still name their own price for this line, which fallback_reason_for

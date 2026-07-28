@@ -730,6 +730,94 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
   end
 
+  # The same rule on the saved-cart path, which reaches the presenter through a different method:
+  # cart lines used Link#has_customizable_price_option?, which scans every alive tier, so a line on
+  # the free tier of a mixed membership reported a customizable price and mounted the Payment
+  # Element on a checkout that charges nothing. Pins the cart line's own tier as the thing that
+  # decides.
+  it "still falls back to CardElement when a saved cart line selects the free tier of a mixed membership" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    free_tier = membership.tiers.first
+    # Variant::Prices#set_customizable_price forces the flag true on any tier whose alive prices
+    # are all zero, so clear the column directly to build the free non-pay-what-you-want tier a
+    # seller reaches by pricing the tier and then zeroing it.
+    free_tier.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    expect(membership.has_customizable_price_option?).to be(true)
+
+    cart = create(:cart)
+    create(:cart_product, cart:, product: membership, option: free_tier, price: 0)
+
+    expect(stripe_payment_props(cart:)).to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The other direction on the cart path: the pay-what-you-want tier still reaches the Payment
+  # Element, so scoping cart lines to their own tier does not undo the fix this PR exists for.
+  it "keeps the Payment Element when a saved cart line selects the pay-what-you-want tier" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    membership.tiers.first.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    membership.reload
+
+    cart = create(:cart)
+    create(:cart_product, cart:, product: membership, option: pwyw_tier, price: 0)
+
+    expect(stripe_payment_props(cart:))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # A cart line with no tier recorded is a non-tiered product, where the product's own
+  # customizable_price column is authoritative and must keep holding the cart on the Payment
+  # Element for a pay-what-you-want product listed from zero.
+  it "keeps the Payment Element for a saved cart line on a pay-what-you-want product with no tier" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
+
+    cart = create(:cart)
+    create(:cart_product, cart:, product: pwyw_product, price: 0)
+
+    expect(stripe_payment_props(cart:))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The guard that keeps the tier read scoped to memberships. An ordinary pay-what-you-want product
+  # can also have variants, and those variants never carry the pay-what-you-want flag —
+  # Variant::Prices#set_customizable_price only sets it for tiered memberships. Reading the cart
+  # line's variant here would call a genuinely pay-what-you-want cart free and undo this whole fix.
+  it "keeps the Payment Element for a saved cart line on a pay-what-you-want product with a variant selected" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
+    category = create(:variant_category, link: pwyw_product)
+    variant = create(:variant, variant_category: category, price_difference_cents: 0)
+
+    expect(variant.reload.customizable_price).to be_falsey
+    expect(pwyw_product.reload.customizable_price).to be(true)
+
+    cart = create(:cart)
+    create(:cart_product, cart:, product: pwyw_product, option: variant, price: 0)
+
+    expect(stripe_payment_props(cart:))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
   # A cart mixing a free product with a pay-what-you-want one can still be paid, so the
   # presence of one free line must not drag the whole cart back to the legacy surface.
   it "keeps the Payment Element when a free line shares the cart with a pay-what-you-want line" do
