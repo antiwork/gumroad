@@ -29,6 +29,22 @@ class User
         !active_preorders?(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
     end
 
+    # True when disconnecting the PayPal Connect account would leave the seller with no way to be
+    # paid at all.
+    #
+    # A seller who has never saved a bank account or a PayPal payout email is still paid out:
+    # User#paypal_payout_email falls back to the primary email on the connected PayPal account, and
+    # PayoutSchedule#current_payout_processor then routes them to PayPal. That fallback disappears
+    # the moment the account is disconnected, and because connecting PayPal requires payout
+    # information to already exist (paypal_connect_allowed?), the seller cannot reconnect to undo
+    # it. Support has had to restore the payout email by hand, so warn before the click instead.
+    def paypal_disconnect_removes_payout_rail?
+      has_paypal_account_connected? &&
+        payment_address.blank? &&
+        active_bank_account.blank? &&
+        !has_stripe_account_connected?
+    end
+
     def can_setup_bank_payouts?
       active_bank_account.present? || (native_payouts_supported? && !signed_up_from_india?) || signed_up_from_united_arab_emirates?
     end

@@ -35,6 +35,8 @@ describe Checkout::FormPresenter do
               charge_processor_verified: false,
               needs_email_confirmation: false,
               paypal_disconnect_allowed: true,
+              paypal_disconnect_removes_payout_rail: false,
+              payout_setup_method: "paypal_email",
             },
             connect_account_fee_info_text: "All sales will incur fees based on how customers find your product:\n\n• Direct sales: 10% + 50¢\n• Discover sales: 30% flat\n",
           }
@@ -204,6 +206,36 @@ describe Checkout::FormPresenter do
             props = owner_presenter.form_props[:paypal_connect]
             expect(props[:email]).to be_nil
             expect(props[:show_paypal_connect]).to eq(true)
+          end
+        end
+
+        context "when the PayPal account is the seller's only payout method" do
+          before do
+            seller.update!(payment_address: nil)
+          end
+
+          it "flags that disconnecting would remove the payout rail" do
+            props = owner_presenter.form_props[:paypal_connect]
+            expect(props[:paypal_disconnect_removes_payout_rail]).to eq(true)
+          end
+
+          it "points sellers in a native bank payout country at their bank account" do
+            allow_any_instance_of(User).to receive(:can_setup_bank_payouts?).and_return(true)
+            allow_any_instance_of(User).to receive(:can_setup_paypal_payouts?).and_return(false)
+
+            expect(owner_presenter.form_props[:paypal_connect][:payout_setup_method]).to eq("bank_account")
+          end
+
+          it "points everyone else at their PayPal payout email" do
+            allow_any_instance_of(User).to receive(:can_setup_paypal_payouts?).and_return(true)
+
+            expect(owner_presenter.form_props[:paypal_connect][:payout_setup_method]).to eq("paypal_email")
+          end
+
+          it "does not flag the disconnect once a payout email is saved" do
+            seller.update!(payment_address: "payouts@example.com")
+
+            expect(owner_presenter.form_props[:paypal_connect][:paypal_disconnect_removes_payout_rail]).to eq(false)
           end
         end
       end

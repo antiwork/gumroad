@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { request } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -21,6 +22,8 @@ export type PayPalConnect = {
   show_paypal_connect: boolean;
   allow_paypal_connect: boolean;
   paypal_disconnect_allowed: boolean;
+  paypal_disconnect_removes_payout_rail: boolean;
+  payout_setup_method: "bank_account" | "paypal_email";
 };
 
 const ConnectWithPayPalButton = ({ disabled }: { disabled: boolean }) => (
@@ -50,7 +53,10 @@ const PayPalConnectSection = ({
   paypalConnect: PayPalConnect;
   connectAccountFeeInfoText: string;
 }) => {
+  const [confirmingDisconnect, setConfirmingDisconnect] = React.useState(false);
+
   const disconnectPayPal = asyncVoid(async () => {
+    setConfirmingDisconnect(false);
     const response = await request({
       method: "POST",
       url: Routes.disconnect_paypal_path(),
@@ -65,6 +71,14 @@ const PayPalConnectSection = ({
       showAlert("Sorry, something went wrong. Please try again.", "error");
     }
   });
+
+  // Sellers who have never saved a bank account or a PayPal payout email are paid out to the
+  // email on this connected account. Disconnecting takes that away and they cannot reconnect
+  // afterwards, so ask them to confirm and tell them what to set up instead.
+  const onDisconnectClick = () => {
+    if (paypalConnect.paypal_disconnect_removes_payout_rail) setConfirmingDisconnect(true);
+    else disconnectPayPal();
+  };
 
   return (
     <section className="space-y-4 border-b border-border p-4 md:p-8">
@@ -106,11 +120,36 @@ const PayPalConnectSection = ({
                 color="paypal"
                 aria-label="Disconnect PayPal account"
                 disabled={!paypalConnect.paypal_disconnect_allowed}
-                onClick={disconnectPayPal}
+                onClick={onDisconnectClick}
               >
                 Disconnect PayPal account
               </Button>
             </p>
+            <Modal
+              open={confirmingDisconnect}
+              onClose={() => setConfirmingDisconnect(false)}
+              title="Disconnect PayPal account"
+              footer={
+                <>
+                  <Button onClick={() => setConfirmingDisconnect(false)}>Cancel</Button>
+                  <Button color="danger" onClick={disconnectPayPal}>
+                    Disconnect
+                  </Button>
+                </>
+              }
+            >
+              <p>
+                You are currently paid out to the PayPal account connected here. Disconnecting it removes your only
+                payout method, so your payouts will stop and you will not be able to publish products until you set up
+                another one.
+              </p>
+              <p>
+                {paypalConnect.payout_setup_method === "bank_account"
+                  ? "In your country payouts go to a bank account, so add your bank account in payout settings to keep getting paid."
+                  : "Add your PayPal payout email in payout settings to keep getting paid."}{" "}
+                You will not be able to reconnect PayPal here until you have done that.
+              </p>
+            </Modal>
             {!paypalConnect.paypal_disconnect_allowed ? (
               <Alert variant="warning">
                 You cannot disconnect your PayPal account because it is being used for active subscription or preorder
