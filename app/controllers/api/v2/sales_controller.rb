@@ -158,6 +158,19 @@ class Api::V2::SalesController < Api::V2::BaseController
       return error_with_sale(purchase)
     end
 
+    # The amount_cents param is denominated in the purchase's LISTED currency (the currency
+    # the product is priced/displayed in, displayed_price_currency_type) — NOT the buyer's
+    # presentment currency. Dividing by that currency's unit scaling factor turns it into a
+    # major-unit amount that Purchase#refunding_amount_cents (app/models/purchase.rb) scales
+    # back by the SAME listed currency and converts to canonical USD cents; for
+    # buyer-presentment purchases the refund path then separately derives the amount to send
+    # to Stripe in the buyer's currency via Purchase::PresentmentRefund
+    # (app/modules/purchase/refundable.rb, refund_and_save!). So listed-currency input is
+    # unambiguous today because at most one of listed/presentment currency is non-USD. If
+    # both can be non-USD (see gumroad-private#1321), a caller reading the buyer's receipt
+    # could reasonably send the presentment amount instead, and this line would silently
+    # misinterpret it — the API contract ("amount is in the listed currency") would need to
+    # be made explicit or the param re-specified.
     amount = params[:amount_cents].to_i / unit_scaling_factor(purchase.displayed_price_currency_type).to_f if params[:amount_cents].present?
 
     if purchase.refund!(refunding_user_id: current_resource_owner.id, amount:)

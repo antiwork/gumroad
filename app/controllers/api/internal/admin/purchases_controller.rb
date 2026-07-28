@@ -183,6 +183,19 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
         if amount_cents <= 0
           return render json: { success: false, message: "amount_cents must be a positive integer" }, status: :unprocessable_entity
         end
+        # amount_cents is denominated in the purchase's LISTED currency (the currency the
+        # product is priced/displayed in, displayed_price_currency_type) — NOT the buyer's
+        # presentment currency. Dividing by that currency's unit scaling factor produces a
+        # major-unit amount that Purchase#refunding_amount_cents (app/models/purchase.rb)
+        # scales back by the SAME listed currency and converts to canonical USD cents; for
+        # buyer-presentment purchases the refund path then separately derives the amount to
+        # send to Stripe in the buyer's currency via Purchase::PresentmentRefund
+        # (app/modules/purchase/refundable.rb, refund_and_save!). Listed-currency input is
+        # unambiguous today because at most one of listed/presentment currency is non-USD.
+        # If both can be non-USD (see gumroad-private#1321), an admin reading the buyer's
+        # receipt could reasonably type the presentment amount instead, and this line would
+        # silently misinterpret it — the admin UI would need to state which currency it
+        # expects (and this endpoint enforce it).
         amount = amount_cents / unit_scaling_factor(purchase.displayed_price_currency_type).to_f
       end
 

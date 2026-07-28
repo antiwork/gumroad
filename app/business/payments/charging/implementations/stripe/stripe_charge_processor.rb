@@ -610,6 +610,23 @@ class StripeChargeProcessor
 
     stripe_balance_amount = stripe_available_object.amount + stripe_pending_object.amount
 
+    # NOTE on currencies: stripe_balance_amount is denominated in the merchant account's own
+    # currency (stripe_currency), while owed_amount_cents_usd is USD. The US branch below
+    # compares them directly WITHOUT conversion, which is only correct because a US account's
+    # currency here is guaranteed to be "usd":
+    #   * Only Gumroad-controlled custom Stripe accounts reach this point — the
+    #     holder_of_funds == HolderOfFunds::STRIPE guard above excludes creator-owned Stripe
+    #     Connect accounts (see StripeChargeProcessor.holder_of_funds).
+    #   * Those accounts get their currency at creation from Country#payout_currency, which
+    #     for the US resolves (via Country#default_currency) to USD
+    #     (StripeMerchantAccountManager.create_account).
+    #   * Afterwards, currency is only ever rewritten together with country from the same
+    #     Stripe account object (StripeMerchantAccountManager's account.updated handling),
+    #     and Stripe only pays out US accounts in USD, so country == "US" implies
+    #     default_currency == "usd".
+    # If any of that stops holding, the US branch must convert the owed amount like the
+    # else branch does (usd_cents_to_currency) before comparing — otherwise it would compare
+    # cents across two different currencies and could debit the wrong amount.
     if credit.merchant_account.country == Compliance::Countries::USA.alpha2
       # Avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
       return unless stripe_balance_amount > owed_amount_cents_usd
