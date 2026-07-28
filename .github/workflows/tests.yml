@@ -308,11 +308,16 @@ jobs:
           fi
 
   test_minitest:
-    name: Test Minitest${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
+    name: Test Minitest ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     needs: ci_gate
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        ci_node_total: [2]
+        ci_node_index: [0, 1]
 
     services:
       mysql:
@@ -408,10 +413,16 @@ jobs:
           curl -fsS http://localhost:9200/_cluster/health || { echo "Elasticsearch did not become ready"; exit 1; }
 
       - name: Run Minitest
-        run: bundle exec rails test
+        run: |
+          FILES=$(bin/minitest-shard "$CI_NODE_INDEX" "$CI_NODE_TOTAL")
+          echo "Shard $CI_NODE_INDEX of $CI_NODE_TOTAL — $(echo "$FILES" | wc -w) files:"
+          echo "$FILES" | tr ' ' '\n' | sed 's/^/  /'
+          bundle exec rails test $FILES
         env:
           RUBY_YJIT_ENABLE: 1
           CI: true
+          CI_NODE_INDEX: ${{ matrix.ci_node_index }}
+          CI_NODE_TOTAL: ${{ matrix.ci_node_total }}
 
   test_fast:
     name: Test Fast ${{ matrix.ci_node_index }}${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}

@@ -21,8 +21,14 @@ same fixture conventions, same verification steps every time.
 
 CI runs the whole `test/` tree as the `test_minitest` job in
 `.github/workflows/tests.yml` (bare runner, no Docker image — services boot as
-native GitHub Actions services). The job is wired into the Buildkite
-deployment gate alongside `test_fast`/`test_slow`.
+native GitHub Actions services, including Elasticsearch and MinIO). The job is
+wired into the Buildkite deployment gate alongside `test_fast`/`test_slow`.
+
+The job is a 2-shard matrix; each shard runs the files
+`bin/minitest-shard <index> <total>` assigns it, split by file size so adding
+tests re-balances on the next run. Raise `ci_node_total` and extend
+`ci_node_index` to add shards. Locally, run the tree in one go with
+`bin/rails test`.
 
 ## Rules
 
