@@ -34,7 +34,7 @@ import {
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
-import { buildCartSaveRefreshCallbacks } from "$app/components/Checkout/checkoutPaymentRefresh";
+import { buildCartSaveRefreshCallbacks, type CartSaveCallbacks } from "$app/components/Checkout/checkoutPaymentRefresh";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -680,14 +680,13 @@ const CheckoutIndexPage = () => {
 
   // A save can finish without delivering a recomputed configuration (dropped connection, timeout,
   // 500). The hold on Pay is NOT released in that case — see checkoutPaymentRefresh for why a lost
-  // response cannot be read as "the edit didn't persist" — instead the configuration is
-  // re-requested from the server, and if that also fails the buyer is asked to reload.
-  const cartSaveRefreshCallbacks = buildCartSaveRefreshCallbacks({
-    reload: (options) => router.reload(options),
-    onUnrecoverable: (message) => showAlert(message, "error"),
-  });
-
-  const debouncedSaveCartState = useDebouncedCallback(() => {
+  // response cannot be read as "the edit didn't persist" — instead the save is re-issued, and if
+  // that one comes back empty-handed too the buyer is asked to reload.
+  //
+  // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
+  // the cart the client currently holds, so its answer is the configuration for that same cart.
+  // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
+  const saveCart = (callbacks: CartSaveCallbacks) => {
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
       // element this checkout mounts, and in which currency, can change when the cart changes.
@@ -696,8 +695,21 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment"],
       preserveUrl: true,
       preserveScroll: true,
-      ...cartSaveRefreshCallbacks,
+      ...callbacks,
     });
+  };
+  // Held in a ref so a recovery started by an earlier save calls the current render's save rather
+  // than one closed over stale cart data.
+  const saveCartRef = React.useRef(saveCart);
+  saveCartRef.current = saveCart;
+
+  const debouncedSaveCartState = useDebouncedCallback(() => {
+    saveCartRef.current(
+      buildCartSaveRefreshCallbacks({
+        save: (callbacks) => saveCartRef.current(callbacks),
+        onUnrecoverable: (message) => showAlert(message, "error"),
+      }),
+    );
   }, cart_save_debounce_ms);
 
   // Clean URL params after initial render to avoid stale URL references during Inertia updates
