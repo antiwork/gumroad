@@ -421,10 +421,22 @@ describe User::Stats, :vcr do
                                   affiliate_credit_success_balance: create(:balance, user: affiliate_user))
       end
 
+      # #affiliate_credit_sum_from_scope is private, so these examples drive it through
+      # #affiliate_credits_sum_for_credits_created_between — the only public caller left on
+      # User::Stats that still routes into it. The window is deliberately wider than the
+      # examples' lifetime so it selects every credit they create and the date filter has no
+      # bearing on the figures asserted below; what is under test is the add-back, not the
+      # window. The dashboard entrypoint these examples originally called,
+      # #affiliate_credits_sum_total, was removed in #6420 in favour of the unfiltered
+      # #affiliate_credits_total_revenue_cents, which does not use the add-back at all.
+      def affiliate_credit_sum
+        affiliate_user.affiliate_credits_sum_for_credits_created_between(1.year.ago, 1.year.from_now)
+      end
+
       it "counts an untouched credit at its full value" do
         affiliate_credit_for_new_purchase
 
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 200
+        expect(affiliate_credit_sum).to eq 200
       end
 
       it "counts only the retained remainder of a partially reversed credit" do
@@ -435,7 +447,7 @@ describe User::Stats, :vcr do
 
         # 200 earned, 75 clawed back, 125 retained. The credit is out of `paid` because the
         # refund balance is set, so this figure comes entirely from the add-back.
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 125
+        expect(affiliate_credit_sum).to eq 125
       end
 
       it "counts nothing for a credit that was clawed back in full" do
@@ -445,7 +457,7 @@ describe User::Stats, :vcr do
         # No affiliate_partial_refund row: Purchase only creates one when the affiliate credit
         # was reversed by less than its full value, so its absence means a full claw-back.
 
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 0
+        expect(affiliate_credit_sum).to eq 0
       end
 
       it "counts a credit reversed over several partial refunds only once" do
@@ -457,7 +469,7 @@ describe User::Stats, :vcr do
 
         # 200 earned, 80 clawed back over two refunds, 120 retained. Guards against restricting
         # the add-back with a join, which would add the 200 once per refund row.
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 120
+        expect(affiliate_credit_sum).to eq 120
       end
 
       it "keeps a fully clawed-back credit at zero even when the affiliate has other refunded credits" do
@@ -474,7 +486,7 @@ describe User::Stats, :vcr do
         # per credit whether an affiliate_partial_refunds row exists for THAT credit, so this
         # is what pins the subquery to the outer row: if it merely asked whether any refund row
         # exists at all, the fully reversed credit would be added back too and this would be 325.
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 125
+        expect(affiliate_credit_sum).to eq 125
       end
 
       it "combines an untouched credit with a fully clawed-back one" do
@@ -483,7 +495,7 @@ describe User::Stats, :vcr do
         reversed.purchase.update!(stripe_partially_refunded: true)
         reversed.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
 
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 200
+        expect(affiliate_credit_sum).to eq 200
       end
     end
 
