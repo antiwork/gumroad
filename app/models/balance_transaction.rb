@@ -98,9 +98,11 @@ class BalanceTransaction < ApplicationRecord
     # Whether Gumroad itself is holding these funds, rather than a seller's own connected
     # Stripe account.
     #
-    # Returns false when no merchant account is given, which keeps the pre-existing behaviour
-    # for the callers that don't pass one (the affiliate legs and the historical backfill
-    # services). Every caller that books a seller balance for Gumroad-held funds passes it.
+    # Returns false when no merchant account is given, which keeps the pre-existing behaviour for
+    # the two Onetime services that don't pass one (RebuildsSellerSettlementAmounts and
+    # BackfillSelfAffiliateDroppedProceeds). Both already build a USD flow of funds for a
+    # Gumroad-held purchase, so they get a USD holding amount either way. Every caller that books a
+    # seller balance from a live charge passes the account.
     def self.gumroad_held?(merchant_account)
       return false if merchant_account.nil?
 
