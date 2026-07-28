@@ -618,12 +618,21 @@ class Checkout::StripePaymentPresenter
     # must not read as "free" (see the zero-total comment there).
     #
     # The product-level `pwyw` field is not enough on its own, because it is not tier-aware. For a
-    # tiered membership, `Product::Prices#set_customizable_price` returns early and never sets the
-    # product's own `customizable_price` column — the TIER carries the flag instead, via
-    # `Variant::Prices`. So `CheckoutPresenter#product_common` emits `pwyw: nil` for every
-    # membership, and without a tier-level check a $0 pay-what-you-want membership opened through
-    # /checkout?product=… fell back to CardElement while the same product added from a saved cart
-    # did not.
+    # tiered membership the TIER carries the flag, via `Variant::Prices` — so the tier is what has
+    # to be consulted, and the product column must not be trusted. A $0 pay-what-you-want
+    # membership opened through /checkout?product=… fell back to CardElement while the same product
+    # added from a saved cart did not.
+    #
+    # Note the product column can be STALE-true on a membership, which is why this reads
+    # `is_tiered_membership` before trusting `pwyw` at all. During create,
+    # `Product::Prices#write_customizable_price` runs (via `price_range=`) while
+    # `is_tiered_membership` is still false, so any membership created with a $0 starting price
+    # persists `customizable_price = true`; the `set_customizable_price` after_save callback
+    # early-returns for memberships, so nothing ever clears it. `customizable_price` is also a
+    # directly writable param on both the web and v2 API update paths. Trusting it here would mount
+    # the Payment Element on a genuinely free membership tier — the defect this method's
+    # selected-tier check exists to prevent — and would disagree with
+    # cart_line_buyer_can_name_price?, which already guards on the membership flag first.
     #
     # The tier-level check has to look at the tier the buyer actually SELECTED, not at every tier
     # the product offers. `options` lists all of them, so asking "does any option allow naming a
@@ -635,7 +644,7 @@ class Checkout::StripePaymentPresenter
     # option is selected — a non-tiered product, where `pwyw` is already authoritative anyway.
     def buyer_can_name_price?(checkout_product)
       product = checkout_product[:product]
-      return true if product[:pwyw].present?
+      return true if product[:pwyw].present? && !product[:is_tiered_membership]
 
       options = product[:options].to_a
       selected_option_id = checkout_product[:option_id]

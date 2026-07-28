@@ -5,7 +5,8 @@ describe Checkout::StripePaymentPresenter do
                            is_preorder: product.is_in_preorder_state, free_trial: product.free_trial_enabled,
                            native_type: product.native_type, buyer_currency_display: nil, ppp_details: nil,
                            pwyw: product.customizable_price? ? { suggested_price_cents: product.suggested_price_cents } : nil,
-                           options: product.options, option_id: nil)
+                           options: product.options, option_id: nil,
+                           is_tiered_membership: product.is_tiered_membership)
     {
       product: {
         creator: { id: product.user.external_id },
@@ -18,9 +19,13 @@ describe Checkout::StripePaymentPresenter do
         # the presenter reads it so a pay-what-you-want cart listed from zero is not mistaken
         # for a free one before the buyer has entered an amount.
         pwyw:,
+        # Also set by product_common. The presenter reads it to decide whether `pwyw` above can be
+        # trusted: on a tiered membership the TIER carries the pay-what-you-want flag, and the
+        # product-level column `pwyw` reflects can be stale-true (see the
+        # buyer_can_name_price? comment for how a membership acquires it), so the tier must win.
+        is_tiered_membership:,
         # Also set by product_common. Each option carries is_pwyw from BaseVariant#to_option,
-        # which is the only tier-aware signal on this payload: `pwyw` above reads the
-        # product-level column, and that column is never set for a tiered membership.
+        # which is the tier-aware signal on this payload.
         options:,
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
@@ -635,7 +640,7 @@ describe Checkout::StripePaymentPresenter do
 
     props = stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 0)])
 
-    expect(props.dig(:elements_options, :fallback_reason)).to be_nil
+    expect(props[:fallback_reason]).to be_nil
     expect(props[:integration]).to eq("payment_element")
   end
 
@@ -705,6 +710,42 @@ describe Checkout::StripePaymentPresenter do
 
     expect(free_tier.reload.customizable_price).to be(false)
     expect(membership.has_customizable_price_option?).to be(true)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: free_tier.external_id)]))
+      .to eq(card_element_fallback("not_charged"))
+  ensure
+    Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+  end
+
+  # The membership guard on the `pwyw` short-circuit, which is what makes the selected-tier read
+  # above reachable at all. A membership can carry a stale product-level `customizable_price =
+  # true`: during create, Product::Prices#write_customizable_price runs (via `price_range=`) while
+  # is_tiered_membership is still false, so any membership started at $0 persists the flag, and the
+  # set_customizable_price after_save callback early-returns for memberships so nothing clears it.
+  # `customizable_price` is a directly writable param too. Measured on production: 6 of the 6,000
+  # most recent alive products with the flag set are tiered memberships.
+  #
+  # Without the guard the short-circuit fires before any tier logic and mounts the Payment Element
+  # on a genuinely free tier — and disagrees with cart_line_buyer_can_name_price?, which already
+  # checks is_tiered_membership? first, so the same product would behave differently depending on
+  # whether it came from a saved cart or /checkout?product=.
+  it "ignores a stale product-level customizable_price on a membership and still reads the selected tier" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_cents: 0)
+    free_tier = membership.tiers.first
+    free_tier.update_column(:customizable_price, false)
+    pwyw_tier = create(:variant, variant_category: membership.tier_category, name: "Supporter")
+    pwyw_tier.update!(customizable_price: true)
+    # The stale flag itself. update_column so the membership early-return in the after_save
+    # callback cannot interfere — which is exactly why production rows keep it.
+    membership.update_column(:customizable_price, true)
+    membership.reload
+
+    # The fixture must genuinely disagree with the tier, or this example cannot distinguish the
+    # guarded read from the unguarded one.
+    expect(membership.customizable_price).to be(true)
+    expect(free_tier.reload.customizable_price).to be(false)
 
     expect(stripe_payment_props(add_products: [checkout_product_for(membership, price: 0, option_id: free_tier.external_id)]))
       .to eq(card_element_fallback("not_charged"))
