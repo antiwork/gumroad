@@ -1117,6 +1117,20 @@ class StripeChargeProcessor
     chargeable = Charge::Chargeable.find_by_processor_transaction_id!(stripe_charge.id)
     amount_cents = chargeable.charged_amount_cents - chargeable.charged_gumroad_amount_cents
 
+    # Resolve Gumroad's share BEFORE moving any money. `presentment_gumroad_amount_for`
+    # deliberately raises rather than book a mixed-currency figure, and the transfer below
+    # has no idempotency key while this runs in HandleStripeEventWorker (`retry: 10`). If
+    # the raise came after the transfer, every retry would re-send the creator the full
+    # seller share — up to 11 duplicate transfers before the job reached the dead set.
+    gumroad_amount = if stripe_charge.application_fee.present?
+      FlowOfFunds::Amount.new(
+        currency: stripe_charge.application_fee.currency,
+        cents: stripe_charge.application_fee.amount_refunded
+      )
+    else
+      presentment_gumroad_amount_for(chargeable, stripe_charge, amount_cents)
+    end
+
     stripe_transfer = StripeTransferInternallyToCreator.transfer_funds_to_account(
       message_why: "Dispute #{stripe_dispute.id} won",
       stripe_account_id: stripe_charge.destination,
@@ -1145,14 +1159,6 @@ class StripeChargeProcessor
       { stripe_account: stripe_transfer.destination }
     )
 
-    gumroad_amount = stripe_charge.application_fee.present? ?
-                       FlowOfFunds::Amount.new(
-                         currency: stripe_charge.application_fee.currency,
-                         cents: stripe_charge.application_fee.amount_refunded) :
-                       FlowOfFunds::Amount.new(
-                         currency: stripe_charge.currency,
-                         cents: stripe_charge.amount - amount_cents)
-
     merchant_account_gross_amount = FlowOfFunds::Amount.new(
       currency: destination_payment.balance_transaction.currency,
       cents: destination_payment.balance_transaction.amount
@@ -1168,6 +1174,48 @@ class StripeChargeProcessor
       merchant_account_gross_amount:,
       merchant_account_net_amount:
     )
+  end
+
+  # Gumroad's share of a disputed charge, expressed in the charge's own currency.
+  #
+  # For a buyer-currency presentment charge the snapshot already recorded this amount in the
+  # currency Stripe charged, so read it from there. For a canonical USD charge there is no
+  # snapshot and the historical subtraction is correct, because both sides really are USD.
+  #
+  # Failing closed matters here: this number becomes a balance-transaction amount on a
+  # dispute-won event, so a non-USD charge whose snapshot is missing must raise rather than
+  # silently book a mixed-currency figure (gumroad-private#1328 A2).
+  #
+  # Note the asymmetry between the two branches, which is the whole point of the helper:
+  # `canonical_seller_cents` is the SELLER's share (`charged_amount_cents -
+  # charged_gumroad_amount_cents`), so the USD branch has to subtract it from the total to
+  # arrive at Gumroad's cut. The presentment snapshot already stores Gumroad's cut directly
+  # (`PurchasePresentment#presentment_gumroad_amount_cents`, validated never to exceed the
+  # presentment total), so that branch must use it AS-IS. Subtracting it would yield the
+  # seller's share under a `gumroad_amount` label.
+  def self.presentment_gumroad_amount_for(chargeable, stripe_charge, canonical_seller_cents)
+    presentment_currency = chargeable.presentment_currency
+
+    if presentment_currency.blank?
+      # A non-USD charge with no presentment snapshot is the exact mixed-currency case A2
+      # exists to eliminate: `stripe_charge.amount` would be in the buyer's currency while
+      # `canonical_seller_cents` is USD, and the result would be labelled as the charge's
+      # currency. There is no correct number to book, so refuse.
+      unless stripe_charge.currency.to_s.casecmp?(Currency::USD)
+        raise "Charge #{stripe_charge.id} is in #{stripe_charge.currency} but has no presentment snapshot; " \
+              "cannot compute Gumroad's share without mixing currencies"
+      end
+
+      return FlowOfFunds::Amount.new(
+        currency: stripe_charge.currency,
+        cents: stripe_charge.amount - canonical_seller_cents
+      )
+    end
+
+    presentment_cents = chargeable.presentment_gumroad_amount_cents
+    raise "Presentment charge #{stripe_charge.id} has a presentment currency but no presentment Gumroad amount" if presentment_cents.nil?
+
+    FlowOfFunds::Amount.new(currency: presentment_currency, cents: presentment_cents)
   end
 
   def transaction_url(charge_id)
