@@ -24,6 +24,7 @@ import {
   getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
+import { recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import {
   type CartItem,
   type CartState,
@@ -377,6 +378,23 @@ const CheckoutIndexPage = () => {
   const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
   const largeTipConfirmedRef = React.useRef(false);
 
+  // Recovers a checkout whose local-currency quote the server refused at charge time. The
+  // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
+  function recoverFromInvalidBuyerCurrencyQuote() {
+    recoverBuyerCurrencyQuote({
+      reloadCartProps: ({ onSuccess, onError }) =>
+        router.reload({
+          only: ["cart"],
+          preserveUrl: true,
+          onSuccess: (page) => onSuccess(page.props),
+          onError,
+        }),
+      cart: cartForm.data.cart,
+      setCart: (cart) => cartForm.setData({ cart }),
+      requote: (cart) => dispatch({ type: "update-products", products: getProducts(cart) }),
+    });
+  }
+
   async function pay() {
     if (state.status.type !== "finished") return;
     if (isTipSuspiciouslyLarge(state) && !largeTipConfirmedRef.current) {
@@ -546,7 +564,7 @@ const CheckoutIndexPage = () => {
       ) {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
-        dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
+        recoverFromInvalidBuyerCurrencyQuote();
         return;
       }
 
