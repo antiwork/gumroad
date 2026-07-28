@@ -964,6 +964,40 @@ describe("reduceCheckoutState", () => {
         expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(false);
       });
 
+      // gumroad#6486: the refusal used to preserve whatever errors were already on screen, which for
+      // the offer pipeline meant none — the cross-sell's own required fields were added to the form
+      // by the very cart edit that made the configuration stale, and the "validate" that should have
+      // flagged them was refused before it validated anything. spec/requests/purchases/product/
+      // upsell_spec.rb:489 caught it: after "Add to cart" on a cross-sell with required fields, the
+      // fields sat un-flagged (`aria-invalid` absent) and the buyer got no explanation.
+      it("flags the buyer's missing required fields immediately instead of deferring them", () => {
+        const withRequiredCheckbox = state({
+          status: { type: "offering" },
+          products: [
+            product({
+              customFields: [
+                { id: "field-1", type: "checkbox", name: "Checkbox field", required: true, collect_per_product: false },
+              ],
+            }),
+          ],
+          customFieldValues: {},
+        });
+        const stale = reduceCheckoutState(withRequiredCheckbox, { type: "invalidate-checkout-payment" });
+
+        const refused = reduceCheckoutState(stale, { type: "validate" });
+
+        expect(refused.status).toEqual({ type: "input", errors: new Set(["customFields.field-1"]) });
+        // No resume: the buyer has to fix the field and press Pay again, so an armed resume would
+        // fire a submit they did not ask for as soon as the configuration lands.
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(false);
+
+        const refreshed = reduceCheckoutState(refused, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+        expect(refreshed.status).toEqual({ type: "input", errors: new Set(["customFields.field-1"]) });
+      });
+
       it("does not resume a submit the buyer never made", () => {
         // A plain cart edit with no submit behind it must not turn into a payment when the
         // configuration comes back.

@@ -328,12 +328,23 @@ const CheckoutIndexPage = () => {
     // resume that the "validate" below arms.
     invalidatedLaneKeyRef.current = paymentLaneCartKeyFor(newCart);
     dispatch({ type: "invalidate-checkout-payment" });
-    if (surchargesIfAccepted)
-      dispatch({
-        type: "update-products",
-        products: getProducts(newCart),
-        surcharges: surchargesIfAccepted,
-      });
+    // Unconditionally, including when the accepted cart's quote has not arrived yet. The products
+    // have to be in state before completeOffer's "validate" runs, because that "validate" is the
+    // dispatch responsible for pointing out required fields belonging to the product the buyer just
+    // added — and it can only see fields for products it has. Making this conditional on the quote
+    // meant that whether the cross-sold product's required fields were flagged depended on whether
+    // a background surcharge request happened to have landed, which is a race the buyer can lose:
+    // upsell_spec.rb:489 loses it, and the fields sit un-flagged with no explanation.
+    //
+    // Passing no surcharges leaves the quote pending, which cancels the pipeline back to "input".
+    // That is the same thing the passive [cartForm.data.cart] effect does one tick later, so this is
+    // the existing behaviour brought forward rather than a new one, and it is the fail-closed
+    // direction: the totals really are not yet ones a charge would honour.
+    dispatch({
+      type: "update-products",
+      products: getProducts(newCart),
+      ...(surchargesIfAccepted ? { surcharges: surchargesIfAccepted } : {}),
+    });
     completeOffer();
   };
 
