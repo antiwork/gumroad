@@ -21,13 +21,14 @@
 # subscribe form until review clears them, and the cost of the alternative was
 # ~364,000 unsolicited emails from our domain.
 #
-# Refusing follows for suspended and deleted accounts outright is a separate
-# change (antiwork/gumroad#6498) that is not merged yet, so this class does not
-# assume it: such a seller can still reach here today, and the `account_active?`
-# check below means they get a challenge rather than a free pass. Suspending an
-# account does not reset `user_risk_state` and deleting one does not touch it at
-# all, so without that check a seller who was marked compliant before being shut
-# down would keep sending confirmation email from our domain with no challenge.
+# Follows for suspended and deleted accounts are also refused outright, one layer
+# down in Follower::CreateService. The `account_active?` check below is kept even
+# so, deliberately: it is cheap, and it means this class states the whole trust
+# rule on its own rather than depending on a caller elsewhere to have already
+# filtered its input. Both checks are needed because suspending an account does
+# not reset `user_risk_state` and deleting one does not touch it at all — a seller
+# marked compliant before being shut down still reads as `compliant?` forever, so
+# without the activity check they would keep taking follows with no challenge.
 module FollowRecaptcha
   SURFACE = :follow
 
