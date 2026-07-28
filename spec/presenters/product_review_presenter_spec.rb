@@ -17,6 +17,7 @@ describe ProductReviewPresenter do
           },
           rating: product_review.rating,
           purchase_id: product_review.purchase.external_id,
+          created_at: product_review.created_at.iso8601,
           is_new: true,
           response: nil,
           video: nil

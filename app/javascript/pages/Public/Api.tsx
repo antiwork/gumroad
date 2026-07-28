@@ -33,6 +33,7 @@ import {
   RotateLicense,
   VerifyLicense,
 } from "$app/components/ApiDocumentation/Endpoints/Licenses";
+import { CreateMedia, DeleteMedia, GetMedia } from "$app/components/ApiDocumentation/Endpoints/Media";
 import {
   CreateOfferCode,
   DeleteOfferCode,
@@ -41,6 +42,7 @@ import {
   UpdateOfferCode,
 } from "$app/components/ApiDocumentation/Endpoints/OfferCodes";
 import { GetPayout, GetPayouts, GetUpcomingPayouts } from "$app/components/ApiDocumentation/Endpoints/Payouts";
+import { GetProductReviews } from "$app/components/ApiDocumentation/Endpoints/ProductReviews";
 import {
   CreateProduct,
   DeleteProduct,
@@ -150,6 +152,10 @@ export default function Api() {
                 <GetPublicProductPage />
               </ApiResource>
 
+              <ApiResource name="Reviews" id="reviews">
+                <GetProductReviews />
+              </ApiResource>
+
               <ApiResource name="Categories" id="categories">
                 <GetCategories />
               </ApiResource>
@@ -170,6 +176,12 @@ export default function Api() {
               <ApiResource name="Thumbnails" id="thumbnails">
                 <CreateThumbnail />
                 <DeleteThumbnail />
+              </ApiResource>
+
+              <ApiResource name="Media library" id="media">
+                <GetMedia />
+                <CreateMedia />
+                <DeleteMedia />
               </ApiResource>
 
               <ApiResource name="Variant categories" id="variant-categories">
