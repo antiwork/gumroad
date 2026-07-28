@@ -138,6 +138,13 @@ describe("Posts on seller profile", type: :system, js: true) do
 
   describe "an audience post" do
     describe "following" do
+      # Reviewed and marked compliant, because these examples drive the subscribe
+      # form as an ordinary visitor and assert the follow lands with no friction.
+      # Sellers we have not reviewed now have to clear a CAPTCHA first (see
+      # FollowRecaptcha), and a headless browser has no Google challenge to
+      # solve.
+      let(:seller) { create(:named_seller, :with_avatar, user_risk_state: "compliant") }
+
       before do
         @follower_email = generate(:email)
       end
