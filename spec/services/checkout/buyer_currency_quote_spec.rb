@@ -70,6 +70,30 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result.token).to be_present
     end
 
+    it "signs a single-charge quote in the flat shape too, so a rollback can still verify it" do
+      # The charge path this token may meet is not necessarily the one that minted it: during a
+      # deploy, and for as long as a rollback is possible, it can be read by code that predates
+      # per-charge quoting and looks these fields up at the top level, failing the payment if
+      # they are missing. Single-seller carts are all of today's buyer-currency traffic, so
+      # this shape has to stay readable both ways. Asserted on the payload rather than through
+      # `verify!` because it is the OLD verifier, no longer in this codebase, that reads it.
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      payload = Rails.application.message_verifier(described_class::TOKEN_PURPOSE).verify(result.token)
+
+      expect(payload).to include("currency" => Currency::CAD,
+                                 "seller_id" => seller.id,
+                                 "canonical_total_cents" => 10_00,
+                                 "presentment_total_cents" => 12_50,
+                                 "stripe_fx_quote_id" => "fxq_test")
+      expect(payload.fetch("stripe_fx_quote_expires_at")).to eq(stripe_fx_quote.expires_at.iso8601)
+      # The same figures are in the per-charge entry the current code reads.
+      expect(payload.fetch("charges").sole).to include("seller_id" => seller.id,
+                                                       "canonical_total_cents" => 10_00,
+                                                       "presentment_total_cents" => 12_50,
+                                                       "stripe_fx_quote_id" => "fxq_test")
+    end
+
     context "with price-ending mirroring on (the default for sellers charging in the buyer's currency)" do
       let(:seller) { create(:user, disable_buyer_local_currency: false) }
 

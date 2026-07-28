@@ -591,12 +591,26 @@ describe Charge::CreateService, :vcr do
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
       allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
-      allow(StripeFxQuote).to receive(:create).and_return(
-        StripeFxQuote::Quote.new(id: "fxq_multi_seller", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
-      )
+      # A distinct quote per seller, with a different id AND a different rate. Stripe mints one
+      # quote per account, so this is the real shape — and it is what makes a cross-charge
+      # mix-up visible: were a charge to pick up the other seller's entry, both the amount and
+      # the quote id it sends would be wrong.
+      merchant_account_quotes = {}
+      allow(StripeFxQuote).to receive(:create) do |**kwargs|
+        index = kwargs[:stripe_account_id] == "acct_seller_0" ? 0 : 1
+        merchant_account_quotes[index] ||= StripeFxQuote::Quote.new(
+          id: ["fxq_seller_a", "fxq_seller_b"][index],
+          expires_at: 30.minutes.from_now,
+          fx_rate: [BigDecimal("0.8"), BigDecimal("0.5")][index]
+        )
+      end
 
       order = create(:order)
-      merchant_accounts = sellers.map { create(:merchant_account_stripe_connect, user: _1) }
+      # Distinct Stripe account ids per seller: the factory hardcodes one, and the whole point
+      # here is that each charge locks and sends the quote minted for its OWN account.
+      merchant_accounts = sellers.each_with_index.map do |seller, index|
+        create(:merchant_account_stripe_connect, user: seller, charge_processor_merchant_id: "acct_seller_#{index}")
+      end
       products = sellers.each_with_index.map { |seller, index| create(:product, user: seller, price_cents: [10_00, 5_00][index]) }
       purchases = products.each_with_index.map do |product, index|
         purchase = create(:purchase,
@@ -625,8 +639,9 @@ describe Charge::CreateService, :vcr do
         )
       end
       quote = Checkout::BuyerCurrencyQuote.create(line_items: quote_line_items, canonical_total_cents: 15_00, ip: "203.0.113.1")
-      # $15 total shown to the buyer as CA$18.75, made of two locked amounts.
-      expect(quote.presentment_total_cents).to eq(18_75)
+      # $15 total shown to the buyer as CA$22.50, made of two independently locked amounts:
+      # $10 at 0.8 is CA$12.50, $5 at 0.5 is CA$10.00.
+      expect(quote.presentment_total_cents).to eq(22_50)
 
       captured = []
       allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*args, **kwargs|
@@ -651,8 +666,10 @@ describe Charge::CreateService, :vcr do
       end
 
       expect(captured.map { _1[:amount_cents] }).to eq([10_00, 5_00])
-      expect(captured.map { _1[:keyword][:processor_amount_cents] }).to eq([12_50, 6_25])
+      expect(captured.map { _1[:keyword][:processor_amount_cents] }).to eq([12_50, 10_00])
       expect(captured.map { _1[:keyword][:processor_currency] }.uniq).to eq([Currency::CAD])
+      # Each charge sends the FX quote minted for ITS OWN account, never the other seller's.
+      expect(captured.map { _1[:keyword][:stripe_fx_quote_id] }).to eq(["fxq_seller_a", "fxq_seller_b"])
       # The two charged amounts add up to exactly the cart total the buyer confirmed.
       expect(captured.sum { _1[:keyword][:processor_amount_cents] }).to eq(quote.presentment_total_cents)
       purchases.each do |purchase|
