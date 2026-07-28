@@ -3111,7 +3111,7 @@ class Purchase < ApplicationRecord
     Purchase.where(email:, seller_id:, can_contact: true).find_each do |purchase|
       purchase.update!(can_contact: false)
     rescue ActiveRecord::RecordInvalid
-      Rails.logger.info "Could not update purchase (#{id}) with validations turned on. Unsubscribing the buyer without running validations."
+      Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Unsubscribing the buyer without running validations."
 
       purchase.can_contact = false
       purchase.save(validate: false)
@@ -5252,6 +5252,13 @@ class Purchase < ApplicationRecord
       return unless new_record?
       return unless can_contact?
       return unless Purchase.where(email:, seller_id:, can_contact: false).exists?
+      # A subscription's contactability lives on its original purchase: that is the only row
+      # `should_be_audience_member?` accepts for a subscription, so it is what decides whether
+      # the buyer hears from the creator at all. If the buyer re-subscribed, the original
+      # purchase is contactable again, and this new renewal charge must not be stamped
+      # uncontactable just because some older sibling row is still marked false. Doing so used to
+      # silently drop a paying member back out of the creator's audience on their next renewal.
+      return if subscription&.original_purchase&.can_contact?
 
       self.can_contact = false
     end
