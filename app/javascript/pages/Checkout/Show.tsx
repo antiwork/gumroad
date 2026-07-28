@@ -24,7 +24,10 @@ import {
   getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
-import { recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
+import {
+  recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote,
+  useLatestCartGetter,
+} from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import {
   type CartItem,
   type CartState,
@@ -380,14 +383,11 @@ const CheckoutIndexPage = () => {
 
   // The recovery below re-fetches the cart from the server, and the checkout goes back to being
   // editable while that request is in flight, so the buyer can change a quantity, an option, or a
-  // pay-what-you-want price before it comes back. Keep the current cart in a ref so the completion
-  // callback works from whatever the buyer is holding at that moment instead of the snapshot from
-  // the render that started the recovery, which would write the older selections back and quote
-  // them.
-  const latestCartRef = React.useRef(cartForm.data.cart);
-  React.useEffect(() => {
-    latestCartRef.current = cartForm.data.cart;
-  }, [cartForm.data.cart]);
+  // pay-what-you-want price before it comes back. This getter always reads the cart from the
+  // latest committed render, so the completion callback works from whatever the buyer is holding
+  // at that moment instead of the snapshot from the render that started the recovery, which would
+  // write the older selections back and quote them.
+  const getLatestCart = useLatestCartGetter(cartForm.data.cart);
 
   // Recovers a checkout whose local-currency quote the server refused at charge time. The
   // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
@@ -400,7 +400,7 @@ const CheckoutIndexPage = () => {
           onSuccess: (page) => onSuccess(page.props),
           onError,
         }),
-      getCart: () => latestCartRef.current,
+      getCart: getLatestCart,
       setCart: (cart) => cartForm.setData({ cart }),
       requote: (cart) => dispatch({ type: "update-products", products: getProducts(cart) }),
     });

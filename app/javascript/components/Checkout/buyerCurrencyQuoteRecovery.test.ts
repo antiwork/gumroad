@@ -1,6 +1,13 @@
+// @vitest-environment happy-dom
+import * as React from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { recoverFromInvalidBuyerCurrencyQuote } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
+import {
+  recoverFromInvalidBuyerCurrencyQuote,
+  useLatestCartGetter,
+} from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
 
 const cartProduct = (overrides: Partial<CartProduct> = {}): CartProduct => ({
@@ -214,6 +221,47 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
 
     expect(setCart.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
     expect(setCart.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
+    expect(requote.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
+  });
+
+  // The test above hands the recovery a getter backed by a plain mutable variable, which is always
+  // current the instant the "edit" happens. Production is not that generous: the getter reads a
+  // value React keeps in sync, and the reload lands in a network callback React does not sequence
+  // — it can arrive after a re-render has been computed but before React has flushed that
+  // render's effects. Synchronizing the getter in an effect leaves exactly that window open, and
+  // the recovery would then merge into, save, and quote the cart from before the edit. Reproduce
+  // the window by answering the reload from inside the re-render itself.
+  it("reads the edited cart even when the reload lands before React flushes effects", () => {
+    const setCart = vi.fn<(cart: CartState) => void>();
+    const requote = vi.fn<(cart: CartState) => void>();
+    const { reload, respondWith } = pendingReloader();
+
+    let start: () => void = () => {};
+    const Checkout = ({ cart, onRender }: { cart: CartState; onRender?: () => void }) => {
+      const getCart = useLatestCartGetter(cart);
+      start = () => recoverFromInvalidBuyerCurrencyQuote({ reloadCartProps: reload, getCart, setCart, requote });
+      onRender?.();
+      return null;
+    };
+
+    const root = createRoot(document.createElement("div"));
+    flushSync(() => root.render(React.createElement(Checkout, { cart: cartWith([cartItem({ quantity: 1 })]) })));
+
+    start();
+
+    // The buyer bumps the quantity while the reload is in flight, and the reload answers while
+    // that render is still in progress — before any effect it queued has run.
+    flushSync(() =>
+      root.render(
+        React.createElement(Checkout, {
+          cart: cartWith([cartItem({ quantity: 3 })]),
+          onRender: () => respondWith({ cart: cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.9 }) })]) }),
+        }),
+      ),
+    );
+
+    expect(setCart.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
     expect(requote.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
     expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
   });

@@ -1,3 +1,4 @@
+import * as React from "react";
 import typia from "typia";
 
 import { type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
@@ -30,6 +31,26 @@ export type BuyerCurrencyQuoteRecoveryDeps = {
   setCart: (cart: CartState) => void;
   // Re-requests a surcharge quote for the given cart.
   requote: (cart: CartState) => void;
+};
+
+// Hands back a getter that always reads the cart from the most recent render.
+//
+// The recovery needs this because the function that starts it — and any plain closure over `cart`
+// — belongs to one particular render, while the reload lands later, after the buyer may have
+// edited the cart. The subtlety is *when* the stored value is refreshed. Synchronizing it in an
+// effect leaves a window: effects are flushed on React's own schedule, and the callback that
+// resolves the reload is free to run before that happens, so the getter would still be holding
+// the cart from before the edit — the exact overwrite this indirection exists to prevent.
+// Assigning during render closes the window, because a render always precedes the commit that
+// makes the edit visible to the buyer, and therefore precedes anything they can do next.
+export const useLatestCartGetter = (cart: CartState): (() => CartState) => {
+  const latest = React.useRef(cart);
+  // Writing a ref while rendering is normally something to avoid, since a render React throws
+  // away would still leave its value behind. It is safe for this one: the value is a cart the
+  // buyer's own form state already holds, the write is the same on every re-render of a given
+  // cart, and nothing reads the ref during rendering.
+  latest.current = cart;
+  return React.useCallback(() => latest.current, []);
 };
 
 export const recoverFromInvalidBuyerCurrencyQuote = ({
