@@ -2,28 +2,38 @@
 
 module StripeMerchantAccountHelper
   # How long we are willing to wait for Stripe to finish verifying a freshly
-  # created test account. Unchanged from when this helper polled on a fixed
-  # 10-second interval (12 attempts x 10s): a genuinely slow account still gets
-  # the full two minutes before we give up.
+  # created test account, in seconds. Unchanged from when this helper polled on
+  # a fixed 10-second interval (12 attempts x 10s): a genuinely slow account
+  # still gets the full two minutes before we give up.
+  #
+  # Note the budget now includes the time spent in the Account.retrieve requests
+  # themselves, where the old loop counted only its own sleeping. In practice
+  # that is a couple of seconds of the two minutes.
   CAPABILITIES_WAIT_BUDGET = 120
 
-  # When we are really talking to Stripe we poll on an exponential backoff
-  # instead of a fixed 10 seconds, so an account that verifies in under a second
-  # costs us about a second rather than ten. Two properties matter here:
+  # How long to wait before each successive poll when we are really talking to
+  # Stripe. The old loop slept a flat 10 seconds, so an account that verified in
+  # under a second still cost ten; the suite spent about 7.5 minutes per CI run
+  # sitting in these sleeps. The first gap here is 1 second, which is what buys
+  # that time back.
   #
-  #   * The two-minute budget above is unchanged, so slow accounts are still
-  #     waited out rather than failed fast.
-  #   * The number of Stripe requests inside that budget goes DOWN, not up:
-  #     1 + 2 + 4 + 8 + 16 + 32 + 32 + 25 seconds is eight polls where the fixed
-  #     interval made twelve. Every spec shard in CI shares one Stripe test
-  #     account, so simply shortening the fixed interval would multiply the
-  #     request rate against that shared account and bring back the rate-limit
-  #     errors we had to make non-fatal in #6489.
-  INITIAL_CAPABILITIES_POLL_INTERVAL = 1
-  MAX_CAPABILITIES_POLL_INTERVAL = 32
+  # Everything after the first gap lands back on the old 10-second grid
+  # (polls at t = 1, 10, 20, 30, 40, 50, 70, 90, 120) and only gets sparser in
+  # the tail, past the ~30 seconds the old comment here described as the typical
+  # US-account delay. Deliberately NOT an exponential backoff: every CI shard
+  # shares ONE Stripe test account, so request volume against it — not just wall
+  # clock — is a constraint, and polling faster or on a coarser grid would bring
+  # back the rate-limit errors #6489 had to make non-fatal. Staying on the grid
+  # means this schedule costs at most ONE extra request than the old loop at any
+  # verification time (the 1-second probe), never notices a verification later
+  # than the old loop would have inside the first 50 seconds, and makes fewer
+  # requests overall in the worst case — 10 rather than 13 for an account that
+  # never verifies at all.
+  CAPABILITIES_POLL_SCHEDULE = [1, 9, 10, 10, 10, 10, 20, 20, 30].freeze
 
   # The cassette path replays recorded responses and never sleeps, so it is
-  # bounded by an attempt count rather than by elapsed time.
+  # bounded by an attempt count rather than by elapsed time. Also used by the
+  # Minitest suite's own replay loop in test/models/purchase_test.rb.
   MAX_ATTEMPTS_TO_WAIT_FOR_CAPABILITIES = 12
 
   module_function
@@ -43,11 +53,10 @@ module StripeMerchantAccountHelper
     stripe_account = Stripe::Account.retrieve(stripe_account_id)
     return if stripe_account.charges_enabled
 
-    # We assume that all required fields have been provided.
-    # Stripe takes a few seconds to verify a test account (this delay seems to
-    # only happen for US-based accounts), so poll until it does.
+    # We assume that all required fields have been provided. Stripe still takes
+    # a few seconds to verify a test account (this delay seems to only happen
+    # for US-based accounts), so poll until it does.
     deadline = monotonic_now + CAPABILITIES_WAIT_BUDGET
-    interval = INITIAL_CAPABILITIES_POLL_INTERVAL
     attempts = 0
 
     until stripe_account.charges_enabled
@@ -55,12 +64,12 @@ module StripeMerchantAccountHelper
         remaining = deadline - monotonic_now
         break if remaining <= 0
 
-        # Never sleep past the budget: the last nap is trimmed so the total wait
-        # is CAPABILITIES_WAIT_BUDGET, exactly as the old fixed loop was.
-        nap = [interval, remaining].min
+        # The schedule sums to exactly CAPABILITIES_WAIT_BUDGET, so this `min`
+        # is normally a no-op — it is here so that editing the schedule can
+        # never accidentally extend the two-minute ceiling.
+        nap = [CAPABILITIES_POLL_SCHEDULE.fetch(attempts, CAPABILITIES_POLL_SCHEDULE.last), remaining].min
         sleep nap
         log_capabilities_wait("VCR off: sleeping for #{format('%g', nap.round(2))} seconds")
-        interval = [interval * 2, MAX_CAPABILITIES_POLL_INTERVAL].min
       else
         # Fast-forward through the recorded cassette to save time.
         break if attempts >= MAX_ATTEMPTS_TO_WAIT_FOR_CAPABILITIES

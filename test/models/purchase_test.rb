@@ -7592,9 +7592,11 @@ class PurchaseTest < ActiveSupport::TestCase
       create_user_compliance_info(user:)
       merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
       StripeMerchantAccountHelper.upload_verification_document(merchant_account.charge_processor_merchant_id)
-      # Mirrors StripeMerchantAccountHelper.ensure_charges_enabled (retry Account.retrieve
-      # until charges are enabled), but without its RSpec.current_example logging, which is
-      # nil under Minitest. Replays the same recorded Account.retrieve interactions.
+      # Mirrors the cassette-replay half of StripeMerchantAccountHelper.ensure_charges_enabled
+      # (retry Account.retrieve until charges are enabled, bounded by an attempt count), but
+      # without its RSpec.current_example logging, which is nil under Minitest. Replays the same
+      # recorded Account.retrieve interactions, so it never needs the helper's live-API polling
+      # schedule — only the attempt ceiling.
       account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
       attempts = 0
       while !account.charges_enabled && attempts < StripeMerchantAccountHelper::MAX_ATTEMPTS_TO_WAIT_FOR_CAPABILITIES

@@ -17,6 +17,43 @@ describe StripeMerchantAccountHelper do
       -> { calls }
     end
 
+    # The old loop slept a flat 10 seconds, so this is the request count and
+    # total sleep it would have spent on an account that verifies after
+    # `verified_after` seconds. Used to assert the new schedule never costs more
+    # than one extra request against the shared Stripe test account.
+    def old_fixed_interval_cost(verified_after)
+      requests = 1
+      slept = 0
+      while slept < verified_after && slept < described_class::CAPABILITIES_WAIT_BUDGET
+        slept += 10
+        requests += 1
+      end
+      [requests, slept]
+    end
+
+    # Runs the helper against a simulated account that becomes verified
+    # `verified_after` seconds in, with sleeps and the clock stubbed so no real
+    # time passes. Returns [request count, total seconds slept].
+    def poll_until_verified(verified_after)
+      slept = 0.0
+      allow(described_class).to receive(:sleep) { |seconds| slept += seconds }
+      allow(described_class).to receive(:monotonic_now) { 1_000.0 + slept }
+
+      requests = 0
+      allow(Stripe::Account).to receive(:retrieve) do
+        requests += 1
+        double(charges_enabled: slept >= verified_after)
+      end
+
+      begin
+        described_class.ensure_charges_enabled(account_id)
+      rescue RuntimeError => e
+        raise unless e.message.include?("Timed out waiting for charges")
+      end
+
+      [requests, slept]
+    end
+
     context "when talking to the live Stripe API" do
       before do
         allow(described_class).to receive(:hitting_stripe_api?).and_return(true)
@@ -33,42 +70,63 @@ describe StripeMerchantAccountHelper do
         expect(slept).to eq([1])
       end
 
-      it "backs off exponentially up to the cap instead of sleeping a fixed interval" do
+      it "probes once after a second and then polls on the same ten-second grid as before" do
         slept = []
         allow(described_class).to receive(:sleep) { |seconds| slept << seconds }
-        stub_retrieve(enabled_on_attempt: 8)
+        stub_retrieve(enabled_on_attempt: 9)
 
         described_class.ensure_charges_enabled(account_id)
 
-        expect(slept).to eq([1, 2, 4, 8, 16, 32, 32])
+        expect(slept).to eq([1, 9, 10, 10, 10, 10, 20, 20])
       end
 
-      it "makes fewer Stripe requests than the old fixed-interval loop while waiting out a slow account" do
-        # The old loop polled 12 times at a fixed 10 seconds. Backoff spends the
-        # same budget in fewer requests, which matters because every CI shard
-        # shares one Stripe test account.
-        elapsed = 0
-        allow(described_class).to receive(:sleep) { |seconds| elapsed += seconds }
-        now = 1_000.0
-        allow(described_class).to receive(:monotonic_now) { now + elapsed }
-        count = stub_retrieve(enabled_on_attempt: 999)
+      # This is the constraint from #6502: all CI shards share one Stripe test
+      # account, so a schedule that verifies faster but polls harder would just
+      # trade wall clock for the rate-limit errors #6489 had to absorb.
+      it "never costs more than one extra Stripe request than the old fixed interval, at any verification time" do
+        [0.5, 3, 10, 15, 20, 30, 45, 60, 90, 119].each do |verified_after|
+          requests, = poll_until_verified(verified_after)
+          old_requests, = old_fixed_interval_cost(verified_after)
 
-        expect { described_class.ensure_charges_enabled(account_id) }
-          .to raise_error(/Timed out waiting for charges/)
-        expect(count.call).to be < 12
+          expect(requests - old_requests).to be <= 1,
+                                             "account verifying after #{verified_after}s: #{requests} requests vs #{old_requests} on the old fixed interval"
+        end
+      end
+
+      it "makes fewer Stripe requests than the old fixed interval when the account never verifies" do
+        requests, = poll_until_verified(Float::INFINITY)
+        old_requests, = old_fixed_interval_cost(described_class::CAPABILITIES_WAIT_BUDGET + 1)
+
+        expect(requests).to be < old_requests
+      end
+
+      it "notices a verification no later than the old fixed interval would within the first fifty seconds" do
+        [0.5, 3, 10, 15, 20, 30, 45, 50].each do |verified_after|
+          _, slept = poll_until_verified(verified_after)
+          _, old_slept = old_fixed_interval_cost(verified_after)
+
+          expect(slept).to be <= old_slept,
+                           "account verifying after #{verified_after}s: waited #{slept}s vs #{old_slept}s on the old fixed interval"
+        end
       end
 
       it "still waits the full two-minute budget before giving up, and no longer" do
-        elapsed = 0
-        allow(described_class).to receive(:sleep) { |seconds| elapsed += seconds }
-        # Freeze the clock so only our stubbed sleeps advance it.
-        now = 1_000.0
-        allow(described_class).to receive(:monotonic_now) { now + elapsed }
+        _, slept = poll_until_verified(Float::INFINITY)
+
+        expect(slept).to eq(described_class::CAPABILITIES_WAIT_BUDGET)
+        # The loop also trims its last sleep against the deadline, but only ever
+        # needs to because a future schedule edit might overshoot; pin the
+        # invariant that keeps the ceiling honest either way.
+        expect(described_class::CAPABILITIES_POLL_SCHEDULE.sum).to eq(described_class::CAPABILITIES_WAIT_BUDGET)
+      end
+
+      it "raises once the budget is exhausted without the account verifying" do
+        allow(described_class).to receive(:sleep)
+        allow(described_class).to receive(:monotonic_now).and_return(1_000.0, 2_000.0)
         stub_retrieve(enabled_on_attempt: 999)
 
         expect { described_class.ensure_charges_enabled(account_id) }
           .to raise_error(/Timed out waiting for charges/)
-        expect(elapsed).to eq(described_class::CAPABILITIES_WAIT_BUDGET)
       end
 
       it "does not poll at all when the account is already verified" do
