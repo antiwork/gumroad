@@ -527,7 +527,231 @@ class AssetPreviewTest < ActiveSupport::TestCase
     end
   end
 
+  # --- #display_height / #display_width --------------------------------------
+
+  test "display_height computes the height scaled to the display width" do
+    # The oembed info below is 356x200, so the display width caps at 356 (< 670)
+    # and the height is unscaled.
+    assert_equal 200, build_unsaved_youtube_preview.display_height
+  end
+
+  test "display_height returns nil when the width is zero instead of raising FloatDomainError" do
+    # Some oEmbed providers report non-numeric widths (e.g. "auto"), which
+    # to_i to 0. Dividing by 0.0 produces NaN and NaN.to_i raises
+    # FloatDomainError, which crashed API product serialization (Sentry
+    # GUMROAD-ZV). A zero width must degrade to nil dimensions instead.
+    preview = build_unsaved_youtube_preview
+    preview.oembed["info"]["width"] = "auto"
+
+    assert_nil preview.display_height
+  end
+
+  test "display_width returns nil when the width is zero, matching display_height's contract" do
+    preview = build_unsaved_youtube_preview
+    preview.oembed["info"]["width"] = "auto"
+
+    assert_nil preview.display_width
+  end
+
+  # --- #as_json --------------------------------------------------------------
+
+  test "as_json serializes without raising when the oembed width is unusable" do
+    preview = create_asset_preview_youtube
+    preview.oembed["info"]["width"] = "auto"
+
+    assert_nothing_raised { preview.as_json }
+    assert_nil preview.as_json[:height]
+    assert_nil preview.as_json[:width]
+  end
+
+  test "as_json serializes without raising for an existing file cover analyzed as 0x0" do
+    # The production trigger for Sentry GUMROAD-ZV: a video file that
+    # ffprobe identifies but can't decode gets analyzed as width/height 0.0.
+    # New uploads like this are now rejected by validation, but records
+    # created before that validation still exist and must serialize.
+    preview = create_asset_preview_mov
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => 0.0, "height" => 0.0))
+
+    assert_nothing_raised { preview.as_json }
+    assert_nil preview.as_json[:width]
+    assert_nil preview.as_json[:height]
+  end
+
+  # --- dimension validation --------------------------------------------------
+
+  test "rejects a file whose analyzed dimensions are zero" do
+    # A 0x0 "video" (e.g. a truncated or mislabeled file that ffprobe
+    # identifies but can't decode) must be rejected at upload time, the same
+    # as a file that couldn't be analyzed at all.
+    preview = attach_unsaved_preview("thing.mov", "video/quicktime")
+    preview.file.blob.update!(metadata: { "identified" => true, "width" => 0.0, "height" => 0.0, "duration" => 0.04, "video" => true, "analyzed" => true })
+
+    assert_not preview.valid?
+    assert_includes preview.errors[:base], "Could not analyze cover. Please check the uploaded file."
+  end
+
+  # --- image file size validation --------------------------------------------
+
+  test "rejects an image cover larger than the size limit" do
+    preview = attach_unsaved_preview("kFDzu.png", "image/png")
+    preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE + 1)
+
+    assert_not preview.valid?
+    assert_includes preview.errors[:base], "Cover images must be smaller than 50 MB. Please resize or compress the image and try again."
+  end
+
+  test "accepts an image cover at the size limit" do
+    preview = attach_unsaved_preview("kFDzu.png", "image/png")
+    preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE)
+    AssetPreviewAnalysisStub.analyze(preview.file)
+
+    assert preview.valid?
+  end
+
+  test "does not apply the image size limit to video covers" do
+    preview = attach_unsaved_preview("thing.mov", "video/quicktime")
+    preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE + 1)
+    AssetPreviewAnalysisStub.analyze(preview.file)
+
+    assert preview.valid?
+  end
+
+  # --- #oversized_image? -----------------------------------------------------
+
+  test "oversized_image? is true when either dimension exceeds the maximum" do
+    asset_preview = create_asset_preview
+    oversize_metadata(asset_preview, height: 500)
+
+    assert_equal true, asset_preview.oversized_image?
+  end
+
+  test "oversized_image? is false for an image within the limit" do
+    assert_equal false, create_asset_preview.oversized_image?
+  end
+
+  test "oversized_image? is false for GIFs, which skip post-processing to preserve animation" do
+    asset_preview = create_asset_preview_gif
+    oversize_metadata(asset_preview)
+
+    assert_equal false, asset_preview.oversized_image?
+  end
+
+  test "oversized_image? is false for video covers" do
+    asset_preview = create_asset_preview_mov
+    oversize_metadata(asset_preview)
+
+    assert_equal false, asset_preview.oversized_image?
+  end
+
+  # --- oversized image resize enqueueing -------------------------------------
+
+  test "enqueues a resize when an oversized image cover is created" do
+    preview = attach_unsaved_preview("kFDzu.png", "image/png")
+    preview.file.blob.update!(metadata: { "identified" => true, "width" => AssetPreview::MAX_IMAGE_DIMENSION + 1, "height" => 500, "analyzed" => true })
+    preview.save!
+
+    assert ResizeOversizedAssetPreviewWorker.jobs.any? { |job| job["args"] == [preview.id] }
+  end
+
+  test "does not enqueue a resize for a normal-size cover" do
+    create_asset_preview
+
+    assert_empty ResizeOversizedAssetPreviewWorker.jobs
+  end
+
+  # --- #resize_oversized_image! ----------------------------------------------
+
+  test "resize_oversized_image! replaces the file with a copy resized within the dimension limit" do
+    asset_preview = create_asset_preview
+    # The fixture is 1633x512; pretend analysis found it oversized so the
+    # resize path runs, then let the real variant processing + re-analysis
+    # restore truthful metadata for the replacement file.
+    oversize_metadata(asset_preview)
+    original_blob_id = asset_preview.file.blob.id
+
+    asset_preview.resize_oversized_image!
+    asset_preview.reload
+
+    assert_not_equal original_blob_id, asset_preview.file.blob.id
+    assert_operator asset_preview.width, :<=, AssetPreview::MAX_IMAGE_DIMENSION
+    assert_operator asset_preview.height, :<=, AssetPreview::MAX_IMAGE_DIMENSION
+  end
+
+  test "resize_oversized_image! does nothing when the image is not oversized" do
+    asset_preview = create_asset_preview
+    original_blob_id = asset_preview.file.blob.id
+
+    asset_preview.resize_oversized_image!
+
+    assert_equal original_blob_id, asset_preview.reload.file.blob.id
+  end
+
+  test "resize_oversized_image! does not overwrite a cover that was replaced while the resize was running" do
+    asset_preview = create_asset_preview
+    oversize_metadata(asset_preview)
+
+    replacement_blob_id = nil
+    # Simulate the seller replacing the cover in the window between the slow
+    # variant processing and the attach of the resized copy.
+    during_variant_processing(asset_preview) do
+      AssetPreview.find(asset_preview.id).file.attach(
+        Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/kFDzu.png"), "image/png")
+      )
+      replacement_blob_id = AssetPreview.find(asset_preview.id).file.blob.id
+    end
+
+    asset_preview.resize_oversized_image!
+
+    assert_equal replacement_blob_id, asset_preview.reload.file.blob.id
+  end
+
+  test "resize_oversized_image! does not attach the resized copy when the preview was deleted while the resize was running" do
+    asset_preview = create_asset_preview
+    oversize_metadata(asset_preview)
+    original_blob_id = asset_preview.file.blob.id
+
+    during_variant_processing(asset_preview) { AssetPreview.find(asset_preview.id).mark_deleted! }
+
+    asset_preview.resize_oversized_image!
+
+    assert_equal original_blob_id, asset_preview.reload.file.blob.id
+  end
+
+  test "resize_oversized_image! cleans up the uploaded resized copy when the attach raises" do
+    asset_preview = create_asset_preview
+    oversize_metadata(asset_preview)
+    original_blob_id = asset_preview.file.blob.id
+    highest_blob_id_before = ActiveStorage::Blob.maximum(:id)
+
+    asset_preview.file.stubs(:attach).raises(ActiveRecord::ConnectionTimeoutError)
+
+    assert_raises(ActiveRecord::ConnectionTimeoutError) { asset_preview.resize_oversized_image! }
+
+    # The worker retry will re-upload, so the copy from this failed attempt must
+    # not be left orphaned in storage. Identify it by its purge job rather than
+    # by intercepting the upload: exactly one blob should be scheduled for
+    # purging, it must be one this attempt created, and it must not be the
+    # seller's original cover.
+    purged_gids = enqueued_jobs.filter_map do |job|
+      job["arguments"].first["_aj_globalid"] if job["job_class"] == "ActiveStorage::PurgeJob"
+    end
+    assert_equal 1, purged_gids.size
+    purged_blob = GlobalID::Locator.locate(purged_gids.first)
+    assert_operator purged_blob.id, :>, highest_blob_id_before
+    assert_not_equal original_blob_id, purged_blob.id
+
+    assert_equal original_blob_id, asset_preview.reload.file.blob.id
+  end
+
   private
+    # The oembed payload the RSpec :asset_preview_youtube factory carries: a
+    # 356x200 YouTube player, which is what the display-dimension tests measure
+    # against.
+    YOUTUBE_OEMBED = {
+      "html" => "<iframe width=\"356\" height=\"200\" src=\"https://www.youtube.com/embed/qKebcV1jv3A?feature=oembed&showinfo=0&controls=0&rel=0\" frameborder=\"0\" allowfullscreen></iframe>",
+      "info" => { "height" => 200, "width" => 356, "thumbnail_url" => "https://i.ytimg.com/vi/qKebcV1jv3A/hqdefault.jpg" }
+    }.freeze
+
     DANGEROUS_URLS = [
       "javascript:alert('xss')",
       "data:text/html,<script>alert('xss')</script>",
@@ -582,6 +806,51 @@ class AssetPreviewTest < ActiveSupport::TestCase
     # tests set the oembed hash on it directly.
     def build_unsaved_asset_preview
       AssetPreview.new(link: create_product)
+    end
+
+    # An unsaved oembed preview carrying the YouTube payload above. Nothing is
+    # attached: an oembed cover is a remote player, not an uploaded file.
+    def build_unsaved_youtube_preview
+      AssetPreview.new(link: create_product, oembed: YOUTUBE_OEMBED.deep_dup)
+    end
+
+    def create_asset_preview_youtube
+      AssetPreview.create!(link: create_product, oembed: YOUTUBE_OEMBED.deep_dup)
+    end
+
+    # An unsaved, already-persisted-blob preview: the file is attached (so the
+    # blob exists and its metadata can be edited) but the record is not saved, so
+    # validations can be asserted against doctored analysis metadata. Attaching
+    # to an unsaved record only stages the attachment, hence the explicit
+    # `file.blob` reads in the callers.
+    def attach_unsaved_preview(fixture, content_type)
+      preview = AssetPreview.new(link: create_product)
+      preview.file.attach(Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures", fixture), content_type))
+      preview
+    end
+
+    # Rewrites the analyzed dimensions so the record looks oversized without
+    # needing a genuinely enormous fixture. Only the width is raised by default,
+    # since `oversized_image?` is an either-dimension check.
+    def oversize_metadata(asset_preview, height: nil)
+      metadata = asset_preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1)
+      metadata["height"] = height if height
+      asset_preview.file.blob.update!(metadata:)
+    end
+
+    # Runs `block` in the middle of `resize_oversized_image!`'s variant
+    # processing — the slow window in which the seller can replace or delete the
+    # cover. `variant` is not defined on the attachment proxy itself; the proxy
+    # forwards unknown methods to the underlying ActiveStorage::Attachment, so
+    # there is nothing to alias. Define it on the proxy's singleton and delegate
+    # to that attachment by hand. Only this test's proxy object is affected.
+    def during_variant_processing(asset_preview)
+      attachment = asset_preview.file
+      target = attachment.attachment
+      attachment.define_singleton_method(:variant) do |*args, **kwargs|
+        yield
+        target.variant(*args, **kwargs)
+      end
     end
 
     # Puts a fixture file in the storage bucket under a key we choose and returns
