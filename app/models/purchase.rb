@@ -29,16 +29,23 @@ class Purchase < ApplicationRecord
   PROCESSOR_FEE_PER_THOUSAND = 29
   PROCESSOR_FIXED_FEE_CENTS = 30
   # IOF is a Brazilian consumer tax on any transaction that involves foreign exchange, currently
-  # 3.5% of the transaction value. It applies when the Pix payment leaves Brazil — that is, when
-  # the charge is created on a Gumroad-held account, since Gumroad is domiciled outside Brazil.
-  # For those charges Gumroad tells Stripe to bill the buyer exactly the price they agreed to
+  # 3.5% of the transaction value. It applies whenever the Pix payment leaves Brazil, which is
+  # every Pix charge except one created directly on a Brazilian seller's own Stripe account.
+  #
+  # This constant is the RECOVERY half, and it is narrower than the tax itself: it is billed only
+  # when Gumroad actually bore the cost. On a charge created on a Gumroad-held account, Gumroad
+  # tells Stripe to bill the buyer exactly the price they agreed to
   # (`amount_includes_iof=always`, see Order::PreparePaymentIntentService#pix_payment_method_options)
   # and Stripe deducts the IOF from what settles to us — so the cost has to be charged back to the
   # seller as a fee component, or it would silently come out of Gumroad's own margin instead (the
-  # decision on gumroad-private#1305 was that the seller absorbs it). A Pix charge created directly
-  # on a Brazilian seller's own Stripe account never crosses a border, so no IOF arises and neither
-  # the Stripe option nor this fee applies — see pix_iof_fee_per_thousand, which gates on the same
-  # condition.
+  # decision on gumroad-private#1305 was that the seller absorbs it).
+  #
+  # On a direct charge to a seller's own connected account the money never passes through a
+  # Gumroad-held balance, so there is no Gumroad cost to recover and this fee is not billed —
+  # whether or not the tax itself applied. That makes this gate deliberately DIFFERENT from
+  # Order::PreparePaymentIntentService#pix_iof_applies?, which decides whether the tax exists at
+  # all (a border question, keyed on the account's country) rather than who paid it. See the
+  # comment on that method.
   PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
@@ -3113,7 +3120,7 @@ class Purchase < ApplicationRecord
     Purchase.where(email:, seller_id:, can_contact: true).find_each do |purchase|
       purchase.update!(can_contact: false)
     rescue ActiveRecord::RecordInvalid
-      Rails.logger.info "Could not update purchase (#{id}) with validations turned on. Unsubscribing the buyer without running validations."
+      Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Unsubscribing the buyer without running validations."
 
       purchase.can_contact = false
       purchase.save(validate: false)
@@ -5266,6 +5273,13 @@ class Purchase < ApplicationRecord
       return unless new_record?
       return unless can_contact?
       return unless Purchase.where(email:, seller_id:, can_contact: false).exists?
+      # A subscription's contactability lives on its original purchase: that is the only row
+      # `should_be_audience_member?` accepts for a subscription, so it is what decides whether
+      # the buyer hears from the creator at all. If the buyer re-subscribed, the original
+      # purchase is contactable again, and this new renewal charge must not be stamped
+      # uncontactable just because some older sibling row is still marked false. Doing so used to
+      # silently drop a paying member back out of the creator's audience on their next renewal.
+      return if subscription&.original_purchase&.can_contact?
 
       self.can_contact = false
     end
