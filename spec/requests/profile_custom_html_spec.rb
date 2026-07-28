@@ -9,7 +9,7 @@ describe "Profile custom HTML rendering", type: :request do
   include Devise::Test::IntegrationHelpers
 
   let(:seller) { create(:user, username: "customprofile", name: "Jane Doe") }
-  let!(:custom_domain) { create(:custom_domain, user: seller, domain: "seller.example.com") }
+  let!(:custom_domain) { create(:custom_domain, :verified_with_certificate, user: seller, domain: "seller.example.com") }
 
   before do
     seller.update!(custom_html: "<section><h1>Profile landing</h1></section>")
