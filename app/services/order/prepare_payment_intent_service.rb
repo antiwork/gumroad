@@ -16,13 +16,18 @@ class Order::PreparePaymentIntentService
   # Same reasoning as the Klarna message above: a Pix amount-window rejection is deterministic for
   # this cart, so telling the buyer to try again would send them in a loop.
   PIX_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Pix supports. Please choose a different payment method (you have not been charged)."
-  # On a cross-border Pix payment, Gumroad absorbs the Brazilian IOF tax on the buyer's behalf so
-  # the amount in their banking app matches the price checkout quoted them, and recovers it from
-  # the seller as a fee component (Purchase::PIX_IOF_FEE_PER_THOUSAND) — the ruling on
-  # gumroad-private#1305. Stripe's default is the opposite (`never`, marking the buyer's amount up
-  # 3.5%), which would undo the whole point of showing an honest local-currency price. Sent on
-  # every Pix intent except a direct charge to a Brazilian connected account, which stays inside
-  # Brazil and so incurs no IOF at all — see #pix_iof_applies?.
+  # On a cross-border Pix payment charged on a GUMROAD-HELD account, Gumroad absorbs the Brazilian
+  # IOF tax on the buyer's behalf so the amount in their banking app matches the price checkout
+  # quoted them, and recovers it from the seller as a fee component
+  # (Purchase::PIX_IOF_FEE_PER_THOUSAND) — the ruling on gumroad-private#1305. Stripe's default is
+  # the opposite (`never`, marking the buyer's amount up 3.5%), which would undo the whole point of
+  # showing an honest local-currency price.
+  #
+  # The option is about the buyer's amount, so it is sent on every cross-border Pix intent — not
+  # only the ones Gumroad settles. On a direct charge to a non-Brazilian connected account the tax
+  # comes out of the seller's own settlement and Gumroad absorbs nothing, so the option is sent and
+  # no fee is billed back. Withheld only on a direct charge to a Brazilian connected account, which
+  # stays inside Brazil and so incurs no IOF at all — see #pix_iof_applies?.
   PIX_AMOUNT_INCLUDES_IOF = "always"
   # How long the buyer has to pay the Pix key in their banking app before it expires. Stripe's
   # default is 4 hours; ours is 30 minutes because the purchase sits in progress until the payment
