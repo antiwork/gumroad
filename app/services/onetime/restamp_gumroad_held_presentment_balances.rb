@@ -46,14 +46,27 @@
 # produces for new charges. `assert_amounts_unchanged!` below re-derives the balance total from
 # those fields and refuses to proceed if it would move by even one cent.
 #
-# ## Usage
+# ## Usage, and the run order that matters
 #
 # Dry run by default. Balance ids must be passed explicitly — deliberately no "find everything that
-# looks wrong" mode, because the affected set is enumerated and reviewed on the tracking issue
-# first, and `buyer_currency_charging` was ramped to 0% on 2026-07-28 so that set is frozen.
+# looks wrong" mode, because the affected set is enumerated and reviewed on the tracking issue first.
 #
 #   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: [...]).process
 #   Onetime::RestampGumroadHeldPresentmentBalances.new(balance_ids: [...], dry_run: false).process
+#
+# **Deploy the forward fix (#6505) before running this.** Ramping `buyer_currency_charging` to 0%
+# stopped new *charges* from mislabelling, but it did not fix the code: until #6505 ships, the refund
+# path and the dispute-win path still reach the broken branch with a canonical issued amount present,
+# so a refund or chargeback booked today against a purchase charged while the lane was live mints a
+# fresh mislabelled row. That is not hypothetical — the affected set already contains one such row, a
+# chargeback leg booked about 100 minutes after the ramp-down.
+#
+# So the set is only frozen once #6505 is live, and even then chargebacks on those purchases can
+# arrive for weeks, past the late edge of REGRESSION_WINDOW below. This service stays safe in both
+# cases — a straggler inside the window is restamped correctly, and one outside it causes the whole
+# balance to be refused rather than quietly relabelled — but two operational consequences follow:
+# running this before #6505 deploys can leave a repaired seller re-broken by a later refund leg, and
+# a clean run is not grounds for calling the incident closed. Re-enumerate before declaring it done.
 #
 class Onetime::RestampGumroadHeldPresentmentBalances
   # The window in which a mislabelled row could have been written, measured from the affected rows
@@ -102,6 +115,18 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       end
 
       if @dry_run
+        # Run the same assertion the live path runs, so a dry run cannot report a balance as
+        # correctable that the live run would refuse. The dry run is the artifact the set gets
+        # reviewed from, so it has to predict the live outcome rather than approximate it.
+        begin
+          assert_amounts_unchanged!(balance, balance.balance_transactions.to_a)
+        rescue => e
+          @stats[:would_refuse] += 1
+          @skipped << { balance_id:, reason: :would_refuse, error: e.message }
+          log "WOULD REFUSE balance #{balance_id}: #{e.message}"
+          return
+        end
+
         @stats[:corrected] += 1
         @corrected << correction_summary(balance)
         return
@@ -192,6 +217,11 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         # The issued side is what the corrected holding fields are copied from, so it has to be the
         # canonical USD amount. If it is not, this row was not written by the branch this repairs.
         return :bt_issued_not_usd unless usd?(bt.issued_amount_currency)
+        # The corrected holding net must equal what the row already holds, per row and not just in
+        # aggregate. Every row written by the broken branch satisfies this by construction (it passed
+        # `issued_net_cents` straight through as `net_cents`), so a row that does not was written by
+        # something else and its amounts — not merely its label — would change if we copied. Refuse.
+        return :bt_net_mismatch unless bt.holding_amount_net_cents == bt.issued_amount_net_cents
         # `find_or_create_balance` keys a balance on its holding currency, so every transaction on a
         # mislabelled balance should share its label. A row that does not means something other than
         # this regression is involved.

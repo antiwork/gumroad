@@ -109,12 +109,10 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(bt.issued_amount_currency).to eq(Currency::USD)
       expect(bt.purchase_id).to eq(purchase.id)
 
-      # And the guard that just rejected this balance now accepts it. Asserted at the guard rather
-      # than by running the payout to completion: past this point
-      # #prepare_payment_and_set_amount goes on to create a real Stripe transfer, which is a
-      # network call well downstream of the currency decision under test here.
-      mismatched = [balance].reject { |b| b.holding_currency == Currency::USD }
-      expect(mismatched).to be_empty
+      # And the payout eligibility check that the mislabelled row tripped now accepts it. Stopping at
+      # is_balance_payable on purpose: past this point #prepare_payment_and_set_amount goes on to
+      # create a real Stripe transfer, which is a network call well downstream of the currency
+      # decision under test here.
       expect(StripePayoutProcessor.is_balance_payable(balance)).to eq(true)
     end
 
@@ -187,20 +185,45 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(bt.holding_amount_net_cents).to eq(-42_75)
     end
 
-    it "refuses to relabel and leaves the row untouched when doing so would move money" do
+    it "refuses a row whose holding net disagrees with its issued net, rather than moving money" do
       balance, bt, _purchase = create_mislabelled_balance
 
-      # Break the property the repair rests on: the issued net no longer agrees with what the
-      # balance holds, so re-deriving the total would change it. That means this is not a pure
-      # label fix and the service must not touch it.
+      # Break the property the repair rests on: copying the issued amounts onto this row would change
+      # its held value, not just its label. Every row the broken branch wrote satisfies the property
+      # by construction, so a row that does not came from somewhere else and must not be touched.
       bt.update_columns(issued_amount_net_cents: 55_00)
+
+      result = described_class.new(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:bt_net_mismatch]).to eq(1)
+      expect(result[:stats][:corrected]).to eq(0)
+      expect(balance.reload.holding_currency).to eq(Currency::EUR)
+      expect(balance.holding_amount_cents).to eq(70_00)
+      expect(bt.reload.holding_amount_currency).to eq(Currency::EUR)
+    end
+
+    it "refuses at the sum assertion when a balance's stored total does not match its rows" do
+      balance, bt, _purchase = create_mislabelled_balance
+
+      # Per-row nets still agree, so eligibility passes — but the balance's own stored total has
+      # drifted from the sum of its rows. Relabelling would rewrite that total, so the service must
+      # refuse rather than silently reconcile it.
+      balance.update_columns(holding_amount_cents: 65_00)
 
       result = described_class.new(balance_ids: [balance.id], dry_run: false).process
       expect(result[:stats][:error]).to eq(1)
       expect(result[:skipped].first[:error]).to include("refusing to relabel")
       expect(balance.reload.holding_currency).to eq(Currency::EUR)
-      expect(balance.holding_amount_cents).to eq(70_00)
+      expect(balance.holding_amount_cents).to eq(65_00)
       expect(bt.reload.holding_amount_currency).to eq(Currency::EUR)
+    end
+
+    it "reports a balance it would refuse as would_refuse in a dry run, not as correctable" do
+      balance, _bt, _purchase = create_mislabelled_balance
+      balance.update_columns(holding_amount_cents: 65_00)
+
+      result = described_class.new(balance_ids: [balance.id]).process
+      expect(result[:stats][:would_refuse]).to eq(1)
+      expect(result[:stats][:corrected]).to eq(0)
     end
   end
 
