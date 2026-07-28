@@ -190,6 +190,9 @@ $light-body-bg: #f4f4f0 !default;
     --#{$name}: #{$color};
     --contrast-#{$name}: #{split-color(fg-color(rgb($color)))};
   }
+  // The Gumroad-default accent needs no readability adjustment. A custom storefront may override
+  // this with a slightly adjusted colour for content-bearing accent fills.
+  --accent-with-text: var(--accent);
   --color: 0 0 0;
   --body-bg: #{$light-body-bg};
   --border-alpha: 1;
