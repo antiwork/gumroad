@@ -20,12 +20,16 @@ const Video = ({ cover, dimensions, frameIsShaped }: Props) => {
   // Whether we know the video's real shape. When we do, the box below is sized by that
   // ratio and the player is told the same ratio; when we don't, both keep the old
   // width-derived behaviour.
+  //
+  // This deliberately does NOT depend on `frameIsShaped`. The player is initialized once
+  // (deps `[id]`), so it captures this value at mount, while the box below re-renders with
+  // it. If the two could disagree the player would keep its mount-time pixel size inside a
+  // reshaped box: a buyer navigating from a cover with no recorded dimensions to a portrait
+  // video would get a player still sized to the full panel width, spilling out of the
+  // height-capped box and inflating the carousel's scrollable width. Both boxes encode the
+  // same ratio, so a percentage-width player fills either one.
   const knowsShape =
-    frameIsShaped &&
-    cover.native_width != null &&
-    cover.native_height != null &&
-    cover.native_width > 0 &&
-    cover.native_height > 0;
+    cover.native_width != null && cover.native_height != null && cover.native_width > 0 && cover.native_height > 0;
 
   // The player is initialized once when this component renders for the first time.
   // I think it's fine _not_ to react to changes to `cover` prop after the component has been initialized,
@@ -65,11 +69,12 @@ const Video = ({ cover, dimensions, frameIsShaped }: Props) => {
     <div
       onClick={(e) => e.preventDefault()}
       style={
-        // When we know the shape, size the box by aspect ratio and let it shrink to fit
-        // the frame in BOTH axes. The percentage padding below derives height from width
-        // alone, so a portrait video ignored the frame's height cap and spilled out of
-        // the bottom of the figure. Videos with no recorded dimensions keep it as before.
-        knowsShape
+        // When we know the shape AND the frame has a definite height, size the box by aspect
+        // ratio and let it shrink to fit the frame in BOTH axes. The percentage padding below
+        // derives height from width alone, so a portrait video ignored the frame's height cap
+        // and spilled out of the bottom of the figure. Videos with no recorded dimensions, and
+        // any video in an unshaped frame, keep the old box.
+        knowsShape && frameIsShaped
           ? {
               position: "relative",
               aspectRatio: `${cover.native_width} / ${cover.native_height}`,

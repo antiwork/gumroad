@@ -94,6 +94,33 @@ describe("Covers", () => {
     expect(frame(container)?.style.width).toBe("");
   });
 
+  // The player is created once (deps `[id]`), so it captures its sizing mode at mount while
+  // the box around it re-renders. If that mode depended on the FRAME being shaped, a video
+  // sibling of a dimension-less active cover would be built with fixed mount-time pixels and
+  // keep them after the buyer navigates to it and the box became ratio-sized and capped --
+  // spilling out of the box and inflating the carousel's scrollable width.
+  it("sizes a video player from its own ratio even while the active cover leaves the frame unshaped", async () => {
+    renderCovers(
+      [cover({ id: "no-dimensions", native_width: null, native_height: null }), portrait({ id: "sibling" })],
+      "no-dimensions",
+    );
+
+    await waitFor(() => expect(createJWPlayer).toHaveBeenCalled());
+    const options = createJWPlayer.mock.calls[0]?.[1];
+    expect(options).toMatchObject({ width: "100%", aspectratio: "1080:1920" });
+    expect(options).not.toHaveProperty("height");
+  });
+
+  // Zero is a real legacy value -- an old oEmbed row storing "auto" parses to 0 -- so the
+  // guards check falsiness rather than `!== null`. Every other dimension-less example here
+  // uses null, which would still pass if a guard were tightened to a null check.
+  it("leaves the frame unshaped when the active cover reports zero dimensions", () => {
+    const { container } = renderCovers([cover({ native_width: 0, native_height: 0 })]);
+
+    expect(frame(container)?.style.aspectRatio).toBe("");
+    expect(frame(container)?.style.maxHeight).toBe("");
+  });
+
   it("keeps the thumbnail variant unshaped", () => {
     const { container } = render(
       <Covers covers={[portrait()]} activeCoverId="cover-1" setActiveCoverId={() => {}} isThumbnail />,
