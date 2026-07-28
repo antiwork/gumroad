@@ -30,13 +30,14 @@ class Ai::StoreAgentService
   # network timeouts on real (slow but working) generations, so this is deliberately generous — the
   # client fails fast on connect problems and retries transient failures on its own.
   REQUEST_TIMEOUT_IN_SECONDS = 120
-  # Upper bound on model turns per reply (each turn may run one or more tools). This has to leave
-  # room for pagination: list endpoints return 10 items per page and the system prompt tells the
-  # model to walk EVERY page for "all of X" tasks, so each page fetch consumes one turn and the
+  # Base upper bound on model turns per reply (each turn may run one or more tools). This has to
+  # leave room for pagination: list endpoints return 10 items per page and the system prompt tells
+  # the model to walk EVERY page for "all of X" tasks, so each page fetch consumes one turn and the
   # final answer needs one more. The previous cap of 5 meant a seller with more than ~40 products
   # hit the generic "couldn't finish" fallback on exactly the catalog-wide tasks the pagination
   # rule exists for. 25 turns covers catalogs of roughly 240 items while still bounding the cost
-  # of a runaway tool loop; past that the honest cap reply below is the correct outcome.
+  # of a runaway tool loop. A late phantom-staging claim can reserve the two tightly scoped turns
+  # below when the normal budget no longer has room for them.
   MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
@@ -60,66 +61,254 @@ class Ai::StoreAgentService
   # reads to the creator as the agent lying to them.
   #
   # Precision matters more than recall here, because a match REPLACES the model's reply: a truthful
-  # reply wrongly matched would tell the creator a change doesn't exist when it does. So every
-  # pattern requires an assertion that a change was JUST staged, offers ("want me to prepare
-  # that?") and general explanations of how confirming works do not match, NEGATED_STAGING_PATTERNS
-  # below excuses the negated and already-applied forms plain word-matching would catch, and none of
-  # this class's own canned replies may match or the guard would flag its own output.
+  # reply wrongly matched would tell the creator a change doesn't exist when it does. Each pattern
+  # therefore starts at a sentence/current-assertion boundary. Conditional and negated clauses such
+  # as "if it is staged" and "it isn't staged" cannot match merely because they contain the same
+  # words, while a later assertion in "nothing was staged before, but I've staged it now" still can.
+  STAGED_CLAIM_BOUNDARY = /
+    (?:\A|[.!?;:—–]\s*|\s-\s*|\n+\s*|\b(?:but|however|though)\s+|
+       \b(?:although|yet|so)\s+(?=i\b)|,\s*and\s+(?=i\b))
+  /ix
+  STAGED_CLAIM_NEGATED_OBJECT = /
+    \s+(?:nothing|none|no\s+(?:product\s+)?(?:change|changes?|update|updates?|discount|discounts?|
+      action|actions?|offer|offers?|code|codes?|edit|edits?))\b
+  /ix
+  STAGED_CLAIM_HISTORICAL_TAIL = /
+    (?:
+      \s+(?:(?:it|that|this)|(?:the|that|this|your)\s+
+        (?:change|update|discount|offer|code|edit))?\s*
+      (?:yesterday|previously|earlier|before|many\s+times|
+        last\s+(?:night|week|month|year)|in\s+the\s+past)\b
+      |
+      \s+(?:(?:it|that|this)\s+)?(?:on|in)\s+(?:my|the)\s+
+        (?:earlier|previous)\s+message\b
+      |
+      [^.!?\n]*\b(?:before|many\s+times|in\s+the\s+past)\b
+    )
+  /ix
+  # "not already applied" still means a proposal is pending. Only a positive assertion that the
+  # action completed excuses staging language.
+  STAGED_CLAIM_COMPLETED_TAIL = /
+    [^.!?\n]*
+    (?:
+      \b(?:you|i)(?:['’]ve|\s+have)?\s+already\s+
+        (?:confirmed|approved|applied)\b
+      |
+      \b(?:it|that|this|the\s+(?:change|update|discount|offer|code|edit))
+      (?:
+        (?:['’]s|\s+(?:is|was))\s+already\s+
+          (?:confirmed|approved|applied|live|done)\b
+        |
+        \s+has\s+already\s+been\s+(?:confirmed|approved|applied)\b
+      )
+      |
+      (?:,\s*|\b(?:and|but)\s+)(?<!not\s)(?<!n['’]t\s)already\s+
+        (?:confirmed|approved|applied|live|done)\b
+    )
+  /ix
+  STAGED_CLAIM_CURRENT_CUE = /
+    (?:
+      \b(?:again|now)\b
+      |
+      \bfor\s+(?:your\s+)?(?:confirmation|approval)\b
+      |
+      \bready\s+
+        (?:(?:for\s+you\s+)?to\s+(?:confirm|approve)|
+           for\s+(?:your\s+)?(?:confirmation|approval))\b
+      |
+      (?:[:,;—–-]\s*|[.!]\s*|\band\s+)(?:please\s+)?(?:confirm|approve)\b
+    )
+  /ix
+  STAGED_CLAIM_CONDITIONAL_TAIL = /
+    (?:
+      \A\s*(?:if|when|whenever|once)\b
+      |
+      \b(?:would|could)\s+(?:be\s+)?(?:staged|prepared|ready|appear)\b
+      |
+      \b(?:staged|prepared)\s+(?:if|when|whenever)\b
+    )
+  /ix
+
   STAGED_CLAIM_PATTERNS = [
-    # "I've staged that" / "It's staged and ready" / "That's now staged"
-    /\b(?:i'?ve|i have|it'?s|it is|that'?s|this is|has been|now)\s+(?:just\s+|now\s+|been\s+)*staged\b/i,
-    # "Staged." / "Staged now, confirm it" — the terse opener the production replies used
-    /\bstaged\s*(?:now\b|and\b|—|-|\.|,|!)/i,
-    # "I've prepared that discount for your confirmation", "I've set it up — confirm it and I'll
-    # apply it". Only counts when confirmation language rides along in the same sentence: "I've
-    # prepared a summary of your sales" is a legitimate reply with nothing to confirm.
-    /\bi'?ve (?:prepared|queued|set up|lined up)\b[^.!?]*\bconfirm/i,
-    /\bready (?:for you )?to confirm\b/i,
-    # "Fresh confirm card on this message.", "the confirm button is below"
-    /\bconfirm(?:ation)? (?:card|button)\b[^.!?]*\b(?:on|below|beneath|underneath) (?:this message|this|the)\b/i,
-    /\bconfirm (?:it|that|this|the change) (?:below|on the card)\b/i,
-  ].freeze
-  # Deliberate scope limit: only a claim about a change staged in THIS turn is matched, because that
-  # is the only thing the service can verify. A reply pointing at an EARLIER message's card ("scroll
-  # up, the confirm button is there") is left alone — an earlier proposal may genuinely still be
-  # pending, since a creator can scroll back and confirm an older card, and the transcript replayed
-  # to the model carries no metadata, so the service cannot tell from here. That case is addressed in
-  # the prompt instead: believe a creator who says they see no card, and re-stage.
-  # Forms that use the same vocabulary while asserting the OPPOSITE, describing a change that
-  # already went through, or explaining how the product works in general. "Nothing is staged", "no
-  # change is prepared yet", "you already confirmed that discount", "changes get staged for you to
-  # review first" are all truthful replies with no proposed action this turn — replacing them would
-  # tell the creator a change never existed when it did, or describe the product wrongly. Checked
-  # first, so a reply matching any of these is never treated as a phantom claim.
-  #
-  # Note what is deliberately absent: a bare "already". "The confirm button is already there —
-  # scroll up" is among the most common phantom replies in production, so "already" only excuses a
-  # reply when it is about a change that already completed.
-  NEGATED_STAGING_PATTERNS = [
-    /\b(?:nothing|nothing'?s|no change|none of)\b[^.!?]*\b(?:staged|prepared|confirm)/i,
-    /\b(?:isn'?t|aren'?t|wasn'?t|hasn'?t|haven'?t|not|never|no longer)\s+(?:yet\s+|been\s+)*(?:staged|prepared|waiting)\b/i,
-    /\balready (?:confirmed|applied|live|done|went through|been applied)\b/i,
-    /\b(?:get|gets|would be|will be|would get)\s+staged\b/i,
+    # First-person staging is current when it uses the present-perfect/current modifiers, or when
+    # the same sentence tells the seller to confirm. Plain historical "I staged..." needs neither.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:now\s+)?
+      i
+      (?:
+        (?:['’]ve|\s+have)\s+
+          (?:(?:just|now|been)\s+|(?:went|gone)\s+ahead\s+and\s+)*staged\b
+        |
+        \s+(?:(?:just|now)\s+|went\s+ahead\s+and\s+)+staged\b
+        |
+        \s+staged\b(?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})
+      )
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?![^.!?\n]*\?)
+    /ix,
+    # Contextual pronouns are specific enough to assert the current proposal. Local exclusions keep
+    # prior-message, completed, conditional, and question forms from being rewritten.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:now\s+)?
+      (?:it|that|this)(?:['’]s|\s+(?:is|has\s+been))
+      \s+(?:just\s+|now\s+|been\s+)*staged\b
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?![^.!?\n]*#{STAGED_CLAIM_CONDITIONAL_TAIL})
+      (?![^.!?\n]*\?)
+    /ix,
+    # Explicit change nouns need a confirmation cue. That prevents product-workflow prose such as
+    # "the change is staged, reviewed, then applied" from reading as a live proposal.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:now\s+)?
+      (?:
+        (?:the|that|this|your)\s+
+          (?:change|update|discount|offer\s+code|product|product\s+update)\s+
+          (?:is|has\s+been)
+        |
+        your\s+(?:changes|updates|discounts)\s+(?:are|have\s+been)
+        |
+        the\s+requested\s+(?:change|changes|update)\s+
+          (?:is|are|has\s+been|have\s+been)
+      )
+      \s+(?:just\s+|now\s+|been\s+)*staged\b
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?:
+        (?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})
+        |
+        (?=[.!]\s*(?:please\s+)?(?:confirm|approve)\b)
+      )
+      (?![^.!?\n]*\?)
+    /ix,
+    # "Staged.", "Staged successfully — confirm below", and the terse production opener.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:(?:all|successfully)\s+)?staged(?:\s+(?:now|successfully))?\b
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?![^.!?\n]*\?)
+      (?=\s*(?:\z|[.!]|[—–-]|\band\b|,\s*but\b|
+        :\s*(?:please\s+)?(?:confirm|approve)\b|
+        ,\s*(?:please\s+)?(?:confirm|approve)\b))
+    /ix,
+    # Prepared/queued phrasing only counts with an instruction or explicit confirmation purpose in
+    # the same sentence. Draft content and explanations can be reviewed without an action card.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:now\s+)?
+      i(?:['’]ve|\s+have)?\s+(?:just\s+|now\s+)*
+      (?:prepared|queued|set\ up|lined\ up)\b
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!\s+(?:an?\s+|the\s+|your\s+)?(?:draft\s+(?:email|message)|summary|
+        explanation|guide|instructions?|report)\b)
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      [^.!?\n]*
+      (?:\bfor\s+(?:your\s+)?(?:confirmation|approval)\b|
+        \b(?:please\s+)?(?:confirm|approve)\b|
+        \bready\s+(?:for\s+you\s+to\s+(?:confirm|approve)|
+          for\s+(?:your\s+)?(?:confirmation|approval))\b)
+      (?![^.!?\n]*\?)
+    /ix,
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:
+        (?:it|that|this)(?:['’]s|\s+(?:is|has\s+been))
+        |
+        (?:the|that|this|your)\s+
+          (?:change|update|discount|offer\s+code|product|product\s+update)\s+
+          (?:is|has\s+been)
+      )
+      \s+(?:just\s+|now\s+)*(?:prepared|queued|set\ up|lined\ up)\b
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      [^.!?\n]*
+      (?:\bfor\s+(?:your\s+)?(?:confirmation|approval)\b|
+        \bready\s+(?:for\s+you\s+to\s+(?:confirm|approve)|
+          for\s+(?:your\s+)?(?:confirmation|approval))\b)
+      (?![^.!?\n]*\?)
+    /ix,
+    # A bare question ("Ready to confirm?") is not a staging assertion.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:
+        ready
+        |
+        (?:
+          (?:it|that|this)(?:['’]s|\s+is)
+          |
+          (?:the|that|this|your)\s+
+            (?:change|update|discount|offer\s+code|product|product\s+update)\s+is
+        )
+        \s+ready
+      )
+      \s+(?:(?:for\s+you\s+)?to\s+(?:confirm|approve)|
+        for\s+(?:your\s+)?(?:confirmation|approval))\b
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?![^.!?\n]*\?)
+    /ix,
+    # Fresh/current card assertions are excluded when the sentence describes a conditional workflow
+    # or an earlier message instead of a card created for this reply.
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?![^.!?\n]*\b(?:if|when|whenever|once|after|before|would|could)\b)
+      (?:a\s+)?(?:fresh|new)\s+confirm(?:ation)?\s+(?:card|button)\b
+      [^.!?\n]*\b(?:on\s+this\s+message|below|beneath|underneath)\b
+    /ix,
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?![^.!?\n]*\b(?:if|when|whenever|once|after|before|would|could)\b)
+      (?:the|a|your)\s+confirm(?:ation)?\s+(?:card|button)\s+
+      (?:is|appears|sits)\s+(?:right\s+)?
+      (?:below|beneath|underneath|on\s+this\s+message)\b
+    /ix,
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      (?:please\s+)?confirm\s+
+      (?:
+        (?:it|that|this|the\s+change)\s+(?:below|on\s+the\s+card)
+        |
+        (?:the|this|that|your)\s+(?:confirmation\s+)?card\s+
+          (?:below|beneath|underneath|on\s+this\s+message)
+      )\b
+      (?![^.!?\n]*\b(?:earlier|previous)\s+message\b)
+      (?![^.!?\n]*\?)
+    /ix,
   ].freeze
 
   # How many times we re-ask the model to actually stage the change it claimed to have staged
   # before giving up and telling the creator the truth. One retry is enough in practice and keeps
   # the worst-case turn cost bounded.
   MAX_STAGED_CLAIM_RETRIES = 1
+  # The correction itself needs one model turn. If it calls api_write, Anthropic's tool protocol
+  # needs one more turn for the final seller-facing reply. Reserve both even when the false claim
+  # arrives on the last normal iteration.
+  STAGED_CLAIM_RECOVERY_ITERATIONS = 2
   # Fed back to the model when it claimed a staged change without calling api_write, so it can
   # either make the call for real or correct itself. Phrased as the tool-protocol fact it is.
   STAGED_CLAIM_CORRECTION = <<~TEXT.strip
     Your last reply told the creator a change is staged and waiting for their confirmation, but you
     did not call api_write in that reply, so no change was prepared and no confirmation card exists
-    for them to click. If the change should be prepared, call api_write now with the exact change.
-    If you cannot, say plainly that no change is prepared and you are not waiting on them, and do
-    not refer the creator to a card.
+    for them to click. Call api_write now only if the creator explicitly asked you to prepare or
+    re-stage this change. If they only reported a missing card, or did not explicitly ask you to
+    re-stage it, do not create another proposal: say plainly that no new change is prepared, ask
+    whether they want you to stage it again, and do not refer them to a card.
   TEXT
   # What the creator sees when the model still won't stage the change it keeps claiming to have
   # staged. Better an honest failure they can retry than a confident instruction to click a button
   # that was never rendered. Must not itself match STAGED_CLAIM_PATTERNS above.
-  NOTHING_STAGED_REPLY = "Something went wrong on my end and that change never got prepared, so " \
-                         "there's nothing here for you to approve yet. Ask me again and I'll redo it."
+  NOTHING_STAGED_REPLY = "That change wasn't prepared, so there's nothing here for you to approve " \
+                         "yet. Ask me again and I'll redo it."
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
   # echoing an unbounded client-supplied history back to the model.
   MAX_HISTORY_MESSAGES = 20
@@ -259,11 +448,12 @@ class Ai::StoreAgentService
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
       again.
-    - If the creator says they cannot see a confirmation card or button, believe them and call
-      api_write again to stage the change fresh in this reply. Never send them back to an earlier
-      message to look for a card, never tell them the card is already there, and never refuse to
-      re-stage a change — you cannot see their screen, and a card that failed to save is exactly
-      what this looks like.
+    - If the creator says they cannot see a confirmation card or button, believe them. Never send
+      them back to an earlier message or claim the card is already there — you cannot see their
+      screen. Explain that no change can apply without a visible confirmation, and ask whether they
+      want you to stage it again. Only call api_write again after they explicitly ask you to
+      re-stage it; blindly creating a second proposal can leave two copies of an action that is
+      unsafe to run twice waiting to be confirmed.
     - Custom HTML pages only display images hosted by Gumroad — external file
       urls are blocked by the page's security policy and render broken. When the creator wants
       their image (logo, photo, banner) on a page, first upload it with
@@ -311,7 +501,9 @@ class Ai::StoreAgentService
     @objects = []
     staged_claim_retries = 0
 
-    MAX_TOOL_ITERATIONS.times do
+    remaining_iterations = MAX_TOOL_ITERATIONS
+    while remaining_iterations.positive?
+      remaining_iterations -= 1
       result = client.messages(
         system: system_prompt,
         messages: conversation,
@@ -335,12 +527,13 @@ class Ai::StoreAgentService
         if phantom_staged_claim?(reply:, proposed_action:)
           if staged_claim_retries < MAX_STAGED_CLAIM_RETRIES
             staged_claim_retries += 1
-            log_phantom_staged_claim(reply:, retrying: true)
+            remaining_iterations = [remaining_iterations, STAGED_CLAIM_RECOVERY_ITERATIONS].max
+            log_phantom_staged_claim(retrying: true)
             append_staged_claim_correction(conversation, reply)
             next
           end
 
-          log_phantom_staged_claim(reply:, retrying: false)
+          log_phantom_staged_claim(retrying: false)
           return { reply: NOTHING_STAGED_REPLY, proposed_action: nil, objects: deduped_objects }
         end
 
@@ -376,7 +569,9 @@ class Ai::StoreAgentService
     @objects = []
     staged_claim_retries = 0
 
-    MAX_TOOL_ITERATIONS.times do
+    remaining_iterations = MAX_TOOL_ITERATIONS
+    while remaining_iterations.positive?
+      remaining_iterations -= 1
       # Stream this turn's text deltas live. We don't yet know if the turn is final (text-only) or an
       # intermediate tool-use turn that happens to include preamble text, so track whether anything
       # was streamed: if the turn turns out to be a tool-use turn, we emit :reset to discard its
@@ -419,18 +614,28 @@ class Ai::StoreAgentService
         # actually call api_write) or streaming the honest "nothing staged" line — otherwise the
         # false claim stays on screen next to a card that will never appear.
         if phantom_staged_claim?(reply:, proposed_action:)
-          emit.call(:reset, {}) if streamed_any
-
           if staged_claim_retries < MAX_STAGED_CLAIM_RETRIES
+            emit.call(:reset, {}) if streamed_any
             staged_claim_retries += 1
-            log_phantom_staged_claim(reply:, retrying: true)
+            remaining_iterations = [remaining_iterations, STAGED_CLAIM_RECOVERY_ITERATIONS].max
+            log_phantom_staged_claim(retrying: true)
             append_staged_claim_correction(conversation, reply)
             next
           end
 
-          log_phantom_staged_claim(reply:, retrying: false)
-          emit.call(:token, { text: NOTHING_STAGED_REPLY })
-          return finish_stream(reply: NOTHING_STAGED_REPLY, proposed_action: nil, last_user_message:, emit:, on_reply_complete:)
+          log_phantom_staged_claim(retrying: false)
+          return finish_stream(
+            reply: NOTHING_STAGED_REPLY,
+            proposed_action: nil,
+            last_user_message:,
+            emit:,
+            on_reply_complete:,
+          ) do
+            # Persist the final fallback before either socket write. A disconnect here must not lose
+            # a fully determined turn; exact-turn recovery can then adopt the stored honest reply.
+            emit.call(:reset, {}) if streamed_any
+            emit.call(:token, { text: NOTHING_STAGED_REPLY })
+          end
         end
 
         return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
@@ -492,12 +697,15 @@ class Ai::StoreAgentService
     def phantom_staged_claim?(reply:, proposed_action:)
       return false if proposed_action.present?
       return false if reply.blank?
-      # Checked first: a reply that says nothing is staged, that a change already went through, or
-      # that explains how confirming works in general is truthful with no proposed action, and must
-      # never be replaced.
-      return false if NEGATED_STAGING_PATTERNS.any? { |pattern| reply.match?(pattern) }
 
-      STAGED_CLAIM_PATTERNS.any? { |pattern| reply.match?(pattern) }
+      # A reply can quote an earlier assistant message before giving its current answer. Remove only
+      # that attributed clause; a later current claim in the same reply still goes through the guard.
+      candidate = reply.gsub(
+        /\b(?:the\s+)?(?:earlier|previous)\s+(?:reply|message)\s+
+          (?:said|claimed|read)\s*:\s*[^.!?;\n]*/ix,
+        "",
+      )
+      STAGED_CLAIM_PATTERNS.any? { |pattern| candidate.match?(pattern) }
     end
 
     # Replay the model's own false claim back at it as an assistant turn, followed by a user turn
@@ -512,20 +720,14 @@ class Ai::StoreAgentService
     # Before this, a phantom staging claim was invisible outside a database read: no metric, no log
     # line, nothing to alert on. Log and report it so the rate is trackable and a regression shows up
     # without anyone querying ai_messages by hand.
-    def log_phantom_staged_claim(reply:, retrying:)
+    def log_phantom_staged_claim(retrying:)
       outcome = retrying ? "retrying" : "gave up, told the seller nothing was prepared"
-      Rails.logger.warn("Store agent claimed a staged change with no proposed action (#{outcome}): #{reply.to_s.truncate(200)}")
-      # Report BOTH the retry and the give-up, under one fixed message string so every occurrence
-      # groups as a single Sentry issue. Reporting only the give-up would undercount: a phantom claim
-      # on the last tool iteration consumes the retry and then falls out of the loop into the
-      # tool-cap reply, so its give-up branch never runs — and a long paginating turn is exactly
-      # where a phantom claim is most likely.
+      Rails.logger.warn("Store agent claimed a staged change with no proposed action (#{outcome})")
+      # Report BOTH the retry and the give-up under one fixed message string so every occurrence
+      # groups as a single Sentry issue. Reporting only the give-up would hide every recovered turn.
       ErrorNotifier.notify(
         "Store agent claimed a staged change with no proposed action",
         outcome:,
-        # The reply's opening words. These can name a product or price the creator already sees in
-        # their own chat; nothing is included that isn't in the reply text itself.
-        reply: reply.to_s.truncate(200),
       )
     end
 
@@ -544,10 +746,11 @@ class Ai::StoreAgentService
     # first — before any further socket write — so the caller can persist the finished turn even
     # when the client's connection is already dead (the next emit would raise ClientDisconnected
     # and abandon the turn) and before the seller waits out the extra suggestions LLM call.
-    def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil)
+    def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil, &before_trailing_events)
       objects = deduped_objects
       result = { reply:, proposed_action: proposed_action&.as_json, objects: }
       on_reply_complete&.call(result)
+      before_trailing_events&.call
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: proposed_action.as_json }) if proposed_action
       suggestions = follow_up_suggestions(reply:, last_user_message:)
