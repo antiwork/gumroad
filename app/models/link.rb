@@ -508,8 +508,36 @@ class Link < ApplicationRecord
   end
   alias_method :streamable, :streamable?
 
+  # Whether a $0 checkout of this product must still solve a CAPTCHA.
+  #
+  # Free checkouts are the cheapest thing to automate on Gumroad: there is no card to
+  # decline and no money at risk, but every completed checkout still sends a receipt from
+  # our transactional mailer. That makes a free product an attractive way to relay mail
+  # through Gumroad's sending reputation.
+  #
+  # Two independent reasons to require the check:
+  #
+  # 1. NEW SELLER. An account younger than REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN has no
+  #    track record, so we ask for the check by default.
+  #
+  # 2. SELLER IS NOT IN GOOD STANDING. Account age alone turned out to be the wrong test:
+  #    in July 2026 a seller whose account was over four years old scripted 150,529 free
+  #    checkouts of their own product in four days, mailing 148,535 scraped addresses
+  #    (gumroad-private#1397). They sailed past the age check purely by being old. What
+  #    actually distinguished them was risk state — they were flagged, not compliant.
+  #
+  #    So we also require the check whenever the seller is not `compliant`. Note that
+  #    `not_reviewed` is the DEFAULT state for the long tail of accounts that have simply
+  #    never been looked at, so this deliberately covers "unknown" as well as "known bad" —
+  #    for a free order, an unverified seller is exactly the case where a cheap bot check is
+  #    worth it. Suspended sellers cannot transact at all, so they never reach here.
+  #
+  # Compliant sellers — reviewed and cleared, and the source of ~85% of legitimate free
+  # checkout volume — are unaffected, so the common path stays frictionless.
   def require_captcha?
-    user.created_at > REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN.ago
+    return true if user.created_at > REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN.ago
+
+    !user.compliant?
   end
 
   def stream_only?

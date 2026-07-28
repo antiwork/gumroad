@@ -25,6 +25,8 @@ class StripeCardType
     # real method instead of falling through to "generic_card".
     "upi" => CardType::UPI,
     "ideal" => CardType::IDEAL,
+    "pix" => CardType::PIX,
+    "bancontact" => CardType::BANCONTACT,
     # Klarna reports itself the same way (payment_method_details.type == "klarna"). Every
     # non-card method launched through the Payment Element needs an entry here, otherwise
     # its charges record "generic_card" and the receipt claims a credit card statement

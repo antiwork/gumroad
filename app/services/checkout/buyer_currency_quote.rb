@@ -12,6 +12,7 @@ class Checkout::BuyerCurrencyQuote
                       :currency,
                       :canonical_total_cents,
                       :presentment_total_cents,
+                      :rounding_delta_cents,
                       :fx_rate,
                       :stripe_fx_quote_id,
                       :stripe_fx_quote_expires_at,
@@ -113,6 +114,9 @@ class Checkout::BuyerCurrencyQuote
       currency: payload.fetch("currency"),
       canonical_total_cents: payload.fetch("canonical_total_cents"),
       presentment_total_cents: payload.fetch("presentment_total_cents"),
+      # Older tokens (minted before price-ending mirroring shipped) have no delta key, and a
+      # token in flight across the deploy must still verify: no key means no rounding.
+      rounding_delta_cents: payload["rounding_delta_cents"].to_i,
       fx_rate: BigDecimal(payload.fetch("fx_rate")),
       stripe_fx_quote_id: payload.fetch("stripe_fx_quote_id"),
       stripe_fx_quote_expires_at: Time.zone.parse(payload.fetch("stripe_fx_quote_expires_at"))
@@ -213,7 +217,32 @@ class Checkout::BuyerCurrencyQuote
       from_currency: buyer_currency,
       stripe_account_id: merchant_account.charge_processor_merchant_id
     )
-    presentment_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
+    converted_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
+    # Give the converted total the same price ending the seller chose in USD ($9.99 →
+    # €8,99, $10 → €9), HERE, before the token is signed, so the rounded amount is the one
+    # the checkout displays, the buyer confirms, and the charge uses. Rounding any later
+    # would charge an amount the buyer never saw.
+    rounding = if Checkout::PresentmentRounding.enabled_for?(seller)
+      Checkout::PresentmentRounding.round(
+        presentment_total_cents: converted_total_cents,
+        canonical_total_cents:,
+        currency: buyer_currency,
+        # A round-down comes out of Gumroad's share of the charge, never the seller's, so
+        # cap it at the presentment value of the fee we know Gumroad collects on this cart.
+        max_downward_cents: presentment_cents_for(
+          Checkout::PresentmentRounding.absorbable_gumroad_cents(
+            seller:,
+            canonical_price_and_tip_cents: line_items.sum { _1.price_cents + _1.tip_cents },
+            merchant_account:
+          ),
+          quote.fx_rate,
+          buyer_currency
+        )
+      )
+    else
+      Checkout::PresentmentRounding::Result.new(presentment_total_cents: converted_total_cents, delta_cents: 0)
+    end
+    presentment_total_cents = rounding.presentment_total_cents
 
     Result.new(
       token: signed_token(
@@ -221,15 +250,20 @@ class Checkout::BuyerCurrencyQuote
         merchant_account:,
         buyer_currency:,
         quote:,
-        presentment_total_cents:
+        presentment_total_cents:,
+        rounding_delta_cents: rounding.delta_cents
       ),
       currency: buyer_currency,
       canonical_total_cents:,
       presentment_total_cents:,
+      rounding_delta_cents: rounding.delta_cents,
       fx_rate: quote.fx_rate,
       stripe_fx_quote_id: quote.id,
       stripe_fx_quote_expires_at: quote.expires_at,
-      line_allocations: line_allocations_for(presentment_total_cents)
+      # Built from the EXACT converted total plus the rounding difference, so the tax the
+      # checkout displays is the true converted tax and the cosmetic difference shows up on
+      # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
+      line_allocations: line_allocations_for(converted_total_cents, rounding.delta_cents)
     )
   rescue StripeFxQuote::SettlementCurrencyMismatch => e
     # Expected condition, not a defect: the account settles this currency in itself
@@ -261,14 +295,22 @@ class Checkout::BuyerCurrencyQuote
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
     end
 
-    # Splits the locked presentment total across the cart lines with the SAME shared
+    # Splits the presentment amounts across the cart lines with the SAME shared
     # largest-remainder code the charge later uses to persist purchase presentment rows
     # (Charge::PresentmentAllocator). The browser renders these amounts verbatim instead of
     # converting each line itself, so the line items the buyer sees always sum to the locked
     # total and match the persisted rows on the receipt.
-    def line_allocations_for(presentment_total_cents)
+    #
+    # The total passed in is the exact converted one; the rounding difference is applied on
+    # top of the split, so the line totals sum to the rounded total that was locked.
+    #
+    # A raise from the allocator (a difference with no non-tax component to carry it) is
+    # caught by #create's rescue, which drops the whole cart back to canonical USD — a
+    # cosmetic price ending must never break a checkout.
+    def line_allocations_for(converted_total_cents, rounding_delta_cents)
       Charge::PresentmentAllocator.allocate_lines(
-        presentment_total_cents:,
+        presentment_total_cents: converted_total_cents,
+        rounding_delta_cents:,
         lines: line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,
@@ -317,7 +359,7 @@ class Checkout::BuyerCurrencyQuote
       true
     end
 
-    def signed_token(seller:, merchant_account:, buyer_currency:, quote:, presentment_total_cents:)
+    def signed_token(seller:, merchant_account:, buyer_currency:, quote:, presentment_total_cents:, rounding_delta_cents:)
       self.class.send(:verifier).generate(
         {
           seller_id: seller.id,
@@ -336,6 +378,10 @@ class Checkout::BuyerCurrencyQuote
             [line_item.permalink.to_s, line_item.canonical_total_cents.to_i]
           end,
           presentment_total_cents:,
+          # How far the rounding moved the amount, signed into the token so the charge
+          # can book the difference against Gumroad's share without re-deriving it (and
+          # so a seller's setting flipping mid-checkout can't change the split).
+          rounding_delta_cents:,
           stripe_fx_quote_id: quote.id,
           stripe_fx_quote_expires_at: quote.expires_at.iso8601,
           fx_rate: quote.fx_rate.to_s("F"),

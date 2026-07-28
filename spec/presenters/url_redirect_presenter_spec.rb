@@ -45,6 +45,8 @@ describe UrlRedirectPresenter do
                                                                      pdf_stamp_enabled: false,
                                                                      processing: false,
                                                                      thumbnail_url: nil,
+                                                                     width: nil,
+                                                                     height: nil,
                                                                    }]
                                                                  },
                                                                  {
@@ -77,6 +79,8 @@ describe UrlRedirectPresenter do
                                                                    pdf_stamp_enabled: false,
                                                                    processing: false,
                                                                    thumbnail_url: nil,
+                                                                   width: nil,
+                                                                   height: nil,
                                                                  }])
     end
 
@@ -129,6 +133,24 @@ describe UrlRedirectPresenter do
       content_items = instance.download_attributes[:content_items]
       expect(content_items.length).to eq(1)
       expect(content_items.first[:thumbnail_url]).to eq("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{file.thumbnail_variant.key}")
+    end
+
+    it "includes the recorded pixel dimensions for video files so the player frame can match their shape" do
+      product = create(:product)
+      portrait = create(:streamable_video, link: product, width: 1080, height: 1920)
+      landscape = create(:streamable_video, link: product, width: 1920, height: 1080)
+      unmeasured = create(:streamable_video, link: product, width: nil, height: nil)
+      pdf = create(:readable_document, link: product)
+      purchase = create(:free_purchase, link: product)
+      url_redirect = create(:url_redirect, purchase:)
+
+      content_items = described_class.new(url_redirect:, logged_in_user: purchase.purchaser).download_attributes[:content_items]
+      by_id = content_items.index_by { _1[:id] }
+
+      expect(by_id[portrait.external_id]&.values_at(:width, :height)).to eq([1080, 1920])
+      expect(by_id[landscape.external_id]&.values_at(:width, :height)).to eq([1920, 1080])
+      expect(by_id[unmeasured.external_id]&.values_at(:width, :height)).to eq([nil, nil])
+      expect(by_id[pdf.external_id]&.values_at(:width, :height)).to eq([nil, nil])
     end
 
     it "keeps a known oversized EPUB download-only while allowing an unknown size" do
@@ -184,6 +206,7 @@ describe UrlRedirectPresenter do
           email: @purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
+          has_invoice: true,
           product_long_url: @product.long_url,
           product_id: @product.external_id,
           product_name: @product.name,
@@ -216,6 +239,60 @@ describe UrlRedirectPresenter do
         )
       }]
       expect(instance.download_page_with_content_props).to eq(@props)
+    end
+
+    # The download page shows its "Generate invoice" link off this flag, and the whole point of
+    # the flag is to match the receipt's own gate rather than inventing a second rule. A free
+    # purchase has no amount to invoice, so offering the link would send the buyer to a page
+    # that cannot render anything.
+    describe "has_invoice" do
+      it "is true for a paid purchase" do
+        instance = described_class.new(url_redirect: @url_redirect, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(true)
+      end
+
+      it "is false for a free purchase" do
+        product = create(:product, user: @user, price_cents: 0)
+        purchase = create(:free_purchase, link: product)
+        url_redirect = create(:url_redirect, purchase:, link: product)
+
+        instance = described_class.new(url_redirect:, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(false)
+      end
+
+      it "tracks the purchase's own has_invoice? rather than duplicating its logic" do
+        instance = described_class.new(url_redirect: @url_redirect, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice])
+          .to eq(@purchase.has_invoice?)
+      end
+
+      # A bundle gives the buyer one $0 access purchase per product in it, and the money sits on
+      # the bundle purchase. The page sends both the receipt and the invoice links to that paid
+      # parent, so the flag has to be answered from the parent too — reading the free child would
+      # hide the link from every paid bundle buyer.
+      it "is true for bundle content when the bundle purchase itself was paid" do
+        bundle_purchase = create(:purchase, link: @product, seller: @user)
+        child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true)
+        create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
+        url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
+
+        instance = described_class.new(url_redirect:, logged_in_user: nil)
+        props = instance.download_page_with_content_props[:purchase]
+
+        expect(child_purchase.has_invoice?).to be(false)
+        expect(props[:bundle_purchase_id]).to eq(bundle_purchase.external_id)
+        expect(props[:has_invoice]).to be(true)
+      end
+
+      it "is false for bundle content when the bundle purchase was free" do
+        bundle_purchase = create(:free_purchase, link: @product)
+        child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true)
+        create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
+        url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
+
+        instance = described_class.new(url_redirect:, logged_in_user: nil)
+        expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(false)
+      end
     end
 
     it "does not include a creator byline in props" do
@@ -495,7 +572,9 @@ describe UrlRedirectPresenter do
             subtitle_files: [],
             pdf_stamp_enabled: false,
             processing: false,
-            thumbnail_url: nil
+            thumbnail_url: nil,
+            width: nil,
+            height: nil
           },
           {
             type: "file",
@@ -516,7 +595,9 @@ describe UrlRedirectPresenter do
             subtitle_files: [],
             pdf_stamp_enabled: false,
             processing: false,
-            thumbnail_url: nil
+            thumbnail_url: nil,
+            width: nil,
+            height: nil
           }
         )
       end
@@ -620,6 +701,7 @@ describe UrlRedirectPresenter do
           email: @purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
+          has_invoice: true,
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,

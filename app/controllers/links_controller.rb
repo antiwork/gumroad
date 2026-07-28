@@ -411,6 +411,30 @@ class LinksController < ApplicationController
         # describe the committed pre-save state.
         deletion_guard_diagnostics
 
+        # Build the save contract NOW, before anything is written
+        # (gumroad-private#1379). Its freshness check compares the client's
+        # revision token against the product's current fingerprint, and the
+        # save mutates rows as it proceeds — creating a content page changes
+        # that fingerprint. Constructing it here, immediately after the lock and
+        # reload, means the question it answers is "was the client editing the
+        # state that was committed when this save started?", which is the only
+        # version of the question that has a stable answer.
+        product_save_contract
+
+        # Reject a DESTRUCTIVE save built from a stale (or absent) snapshot
+        # before anything is written. Skipping the deletion silently, as an
+        # earlier revision of this branch did, is the worst available outcome:
+        # the seller is told "Changes saved", the editor clears the pending
+        # removals, and the versions they deleted are still there — so the
+        # interface now disagrees with the database and the next save has lost
+        # the intent entirely.
+        #
+        # Only destructive saves are refused. A stale tab fixing a typo still
+        # saves normally, because a stale write is recoverable and a stale
+        # delete is not — rejecting every stale save is what forced #6245 to be
+        # switched off.
+        ensure_contract_deletions_are_fresh!
+
         # Reject a save built from a stale snapshot BEFORE any mutation: a
         # payload that echoes page/variant snapshot timestamps older than the
         # stored rows would silently overwrite content another session saved in
@@ -502,7 +526,7 @@ class LinksController < ApplicationController
         product_permitted_params[:variants].each { rich_content_params.push(*_1[:rich_content]) } if product_permitted_params[:variants].present?
         rich_content_params = rich_content_params.flat_map { _1[:description] = _1.dig(:description, :content) }
         rich_contents_to_keep = []
-        SaveFilesService.perform(@product, product_permitted_params, rich_content_params)
+        SaveFilesService.perform(@product, product_permitted_params, rich_content_params, contract: product_save_contract)
         existing_rich_contents = @product.alive_rich_contents.to_a
         rich_content.each.with_index do |product_rich_content, index|
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
@@ -516,6 +540,16 @@ class LinksController < ApplicationController
         end
         product_rich_contents_to_delete = (existing_rich_contents - rich_contents_to_keep)
           .reject { preserved_rich_content_ids.include?(_1.external_id) }
+        # Product::SaveContract, Rules 1 and 2. `existing - kept` is exactly the
+        # omission-inference this contract exists to remove: a payload that
+        # doesn't mention a page — including one strong parameters dropped
+        # because it was malformed — currently reads as "delete that page".
+        # Under the contract the diff stops being deletion authority: pages go
+        # only when the client names them, or asks to clear the collection.
+        product_rich_contents_to_delete = contract_scoped_rich_content_deletions(
+          product_rich_contents_to_delete,
+          existing_rich_contents
+        )
         Product::RichContentDeletionGuard.ensure_intent!(
           product: @product,
           rich_contents_to_delete: product_rich_contents_to_delete,
@@ -526,7 +560,7 @@ class LinksController < ApplicationController
         )
         product_rich_contents_to_delete.each(&:mark_deleted!)
 
-        Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations])
+        Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations], contract: product_save_contract)
         update_variants
         update_removed_file_attributes
         update_custom_domain
@@ -541,7 +575,7 @@ class LinksController < ApplicationController
         unless @product.is_licensed
           @product.is_multiseat_license = false
         end
-        @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description).process
+        @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description, contract: product_save_contract).process
         @product.save!
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
         @product.generate_product_files_archives!
@@ -555,6 +589,19 @@ class LinksController < ApplicationController
         error_message: e.message,
         error_code: "stale_content_conflict",
         stale_records: e.stale_records,
+      }, status: :conflict
+    rescue Product::SaveContract::StaleDeletionConflict => e
+      # Raised before any mutation, so the transaction rolls back with nothing
+      # written and the removals are still pending in the database. The editor
+      # must NOT clear its pending-removal state on this response — the whole
+      # point is that the seller's deletion has not happened yet.
+      #
+      # A fresh token rides along so the editor can reconcile and retry after
+      # showing the seller what changed, rather than forcing a full page reload.
+      return render json: {
+        error_message: e.message,
+        error_code: "stale_deletion_conflict",
+        editor_revision: Product::EditorRevision.current(@product.reload),
       }, status: :conflict
     rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
       # The fail-closed inconsistent-content case: hidden version-level pages
@@ -781,6 +828,113 @@ class LinksController < ApplicationController
       end
     end
 
+    # The editor's save contract (Product::SaveContract, gumroad-private#1379).
+    # Built from PERMITTED params on purpose: `submitted?` must see collections
+    # exactly as strong parameters shaped them, so a malformed value — which
+    # the permit list drops — reads as "not submitted" rather than as data.
+    # The contract-specific keys (editor_revision, deletion_operations) are not
+    # product attributes, so they are permitted here rather than in the policy.
+    # Deletion operations are wired per collection as its save path adopts the
+    # contract: :files, :public_files (ids are PublicFile#public_id) and
+    # :integrations (integrations have no external id in the editor payload —
+    # they are keyed by provider name, so their "ids" here are provider names
+    # from Integration::ALL_NAMES).
+    #
+    # deep_symbolize_keys is load-bearing: the contract reads
+    # `deletion_operations.dig(:deleted_ids, :files)` with symbol keys, and
+    # Parameters#to_unsafe_h.symbolize_keys re-stringifies NESTED keys, so the
+    # contract must be handed plain, deeply-symbolized hashes.
+    def product_save_contract
+      @_product_save_contract ||= Product::SaveContract.new(
+        params: product_permitted_params.to_h.deep_symbolize_keys.merge(
+          params.permit(
+            :editor_revision,
+            deletion_operations: {
+              deleted_ids: {
+                files: [],
+                public_files: [],
+                integrations: [],
+                variants: [],
+                rich_content: [],
+              },
+              cleared_collections: [],
+            }
+          ).to_h.deep_symbolize_keys
+        ).deep_merge(variant_scoped_deletion_params),
+        product: @product
+      )
+    end
+
+    # Version-scoped deletion operations, permitted separately because their
+    # keys are variant external ids — arbitrary strings that cannot be named in
+    # a static `permit` list.
+    #
+    # Each variant id maps to a per-collection list, so the shape is validated
+    # by hand rather than trusted: anything that is not a hash of
+    # collection => array-of-strings is dropped, which lands a malformed
+    # payload on "no deletions requested" instead of raising inside the save.
+    def variant_scoped_deletion_params
+      raw = params[:deletion_operations]
+      # `raw` is client-controlled and may be any shape. A bare String responds
+      # to `[]` but raises TypeError on a Symbol key, so `respond_to?(:[])` is
+      # not a sufficient guard here — require the hash-like shape explicitly.
+      return {} unless raw.is_a?(Hash) || raw.is_a?(ActionController::Parameters)
+
+      by_owner = raw[:variant_deleted_ids]
+      return {} unless by_owner.respond_to?(:each_pair)
+
+      scoped = by_owner.each_pair.with_object({}) do |(owner_id, collections), acc|
+        next unless collections.respond_to?(:each_pair)
+
+        permitted = collections.each_pair.with_object({}) do |(collection, ids), inner|
+          next unless collection.to_sym.in?(Product::SaveContract::COLLECTIONS)
+          next unless ids.is_a?(Array)
+
+          inner[collection.to_sym] = ids.select { _1.is_a?(String) || _1.is_a?(Symbol) }.map(&:to_s)
+        end
+        acc[owner_id.to_s] = permitted if permitted.any?
+      end
+
+      scoped.any? ? { deletion_operations: { variant_deleted_ids: scoped } } : {}
+    end
+
+    # Narrows a diff-derived set of pages down to what the contract actually
+    # authorises removing. Returns the input untouched when the contract is not
+    # enforced, so the flag-off path is byte-identical to before.
+    #
+    # `cleared?` deletes from the PRE-SAVE set rather than the diff, so a
+    # clear-all means "everything that existed when the editor loaded" and can
+    # never sweep up a page created by this same request.
+    def contract_scoped_rich_content_deletions(diff_deletions, existing_rich_contents)
+      contract = product_save_contract
+      return diff_deletions unless contract.enforced?
+
+      if contract.cleared?(:rich_content)
+        return existing_rich_contents.reject { preserved_rich_content_ids.include?(_1.external_id) }
+      end
+
+      ids = contract.deleted_ids(:rich_content)
+      return [] if ids.empty?
+
+      existing_rich_contents.select { ids.include?(_1.external_id) }
+        .reject { preserved_rich_content_ids.include?(_1.external_id) }
+    end
+
+    # Refuses a destructive save whose snapshot token is missing or stale.
+    #
+    # Raised (rather than returned) so it unwinds inside the transaction that
+    # wraps the save: nothing has been written at this point, the rollback
+    # releases the product lock, and the rescue renders a 409 the editor can act
+    # on. A write-only save is never refused here.
+    def ensure_contract_deletions_are_fresh!
+      contract = product_save_contract
+      return unless contract.enforced?
+      return unless contract.requested_deletion?
+      return if contract.may_delete?
+
+      raise Product::SaveContract::StaleDeletionConflict
+    end
+
     def check_banned
       e404 if @product.banned?
     end
@@ -881,7 +1035,8 @@ class LinksController < ApplicationController
     end
 
     def update_variants
-      variant_category = @product.variant_categories_alive.first
+      alive_categories = @product.variant_categories_alive.to_a
+      variant_category = alive_categories.first
       variants = product_permitted_params[:variants] || []
       if variants.any? || @product.is_tiered_membership?
         variant_category_params = variant_category.present? ?
@@ -896,7 +1051,8 @@ class LinksController < ApplicationController
             {
               **variant_category_params,
               options: variants,
-            }
+            },
+            *deletion_only_category_params(alive_categories, except: variant_category),
           ],
           confirmed_removed_variant_ids:,
           payload_page_ids:,
@@ -906,6 +1062,7 @@ class LinksController < ApplicationController
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
           deletion_audit_context:,
+          contract: product_save_contract,
         ).perform
       elsif variant_category.present?
         Product::VariantsUpdaterService.new(
@@ -914,7 +1071,8 @@ class LinksController < ApplicationController
             {
               id: variant_category.external_id,
               options: nil,
-            }
+            },
+            *deletion_only_category_params(alive_categories, except: variant_category),
           ],
           confirmed_removed_variant_ids:,
           payload_page_ids:,
@@ -924,8 +1082,52 @@ class LinksController < ApplicationController
           deletion_guard_diagnostics:,
           id_mappings: save_id_mappings,
           deletion_audit_context:,
+          contract: product_save_contract,
         ).perform
       end
+    end
+
+    # The editor only ever addresses the product's FIRST alive variant grouping
+    # — that is what the UI shows and what the payload's `variants` list means.
+    # Everything else the product owns (a second grouping left over from the
+    # older multi-category editor, or from the API) is simply not part of the
+    # request, so the save never visits it.
+    #
+    # That is fine while deletion is inferred from the payload, because a
+    # grouping nobody submitted has nothing to infer from. Under the save
+    # contract it stops being fine: the client can now name a specific variant
+    # id to delete, and if that variant lives in a grouping the save never
+    # visits, the deletion is silently dropped — the save returns success and
+    # the version is still there after a reload.
+    #
+    # So when (and only when) the contract is enforced and the request names ids
+    # or asks for a clear-all, the other alive groupings are appended as
+    # deletion-only entries (`options: nil`). Under the contract that route
+    # deletes exactly the named ids and nothing else
+    # (VariantCategoryUpdaterService#contract_scoped_category_deletions), so a
+    # grouping with no named ids is visited and left completely alone.
+    #
+    # Version-scoped deletions (a version's integrations) count as "names ids"
+    # for exactly the same reason: they name a version by its external id, and
+    # that version can live in any grouping. Without them in this condition a
+    # fresh, explicitly authorised request to disconnect an integration from a
+    # version outside the first grouping would return 200 with the integration
+    # still connected.
+    #
+    # Returns [] whenever the contract is off, which keeps the legacy single-
+    # grouping call byte-identical.
+    def deletion_only_category_params(alive_categories, except:)
+      contract = product_save_contract
+      return [] unless contract.enforced?
+
+      names_deletions = contract.cleared?(:variants) ||
+        contract.deleted_ids(:variants).any? ||
+        contract.variant_deletion_owner_ids.any?
+      return [] unless names_deletions
+
+      alive_categories
+        .reject { _1.id == except&.id }
+        .map { { id: _1.external_id, options: nil } }
     end
 
     # Who and which request is performing this save, for the deletion audit
@@ -951,7 +1153,12 @@ class LinksController < ApplicationController
         actor_user_id: logged_in_user&.id,
         correlation_id: AuditCorrelationId.for(request.request_id),
         request_id: request.request_id,
-        revision_token: nil,
+        # The snapshot token the client submitted, recorded so an audit row can
+        # be tied back to the editor session that asked for the deletion.
+        # Read straight from the params rather than from the contract: the audit
+        # must describe what the client actually sent even when the contract is
+        # disabled, and reading it here cannot start any revision work.
+        revision_token: params[:editor_revision].presence,
       }
     end
 
@@ -1093,7 +1300,68 @@ class LinksController < ApplicationController
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
         **content_updated_at_response,
+        # The revision token for the state this save just committed
+        # (gumroad-private#1379). Every successful save moves the product's
+        # fingerprint, so the token the editor is holding — issued when the page
+        # loaded — is stale the moment the first save returns. Without handing
+        # back a fresh one, a seller who saves an ordinary edit and then deletes
+        # a version in the same session has the deletion silently refused as
+        # stale, and the row reappears on reload. The editor adopts this value
+        # and echoes it on the next save.
+        #
+        # Emitted only while the contract is enforced: with the flag off the
+        # token is meaningless and computing it would cost the fingerprint
+        # queries on every save for no benefit.
+        **editor_revision_response,
       }
+    end
+
+    # The snapshot token for the state this save just produced, so the editor's
+    # NEXT save can still delete. Every save moves the fingerprint (it writes
+    # rows, and the token now covers child updated_at as well as ids), so a
+    # session that kept its original token would find itself stale the moment it
+    # saved once — the second deletion in a session would be silently refused.
+    #
+    # Only emitted when the contract is enforced: with the flag off the client
+    # has no use for it, and computing it would put the fingerprint queries back
+    # on the default path that must stay free of them.
+    def editor_revision_response
+      return {} unless product_save_contract.enforced?
+
+      {
+        editor_revision: Product::EditorRevision.current(@product.reload),
+        # The integrations baseline for the state this save just committed.
+        #
+        # Same staleness problem as the token, different symptom. The baseline
+        # says which integrations were connected when the session loaded, and
+        # the client asks to disconnect one only if it was in that baseline and
+        # is now off. If the baseline is never refreshed, an integration that
+        # was CONNECTED during this session (connect -> save) is still recorded
+        # as "was off at load", so turning it off and saving again emits no
+        # deletion at all and the integration silently survives.
+        loaded_integrations: current_integrations_baseline,
+        # The same refresh, per version. Without it the version-scoped baseline
+        # goes stale in exactly the way the product-level one did: enable an
+        # integration on a tier, save, switch it off, save again — and the
+        # second save emits no version-scoped deletion because the tier is
+        # still recorded as "was off at load".
+        variant_loaded_integrations: current_variant_integrations_baseline,
+      }
+    end
+
+    # Per-variant connected/not-connected snapshot, keyed by variant external
+    # id. Mirrors what ProductPresenter issues for each variant on page load.
+    def current_variant_integrations_baseline
+      @product.reload.alive_variants.each_with_object({}) do |variant, acc|
+        acc[variant.external_id] = Integration::ALL_NAMES.index_with { |name| variant.find_integration_by_name(name).present? }
+      end
+    end
+
+    # Which integrations are connected right now, keyed by provider name. Same
+    # shape and source of truth as ProductPresenter#edit_props issues on page
+    # load, so the client can swap one for the other without special-casing.
+    def current_integrations_baseline
+      Integration::ALL_NAMES.index_with { @product.find_integration_by_name(_1).present? }
     end
 
     # Fresh post-save snapshot timestamps for every alive page and variant,

@@ -9,7 +9,15 @@ class Thumbnail < ApplicationRecord
   ALLOW_CONTENT_TYPES = /jpeg|gif|png|jpg/i
   RemoteFileTooLarge = Class.new(StandardError)
 
-  belongs_to :product, class_name: "Link", optional: true
+  # `touch: true` bumps the product's updated_at whenever a thumbnail is created, replaced or
+  # soft-deleted. Several caches are keyed on the product's updated_at — most importantly the
+  # seller's profile payload (Pages::ProfileData caches on
+  # `seller.products.cache_key_with_version`), which is what custom and default profile
+  # storefronts render from. Without the touch, uploading or removing a thumbnail left that
+  # cached payload untouched, so the storefront kept serving the old (often missing) image
+  # until some unrelated product edit happened to move updated_at. Cover images
+  # (AssetPreview) have always touched the product for the same reason.
+  belongs_to :product, class_name: "Link", touch: true, optional: true
 
   has_one_attached :file
 

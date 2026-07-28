@@ -576,6 +576,47 @@ describe Api::Mobile::PurchasesController do
         expect(response).to match_json_schema("api/mobile/purchases")
         expect(response.parsed_body[:purchases].size).to eq(3)
       end
+
+      it "returns no purchases when the seller external id does not match a user" do
+        seller = create(:named_user)
+        create(:free_purchase, purchaser: @purchaser, seller:, link: create(:product, user: seller, price_cents: 0))
+
+        get :search, params: @params.merge(seller: "does-not-exist")
+
+        expect(response).to match_json_schema("api/mobile/purchases")
+        expect(response.parsed_body).to include(success: true)
+        expect(response.parsed_body[:purchases]).to be_empty
+        expect(response.parsed_body[:sellers]).to be_empty
+      end
+
+      it "filters on concrete seller ids instead of nesting a users subquery" do
+        # The seller filter has to resolve external ids in its own query. When
+        # the ids are nested as a subquery, MySQL plans the purchases lookup
+        # seller-first and reads the seller's whole sales history before
+        # filtering down to this buyer, which is slow enough on a large seller
+        # to exhaust the request timeout. Passing concrete ids lets the
+        # optimizer start from the buyer's own purchases instead.
+        seller = create(:named_user)
+        other_seller = create(:named_user)
+        create(:free_purchase, purchaser: @purchaser, seller:, link: create(:product, user: seller, price_cents: 0))
+        create(:free_purchase, purchaser: @purchaser, seller: other_seller, link: create(:product, user: other_seller, price_cents: 0))
+
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
+          payload = ActiveSupport::Notifications::Event.new(*args).payload
+          queries << payload[:sql].to_s if payload[:sql].to_s.include?("`purchases`")
+        end
+        begin
+          get :search, params: @params.merge(seller: seller.external_id)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        purchase_queries = queries.select { |sql| sql.include?("seller_id") }
+        expect(purchase_queries).to be_present
+        expect(purchase_queries.none? { |sql| sql.include?("SELECT `users`.`id` FROM `users`") }).to be(true)
+      end
     end
 
     describe "filter by archived" do
@@ -870,6 +911,76 @@ describe Api::Mobile::PurchasesController do
         @action = :search
         @response_key_name = "purchases"
         @records = create_list(:purchase, 2, purchaser: @purchaser)
+      end
+    end
+
+    describe "product_updates_data" do
+      before do
+        @updates_product = create(:product, user: @user)
+        @updates_purchase = create(:purchase_with_balance, link: @updates_product, purchaser: @purchaser, seller: @user)
+        post = create(:installment, link: @updates_product, published_at: Time.current, name: "A post")
+        create(:creator_contacting_customers_email_info_sent, purchase: @updates_purchase, installment: post)
+      end
+
+      it "is omitted from the response" do
+        get :search, params: @params
+
+        expect(response).to match_json_schema("api/mobile/purchases_search")
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        expect(response.parsed_body[:purchases][0]).not_to have_key(:product_updates_data)
+      end
+
+      # json_data_for_mobile picks one of three branches depending on what the purchase has,
+      # and each branch drops the field separately. The purchase above has a url_redirect, so
+      # these two cover the other branches: without them, removing the guard from either one
+      # leaves the field in the search response with the whole suite still green.
+      it "is omitted for a purchase that has no url_redirect" do
+        @updates_purchase.url_redirect.destroy!
+
+        get :search, params: @params
+
+        expect(response.parsed_body[:purchases].size).to eq(1)
+        expect(response.parsed_body[:purchases][0]).not_to have_key(:product_updates_data)
+      end
+
+      it "is omitted for a preorder that has not been charged yet" do
+        preorder_product = create(:product, user: @user, is_in_preorder_state: true)
+        preorder_link = create(:preorder_link, link: preorder_product, release_at: 2.days.from_now)
+        authorization_purchase = create(:preorder_authorization_purchase, link: preorder_product, purchaser: @purchaser, seller: @user, email: @purchaser.email)
+        preorder = create(:preorder, preorder_link:, seller: @user, purchaser: @purchaser, state: "authorization_successful")
+        authorization_purchase.update!(preorder:)
+        post = create(:installment, link: preorder_product, published_at: Time.current, name: "A preorder post")
+        create(:creator_contacting_customers_email_info_sent, purchase: authorization_purchase, installment: post)
+
+        get :search, params: @params
+
+        preorder_item = response.parsed_body[:purchases].find { _1[:purchase_id] == authorization_purchase.external_id }
+        expect(preorder_item).to be_present
+        expect(preorder_item).not_to have_key(:product_updates_data)
+      end
+
+      it "does not run the queries that decide which posts the buyer can see" do
+        expect(Purchase).not_to receive(:preload_product_updates_data!)
+        expect(Installment).not_to receive(:profile_only_for_sellers)
+        expect(Installment).not_to receive(:seller_with_sent_emails_for_purchases)
+
+        get :search, params: @params
+
+        expect(response.parsed_body[:success]).to be true
+      end
+
+      it "is still returned by purchase_attributes for the same purchase" do
+        get :purchase_attributes, params: @params.merge(id: @updates_purchase.external_id)
+
+        expect(response.parsed_body["product"]).to have_key("product_updates_data")
+        expect(response.parsed_body["product"]["product_updates_data"].map { _1["name"] }).to eq(["A post"])
+      end
+
+      it "is still returned by index for the same purchase" do
+        get :index, params: @params
+
+        expect(response.parsed_body["products"][0]).to have_key("product_updates_data")
+        expect(response.parsed_body["products"][0]["product_updates_data"].map { _1["name"] }).to eq(["A post"])
       end
     end
   end

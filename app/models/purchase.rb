@@ -28,6 +28,25 @@ class Purchase < ApplicationRecord
   GUMROAD_FIXED_FEE_CENTS = 50
   PROCESSOR_FEE_PER_THOUSAND = 29
   PROCESSOR_FIXED_FEE_CENTS = 30
+  # IOF is a Brazilian consumer tax on any transaction that involves foreign exchange, currently
+  # 3.5% of the transaction value. It applies whenever the Pix payment leaves Brazil, which is
+  # every Pix charge except one created directly on a Brazilian seller's own Stripe account.
+  #
+  # This constant is the RECOVERY half, and it is narrower than the tax itself: it is billed only
+  # when Gumroad actually bore the cost. On a charge created on a Gumroad-held account, Gumroad
+  # tells Stripe to bill the buyer exactly the price they agreed to
+  # (`amount_includes_iof=always`, see Order::PreparePaymentIntentService#pix_payment_method_options)
+  # and Stripe deducts the IOF from what settles to us — so the cost has to be charged back to the
+  # seller as a fee component, or it would silently come out of Gumroad's own margin instead (the
+  # decision on gumroad-private#1305 was that the seller absorbs it).
+  #
+  # On a direct charge to a seller's own connected account the money never passes through a
+  # Gumroad-held balance, so there is no Gumroad cost to recover and this fee is not billed —
+  # whether or not the tax itself applied. That makes this gate deliberately DIFFERENT from
+  # Order::PreparePaymentIntentService#pix_iof_applies?, which decides whether the tax exists at
+  # all (a border question, keyed on the account's country) rather than who paid it. See the
+  # comment on that method.
+  PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
 
@@ -605,13 +624,20 @@ class Purchase < ApplicationRecord
   scope :successful, -> { where(purchase_state: "successful") }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
-  # A payment the processor has confirmed but that hasn't settled yet — e.g. an ACH bank
-  # debit that takes several business days to clear. Both conditions matter: `stripe_status`
-  # is only ever written once Stripe acknowledges a real payment (the checkout return page
-  # sets it to "processing", and every subsequent Stripe webhook updates it), so an attempt
-  # the buyer abandoned before confirming payment keeps it nil and is NOT settling. And a
-  # purchase must still be in_progress — once it reaches a terminal state (failed,
-  # successful), stripe_status remains set but the payment is no longer in flight.
+  # A payment that can still complete without the buyer returning to checkout, but hasn't
+  # settled yet. Two shapes reach this state: a payment the processor already confirmed and
+  # is clearing (e.g. an ACH bank debit, several business days), and a Pix payment where
+  # Stripe issued a QR code / copy-paste key the buyer can pay from their banking app for up
+  # to half an hour (Purchase::FinalizeConfirmedChargeService writes "requires_action" for
+  # that case). Both conditions matter: `stripe_status` is only ever written once Stripe has
+  # a live payment to report on, so an attempt the buyer dropped before reaching a payment
+  # method keeps it nil and is NOT settling. And a purchase must still be in_progress — once
+  # it reaches a terminal state (failed, successful), stripe_status remains set but the
+  # payment is no longer in flight.
+  #
+  # The Pix case is deliberately included: an outstanding QR key is exactly the window where
+  # a buyer could pay again by another method and end up paying twice, which is what the
+  # double-charge guards built on this scope exist to prevent.
   scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
@@ -1482,15 +1508,16 @@ class Purchase < ApplicationRecord
   def tax_label(include_tax_rate: true)
     return unless has_tax_label?
 
-    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
-       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      label = "VAT"
-      label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
-      label
-    elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      label = "GST"
+    country = zip_tax_rate&.country
+
+    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country) ||
+       Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(country) ||
+       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country) ||
+       Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country) ||
+       Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(country)
+      # Name the tax the way a buyer in that country knows it (GST in India, CT in Japan, and so
+      # on) instead of calling everything "VAT". Matches what the checkout UI shows them.
+      label = Compliance::Countries.tax_name_for(country)
       label += " (#{(zip_tax_rate.combined_rate * 100).to_i}%)" if include_tax_rate
       label
     else
@@ -1511,38 +1538,23 @@ class Purchase < ApplicationRecord
   def seller_tax_label
     return unless has_tax_label?
 
-    if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "EU VAT"
-      else
-        "EU VAT (included)"
-      end
-    elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(zip_tax_rate&.country) ||
-          Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "VAT"
-      else
-        "VAT (included)"
-      end
-    elsif Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "GST"
-      else
-        "GST (included)"
-      end
-    elsif Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(zip_tax_rate&.country)
-      if was_tax_excluded_from_price
-        "Norway VAT"
-      else
-        "Norway VAT (included)"
-      end
+    country = zip_tax_rate&.country
+
+    label = if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country)
+      "EU VAT"
+    elsif Compliance::Countries::NORWAY_VAT_APPLICABLE_COUNTRY_CODES.include?(country)
+      "Norway VAT"
+    elsif Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.include?(country) ||
+          Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.include?(country) ||
+          Compliance::Countries::GST_APPLICABLE_COUNTRY_CODES.include?(country)
+      # Same per-country naming as the buyer-facing label, so the seller's sale notification and
+      # the buyer's receipt call the tax the same thing.
+      Compliance::Countries.tax_name_for(country)
     else
-      if was_tax_excluded_from_price
-        "Sales tax"
-      else
-        "Sales tax (included)"
-      end
+      "Sales tax"
     end
+
+    was_tax_excluded_from_price ? label : "#{label} (included)"
   end
 
   def has_tax_label?
@@ -1605,15 +1617,11 @@ class Purchase < ApplicationRecord
   # Sum of the buyer-currency amounts actually returned to the buyer across this
   # purchase's effective refunds, in buyer-currency minor units.
   #
-  # Presentment refund amounts intentionally live as snapshots in refunds.json_data
-  # rather than a database column (see gumroad#5419: aggregate refunded-presentment
-  # reporting has to be derived deliberately, never SUM()ed in SQL), so this walks the
-  # refunds association in memory. Uses the same effective?/loaded? pattern as
-  # amount_refunded_cents so callers that preload :refunds — the Sales API and the CSV
-  # export both do — issue no extra queries per purchase.
+  # Only refunds carrying a buyer-currency snapshot contribute; see
+  # refunds_that_moved_money for why the amounts are walked in Ruby rather than SUM()ed,
+  # and buyer_presentment_refunded_cents_incomplete? for what a missing snapshot means.
   def buyer_presentment_refunded_cents
-    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-    effective_refunds.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
+    refunds_that_moved_money.sum { |refund| refund.presentment_snapshot? ? refund.presentment_amount_cents.to_i : 0 }
   end
 
   # True when this purchase has an effective refund that carries NO buyer-currency
@@ -1626,8 +1634,7 @@ class Purchase < ApplicationRecord
   # worse than an empty cell. Callers rendering the total for a human use this to blank the
   # cell instead of publishing a number they'd have to caveat.
   def buyer_presentment_refunded_cents_incomplete?
-    effective_refunds = association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
-    effective_refunds.any? { |refund| !refund.presentment_snapshot? }
+    refunds_that_moved_money.any? { |refund| !refund.presentment_snapshot? }
   end
 
   # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
@@ -1644,6 +1651,46 @@ class Purchase < ApplicationRecord
     return amount_cents if scaling_factor == 1
 
     (amount_cents.to_f / scaling_factor).round(2)
+  end
+
+  # Whether buyer-currency amounts are safe to print on a receipt or invoice.
+  #
+  # Every refund that actually moved money reduces what the buyer paid. Refunds on
+  # buyer-currency purchases normally carry a buyer-currency snapshot (see
+  # Purchase::PresentmentRefund), but a refund created without one consumed canonical
+  # USD cents while recording zero buyer-currency cents — which is exactly what
+  # buyer_presentment_refunded_cents_incomplete? reports. Any "remaining" buyer-currency
+  # figure derived from that state would overstate what the buyer is still out of pocket.
+  # An invoice is the document a tax authority reads, so in that case receipts and
+  # invoices fall back to canonical USD amounts for every line rather than print a
+  # confident buyer-currency number that is wrong.
+  def buyer_presentment_display?
+    buyer_presentment? && !buyer_presentment_refunded_cents_incomplete?
+  end
+
+  # Buyer-currency tax still retained after refunds. A tax amount printed in the buyer's
+  # currency is the figure a tax authority reads off the invoice, so it has to be net of
+  # anything already returned: Gumroad-remitted tax (VAT/GST) can be refunded on its own
+  # — for example when a buyer supplies a valid VAT ID while generating an invoice — and
+  # a full or partial refund of the purchase returns a share of both tax components.
+  # (Canonical non_refunded_tax_amount nets only the Gumroad-remitted side; here both
+  # sides are netted because both are printed as one buyer-currency tax line.)
+  def buyer_presentment_non_refunded_tax_cents
+    return unless buyer_presentment?
+
+    refunded_tax_cents = refunds_that_moved_money.sum do |refund|
+      refund.presentment_seller_tax_cents.to_i + refund.presentment_gumroad_tax_cents.to_i
+    end
+    [buyer_presentment_tax_cents - refunded_tax_cents, 0].max
+  end
+
+  # Buyer-currency amount the buyer has actually paid after refunds — the buyer-currency
+  # counterpart of non_refunded_total_transaction_amount, used for an invoice's payment
+  # total so it is denominated in the same currency as the line items above it.
+  def buyer_presentment_non_refunded_total_cents
+    return unless buyer_presentment?
+
+    [buyer_presentment_total_cents - buyer_presentment_refunded_cents, 0].max
   end
 
   def formatted_buyer_presentment_price
@@ -2617,15 +2664,22 @@ class Purchase < ApplicationRecord
 
   # Public: Return json information about this purchase for the mobile api.
   def json_data_for_mobile(options = {})
+    # `product_updates_data` is the list of creator posts this buyer is entitled to
+    # see for the product. Working out that entitlement is the most expensive thing
+    # the mobile library endpoints do, so the list and search endpoints opt out of it
+    # (no mobile client reads the field from a list response — see
+    # Api::Mobile::PurchasesController#purchases_to_json for the full reasoning).
+    include_product_updates = options.fetch(:include_product_updates, true)
+
     if url_redirect.present?
-      json_data = url_redirect.product_json_data
+      json_data = url_redirect.product_json_data(include_product_updates:)
     elsif preorder.present?
-      json_data = preorder.mobile_json_data
+      json_data = preorder.mobile_json_data(include_product_updates:)
     else
       json_data = link.as_json(mobile: true)
       json_data[:purchase_id] = external_id
       json_data[:purchased_at] = created_at
-      json_data[:product_updates_data] = update_json_data_for_mobile
+      json_data[:product_updates_data] = update_json_data_for_mobile if include_product_updates
       json_data[:user_id] = purchaser.external_id if purchaser
       json_data[:is_archived] = is_archived
       json_data[:custom_delivery_url] = nil # Deprecated
@@ -2903,8 +2957,28 @@ class Purchase < ApplicationRecord
                                            .not_fully_refunded
                                            .not_chargedback_or_chargedback_reversed
                                            .pluck(:id)
-    emailed_seller_posts = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
-                                      .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at")
+    # Same slim-then-reload split as the profile-only seller posts below, for
+    # the same reason. This scope joins `email_infos` (one row per email the
+    # buyer was sent) and MySQL discards roughly 95% of what the join touches
+    # afterwards, on the `installment_type` and flag predicates — so
+    # `installments.*` drags each post's LONGTEXT `message` body through the
+    # join just for the Ruby-side buyer filters to read `json_data`. On
+    # production this shape was 27% of the time in the slowest mobile library
+    # search requests (gumroad-private#1412). Run the filter pass on slim rows,
+    # then reload full rows for the few posts the buyer can actually see.
+    emailed_seller_posts_scope = Installment.seller_with_sent_emails_for_purchases(purchase_ids + purchase_ids_with_same_email)
+    slim_emailed_seller_posts = emailed_seller_posts_scope
+                                  .select(:id, :seller_id, :installment_type, :link_id, :base_variant_id, :flags, :published_at, :json_data)
+    candidate_emailed_seller_post_ids = check_filters.call(slim_emailed_seller_posts).map(&:id).uniq
+    # Reload through the same scope (join included, so the `email_infos`
+    # timestamps the final sort reads come back with the row) restricted to the
+    # candidates. A post mutated between the two queries — unpublished, flipped
+    # to profile-only — drops out here rather than reaching the sort with a nil
+    # published_at, matching the profile-only path's behavior.
+    emailed_seller_posts = candidate_emailed_seller_post_ids.any? ?
+      emailed_seller_posts_scope.where(installments: { id: candidate_emailed_seller_post_ids })
+                                .select("installments.*, email_infos.sent_at, email_infos.delivered_at, email_infos.opened_at").to_a :
+      []
     # `profile_only_for_sellers` matches every profile-only seller post the
     # seller has ever published — for prolific sellers that's thousands of
     # rows, and `installments.*` drags in each post's LONGTEXT `message` body
@@ -3037,7 +3111,7 @@ class Purchase < ApplicationRecord
     Purchase.where(email:, seller_id:, can_contact: true).find_each do |purchase|
       purchase.update!(can_contact: false)
     rescue ActiveRecord::RecordInvalid
-      Rails.logger.info "Could not update purchase (#{id}) with validations turned on. Unsubscribing the buyer without running validations."
+      Rails.logger.info "Could not update purchase (#{purchase.id}) with validations turned on. Unsubscribing the buyer without running validations."
 
       purchase.can_contact = false
       purchase.save(validate: false)
@@ -3226,6 +3300,32 @@ class Purchase < ApplicationRecord
 
   def total_fee_cents
     fee_cents + paypal_fee_usd_cents
+  end
+
+  # The slice of fee_cents that is Gumroad's own percentage revenue on this sale.
+  #
+  # fee_cents is a bundle: Gumroad's percentage fee, Gumroad's fixed fee, and — on sales
+  # charged through a Gumroad-owned Stripe account — the processor's percentage and fixed
+  # costs, which Gumroad only collects in order to hand them to Stripe. Anything that will
+  # be paid out to somebody else is not Gumroad's to give away, so a caller that needs to
+  # know how much of a charge Gumroad could absorb has to ask for this rather than reading
+  # fee_cents. Used by the buyer-currency charge path, where a displayed price rounded down
+  # from the exact conversion is taken out of Gumroad's share of the payment and must never
+  # reach the seller's proceeds or Stripe's costs (Charge::PresentmentOrchestrator).
+  #
+  # Returns 0 exactly where Gumroad's percentage fee is zero: a fee-waived sale (Gumroad
+  # Day or the per-seller waiver), a free purchase, and Brazilian Stripe Connect sellers,
+  # for whom calculate_fees zeroes the fee outright. The discover fee and the fixed Gumroad
+  # fee are deliberately left out even though they are Gumroad revenue — this is meant to
+  # be a floor on what is safely disposable, not an accurate total.
+  def gumroad_percentage_fee_cents
+    return 0 if price_cents.to_i.zero?
+    return 0 if merchant_account&.is_a_brazilian_stripe_connect_account?
+
+    fee_per_thousand = (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand).to_i
+    return 0 unless fee_per_thousand.positive?
+
+    [price_cents.to_i * fee_per_thousand / 1000, fee_cents.to_i].min
   end
 
   # "not_charged" purchases that are free trial purchases should be treated as
@@ -3680,6 +3780,18 @@ class Purchase < ApplicationRecord
       return if purchase_presentment.blank?
 
       FlowOfFunds::Amount.new(currency: Currency::USD, cents: total_transaction_cents)
+    end
+
+    # This purchase's refunds that actually moved money, as an in-memory array.
+    #
+    # Presentment refund amounts live as snapshots in refunds.json_data rather than
+    # database columns (see gumroad#5419: aggregate refunded-presentment reporting has to
+    # be derived deliberately, never SUM()ed in SQL), so every buyer-currency refund
+    # figure has to walk the refunds in Ruby. Uses the same effective?/loaded? pattern as
+    # amount_refunded_cents, so callers that preload :refunds — the Sales API, the CSV
+    # export, and the receipt and invoice presenters — issue no extra query per purchase.
+    def refunds_that_moved_money
+      association(:refunds).loaded? ? refunds.select(&:effective?) : refunds.effective.to_a
     end
 
     # Refund counterpart of presentment_canonical_issued_amount: the processor refund is
@@ -4377,7 +4489,27 @@ class Purchase < ApplicationRecord
 
     def calculate_gumroad_fee_per_thousand
       calculate_custom_fee_per_thousand
-      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) + (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0)
+      (custom_fee_per_thousand.presence || gumroad_flat_fee_per_thousand) +
+        (charged_using_gumroad_merchant_account? ? PROCESSOR_FEE_PER_THOUSAND : 0) +
+        pix_iof_fee_per_thousand
+    end
+
+    # The Brazilian IOF tax Gumroad absorbs on the buyer's behalf and recovers from the seller
+    # (see PIX_IOF_FEE_PER_THOUSAND). Keyed on card_type because that is where the purchase records
+    # which payment method it is being paid with — set from the buyer's Payment Element selection at
+    # intent-prepare time, before fees are computed, and re-confirmed from Stripe's own
+    # payment_method_details once the charge exists. Only Pix carries it; every other method reads 0.
+    #
+    # Gated on the charge riding Gumroad's own Stripe account, for the same reason
+    # PROCESSOR_FEE_PER_THOUSAND above is: we can only recover a cost we actually paid. On a direct
+    # charge the money never touches a Gumroad account — Stripe settles into the seller's own
+    # account and deducts the IOF from that balance itself — so the seller has already absorbed it.
+    # Adding it to fee_cents there would bill them for the same tax a second time.
+    def pix_iof_fee_per_thousand
+      return 0 unless card_type == CardType::PIX
+      return 0 unless charged_using_gumroad_merchant_account?
+
+      PIX_IOF_FEE_PER_THOUSAND
     end
 
     def calculate_custom_fee_per_thousand
@@ -4727,11 +4859,21 @@ class Purchase < ApplicationRecord
       already = already.where("purchases.id != ?", id) if id
       already = already.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
-      already += self.class.joins(:gift_given).where(
-        gifts: { giftee_email: recipient_email },
-        link:,
-        purchase_state: limiting_purchase_states
-      ) unless is_recurring_subscription_charge
+      # A gift purchase is stored under the *sender's* email, so the lookup above can't see an
+      # earlier gift of this product to the same recipient — it has to go through the gift record.
+      # This uses the same time window as the lookup above on purpose: the point is to stop one
+      # checkout being submitted twice, not to cap a recipient at one gift of a product for life.
+      # Without the window, a single successful gift permanently blocked every later gift of that
+      # product to that address, from any sender.
+      unless is_recurring_subscription_charge
+        already_gifted = self.class.joins(:gift_given).where(
+          gifts: { giftee_email: recipient_email },
+          link:,
+          purchase_state: limiting_purchase_states
+        ).where("purchases.created_at > ?", last_allowed_purchase_at)
+        already_gifted = already_gifted.where("purchases.id != ?", id) if id
+        already += already_gifted
+      end
 
       if variant_attributes.present?
         already = already.select do |purchase|
@@ -4765,11 +4907,24 @@ class Purchase < ApplicationRecord
       settling = settling.where("purchases.id != ?", id) if id
       settling = settling.not_is_gift_sender_purchase unless is_gift_sender_purchase
 
-      # No gift join is needed here, even though gift purchases are stored under the sender's
-      # email rather than the giftee's. The gift lookup in `not_double_charged` above
-      # (`joins(:gift_given).where(gifts: { giftee_email: ... })`) has no created_at window,
-      # so an in_progress gift — including one settling over a bank debit for days — already
-      # blocks repeat gifts to the same giftee until it resolves.
+      # Gift purchases are stored under the sender's email, so they only turn up via the gift
+      # record. The time-boxed check above deliberately ignores gifts older than a few minutes,
+      # which means an unresolved gift paid by bank debit would otherwise be invisible here — so
+      # look it up explicitly, with no window, exactly like the non-gift settling lookup.
+      #
+      # `payment_settling` requires a stripe_status, so a gift stuck `in_progress` with no status
+      # at all, older than the window above, is caught by neither check. That gap is inherited
+      # rather than introduced: direct purchases of the same products have always behaved this way,
+      # because the window above is what bounds them too. Widening it here would only re-create the
+      # lifetime block this change exists to remove.
+      unless is_recurring_subscription_charge
+        settling_gifts = self.class.payment_settling.joins(:gift_given).where(
+          gifts: { giftee_email: recipient_email },
+          link:
+        )
+        settling_gifts = settling_gifts.where("purchases.id != ?", id) if id
+        settling += settling_gifts
+      end
 
       if variant_attributes.present?
         settling = settling.select do |purchase|
@@ -4778,7 +4933,31 @@ class Purchase < ApplicationRecord
       end
 
       if settling.any?
-        errors.add :base, "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        # Same two-reader problem as add_errors_for_existing_purchase below, and it reaches this
+        # site for the first time now that the gift lookup above is windowed: a gift settling over
+        # a bank debit for days is no longer caught up there, so it lands here instead. "Your
+        # previous payment" is wrong for both readers this can face — a *different* sender gifting
+        # the same product has made no previous payment, and a giftee buying it directly has not
+        # either. Telling either of them "do not pay again" abandons a legitimate purchase.
+        #
+        # The gift wording also has to stay neutral about *who owns* the blocking gift. The gift it
+        # names may have been sent by someone else entirely — two people can independently gift the
+        # same product to the same person — and the receipt for it goes to whoever started it. So
+        # never promise this reader an email: they may not be the one who gets it.
+        #
+        # A sender can also be blocked by something that is not a gift at all. This lookup finds
+        # anything settling under the recipient's address, and the recipient buying the product
+        # for themselves is stored under exactly that address, so their own purchase matches. Tell
+        # the sender what is actually in flight rather than describing every match as a gift.
+        errors.add :base, if is_gift_sender_purchase && settling.any?(&:is_gift_sender_purchase)
+          "A gift of this product to #{giftee_email} is still being paid for. Wait for that to finish before sending it again."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them."
+        elsif settling.any?(&:is_gift_sender_purchase)
+          "Someone is in the middle of gifting you this product. Give that a moment to complete before paying for it yourself."
+        else
+          "Your previous payment for this product is still processing. We will email you a receipt as soon as it completes — please do not pay again."
+        end
       end
     end
 
@@ -4793,13 +4972,39 @@ class Purchase < ApplicationRecord
       potential_duplicates.each(&:cancel_charge_intent)
     end
 
+    # The wording here has to work for two different readers. On a normal purchase the person
+    # reading it is the buyer, so "you" is right. On a gift the person reading it is the sender,
+    # who has not been charged and whose mailbox is not where anything was delivered — telling
+    # them "it has been emailed to you" reads like the gift went through, so they try again.
+    #
+    # The gift wording also has to stay neutral about *who owns* the gift it is describing. Two
+    # people can independently gift the same product to the same person, so the blocking gift may
+    # belong to a different sender, and its receipt goes to them rather than to whoever is reading
+    # this. Describe the gift and what to do about it; never promise this reader an email.
     def add_errors_for_existing_purchase(purchases)
-      if purchases.any?(&:successful?)
-        errors.add :base, "You have already paid for this product. It has been emailed to you."
+      # A gift sender can be blocked by something that is not a gift. The lookup that produced
+      # these keys on the recipient's address, and the recipient buying the product for themselves
+      # is stored under exactly that address, so their own purchase matches. Only call it a gift
+      # when the purchase actually being reported is one — checked per state, because a recipient
+      # can have both a settled direct purchase and someone's in-flight gift at the same time.
+      if (successful = purchases.select(&:successful?)).any?
+        errors.add :base, if is_gift_sender_purchase && successful.any?(&:is_gift_sender_purchase)
+          "This product was just sent as a gift to #{giftee_email}. Check with them before sending it again."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} just bought this product themselves. Check with them before sending it as a gift."
+        else
+          "You have already paid for this product. It has been emailed to you."
+        end
       elsif purchases.any?(&:preorder_authorization_successful?)
         errors.add :base, "You have already pre-ordered this product. A confirmation has been emailed to you."
-      elsif purchases.any?(&:in_progress?)
-        errors.add :base, "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+      elsif (in_progress = purchases.select(&:in_progress?)).any?
+        errors.add :base, if is_gift_sender_purchase && in_progress.any?(&:is_gift_sender_purchase)
+          "A gift of this product to #{giftee_email} is already going through. Wait for it to finish before sending another."
+        elsif is_gift_sender_purchase
+          "#{giftee_email} is in the middle of buying this product themselves. Wait for that to finish before gifting it to them."
+        else
+          "You have already attempted to purchase this product. We will email you shortly if the purchase is successful."
+        end
       end
     end
 
@@ -5047,6 +5252,13 @@ class Purchase < ApplicationRecord
       return unless new_record?
       return unless can_contact?
       return unless Purchase.where(email:, seller_id:, can_contact: false).exists?
+      # A subscription's contactability lives on its original purchase: that is the only row
+      # `should_be_audience_member?` accepts for a subscription, so it is what decides whether
+      # the buyer hears from the creator at all. If the buyer re-subscribed, the original
+      # purchase is contactable again, and this new renewal charge must not be stamped
+      # uncontactable just because some older sibling row is still marked false. Doing so used to
+      # silently drop a paying member back out of the creator's audience on their next renewal.
+      return if subscription&.original_purchase&.can_contact?
 
       self.can_contact = false
     end

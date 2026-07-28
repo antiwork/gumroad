@@ -14,7 +14,17 @@ class Checkout::StripePaymentPresenter
   # When active for every seller in the cart, the Payment Element renders Apple Pay / Google Pay
   # natively (instead of the deprecated Payment Request Button rendering them next to it) and the
   # Payment Request Button is not mounted for that cart. Rollout flag for antiwork/gumroad#5768.
-  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
+  PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME
+  # Ramp flag for wallets on the buyer-currency (FX-quoted) presentment lane, gumroad-private#1436.
+  # Separate from PAYMENT_ELEMENT_WALLETS_FEATURE_NAME (at 100% since July 2026) because this lane
+  # has a distinct risk: the wallet sheet quotes a locked local-currency total from an FX quote, so
+  # it needs its own kill switch that does not take wallets off every other checkout with it.
+  # Keyed per seller and ANDed with the general wallet flag — a seller must be in BOTH.
+  #
+  # Both names are borrowed from Checkout::BuyerCurrencyEligibility, which owns them, so the
+  # wallet rows this presenter renders and the wallet charges that service accepts can never
+  # end up reading different flags.
+  BUYER_CURRENCY_WALLETS_FEATURE_NAME = Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME
   STRIPE_CARD_ELEMENT_INTEGRATION = "card_element"
   STRIPE_PAYMENT_ELEMENT_INTEGRATION = "payment_element"
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION = "payment_element_client_confirm"
@@ -46,6 +56,9 @@ class Checkout::StripePaymentPresenter
 
   def props
     checkout_items = items
+    # CardElement candidates keep wallets suppressed: that lane never mounts a Payment Element,
+    # so a wallet there is the Payment Request Button, whose sheet is built from the canonical USD
+    # total and cannot show the buyer-currency total the cart displays.
     disable_wallets = checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
@@ -57,8 +70,17 @@ class Checkout::StripePaymentPresenter
     # shape — not for this GeoIP-driven card mode. The server-confirm lane creates a plain card
     # PaymentMethod (currency-less), so the element can mount in the buyer's currency purely for
     # display/method-filtering while the charge path prices the intent from the verified quote
-    # token. Wallets stay disabled for the same reason as CardElement candidates: a wallet payment
-    # would charge canonical USD while the cart displays buyer-currency totals.
+    # token.
+    #
+    # Wallets are allowed here when the rollout flag below is on, because on this lane the
+    # element's wallet sheet quotes the SAME locked buyer-currency total the cart displays: the
+    # browser mounts the element from the FX quote in the surcharge response, and the charge
+    # verifies that quote's signed token. A wallet payment therefore charges what its sheet
+    # showed. Three properties make that safe, all covered by specs — the sheet reads the quote
+    # (getStripePaymentElementAmount), the purchase carries the quote token, and a wallet whose
+    # adopted billing address moves the tax location is held and re-confirmed rather than
+    # submitted (resolveHeldWalletPayment). Ramped per seller by
+    # BUYER_CURRENCY_WALLETS_FEATURE_NAME so it can be pulled instantly.
     #
     # This branch has to come before the client-confirm one below, and the reason is a
     # correctness constraint rather than a preference. Whenever a cart is a presentment
@@ -84,7 +106,11 @@ class Checkout::StripePaymentPresenter
     # match, so those carts are never quoted, produce no candidate here, and fall through to
     # the client-confirm branch below with their local method tabs intact.
     if buyer_currency_presentment_element_shape?(checkout_items)
-      return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, buyer_currency_presentment: true, disable_wallets: true)
+      return payment_element_props(
+        STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+        buyer_currency_presentment: true,
+        disable_wallets: !buyer_currency_wallets?
+      )
     end
 
     # Client-confirm eligible carts are always one-time charges, so check them before setup mode.
@@ -180,12 +206,11 @@ class Checkout::StripePaymentPresenter
         setup_for_future: setup_for_future_charges_without_charging?(items),
         buyer_country:,
         ppp_discounted: ppp_verification_applies?,
-        # Single-item carts pass the product's own pricing currency so the resolver can tell
-        # whether iDEAL/Bancontact are actually mountable for this cart (they only are when the
-        # cart is priced in the currency they force). Multi-item
-        # carts pass nil — they always mount the canonical USD element, where forced-currency
-        # methods must never appear.
-        cart_product_currency: items.one? ? items.first[:product_currency] : nil,
+        # Pass the cart's uniform forced currency so the resolver can tell whether
+        # iDEAL/Bancontact/UPI are actually mountable for this cart (they only are when the
+        # whole cart is priced in the currency they force). Mixed-currency and USD carts pass nil —
+        # they mount the canonical USD element, where forced-currency methods must never appear.
+        cart_product_currency: uniform_method_forced_currency(items),
         # The Klarna amount-window gate's input (see the resolver). Pre-tax, pre-discount cart
         # total including quantities — price_cents is the per-unit price and quantity is a
         # separate field, so a 100 × $50 cart must read $5,000 here, not $50: undercounting
@@ -210,6 +235,18 @@ class Checkout::StripePaymentPresenter
     # enabling wallets-in-the-element for one seller must never change another seller's checkout.
     def payment_element_wallets?
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
+    end
+
+    # Same seller-complete keying as payment_element_wallets?, and ANDed with it: a seller must be
+    # in the general wallet rollout AND this lane's ramp before their buyer-currency checkouts
+    # offer a wallet. That means ramping the general flag down still removes wallets everywhere,
+    # while this flag scopes an emergency ramp-down to presentment carts only.
+    #
+    # The per-seller answer comes from Checkout::BuyerCurrencyEligibility.wallets_enabled?, the
+    # same predicate the charge path applies to an incoming wallet payment, so the surface and
+    # the charge decision cannot drift apart.
+    def buyer_currency_wallets?
+      sellers.present? && sellers.all? { Checkout::BuyerCurrencyEligibility.wallets_enabled?(_1) }
     end
 
     # Whether the checkout renders the flat payment-methods list (the Payment Element's
@@ -296,11 +333,24 @@ class Checkout::StripePaymentPresenter
           stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
           currency: method_forced ? method_forced_element_currency : CLIENT_CONFIRM_CURRENCY,
           # The forced-currency listed amount the element mounts with (nil otherwise, where the
-          # frontend keeps deriving the amount from the USD total): the single item's listed price
-          # in its own currency. It drives method filtering and may be shown by wallets; the
+          # frontend keeps deriving the amount from the USD total): the cart's listed subtotal
+          # in its own uniform forced currency, quantities included. It drives method filtering and may be shown by wallets; the
           # deferred intent includes the full tax/tip/shipping composition, so rollout QA must
           # verify wallet totals before this surface is broadly enabled.
-          presentment_amount_cents: method_forced ? items.first[:price_cents].to_i : nil,
+          presentment_amount_cents: method_forced ? method_forced_element_amount_cents : nil,
+          # Present only on the method-forced lane, where every product in the cart is priced in
+          # the currency the payment method forces and Charge::MethodForcedPresentment charges
+          # those listed prices directly (no FX quote anywhere in the flow). The checkout summary
+          # reads this to render the cart in the listed currency instead of dividing the listed
+          # price by our own USD exchange rate — a buyer of a R$49.90 product was previously shown
+          # a US$9.16 cart total and then charged R$49.90 by the Stripe sheet next to it
+          # (gumroad-private#1371). subunit_to_unit is the backend's authoritative minor-unit
+          # scale for the currency (the Money gem's value, which is non-ISO for some currencies),
+          # so the browser never has to guess how to format it.
+          listed_currency_display: method_forced ? {
+            currency: method_forced_element_currency,
+            subunit_to_unit: subunit_to_unit(method_forced_element_currency),
+          } : nil,
           payment_method_types:,
           # Derived from the resolver's method list (not a second flag check) so the Element's Link
           # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
@@ -400,20 +450,18 @@ class Checkout::StripePaymentPresenter
     end
 
     # The method-forced cart shape, mirroring the gates under which
-    # Checkout::PaymentMethodResolver#forced_currency_methods offers iDEAL/Bancontact:
-    # the seller's buyer-currency flags + a single item whose product is priced in a
-    # currency some payment method forces (EUR today — the eligibility service's
-    # "direct listed amount" case, where the buyer pays the listed price as-is with no FX
-    # quote) + a resolver result that offers a method forcing that currency. The resolver
-    # applies the per-method launch flags and the Connect account's capability snapshot, so
-    # only a method the account can accept enables the live surface. Only this simple shape
-    # mounts the element in the forced currency; USD-priced products keep today's behavior.
+    # Checkout::PaymentMethodResolver#forced_currency_methods offers iDEAL/Bancontact/UPI:
+    # the seller's buyer-currency flags + every item priced in the same forced currency
+    # (the eligibility service's "direct listed amount" case, where the buyer pays the listed
+    # prices as-is with no FX quote) + a resolver result that offers a method forcing that
+    # currency. The resolver applies the per-method launch flags and the Connect account's
+    # capability snapshot, so only a method the account can accept enables the live surface.
+    # USD-priced and mixed-currency products keep today's behavior until the per-line quote basis
+    # can split one intent across multiple pricing bases.
     def method_forced_shape?(items)
-      return false unless items.one?
-
-      item = items.first
-      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(item[:seller])
-      return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(item[:product_currency])
+      forced_currency = uniform_method_forced_currency(items)
+      return false if forced_currency.blank?
+      return false unless items.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1[:seller]) }
 
       # The resolver returns nil payment_method_types when it rejects the cart (recurring,
       # commission, multi-seller, etc.), so check its eligibility verdict before inspecting
@@ -422,12 +470,34 @@ class Checkout::StripePaymentPresenter
       return false unless resolution.client_confirm_eligible?
 
       resolution.payment_method_types.any? do |payment_method_type|
-        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == item[:product_currency]
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == forced_currency
       end
     end
 
     def method_forced_element_currency
-      items.first[:product_currency]
+      uniform_method_forced_currency(items)
+    end
+
+    # The cart's listed subtotal in its uniform forced currency, INCLUDING quantities:
+    # price_cents is the per-unit listed price and quantity is a separate field, so two
+    # copies of a EUR 24 item must read 4800 here. The charge side derives the intent's
+    # amount from each purchase's displayed_price_cents, which is already quantity-inclusive,
+    # so summing per-unit prices would mount the Element with a smaller amount than the
+    # PaymentIntent it confirms against — Stripe rejects that mismatch.
+    def method_forced_element_amount_cents
+      items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i }
+    end
+
+    def uniform_method_forced_currency(items)
+      return nil if items.empty?
+
+      currencies = items.map { _1[:product_currency].to_s.downcase }.uniq
+      return nil unless currencies.one?
+
+      currency = currencies.first
+      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+
+      currency
     end
 
     def buyer_currency_presentment_candidate?(item)

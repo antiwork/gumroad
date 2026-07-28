@@ -382,6 +382,21 @@ describe "Product creation", type: :system, js: true do
       allow_any_instance_of(User).to receive(:eligible_for_ai_product_generation?).and_return(true)
     end
 
+    it "explains when the hourly generation limit clears" do
+      throttle_key = RedisKey.ai_request_throttle(seller.id)
+      $redis.setex(throttle_key, 15.minutes.to_i, 10)
+
+      visit new_product_path
+      click_on "Create a product with AI"
+      fill_in "Create a product with AI", with: "Create a Ruby on Rails coding tutorial ebook with 4 chapters for $29.99"
+      click_on "Generate"
+
+      expect(page).to have_alert(text: "You've used all 10 AI generations for this hour. You can generate again in 15 minutes.")
+      expect(page).to_not have_alert(text: "Failed to generate product details")
+    ensure
+      $redis.del(throttle_key) if throttle_key
+    end
+
     it "creates a product using AI prompt and customizes it" do
       vcr_turned_on do
         VCR.use_cassette("Product creation using AI") do

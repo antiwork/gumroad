@@ -29,7 +29,6 @@ export type PaymentElementController = { stripe: Stripe; elements: StripeElement
 type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClientConfirmConfig;
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
-type LinkPrefillContact = { email: string; name: string };
 
 // When the payment_element_wallets rollout flag is off, Apple Pay and Google Pay are pinned to
 // "never" — that was the Phase-1 duplication guard while the separate Payment Request Button
@@ -55,6 +54,7 @@ export const PaymentElementInput = ({
   disabled,
   defaultEmail,
   defaultName,
+  defaultCountry,
   hasShippingCart,
   invalid,
   onReady,
@@ -92,6 +92,11 @@ export const PaymentElementInput = ({
   disabled?: boolean | undefined;
   defaultEmail: string;
   defaultName: string;
+  // Prefill for the country the Payment Element's own address form starts on when a selection
+  // has the element collect the full billing details ("element-full" — UPI on digital carts).
+  // Checkout's GeoIP-detected country is the best guess, and prefilling it means the buyer's
+  // pane opens on the right country's address format instead of Stripe's default.
+  defaultCountry: string;
   // Whether the cart requires shipping, i.e. whether checkout's own form is collecting a full
   // street address. Drives which billing-details fields the element renders for methods that
   // need an address (see paymentElementBillingDetailsCollection).
@@ -117,20 +122,28 @@ export const PaymentElementInput = ({
     if (mountCurrency != null) setMountedCurrency(mountCurrency);
   }, [mountCurrency]);
 
-  const [linkPrefillContact, setLinkPrefillContact] = React.useState<LinkPrefillContact>(() => ({
-    email: defaultEmail,
-    name: defaultName,
-  }));
+  // The prefill values handed to the element as defaultValues, debounced so the mounted
+  // element isn't updated on every keystroke of checkout's email/name fields. Two freezing
+  // policies:
+  // - Link's email prefill FREEZES once the buyer touches the element: Link reacts to its
+  //   email default by re-running lookup UI, which would disrupt an in-progress interaction.
+  // - The name prefill keeps FOLLOWING checkout's Full name field even after a touch: it only
+  //   materializes when a pane that collects a name renders its fields (the UPI element-full
+  //   pane) — nothing on the card/Link surface reacts to it, and freezing it caused the
+  //   reviewed bug where a buyer who touched the element before typing their name got an
+  //   empty Name field in the UPI pane (PR #6191 review).
+  const [linkPrefillEmail, setLinkPrefillEmail] = React.useState(defaultEmail);
+  const [prefillName, setPrefillName] = React.useState(defaultName);
   const paymentElementTouchedRef = React.useRef(false);
   const handlePaymentElementTouched = React.useCallback(() => {
     paymentElementTouchedRef.current = true;
   }, []);
   React.useEffect(() => {
-    if (!elementsOptions.stripe_link_enabled) return;
-    if (paymentElementTouchedRef.current) return;
     const handle = setTimeout(() => {
-      if (paymentElementTouchedRef.current) return;
-      setLinkPrefillContact({ email: defaultEmail, name: defaultName });
+      if (elementsOptions.stripe_link_enabled && !paymentElementTouchedRef.current) {
+        setLinkPrefillEmail(defaultEmail);
+      }
+      setPrefillName(defaultName);
     }, CONTACT_PREFILL_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [defaultEmail, defaultName, elementsOptions.stripe_link_enabled]);
@@ -164,8 +177,9 @@ export const PaymentElementInput = ({
             walletsEnabled={walletsEnabled}
             flatLayout={flatLayout}
             applePayOption={applePayOption}
-            defaultEmail={linkPrefillContact.email}
-            defaultName={linkPrefillContact.name}
+            linkPrefillEmail={linkPrefillEmail}
+            defaultName={prefillName}
+            defaultCountry={defaultCountry}
             hasShippingCart={hasShippingCart}
             onReady={onReady}
             onChange={onChange}
@@ -189,8 +203,9 @@ const PaymentElementControllerInput = ({
   walletsEnabled,
   flatLayout,
   applePayOption,
-  defaultEmail,
+  linkPrefillEmail,
   defaultName,
+  defaultCountry,
   hasShippingCart,
   onReady,
   onChange,
@@ -203,8 +218,16 @@ const PaymentElementControllerInput = ({
   walletsEnabled: boolean;
   flatLayout: boolean;
   applePayOption?: PaymentElementApplePayOption | undefined;
-  defaultEmail: string;
+  // The debounce-frozen email snapshot for Link's prefill (see PaymentElementInput):
+  // deliberately stops following checkout's email field once the buyer touches the element,
+  // so Link's own lookup UI isn't disrupted mid-interaction.
+  linkPrefillEmail: string;
+  // The (debounced) LIVE name from checkout's Full name field (state.fullName) — unlike the
+  // Link email snapshot this keeps following the form after a touch. It feeds the element's
+  // defaultValues, which only materialize when a pane that collects a name renders (the UPI
+  // element-full pane) — see the defaultValues memo below.
   defaultName: string;
+  defaultCountry: string;
   hasShippingCart: boolean;
   onReady: (controller: PaymentElementController | null) => void;
   onChange?: ((event: StripePaymentElementChangeEvent) => void) | undefined;
@@ -230,15 +253,23 @@ const PaymentElementControllerInput = ({
     if (amount !== null) elements?.update({ amount });
   }, [amount, elements]);
 
-  const linkDefaultValues = React.useMemo<StripePaymentElementOptions["defaultValues"] | undefined>(() => {
-    if (!stripeLinkEnabled) return undefined;
-
+  // The element's defaultValues: Link's email prefill plus the name/country checkout already
+  // knows. Stripe treats defaultValues as INITIAL values, applied only when a field first
+  // renders — pushing them via element.update() after a field is on screen (or in the same
+  // tick it renders) does nothing (verified in the browser-level UPI regression spec). That
+  // limitation is why the pane's name field is pinned to "never" on every mode (see fields
+  // below) and checkout keeps its own Full name field: a name typed before switching to UPI
+  // could never be carried into a later-rendered pane field. The values here matter where
+  // fields DO render with them from the start — Link's email lookup, and the pane's country
+  // for the element-full address form, which is GeoIP-known at mount.
+  const defaultValues = React.useMemo<StripePaymentElementOptions["defaultValues"] | undefined>(() => {
     const billingDetails = {
-      ...(defaultEmail ? { email: defaultEmail } : {}),
+      ...(stripeLinkEnabled && linkPrefillEmail ? { email: linkPrefillEmail } : {}),
       ...(defaultName ? { name: defaultName } : {}),
+      ...(defaultCountry ? { address: { country: defaultCountry } } : {}),
     };
     return Object.keys(billingDetails).length > 0 ? { billingDetails } : undefined;
-  }, [defaultEmail, defaultName, stripeLinkEnabled]);
+  }, [stripeLinkEnabled, linkPrefillEmail, defaultCountry, defaultName]);
 
   return (
     <PaymentElement
@@ -250,7 +281,7 @@ const PaymentElementControllerInput = ({
         // card form: it keeps the tabs layout, whose tabs are hidden via the ".Tab" appearance
         // rule in StripePaymentElementProvider — the exact pre-flat-list behavior.
         layout: flatLayout ? { type: "accordion", radios: false, spacedAccordionItems: true } : { type: "tabs" },
-        ...(linkDefaultValues ? { defaultValues: linkDefaultValues } : {}),
+        ...(defaultValues ? { defaultValues } : {}),
         // Checkout collects billing details in its own form, so each element field is only shown
         // when checkout does NOT already ask for it — nothing should be asked for twice. The
         // collection mode (see paymentElementBillingDetailsCollection) decides per selection:
@@ -264,15 +295,20 @@ const PaymentElementControllerInput = ({
         // - "element" (wallets): the whole block is "auto" — the wallet sheet supplies the
         //   buyer's verified billing details and tokenization deliberately passes no override.
         //   Nothing extra renders on the page (the sheet is its own surface).
-        // - "element-address" (UPI on digital carts): Stripe requires billing_details.name and a
+        // - "element-full" (UPI on digital carts): Stripe requires billing_details.name and a
         //   full street address to CONFIRM a UPI payment, and checkout's digital form has no
         //   street-address fields. With everything pinned to "never" the confirm always failed
         //   server-side with parameter_missing and no last_payment_error — buyers could never
-        //   complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). Only the
-        //   street-address fields render inside the UPI pane (the one thing the form doesn't
-        //   have); name/email/country stay "never" because checkout's form already collects
-        //   those, and tokenization passes them alongside. On shippable carts the form collects
-        //   the full address itself, so UPI stays on "form" and no element fields appear.
+        //   complete a UPI purchase (the July 2026 UPI ramp-down, gumroad-private#933). On this
+        //   mode Stripe's pane collects the full street address itself — with its own localized
+        //   labels and validation — while checkout's Country/ZIP fields hide for the selection
+        //   (see SharedInputs in PaymentForm.tsx) so nothing is asked for twice. Name and email
+        //   stay "never": both remain checkout's own fields (the Full name field stays visible
+        //   for UPI) and tokenization passes them alongside, exactly like "form" mode. Name
+        //   deliberately does NOT move into the pane: the pane's fields only apply defaultValues
+        //   present when they first render, so a name typed into checkout before switching to
+        //   UPI could not be carried over — the buyer would retype a name checkout already knew
+        //   (PR #6191 review).
         // The switch reaches the mounted element through react-stripe-js's option diffing
         // (element.update) as soon as the change event reports the row selection — before
         // tokenization, which only starts from the pay click.
@@ -280,29 +316,21 @@ const PaymentElementControllerInput = ({
           billingDetails:
             billingDetailsCollection === "element"
               ? "auto"
-              : {
-                  name: "never",
-                  email: "never",
-                  phone: "never",
-                  address:
-                    billingDetailsCollection === "element-address"
-                      ? {
-                          country: "never",
-                          postalCode: "auto",
-                          state: "auto",
-                          city: "auto",
-                          line1: "auto",
-                          line2: "auto",
-                        }
-                      : {
-                          country: "never",
-                          postalCode: "never",
-                          state: "never",
-                          city: "never",
-                          line1: "never",
-                          line2: "never",
-                        },
-                },
+              : billingDetailsCollection === "element-full"
+                ? { name: "never", email: "never", phone: "never", address: "auto" }
+                : {
+                    name: "never",
+                    email: "never",
+                    phone: "never",
+                    address: {
+                      country: "never",
+                      postalCode: "never",
+                      state: "never",
+                      city: "never",
+                      line1: "never",
+                      line2: "never",
+                    },
+                  },
         },
         wallets: paymentElementWallets(stripeLinkEnabled, walletsEnabled),
         // The recurring declaration attaches to the PaymentElement's own options (that's where

@@ -180,11 +180,63 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::JPY)
   end
 
-  it "falls back for wallet payment requests" do
-    params[:wallet_type] = "apple_pay"
+  # Wallet payments are accepted, but only from the surface whose sheet quotes the locked
+  # buyer-currency total (the Payment Element) and only while the seller is in both wallet
+  # rollout flags. The Payment Request Button's sheet is built from the canonical USD total,
+  # and it cannot reach a presentment checkout today anyway — it is suppressed whenever the
+  # Payment Element renders wallets (PaymentForm.tsx passes `disable_wallets ||
+  # payment_element_wallets` as its disabled flag), and selecting it sets checkout's
+  # paymentMethod to "stripePaymentRequest", which makes getCheckoutBuyerCurrencyDisplay
+  # return null so no quote token is issued. The gate below is the server-side backstop for
+  # both rules, so pulling a flag stops in-flight wallet charges instead of only removing the
+  # rows from newly rendered pages.
+  context "wallet payments" do
+    before do
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::WALLETS_FEATURE_NAME, seller)
+      params[:wallet_type] = "apple_pay"
+      params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+    end
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    after do
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+      Feature.deactivate_user(described_class::WALLETS_FEATURE_NAME, seller)
+    end
+
+    it "allows a Payment Element wallet payment when both rollout flags are active" do
+      expect(decision).to be_eligible
+      expect(decision.currency).to eq(Currency::CAD)
+      expect(decision.fallback_reason).to be_nil
+    end
+
+    it "refuses the wallet payment once the lane's ramp flag is pulled" do
+      Feature.deactivate_user(described_class::WALLETS_FEATURE_NAME, seller)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    end
+
+    it "refuses the wallet payment once the general wallet flag is pulled" do
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    end
+
+    it "refuses a wallet payment that does not come from the Payment Element" do
+      params[:payment_details_source] = nil
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:wallet_payment_request)
+    end
+
+    it "still allows a non-wallet payment when the wallet flags are off" do
+      Feature.deactivate_user(described_class::WALLETS_FEATURE_NAME, seller)
+      params[:wallet_type] = nil
+
+      expect(decision).to be_eligible
+      expect(decision.fallback_reason).to be_nil
+    end
   end
 
   it "falls back for future-charge card setups such as save-card checkouts" do
@@ -483,19 +535,92 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(paypal_decision.fallback_reason).to eq(:unsupported_processor)
     end
 
-    it "withholds the method for seller-managed destination-charge models" do
-      merchant_account.update!(json_data: {})
-
-      expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:unsupported_charge_model)
+    # The Gumroad platform account is the account a destination charge's PaymentIntent is
+    # created on, so the three destination-charge tests below need it to exist. It is a
+    # seeded row in most environments; create it here so the file is self-contained.
+    def platform_merchant_account
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                  charge_processor_merchant_id: nil, country: "US", currency: Currency::USD)
     end
 
-    it "withholds the method for merchant accounts that settle in a non-USD currency, even for EUR-priced products" do
+    # Superseded by gumroad-private#1409. A Gumroad-managed seller account IS a
+    # destination-charge model: the PaymentIntent is created on the Gumroad platform
+    # account with the seller's account as transfer_data[destination] — the same intent
+    # shape as a seller with no Stripe account at all, which this lane has always
+    # supported. Withholding it only hid local payment methods from checkouts that could
+    # complete. The card lane's own charge-model gate is unchanged (it mints an FX quote
+    # against the seller's account, where the model genuinely matters).
+    it "allows the method for a seller-managed destination-charge model" do
+      platform_merchant_account
+      merchant_account.update!(json_data: {}, currency: Currency::USD)
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+    end
+
+    # gumroad-private#1442. A product priced in the method's forced currency is charged
+    # at its listed price with no FX quote, so the charging account's own balance
+    # currency has no bearing on whether the charge can succeed — a EUR intent on a
+    # EUR-settling Belgian account is the most natural shape there is. Requiring US
+    # dollars here withheld iDEAL and Bancontact from most eurozone sellers.
+    it "allows the method for merchant accounts that settle in a non-USD currency when the product is priced in the forced currency" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      merchant_account.update!(currency: Currency::EUR)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+      expect(forced_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "allows the method for a merchant account settling in a third currency, unrelated to the forced one" do
       purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
       merchant_account.update!(currency: Currency::CAD)
 
-      expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+    end
+
+    # gumroad-private#1409. The default merchant_account in this spec is a Stripe Connect
+    # (direct-charge) account. A destination-charge seller is different: the intent is
+    # created on the Gumroad platform account and their own account merely receives the
+    # transfer afterwards.
+    it "keeps the method available for a destination-charge seller whose own account settles in a non-USD currency" do
+      platform_merchant_account.update!(currency: Currency::USD)
+      destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::GBP, country: "GB")
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 81_800_00), merchant_account: destination_merchant_account)
+
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account: destination_merchant_account,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).to be_eligible
+      expect(upi_decision.currency).to eq(Currency::INR)
+      expect(upi_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "keeps the method available when the Gumroad platform account the destination charge is created on holds a non-USD balance" do
+      platform_merchant_account.update!(currency: Currency::CAD)
+      destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR), merchant_account: destination_merchant_account)
+
+      destination_decision = described_class.new(order:,
+                                                 seller:,
+                                                 merchant_account: destination_merchant_account,
+                                                 chargeable:,
+                                                 purchases:,
+                                                 params:,
+                                                 setup_future_charges:,
+                                                 off_session:).method_forced_decision(payment_method:)
+
+      expect(destination_decision).to be_eligible
+      expect(destination_decision.currency).to eq(Currency::EUR)
     end
 
     # Regression test for the 2026-07-23 iDEAL dark-ramp (gumroad-private#933): enabling
@@ -526,6 +651,18 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.direct_listed_amount?).to eq(false)
     end
 
+    # The quoted (USD-priced) case still asks BOTH halves of the settlement question, and
+    # this pins the half that does not depend on a learned mismatch marker: an account
+    # whose stored balance currency is not US dollars cannot be quoted from the forced
+    # currency into USD, so the method has to stay withheld there even though the
+    # direct-listed lane above no longer cares about the same account's currency.
+    it "withholds the method for a USD-priced product when the account holds a non-USD balance and no mismatch marker is set" do
+      merchant_account.update!(currency: Currency::EUR)
+
+      expect(forced_decision).not_to be_eligible
+      expect(forced_decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+
     it "withholds the method for future-charge setups such as save-card checkouts" do
       save_card_decision = described_class.new(order:,
                                                seller:,
@@ -554,11 +691,69 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(off_session_decision.fallback_reason).to eq(:off_session)
     end
 
-    it "withholds the method for multi-item checkouts" do
+    it "allows the direct listed-amount path for multi-item carts uniformly priced in the forced currency" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
+      purchases << create(:purchase,
+                          link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
+                          seller:,
+                          merchant_account:,
+                          purchase_state: "in_progress")
+
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).to be_eligible
+      expect(upi_decision.currency).to eq(Currency::INR)
+      expect(upi_decision.direct_listed_amount?).to eq(true)
+    end
+
+    it "withholds the method for multi-item carts that need the per-line quote basis" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
       purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
 
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision).not_to be_eligible
+      expect(upi_decision.fallback_reason).to eq(:unsupported_product_currency)
+    end
+
+    # A single USD-priced line is allowed through here on the quoted-FX path, and that
+    # allowance is deliberately narrow: two USD lines would need one quote per line before the
+    # quoted amounts could reconcile with the persisted purchase rows. Pin the boundary so
+    # widening the single-line allowance can't silently let a multi-line USD cart in.
+    it "withholds the method for multi-item USD carts, which would need one quote per line" do
+      purchases << create(:purchase, link: product, seller:, merchant_account:, purchase_state: "in_progress")
+
+      expect(product.price_currency_type.to_s).to eq(Currency::USD)
       expect(forced_decision).not_to be_eligible
-      expect(forced_decision.fallback_reason).to eq(:multi_item_checkout)
+      expect(forced_decision.fallback_reason).to eq(:unsupported_product_currency)
+    end
+
+    it "withholds the method when the charge has no purchases" do
+      empty_decision = described_class.new(order:,
+                                           seller:,
+                                           merchant_account:,
+                                           chargeable:,
+                                           purchases: [],
+                                           params:,
+                                           setup_future_charges:,
+                                           off_session:).method_forced_decision(payment_method: "ideal")
+
+      expect(empty_decision).not_to be_eligible
+      expect(empty_decision.fallback_reason).to eq(:no_purchases)
     end
 
     it "withholds the method for installment payments" do
@@ -590,6 +785,30 @@ describe Checkout::BuyerCurrencyEligibility do
 
       expect(krw_decision).not_to be_eligible
       expect(krw_decision.fallback_reason).to eq(:unsupported_forced_currency)
+    end
+  end
+
+  describe ".buyer_presentment_display?" do
+    it "treats a local currency other than USD as presentment" do
+      expect(described_class.buyer_presentment_display?(display_mode: "buyer_local", buyer_currency_shown: "eur")).to be(true)
+    end
+
+    # A USD display is the converted price of a non-USD-priced product shown to a US buyer, and
+    # that is the amount the charge already uses, so no quote is ever minted for it. Callers
+    # disable wallet buttons for presentment carts, and doing that here would cost the buyer
+    # Apple Pay and Google Pay for nothing.
+    it "does not treat a USD local currency as presentment" do
+      expect(described_class.buyer_presentment_display?(display_mode: "buyer_local", buyer_currency_shown: "usd")).to be(false)
+    end
+
+    it "reads string keys the same way as symbol keys" do
+      expect(described_class.buyer_presentment_display?("display_mode" => "buyer_local", "buyer_currency_shown" => "usd")).to be(false)
+      expect(described_class.buyer_presentment_display?("display_mode" => "buyer_local", "buyer_currency_shown" => "gbp")).to be(true)
+    end
+
+    it "is false for a default display and for a blank payload" do
+      expect(described_class.buyer_presentment_display?(display_mode: "default", buyer_currency_shown: "eur")).to be(false)
+      expect(described_class.buyer_presentment_display?(nil)).to be(false)
     end
   end
 end

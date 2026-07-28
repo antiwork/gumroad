@@ -114,6 +114,11 @@ module CurrencyHelper
 
     buyer_currency = buyer_currency_for_ip(ip)
     return default_props unless buyer_currency.present? && buyer_currency != product_currency
+    # Only show a currency this checkout could actually be settled in. Otherwise the page
+    # promises a local price that the charge path will refuse, and the buyer is charged the
+    # canonical USD amount instead — the number changes between the product page and the
+    # total with no explanation, which is the complaint this gate exists to prevent.
+    return default_props unless buyer_currency_settleable?(seller: product.user, buyer_currency:, product:, product_currency:)
 
     rate = buyer_local_currency_rate(from_currency: product_currency, to_currency: buyer_currency)
     return default_props if rate.blank?
@@ -125,6 +130,13 @@ module CurrencyHelper
       rate:
     )
     return default_props if local_price_cents.blank?
+    # Deliberately NOT rounded here. This is the product page's approximate preview,
+    # converted from hourly cached rates rather than a locked quote, and the browser
+    # derives variant/option prices from `rate` on top of it — rounding only the base
+    # price would make the options disagree with it. The rounding that the buyer is
+    # actually charged happens once, when the checkout quote is minted
+    # (Checkout::PresentmentRounding), so the amount shown at checkout, itemized, and
+    # charged is the rounded one.
 
     {
       product_id: product.external_id,
@@ -154,6 +166,76 @@ module CurrencyHelper
       rate: nil,
       display_mode: "default",
     }
+  end
+
+  # Whether a checkout for this seller could actually be settled in `buyer_currency`, so the
+  # product page only ever shows a local price the charge path can honour. Deliberately the
+  # SELLER-, PRODUCT- and CURRENCY-level part of Checkout::BuyerCurrencyEligibility. What is
+  # left out is only what a product page genuinely cannot know: how many items the cart holds
+  # and whether they span several sellers. Those carts get told at checkout what they are
+  # charged instead.
+  #
+  # Charging in the buyer's currency is a separate rollout from displaying it
+  # (:buyer_currency_charging vs :buyer_local_currency), and while charging is off for a
+  # seller, display is a preview only: every buyer is charged canonical USD anyway, so
+  # requiring settleability there would turn the whole display feature off. The gate applies
+  # only once the seller can actually charge in the buyer's currency, which is where a shown
+  # local price becomes a promise.
+  def buyer_currency_settleable?(seller:, buyer_currency:, product:, product_currency:)
+    return true unless Feature.active?(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    # A buyer whose own currency is USD is the one case where converting a non-USD-priced
+    # product is safe, because USD is what the charge uses anyway: a plain card charge is
+    # created in USD and the listed price is converted with the same cached rate this display
+    # path reads, so the preview equals the amount charged. Allow it before the USD-pricing
+    # guard below, which would otherwise hide the one converted price we do honour.
+    return true if buyer_currency.to_s.downcase == Currency::USD
+    # Past this point the buyer's currency is not USD, and the charge path only presents in it
+    # for USD-priced products. A product priced in anything else is charged its listed price
+    # converted to USD (only the method-forced lanes such as iDEAL charge in the listed
+    # currency), so a price converted into the buyer's currency is never what is charged.
+    return false unless product_currency.to_s.downcase == Currency::USD
+    # The same product shapes Checkout::BuyerCurrencyQuote#quotable_product? refuses to quote.
+    # Each of these charges an amount that can differ from the cart total a quote would lock
+    # (nothing yet for a preorder, one period for a membership, $0 for a free trial, a deposit
+    # for a commission, one installment for an installment plan), so checkout falls back to
+    # canonical USD for them and a converted price shown here is never the amount charged.
+    return false if buyer_currency_unquotable_product?(product)
+    # Gumroad and Stripe must agree on the currency's minor units before we can charge it.
+    return false unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+
+    merchant_account = buyer_currency_merchant_account(seller)
+    return false if merchant_account.blank?
+    return false unless merchant_account.stripe_charge_processor?
+    return false unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
+
+    # Accounts that settle this currency in itself rather than USD reject the FX quote the
+    # charge needs, so a local price shown for them always ends up charged in USD.
+    Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
+  end
+
+  # The product-shape half of the gate, kept in step with
+  # Checkout::BuyerCurrencyQuote#quotable_product? and the charge-time mirror in
+  # Checkout::BuyerCurrencyEligibility#unquotable_product?. Those two are private to their
+  # services, so this repeats the list rather than calling into them; if a shape is added
+  # there, add it here too or the product page will start promising a price checkout refuses.
+  def buyer_currency_unquotable_product?(product)
+    product.is_in_preorder_state? ||
+      product.is_recurring_billing? ||
+      product.free_trial_enabled? ||
+      product.native_type == Link::NATIVE_TYPE_COMMISSION ||
+      product.installment_plan.present?
+  end
+
+  # Mirrors how Checkout::BuyerCurrencyQuote resolves the account that would charge this
+  # seller's cart, memoized per request: a profile or discover grid renders one card per
+  # product, and without memoization each card would re-run the merchant-account lookup for
+  # the same seller.
+  def buyer_currency_merchant_account(seller)
+    cache = (Current.buyer_currency_merchant_accounts ||= {})
+    return cache[seller.id] if cache.key?(seller.id)
+
+    cache[seller.id] = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
   end
 
   def buyer_local_price_props(product:, original_price_cents: nil, buyer_currency_display:)

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
+import { isUnredirectedDownloadPagePollResponse, warnAboutDroppedPollResponse } from "../utils/inertia_partial_reload";
 import { defaults as requestDefaults } from "../utils/request";
 
 // Keep the `request()` util's CSRF token current for Inertia pages. `base_page.ts` only
@@ -80,6 +81,32 @@ router.on("invalid", (event) => {
   event.preventDefault();
 
   const response = event.detail.response;
+
+  // A buyer-content-page background poll that came back non-Inertia from the URL it asked for
+  // is dropped rather than navigated to: those requests happen on a timer while the buyer is
+  // using the page, and reloading the same URL re-issues whatever was just intercepted, which
+  // destroys a long viewing session (see utils/inertia_partial_reload.ts). Dropping is safe —
+  // the poll keeps running and the next successful response refreshes the props. The guard is
+  // scoped to exactly the GET polls the server recognizes in
+  // `UrlRedirectsController#download_page_polling_request?`, so every other request in the app
+  // — forms, searches, and all other `only:` visits — behaves exactly as before. A poll that
+  // was genuinely REDIRECTED (expired session, revoked access, inactive membership, expired
+  // rental) still navigates, because those land on a different path.
+  //
+  // Known tradeoff: a few access terminations render a 404 at the SAME url instead of
+  // redirecting — a purchase refunded or charged back mid-session, or an installment whose
+  // files were deleted (see check_permissions in url_redirects_controller.rb). Those are
+  // swallowed too, so the buyer keeps the already-loaded page until they next navigate. That
+  // is deliberate: a same-url non-Inertia response is indistinguishable from the transient
+  // interception this guard exists to absorb, and the client cannot tell them apart without a
+  // server-side signal (a distinct header on terminal states would be the way to fix it).
+  // Erring toward keeping the session is the point — no new content is served either way.
+  if (isUnredirectedDownloadPagePollResponse(response)) {
+    // Dropping is silent from the buyer's side, so leave a console breadcrumb (once per URL) —
+    // otherwise a persistent interception looks like nothing but progress that stopped updating.
+    warnAboutDroppedPollResponse(response);
+    return;
+  }
 
   const redirectedUrl = response.request.responseURL;
   if (redirectedUrl) {

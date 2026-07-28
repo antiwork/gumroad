@@ -1379,6 +1379,141 @@ describe Order::PreparePaymentIntentService, :vcr do
                                                                    presentment_total_cents: 15_00)
         end
 
+        it "prepares one forced-currency intent for a multi-item cart uniformly priced in the forced currency" do
+          expect(StripeFxQuote).not_to receive(:create)
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_multi_direct")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(22_00)
+          expect(create_args[:stripe_fx_quote_id]).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(responses["unique-id-1"][:success]).to eq(true)
+
+          charge = order.charges.last
+          expect(charge.charge_presentment).to have_attributes(presentment_currency: Currency::EUR,
+                                                               presentment_total_cents: 22_00,
+                                                               stripe_fx_quote_id: nil)
+          expect(order.purchases.map { _1.reload.purchase_presentment.presentment_total_cents }).to contain_exactly(15_00, 7_00)
+        end
+
+        # The Payment Element mounts at the quantity-inclusive cart subtotal (the presenter
+        # multiplies per-unit price by quantity), so prepare must create the intent for the same
+        # number. If prepare summed per-unit prices instead, a quantity-2 cart would confirm an
+        # EUR 15.00 intent against an Element that showed EUR 30.00 and Stripe would reject it.
+        it "prepares the forced-currency intent for the quantity-inclusive amount" do
+          expect(StripeFxQuote).not_to receive(:create)
+
+          order, params = build_order(line_item_overrides: { quantity: 2, perceived_price_cents: 30_00 })
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_quantity_two")
+
+          expect(order.purchases.first.reload.displayed_price_cents).to eq(30_00)
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(30_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_total_cents).to eq(30_00)
+        end
+
+        # Gumroad's cut is stored twice: once on the charge-level presentment row and once per
+        # purchase. Payouts and refunds read the per-purchase rows, so if the allocator ever
+        # dropped or double-counted a cent the seller's proceeds would silently disagree with what
+        # was charged.
+        #
+        # Pinning only "the parts sum to the whole" would prove nothing here, because the
+        # charge-level figure is computed as the sum of the per-purchase figures — that assertion
+        # holds even if every purchase were given the whole charge's cut. So assert each
+        # purchase's own expected value: its own fee + affiliate credit + Gumroad tax, converted
+        # at its own stored rate.
+        it "splits Gumroad's presentment fee share across purchases so it sums to the charge-level share" do
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          _create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_fee_split")
+          expect(responses.values).to all(include(success: true))
+
+          charge_presentment = order.charges.last.charge_presentment
+          purchases = order.purchases.map(&:reload)
+          purchase_shares = purchases.map { _1.purchase_presentment.presentment_gumroad_amount_cents }
+
+          expect(purchase_shares.size).to eq(2)
+
+          # The value each purchase must carry on its own, independent of the charge total: the
+          # same USD composition the payout path reads (Purchase#total_transaction_amount_for_gumroad_cents),
+          # converted back with the rate that purchase stored.
+          expected_shares = purchases.map do |purchase|
+            usd_cents = purchase.fee_cents + purchase.affiliate_credit_cents + purchase.gumroad_tax_cents
+            purchase.send(:usd_cents_to_currency, Currency::EUR, usd_cents, purchase.rate_converted_to_usd)
+          end
+
+          expect(expected_shares).to all(be > 0)
+          expect(purchase_shares).to eq(expected_shares)
+          # And a purchase can never be assigned the whole charge's cut — the bug the sum
+          # assertion below is blind to.
+          expect(purchase_shares).to all(be < charge_presentment.presentment_gumroad_amount_cents)
+          expect(purchase_shares.sum).to eq(charge_presentment.presentment_gumroad_amount_cents)
+          expect(charge_presentment.presentment_gumroad_amount_cents).to be <= charge_presentment.presentment_total_cents
+        end
+
+        # The currency basis includes this seller's free/test lines (charge_purchases), but the
+        # presentment snapshot is built from the paid lines only. A free line priced in a different
+        # currency therefore makes the cart non-uniform for the Element while still looking uniform
+        # to the presentment call. iDEAL forces EUR by itself, so without a guard prepare would
+        # build an EUR presentment for a cart whose Element mounted in USD and create an intent the
+        # token can never confirm. It must fail the purchases cleanly instead.
+        it "fails cleanly rather than building a forced-currency presentment when a free line is priced differently" do
+          expect(StripeFxQuote).not_to receive(:create)
+          free_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_free_line_currency")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.charges.last&.charge_presentment).to be_nil
+          expect(order.purchases.find { _1.link_id == product.id }.reload).to be_failed
+        end
+
+        # The same shape with the free line priced in the forced currency stays on the
+        # forced-currency path — the guard must not reject a genuinely uniform cart.
+        it "still prepares the forced-currency intent when the free line shares the forced currency" do
+          expect(StripeFxQuote).not_to receive(:create)
+          free_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_free_line_eur")
+
+          expect(create_args[:currency]).to eq(Currency::EUR)
+          expect(create_args[:amount_cents]).to eq(15_00)
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(order.charges.last.charge_presentment.presentment_total_cents).to eq(15_00)
+        end
+
         it "keys the intent on the charge external id and currency (no quote), scoped to the confirmation token" do
           order, params = build_order
           create_args, = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_direct")
@@ -1405,6 +1540,28 @@ describe Order::PreparePaymentIntentService, :vcr do
 
           responses = described_class.new(order:, params:, confirmation_token:).perform
           [create_args, responses]
+        end
+
+        it "keeps the USD intent when a free differently priced line makes the cart non-uniform" do
+          other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
+          free_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 0)
+          params = {
+            line_items: [
+              line_item,
+              { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: other_product.price_cents, quantity: 1 },
+              { uid: "unique-id-2", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+            ],
+          }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          create_args, responses = perform_with_card_preview(order, params, confirmation_token: "ctoken_mixed_free_currency")
+
+          # The Element also sees the free USD line, so it mounts in canonical USD instead of
+          # offering EUR-only methods. Prepare must preserve that same method/currency set.
+          expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
+          expect(create_args[:payment_method_types]).to eq(%w[card link])
+          expect(responses.values).to all(include(success: true))
+          expect(order.charges.last.charge_presentment).to be_nil
         end
 
         it "prepares an EUR intent with presentment rows when the buyer pays by card on the forced-currency element" do
@@ -1675,6 +1832,277 @@ describe Order::PreparePaymentIntentService, :vcr do
         order.purchases.each { _1.update!(ip_country: "United States") }
 
         create_args, responses = perform_with_upi_preview(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
+    context "with a method-forced Pix payment method" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let(:product) { create(:product, user: seller, price_currency_type: Currency::BRL, price_cents: 100_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "pix_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      def perform_with_preview(order, params, preview:, confirmation_token: "ctoken_pix")
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_pix", client_secret: "pi_pix_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token:).perform
+        [create_args, responses]
+      end
+
+      def perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix")
+        preview = Stripe::StripeObject.construct_from(type: "pix", pix: {}, card: nil)
+        perform_with_preview(order, params, preview:, confirmation_token:)
+      end
+
+      it "creates the BRL intent with Pix's create-time options, charging the buyer exactly the listed price and adding no IOF on this direct charge" do
+        # A genuinely Brazilian connected account — the domestic case. The factory leaves country
+        # nil, which is a DIFFERENT lane (see the non-Brazilian example below), so set it here
+        # rather than relying on the default.
+        connect_account.update!(country: "BR")
+
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        create_args, responses = perform_with_pix_preview(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_types]).to include("pix")
+        expect(create_args[:amount_cents]).to eq(100_00)
+        # The charge is created on the seller's own Brazilian Stripe account, so the payment never
+        # leaves Brazil: no foreign exchange, therefore no IOF for Stripe to price.
+        # amount_includes_iof is left off entirely rather than sent — asking Stripe to price a tax
+        # that does not apply is at best meaningless, and an option Stripe does not accept fails
+        # the whole intent create, taking card down with it for that checkout.
+        expect(create_args[:payment_method_options]).to eq(
+          pix: { expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS }
+        )
+
+        # The method must be seeded onto the purchase before fees are recomputed, so that fee logic
+        # can see it is a Pix payment at all. Assert that first, independently of the fee amount.
+        purchase = order.purchases.first.reload
+        expect(purchase.card_type).to eq(CardType::PIX)
+
+        # Gumroad charges a Brazilian connected account no fee at all (calculate_fees returns early
+        # for is_a_brazilian_stripe_connect_account?), so there is no IOF component to look for and
+        # nothing else either. The IOF-charging path is covered on a Gumroad-managed account in
+        # spec/models/purchase/purchase_process_spec.rb ("Pix IOF fee").
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(false)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
+        expect(purchase.fee_cents).to eq(0)
+      end
+
+      # The other direct-charge lane, and the reason the option's gate is keyed on the account's
+      # COUNTRY rather than on who owns it. Nothing restricts Pix to Brazilian connected accounts —
+      # the resolver's BR lock is on the buyer, and the only per-account condition is the Stripe
+      # capability snapshot — so a non-Brazilian connected account with pix_payments active takes a
+      # payment that DOES leave Brazil. IOF applies, so the option must still be sent, even though
+      # the money never touches a Gumroad-held balance and there is no Gumroad cost to bill back.
+      it "still sends amount_includes_iof on a direct charge to a NON-Brazilian connected account, but bills no IOF fee" do
+        connect_account.update!(country: "US")
+
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_non_br")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_types]).to include("pix")
+        expect(create_args[:payment_method_options]).to eq(
+          pix: {
+            expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS,
+            amount_includes_iof: described_class::PIX_AMOUNT_INCLUDES_IOF,
+          }
+        )
+
+        purchase = order.purchases.first.reload
+        expect(purchase.card_type).to eq(CardType::PIX)
+        # Cross-border, so the tax exists and the option is sent — but the charge settles into the
+        # seller's own account, so Gumroad absorbed nothing and recovers nothing. The two gates
+        # answering differently here is the intended behaviour, not a drift.
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(false)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(0)
+      end
+
+      # The counterpart to the direct-charge cases above: on a Gumroad-held account the money leaves
+      # Brazil, the payment is cross-border, IOF applies, and the option must be sent — otherwise
+      # Stripe's default marks the buyer's amount up by the tax and the banking-app total stops
+      # matching the price checkout quoted. This is what all Pix traffic looks like today.
+      it "sends amount_includes_iof and bills the IOF fee when the Pix charge is created on a Gumroad-held account" do
+        connect_account.mark_deleted!
+        seller.reload
+
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_gumroad")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_types]).to include("pix")
+        expect(create_args[:payment_method_options]).to eq(
+          pix: {
+            expires_after_seconds: described_class::PIX_EXPIRES_AFTER_SECONDS,
+            amount_includes_iof: described_class::PIX_AMOUNT_INCLUDES_IOF,
+          }
+        )
+
+        purchase = order.purchases.first.reload
+        expect(purchase.card_type).to eq(CardType::PIX)
+        expect(purchase.charged_using_gumroad_merchant_account?).to eq(true)
+        expect(purchase.send(:pix_iof_fee_per_thousand)).to eq(Purchase::PIX_IOF_FEE_PER_THOUSAND)
+      end
+
+      it "sends no payment_method_options and no IOF fee for a card confirm on the same BRL element" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "BR" })
+        create_args, responses = perform_with_preview(order, params, preview:, confirmation_token: "ctoken_card_brl")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::BRL)
+        expect(create_args[:payment_method_options]).to be_nil
+
+        purchase = order.purchases.first.reload
+        expect(purchase.card_type).to be_nil
+        expected_variable_fee_cents = (purchase.price_cents * Purchase::GUMROAD_FLAT_FEE_PER_THOUSAND / 1000.0).round
+        expect(purchase.fee_cents).to eq(expected_variable_fee_cents + Purchase::GUMROAD_FIXED_FEE_CENTS)
+      end
+
+      # Stripe caps a single Pix payment at 3,000 USD and validates it against the intent's final
+      # amount. The bound is quoted in USD, so it is checked against the canonical USD total
+      # (amount_cents), which is already denominated in USD — no FX conversion can drift the
+      # verdict. Checkout's own $5,000 purchase maximum still admits carts above Pix's $3,000
+      # ceiling: with the BRL rate pinned to 5.0 — pinned because the shared Redis rate cache
+      # varies by environment (backup-rates fixture locally, the preview-QA seed on a fresh CI
+      # Redis) — R$20,000 converts to exactly $4,000: above the Pix ceiling, under the purchase
+      # max, and comfortably above the BRL floor, so this failure isolates the ceiling.
+      it "fails closed with PIX_AMOUNT_OUTSIDE_WINDOW when the canonical USD total exceeds Stripe's Pix ceiling, leaving no orphaned presentment rows" do
+        currency_namespace = Redis::Namespace.new(:currencies, redis: $redis)
+        original_brl_rate = currency_namespace.get("BRL")
+        currency_namespace.set("BRL", "5.0")
+
+        big_product = create(:product, user: seller, price_currency_type: Currency::BRL, price_cents: 20_000_00)
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: big_product.unique_permalink, perceived_price_cents: 20_000_00, quantity: 1 }]
+        }.merge(common_params)
+        order, order_responses = Order::CreateService.new(params:).perform
+        expect(order_responses.values).to all(include(success: true))
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_big")
+
+        expect(create_args).to be_nil
+        response = responses["unique-id-0"]
+        expect(response[:success]).to eq(false)
+        # Deterministic rejection: retrying Pix on this cart can never succeed, so the buyer gets
+        # the actionable "choose a different payment method" message, not the generic retry one.
+        expect(response[:error_message]).to eq(described_class::PIX_AMOUNT_INELIGIBLE_MESSAGE)
+        expect(response[:error_code]).to eq(PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW)
+        expect(order.purchases.first.reload).to be_failed
+        # The BRL snapshot was persisted before the gate ran (the gate needs its BRL total), and
+        # belongs to an intent that will never exist — it must not be orphaned.
+        expect(ChargePresentment.count).to eq(0)
+        expect(PurchasePresentment.count).to eq(0)
+      ensure
+        original_brl_rate.present? ? currency_namespace.set("BRL", original_brl_rate) : currency_namespace.del("BRL")
+      end
+
+      # Stripe's floor is 0.50 BRL, checked against the BRL presentment total — the figure
+      # natively in the floor's own currency. No real cart can price below it (Gumroad's minimum
+      # BRL price is R$5.33), so force the presentment total under the floor while keeping the
+      # genuinely persisted rows: this proves both the BRL-native comparison and that the gate
+      # cleans up the snapshot it strands. The R$100 cart's USD total (~$56) is well inside the
+      # ceiling, so this failure isolates the floor.
+      it "fails closed with PIX_AMOUNT_OUTSIDE_WINDOW when the BRL presentment total is below Stripe's Pix floor, leaving no orphaned presentment rows" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        allow_any_instance_of(Charge::MethodForcedPresentment).to receive(:perform).and_wrap_original do |original|
+          result = original.call
+          result.presentment_total_cents = Checkout::PaymentMethodResolver::PIX_MIN_BRL_CHARGE_CENTS - 1
+          result
+        end
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_small")
+
+        expect(create_args).to be_nil
+        response = responses["unique-id-0"]
+        expect(response[:success]).to eq(false)
+        expect(response[:error_message]).to eq(described_class::PIX_AMOUNT_INELIGIBLE_MESSAGE)
+        expect(response[:error_code]).to eq(PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW)
+        expect(order.purchases.first.reload).to be_failed
+        expect(ChargePresentment.count).to eq(0)
+        expect(PurchasePresentment.count).to eq(0)
+      end
+
+      # A Pix cart always produces a BRL presentment (Pix forces BRL), so a missing one means our own
+      # presentment layer failed, not that the buyer's basket is priced outside Stripe's window. The
+      # gate must still fail closed, but it must not stamp PIX_AMOUNT_OUTSIDE_WINDOW — that code is
+      # the metric for how often real carts fall outside the window, and mixing an internal fault
+      # into it would make the number mean two different things.
+      it "fails closed with the generic error, not PIX_AMOUNT_OUTSIDE_WINDOW, when no BRL presentment exists at all" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Brazil") }
+
+        # The seller's buyer-currency flags have to be off for this example to reach the Pix gate
+        # at all. With them on, method_forced_presentment_required? is true and
+        # prepare_unconfirmed_charge fails the order on its own nil-presentment guard several lines
+        # earlier, which produces this same generic error and would let the example pass without
+        # the gate ever running. Flags off is also the only way a Pix token genuinely arrives with
+        # no presentment in production: a stale token confirming after the seller's local-method
+        # rollout was rolled back.
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+
+        allow_any_instance_of(Charge::MethodForcedPresentment).to receive(:perform).and_return(nil)
+
+        create_args, responses = perform_with_pix_preview(order, params, confirmation_token: "ctoken_pix_no_presentment")
+
+        expect(create_args).to be_nil
+        response = responses["unique-id-0"]
+        expect(response[:success]).to eq(false)
+        expect(response[:error_message]).to eq(described_class::GENERIC_CHARGE_ERROR)
+        expect(response[:error_code]).to eq(PurchaseErrorCode::PROCESSING_ERROR)
+        expect(response[:error_code]).not_to eq(PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW)
+        expect(order.purchases.first.reload).to be_failed
+        expect(ChargePresentment.count).to eq(0)
+        expect(PurchasePresentment.count).to eq(0)
+      end
+
+      it "rejects a Pix token when the server-owned buyer country is outside Brazil" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        create_args, responses = perform_with_pix_preview(order, params)
 
         expect(create_args).to be_nil
         expect(responses["unique-id-0"][:success]).to eq(false)

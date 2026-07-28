@@ -25,11 +25,11 @@ class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
   # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
   # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
-  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi cashapp us_bank_account alipay].freeze
-  # Afterpay/Clearpay, Affirm, and UPI are one-time, buyer-present only, so a recurring lifecycle
-  # drops them. (Recurring carts currently fall back to Lane A before any Stripe method list is
-  # built, but the eligible-policy set is logged and intersected by later units, so it must not
-  # claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
+  ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay].freeze
+  # Afterpay/Clearpay, Affirm, UPI, and Pix are one-time, buyer-present only, so a recurring
+  # lifecycle drops them. (Recurring carts currently fall back to Lane A before any Stripe method
+  # list is built, but the eligible-policy set is logged and intersected by later units, so it must
+  # not claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
   # limitation: Stripe supports Klarna on recurring payments, but memberships/preorders are
   # excluded from Klarna's first launch (gumroad-private#933) so the policy set must not claim it.
   # Alipay is here for a stronger reason than Klarna's: Stripe gates recurring Alipay behind
@@ -37,7 +37,14 @@ class Checkout::PaymentMethodResolver
   # (docs.stripe.com/payments/alipay), and memberships/preorders are out of scope for its
   # first launch anyway (gumroad-private#1339), so the policy set must not claim it on a
   # recurring cart.
-  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi klarna alipay].freeze
+  # iDEAL and Bancontact are one-shot bank approvals: the buyer authorises a single payment in
+  # their banking app, and charging them again later requires separately collecting a SEPA Direct
+  # Debit mandate, which Gumroad's checkout does not do. So a membership or preorder priced in
+  # euros must never claim them either — the buyer would authorise the first charge and every
+  # renewal after it would have nothing to charge against. Pix works the same way in Brazil: the
+  # buyer approves one QR-code transfer from their bank account and there is no stored mandate to
+  # bill again, so it is one-time only too.
+  RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi pix klarna alipay ideal bancontact].freeze
   # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
   # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
   # element flags themselves since Stripe's dashboard payment-method settings are the emergency
@@ -105,6 +112,27 @@ class Checkout::PaymentMethodResolver
   US_LOCKED_PAYMENT_METHOD_TYPES = %w[us_bank_account cashapp].freeze
   # UPI can only be used by Indian buyers on INR PaymentIntents. Unknown GeoIP fails safe.
   IN_LOCKED_PAYMENT_METHOD_TYPES = %w[upi].freeze
+  # Pix can only be used by Brazilian buyers on BRL PaymentIntents: it settles over Brazil's
+  # domestic instant-payment rails, so the buyer needs an account at a Brazilian bank. Unknown
+  # GeoIP fails safe.
+  BR_LOCKED_PAYMENT_METHOD_TYPES = %w[pix].freeze
+  PIX_PAYMENT_METHOD_TYPE = "pix"
+  # Stripe's Pix transaction window: at least 0.50 BRL, at most 3,000 USD per payment
+  # (https://docs.stripe.com/payments/pix#transaction-limits). The floor is in the presentment
+  # currency (BRL, the only currency Pix charges in) and the ceiling is quoted in USD, which is
+  # also the currency Gumroad's canonical cart total is already in — so each bound is checked
+  # against the figure that is natively in its own currency, with no FX conversion invented here.
+  # Enforced at intent-prepare time against the FINAL charged amounts rather than in this resolver:
+  # a BRL cart has no USD item total for the resolver to read (the presenter only passes one for
+  # USD-priced carts), and Stripe validates the intent's final amount anyway. See
+  # Order::PreparePaymentIntentService#block_pix_amount_outside_window.
+  # Stripe also caps a single buyer at 10,000 USD of Pix payments per month with one business.
+  # That is a property of the buyer's history, not of this cart, so no cart-shaped gate can see
+  # it: such a payment fails at confirm and surfaces through the payment_intent.payment_failed
+  # webhook like any other decline.
+  PIX_MIN_BRL_CHARGE_CENTS = 50
+  PIX_MAX_USD_CHARGE_CENTS = 3_000_00
+
   # Never gated by the per-account capability check on direct-charge sellers. Card processing is
   # the baseline capability of any chargeable Stripe account — an account that truly can't take
   # cards is unusable no matter what we render, and an empty method list would just break the
@@ -114,6 +142,7 @@ class Checkout::PaymentMethodResolver
   ALWAYS_ACCOUNT_SUPPORTED_PAYMENT_METHOD_TYPES = %w[card].freeze
   US_ALPHA2 = "US"
   IN_ALPHA2 = "IN"
+  BR_ALPHA2 = "BR"
   # PPP method matrix (U13). On a PPP-discounted checkout, only methods whose funding country is
   # verifiable pre-charge (card/wallets via card.country, and later sepa_debit.country) or whose
   # region lock matches the discount country (Cash App Pay / ACH are US-locked, so US-only) may be
@@ -125,9 +154,10 @@ class Checkout::PaymentMethodResolver
   PPP_VERIFIABLE_PAYMENT_METHOD_TYPES = %w[card sepa_debit].freeze
   # Region-locked methods are allowed on a PPP checkout only when the buyer's (GeoIP) country —
   # the basis of the discount — is the lock country. The resolver's region gates already enforce
-  # buyer_country == US for Cash App Pay/ACH and buyer_country == IN for UPI, so on a PPP checkout
-  # they stay offered exactly when the discount country is the lock country.
-  PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES = (US_LOCKED_PAYMENT_METHOD_TYPES + IN_LOCKED_PAYMENT_METHOD_TYPES).freeze
+  # buyer_country == US for Cash App Pay/ACH, buyer_country == IN for UPI, and buyer_country == BR
+  # for Pix, so on a PPP checkout they stay offered exactly when the discount country is the lock
+  # country.
+  PPP_REGION_LOCKED_PAYMENT_METHOD_TYPES = (US_LOCKED_PAYMENT_METHOD_TYPES + IN_LOCKED_PAYMENT_METHOD_TYPES + BR_LOCKED_PAYMENT_METHOD_TYPES).freeze
   # Multi-seller and other Lane A carts keep Gumroad's existing card + PayPal set.
   LANE_A_PAYMENT_METHOD_TYPES = %w[card paypal].freeze
 
@@ -174,12 +204,12 @@ class Checkout::PaymentMethodResolver
     seller.stripe_connect_account&.country == US_ALPHA2
   end
 
-  # cart_product_currency: the ISO code (lowercase, e.g. "eur") the cart's single item is priced
-  # in, or nil for multi-item carts / unknown. Only consulted by the forced-currency
-  # gate below: a forced-currency method (iDEAL/Bancontact) is offered only when the cart is
-  # priced in exactly the currency that method forces, because that is the only shape where the
-  # Payment Element mounts in that currency (StripePaymentPresenter#method_forced_shape?) and
-  # the deferred intent can be created in it. Offering the methods on any other cart puts EUR-only
+  # cart_product_currency: the ISO code (lowercase, e.g. "eur") every cart item is priced in,
+  # or nil for mixed-currency / unknown carts. Only consulted by the forced-currency gate below:
+  # a forced-currency method (iDEAL/Bancontact/UPI) is offered only when the whole cart is priced
+  # in exactly the currency that method forces, because that is the only shape where the Payment
+  # Element mounts in that currency (StripePaymentPresenter#method_forced_shape?) and the deferred
+  # intent can be created in it. Offering the methods on any other cart puts forced-currency
   # entries on a USD element/intent, which Stripe rejects outright (no element mounts at all).
   #
   # cart_total_usd_cents: the cart's total in USD cents, or nil when unknown. Only consulted by
@@ -287,6 +317,7 @@ class Checkout::PaymentMethodResolver
       launched += alipay_methods(eligible) if forced.empty?
       launched -= US_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == US_ALPHA2
       launched -= IN_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == IN_ALPHA2
+      launched -= BR_LOCKED_PAYMENT_METHOD_TYPES unless buyer_country == BR_ALPHA2
       launched = ppp_method_matrix(launched) if ppp_discounted
       launched & account_supported_methods(launched)
     end
@@ -438,10 +469,10 @@ class Checkout::PaymentMethodResolver
       Rails.logger.error("Failed to enqueue payment method availability refresh for merchant account #{connect_account.id}: #{e.class} => #{e.message}")
     end
 
-    # The EUR forced-currency methods (iDEAL/Bancontact) surface in two situations:
+    # The forced-currency methods (iDEAL/Bancontact/UPI) surface in two situations:
     #
     #   QA (Stripe test mode): the seller has the internal buyer-currency flags on and the
-    #   cart's single item is priced in the currency the method forces. This is the
+    #   whole cart is priced in the currency the method forces. This is the
     #   pre-launch manual QA surface on preview apps/staging.
     #
     #   Production (live mode): additionally, the method's own per-method launch flag
@@ -450,7 +481,7 @@ class Checkout::PaymentMethodResolver
     #   ramp and roll back independently of the rest of the cohort.
     #
     # In both modes the cart-shape condition mirrors the presenter's method_forced_shape?
-    # gate: only a single item priced in the forced currency mounts the Payment Element in
+    # gate: only a cart priced uniformly in the forced currency mounts the Payment Element in
     # that currency, and a forced-currency method listed on a USD element/intent makes
     # Stripe reject the whole element session (no payment form renders at all — this broke
     # flag-on sellers' plain USD checkouts before the gate was added).
@@ -462,31 +493,27 @@ class Checkout::PaymentMethodResolver
       end
       return [] if methods_for_cart_currency.empty?
 
-      # The prepare-time eligibility check rejects a forced-currency intent when the
-      # account doesn't HOLD USD (stored-currency check). Mirror only that half here.
-      # Deliberately NOT the marker-aware usd_settling_merchant_account?: the methods
-      # this resolver offers are always the direct-listed-amount shape (single item
-      # priced in the forced currency — the select above), which charges the listed
-      # price with no FX quote, so the learned mismatch marker is irrelevant to them.
-      # Gating on the marker here is what made iDEAL disappear platform-wide on
-      # 2026-07-23: enabling the iDEAL/SEPA capabilities made the platform account
-      # settle EUR in EUR, the EUR marker was recorded, and the tab never rendered for
-      # any Gumroad-managed seller (gumroad-private#933).
-      return [] unless forced_currency_settlement_supported?
+      # No settlement gate here. The methods this resolver offers are always the
+      # direct-listed-amount shape (the whole cart priced in the forced currency — the
+      # select above), which charges the listed price with no FX quote anywhere, so no
+      # property of the charging account's balance currency can make the charge fail.
+      # Stripe is happy to create a EUR intent on a EUR-settling account; the per-account
+      # capability intersection further down (account_supported_methods) is what actually
+      # establishes the account can take the method.
+      #
+      # Two narrower versions of this gate were removed in turn, both because they hid
+      # methods from checkouts that could complete: the marker-aware
+      # usd_settling_merchant_account? made iDEAL disappear platform-wide on 2026-07-23
+      # (enabling the iDEAL/SEPA capabilities made the platform account settle EUR in EUR,
+      # so the EUR marker was recorded — gumroad-private#933), and the stored-currency
+      # usd_holding_settlement_account? that replaced it still withheld the methods from
+      # every Stripe Connect seller settling in euros, which is most eurozone sellers and
+      # the majority of the lane's addressable volume (gumroad-private#1442).
 
       methods_for_cart_currency.select do |method|
         Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
           Checkout::BuyerCurrencyEligibility.local_method_launched?(method, sellers.first)
       end
-    end
-
-    def forced_currency_settlement_supported?
-      seller = sellers.first
-      merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
-                         MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-      return false if merchant_account.blank?
-
-      Checkout::BuyerCurrencyEligibility.usd_holding_merchant_account?(merchant_account)
     end
 
     # U13: a PPP-discounted checkout only offers methods the pre-charge country check can verify

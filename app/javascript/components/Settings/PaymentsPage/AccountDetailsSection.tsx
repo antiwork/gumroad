@@ -4,6 +4,7 @@ import * as React from "react";
 import typia from "typia";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
 import { Button } from "$app/components/Button";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -202,9 +203,18 @@ const AccountDetailsSection = ({
         idSuffix: "social-insurance-number",
       },
       CO: {
-        label: "Cédula de Ciudadanía (CC)",
-        placeholder: "1.123.123.123",
-        minLength: 13,
+        // Colombia issues two personal IDs: the Cédula de Ciudadanía to citizens and the Cédula de
+        // Extranjería to foreign residents. Both are sent to Stripe as the generic
+        // individual.id_number, so both are accepted — the label has to say so, otherwise a foreign
+        // resident reads "Cédula de Ciudadanía" and concludes their ID cannot be used.
+        label: "Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)",
+        placeholder: "1234567890",
+        // Colombian ID numbers vary in length: Cédula de Extranjería numbers are commonly six or
+        // seven digits, citizen numbers eight to ten. A single exact length would block most of that
+        // range, so only a loose range is enforced here (the upper bound leaves room for a number
+        // pasted with thousands separators, e.g. "1.123.123.123"). Stripe does the authoritative
+        // validation on individual.id_number.
+        minLength: 6,
         maxLength: 13,
         idSuffix: "colombia-id-number",
       },
@@ -718,22 +728,24 @@ const AccountDetailsSection = ({
                   "business_state",
                 )
               : null}
-            <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}-business-zip-code`}>
-                  {complianceInfo.business_country === "US" ? "ZIP code" : "Postal code"}
-                </Label>
-              </FieldsetTitle>
-              <Input
-                id={`${uid}-business-zip-code`}
-                placeholder="12345"
-                required={complianceInfo.is_business}
-                value={complianceInfo.business_zip_code || ""}
-                disabled={isFormDisabled}
-                aria-invalid={errorFieldNames.has("business_zip_code")}
-                onChange={(evt) => updateComplianceInfo({ business_zip_code: evt.target.value })}
-              />
-            </Fieldset>
+            {countryRequiresPostalCode(complianceInfo.business_country) ? (
+              <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
+                <FieldsetTitle>
+                  <Label htmlFor={`${uid}-business-zip-code`}>
+                    {complianceInfo.business_country === "US" ? "ZIP code" : "Postal code"}
+                  </Label>
+                </FieldsetTitle>
+                <Input
+                  id={`${uid}-business-zip-code`}
+                  placeholder="12345"
+                  required={complianceInfo.is_business}
+                  value={complianceInfo.business_zip_code || ""}
+                  disabled={isFormDisabled}
+                  aria-invalid={errorFieldNames.has("business_zip_code")}
+                  onChange={(evt) => updateComplianceInfo({ business_zip_code: evt.target.value })}
+                />
+              </Fieldset>
+            ) : null}
           </div>
           <Fieldset>
             <FieldsetTitle>
@@ -1147,22 +1159,24 @@ const AccountDetailsSection = ({
                 "state",
               )
             : null}
-          <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
-            <FieldsetTitle>
-              <Label htmlFor={`${uid}-creator-zip-code`}>
-                {complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
-              </Label>
-            </FieldsetTitle>
-            <Input
-              id={`${uid}-creator-zip-code`}
-              type="text"
-              value={complianceInfo.zip_code || ""}
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("zip_code")}
-              required
-              onChange={(evt) => updateComplianceInfo({ zip_code: evt.target.value })}
-            />
-          </Fieldset>
+          {countryRequiresPostalCode(complianceInfo.country) ? (
+            <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}-creator-zip-code`}>
+                  {complianceInfo.country === "US" ? "ZIP code" : "Postal code"}
+                </Label>
+              </FieldsetTitle>
+              <Input
+                id={`${uid}-creator-zip-code`}
+                type="text"
+                value={complianceInfo.zip_code || ""}
+                disabled={isFormDisabled}
+                aria-invalid={errorFieldNames.has("zip_code")}
+                required
+                onChange={(evt) => updateComplianceInfo({ zip_code: evt.target.value })}
+              />
+            </Fieldset>
+          ) : null}
         </div>
       )}
       <Fieldset>

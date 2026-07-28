@@ -6061,6 +6061,89 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "all info provided of a Gambia individual" do
+      # Gambia has no postal codes in its official addressing format, so the seller never provides
+      # one and the address Stripe receives carries a nil postal_code.
+      let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Banjul", zip_code: nil,
+                                                                  street_address: "address_full_match", state: nil,
+                                                                  country: "Gambia", individual_tax_id: nil) end
+      let(:bank_account) { create(:gambia_bank_account, user:) }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+
+      before do
+        user_compliance_info
+        bank_account
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+      end
+
+      let(:expected_account_params) do
+        {
+          type: "custom",
+          country: "GM",
+          metadata: {
+            user_id: user.external_id,
+            tos_agreement_id: tos_agreement.external_id,
+            user_compliance_info_id: user_compliance_info.external_id,
+            bank_account_id: bank_account.external_id
+          },
+          tos_acceptance: { date: 1427846400, ip: "54.234.242.13", service_agreement: "recipient" },
+          default_currency: "gmd",
+          business_type: "individual",
+          business_profile: {
+            name: user_compliance_info.legal_entity_name,
+            url: user.business_profile_url,
+            product_description: user_compliance_info.legal_entity_name
+          },
+          individual: {
+            address: {
+              line1: "address_full_match",
+              line2: nil,
+              city: "Banjul",
+              state: nil,
+              postal_code: nil,
+              country: "GM"
+            },
+            dob: { day: 1, month: 1, year: 1901 },
+            first_name: "Chuck",
+            last_name: "Bartowski",
+            phone: "0000000000",
+            email: user.email,
+          },
+          bank_account: {
+            country: "GM",
+            currency: "gmd",
+            account_number: "000123000456000789",
+            routing_number: "AAAAGMGMXYZ"
+          },
+          settings: {
+            payouts: {
+              schedule: {
+                interval: "manual"
+              },
+              debit_negative_balances: false
+            }
+          },
+          requested_capabilities: StripeMerchantAccountManager::CROSS_BORDER_PAYOUTS_ONLY_CAPABILITIES
+        }
+      end
+
+      it "creates an account at stripe with all the params and returns the corresponding merchant account" do
+        expect(Stripe::Account).to receive(:create).with(expected_account_params).and_call_original
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.charge_processor_id).to eq(StripeChargeProcessor.charge_processor_id)
+        expect(merchant_account.charge_processor_merchant_id).to be_present
+        expect(merchant_account.country).to eq("GM")
+        expect(merchant_account.currency).to eq("gmd")
+        expect(bank_account.reload.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
+        expect(bank_account.reload.stripe_bank_account_id).to match(/ba_[a-zA-Z0-9]+/)
+        expect(bank_account.reload.stripe_fingerprint).to match(/[a-zA-Z0-9]+/)
+      end
+    end
+
     describe "all info provided of an Liechtenstein individual" do
       let(:user_compliance_info) do create(:user_compliance_info, user:, city: "Vaduz",
                                                                   street_address: "address_full_match", state: nil, zip_code: "0139",
@@ -9487,10 +9570,11 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Invalid account number", "invalid_account_number"))
         end
 
-        it "emails the creator" do
+        it "emails the creator, flagging it as a format rejection the seller has to correct" do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
         end
       end
 
@@ -9500,16 +9584,18 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "invalid_account_number"))
         end
 
-        it "emails the creator" do
+        it "emails the creator without flagging it as a format rejection" do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, nil, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
         end
       end
 
       describe "account flagged as unusable by Stripe" do
+        let(:error_message) { "This bank account can't be used. Contact support at https://support.stripe.com/contact if you think this is an error." }
+
         before do
-          error_message = "This bank account can't be used. Contact support at https://support.stripe.com/contact if you think this is an error."
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account", code: "bank_account_unusable"))
         end
 
@@ -9517,14 +9603,15 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end
 
       describe "account rejected because previous payouts failed" do
+        let(:error_message) { "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error." }
+
         before do
-          error_message = "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account"))
         end
 
@@ -9532,7 +9619,7 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end

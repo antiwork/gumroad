@@ -12,6 +12,29 @@ class Order::PreparePaymentIntentService
   # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
   # buyer the one action that works: pick a different payment method.
   KLARNA_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Klarna supports. Please choose a different payment method (you have not been charged)."
+  PIX_PAYMENT_METHOD_TYPE = Checkout::PaymentMethodResolver::PIX_PAYMENT_METHOD_TYPE
+  # Same reasoning as the Klarna message above: a Pix amount-window rejection is deterministic for
+  # this cart, so telling the buyer to try again would send them in a loop.
+  PIX_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Pix supports. Please choose a different payment method (you have not been charged)."
+  # On a cross-border Pix payment charged on a GUMROAD-HELD account, Gumroad absorbs the Brazilian
+  # IOF tax on the buyer's behalf so the amount in their banking app matches the price checkout
+  # quoted them, and recovers it from the seller as a fee component
+  # (Purchase::PIX_IOF_FEE_PER_THOUSAND) — the ruling on gumroad-private#1305. Stripe's default is
+  # the opposite (`never`, marking the buyer's amount up 3.5%), which would undo the whole point of
+  # showing an honest local-currency price.
+  #
+  # The option is about the buyer's amount, so it is sent on every cross-border Pix intent — not
+  # only the ones Gumroad settles. On a direct charge to a non-Brazilian connected account the tax
+  # comes out of the seller's own settlement and Gumroad absorbs nothing, so the option is sent and
+  # no fee is billed back. Withheld only on a direct charge to a Brazilian connected account, which
+  # stays inside Brazil and so incurs no IOF at all — see #pix_iof_applies?.
+  PIX_AMOUNT_INCLUDES_IOF = "always"
+  # How long the buyer has to pay the Pix key in their banking app before it expires. Stripe's
+  # default is 4 hours; ours is 30 minutes because the purchase sits in progress until the payment
+  # lands and the product is only delivered on settlement — a buyer who wandered off is better
+  # served by a clean expiry (and a re-purchase) than by a key that outlives their session by
+  # hours. Also keeps the pending window near the abandonment worker's own horizon.
+  PIX_EXPIRES_AFTER_SECONDS = 30.minutes.to_i
 
   def initialize(order:, params:, confirmation_token:)
     @order = order
@@ -80,6 +103,14 @@ class Order::PreparePaymentIntentService
       end
     end
 
+    # The client-confirmed charge includes this seller's free/test purchases for receipts even
+    # though they do not contribute to its amount. Keep them in the currency/method-set basis too:
+    # the Payment Element saw every cart item, so omitting a free item here could create an intent
+    # in a different currency from the Element that minted the ConfirmationToken.
+    def charge_purchases
+      @charge_purchases ||= purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
+    end
+
     # One ConfirmationToken funds one PaymentIntent, so re-check the single-seller constraint
     # server-side before charging a crafted cart.
     def block_multiple_sellers
@@ -145,6 +176,14 @@ class Order::PreparePaymentIntentService
       purchases_to_charge.each do |purchase|
         purchase.card_country = country
         purchase.card_country_source = CARD_COUNTRY_SOURCE
+        # Record the selected method now, before fees are computed, for the methods whose fees
+        # depend on it: a Pix purchase carries the Brazilian IOF component (see
+        # Purchase::PIX_IOF_FEE_PER_THOUSAND), so calculate_fees has to know it is a Pix payment
+        # before the intent amount is derived from it. Stripe re-confirms the method from the
+        # settled charge afterwards (Purchase::FinalizeConfirmedChargeService), so this is a
+        # pre-charge seed rather than the final word. Left untouched for other methods, which
+        # record card_type from the confirmed charge exactly as before.
+        purchase.card_type = CardType::PIX if pix_selected?
       end
     end
 
@@ -154,8 +193,9 @@ class Order::PreparePaymentIntentService
     # Stripe-owned funding-source countries, safe to trust for PPP verification. US-locked methods
     # (Cash App Pay, ACH) expose no country in their preview blocks, but Stripe only lets a US Cash
     # App account or US bank account fund them — the region lock IS the funding country, so verify
-    # them as US (U13's region-locked bucket). UPI has the same property for India. We deliberately
-    # do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
+    # them as US (U13's region-locked bucket). UPI has the same property for India, and Pix for
+    # Brazil (both settle over domestic rails the buyer can only reach from a local bank account).
+    # We deliberately do NOT fall back to buyer-supplied billing_details: that is checkout-form input, so trusting it
     # would let a buyer spoof the discounted country. When Stripe exposes no funding country and the
     # method has no region lock, the value stays nil and a PPP-discounted purchase fails closed. Uses
     # [] access because a Stripe::StripeObject raises on a missing attribute reader but returns nil
@@ -204,8 +244,16 @@ class Order::PreparePaymentIntentService
     def region_locked_country(method_type)
       return Checkout::PaymentMethodResolver::US_ALPHA2 if Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
       return Checkout::PaymentMethodResolver::IN_ALPHA2 if Checkout::PaymentMethodResolver::IN_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
+      return Checkout::PaymentMethodResolver::BR_ALPHA2 if Checkout::PaymentMethodResolver::BR_LOCKED_PAYMENT_METHOD_TYPES.include?(method_type)
 
       nil
+    end
+
+    # The buyer picked Pix in the Payment Element. Pix is the only method today whose intent needs
+    # per-method options at create time and whose fee composition differs, so both call this rather
+    # than re-deriving the check.
+    def pix_selected?
+      @previewed_payment_method_type == PIX_PAYMENT_METHOD_TYPE
     end
 
     def block_purchasing_power_parity_mismatches
@@ -242,6 +290,104 @@ class Order::PreparePaymentIntentService
         amount_cents <= Checkout::PaymentMethodResolver::KLARNA_MAX_USD_CHARGE_CENTS
     end
 
+    # Stripe enforces Pix's transaction window at confirm, and a cart outside it can never succeed
+    # with Pix no matter how many times the buyer retries — so fail the order closed here, before
+    # any intent exists, with a message that names the one action that works. Same shape as the
+    # Klarna gate above; the difference is that a Pix ConfirmationToken can only ever confirm as
+    # Pix, so there is no "silently drop the method and let their card through" branch.
+    def block_pix_amount_outside_window(presentment)
+      return false unless pix_selected?
+
+      # A Pix payment normally always has a BRL presentment (Pix forces BRL), so a missing one is
+      # our own state being wrong, not a cart the buyer can fix by picking a cheaper basket. The one
+      # way to reach here without a presentment is a Pix token confirming while the seller's
+      # buyer-currency flags are off, which is what a rolled-back local-method rollout looks like:
+      # the presentment layer no longer runs, but a token minted before the rollback can still
+      # arrive. (With the flags on, prepare_unconfirmed_charge's own nil-presentment guard fails the
+      # order before this method is ever called.) Fail closed either way, but keep the two causes
+      # distinguishable: PIX_AMOUNT_OUTSIDE_WINDOW is what monitoring watches to see how often real
+      # carts fall outside Stripe's window, and folding our own broken state into that number would
+      # make the metric mean two things at once. The buyer gets the generic retry message, which is
+      # the right advice here: the same cart succeeds once the flags are back on.
+      if presentment.blank?
+        Rails.logger.error("Pix payment blocked for order #{order.id}: no BRL presentment record exists at prepare time, so the presentment layer did not run for this Pix cart (most likely the seller's buyer-currency flags are off)")
+        cleanup_prepare_time_presentment_records
+        fail_purchases_with(GENERIC_CHARGE_ERROR)
+        return true
+      end
+
+      return false if pix_amount_within_window?(presentment)
+
+      Rails.logger.error("Pix payment blocked for order #{order.id}: charged amount #{amount_cents} USD cents / #{presentment.presentment_total_cents} presentment cents is outside Stripe's Pix window")
+      purchases_to_charge.each { _1.error_code = PurchaseErrorCode::PIX_AMOUNT_OUTSIDE_WINDOW if _1.error_code.blank? }
+      # The snapshot belongs to an intent that will never exist, so drop it rather than orphaning it.
+      cleanup_prepare_time_presentment_records
+      fail_purchases_with(PIX_AMOUNT_INELIGIBLE_MESSAGE)
+      true
+    end
+
+    # Each of Stripe's two Pix bounds is compared against the amount already denominated in that
+    # bound's own currency: the 0.50 BRL floor against the BRL presentment total the intent is
+    # created with, and the 3,000 USD ceiling against the canonical USD total. Nothing is converted,
+    # so no FX rate can drift the answer. Callers guarantee a presentment exists — the blank case is
+    # handled as an internal fault by block_pix_amount_outside_window above.
+    def pix_amount_within_window?(presentment)
+      presentment.presentment_total_cents >= Checkout::PaymentMethodResolver::PIX_MIN_BRL_CHARGE_CENTS &&
+        amount_cents <= Checkout::PaymentMethodResolver::PIX_MAX_USD_CHARGE_CENTS
+    end
+
+    # Per-method options Stripe wants at intent CREATE time. Only sent when the buyer actually
+    # picked Pix — Stripe rejects options for a method the intent doesn't list, and the previewed
+    # method is what decides whether pix rides this intent at all.
+    #
+    # amount_includes_iof only makes sense on a cross-border Pix payment. IOF is a Brazilian tax on
+    # transactions that involve foreign exchange, so it applies whenever the money leaves Brazil;
+    # that is the case the option exists for (it tells Stripe to bill the buyer exactly the listed
+    # price and take the tax out of what settles, rather than Stripe's default of marking the
+    # buyer's amount up by the tax — see Purchase::PIX_IOF_FEE_PER_THOUSAND). When the charge is
+    # created directly on a seller's own BRAZILIAN Stripe account the payment stays inside Brazil,
+    # there is no foreign exchange and therefore no IOF. Sending the option on that intent would be
+    # asking Stripe to price a tax that does not exist, and an option Stripe does not accept makes
+    # the whole intent create fail — which takes card down with it for that checkout, the failure
+    # shape from gumroad-private#1026.
+    #
+    # Nothing changes for today's traffic, where every Pix intent is created on the platform
+    # account; this is the gate that keeps the option correct once a connected account can reach
+    # Pix at all (gumroad-private#1442 widened the settlement gate that used to make it
+    # unreachable).
+    #
+    # expires_after_seconds is unconditional: it is a property of how long we are willing to hold
+    # the purchase open, not of who settles the money.
+    def pix_payment_method_options
+      return nil unless pix_selected?
+
+      pix_options = { expires_after_seconds: PIX_EXPIRES_AFTER_SECONDS }
+      pix_options[:amount_includes_iof] = PIX_AMOUNT_INCLUDES_IOF if pix_iof_applies?
+
+      { pix: pix_options }
+    end
+
+    # True when the Pix payment crosses Brazil's border, which is what makes it subject to IOF.
+    # The only Pix charge that does NOT cross the border is one created directly on a seller's own
+    # Brazilian connected account; a Gumroad-held account is domiciled outside Brazil, and so is a
+    # connected account in any other country.
+    #
+    # Deliberately keyed on the account's COUNTRY, not on who owns it, and so deliberately NOT the
+    # same question Purchase#pix_iof_fee_per_thousand asks. The two gates answer different things:
+    # this one asks "is this payment cross-border, so does the tax exist at all", while the fee asks
+    # "did Gumroad absorb the tax and therefore have a cost to recover from the seller". They part
+    # company on a direct charge to a non-Brazilian connected account — the payment is cross-border
+    # so IOF applies and the option must be sent, but the tax comes out of the seller's own
+    # settlement rather than Gumroad's, so there is nothing for Gumroad to bill back. Nothing
+    # restricts Pix to Brazilian connected accounts: Checkout::PaymentMethodResolver's
+    # BR_LOCKED_PAYMENT_METHOD_TYPES gate is on the BUYER's country, and the only per-account
+    # condition is the Stripe capability snapshot, which sellers manage themselves.
+    #
+    # A missing merchant account means the platform account, which is outside Brazil.
+    def pix_iof_applies?
+      !merchant_account&.is_a_brazilian_stripe_connect_account?
+    end
+
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at
     # create time, so run it before creating the PaymentIntent.
     def block_purchases_with_blocked_customer_emails
@@ -276,6 +422,10 @@ class Order::PreparePaymentIntentService
       return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && method_forced_presentment_required?
 
       @charge_with_prepare_time_presentment = charge if presentment.present?
+      # Runs after the presentment because Pix's floor is denominated in BRL, which only the
+      # presentment knows the charged amount in. Any rows persisted above are cleaned up inside the
+      # gate, since a blocked order never gets an intent for them to belong to.
+      return if block_pix_amount_outside_window(presentment)
       charge_intent = create_unconfirmed_intent(charge, presentment)
       if charge_intent.nil?
         # The presentment rows were persisted before the intent create failed, and the
@@ -318,7 +468,6 @@ class Order::PreparePaymentIntentService
       # finalize's send_charge_receipts covers them (Order::ChargeService assigns every purchase in
       # a seller group to its charge). Scoped to this charge's seller so a free item from another
       # seller in a mixed cart isn't misattributed. The charge amount stays paid-only.
-      charge_purchases = purchases_to_charge + free_or_test_purchases.select { _1.seller_id == seller.id }
       charge_purchases.each do |purchase|
         purchase.charge = charge
         purchase.save!
@@ -347,6 +496,14 @@ class Order::PreparePaymentIntentService
       return nil if method_type.blank?
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type) || element_mount_forced_currency
       return nil if forced_currency.blank?
+      unless free_and_test_lines_share_currency?(forced_currency)
+        # Every other way this method returns nil is either uninteresting (no forced currency at
+        # all) or logged by Charge::MethodForcedPresentment itself. This branch skips the service
+        # entirely, so without a line here an operator investigating "iDEAL checkouts fail for
+        # this cart shape" sees only the generic charge error the caller raises, with no reason.
+        Rails.logger.info("Skipping method-forced presentment for order #{order.id}: a free or test line is not priced in #{forced_currency}")
+        return nil
+      end
 
       Charge::MethodForcedPresentment.new(
         charge:,
@@ -364,21 +521,36 @@ class Order::PreparePaymentIntentService
 
     # The currency the Payment Element was mounted in when it differs from USD, derived
     # from the same basis as Checkout::StripePaymentPresenter#method_forced_shape?
-    # (seller flags + a resolver result that exposes a capability-eligible local method + a
-    # single purchase whose product is priced in a currency some payment method forces). Nil
-    # everywhere else — flags off, no launched method for the currency in live mode, USD-priced
-    # or multi-item carts — which keeps every other checkout on the canonical USD intent.
+    # (seller flags + a resolver result that exposes a capability-eligible local method +
+    # purchases all priced in the same currency some payment method forces). Nil everywhere else —
+    # flags off, no launched method for the currency in live mode, USD-priced or mixed-currency
+    # carts — which keeps every other checkout on the canonical USD intent.
     def element_mount_forced_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return nil unless purchases_to_charge.one?
 
-      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency = uniform_method_forced_purchase_currency
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
       return nil unless payment_method_resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == product_currency
       end
 
       product_currency
+    end
+
+    # The Payment Element's currency basis is every cart line the buyer saw, and prepare mirrors
+    # that in #charge_purchases — paid lines plus this seller's free/test lines. The presentment
+    # snapshot, though, is built from the PAID lines only, because a free line contributes no
+    # money to the charge. That asymmetry is safe only while the free/test lines are priced in
+    # the same currency as the paid ones: a free line priced in a different currency makes the
+    # cart non-uniform, so the Element mounted in canonical USD, and building a forced-currency
+    # presentment from the paid subset alone would create an intent the ConfirmationToken can
+    # never confirm. Returning false here leaves the checkout on the canonical USD intent, and
+    # for a token minted on a forced-currency element #method_forced_presentment_required? turns
+    # that into a clean synchronous failure instead of an unconfirmable intent.
+    def free_and_test_lines_share_currency?(forced_currency)
+      (charge_purchases - purchases_to_charge).all? do |purchase|
+        purchase.link.price_currency_type.to_s.downcase == forced_currency
+      end
     end
 
     # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency
@@ -406,9 +578,8 @@ class Order::PreparePaymentIntentService
     # this shape check still prevents us from creating a USD intent that Stripe will reject.
     def client_reported_mount_currency
       return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return nil unless purchases_to_charge.one?
 
-      product_currency = purchases_to_charge.first.link.price_currency_type.to_s.downcase
+      product_currency = uniform_method_forced_purchase_currency
       return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
       return nil unless params[:payment_element_mount_currency].to_s.downcase == product_currency
 
@@ -438,7 +609,8 @@ class Order::PreparePaymentIntentService
         idempotency_key: "#{presentment&.idempotency_key || "deferred_intent_#{charge.external_id}"}_#{confirmation_token}",
         payment_method_types: intent_payment_method_types(presentment),
         currency: presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY,
-        stripe_fx_quote_id: presentment&.stripe_fx_quote_id
+        stripe_fx_quote_id: presentment&.stripe_fx_quote_id,
+        payment_method_options: pix_payment_method_options
       )
     rescue ChargeProcessorCardError => e
       # The seller-proceeds guard is an expected buyer-facing rejection, not a generic prepare
@@ -641,11 +813,11 @@ class Order::PreparePaymentIntentService
         commission: purchases_to_charge.any? { _1.link.native_type == Link::NATIVE_TYPE_COMMISSION },
         buyer_country: buyer_country_alpha2,
         ppp_discounted: ppp_verification_applies?,
-        # Same basis as the presenter's cart_product_currency (the single item's pricing
-        # currency, nil for multi-item carts) so both sides resolve identical method sets —
-        # the Element's list and the deferred intent's list must match or Stripe rejects
-        # the ConfirmationToken.
-        cart_product_currency: purchases_to_charge.one? ? purchases_to_charge.first.link.price_currency_type.to_s.downcase : nil,
+        # Same basis as the presenter's cart_product_currency (a uniform forced pricing currency,
+        # nil for mixed-currency/non-forced carts) so both sides resolve identical method sets —
+        # the Element's list and the deferred intent's list must match or Stripe rejects the
+        # ConfirmationToken.
+        cart_product_currency: uniform_method_forced_purchase_currency,
         # Klarna's amount-window input (see the resolver), on the SAME basis the presenter used
         # when mounting the Element — nil unless every product is USD-priced, and the pre-tax,
         # pre-discount, quantity-inclusive item total when they are. Matching the basis matters
@@ -682,6 +854,24 @@ class Order::PreparePaymentIntentService
 
       original_per_unit = offer_code.original_price(purchase.displayed_price_per_unit_cents)
       original_per_unit.present? ? original_per_unit * purchase.quantity : purchase.displayed_price_cents
+    end
+
+    # The cart's uniform forced pricing currency, or nil. Mirrors the presenter's
+    # #uniform_method_forced_currency: a forced-currency method (iDEAL/Bancontact/UPI) is only
+    # resolvable when EVERY purchase in the charge is priced in the one currency that method
+    # forces, because that is the only shape where a single PaymentIntent can be created in that
+    # currency. Mixed-currency charges and USD charges return nil so the resolver falls back to
+    # the canonical USD method set — the same answer the presenter gave when the Element mounted.
+    def uniform_method_forced_purchase_currency
+      return nil if charge_purchases.empty?
+
+      currencies = charge_purchases.map { _1.link.price_currency_type.to_s.downcase }.uniq
+      return nil unless currencies.one?
+
+      currency = currencies.first
+      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+
+      currency
     end
 
     # U13: mirrors the presenter's PPP input so the deferred intent's method set equals the Payment
