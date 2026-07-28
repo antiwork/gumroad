@@ -10,14 +10,14 @@ type OptionForBundlePricing = { price_difference_cents: number | null };
 // BundleProduct#standalone_price_cents on the server: the bundled product's own
 // price plus the price difference of the one child variant the seller pinned
 // when they built the bundle, times the quantity.
-const getStandalonePrice = (product: ProductForBundlePricing) =>
+export const getStandalonePrice = (product: ProductForBundlePricing) =>
   product.bundle_products.reduce(
     (totalStandalonePrice, bundleProduct) => totalStandalonePrice + bundleProduct.price,
     0,
   );
 
-// The price a bundle's strikethrough ("original price") should compare against,
-// or null when there is no honest comparison to show.
+// The price a bundle's price tag should show struck through as the "original
+// price", or null when there is no honest comparison to show.
 //
 // A bundle can have versions of its own, which sellers use as tiers (a licence
 // level, for example). Those bundle versions are unrelated to the child variants
@@ -25,7 +25,7 @@ const getStandalonePrice = (product: ProductForBundlePricing) =>
 // built, so the standalone sum describes exactly one tier — the one that adds
 // nothing to the bundle's price. Picking a more expensive tier raises the price
 // the buyer pays while leaving the standalone sum untouched, so the comparison
-// silently understates (or misstates) the saving.
+// silently understates the saving.
 //
 // Rather than show a reference price that does not describe what is being sold,
 // we show no strikethrough on those tiers. Sellers who want a comparison on

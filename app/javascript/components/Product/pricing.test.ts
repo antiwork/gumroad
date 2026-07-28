@@ -31,4 +31,12 @@ describe("getBundleComparisonPriceCents", () => {
     expect(getBundleComparisonPriceCents(bundle, { price_difference_cents: 15000 })).toBeNull();
     expect(getBundleComparisonPriceCents(bundle, { price_difference_cents: 75000 })).toBeNull();
   });
+
+  // A single bundled product still gets a comparison — the guard is about the
+  // selected tier, not the size of the bundle.
+  it("compares a one-product bundle on its free tier", () => {
+    expect(getBundleComparisonPriceCents({ bundle_products: [{ price: 3500 }] }, { price_difference_cents: 0 })).toBe(
+      3500,
+    );
+  });
 });
