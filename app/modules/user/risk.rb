@@ -147,15 +147,14 @@ module User::Risk
     enable_accounts_with_same_stripe_fingerprint
   end
 
-  # These two mirror suspend_sellers_other_accounts: when an account is cleared, the sibling
-  # accounts that were auto-suspended alongside it are cleared too.
+  # True when the most recent suspension on this account was written by the account cascade
+  # (SuspendAccountsWithPaymentAddressWorker suspends siblings under that author name) rather
+  # than by a review of this account on its own merits.
   #
-  # Only the ones this cascade suspended. The suspend side skips accounts that were already
-  # suspended (`User.not_suspended`), so an account suspended on its own merits never entered
-  # the cascade and must not be released by it — its suspension was a separate decision that
-  # nobody here has reviewed.
-  def cascade_suspended_sibling?(user)
-    last_suspension = user.comments
+  # Called from inside the compliant transition while the row is locked, never from the
+  # cascade itself — see #release_cascade_suspended_sibling for why.
+  def suspended_by_account_cascade?
+    last_suspension = comments
       .where(comment_type: Comment::COMMENT_TYPE_SUSPENDED)
       .order(:created_at, :id)
       .last
@@ -163,13 +162,13 @@ module User::Risk
     last_suspension&.author_name == "suspend_sellers_other_accounts"
   end
 
+  # These two mirror suspend_sellers_other_accounts: when an account is cleared, the sibling
+  # accounts that were auto-suspended alongside it are cleared too.
   def enable_accounts_with_same_payment_address
     return if payment_address.blank?
 
     User.where(payment_address:).where.not(id:).each do |user|
-      next if user.suspended? && !cascade_suspended_sibling?(user)
-
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts, clear_suspension: true)
+      release_cascade_suspended_sibling(user, "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as payment address #{payment_address} is now unblocked (from User##{id})")
     end
   end
 
@@ -184,11 +183,36 @@ module User::Risk
       .pluck(:user_id)
 
     User.where(id: user_ids_with_same_fingerprint).each do |user|
-      next if user.suspended? && !cascade_suspended_sibling?(user)
-
       matching_fingerprint = (fingerprints & user.alive_bank_accounts.pluck(:stripe_fingerprint)).first
-      user.mark_compliant!(author_name: "enable_sellers_other_accounts", content: "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})", skip_transition_callback: :enable_sellers_other_accounts, clear_suspension: true)
+      release_cascade_suspended_sibling(user, "Marked compliant automatically on #{Time.current.to_fs(:formatted_date_full_month)} as bank account fingerprint #{matching_fingerprint} is now unblocked (from User##{id})")
     end
+  end
+
+  # Releases one sibling account.
+  #
+  # The cascade may only undo its own work. The suspend side skips accounts that are already
+  # suspended (`User.not_suspended`), so an account suspended on its own merits never entered
+  # the cascade and must not be released by it — that suspension was a separate decision that
+  # nobody here has reviewed.
+  #
+  # Asking "did the cascade suspend this sibling?" here would be asking too early: another
+  # enforcement lane can suspend the sibling in the moment between the answer and the write,
+  # and the write would then clear a suspension the answer never saw. So we pass the question
+  # instead of the answer — `clear_suspension: :if_suspended_by_account_cascade` — and the
+  # transition resolves it while holding the row lock.
+  #
+  # A refusal means another lane owns this sibling's suspension; it stays suspended and the
+  # remaining siblings are still processed. Nothing has been written at the point the
+  # transition refuses, so there is no partial update to unwind.
+  def release_cascade_suspended_sibling(user, content)
+    user.mark_compliant!(
+      author_name: "enable_sellers_other_accounts",
+      content:,
+      skip_transition_callback: :enable_sellers_other_accounts,
+      clear_suspension: :if_suspended_by_account_cascade
+    )
+  rescue SuspensionClearNotAuthorizedError
+    nil
   end
 
   def unblock_seller_ip!
@@ -246,12 +270,24 @@ module User::Risk
     return true unless SUSPENDED_STATES.include?(persisted_risk_state)
 
     params = transition.args.first || {}
-    unless params[:clear_suspension]
+    unless suspension_clear_authorized?(params[:clear_suspension])
       raise SuspensionClearNotAuthorizedError,
-            "refusing to clear #{persisted_risk_state} without clear_suspension: true"
+            "refusing to clear #{persisted_risk_state}: the caller did not authorize clearing this suspension"
     end
 
     true
+  end
+
+  # `clear_suspension` is either an unconditional yes (a human admin, or an internal-API
+  # caller who passed clear_suspension=true) or the account cascade's conditional yes,
+  # `:if_suspended_by_account_cascade`. The conditional form is resolved here rather than at
+  # the call site because only here are we holding the row lock: the ownership question and
+  # the write that depends on the answer have to be the same moment, or a suspension landing
+  # in between gets cleared by an authorization that never saw it.
+  def suspension_clear_authorized?(clear_suspension)
+    return suspended_by_account_cascade? if clear_suspension == :if_suspended_by_account_cascade
+
+    !!clear_suspension
   end
 
   def add_user_comment(transition)

@@ -83,6 +83,44 @@ describe User::Risk do
       expect(sibling.reload).to be_suspended_for_tos_violation
     end
 
+    it "leaves a sibling alone when another lane suspends it mid-cascade" do
+      # Ownership of the suspension is decided inside the transition, under the row lock, not
+      # when the cascade picks the sibling up. Here the sibling starts out cascade-suspended
+      # (so any pick-up-time check would wave it through) and a separate piracy review
+      # suspends it on its own merits before the transition runs.
+      payment_address = "shared@example.com"
+      parent = create(:user, payment_address:, user_risk_state: "suspended_for_fraud")
+      sibling = create(:user, payment_address:)
+      sibling.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
+
+      allow_any_instance_of(User).to receive(:mark_compliant!).and_wrap_original do |original, *args|
+        if original.receiver.id == sibling.id
+          User.find(sibling.id).update_column(:user_risk_state, "suspended_for_tos_violation")
+          Comment.create!(commentable: sibling, comment_type: Comment::COMMENT_TYPE_SUSPENDED,
+                          author_name: "piracy_review", content: "Suspended for selling pirated content")
+        end
+        original.call(*args)
+      end
+
+      parent.mark_compliant!(author_id: admin.id, clear_suspension: true)
+
+      expect(sibling.reload).to be_suspended_for_tos_violation
+    end
+
+    it "still releases the other siblings when one of them is refused" do
+      payment_address = "shared@example.com"
+      parent = create(:user, payment_address:, user_risk_state: "suspended_for_fraud")
+      own_merits_sibling = create(:user, payment_address:)
+      own_merits_sibling.suspend_for_tos_violation!(author_id: admin.id, content: "piracy")
+      cascade_sibling = create(:user, payment_address:)
+      cascade_sibling.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
+
+      parent.mark_compliant!(author_id: admin.id, clear_suspension: true)
+
+      expect(own_merits_sibling.reload).to be_suspended_for_tos_violation
+      expect(cascade_sibling.reload).to be_compliant
+    end
+
     it "leaves a suspension in place when the low-balance probation check runs after it" do
       # This check lifts probation once a seller's balance recovers. It knows nothing about
       # why an account might be suspended, so a suspension written while it was in flight
