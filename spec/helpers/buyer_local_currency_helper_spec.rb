@@ -270,5 +270,55 @@ describe CurrencyHelper do
 
       3.times { helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4") }
     end
+
+    # Checkout refuses to quote these product shapes (Checkout::BuyerCurrencyQuote#quotable_product?),
+    # so it charges canonical USD for them. Showing a converted price here would put the same
+    # unexplained change between the product page and the total that this gate exists to prevent.
+    context "for a product shape the checkout refuses to quote" do
+      it "hides the buyer currency for a membership, which is charged one period rather than the cart total" do
+        membership = create(:membership_product, user: seller, price_cents: 1000)
+
+        props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a preorder, which charges nothing at checkout time" do
+        preorder = create(:product, user: seller, price_cents: 1000, price_currency_type: "usd", is_in_preorder_state: true)
+
+        props = helper.buyer_currency_display_props(product: preorder, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a free trial, which charges nothing up front" do
+        free_trial = create(:membership_product, user: seller, price_cents: 1000, free_trial_enabled: true,
+                                                 free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+
+        props = helper.buyer_currency_display_props(product: free_trial, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a commission, which charges only a deposit at checkout" do
+        # Commission products are only allowed once the seller's account is old enough
+        # (User#eligible_for_service_products?), so age this seller past that threshold.
+        seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+        commission = create(:product, user: seller, price_cents: 1000, price_currency_type: "usd",
+                                      native_type: Link::NATIVE_TYPE_COMMISSION)
+
+        props = helper.buyer_currency_display_props(product: commission, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "hides the buyer currency for a product offering an installment plan, which charges one installment" do
+        create(:product_installment_plan, link: product)
+
+        props = helper.buyer_currency_display_props(product: product.reload, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+    end
   end
 end
