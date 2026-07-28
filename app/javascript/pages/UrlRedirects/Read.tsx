@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, SearchMinus, SearchPlus, X } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import type { Book, Rendition, Location as EpubLocation } from "epubjs";
+import type { PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFSinglePageViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import * as React from "react";
 import typia from "typia";
@@ -237,6 +238,12 @@ const PdfReader = ({
       ).default;
 
       const { EventBus, PDFLinkService, PDFSinglePageViewer } = await import("pdfjs-dist/legacy/web/pdf_viewer.mjs");
+      // The three dynamic imports above are a real network window on a first visit (the pdf_viewer
+      // chunk is not small). Bail before constructing anything if the reader closed during them,
+      // or we build a viewer against a detached container, overwrite the ref the cleanup just
+      // nulled, and issue the full getDocument fetch anyway.
+      if (isCancelled) return;
+
       const eventBus = new EventBus();
       const pdfLinkService = new PDFLinkService({ eventBus });
       const pdfSinglePageViewer = new PDFSinglePageViewer({ container, eventBus, linkService: pdfLinkService });
@@ -269,6 +276,7 @@ const PdfReader = ({
       const pdf = await pdfjs.getDocument(url).promise;
       // Closed while the document was downloading and parsing: release it instead of handing it to
       // a viewer that is already gone.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set by the effect's cleanup closure, which the compiler cannot see from here
       if (isCancelled) {
         void pdf.destroy();
         return;
@@ -277,6 +285,17 @@ const PdfReader = ({
       // The document itself has to be destroyed on unmount, not just detached from the viewer.
       const previousTeardown = teardown;
       teardown = () => {
+        // setDocument(null) is the real teardown, not cleanup(): in pdfjs's own source it
+        // dispatches "pagesdestroy", then calls _cancelRendering() and _resetView(). cleanup()
+        // only resets pages whose rendering has already FINISHED, so on an unmount that lands
+        // mid-render the in-flight render task would be rejected by destroy() below and logged as
+        // a renderView error.
+        //
+        // The bundled implementation checks `if (!pdfDocument) return` immediately after resetting,
+        // so null is its detach path — but the .d.ts types the parameter as a required
+        // PDFDocumentProxy, so this needs the cast.
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+        pdfSinglePageViewer.setDocument(null as unknown as PDFDocumentProxy);
         previousTeardown();
         void pdf.destroy();
       };
