@@ -81,6 +81,37 @@ class Checkout::StripePaymentPresenter
     # adopted billing address moves the tax location is held and re-confirmed rather than
     # submitted (resolveHeldWalletPayment). Ramped per seller by
     # BUYER_CURRENCY_WALLETS_FEATURE_NAME so it can be pulled instantly.
+    #
+    # This branch has to come before the client-confirm one below, and the reason is a
+    # correctness constraint rather than a preference. When a cart is a presentment candidate
+    # and the buyer's currency supports quoting, the surcharge endpoint quotes it, and the
+    # browser then both displays the quoted local total and submits the quote token with the
+    # payment. The client-confirm lane cannot honor a token:
+    # Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote fails the
+    # purchase closed rather than charge canonical USD behind a local-currency total, so
+    # sending a quoted cart there makes every payment attempt on it fail. The rule: if the
+    # surcharge endpoint would quote the cart, checkout must mount a lane that can honor the
+    # quote (this element, or CardElement via the fallback above).
+    #
+    # A candidate can also go unquoted, and that cart takes this branch too. A buyer whose
+    # GeoIP currency is USD sees a candidate display for a non-USD listing, but the quote
+    # service returns nothing for USD buyers, so the cart renders plain canonical USD and
+    # submits no token. That is safe; it does mean this element replaces the local-method
+    # tabs for those viewers.
+    #
+    # The two shapes really can overlap, and this is where that is decided. A product listed in
+    # a forced currency, bought by someone whose own currency is different — a EUR product and a
+    # Canadian buyer — is both a quote candidate and a method-forced cart. The quote lane takes
+    # it: the buyer sees CA$, which is the point of quoting, and the local methods it gives up
+    # (iDEAL, Bancontact) require a bank in the country that issues them, so a Canadian buyer
+    # could never have paid with them anyway.
+    #
+    # The carts the method-forced lane exists for are untouched, because they are not
+    # candidates. That lane serves a buyer paying a product listed in their OWN currency (a
+    # Dutch buyer on a EUR product, a Brazilian buyer on a BRL one — #6346), and
+    # buyer_currency_display_props returns display_mode "default" when the two currencies
+    # match, so those carts are never quoted, produce no candidate here, and fall through to
+    # the client-confirm branch below with their local method tabs intact.
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(
         STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -378,14 +409,24 @@ class Checkout::StripePaymentPresenter
         #      forced-currency intent in Order::PreparePaymentIntentService); kicking it back
         #      to CardElement would make the iDEAL/Bancontact tabs unreachable for any tester
         #      whose GeoIP currency differs from the product's.
-        #   2. The buyer-currency card shape (one seller's USD-priced one-time items — the
-        #      same cart shape the eligibility service's card mode accepts), which mounts the
+        #   2. The buyer-currency card shape (one seller's one-time items, each priced in a
+        #      currency other than the buyer's own — the same cart shape the eligibility
+        #      service's card mode accepts), which mounts the
         #      server-confirm Payment Element in the buyer's quote currency (see props).
         # Non-flagged sellers never produce a candidate (buyer_presentment_candidate? checks
         # the seller flags), so neither branch changes behavior for unflagged checkouts. The
         # card shape (2) runs in live mode since the production rollout; the method-forced
         # shape (1) runs in live mode only when the resolver exposes a launched local method
         # whose Connect-account capabilities can accept the product's forced currency.
+        #
+        # Shape 1 is still reachable even though props now always hands a quoted cart to the
+        # buyer-currency element. The gap between "is a candidate" and "gets the element" is a
+        # product that OFFERS an installment plan: it is a candidate (the display converts) but
+        # the element shape rejects it, because quote creation cannot see whether the buyer
+        # picked installments. Such a cart is never quoted either — quotable_product? rejects
+        # installment-plan products — so it carries no token and the client-confirm lane can
+        # charge it safely. Keeping shape 1 listed means it keeps the local-method tabs instead
+        # of being kicked back to CardElement.
         supported = (method_forced_shape?(items) && client_confirm_eligible?) ||
           buyer_currency_presentment_element_shape?(items)
         return "buyer_currency_presentment_unsupported" unless supported
@@ -396,7 +437,7 @@ class Checkout::StripePaymentPresenter
 
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
-    # one-time, USD-priced, non-commission items that all belong to ONE seller and are each a
+    # one-time, non-commission items that all belong to ONE seller and are each a
     # presentment candidate (candidate? already covers the seller's flags and an active
     # buyer-local display). One seller matters because the order pipeline creates one
     # charge per seller, and the quote locks the cart total for a single PaymentIntent —
@@ -404,6 +445,16 @@ class Checkout::StripePaymentPresenter
     # Question 9 on issue #5419), so they stay on CardElement. Products that offer installments
     # stay on CardElement even when the buyer chooses a one-time purchase because quote creation
     # cannot see that choice and rejects the product.
+    #
+    # There is deliberately no condition on the currency the SELLER priced in. The quote
+    # converts the cart's canonical USD total into the buyer's currency, which works the same
+    # whether the seller listed in dollars, euros or reais. The one
+    # excluded case — a product priced in the buyer's own currency, which is withheld from
+    # quoting so an FX round trip cannot misprice it — is already excluded by
+    # buyer_currency_presentment_candidate?: the buyer-local display only turns on when the
+    # buyer's currency differs from the product's. (That cart pays its listed price only via
+    # the method-forced local-method lane; a card checkout for it charges canonical USD.)
+    #
     # Charge-time-only gates (merchant account model, wallet params, GeoIP re-check, quote
     # verification) stay in the eligibility service — when any of them falls back, the charge
     # simply runs canonical USD, which the currency-less card PaymentMethod the server-confirm
@@ -420,8 +471,7 @@ class Checkout::StripePaymentPresenter
           item[:recurrence].blank? &&
           !item[:pay_in_installments] && !item[:offers_installment_plan] &&
           !item[:is_preorder] && !item[:has_free_trial] &&
-          item[:native_type] != Link::NATIVE_TYPE_COMMISSION &&
-          item[:product_currency] == Currency::USD
+          item[:native_type] != Link::NATIVE_TYPE_COMMISSION
       end
     end
 

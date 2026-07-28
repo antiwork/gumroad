@@ -49,7 +49,9 @@ class Checkout::BuyerCurrencyEligibility
   # `direct_listed_amount` is only set by the method-forced mode: true means the
   # product is already priced in the forced currency, so the charge path can use
   # the listed price as-is and skip fetching an FX quote. For the card mode
-  # (#decision) it is always nil because that mode requires USD-priced products.
+  # (#decision) it is always nil: that mode always charges through the locked FX
+  # quote, and the one cart that could use a listed price as-is (a product priced
+  # in the buyer's own currency) is rejected by that mode instead of charged directly.
   Decision = Struct.new(:eligible, :currency, :fallback_reason, :direct_listed_amount, keyword_init: true) do
     def eligible?
       eligible
@@ -218,6 +220,13 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:multi_seller_checkout) if multi_seller_order?
     return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
+    # All purchases in an order come from the same checkout request, so any purchase's IP
+    # identifies the buyer's location.
+    buyer_currency = buyer_currency_for_ip(purchases.first.ip_address)
+    return fallback(:missing_buyer_currency) if buyer_currency.blank?
+    return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
+    return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+
     # The verified quote locked the cart total, so every purchase on the charge must
     # individually support presentment — one unsupported item invalidates the whole cart.
     # The gates here must mirror BuyerCurrencyQuote#quotable_product?: the quote token
@@ -227,15 +236,15 @@ class Checkout::BuyerCurrencyEligibility
     purchases.each do |purchase|
       return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
       return fallback(:unsupported_product_type) if unquotable_product?(purchase.link)
-      return fallback(:unsupported_product_currency) unless purchase.link.price_currency_type.to_s.downcase == Currency::USD
+      # A product already priced in the buyer's currency is withheld from the quote
+      # lane so an FX round trip can never misprice it — see the comment on
+      # BuyerCurrencyQuote#quotable_product?. (It only pays its listed price directly
+      # on the method-forced local-method lane; a card checkout for it charges
+      # canonical USD.) Any product currency other than the buyer's own is quotable,
+      # including non-USD ones.
+      return fallback(:listed_currency_is_buyer_currency) if purchase.link.price_currency_type.to_s.downcase == buyer_currency
     end
 
-    # All purchases in an order come from the same checkout request, so any purchase's IP
-    # identifies the buyer's location.
-    buyer_currency = buyer_currency_for_ip(purchases.first.ip_address)
-    return fallback(:missing_buyer_currency) if buyer_currency.blank?
-    return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
-    return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
     # Checked here (not up top with the other account gates) because the settlement
     # mismatch marker is scoped to the presentment currency, which isn't known earlier.
     return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(buyer_currency)
