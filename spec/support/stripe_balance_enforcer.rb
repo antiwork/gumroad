@@ -18,18 +18,26 @@ class StripeBalanceEnforcer
   # and, when the account is short, creates a payment method and charges
   # $999,999.99 to refill it — against the single Stripe test account every CI
   # shard shares. This used to be gated on `type: :system`, so that request was
-  # spent on every browser-spec run before a single example executed.
+  # spent on every browser-spec run before a single example executed, including
+  # the overwhelming majority that never touch a Stripe balance.
   #
-  # Nothing in the suite needs it today. Every spec that moves a Stripe balance
+  # One spec genuinely does spend it: the "past payouts" context in
+  # `spec/requests/balance_pages_spec.rb`. It is a `:js` spec (so VCR is off) and
+  # its setup calls `Payouts.create_payment`, which reaches
+  # `StripeTransferInternallyToCreator.transfer_funds_to_account` and performs a
+  # live `Stripe::Transfer` out of the shared platform balance. That context
+  # carries `spend_stripe_balance: true`, which is what keeps the top-up running
+  # for the shards that execute it.
+  #
+  # Everything else is safe to skip. Every other balance-moving spec
   # (`InstantPayoutsService`, `StripeTransferInternallyToCreator`,
-  # `StripeTransferExternallyToGumroad`) runs under `:vcr` or stubs the service,
-  # and none is a `:system` spec. The browser spec that looks like it spends funds
-  # — `balance_pages_spec.rb` — stubs `InstantPayoutsService#perform` and builds
-  # payout rows as factories.
+  # `StripeTransferExternallyToGumroad`, `payouts_spec`) runs under `:vcr` or
+  # stubs the service, and the instant-payout context in `balance_pages_spec.rb`
+  # stubs `InstantPayoutsService#perform` and builds payout rows as factories.
   #
-  # Kept as an opt-in rather than deleted: a spec that genuinely needs live funds
-  # can tag itself `spend_stripe_balance: true` and get the old behaviour for that
-  # run alone, instead of for the whole fleet.
+  # If a new spec starts moving real funds, tag it `spend_stripe_balance: true`.
+  # The symptom of forgetting is a loud, attributable `balance_insufficient` from
+  # Stripe in that one file — not a silent wrong answer.
   def self.needed_for?(examples)
     examples.any? { |example| example.metadata[:spend_stripe_balance] }
   end

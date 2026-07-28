@@ -63,10 +63,16 @@ describe StripeBalanceEnforcer do
     end
   end
 
-  describe "the premise: no spec currently needs live funds" do
-    # If someone adds a spec that genuinely spends the balance without tagging it,
-    # this is the example that should make them think.
-    it "keeps every balance-moving spec on VCR or a stub" do
+  describe "the premise: only the specs that move real funds opt in" do
+    # The claim this gate rests on. Stated as an assertion about the ONE context
+    # that genuinely transfers live funds, so that removing its tag fails here
+    # rather than surfacing as `balance_insufficient` in CI weeks later.
+    it "tags the balance-pages past-payouts context, which does a live transfer" do
+      source = File.read(Rails.root.join("spec/requests/balance_pages_spec.rb"))
+      expect(source).to include(%(describe "past payouts", spend_stripe_balance: true))
+    end
+
+    it "keeps every other balance-moving spec on VCR or a stub" do
       %w[
         spec/services/instant_payouts_service_spec.rb
         spec/business/payments/transfers/stripe/stripe_transfer_internally_to_creator_spec.rb
@@ -78,7 +84,9 @@ describe StripeBalanceEnforcer do
       end
     end
 
-    it "keeps the balance-pages browser spec on a stubbed instant payout" do
+    it "keeps the balance-pages instant-payout context on a stubbed service" do
+      # Distinct from the past-payouts context above: this one never transfers,
+      # because the service itself is stubbed.
       source = File.read(Rails.root.join("spec/requests/balance_pages_spec.rb"))
       expect(source).to include("allow_any_instance_of(InstantPayoutsService)")
     end
