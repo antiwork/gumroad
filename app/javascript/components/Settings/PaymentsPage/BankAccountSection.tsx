@@ -820,12 +820,101 @@ const BankAccountSection = ({
       pattern: "[0-9A-Za-z]{18}",
       title: "Enter your 18-character account number",
     },
+    // The countries below were left on the generic hint when the first batch above was fixed.
+    // Each one's model regex rejects "1234567890" outright, so the generic example could never
+    // have been saved. Values mirror the fixtures in spec/requests/settings/payments_spec.rb.
+    MZ: {
+      placeholder: "001234567890123456789",
+      maxLength: 21,
+      pattern: "[0-9A-Za-z]{21}",
+      title: "Enter your 21-character NIB, without the MZ IBAN prefix",
+    },
+    QA: { placeholder: "QA87CITI123456789012345678901", maxLength: 29, pattern: "[0-9A-Za-z]{29}" },
+    MK: { placeholder: "MK49250120000058907", maxLength: 19, pattern: "[0-9A-Za-z]{19}" },
+    GA: {
+      placeholder: "00001234567890123456789",
+      maxLength: 23,
+      pattern: "[0-9]{23}",
+      inputMode: "numeric",
+      title: "Enter your 23-digit account number",
+    },
+    DZ: {
+      placeholder: "00001234567890123456",
+      maxLength: 20,
+      pattern: "[0-9]{20}",
+      inputMode: "numeric",
+      title: "Enter your 20-digit RIB, digits only",
+    },
+    ET: {
+      placeholder: "0000000012345",
+      maxLength: 16,
+      pattern: "[0-9A-Za-z]{13,16}",
+      title: "Enter your 13 to 16 character account number",
+    },
+    BD: {
+      placeholder: "0000123456789",
+      maxLength: 17,
+      pattern: "[0-9A-Za-z]{13,17}",
+      title: "Enter your 13 to 17 character account number",
+    },
+    AM: {
+      placeholder: "00001234567890",
+      maxLength: 16,
+      pattern: "[0-9]{11,16}",
+      inputMode: "numeric",
+      title: "Enter your 11 to 16 digit account number",
+    },
+    AR: {
+      placeholder: "0110000600000000000000",
+      maxLength: 22,
+      pattern: "[0-9]{22}",
+      inputMode: "numeric",
+      title: "Enter your 22-digit CBU",
+    },
+    PE: {
+      placeholder: "99934500012345670024",
+      maxLength: 20,
+      pattern: "[0-9]{20}",
+      inputMode: "numeric",
+      title: "Enter your 20-digit CCI",
+    },
+    MX: {
+      placeholder: "032180000118359719",
+      maxLength: 18,
+      pattern: "[0-9]{18}",
+      inputMode: "numeric",
+      title: "Enter your 18-digit CLABE",
+    },
+    KR: {
+      placeholder: "00012345678901",
+      maxLength: 16,
+      pattern: "[0-9]{11,16}",
+      inputMode: "numeric",
+      title: "Enter your 11 to 16 digit account number",
+    },
+    NZ: {
+      placeholder: "1100000000000010",
+      maxLength: 16,
+      pattern: "[0-9]{15,16}",
+      inputMode: "numeric",
+      title: "Enter your 15 or 16 digit account number, including the bank and branch digits",
+    },
+    JP: {
+      placeholder: "1234567",
+      maxLength: 8,
+      pattern: "[0-9]{4,8}",
+      inputMode: "numeric",
+      title: "Enter your 4 to 8 digit account number, without the bank or branch code",
+    },
   };
 
   // Of the countries above, these are the ones whose expected value really is an IBAN, so the
   // field should be labelled "IBAN" rather than "Account #". Gambia is deliberately excluded:
   // it has a country-specific format but it is an 18-character local account number, not an IBAN.
-  const IBAN_SHAPED_COUNTRY_CODES = ["MA", "SN", "RS", "MD"];
+  // Mozambique is excluded for the same reason: Stripe wants the bare 21-character NIB, and the
+  // full MZ IBAN is rejected. Qatar and North Macedonia are included because Stripe rejects a
+  // bare local number for them with "must be an IBAN of the form ...".
+  const IBAN_SHAPED_COUNTRY_CODES = ["MA", "SN", "RS", "MD", "QA", "MK"];
 
   const isGibraltar = user.country_code === "GI";
   const isOman = user.country_code === "OM";

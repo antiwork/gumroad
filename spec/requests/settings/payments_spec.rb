@@ -4912,8 +4912,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("Account #", with: "MK49250120000058907")
-        fill_in("Confirm account #", with: "MK49250120000058907")
+        fill_in("IBAN", with: "MK49250120000058907")
+        fill_in("Confirm IBAN", with: "MK49250120000058907")
         fill_in("SWIFT / BIC Code", with: "AAAAMK2XXXX")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
@@ -5773,8 +5773,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "Qatar Creator")
         fill_in("SWIFT / BIC Code", with: "AAAAQAQAXXX")
-        fill_in("Account #", with: "QA87CITI123456789012345678901")
-        fill_in("Confirm account #", with: "QA87CITI123456789012345678901")
+        fill_in("IBAN", with: "QA87CITI123456789012345678901")
+        fill_in("Confirm IBAN", with: "QA87CITI123456789012345678901")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in QAR.")
