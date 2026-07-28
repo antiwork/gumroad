@@ -15,8 +15,9 @@ const MEDIA_FIELDS = [
   { name: "name", type: "string", description: "The file's display name" },
   {
     name: "extension",
-    type: "string | null",
-    description: "The uppercased file extension, e.g. PNG; null when the uploaded filename had none",
+    type: "string",
+    description:
+      "The uppercased file extension, e.g. PNG. Derived from the filename, so a filename with no extension yields the filename itself",
   },
   { name: "file_size", type: "number | null", description: "Size in bytes; null if no file is attached" },
   {
@@ -24,13 +25,13 @@ const MEDIA_FIELDS = [
     type: "string | null",
     description: "Public CDN URL for the file — this is what you embed in a custom page",
   },
+  { name: "status", type: "object", description: 'Upload status; always { "type": "saved" } for a stored file' },
   {
     name: "file_group",
     type: "string | null",
     description:
-      "Broad file category derived from the filename extension, e.g. 'image'; null when the extension is missing or unrecognized",
+      "Broad file category matched from the extension, e.g. 'image'; null when nothing matches. The match is a substring one, so a filename with no extension is matched against the whole name",
   },
-  { name: "status", type: "object", description: 'Upload status; always { "type": "saved" } for a stored file' },
   { name: "created_at", type: "string", description: "ISO 8601 timestamp of when the file was uploaded" },
 ];
 
