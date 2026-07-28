@@ -62,6 +62,56 @@ describe StripeFxQuote do
     expect(quote.id).to eq("fxq_test")
   end
 
+  describe "transfer destination" do
+    let(:response) do
+      Stripe::StripeResponse.new.tap do |r|
+        r.data = {
+          id: "fxq_test",
+          lock_expires_at: 1.hour.from_now.to_i,
+          to_currency: "usd",
+          rates: { cad: { exchange_rate: "0.800000000000000" } }
+        }
+      end
+    end
+
+    # Stripe matches usage.payment.destination against the PaymentIntent's
+    # transfer_data[destination] exactly, so a destination charge's quote has to name the
+    # connected account it will transfer to or the intent is refused at charge time.
+    it "declares the transfer destination for a destination charge" do
+      expect(Stripe).to receive(:raw_request).with(
+        :post,
+        "/v1/fx_quotes",
+        hash_including(usage: { type: "payment", payment: { destination: "acct_seller_custom" } }),
+        anything
+      ).and_return(response)
+
+      described_class.create(
+        to_currency: Currency::USD,
+        from_currency: Currency::CAD,
+        stripe_account_id: nil,
+        destination_account_id: "acct_seller_custom"
+      )
+    end
+
+    # The inverse is equally strict: a quote that names a destination cannot be used on an
+    # intent that carries no transfer, so charges without one must send no destination.
+    it "omits the destination when the charge carries no transfer" do
+      expect(Stripe).to receive(:raw_request).with(
+        :post,
+        "/v1/fx_quotes",
+        hash_including(usage: { type: "payment" }),
+        anything
+      ).and_return(response)
+
+      described_class.create(
+        to_currency: Currency::USD,
+        from_currency: Currency::CAD,
+        stripe_account_id: nil,
+        destination_account_id: nil
+      )
+    end
+  end
+
   it "rejects quotes that settle in a different currency than requested" do
     # Stripe can settle in a currency the connected account enabled through multi-currency
     # settlement; converting against the wrong settlement currency would charge the buyer a

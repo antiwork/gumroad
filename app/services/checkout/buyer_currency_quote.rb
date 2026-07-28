@@ -250,7 +250,10 @@ class Checkout::BuyerCurrencyQuote
     quote = StripeFxQuote.create(
       to_currency: Currency::USD,
       from_currency: buyer_currency,
-      stripe_account_id: quote_merchant_account.charge_processor_merchant_id
+      stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
+      # Declared up front because Stripe matches the quote's destination against the
+      # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
+      destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
     )
     converted_total_cents = presentment_cents_for(canonical_total_cents, quote.fx_rate, buyer_currency)
     # Give the converted total the same price ending the seller chose in USD ($9.99 →

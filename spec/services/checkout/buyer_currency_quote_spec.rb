@@ -44,7 +44,8 @@ describe Checkout::BuyerCurrencyQuote do
     allow(StripeFxQuote).to receive(:create).with(
       to_currency: Currency::USD,
       from_currency: Currency::CAD,
-      stripe_account_id: merchant_account.charge_processor_merchant_id
+      stripe_account_id: merchant_account.charge_processor_merchant_id,
+      destination_account_id: nil
     ).and_return(stripe_fx_quote)
   end
 
@@ -510,7 +511,8 @@ describe Checkout::BuyerCurrencyQuote do
       allow(StripeFxQuote).to receive(:create).with(
         to_currency: Currency::USD,
         from_currency: Currency::JPY,
-        stripe_account_id: merchant_account.charge_processor_merchant_id
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
       ).and_return(jpy_quote)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "126.79.0.1")
@@ -557,7 +559,8 @@ describe Checkout::BuyerCurrencyQuote do
       allow(StripeFxQuote).to receive(:create).with(
         to_currency: Currency::USD,
         from_currency: Currency::CAD,
-        stripe_account_id: seller_merchant_account.charge_processor_merchant_id
+        stripe_account_id: seller_merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
       ).and_raise(StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd")
 
       expect do
@@ -627,7 +630,11 @@ describe Checkout::BuyerCurrencyQuote do
           expect(StripeFxQuote).to receive(:create).with(
             to_currency: Currency::USD,
             from_currency: Currency::CAD,
-            stripe_account_id: merchant_account.charge_processor_merchant_id
+            stripe_account_id: merchant_account.charge_processor_merchant_id,
+            # Stripe refuses a quote whose destination does not match the intent's
+            # transfer_data[destination], so the seller's account has to be named here even
+            # though the quote is minted on the platform account.
+            destination_account_id: "acct_seller_custom"
           ).and_return(stripe_fx_quote)
 
           result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")

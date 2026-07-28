@@ -354,6 +354,25 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(described_class.fx_quote_merchant_account(merchant_account, seller:)).to eq(platform_merchant_account)
     end
 
+    it "declares the seller's account as the quote's transfer destination" do
+      # A destination charge's intent carries transfer_data[destination], and Stripe refuses
+      # a quote that does not name the same account, so the quote and the intent have to
+      # agree on the destination as well as on which account mints the quote.
+      expect(described_class.fx_quote_destination_account_id(merchant_account))
+        .to eq(merchant_account.charge_processor_merchant_id)
+    end
+
+    it "declares the transfer destination regardless of the ramp flag" do
+      # Same reason the account routing is not flag-gated: whether the intent carries a
+      # transfer is a fact about how Stripe creates it, and the forced-currency lane creates
+      # destination charges with the flag off.
+      Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+      expect(described_class.fx_quote_destination_account_id(merchant_account))
+        .to eq(merchant_account.charge_processor_merchant_id)
+    ensure
+      Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+    end
+
     context "with the destination-charge ramp flag on" do
       before { Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller) }
       after { Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller) }
@@ -395,6 +414,13 @@ describe Checkout::BuyerCurrencyEligibility do
   end
 
   describe "direct charges" do
+    it "sends no transfer destination, because a direct charge carries no transfer" do
+      # A direct charge is created on the seller's own connected account and pays them
+      # directly, so the intent has no transfer_data — and a quote that named a destination
+      # would be refused on it.
+      expect(described_class.fx_quote_destination_account_id(merchant_account)).to be_nil
+    end
+
     it "still quotes against the seller's own connected account" do
       # A direct charge creates the intent on the seller's account, so nothing about the
       # destination lane may move the quote off it — with the ramp flag on or off.

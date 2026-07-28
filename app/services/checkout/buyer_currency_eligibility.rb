@@ -178,6 +178,35 @@ class Checkout::BuyerCurrencyEligibility
     settlement_merchant_account(merchant_account)
   end
 
+  # The connected account the PaymentIntent for this charge will pay out to via
+  # `transfer_data[destination]`, or nil when the intent carries no transfer.
+  #
+  # This is the companion to #fx_quote_merchant_account: knowing which account to MINT the
+  # quote on is only half of what Stripe checks. Stripe also requires the quote to declare
+  # the transfer destination in advance (`usage.payment.destination`) and matches it against
+  # the intent exactly — a quote with no destination is refused on an intent that has one,
+  # and vice versa. Both are hard failures at charge time, so the two questions have to be
+  # answered together and from the same rule.
+  #
+  # A destination charge is the "Gumroad-managed Custom account" shape: the seller has a
+  # Stripe account of ours (so `user` is present) but it is not a Stripe Connect account of
+  # their own, which is precisely the branch in StripeChargeProcessor that sets
+  # `transfer_data`. A Stripe Connect seller is charged directly on their own account with no
+  # transfer, and a seller with no Stripe account at all is charged on the platform account
+  # with no transfer; both get nil.
+  #
+  # Like the routing above, this is NOT gated on the destination-charge ramp flag: whether an
+  # intent carries a transfer is a fact about how Stripe creates it, not a rollout choice,
+  # and the forced-currency lane (iDEAL/Bancontact/UPI/Pix) has been creating destination
+  # charges since before the flag existed.
+  def self.fx_quote_destination_account_id(merchant_account)
+    return nil if merchant_account.blank?
+    return nil if merchant_account.is_a_stripe_connect_account?
+    return nil if merchant_account.user.blank?
+
+    merchant_account.charge_processor_merchant_id.presence
+  end
+
   def self.supported_merchant_account?(merchant_account, seller: nil)
     return false if merchant_account.blank?
 
