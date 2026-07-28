@@ -176,6 +176,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       create_payment_with_purchase(seller, date, product: top_products.first, amount_cents: 100_00, ip_country: "Romania")
       add_page_view(top_products.first, Time.current.iso8601, country: "Romania")
     end
+    refresh_page_views!
     index_model_records(Purchase)
 
     assert_difference -> { ActionMailer::Base.deliveries.count }, 1 do
@@ -220,16 +221,23 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     # Indexes one page view for a product (mirrors spec/support/product_page_view_helpers.rb).
     # Writes straight to the index rather than through the app so the timestamp
     # and country can be dictated.
+    #
+    # Deliberately does NOT wait for the write to become searchable: these are
+    # called up to 24 times per test, and `refresh: "wait_for"` on each one made
+    # this file take 156s instead of 22s. Call refresh_page_views! once when the
+    # data is in place instead — the job only reads them at perform time.
     def add_page_view(product, timestamp = Time.current.iso8601, **extra_body)
       extra_body[:referrer_domain] = extra_body[:referrer_domain].presence || "direct"
       EsClient.index(
         index: ProductPageView.index_name,
-        # The job queries these views back immediately, so wait for the write to
-        # be searchable instead of racing Elasticsearch's near-real-time refresh
-        # (the RSpec original got this from its :elasticsearch_wait_for_refresh tag).
-        refresh: "wait_for",
         body: { product_id: product.id, seller_id: product.user_id, timestamp: }.merge(extra_body)
       )
+    end
+
+    # Makes every page view written so far searchable. The RSpec original got this
+    # per-write from its :elasticsearch_wait_for_refresh tag.
+    def refresh_page_views!
+      ProductPageView.__elasticsearch__.refresh_index!
     end
 
     # One product, one sale of $1,000 from the US, two views — the "sold only one
@@ -241,6 +249,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
         create_payment_with_purchase(seller, date, product:, amount_cents: 1_000_00, ip_country: "United States")
         2.times { add_page_view(product, Time.current.iso8601, country: "United States") }
       end
+      refresh_page_views!
       index_model_records(Purchase)
     end
 
@@ -270,6 +279,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
         end
       end
 
+      refresh_page_views!
       index_model_records(Purchase)
 
       sales_for_report_year.filter { |_, total| total.nonzero? }
