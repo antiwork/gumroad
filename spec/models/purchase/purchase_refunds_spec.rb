@@ -1529,6 +1529,78 @@ describe "PurchaseRefunds", :vcr do
 
       purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
     end
+
+    it "reverses the holding-currency amount when the transfer is denominated in the merchant account's currency" do
+      # Regression test for the buyer-currency (presentment) case. When a charge settles in the
+      # buyer's currency the resulting transfer is in that currency too, so reversing the
+      # canonical USD figure takes the wrong amount of the seller's money. Verified against a
+      # live EUR-settling seller: a 366-cent EUR transfer with a 416-cent USD canonical figure,
+      # where the old code reversed 416 EUR cents (about 50 cents too much).
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+
+      refund = create(:refund, purchase:, processor_refund_id: "re_no_existing_reversal")
+
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -416),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+
+      # The transfer this charge points at is CAD in the fixture below, so the CAD (holding) leg
+      # is the one that must reach Stripe — not the 416 USD cents.
+      transfer = double("transfer", id: "tr_cad_presentment", currency: "cad",
+                                    reversals: double("reversals", data: []))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_cad_presentment"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+
+      expect(Stripe::Transfer).to receive(:create_reversal)
+        .with("tr_cad_presentment", { amount: 366 })
+        .and_return(double("reversal", destination_payment_refund: "re_dest", destination: "acct_1MbQQ6S2yTRm7HHQ"))
+      allow(Stripe::Refund).to receive(:retrieve).and_return(double("refund", balance_transaction: "txn_dest"))
+      allow(Stripe::BalanceTransaction).to receive(:retrieve).and_return(double("balance_transaction", net: -366))
+
+      # The ledger stays canonical: the credit's USD leg is the full 416, not a conversion of 366.
+      expect(Credit).to receive(:create_for_partial_refund_transfer_reversal!)
+        .with(amount_cents_usd: -416, amount_cents_holding_currency: -366, merchant_account: @merchant_account)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
+    it "does not move money when neither ledger leg matches the transfer currency" do
+      # Failing closed matters more than completing the reversal: sending a number in the wrong
+      # currency would silently take the wrong amount from the seller.
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+
+      refund = create(:refund, purchase:, processor_refund_id: "re_mismatched_currency")
+
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -416),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+
+      transfer = double("transfer", id: "tr_gbp", currency: "gbp",
+                                    reversals: double("reversals", data: []))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_gbp"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+
+      expect(Stripe::Transfer).not_to receive(:create_reversal)
+      expect(Credit).not_to receive(:create_for_partial_refund_transfer_reversal!)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
   end
 
   describe "refund subscription purchase" do

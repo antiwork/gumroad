@@ -380,20 +380,17 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
-        it "withholds a launched forced-currency method when the charged account holds a non-USD balance" do
+        it "keeps a launched forced-currency method offered when the charged account holds a non-USD balance" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           Feature.activate_user(:checkout_local_method_ideal, seller)
           platform_merchant_account.update!(currency: Currency::CAD)
 
-          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).not_to include("ideal")
+          expect(resolve(cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
         end
 
         # gumroad-private#1409: a seller who is not a Stripe Connect seller is charged
         # with a DESTINATION charge — the intent is created on the Gumroad platform
-        # account (which holds USD) and their own account only receives the transfer.
-        # Their account's balance currency therefore does not constrain the intent's
-        # currency, and reading it withheld UPI from the reporting seller (a GBP-settling
-        # Gumroad-managed account selling an INR-priced product to an Indian buyer).
+        # account and their own account only receives the transfer.
         it "offers a launched forced-currency method to a destination-charge seller whose own account settles in a non-USD currency" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           Feature.activate_user(:checkout_local_method_upi, seller)
@@ -402,15 +399,38 @@ describe Checkout::PaymentMethodResolver do
           expect(resolve(buyer_country: "IN", cart_product_currency: "inr").payment_method_types).to include("upi")
         end
 
-        it "still withholds a launched forced-currency method from a DIRECT-charge (Stripe Connect) seller whose own account settles in a non-USD currency — that intent really is created on their account" do
+        # gumroad-private#1442. Most eurozone sellers settle in euros, and the old gate
+        # required the charging account to hold US dollars — which withheld iDEAL and
+        # Bancontact from exactly the sellers they exist for. The cart is priced in the
+        # method's forced currency, so the charge is the listed price with no FX quote:
+        # a EUR intent on a EUR-settling account is the simplest case Stripe supports.
+        it "offers a launched forced-currency method to a DIRECT-charge (Stripe Connect) seller whose own account settles in that same currency" do
           allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
           connect_seller = create(:user, check_merchant_account_is_linked: true)
-          create(:merchant_account_stripe_connect, user: connect_seller, currency: Currency::GBP, country: "GB")
+          connect_account = create(:merchant_account_stripe_connect, user: connect_seller, currency: Currency::EUR, country: "BE")
+          connect_account.update!(stripe_capabilities_snapshot: { "capabilities" => { "ideal_payments" => "active" }, "refreshed_at" => Time.current.iso8601 })
           Feature.activate_user(:buyer_currency_charging, connect_seller)
           Feature.activate_user(:buyer_local_currency, connect_seller)
-          Feature.activate_user(:checkout_local_method_upi, connect_seller)
+          Feature.activate_user(:checkout_local_method_ideal, connect_seller)
 
-          expect(resolve(sellers: [connect_seller], buyer_country: "IN", cart_product_currency: "inr").payment_method_types).not_to include("upi")
+          expect(resolve(sellers: [connect_seller], cart_product_currency: Currency::EUR).payment_method_types).to include("ideal")
+        end
+
+        # The per-account capability snapshot, not a settlement-currency rule, is what
+        # keeps a method off an account that cannot take it. Listing a method the account
+        # has not activated fails the ENTIRE intent create, card included
+        # (gumroad-private#1026), so this gate has to keep holding after the settlement
+        # gate is gone.
+        it "still withholds a launched forced-currency method from a Stripe Connect seller whose account has not activated it" do
+          allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+          connect_seller = create(:user, check_merchant_account_is_linked: true)
+          connect_account = create(:merchant_account_stripe_connect, user: connect_seller, currency: Currency::EUR, country: "BE")
+          connect_account.update!(stripe_capabilities_snapshot: { "capabilities" => { "ideal_payments" => "inactive" }, "refreshed_at" => Time.current.iso8601 })
+          Feature.activate_user(:buyer_currency_charging, connect_seller)
+          Feature.activate_user(:buyer_local_currency, connect_seller)
+          Feature.activate_user(:checkout_local_method_ideal, connect_seller)
+
+          expect(resolve(sellers: [connect_seller], cart_product_currency: Currency::EUR).payment_method_types).not_to include("ideal")
         end
 
         it "keeps a launched forced-currency method when the charged account's mismatch is for another currency" do

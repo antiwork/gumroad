@@ -189,6 +189,90 @@ describe Checkout::StripePaymentPresenter do
     Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller) if seller
   end
 
+  # The gumroad-private#1436 ramp. Wallets on this lane are safe because the element's wallet
+  # sheet quotes the same locked buyer-currency total the cart displays, but they ride their own
+  # flag so an emergency ramp-down does not remove wallets from every other checkout.
+  describe "wallets on the buyer-currency presentment lane" do
+    let(:presentment_seller) { create(:user, disable_buyer_local_currency: false) }
+    let(:presentment_product) { create(:product, user: presentment_seller, price_cents: 1234) }
+    let(:presentment_add_products) do
+      [
+        checkout_product_for(
+          presentment_product,
+          buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }
+        )
+      ]
+    end
+
+    before do
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, presentment_seller)
+      Feature.activate_user(:buyer_local_currency, presentment_seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, presentment_seller)
+    end
+
+    after do
+      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, presentment_seller)
+      Feature.deactivate_user(:buyer_local_currency, presentment_seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, presentment_seller)
+      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, presentment_seller)
+      Feature.deactivate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, presentment_seller)
+    end
+
+    it "enables wallets when both the general wallet flag and this lane's ramp are active" do
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, presentment_seller)
+      Feature.activate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, presentment_seller)
+
+      expect(stripe_payment_props(add_products: presentment_add_products)).to eq(
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: false, payment_element_wallets: true)
+      )
+    end
+
+    # The lane's own kill switch: pulling this flag removes wallets from presentment carts while
+    # leaving them on every other checkout the general flag governs.
+    it "keeps wallets suppressed when this lane's ramp is off but the general wallet flag is on" do
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, presentment_seller)
+
+      expect(stripe_payment_props(add_products: presentment_add_products)).to eq(
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      )
+    end
+
+    # And the general flag still dominates: ramping it down must remove wallets everywhere,
+    # including here, no matter what this lane's flag says.
+    it "keeps wallets suppressed when the general wallet flag is off even with this lane's ramp on" do
+      Feature.activate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, presentment_seller)
+
+      expect(stripe_payment_props(add_products: presentment_add_products)).to eq(
+        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      )
+    end
+
+    # A cart that falls back to CardElement never mounts a Payment Element, so its only wallet
+    # surface is the Payment Request Button — whose sheet shows canonical USD. It stays suppressed
+    # regardless of either flag.
+    it "keeps wallets suppressed on a CardElement-fallback presentment cart with both flags on" do
+      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, presentment_seller)
+      Feature.activate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, presentment_seller)
+      # A recurring item is a presentment candidate but not a supported element shape.
+      recurring_product = create(:membership_product, user: presentment_seller)
+      add_products = [
+        checkout_product_for(
+          recurring_product,
+          price: 500,
+          recurrence: "monthly",
+          buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }
+        )
+      ]
+
+      props = stripe_payment_props(add_products:)
+
+      expect(props[:integration]).to eq(described_class::STRIPE_CARD_ELEMENT_INTEGRATION)
+      expect(props[:disable_wallets]).to be(true)
+      expect(props[:payment_element_wallets]).to be(false)
+    end
+  end
+
   it "falls back to CardElement for a presentment-candidate cart spanning multiple sellers" do
     sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
