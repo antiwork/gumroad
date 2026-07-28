@@ -357,9 +357,24 @@ describe BalanceTransaction, :vcr do
             expect(amount.net_cents).to eq(issued_net_cents)
           end
 
-          # The guard the mislabelling tripped, asserted directly rather than by implication.
-          it "produces a balance the Stripe payout processor will not reject" do
-            expect(amount.currency).to eq(Currency::USD)
+          # The guard the mislabelling tripped, driven directly rather than asserted by implication.
+          # This is what ties the currency label to the seller's money. Payouts reject a Gumroad-held
+          # balance whose holding_currency is not USD, and because is_balance_payable is true for
+          # every Gumroad-held balance, one bad row is still pulled into the payout and fails the
+          # whole payment — taking the seller's correctly-labelled USD balances down with it.
+          it "produces a currency the payout processor's Gumroad-held check accepts" do
+            expect(StripePayoutProcessor.is_balance_payable(
+                     instance_double(Balance, merchant_account:, holding_currency: amount.currency)
+                   )).to be(true)
+
+            # The rejection half, so this pins the failure mode and not only the fix: a Gumroad-held
+            # balance is payable whatever its currency, so it is the currency comparison in
+            # #prepare_payment_and_set_amount that must keep refusing the buyer's currency. If that
+            # ever stopped being true, mislabelling would go silent instead of failing loudly.
+            expect(StripePayoutProcessor.is_balance_payable(
+                     instance_double(Balance, merchant_account:, holding_currency: Currency::EUR)
+                   )).to be(true)
+            expect(Currency::EUR).not_to eq(amount.currency)
           end
         end
 
