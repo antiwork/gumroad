@@ -141,7 +141,84 @@ describe ReleaseChargebackRatePayoutPauseForSellerJob do
 
     described_class.new.perform(seller.id)
 
-    expect(seller.reload.payouts_paused_by_user?).to be(true)
+    seller.reload
+    expect(seller.payouts_paused_by_user?).to be(true)
+    expect(seller.payouts_paused_internally?).to be(false)
+    expect(seller.comments.with_type_payouts_resumed).to be_empty
+  end
+
+  it "lifts the hold but says so plainly when the seller has also paused their own payouts" do
+    pause_for_chargeback_rate!
+    seller.update!(payouts_paused_by_user: true)
+    stub_rate("0.5%")
+
+    described_class.new.perform(seller.id)
+
+    seller.reload
+    expect(seller.payouts_paused_internally?).to be(false)
+    expect(seller.payouts_paused_by_user?).to be(true)
+    expect(seller.comments.with_type_payouts_resumed.last.content)
+      .to include("Payouts remain paused by the creator")
+  end
+
+  it "leaves a closed account alone even though closing it also pauses payouts" do
+    pause_for_chargeback_rate!
+    stub_rate("0.5%")
+    seller.update!(deleted_at: Time.current)
+
+    described_class.new.perform(seller.id)
+
+    seller.reload
+    expect(seller.payouts_paused_internally?).to be(true)
+    expect(seller.comments.with_type_payouts_resumed).to be_empty
+  end
+
+  it "ignores a deleted pause comment when deciding what the current hold is" do
+    stub_rate("0.5%")
+    pause_for_chargeback_rate!.mark_deleted!
+    seller.comments.create!(
+      content: "Payouts paused automatically after 3 consecutive failed payouts.",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
+    )
+
+    described_class.new.perform(seller.id)
+
+    expect(seller.reload.payouts_paused_internally?).to be(true)
+  end
+
+  # A retracted failed-payouts note does NOT re-expose the older chargeback hold: the predicate
+  # reads deleted comments too, on purpose, so deleting a comment can never widen what this job
+  # releases. See User#payouts_paused_for_chargeback_rate?.
+  it "keeps the hold when a newer pause comment from the other check has been deleted" do
+    stub_rate("0.5%")
+    pause_for_chargeback_rate!
+    seller.comments.create!(
+      content: "Payouts paused automatically after 3 consecutive failed payouts.",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
+    ).mark_deleted!
+
+    described_class.new.perform(seller.id)
+
+    expect(seller.reload.payouts_paused_internally?).to be(true)
+  end
+
+  it "does not release a hold an admin re-applied while the rate was being computed" do
+    pause_for_chargeback_rate!
+    admin_id = create(:user).id
+    # The rate lookup is the slow part; simulate an admin pausing the account during it.
+    allow_any_instance_of(User).to receive(:lost_chargebacks) do
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: admin_id)
+      { volume: "0.5%", count: "0.0%" }
+    end
+
+    described_class.new.perform(seller.id)
+
+    seller.reload
+    expect(seller.payouts_paused_internally?).to be(true)
+    expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+    expect(seller.comments.with_type_payouts_resumed).to be_empty
   end
 
   it "does nothing when the user no longer exists" do

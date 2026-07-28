@@ -21,11 +21,20 @@ class ReleaseChargebackRatePayoutPausesJob
   BATCH_SIZE = 1_000
 
   def perform
+    # Every seller ever caught by this check keeps their pause comment forever, so this scan also
+    # turns up accounts that were released long ago. That is fine and cheap: the per-seller job's
+    # first guard is a comment lookup, and it returns before touching Elasticsearch for anyone who
+    # is no longer under this hold. Dedupe across the whole scan rather than per batch so a seller
+    # with several historical pause comments is only enqueued once.
+    seen = Set.new
+
     candidate_comments.find_in_batches(batch_size: BATCH_SIZE) do |batch|
       ReplicaLagWatcher.watch
-      batch.map(&:commentable_id)
-           .uniq
-           .each { |user_id| ReleaseChargebackRatePayoutPauseForSellerJob.perform_async(user_id) }
+      batch.each do |comment|
+        next unless seen.add?(comment.commentable_id)
+
+        ReleaseChargebackRatePayoutPauseForSellerJob.perform_async(comment.commentable_id)
+      end
     end
   end
 

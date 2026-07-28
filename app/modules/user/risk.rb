@@ -305,6 +305,14 @@ module User::Risk
   # Both of the pausing checks write a probation comment and both set the pause source to
   # "system", so the source column alone can't tell them apart — the most recent comment from a
   # pausing author is what identifies the current hold.
+  #
+  # This deliberately does NOT filter to alive comments, and must not be "cleaned up" to. A
+  # soft-deleted newer comment from the other pausing check still suppresses the answer here,
+  # which is the safe direction: the worst case is that an account keeps a hold an admin can lift
+  # by hand. Filtering to alive would let deleting a comment turn an older chargeback comment into
+  # the apparent current hold and release payouts on an account paused for a different reason.
+  # The candidate scan in ReleaseChargebackRatePayoutPausesJob does filter to alive, so a retracted
+  # chargeback comment simply stops being auto-released — the same fail-closed direction.
   def payouts_paused_for_chargeback_rate?
     return false unless payouts_paused_internally?
     return false unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
