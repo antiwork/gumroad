@@ -17,13 +17,12 @@ describe PaypalEventHandler do
 
     context "when event is from Integrated signup API" do
       PaypalEventType::MERCHANT_ACCOUNT_EVENTS.each do |event_type|
-        before do
-          @event_info = { "event_type" => event_type }
+        it "schedules the #{event_type} event for processing" do
+          event_info = { "event_type" => event_type }
 
-          it do
-            described_class.new(@event_info).schedule_paypal_event_processing
-            expect(HandlePaypalEventWorker).to have_enqueued_sidekiq_job(@event_info)
-          end
+          described_class.new(event_info).schedule_paypal_event_processing
+
+          expect(HandlePaypalEventWorker).to have_enqueued_sidekiq_job(event_info)
         end
       end
     end
