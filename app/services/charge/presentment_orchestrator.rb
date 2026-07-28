@@ -88,9 +88,40 @@ class Charge::PresentmentOrchestrator
           presentment_total_cents: allocation.presentment_total_cents,
           presentment_gumroad_amount_cents: allocation.presentment_gumroad_amount_cents
         )
+        record_subscription_presentment!(allocation:, presentment_currency:, fx_rate:)
       end
 
       charge_presentment
+    end
+  end
+
+  # Records the fixed buyer-currency amount a membership's later charges must reuse.
+  #
+  # Written inside #persist!'s transaction so a subscription can never end up with a
+  # presented signup charge but no stored amount to renew with — the renewal reader treats a
+  # missing row as "not in the lane" and charges canonical USD, so a half-written signup
+  # would silently switch the member's currency at the first renewal.
+  #
+  # Only the SIGNUP writes this row. Renewals reuse it, and #find_or_create_by! (rather than
+  # create!) makes a re-run idempotent: Charge::CreateService can retry a charge after a
+  # processor timeout, and the unique index on subscription_id would otherwise raise.
+  # `presentment_price_cents` deliberately stores the PRICE component, not the total: tax and
+  # shipping are recomputed per renewal from the member's current address, so storing a total
+  # would freeze figures that are supposed to move.
+  def self.record_subscription_presentment!(allocation:, presentment_currency:, fx_rate:)
+    purchase = allocation.purchase
+    subscription = purchase.subscription
+    return if subscription.blank?
+    return if fx_rate.blank?
+    # A renewal already has its stored row; only the first charge of a subscription
+    # establishes the fixed amount.
+    return unless purchase.is_original_subscription_purchase?
+    return if allocation.presentment_price_cents.to_i <= 0
+
+    SubscriptionPresentment.find_or_create_by!(subscription:) do |presentment|
+      presentment.presentment_currency = presentment_currency
+      presentment.presentment_price_cents = allocation.presentment_price_cents
+      presentment.signup_exchange_rate = fx_rate
     end
   end
 

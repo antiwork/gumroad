@@ -381,7 +381,14 @@ class Checkout::BuyerCurrencyQuote
     # or UPI); a plain card checkout for that cart falls back to canonical USD today.
     def quotable_product?(product, buyer_currency:)
       return false if product.price_currency_type.to_s.downcase == buyer_currency.to_s.downcase
-      return false if product.is_in_preorder_state? || product.is_recurring_billing? || product.free_trial_enabled?
+      return false if product.is_in_preorder_state? || product.free_trial_enabled?
+      # A plain membership is quotable when the seller is in the subscription ramp: its
+      # first charge is the full period price, which equals the locked cart total. This
+      # MUST stay in lockstep with BuyerCurrencyEligibility#unquotable_product?, which
+      # re-applies the same test at charge time — the token binds seller, currency and
+      # total but not product ids, so a token minted here for a membership has to be
+      # honored there or the buyer is asked to confirm a total we then refuse.
+      return false if product.is_recurring_billing? && !Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(product.user)
       # Commissions charge only a deposit now and installment plans charge only the first
       # payment, so a quote locked against the full cart total can never match the charged
       # amount; issue #5419 excludes both from Phase 1. Installment intent is not visible at

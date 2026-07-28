@@ -265,6 +265,14 @@ class Charge::CreateService
     # amount, and any eligibility or quote failure must stop the charge.
     quote_token = params[:buyer_currency_quote].presence if merchant_account&.stripe_charge_processor?
 
+    # A membership renewal runs off-session with no quote token: there is no browser to
+    # confirm a total and nothing to verify against. It presents from the amount stored at
+    # signup instead (gumroad-private#1322), so it is resolved before the token-based lane.
+    # Returns {} to charge canonical USD when the subscription has no stored amount, which is
+    # every subscription created before this ramp.
+    renewal_args = subscription_renewal_presentment_processor_args
+    return renewal_args if renewal_args.present?
+
     eligibility_decision = Checkout::BuyerCurrencyEligibility.new(
       order:,
       seller:,
@@ -325,6 +333,38 @@ class Charge::CreateService
       processor_currency: presentment_result.processor_currency,
       processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
       stripe_fx_quote_id: presentment_result.stripe_fx_quote_id,
+    }
+  end
+
+  # Processor args for a membership renewal presented in the currency stored at signup, or {}
+  # to leave the caller charging canonical USD.
+  #
+  # Gated on off_session so an on-session charge can never reach it: a buyer-present checkout
+  # has a quote token and belongs in the verified-quote lane, and an upgrade/plan change
+  # charges a prorated amount that is not the stored price. The eligibility service applies
+  # the same shape tests (Checkout::BuyerCurrencyEligibility#subscription_renewal_with_stored_amount?).
+  def subscription_renewal_presentment_processor_args
+    return {} unless off_session
+    return {} unless merchant_account&.stripe_charge_processor?
+    return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+
+    renewal = Subscription::PresentmentRenewal.new(
+      charge:,
+      merchant_account:,
+      purchases:,
+      amount_cents:,
+      gumroad_amount_cents:
+    )
+    result = renewal.perform
+    return {} if result.blank?
+
+    @presentment_currency_attempted = result.processor_currency
+
+    {
+      processor_amount_cents: result.processor_amount_cents,
+      processor_currency: result.processor_currency,
+      processor_gumroad_amount_cents: result.processor_gumroad_amount_cents,
+      stripe_fx_quote_id: result.stripe_fx_quote_id,
     }
   end
 

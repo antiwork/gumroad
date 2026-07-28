@@ -17,6 +17,13 @@ class Checkout::BuyerCurrencyEligibility
   PAYMENT_ELEMENT_WALLETS_FEATURE_NAME = :payment_element_wallets
   WALLETS_FEATURE_NAME = :buyer_currency_wallets
 
+  # This lane's own ramp for memberships. Separate from FEATURE_NAME because a membership is
+  # the first shape where a buyer-currency amount outlives the checkout that agreed it, and
+  # because turning it on starts a recurring obligation rather than a single charge — so it
+  # ramps independently and can be pulled without taking buyer-currency charging away from
+  # the one-off checkouts that already have it (gumroad-private#1322).
+  SUBSCRIPTION_FEATURE_NAME = :buyer_currency_subscriptions
+
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
   # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
@@ -96,6 +103,21 @@ class Checkout::BuyerCurrencyEligibility
       Feature.active?(FEATURE_NAME, seller) &&
       Feature.active?(:buyer_local_currency, seller) &&
       !seller.disable_buyer_local_currency?
+  end
+
+  # Whether this seller's memberships may be charged in the buyer's own currency.
+  #
+  # Its own ramp, on top of seller_enabled?, because a membership is the first shape where
+  # the buyer-currency amount outlives the checkout that agreed it: the signup stores a
+  # fixed presentment amount (SubscriptionPresentment) and every renewal charges that same
+  # amount, so Gumroad absorbs the FX drift between renewals (gumroad-private#1322, ruled
+  # 2026-07-28). Pulling this flag stops NEW memberships entering the lane; it deliberately
+  # does not orphan existing ones, because a subscription that already stored an amount must
+  # keep charging it — see Subscription::PresentmentRenewal.
+  def self.subscriptions_enabled?(seller)
+    seller.present? &&
+      seller_enabled?(seller) &&
+      Feature.active?(SUBSCRIPTION_FEATURE_NAME, seller)
   end
 
   # Whether this seller's buyer-currency checkouts may take wallet payments at all. Seller must
@@ -208,8 +230,15 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
     return fallback(:wallet_payment_request) if wallet_type.present? && !wallet_lane_allowed?
-    return fallback(:future_charge_setup) if setup_future_charges
-    return fallback(:off_session) if off_session
+    # `setup_future_charges` means this checkout is also saving the card for later use. It
+    # is a fallback because a saved card implies a later off-session charge whose amount we
+    # could not previously honor in the buyer's currency. A membership signup in the
+    # subscription ramp is the exception: the later charges now have a stored fixed
+    # presentment amount to reuse (SubscriptionPresentment), so the reason for the gate no
+    # longer holds. Card-saving for other reasons (a one-off "save my card" tick, a preorder
+    # authorization) still falls back — see #subscription_setup_in_ramp?.
+    return fallback(:future_charge_setup) if setup_future_charges && !subscription_setup_in_ramp?
+    return fallback(:off_session) if off_session && !subscription_renewal_with_stored_amount?
     return fallback(:no_purchases) if purchases.empty?
     # This service sees the purchases of ONE charge (the order pipeline groups purchases
     # into one charge per seller before charging), so an order spanning several sellers
@@ -440,6 +469,38 @@ class Checkout::BuyerCurrencyEligibility
       order.present? && order.purchases.map(&:seller_id).uniq.many?
     end
 
+    # True only for a genuine membership signup by a seller in the subscription ramp.
+    #
+    # `setup_future_charges` is set for several unrelated reasons (Order::ChargeService:57
+    # ORs together a buyer ticking "save my card", a preorder authorization, and a
+    # membership), so it cannot be treated as "this is a subscription". Requiring EVERY
+    # purchase on the charge to be a plain membership keeps the lift narrow: a cart mixing a
+    # membership with a card-saving one-off still falls back, because the locked quote covers
+    # the whole cart and only the membership half would have a stored amount to renew with.
+    def subscription_setup_in_ramp?
+      return false if purchases.blank?
+      return false unless self.class.subscriptions_enabled?(seller)
+
+      purchases.all? { |purchase| purchase.link.is_recurring_billing? && !purchase.is_preorder_authorization? }
+    end
+
+    # True only for a renewal that already has a stored fixed amount to charge.
+    #
+    # This is what makes the off_session lift safe. A renewal must charge the amount stored
+    # at signup, never one re-derived from today's rate — so if the stored row is missing
+    # (subscription signed up before the ramp, or the flag was off at signup) the renewal
+    # must keep falling back to canonical USD rather than invent a buyer-currency amount the
+    # member never agreed to. Deliberately does NOT consult the ramp flag: a subscription
+    # that stored an amount keeps charging it even if the flag is later pulled, because the
+    # alternative is silently switching an existing member's currency mid-subscription.
+    def subscription_renewal_with_stored_amount?
+      return false if purchases.blank?
+      return false unless purchases.one?
+
+      subscription = purchases.first.subscription
+      subscription.present? && subscription.subscription_presentment.present?
+    end
+
     # Commission deposits and installment payments charge less than the locked cart total
     # (issue #5419 excludes both from Phase 1), so they must fall back even when a valid
     # quote token reaches the charge path.
@@ -450,15 +511,24 @@ class Checkout::BuyerCurrencyEligibility
     end
 
     # Charge-time mirror of the product-shape gates BuyerCurrencyQuote#quotable_product?
-    # applies at quote time. Preorders, subscriptions, free trials, and products offering
-    # an installment plan all charge an amount that can differ from the locked cart total
-    # (nothing now, a first period, $0, or a first installment), so a quote replayed
-    # against them must fall back instead of being honored. Only the card-mode #decision
-    # uses this — the method-forced lane (iDEAL/Bancontact) has no locked cart quote.
+    # applies at quote time. Preorders, free trials, and products offering an installment
+    # plan all charge an amount that can differ from the locked cart total (nothing now,
+    # $0, or a first installment), so a quote replayed against them must fall back instead
+    # of being honored. Only the card-mode #decision uses this — the method-forced lane
+    # (iDEAL/Bancontact) has no locked cart quote.
+    #
+    # A plain membership is the one recurring shape that IS quotable, and only when the
+    # seller is in the subscription ramp: its first charge is the full period price, which
+    # equals the locked cart total. Free trials ($0 now) and installment plans (first
+    # payment only) still charge something other than the total, so they stay excluded
+    # regardless of the flag — the `free_trial_enabled?` and `installment_plan` gates below
+    # keep applying to memberships too.
     def unquotable_product?(product)
-      product.is_in_preorder_state? ||
-        product.is_recurring_billing? ||
-        product.free_trial_enabled? ||
-        product.installment_plan.present?
+      return true if product.is_in_preorder_state?
+      return true if product.free_trial_enabled?
+      return true if product.installment_plan.present?
+      return false unless product.is_recurring_billing?
+
+      !self.class.subscriptions_enabled?(product.user)
     end
 end
