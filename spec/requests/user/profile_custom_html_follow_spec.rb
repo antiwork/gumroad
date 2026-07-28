@@ -10,7 +10,12 @@ require "spec_helper"
 # the outcome back so the page can show a confirmation. These specs drive that
 # flow in a real browser.
 describe "Profile custom HTML page follow bridge", type: :system, js: true do
-  let(:seller) { create(:user, username: "followstudio", name: "Follow Studio") }
+  # A reviewed, compliant seller. The follow endpoint refuses submissions for
+  # sellers we haven't reviewed (see FollowRecaptcha) — a sandboxed custom-HTML
+  # page can't render a CAPTCHA, so there is nothing for a visitor to solve
+  # there, and it was custom profile pages that the phishing ring in
+  # gumroad-private#1465 used as its landing page.
+  let(:seller) { create(:compliant_user, username: "followstudio", name: "Follow Studio") }
   let(:other_seller) { create(:user) }
 
   let(:custom_html) do

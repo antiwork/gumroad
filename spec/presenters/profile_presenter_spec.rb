@@ -44,8 +44,21 @@ describe ProfilePresenter do
           subdomain: seller.subdomain,
           is_verified: false,
           can_edit: true,
+          follow_recaptcha_site_key: FollowRecaptcha.site_key,
         }
       )
+    end
+
+    it "omits the follow CAPTCHA key for a compliant seller" do
+      seller.update!(user_risk_state: "compliant")
+
+      expect(described_class.new(pundit_user:, seller: seller.reload).creator_profile[:follow_recaptcha_site_key]).to be_nil
+    end
+
+    it "includes the follow CAPTCHA key for a seller who has not been reviewed" do
+      expect(seller.user_risk_state).to eq("not_reviewed")
+
+      expect(presenter.creator_profile[:follow_recaptcha_site_key]).to eq(FollowRecaptcha.site_key)
     end
 
     it "sets can_edit to false when viewing as another seller" do

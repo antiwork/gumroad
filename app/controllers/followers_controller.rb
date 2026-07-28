@@ -5,6 +5,7 @@ class FollowersController < ApplicationController
   include CustomDomainConfig
   include Pagy::Backend
   include PageMeta::Post
+  include ValidateRecaptcha
 
   PUBLIC_ACTIONS = %i[new create from_embed_form confirm cancel].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -45,6 +46,15 @@ class FollowersController < ApplicationController
   end
 
   def create
+    if follow_needs_captcha?(followed_user_from_params)
+      message = ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
+      respond_to do |format|
+        format.html { redirect_to custom_domain_subscribe_path, alert: message }
+        format.json { render json: { success: false, message: }, status: :unprocessable_entity }
+      end
+      return
+    end
+
     follower = create_follower(params)
 
     respond_to do |format|
@@ -81,6 +91,21 @@ class FollowersController < ApplicationController
   # raising UnknownFormat). Both formats 404 on the same predicate: a seller
   # that doesn't resolve to a public profile.
   def from_embed_form
+    followed_user = followed_user_from_params
+    if FollowRecaptcha.required?(followed_user)
+      # The embed form is copy-pasted HTML living on someone else's website, so
+      # there is no CAPTCHA there for the visitor to solve — which is also why
+      # this endpoint is the one an abuser would script. For a seller we haven't
+      # reviewed, refuse the follow outright and point the visitor at the
+      # seller's own subscribe page, which does render a challenge, so a real
+      # person can still finish subscribing in one more click.
+      subscribe_url = custom_domain_subscribe_url(host: followed_user.subdomain_with_protocol) if followed_user.subdomain.present?
+      message = "Please subscribe from #{followed_user.name_or_username}'s Gumroad page so we can confirm you're not a bot."
+      return render json: { success: false, message: }, status: :unprocessable_entity if request.format.json?
+
+      return render inertia: "Followers/FromEmbedForm", props: { success: false, message:, subscribe_url: }
+    end
+
     @follower = create_follower(params, source: Follower::From::EMBED_FORM)
 
     if @follower.nil? || @follower.errors.present?
@@ -132,6 +157,22 @@ class FollowersController < ApplicationController
   end
 
   private
+    # True when this follow submission had to pass a CAPTCHA and didn't.
+    #
+    # Both public entry points check it, because a challenge on only one of them
+    # is no challenge at all: the two endpoints take the same parameters, so
+    # anyone scripting /follow would simply script /follow_from_embed_form
+    # instead.
+    def follow_needs_captcha?(followed_user)
+      return false unless FollowRecaptcha.required?(followed_user)
+
+      !valid_recaptcha_response?(site_key: FollowRecaptcha.site_key, surface: FollowRecaptcha::SURFACE)
+    end
+
+    def followed_user_from_params
+      @followed_user_from_params ||= User.find_by_external_id(params[:seller_id])
+    end
+
     # One home for the visitor-facing outcome copy, shared by #create and
     # #from_embed_form so the subscribe page, the third-party embed form, and
     # the custom-page follow bridge can never drift apart.

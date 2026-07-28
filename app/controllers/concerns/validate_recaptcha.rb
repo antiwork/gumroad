@@ -13,10 +13,18 @@ module ValidateRecaptcha
   ENTERPRISE_VERIFICATION_URL =
     "https://recaptchaenterprise.googleapis.com/v1/projects/#{GOOGLE_CLOUD_PROJECT_ID}/" \
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"
+  # `follow` fails open for the same reason checkout does: when Google's
+  # verification call errors we have no evidence about the visitor either way, and
+  # a Google outage would otherwise break the subscribe form for every seller who
+  # has not been reviewed yet — which is every new account. The abuse this surface
+  # guards against needs sustained volume to be worth anything, and the daily
+  # unconfirmed-follower detector still catches a ring that runs during an outage
+  # window. Override per environment with RECAPTCHA_FAIL_OPEN_FOLLOW=false.
   RECAPTCHA_FAIL_OPEN_DEFAULTS = {
     checkout: true,
     checkout_score: true,
     checkout_score_trusted: true,
+    follow: true,
     login: false,
   }.freeze
   # Default score thresholds used when the per-surface Redis key is unset.
