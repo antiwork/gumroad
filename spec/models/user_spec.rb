@@ -776,6 +776,42 @@ describe User, :vcr do
     end
   end
 
+  describe "#custom_html_store_hostnames" do
+    it "includes the seller's subdomain" do
+      creator = create(:user, username: "john")
+
+      expect(creator.custom_html_store_hostnames).to eq([URI("#{PROTOCOL}://#{creator.subdomain}").host])
+    end
+
+    it "includes a live custom domain alongside the subdomain" do
+      creator = create(:user, username: "jane")
+      create(:custom_domain, user: creator, domain: "store.example.com")
+
+      expect(creator.reload.custom_html_store_hostnames).to match_array(
+        [URI("#{PROTOCOL}://#{creator.subdomain}").host, "store.example.com"]
+      )
+    end
+
+    it "leaves out a deleted custom domain" do
+      creator = create(:user, username: "jess")
+      create(:custom_domain, user: creator, domain: "gone.example.com").mark_deleted!
+
+      expect(creator.reload.custom_html_store_hostnames).not_to include("gone.example.com")
+    end
+
+    it "never includes a shared Gumroad host" do
+      creator = create(:user, username: "jem")
+
+      expect(creator.custom_html_store_hostnames).not_to include(*VALID_REQUEST_HOSTS)
+    end
+
+    it "is just the subdomain when the seller has no username (subdomain falls back to their id)" do
+      creator = create(:user, username: nil)
+
+      expect(creator.custom_html_store_hostnames).to eq([URI("#{PROTOCOL}://#{creator.subdomain}").host])
+    end
+  end
+
   describe ".find_by_hostname" do
     before do
       @creator_without_username = create(:user, username: nil)

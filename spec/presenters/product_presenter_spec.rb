@@ -516,6 +516,7 @@ describe ProductPresenter do
           receipt_email_from: "#{product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
           price_checker_enabled: false,
           custom_html_pages_enabled: false,
+          custom_html_store_hostnames: product.user.custom_html_store_hostnames,
           ai_generated: false,
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
@@ -569,6 +570,21 @@ describe ProductPresenter do
 
       it "exposes custom_html_pages_enabled: true in edit_props" do
         expect(presenter.edit_props[:custom_html_pages_enabled]).to eq(true)
+      end
+    end
+
+    describe "custom_html_store_hostnames" do
+      it "lists the seller's own hosts so the landing-page preview can check where a link goes" do
+        create(:custom_domain, user: product.user, domain: "store.example.com")
+        product.user.reload
+
+        expect(presenter.edit_props[:custom_html_store_hostnames]).to match_array(
+          [URI("#{PROTOCOL}://#{product.user.subdomain}").host, "store.example.com"]
+        )
+      end
+
+      it "never includes a shared Gumroad host" do
+        expect(presenter.edit_props[:custom_html_store_hostnames]).not_to include(*VALID_REQUEST_HOSTS)
       end
     end
 
@@ -822,6 +838,7 @@ describe ProductPresenter do
             receipt_email_from: "#{membership.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
+            custom_html_store_hostnames: membership.user.custom_html_store_hostnames,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
@@ -1056,6 +1073,7 @@ describe ProductPresenter do
             receipt_email_from: "#{new_product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
+            custom_html_store_hostnames: new_product.user.custom_html_store_hostnames,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }

@@ -1606,8 +1606,7 @@ class LinksController < ApplicationController
 
       hostnames = []
       hostnames << request.host unless VALID_REQUEST_HOSTS.include?(request.host)
-      hostnames << URI("#{PROTOCOL}://#{user.subdomain}").host if user.subdomain.present?
-      hostnames << user.custom_domain.domain if user.custom_domain&.domain.present?
+      hostnames.concat(user.custom_html_store_hostnames)
       hostnames.compact.uniq
     end
 
