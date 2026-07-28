@@ -293,6 +293,181 @@ describe Charge::CreateService, :vcr do
                                 params: { buyer_currency_quote: "locked-token" }).perform
     end
 
+    it "converts the e-mandate cap into the charge currency on a buyer-presentment charge" do
+      # The cap is registered with this charge and then governs every future off-session
+      # renewal. Stripe reads mandate_options[:amount] in the mandate's own currency, and the
+      # mandate inherits the intent's currency — so a canonical USD cap sent unqualified on a
+      # CAD intent would register as CA$10.00 against a CA$12.50 charge, and every renewal
+      # would exceed it and be declined off-session.
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      purchases = [purchase]
+      amount_cents = 10_00
+      gumroad_amount_cents = 3_00
+      canonical_mandate_options = {
+        payment_method_options: {
+          card: {
+            mandate_options: {
+              reference: "gumroad-ref",
+              amount_type: "maximum",
+              amount: 10_00,
+              start_date: Time.current.to_i,
+              interval: "month",
+              interval_count: 1,
+              supported_types: ["india"]
+            }
+          }
+        }
+      }
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::CAD, fallback_reason: nil)
+      presentment_result = Charge::PresentmentOrchestrator::Result.new(processor_amount_cents: 12_50,
+                                                                       processor_currency: Currency::CAD,
+                                                                       processor_gumroad_amount_cents: 3_75,
+                                                                       stripe_fx_quote_id: "fxq_test")
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(token: "locked-token",
+                                                              currency: Currency::CAD,
+                                                              canonical_total_cents: amount_cents,
+                                                              presentment_total_cents: 12_50,
+                                                              fx_rate: BigDecimal("0.8"),
+                                                              stripe_fx_quote_id: "fxq_test",
+                                                              stripe_fx_quote_expires_at: 1.hour.from_now)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_quote)
+      allow_any_instance_of(Charge::PresentmentOrchestrator).to receive(:perform).and_return(presentment_result)
+
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*, **kwargs|
+        inner = kwargs[:mandate_options][:payment_method_options][:card][:mandate_options]
+        # 10_00 canonical scaled by the charge's own 12_50/10_00 ratio.
+        expect(inner[:amount]).to eq 12_50
+        expect(inner[:currency]).to eq Currency::CAD
+        # Everything else about the mandate is untouched.
+        expect(inner[:amount_type]).to eq "maximum"
+        expect(inner[:reference]).to eq "gumroad-ref"
+        expect(inner[:interval]).to eq "month"
+        expect(inner[:supported_types]).to eq ["india"]
+        nil
+      end
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases:,
+                                amount_cents:,
+                                gumroad_amount_cents:,
+                                setup_future_charges: true,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                mandate_options: canonical_mandate_options,
+                                params: { buyer_currency_quote: "locked-token" }).perform
+    end
+
+    it "never registers an e-mandate cap below the amount being charged" do
+      # A discount-free subscription caps at exactly today's total. Rounding that conversion
+      # down by a subunit would make the very first renewal at the same price exceed the cap.
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 3_33)
+      amount_cents = 3_33
+      canonical_mandate_options = {
+        payment_method_options: {
+          card: {
+            mandate_options: { reference: "r", amount_type: "maximum", amount: 3_33, supported_types: ["india"] }
+          }
+        }
+      }
+      eligibility_decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::INR, fallback_reason: nil)
+      presentment_result = Charge::PresentmentOrchestrator::Result.new(processor_amount_cents: 277_77,
+                                                                       processor_currency: Currency::INR,
+                                                                       processor_gumroad_amount_cents: 83_33,
+                                                                       stripe_fx_quote_id: "fxq_inr")
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(token: "locked-token",
+                                                              currency: Currency::INR,
+                                                              canonical_total_cents: amount_cents,
+                                                              presentment_total_cents: 277_77,
+                                                              fx_rate: BigDecimal("0.012"),
+                                                              stripe_fx_quote_id: "fxq_inr",
+                                                              stripe_fx_quote_expires_at: 1.hour.from_now)
+
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:decision).and_return(eligibility_decision)
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_quote)
+      allow_any_instance_of(Charge::PresentmentOrchestrator).to receive(:perform).and_return(presentment_result)
+
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*, **kwargs|
+        inner = kwargs[:mandate_options][:payment_method_options][:card][:mandate_options]
+        expect(inner[:amount]).to be >= 277_77
+        expect(inner[:currency]).to eq Currency::INR
+        nil
+      end
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents:,
+                                gumroad_amount_cents: 1_00,
+                                setup_future_charges: true,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                mandate_options: canonical_mandate_options,
+                                params: { buyer_currency_quote: "locked-token" }).perform
+    end
+
+    it "leaves the e-mandate cap in canonical USD when the charge is not a presentment charge" do
+      # No quote token means the checkout displayed canonical USD and the intent is created in
+      # USD, so the cap is already in the intent's currency and must not be converted.
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      canonical_mandate_options = {
+        payment_method_options: {
+          card: {
+            mandate_options: { reference: "r", amount_type: "maximum", amount: 10_00, supported_types: ["india"] }
+          }
+        }
+      }
+
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*, **kwargs|
+        inner = kwargs[:mandate_options][:payment_method_options][:card][:mandate_options]
+        expect(inner[:amount]).to eq 10_00
+        expect(inner).not_to have_key(:currency)
+        nil
+      end
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 10_00,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: true,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                mandate_options: canonical_mandate_options).perform
+    end
+
     it "prices one PaymentIntent at the locked cart total and snapshots per-purchase presentments for a multi-item single-seller cart" do
       # check_merchant_account_is_linked lets quote creation resolve the seller's Stripe
       # Connect account (User#merchant_account only returns connect accounts for

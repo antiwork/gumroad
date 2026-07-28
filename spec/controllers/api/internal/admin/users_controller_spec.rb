@@ -2963,7 +2963,7 @@ describe Api::Internal::Admin::UsersController do
 
     it "marks the user compliant and creates separate audit and note comments attributed to GUMROAD_ADMIN_ID" do
       expect do
-        post :mark_compliant, params: { user_id: user.external_id, note: "Cleared after review" }
+        post :mark_compliant, params: { user_id: user.external_id, note: "Cleared after review", clear_suspension: "true" }
       end.to change { user.comments.reload.count }.by(2)
 
       expect(response).to have_http_status(:ok)
@@ -2992,7 +2992,7 @@ describe Api::Internal::Admin::UsersController do
 
     it "returns 422 without marking the user compliant when the note is invalid" do
       expect do
-        post :mark_compliant, params: { user_id: user.external_id, note: "x" * 10_001 }
+        post :mark_compliant, params: { user_id: user.external_id, note: "x" * 10_001, clear_suspension: "true" }
       end.not_to change { user.comments.reload.count }
 
       expect(response).to have_http_status(:unprocessable_entity)
@@ -3004,9 +3004,12 @@ describe Api::Internal::Admin::UsersController do
     it "keeps the existing sibling-account compliant side effect" do
       payment_address = "shared@example.com"
       user.update!(payment_address:)
-      sibling = create(:user, user_risk_state: "suspended_for_fraud", payment_address:)
+      sibling = create(:user, payment_address:)
+      # Suspend it the way the cascade actually does, so the release side can tell this
+      # suspension came from the cascade rather than from a decision about this account.
+      sibling.suspend_for_fraud!(author_name: "suspend_sellers_other_accounts", content: "cascade")
 
-      post :mark_compliant, params: { user_id: user.external_id }
+      post :mark_compliant, params: { user_id: user.external_id, clear_suspension: "true" }
 
       expect(response).to have_http_status(:ok)
       expect(user.reload).to be_compliant
@@ -3035,8 +3038,45 @@ describe Api::Internal::Admin::UsersController do
     end
 
     include_examples "requires user_id for user mutation", :mark_compliant
-    include_examples "supports user lookup by user_id", :mark_compliant, build_user: -> { create(:user, user_risk_state: "suspended_for_fraud") }
-    include_examples "checks expected_email for user mutation", :mark_compliant, build_user: -> { create(:user, user_risk_state: "suspended_for_fraud") }
+    include_examples "supports user lookup by user_id", :mark_compliant, build_user: -> { create(:user, user_risk_state: "flagged_for_fraud") }
+    include_examples "checks expected_email for user mutation", :mark_compliant, build_user: -> { create(:user, user_risk_state: "flagged_for_fraud") }
+
+    context "when the user is suspended" do
+      it "refuses to lift the suspension unless clear_suspension is passed" do
+        expect do
+          post :mark_compliant, params: { user_id: user.external_id, note: "First-payout review passed" }
+        end.not_to change { user.comments.reload.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("User is suspended_for_fraud; pass clear_suspension=true to lift the suspension as well")
+        expect(user.reload).to be_suspended_for_fraud
+      end
+
+      it "lifts the suspension when clear_suspension is passed" do
+        post :mark_compliant, params: { user_id: user.external_id, clear_suspension: "true" }
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload).to be_compliant
+      end
+
+      it "returns 409 when the account becomes suspended after the request's own check" do
+        # The precheck above reads the copy of the user loaded at the start of the request.
+        # Simulate another lane suspending the account after that point: the locked re-read
+        # inside the transition has to catch it, which only works if the controller forwards
+        # the caller's real intent rather than a hardcoded true.
+        unsuspended = create(:user, user_risk_state: "flagged_for_fraud")
+        allow_any_instance_of(User).to receive(:suspended?).and_return(false)
+        User.where(id: unsuspended.id).update_all(user_risk_state: "suspended_for_tos_violation")
+
+        post :mark_compliant, params: { user_id: unsuspended.external_id }
+
+        expect(response).to have_http_status(:conflict)
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("refusing to clear suspended_for_tos_violation")
+        expect(unsuspended.reload).to be_suspended_for_tos_violation
+      end
+    end
   end
 
   describe "POST suspend_for_fraud" do

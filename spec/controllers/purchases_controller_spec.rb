@@ -1445,6 +1445,35 @@ describe PurchasesController, :vcr do
         expect(purchase.reload.can_contact).to eq true
         expect(purchase2.reload.can_contact).to eq true
       end
+
+      it "puts a re-subscribed member back into the seller's audience" do
+        seller = create(:user)
+        product = create(:membership_product, user: seller)
+        purchase = create(:membership_purchase, link: product, seller:)
+        purchase.unsubscribe_buyer
+        expect(AudienceMember.find_by(email: purchase.email, seller_id: seller.id)).to be_nil
+
+        post :subscribe, params: { id: purchase.external_id }
+
+        expect(response).to be_successful
+        member = AudienceMember.find_by(email: purchase.email, seller_id: seller.id)
+        expect(member.details["purchases"].map { _1["id"] }).to eq([purchase.id])
+      end
+
+      it "keeps re-subscribing the remaining purchases when one fails validation" do
+        purchase = create(:purchase, can_contact: false)
+        invalid = create(:purchase, seller_id: purchase.seller.id, link: create(:product, user: purchase.seller), email: purchase.email, can_contact: false)
+        allow_any_instance_of(Purchase).to receive(:update!).and_wrap_original do |method, *args|
+          raise ActiveRecord::RecordInvalid, method.receiver if method.receiver.id == invalid.id
+          method.call(*args)
+        end
+
+        post :subscribe, params: { id: purchase.external_id }
+
+        expect(response).to be_successful
+        expect(purchase.reload.can_contact).to eq true
+        expect(invalid.reload.can_contact).to eq true
+      end
     end
 
     describe "unsubscribe" do

@@ -19,7 +19,12 @@
 // all can also read this.
 import type * as React from "react";
 
-const MAX_PORTRAIT_PLAYER_HEIGHT = "80svh";
+/**
+ * How tall a video frame is ever allowed to get. A 9:16 video at the full width of
+ * either the content page or the product column derives a height roughly 1.8x that
+ * width — taller than a laptop window — which pushes everything below it off screen.
+ */
+export const MAX_PORTRAIT_FRAME_HEIGHT = "80svh";
 
 type VideoDimensions = { width?: number | null; height?: number | null };
 
@@ -37,7 +42,7 @@ export const videoFrameStyle = ({ width, height }: VideoDimensions): React.CSSPr
     // whose children are absolutely positioned, so it has no intrinsic width of
     // its own, and the centring margins below suppress the grid's default
     // stretch — leaving a max-width alone would collapse the box to nothing.
-    style.width = `min(100%, calc(${MAX_PORTRAIT_PLAYER_HEIGHT} * ${width} / ${height}))`;
+    style.width = `min(100%, calc(${MAX_PORTRAIT_FRAME_HEIGHT} * ${width} / ${height}))`;
     style.marginInline = "auto";
   }
   return style;

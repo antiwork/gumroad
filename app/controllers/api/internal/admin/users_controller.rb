@@ -254,14 +254,34 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         return render json: internal_admin_user_success_payload(user, status: "already_compliant", message: "User is already compliant")
       end
 
+      # Clearing a suspension puts the seller's products back on sale, so the caller has to
+      # ask for it explicitly. Automated reviews that only look at their own signals (the
+      # first-payout review, for instance) don't send this and are refused, instead of
+      # silently reversing a suspension another lane just wrote (gumroad-private#1438).
+      clear_suspension = ActiveModel::Type::Boolean.new.cast(params[:clear_suspension])
+      if user.suspended? && !clear_suspension
+        return render json: {
+          success: false,
+          message: "User is #{user.user_risk_state}; pass clear_suspension=true to lift the suspension as well"
+        }, status: :unprocessable_entity
+      end
+
       note = build_admin_note(user, params[:note]) if params[:note].present?
       return render_invalid_comment(note) if note&.invalid?
 
-      user.mark_compliant!(author_id: current_admin_actor_id)
+      # Pass the caller's actual intent, not a literal true. The check above reads the copy of
+      # the user loaded at the start of this request, so it can't see a suspension written
+      # since; the locked re-read inside the transition is what catches that, and hardcoding
+      # the flag here would satisfy it unconditionally and defeat the guard.
+      user.mark_compliant!(author_id: current_admin_actor_id, clear_suspension:)
       note&.save!
       render json: internal_admin_user_success_payload(user, status: "marked_compliant", message: "User marked compliant")
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity
+    rescue User::Risk::SuspensionClearNotAuthorizedError => e
+      # The account became suspended between the check above and the write — another lane
+      # won the race. Refuse rather than overwrite it.
+      render json: { success: false, message: e.message }, status: :conflict
     end
   end
 

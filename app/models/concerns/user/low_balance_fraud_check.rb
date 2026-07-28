@@ -42,6 +42,9 @@ module User::LowBalanceFraudCheck
   def check_for_high_balance_and_remove_low_balance_probation!
     return unless unpaid_balance_cents >= HIGH_BALANCE_THRESHOLD
     return unless on_probation?
+    # A suspension written while this job was in flight outranks a balance recovery: this
+    # lane knows nothing about why the account was suspended, so it must never lift it.
+    return if suspended?
 
     probation_comment = most_recent_low_balance_probation_comment
     return if probation_comment.nil?

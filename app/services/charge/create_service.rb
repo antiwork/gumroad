@@ -55,7 +55,7 @@ class Charge::CreateService
                                                        off_session:,
                                                        setup_future_charges:,
                                                        metadata: StripeMetadata.build_metadata_large_list(purchases.map(&:external_id), key: :purchases, separator: ","),
-                                                       mandate_options:,
+                                                       mandate_options: mandate_options_in_charge_currency(processor_args),
                                                        **processor_args)
     end
     # Ambiguous processor outcomes (timeouts, rate limits) may have created and even
@@ -206,6 +206,55 @@ class Charge::CreateService
       purchase.errors.add :base, BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
       purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     end
+  end
+
+  # The RBI e-mandate cap registered with this charge (see Purchase#mandate_options_for_stripe)
+  # is sized in canonical USD cents, and it is built by the caller before we know whether this
+  # charge will present in the buyer's currency. Stripe reads mandate_options[:amount] in the
+  # mandate's own currency, and the mandate inherits the PaymentIntent's currency unless we say
+  # otherwise — so on a presentment charge an unqualified cap of 1000 registers as ₹10.00 rather
+  # than $10.00. Every renewal then exceeds the cap, needs fresh additional-factor
+  # authentication, and is declined off-session until the buyer comes back to re-authorise.
+  #
+  # Convert the cap with the same locked FX rate the charge itself uses, so the cap keeps the
+  # meaning it had in USD. Canonical charges are unaffected: they carry no presentment args, and
+  # the intent is created in USD.
+  def mandate_options_in_charge_currency(processor_args)
+    return mandate_options if mandate_options.blank?
+
+    presentment_currency = processor_args[:processor_currency]
+    return mandate_options if presentment_currency.blank? || presentment_currency == Currency::USD
+
+    canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
+    # No cap to convert (amount_type is not "maximum", or the shape changed): leave the options
+    # untouched rather than guessing, and let the charge proceed — a mandate with no maximum is
+    # not the failure mode this guards against.
+    return mandate_options if canonical_cap_cents.blank?
+
+    # Scale by the charge itself rather than re-deriving from the FX rate: processor_amount_cents
+    # and amount_cents are the same money in the two currencies, already rounded the way this
+    # charge was quoted, so the ratio carries the rate and the rounding together.
+    return mandate_options unless amount_cents.to_i.positive?
+    presentment_cap_cents = (Rational(canonical_cap_cents * processor_args[:processor_amount_cents].to_i, amount_cents)).ceil
+
+    # A cap must never round down below the amount we are about to charge, or the very first
+    # renewal at the same price is guaranteed to need re-authorisation.
+    presentment_cap_cents = [presentment_cap_cents, processor_args[:processor_amount_cents].to_i].max
+
+    deep_merged_mandate_options(presentment_cap_cents, presentment_currency)
+  end
+
+  # Rebuild the nested mandate options with the converted cap and an explicit currency, without
+  # mutating the hash the caller passed in (it belongs to the Purchase that built it).
+  def deep_merged_mandate_options(cap_cents, currency)
+    card_options = mandate_options[:payment_method_options][:card]
+    inner = card_options[:mandate_options].merge(amount: cap_cents, currency:)
+
+    mandate_options.merge(
+      payment_method_options: mandate_options[:payment_method_options].merge(
+        card: card_options.merge(mandate_options: inner)
+      )
+    )
   end
 
   def buyer_currency_presentment_processor_args
