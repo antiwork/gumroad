@@ -289,6 +289,14 @@ class Payment < ApplicationRecord
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS
 
+      # Flag and comment must land together. The comment is what identifies WHICH automatic check
+      # paused this account (both write source "system"), so a window where the flag is set but the
+      # comment is not lets a reader attribute the hold to the wrong check — specifically,
+      # ReleaseChargebackRatePayoutPauseForSellerJob would see an older chargeback comment as the
+      # current reason and lift a hold this code just applied. No explicit transaction is needed
+      # here: state_machines-activerecord already wraps the whole transition, including this
+      # after_transition callback, in one. The spec pins that so a future refactor out of the state
+      # machine can't quietly reintroduce the gap.
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
       user.comments.create!(
         content: "Payouts paused automatically after #{failed_count} consecutive failed payouts to the same #{destination}. Verify the seller's payout details before resuming.",
