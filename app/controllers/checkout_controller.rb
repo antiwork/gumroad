@@ -12,6 +12,10 @@ class CheckoutController < ApplicationController
     render inertia: "Checkout/Show", props: {
       cart: -> { cart_presenter.cart_props },
       checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart) },
+      # Depends on the cart's contents, so the page re-requests just this prop after every cart
+      # edit (see the debounced cart save in pages/Checkout/Show.tsx). Kept out of `checkout` so
+      # that refresh doesn't recompute country lists and wishlists as well.
+      checkout_payment: -> { checkout_presenter.checkout_payment_props(params: checkout_params, cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
     }
   end

@@ -50,7 +50,6 @@ describe CheckoutPresenter do
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
-        checkout_payment: card_element_checkout_payment,
       )
     end
 
@@ -256,15 +255,6 @@ describe CheckoutPresenter do
         cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
         tip_options: [5, 15, 25],
         default_tip_option: 15,
-        checkout_payment: {
-          integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
-          fallback_reason: "stripe_payment_element_flag_disabled",
-          disable_wallets: false,
-          request_apple_pay_merchant_tokens: false,
-          payment_element_wallets: false,
-          flat_payment_methods: false,
-          elements_options: nil,
-        },
       )
     end
 
@@ -661,6 +651,75 @@ describe CheckoutPresenter do
           ]
         )
       end
+    end
+  end
+
+  describe "#checkout_payment_props" do
+    let(:instance) { described_class.new(logged_in_user: nil, ip: "104.193.168.19") }
+
+    it "returns the payment configuration for an empty cart" do
+      expect(instance.checkout_payment_props(params: {})).to include(
+        integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "empty_cart"
+      )
+    end
+
+    it "recomputes the configuration from the cart it is given, so an edited cart gets its own lane" do
+      # The whole reason this is a separate prop: the answer depends on the cart's contents, and the
+      # checkout page re-requests it after every cart edit. A cart spanning two sellers cannot be
+      # quoted in the buyer's currency (one quote locks one total for one PaymentIntent, and the
+      # order pipeline creates one charge per seller), so it mounts the canonical element with its
+      # wallet rows. Removing one seller's item makes the very same cart quotable, and it must then
+      # mount the buyer-currency element — which is only possible if this prop is recomputed rather
+      # than frozen at page load.
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      # A Canadian buyer: the display currency has to differ from the product's USD pricing for the
+      # cart to be a presentment candidate at all.
+      allow(GeoIp).to receive(:lookup).and_call_original
+      allow(GeoIp).to receive(:lookup).with("104.193.168.19").and_return(double(country_name: "Canada", country_code: "CA", region_name: nil))
+      # The USD→CAD rate is normally kept warm in the cache by UpdateCurrenciesWorker; without it
+      # the display falls back to canonical USD and no item is a presentment candidate.
+      allow_any_instance_of(Checkout::StripePaymentPresenter).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.35"))
+      sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
+      sellers.each do |seller|
+        Feature.activate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+        Feature.activate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+      products = sellers.map { create(:product, user: _1, price_cents: 1234) }
+      cart = create(:cart)
+      products.each { create(:cart_product, cart:, product: _1, price: _1.price_cents) }
+
+      multi_seller = instance.checkout_payment_props(params: {}, cart:)
+      expect(multi_seller[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+      expect(multi_seller[:elements_options][:buyer_currency_presentment]).to be(false)
+      expect(multi_seller[:payment_element_wallets]).to be(true)
+
+      cart.cart_products.find_by(product: products.last).mark_deleted!
+      cart.reload
+
+      single_seller = instance.checkout_payment_props(params: {}, cart:)
+      expect(single_seller[:integration]).to eq(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+      expect(single_seller[:elements_options][:buyer_currency_presentment]).to be(true)
+    ensure
+      (sellers || []).each do |seller|
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+    end
+
+    it "includes the products the request's params add, which are not in the cart yet" do
+      # The "buy now" links land on checkout with the product in params rather than in a saved
+      # cart, so the payment configuration has to see those items too — otherwise the first render
+      # of a direct-purchase checkout would report an empty cart.
+      product = create(:product, price_cents: 1234)
+
+      props = instance.checkout_payment_props(params: { product: product.unique_permalink })
+
+      expect(props[:fallback_reason]).not_to eq("empty_cart")
     end
   end
 

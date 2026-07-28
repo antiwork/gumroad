@@ -59,7 +59,15 @@ class Checkout::StripePaymentPresenter
     # CardElement candidates keep wallets suppressed: that lane never mounts a Payment Element,
     # so a wallet there is the Payment Request Button, whose sheet is built from the canonical USD
     # total and cannot show the buyer-currency total the cart displays.
-    disable_wallets = checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
+    #
+    # Only when the cart can actually be quoted, though. A cart spanning more than one seller is
+    # never quoted at all — Checkout::BuyerCurrencyQuote#create requires a single seller, because
+    # the order pipeline creates one charge per seller and a quote locks one total for one
+    # PaymentIntent. With no quote the checkout shows canonical USD totals and the charge takes
+    # canonical USD, so there is nothing for a wallet sheet to disagree with. Suppressing wallets
+    # on those carts removed Apple Pay and Google Pay from multi-seller checkouts that had them
+    # before buyer-currency presentment existed, for no safety benefit.
+    disable_wallets = sellers.one? && checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
@@ -380,7 +388,11 @@ class Checkout::StripePaymentPresenter
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
-      if items.any? { buyer_currency_presentment_candidate?(_1) }
+      # Single-seller only: buyer-currency presentment is a single-seller feature end to end (the
+      # quote endpoint, the element shape, and the charge-time eligibility service all require
+      # one seller), so a multi-seller cart can never be quoted and must not be judged against a
+      # presentment gate at all. See the note in `props` above.
+      if sellers.one? && items.any? { buyer_currency_presentment_candidate?(_1) }
         # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
         # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
         # presentment. Two shapes now stay on the Payment Element:

@@ -41,24 +41,40 @@ class CheckoutPresenter
       saved_credit_card:,
       gift: nil,
       clear_cart: false,
-      **add_single_product_props(params:, user:),
-      **checkout_wishlist_props(params:),
-      **checkout_wishlist_gift_props(params:),
+      **params_add_products(params:, user:),
       max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
       cart_save_debounce_ms: CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
       tip_options: TipOptionsService.get_tip_options,
       default_tip_option: TipOptionsService.get_default_tip_option,
     }
 
-    props[:checkout_payment] = Checkout::StripePaymentPresenter.new(
+    props
+  end
+
+  # Which Stripe checkout surface this cart gets (CardElement, server-confirm Payment Element,
+  # client-confirm Payment Element) plus the element's mount options.
+  #
+  # A separate Inertia prop rather than a key inside checkout_props, because the answer depends on
+  # the cart's contents and so has to be recomputed whenever the cart is edited. The checkout
+  # page's debounced cart save asks for this prop by name in the same request that persists the
+  # edit, so the configuration the browser holds always describes the cart the buyer is looking
+  # at. Bundling it into checkout_props would either make it stale after a cart edit or force a
+  # refresh to recompute every unrelated checkout prop (country lists, GeoIP, wishlists).
+  def checkout_payment_props(params:, cart: nil)
+    user = params[:username] && User.find_by_username(params[:username])
+    # Mirrors what checkout_props seeds the page's cart with: the items being added by this
+    # request's params (the "buy now" links land on checkout before the cart is persisted) on top
+    # of the saved cart, and the same clear-cart signal a wishlist gift sets. Once an edit has
+    # been saved, the params are gone and the cart alone is the whole story.
+    add_products = params_add_products(params:, user:)
+
+    Checkout::StripePaymentPresenter.new(
       cart:,
-      add_products: props[:add_products],
-      clear_cart: props[:clear_cart],
-      saved_credit_card:,
+      add_products: add_products[:add_products],
+      clear_cart: add_products[:clear_cart] || false,
+      saved_credit_card: CheckoutPresenter.saved_card(logged_in_user&.credit_card),
       ip:
     ).props
-
-    props
   end
 
   def checkout_product(product, cart_item, params, include_cross_sells: true)
@@ -258,6 +274,18 @@ class CheckoutPresenter
   end
 
   private
+    # The items this request's params add to the page's cart, and whether they replace it. Shared
+    # by checkout_props (which renders them) and checkout_payment_props (which needs the same set
+    # to decide the payment lane), so the two can never disagree about what the cart holds.
+    def params_add_products(params:, user:)
+      {
+        add_products: [],
+        **add_single_product_props(params:, user:),
+        **checkout_wishlist_props(params:),
+        **checkout_wishlist_gift_props(params:),
+      }
+    end
+
     def add_single_product_props(params:, user:)
       product = params[:product] && (user ? Link.fetch_leniently(params[:product], user:) : Link.find_by_unique_permalink(params[:product]))
       cart_item = product.cart_item(params) if product

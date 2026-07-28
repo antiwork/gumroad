@@ -12,6 +12,7 @@ import {
   getStripePaymentElementMountCurrency,
   getStripePaymentElementPresentment,
   isCardReadyToPay,
+  isSubmitDisabled,
   reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
@@ -161,6 +162,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   willSaveCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
+  checkoutPaymentStale: false,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   paypalClientId: "",
@@ -837,6 +839,54 @@ describe("isCardReadyToPay", () => {
 });
 
 describe("reduceCheckoutState", () => {
+  // The payment configuration decides which element is mounted and in which currency, and it is
+  // computed by the server from the cart. A cart edit can change the answer — a two-seller cart
+  // cannot be quoted in the buyer's currency, and removing one seller's item makes the very same
+  // cart quotable — so the configuration on screen is stale from the moment the cart changes until
+  // the server answers.
+  describe("keeping the payment configuration in step with the cart", () => {
+    it("marks the configuration stale on a cart edit and blocks Pay until it is refreshed", () => {
+      const initial = state();
+      expect(isSubmitDisabled(initial)).toBe(false);
+
+      const stale = reduceCheckoutState(initial, { type: "invalidate-checkout-payment" });
+
+      expect(stale.checkoutPaymentStale).toBe(true);
+      // The buyer must not be able to pay through an element built for the previous cart.
+      expect(isSubmitDisabled(stale)).toBe(true);
+      // The configuration itself is untouched: the element stays mounted (and any card details
+      // the buyer entered survive) while the refreshed one is on its way.
+      expect(stale.checkoutPayment).toBe(initial.checkoutPayment);
+    });
+
+    it("adopts the refreshed configuration and re-enables Pay", () => {
+      const stale = reduceCheckoutState(state(), { type: "invalidate-checkout-payment" });
+
+      const refreshed = reduceCheckoutState(stale, {
+        type: "update-checkout-payment",
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+      });
+
+      expect(refreshed.checkoutPayment).toEqual(buyerCurrencyPresentmentPaymentElementConfig);
+      expect(refreshed.checkoutPaymentStale).toBe(false);
+      expect(isSubmitDisabled(refreshed)).toBe(false);
+    });
+
+    it("clears the stale flag even when the refreshed configuration is unchanged", () => {
+      // Most cart edits do not move the cart to another lane. The response still has to clear the
+      // flag, or Pay would stay disabled for the rest of the checkout.
+      const stale = reduceCheckoutState(state(), { type: "invalidate-checkout-payment" });
+
+      const refreshed = reduceCheckoutState(stale, {
+        type: "update-checkout-payment",
+        checkoutPayment: paymentElementConfig,
+      });
+
+      expect(refreshed.checkoutPaymentStale).toBe(false);
+      expect(isSubmitDisabled(refreshed)).toBe(false);
+    });
+  });
+
   it("stores the save-card intent without invalidating loaded surcharges", () => {
     const initial = state();
 

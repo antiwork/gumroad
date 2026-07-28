@@ -239,6 +239,12 @@ export type State = {
   usingSavedCard: boolean;
   savedCreditCard: SavedCreditCard | null;
   checkoutPayment: CheckoutPaymentConfig;
+  // True while the cart has been edited but the server has not yet returned the payment
+  // configuration for the edited cart. The configuration decides which element is mounted and in
+  // which currency, and a cart edit can change the answer, so paying during this window would
+  // pay through an element built for the previous cart. isSubmitDisabled blocks Pay until the
+  // refreshed configuration lands (the same treatment an in-flight surcharge refresh gets).
+  checkoutPaymentStale: boolean;
   status:
     | { type: "input"; errors: Set<string> }
     | { type: "offering" }
@@ -305,6 +311,14 @@ type PublicAction =
       products: Product[];
       surcharges?: SurchargesResponse;
     }
+  // The cart was edited in a way that can change which payment lane it belongs to (its set of
+  // sellers, its recurrence, its installment choice), so the server has to recompute the payment
+  // configuration for the new cart. Marks the configuration on screen as stale; the refreshed
+  // one arrives as "update-checkout-payment" below.
+  | { type: "invalidate-checkout-payment" }
+  // The recomputed payment configuration for the edited cart, from a partial reload of the
+  // checkout page's props.
+  | { type: "update-checkout-payment"; checkoutPayment: CheckoutPaymentConfig }
   | { type: "cancel" };
 
 type Action =
@@ -474,7 +488,10 @@ export function isProcessing(state: State) {
 
 export function isSubmitDisabled(state: State) {
   const emailTypoBlocking = state.requireEmailTypoAcknowledgment && state.emailTypoSuggestion !== null;
-  return isProcessing(state) || state.surcharges.type !== "loaded" || emailTypoBlocking;
+  // checkoutPaymentStale: a cart edit is still waiting on the server's answer for which element
+  // this cart should be paying through. Same reasoning as an unloaded surcharge response — the
+  // buyer must not be able to pay on a configuration computed for the previous cart.
+  return isProcessing(state) || state.surcharges.type !== "loaded" || state.checkoutPaymentStale || emailTypoBlocking;
 }
 
 export function isCardReadyToPay({
@@ -959,6 +976,18 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       if (state.surcharges.type !== "loaded" && state.status.type !== "input" && state.status.type !== "finished")
         state.status = { type: "input", errors: new Set() };
       break;
+    case "invalidate-checkout-payment":
+      // A cart edit can move the cart to a different payment lane (a multi-seller cart becoming
+      // single-seller is quotable, so it belongs on the buyer-currency element rather than the
+      // canonical one), and the configuration on screen was computed for the cart before the
+      // edit. Mark it stale until the server answers: isSubmitDisabled blocks Pay while it is,
+      // so the buyer can't pay through an element mounted for a cart they no longer have.
+      state.checkoutPaymentStale = true;
+      break;
+    case "update-checkout-payment":
+      state.checkoutPayment = action.checkoutPayment;
+      state.checkoutPaymentStale = false;
+      break;
     case "surcharges-fetch-succeeded":
       // A response may only publish while its own loading state is still current. Reducer
       // dispatches are processed strictly in order, so by the time this action runs, every
@@ -1040,6 +1069,7 @@ export function createReducer(initial: {
       },
       paymentMethod: "card",
       paymentElementType: "card",
+      checkoutPaymentStale: false,
       willSaveCard: false,
       // Matches PaymentForm's own default (`useState(!!state.savedCreditCard)`), so the summary is
       // correct on the very first render rather than only after PaymentForm mounts and syncs.

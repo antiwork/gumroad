@@ -15,7 +15,7 @@ require "spec_helper"
 describe "UPI Payment Element billing handling", type: :system, js: true do
   def checkout_payment_props
     page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
   end
 

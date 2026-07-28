@@ -88,8 +88,11 @@ type CheckoutIndexPageProps = {
     state: string | null;
     tip_options: number[];
     us_states: string[];
-    checkout_payment: CheckoutPaymentConfig;
   };
+  // Its own top-level prop rather than a key of `checkout`, because it depends on the cart's
+  // contents: the page re-requests it alone after every cart edit so the mounted element always
+  // matches the cart on screen. See CheckoutPresenter#checkout_payment_props.
+  checkout_payment: CheckoutPaymentConfig;
 };
 
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
@@ -131,8 +134,8 @@ const CheckoutIndexPage = () => {
       cart_save_debounce_ms,
       tip_options,
       default_tip_option,
-      checkout_payment,
     },
+    checkout_payment,
     ...props
   } = typia.assert<CheckoutIndexPageProps>(usePage().props);
 
@@ -670,7 +673,11 @@ const CheckoutIndexPage = () => {
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
-      only: ["cart", "flash"],
+      // checkout_payment comes back with the save because it is derived from the cart: which
+      // element this checkout mounts, and in which currency, can change when the cart changes.
+      // Asking for it in the same request means there is no window where the persisted cart and
+      // the payment configuration on screen describe different carts.
+      only: ["cart", "flash", "checkout_payment"],
       preserveUrl: true,
       preserveScroll: true,
     });
@@ -689,6 +696,18 @@ const CheckoutIndexPage = () => {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
   }, [cartForm.data.cart]);
+  // The cart changed, so the payment configuration on screen was computed for the previous cart.
+  // Mark it stale (Pay stays disabled) until the save above returns the recomputed one. Skipping
+  // the very first render: the configuration the server rendered the page with already describes
+  // this cart.
+  useOnChange(() => dispatch({ type: "invalidate-checkout-payment" }), [cartForm.data.cart]);
+  // The recomputed configuration, from the save's partial reload. Inertia replaces the prop with
+  // a new object on every response, so this also clears the stale flag when the lane did not
+  // actually change.
+  useOnChange(
+    () => dispatch({ type: "update-checkout-payment", checkoutPayment: checkout_payment }),
+    [checkout_payment],
+  );
   useOnChange(() => {
     if (state.email.trim() === "" || isValidEmail(state.email.trim())) {
       // @ts-expect-error FormDataKeys recurses into Product.cross_sells; CartState is still correct at runtime
