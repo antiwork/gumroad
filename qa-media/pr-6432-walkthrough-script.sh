@@ -52,6 +52,16 @@ bundle exec rspec spec/controllers/api/v2/variants_controller_spec.rb \
 sleep 2
 
 printf "%b\n" ""
+printf "%b\n" "=== Trusted stored-content copies clean the same stale embed explicitly ==="
+bundle exec rspec spec/controllers/api/v2/links_controller_spec.rb \
+  -e "drops a stale dead foreign embed when copying" \
+  spec/services/product_duplicator_service_spec.rb \
+  -e "drops a stale dead foreign embed when copying stored content" \
+  --format documentation --no-profile 2>&1 \
+  | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+sleep 2
+
+printf "%b\n" ""
 printf "%b\n" "=== Full group, including the cases that must STILL be rejected ==="
 bundle exec rspec spec/models/rich_content_spec.rb \
   -e "rejecting cross-product file embeds" \
