@@ -85,6 +85,14 @@ describe "Buyer-currency quote recovery after the stored rate moves (#6484)", ty
 
     # Second attempt: the recovery has re-fetched the cart props and re-quoted on the current
     # rate, so the same click now succeeds.
+    #
+    # Wait for that fresh quote to land before clicking. The recovery deliberately puts surcharges
+    # back into "pending" and re-requests them, and the reducer refuses to start a payment while
+    # they are pending — the on-screen total is not yet one the charge would honour. Clicking in
+    # that window is a no-op by design, so without this wait the spec asserts the retry failed when
+    # really it never started.
+    wait_for_checkout_surcharges_loaded
+
     expect do
       click_on "Pay", exact: true
       expect(page).to have_alert(text: "Your purchase was successful!", visible: :all, wait: 60)
