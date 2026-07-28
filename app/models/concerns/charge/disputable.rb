@@ -47,15 +47,20 @@ module Charge::Disputable
       is_a?(Charge) ? amount_cents : total_transaction_cents
     end
 
-    # The disputed amount as it appears to everyone outside Gumroad.
+    # The disputed amount as it appears to everyone outside Gumroad's own accounting.
     #
-    # Dispute evidence is read by the card network and the issuing bank, and their record of
-    # the transaction — like the buyer's own statement — is in the currency the buyer was
-    # charged. Showing our canonical USD figure instead invites the reviewer to conclude the
-    # amounts do not match, which weakens a document whose entire purpose is winning the money
-    # back. Show the presentment amount when this charge has one, keeping the canonical figure
-    # alongside it so our own books remain traceable from the evidence
-    # (gumroad-private#1328 A5).
+    # Consumers are all human-facing, not machine-parsed: the seller chargeback notice /
+    # chargeback-won / no-refund-policy emails, the buyer's dispute notice, the admin
+    # chargeback alert, and the seller-facing dispute evidence page
+    # (`DisputeEvidencePagePresenter#formatted_display_price`). It is NOT part of the
+    # evidence payload submitted to Stripe — `fight_chargeback` builds that separately — so
+    # a format change here cannot affect what a card network sees.
+    #
+    # It still needs the buyer's currency: the buyer's own bank statement, and the seller's
+    # mental model of the sale, are both in the currency actually charged. Showing only our
+    # canonical USD figure makes a €18.74 dispute look like a $20 one to everybody reading
+    # these emails. Show the presentment amount when this charge has one, keeping the
+    # canonical figure alongside it so our books stay traceable (gumroad-private#1328 A5).
     def formatted_disputed_amount
       canonical = formatted_dollar_amount(disputed_amount_cents)
       presentment_cents = presentment_refundable_amount_cents
