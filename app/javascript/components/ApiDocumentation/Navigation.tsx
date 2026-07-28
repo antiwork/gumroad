@@ -32,6 +32,9 @@ export const Navigation = () => (
             <a href="#public-product-page">Public product page</a>
           </li>
           <li>
+            <a href="#reviews">Reviews</a>
+          </li>
+          <li>
             <a href="#categories">Categories</a>
           </li>
           <li>

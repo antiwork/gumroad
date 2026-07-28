@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,13 +10,18 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 // destroy() we can assert on.
 const destroy = vi.fn();
 const clipboardConstructor = vi.fn();
+// Captures the "success" handlers CopyToClipboard registers, so a test can fire a copy without a
+// real clipboard or selection (neither of which happy-dom provides).
+const successHandlers: ((event: { clearSelection: () => void }) => void)[] = [];
+const fireCopySuccess = () => successHandlers.forEach((h) => h({ clearSelection: () => {} }));
 
 vi.mock("clipboard", () => ({
   default: class FakeClipboardJS {
     constructor(...args: unknown[]) {
       clipboardConstructor(...args);
     }
-    on() {
+    on(event: string, handler: (e: { clearSelection: () => void }) => void) {
+      if (event === "success") successHandlers.push(handler);
       return this;
     }
     destroy() {
@@ -36,6 +41,7 @@ afterEach(() => {
   cleanup();
   destroy.mockClear();
   clipboardConstructor.mockClear();
+  successHandlers.length = 0;
   // One test spies on the EventTarget prototype methods, which would otherwise leak into the rest
   // of the suite.
   vi.restoreAllMocks();
@@ -119,5 +125,40 @@ describe("CopyToClipboard", () => {
 
     expect(clipboardConstructor).toHaveBeenCalledTimes(1);
     expect(destroy).not.toHaveBeenCalled();
+  });
+
+  // Sighted users learn the copy worked from the tooltip flipping to copiedTooltip. That text
+  // reaches assistive tech through aria-describedby, and changing already-referenced description
+  // text is not an announced event, so screen-reader users got no confirmation at all.
+  it("announces the copy through a live region once a copy succeeds", () => {
+    render(
+      <CopyToClipboard text="secret-key" copiedTooltip="Copied!">
+        <button>Copy</button>
+      </CopyToClipboard>,
+    );
+
+    const liveRegion = screen.getByRole("status");
+    expect(liveRegion.getAttribute("aria-live")).toBe("polite");
+    // Must stay visually hidden: without sr-only this span becomes a real second child of every
+    // tooltip wrapper in the app, so "Copied!" would render visibly next to every copy affordance.
+    expect(liveRegion.className).toContain("sr-only");
+    // Empty on render, or every copy affordance on the page announces itself on load.
+    expect(liveRegion.textContent).toBe("");
+
+    act(() => fireCopySuccess());
+
+    expect(screen.getByRole("status").textContent).toBe("Copied!");
+  });
+
+  it("announces the caller's own copiedTooltip wording", () => {
+    render(
+      <CopyToClipboard text="k" copiedTooltip="License key copied">
+        <button>Copy</button>
+      </CopyToClipboard>,
+    );
+
+    act(() => fireCopySuccess());
+
+    expect(screen.getByRole("status").textContent).toBe("License key copied");
   });
 });
