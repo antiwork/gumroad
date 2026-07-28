@@ -217,7 +217,9 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
   });
 
   // Only refused lines carry an `updated_product`, so a rate must never be collected from a line
-  // that is missing one — that is what keeps a partly-succeeded cart's successful lines out.
+  // that is missing one. This covers the refused-but-productless case; a line that already
+  // succeeded is excluded by the `result.success` check, which TypeScript enforces — the success
+  // shape has no `updated_product` field to read at all, so that branch cannot regress silently.
   it("collects a rate only from lines that carry a product", () => {
     const rates = refreshedRatesFromLineItems({
       "eur ": refusedLine(cartProduct({ exchange_rate: 0.9 })),

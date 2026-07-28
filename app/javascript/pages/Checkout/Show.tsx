@@ -382,12 +382,13 @@ const CheckoutIndexPage = () => {
   const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
   const largeTipConfirmedRef = React.useRef(false);
 
-  // The recovery below re-fetches the cart from the server, and the checkout goes back to being
-  // editable while that request is in flight, so the buyer can change a quantity, an option, or a
-  // pay-what-you-want price before it comes back. This getter always reads the cart from the
-  // latest committed render, so the completion callback works from whatever the buyer is holding
-  // at that moment instead of the snapshot from the render that started the recovery, which would
-  // write the older selections back and quote them.
+  // The cart stays editable while the charge request is in flight — the Edit and Remove
+  // controls in the cart rows are not disabled during processing — so the buyer can change a
+  // quantity, an option, or a pay-what-you-want price, or drop an item entirely, between
+  // pressing Pay and the server answering. This getter always reads the cart from the latest
+  // committed render, so the recovery writes back whatever the buyer is holding at that
+  // moment rather than the snapshot from the render that started the charge, which would
+  // resurrect selections they had already changed and then quote them.
   const getLatestCart = useLatestCartGetter(cartForm.data.cart);
 
   // Recovers a checkout whose local-currency quote the server refused at charge time. The

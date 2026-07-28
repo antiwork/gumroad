@@ -144,8 +144,9 @@ export const convertToUSD = (item: CartItem, price: number) => price / item.prod
 // The rate the checkout converts listed prices with is baked into the page props when the
 // page renders, but the server refreshes stored rates every hour. A checkout left open
 // across that refresh keeps converting at the old rate, which is how a buyer ends up
-// confirming a local-currency total the charge then refuses to honour. Re-fetching the cart
-// props gives us the current rates; this merges only those rates back in, leaving everything
+// confirming a local-currency total the charge then refuses to honour. The caller supplies
+// the server's current rates, read out of the charge-refusal response itself; this merges
+// only those rates back in, leaving everything
 // the buyer chose (quantity, pay-what-you-want price, option, accepted offers, discounts)
 // untouched. Returns the original cart object when no rate actually moved, so an unchanged
 // cart doesn't trigger a needless save round-trip.
@@ -154,7 +155,8 @@ export const withRefreshedExchangeRates = (cart: CartState, refreshedRates: Read
   const items = cart.items.map((item) => {
     const rate = refreshedRates.get(item.product.permalink);
     // A rate of 0 (or a missing item) would make convertToUSD produce Infinity/NaN, so keep
-    // the rate the cart already has rather than adopting an unusable one.
+    // the rate the cart already has rather than adopting an unusable one. 0 is the reachable
+    // case: the server's get_rate returns 0.0 for a currency it has no stored rate for.
     if (rate === undefined || !(rate > 0) || rate === item.product.exchange_rate) return item;
     changed = true;
     return { ...item, product: { ...item.product, exchange_rate: rate } };
