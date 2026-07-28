@@ -799,6 +799,36 @@ function validatePaymentMethodIndependentFields(state: State) {
   return errors;
 }
 
+/**
+ * Finishes a submit that was refused only because the payment configuration was stale, once
+ * everything it was waiting for has arrived.
+ *
+ * A refused submit is waiting on TWO things, and they can land in either order: the recomputed
+ * payment configuration, and a loaded quote. Accepting an offer edits the cart, and a cart edit
+ * resets the quote to pending, so the configuration commonly arrives first with the quote still in
+ * flight. Both arrival sites call this, and whichever completes the pair performs the resume — the
+ * other one finds a gate still open and leaves the resume armed.
+ *
+ * That "leave it armed" part is what keeps the offer pipeline from deadlocking. Consuming the flag
+ * on the first arrival and bailing because the other gate was still closed is exactly how a buyer
+ * ends up on the checkout page, Pay re-enabled, with the purchase they confirmed in the offer modal
+ * never placed and no error shown.
+ */
+function resumeRefusedSubmitIfReady(state: State) {
+  if (!state.resumeSubmitAfterCheckoutPayment) return;
+  // Still waiting on the other half. Stay armed so the later arrival can finish the job.
+  if (state.checkoutPaymentStale || state.surcharges.type !== "loaded") return;
+  // Only resume a submit the buyer is still sitting in front of. Anything past "input" means the
+  // pipeline already moved on under its own steam and does not need restarting.
+  if (state.status.type !== "input") return;
+
+  state.resumeSubmitAfterCheckoutPayment = false;
+  // A resumed submit is not a free pass: it re-runs the same field validation a fresh submit does,
+  // so an incomplete form lands back on "input" with the offending fields flagged.
+  const resumeErrors = validatePaymentMethodIndependentFields(state);
+  state.status = resumeErrors.size ? { type: "input", errors: resumeErrors } : { type: "validating" };
+}
+
 // Exported so checkout state transitions can be unit-tested without rendering the checkout.
 export const reduceCheckoutState = produce((state: State, action: Action) => {
   switch (action.type) {
@@ -920,13 +950,17 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // would pay through an element configured for the cart as it was before the edit. Accepting
         // an offer invalidates synchronously (see acceptOffer) precisely so this refusal sees it.
         if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
-        // Remember to finish this submit once the refreshed configuration lands. The offer pipeline
+        // Remember to finish this submit once everything it is waiting for lands. The offer pipeline
         // dispatches "validate" as the last step of accepting an offer, so if the refusal were the
-        // end of it the buyer's confirmed purchase would silently never be placed. Only when
-        // staleness is the sole reason: an unloaded surcharge response has its own refetch-and-retry
-        // path, and re-submitting on the buyer's behalf there would bypass it.
-        if (state.surcharges.type === "loaded" && state.checkoutPaymentStale)
-          state.resumeSubmitAfterCheckoutPayment = true;
+        // end of it the buyer's confirmed purchase would silently never be placed.
+        //
+        // Armed whenever staleness is *one* of the reasons, not only when it is the sole one. An
+        // accepted offer edits the cart, and a cart edit resets the quote to pending, so the two
+        // conditions almost always fire together here — requiring a loaded quote at this instant
+        // meant the resume was never armed for the offer flow it exists to serve. The quote's own
+        // refetch path is not bypassed: resumeRefusedSubmitIfReady waits for the quote to load and
+        // re-runs full validation before the submit proceeds.
+        if (state.checkoutPaymentStale) state.resumeSubmitAfterCheckoutPayment = true;
         state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
         return;
       }
@@ -996,6 +1030,13 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // flight and un-cancellable, so resetting would only invite a duplicate submission.
       if (state.surcharges.type !== "loaded" && state.status.type !== "input" && state.status.type !== "finished")
         state.status = { type: "input", errors: new Set() };
+      // The third place a refused submit can become ready. This one also matters for correctness
+      // rather than just liveness: the resume re-runs field validation, and the required custom
+      // fields it must check come from state.products. Resuming here — right after the accepted
+      // offer's products land — means that validation sees the cross-sold product's fields instead
+      // of the pre-offer product list, so a cart whose new item has unfilled required fields is
+      // flagged rather than waved through.
+      resumeRefusedSubmitIfReady(state);
       break;
     case "invalidate-checkout-payment":
       // A cart edit can move the cart to a different payment lane (a multi-seller cart becoming
@@ -1027,20 +1068,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       if (state.status.type !== "input") return;
       state.checkoutPayment = action.checkoutPayment;
       state.checkoutPaymentStale = false;
-      // Finish a submit that was refused only because the configuration was stale. The refreshed
-      // configuration is now the one the element will be mounted from, so re-running the same
-      // validation "validate" would have done resumes the buyer's purchase where it left off. This
-      // is what keeps accepting an offer from stranding the checkout: acceptOffer invalidates and
-      // then dispatches "validate", and this is where that "validate" actually takes effect.
-      if (state.resumeSubmitAfterCheckoutPayment) {
-        state.resumeSubmitAfterCheckoutPayment = false;
-        // A resumed submit still has to clear the same gates as a fresh one. Surcharges can have
-        // gone stale again while the configuration was in flight, in which case the refetch path
-        // owns the retry and re-submitting here would race it.
-        if (state.surcharges.type !== "loaded") break;
-        const resumeErrors = validatePaymentMethodIndependentFields(state);
-        state.status = resumeErrors.size ? { type: "input", errors: resumeErrors } : { type: "validating" };
-      }
+      resumeRefusedSubmitIfReady(state);
       break;
     case "surcharges-fetch-succeeded":
       // A response may only publish while its own loading state is still current. Reducer
@@ -1054,6 +1082,11 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // where a stale response still saw the old value.
       if (state.surcharges.type !== "loading" || state.surcharges.requestId !== action.requestId) return;
       state.surcharges = { type: "loaded", result: action.result };
+      // A quote arriving is the other half of what a refused submit is waiting for. Accepting an
+      // offer edits the cart, and a cart edit resets the quote to pending, so the refreshed payment
+      // configuration usually lands while the quote is still in flight — this is where the resume
+      // actually fires in that ordering.
+      resumeRefusedSubmitIfReady(state);
       break;
     case "surcharges-fetch-failed":
       // Same fence as the success case: only the current request may flip the state to

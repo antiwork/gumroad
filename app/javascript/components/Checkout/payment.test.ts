@@ -1032,22 +1032,60 @@ describe("reduceCheckoutState", () => {
         expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
       });
 
-      it("does not resume while surcharges are unloaded, leaving that retry to the refetch path", () => {
-        // Surcharges have their own refetch-and-retry path; re-submitting here would race it and
-        // could pay on a total the buyer never saw.
+      it("waits for the quote, then resumes when it lands", () => {
+        // The common offer ordering: accepting an offer edits the cart, which resets the quote to
+        // pending, so the refreshed configuration arrives while the quote is still in flight. The
+        // resume must survive that first arrival and fire when the quote lands — consuming it early
+        // is what stranded the buyer's confirmed purchase with no error shown.
         const stale = reduceCheckoutState(state({ status: { type: "offering" }, surcharges: { type: "pending" } }), {
           type: "invalidate-checkout-payment",
         });
         const refused = reduceCheckoutState(stale, { type: "validate" });
-        // Staleness was not the sole reason for the refusal, so no resume is armed.
-        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(false);
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(true);
 
+        // Configuration first: not enough on its own, so the resume stays armed.
         const refreshed = reduceCheckoutState(refused, {
           type: "update-checkout-payment",
           checkoutPayment: paymentElementConfig,
         });
-
         expect(refreshed.status).toEqual({ type: "input", errors: new Set() });
+        expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(true);
+
+        // The quote completes the pair and the submit proceeds.
+        const loading = { ...refreshed, surcharges: { type: "loading" as const, requestId: 1, abort: vi.fn() } };
+        const quoted = reduceCheckoutState(loading, {
+          type: "surcharges-fetch-succeeded",
+          requestId: 1,
+          result: loadedSurcharges().result,
+        });
+
+        expect(quoted.status.type).toBe("validating");
+        expect(quoted.resumeSubmitAfterCheckoutPayment).toBe(false);
+      });
+
+      it("resumes on the configuration when the quote landed first", () => {
+        // The other arrival order. Whichever of the two completes the pair performs the resume.
+        const stale = reduceCheckoutState(state({ status: { type: "offering" }, surcharges: { type: "pending" } }), {
+          type: "invalidate-checkout-payment",
+        });
+        const refused = reduceCheckoutState(stale, { type: "validate" });
+
+        const loading = { ...refused, surcharges: { type: "loading" as const, requestId: 1, abort: vi.fn() } };
+        const quoted = reduceCheckoutState(loading, {
+          type: "surcharges-fetch-succeeded",
+          requestId: 1,
+          result: loadedSurcharges().result,
+        });
+        // Configuration is still stale, so nothing has resumed yet.
+        expect(quoted.status).toEqual({ type: "input", errors: new Set() });
+        expect(quoted.resumeSubmitAfterCheckoutPayment).toBe(true);
+
+        const refreshed = reduceCheckoutState(quoted, {
+          type: "update-checkout-payment",
+          checkoutPayment: paymentElementConfig,
+        });
+
+        expect(refreshed.status.type).toBe("validating");
       });
 
       it("surfaces validation errors instead of paying when the resumed form is incomplete", () => {
