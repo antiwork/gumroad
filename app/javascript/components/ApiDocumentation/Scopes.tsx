@@ -5,7 +5,8 @@ import { Card, CardContent } from "$app/components/ui/Card";
 const SCOPES = [
   {
     name: "account",
-    description: "full access to all API endpoints.",
+    description:
+      "full access to most API endpoints. Endpoints with a narrower security boundary, such as media, refuse an account-only token and require the specific scope noted on the endpoint.",
   },
   {
     name: "view_profile",
