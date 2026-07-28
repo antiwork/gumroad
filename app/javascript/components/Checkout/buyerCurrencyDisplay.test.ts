@@ -217,6 +217,61 @@ describe("getCheckoutBuyerCurrencyQuoteToken", () => {
   });
 });
 
+describe("a stale canonical Payment Element next to a fresh quote", () => {
+  // `checkout_payment` is computed once at page load and no cart edit refreshes it, so a buyer
+  // who edits a multi-seller cart down to one seller gets a quotable cart underneath a Payment
+  // Element still mounted in dollars. The wallet sheet reads the element's mounted amount, so
+  // honouring the quote here would let a buyer approve dollars and be charged the local total.
+  const paymentElement = (buyerCurrencyPresentment: boolean): CheckoutPaymentConfig => ({
+    integration: "payment_element",
+    fallback_reason: null,
+    disable_wallets: false,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: true,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "usd",
+      buyer_currency_presentment: buyerCurrencyPresentment,
+      payment_method_types: ["card"],
+      payment_method_creation: "manual",
+      stripe_link_enabled: true,
+    },
+  });
+
+  it("shows canonical USD and withholds the token while the element is mounted canonically", () => {
+    const options = { ...cartOptions, checkoutPayment: paymentElement(false) };
+
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), options)).toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), options)).toBeNull();
+  });
+
+  it("still presents when the element was mounted for the buyer-currency lane", () => {
+    const options = { ...cartOptions, checkoutPayment: paymentElement(true) };
+
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), options)).not.toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), options)).toBe("quote-token");
+  });
+
+  it("still presents on the CardElement lane, which never mounts an amount", () => {
+    // A single-seller cart whose seller is outside the Payment Element rollout is quoted and
+    // charged in the buyer's currency today. The guard must not reach it.
+    const cardElement: CheckoutPaymentConfig = {
+      integration: "card_element",
+      fallback_reason: "stripe_payment_element_flag_disabled",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
+      flat_payment_methods: false,
+      elements_options: null,
+    };
+    const options = { ...cartOptions, checkoutPayment: cardElement };
+
+    expect(getCheckoutBuyerCurrencyDisplay(surcharges(), options)).not.toBeNull();
+    expect(getCheckoutBuyerCurrencyQuoteToken(surcharges(), options)).toBe("quote-token");
+  });
+});
+
 describe("formatCheckoutPrice", () => {
   it("formats buyer-currency amounts using the backend's minor-unit scale", () => {
     expect(formatCheckoutPrice(1_000, { currencyCode: "cad", rate: 1.25, subunitToUnit: 100 })).toBe("CA$12.50");

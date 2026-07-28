@@ -16,7 +16,28 @@ type CheckoutBuyerCurrencyOptions = {
   cartPermalinks: readonly string[];
   willSaveCard?: boolean;
   paymentMethod?: PaymentMethodType;
+  checkoutPayment?: CheckoutPaymentConfig;
 };
+
+// Whether the Payment Element currently on screen was mounted in canonical USD while the
+// surcharge response now carries a buyer-currency quote. That combination means the page is
+// stale: `checkout_payment` is computed once at page load and no cart edit refreshes it (the
+// `update-products` reducer action replaces products and surcharges only), so a buyer who edits
+// the cart into a quotable shape gets a fresh quote next to an element that is still mounted in
+// dollars.
+//
+// It matters because of what the buyer SEES. A wallet payment made through the Payment Element
+// opens its sheet with the element's mounted amount, and a wallet submits as an ordinary card
+// (`paymentMethod` stays "card"), so nothing else downstream would notice the mismatch: the
+// buyer would approve a dollar figure in the Apple Pay sheet and be charged the local-currency
+// total instead. Suppressing the buyer-currency lane here keeps the displayed totals, the
+// wallet sheet, and the charge all canonical, which is what the mounted element can honour.
+//
+// Deliberately scoped to the Payment Element. The CardElement lane never mounts an amount, so a
+// quote there is not stale — a single-seller cart whose seller is outside the Payment Element
+// rollout is quoted and charged in the buyer's currency today, and must keep working.
+const mountedCanonicalWhileQuoted = (checkoutPayment: CheckoutPaymentConfig | undefined) =>
+  checkoutPayment?.integration === "payment_element" && !checkoutPayment.elements_options.buyer_currency_presentment;
 
 export type CheckoutBuyerCurrencyDisplay = {
   currencyCode: CurrencyCode;
@@ -58,7 +79,7 @@ export type CheckoutListedCurrencyOptions = Pick<CheckoutBuyerCurrencyOptions, "
 
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
-  { cartPermalinks, willSaveCard = false, paymentMethod = "card" }: CheckoutBuyerCurrencyOptions,
+  { cartPermalinks, willSaveCard = false, paymentMethod = "card", checkoutPayment }: CheckoutBuyerCurrencyOptions,
 ): CheckoutBuyerCurrencyDisplay | null => {
   const quote = surcharges?.buyer_currency_quote;
   // Saving a card charges through the canonical path (buyer-presentment excludes
@@ -69,6 +90,9 @@ export const getCheckoutBuyerCurrencyDisplay = (
   // charge path fails closed if a quote token arrives on a charge that cannot present —
   // so while such a method is selected the cart must show the USD totals it will charge.
   if (!quote || willSaveCard || paymentMethod !== "card") return null;
+  // And the same again when the mounted element itself is canonical — see
+  // mountedCanonicalWhileQuoted for why a cart edit can produce that combination.
+  if (mountedCanonicalWhileQuoted(checkoutPayment)) return null;
 
   const lineAllocations = quote.line_allocations;
   if (!Array.isArray(lineAllocations)) return null;
