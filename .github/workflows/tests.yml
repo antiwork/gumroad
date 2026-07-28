@@ -313,13 +313,6 @@ jobs:
     if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-22.04
     timeout-minutes: 15
-    # Sharded because the single-runner job had grown to ~12 minutes against this
-    # 15-minute limit, and every file still to be ported from RSpec (#5801) adds
-    # to it — the next few big ones would have pushed it into timing out, which
-    # reads like a broken suite rather than a suite that outgrew its runner.
-    # Files are split by bin/minitest-shard; see that script for how, and why not
-    # Knapsack Pro. Shards are independent processes with their own database, so
-    # raising ci_node_total is the only change needed to add more.
     strategy:
       fail-fast: false
       matrix:
@@ -422,11 +415,8 @@ jobs:
       - name: Run Minitest
         run: |
           FILES=$(bin/minitest-shard "$CI_NODE_INDEX" "$CI_NODE_TOTAL")
-          # Log the manifest: when a shard fails you want to know what it covered
-          # without recomputing the split by hand.
           echo "Shard $CI_NODE_INDEX of $CI_NODE_TOTAL — $(echo "$FILES" | wc -w) files:"
           echo "$FILES" | tr ' ' '\n' | sed 's/^/  /'
-          # Unquoted on purpose: the file list has to word-split into arguments.
           bundle exec rails test $FILES
         env:
           RUBY_YJIT_ENABLE: 1

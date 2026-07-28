@@ -1,50 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Prints the Minitest files belonging to one CI shard, so the `Test Minitest`
-# job can run as a matrix instead of one runner working through the whole tree.
-#
-# Usage:
-#   bin/minitest-shard <index> <total>     # files for shard <index> of <total>
-#   bin/minitest-shard --report <total>    # per-shard file/weight summary (no run)
-#
-#   bundle exec rails test $(bin/minitest-shard 0 2)
-#
-# ## How files are distributed
-#
-# Longest-processing-time-first: sort files by weight descending, then hand each
-# one to whichever shard is currently lightest. For a set where a few files
-# dominate — and this suite has several thousand-test files — that lands much
-# closer to even than round-robin or splitting an alphabetical list in half.
-#
-# The weight is a file's byte size, adjusted by WEIGHT_PER_BYTE for files whose
-# runtime is nothing like their size. That list exists because size is only a
-# proxy: stripe_payout_processor_test.rb replays a VCR cassette for most of its
-# tests, so it costs several times what its bytes suggest, while a file that is
-# mostly long expected-JSON literals costs less. Sizes come from disk, so adding
-# tests re-balances the shards on the next run with no table to maintain.
-#
-# ## Why not Knapsack Pro (which the RSpec lane uses)
-#
-# Knapsack splits by recorded timings from its API, which is the right tool at 18
-# and 50 shards. At 2 shards the win over a static split is small, and it would
-# put a network dependency and an API token in front of a job whose whole point
-# is to stay lean. Revisit if this job ever needs more than a handful of shards.
-#
-# Determinism matters more than perfection here: both shards must agree on the
-# partition without talking to each other, and every file must land in exactly
-# one shard. `--report` prints the split so the balance can be checked.
-
 TEST_GLOB = "test/**/*_test.rb"
 
-# Multipliers for files whose wall time is badly predicted by their size.
-# Keep this short and justified — it is a hint, not a schedule.
 WEIGHT_PER_BYTE = {
-  # ~2/3 of these tests replay Stripe cassettes through the VCR bridge; the HTTP
-  # replay, not the file, is the cost.
   "test/business/payments/payouts/processor/stripe/stripe_payout_processor_test.rb" => 3.0,
-  # Indexes into a real Elasticsearch cluster and queries it back (product
-  # search, page-view analytics), which no other file does at this scale.
   "test/controllers/links_controller_test.rb" => 1.5,
 }.freeze
 
@@ -57,7 +17,6 @@ def weight(path)
   File.size(path) * (WEIGHT_PER_BYTE[path] || 1.0)
 end
 
-# Returns an array of `total` arrays of paths.
 def partition(total)
   files = Dir[TEST_GLOB].sort
   abort "bin/minitest-shard: no files matched #{TEST_GLOB}" if files.empty?
@@ -65,8 +24,6 @@ def partition(total)
   shards = Array.new(total) { [] }
   loads = Array.new(total, 0.0)
 
-  # Sort by weight descending, then by path so equal-weight files always land the
-  # same way regardless of the order the filesystem returned them in.
   files.sort_by { |path| [-weight(path), path] }.each do |path|
     lightest = loads.each_with_index.min_by { |load, index| [load, index] }.last
     shards[lightest] << path
@@ -96,7 +53,8 @@ usage! if index.nil? || index.negative? || index >= total
 
 shards, = partition(total)
 files = shards[index]
-# An empty shard would make `rails test` run the WHOLE tree (no file arguments
-# means every test), silently multiplying the work instead of doing none of it.
-abort "bin/minitest-shard: shard #{index} of #{total} is empty" if files.empty?
+if files.empty?
+  abort "bin/minitest-shard: shard #{index} of #{total} is empty; " \
+        "running `rails test` with no files would run the whole tree"
+end
 puts files.join(" ")
