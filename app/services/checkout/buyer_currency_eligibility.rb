@@ -139,39 +139,22 @@ class Checkout::BuyerCurrencyEligibility
     merchant_account.currency.blank? || merchant_account.currency.to_s.downcase == Currency::USD
   end
 
-  # The account a PaymentIntent for this seller is actually CREATED on — which is the
-  # account whose settlement currency Stripe applies to the intent.
+  # The account a PaymentIntent for this seller is actually CREATED on.
   #
   # Gumroad charges sellers two different ways (see StripeChargeProcessor):
   #
   #   Stripe Connect sellers (direct charges): the intent is created ON the seller's own
-  #   connected account, so that account's settlement currency is the one that matters.
+  #   connected account.
   #
   #   Everyone else (destination charges): the intent is created on the GUMROAD PLATFORM
-  #   account, which holds USD, and the seller's account only appears as
-  #   `transfer_data[destination]` — it receives a transfer after the charge settles. The
-  #   destination account's own balance currency does not constrain what currency the
-  #   intent may be created in, so reading it here withholds payment methods a checkout
-  #   could complete perfectly well. Reading it hid UPI from the seller in
-  #   gumroad-private#1409 — an Indian seller pricing in rupees for an Indian buyer, the
-  #   exact shape UPI exists for.
+  #   account, and the seller's account only appears as `transfer_data[destination]` — it
+  #   receives a transfer after the charge settles.
   #
-  # Returns nil only if the platform account row is missing, which callers treat as
-  # "cannot verify settlement" and fail closed.
+  # Returns nil only if the platform account row is missing.
   def self.settlement_merchant_account(merchant_account)
     return merchant_account if merchant_account.blank? || merchant_account.is_a_stripe_connect_account?
 
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-  end
-
-  # usd_holding_merchant_account? asked of the account the intent is created on, rather
-  # than of whichever account happens to be attached to the purchase. See
-  # settlement_merchant_account above for why those differ for destination charges.
-  def self.usd_holding_settlement_account?(merchant_account)
-    settlement_account = settlement_merchant_account(merchant_account)
-    return false if settlement_account.blank?
-
-    usd_holding_merchant_account?(settlement_account)
   end
 
   def self.stripe_test_mode?
@@ -267,21 +250,26 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:method_not_launched) unless method_forced_mode_allowed?(payment_method, forced_currency)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_forced_currency_charge_model?
-    # Only the stored-currency (USD-holding) half of the settlement question is a
-    # blanket gate here. The learned per-currency mismatch marker is NOT: it predicts
-    # FX-quote rejection, which only matters on the quoted (USD-priced) case below.
-    # The direct-listed-amount case charges the listed price with no FX quote at all,
-    # and the marker being set for the forced currency is in fact the EXPECTED state
-    # once that method's capabilities make the account settle the currency in itself
-    # (2026-07-23 iDEAL dark-ramp, gumroad-private#933) — so it must not withhold the
-    # method.
+    # No settlement gate applies to this lane as a whole. The only settlement question
+    # left is asked further down, and only of the quoted (USD-priced) case, which is the
+    # one that actually needs a Stripe FX quote to succeed.
     #
-    # The question is asked of the account the intent is CREATED on, which for a
-    # destination charge is the Gumroad platform account, not the seller's own account
-    # (see settlement_merchant_account). Asking it of the seller's account instead used
-    # to hide UPI from every seller whose Stripe balance settles in rupees — the exact
-    # seller UPI exists for (gumroad-private#1409).
-    return fallback(:unsupported_settlement_currency) unless self.class.usd_holding_settlement_account?(merchant_account)
+    # The direct-listed-amount case — an EUR-priced product paid with iDEAL or Bancontact,
+    # an INR-priced product paid with UPI — charges the product's listed price in the
+    # currency it is already priced in. There is no FX quote anywhere in that flow, so
+    # nothing about the charging account's balance currency can make it fail: Stripe
+    # accepts a EUR intent on an account whose balance is EUR (indeed that is the simplest
+    # case — the payment settles natively with no conversion at all), and the per-account
+    # capability intersection in Checkout::PaymentMethodResolver separately guarantees the
+    # account has the method activated. Requiring the charging account to HOLD US dollars
+    # was inherited from the FX-quote lane, where it genuinely matters, and it was the last
+    # thing capping this lane: it withheld iDEAL/Bancontact from every Stripe Connect seller
+    # settling in euros — precisely the sellers those methods exist for (gumroad-private#1442).
+    #
+    # Balances stay correct without it: the balance layer records the charge in the account's
+    # own holding currency (see BalanceTransaction.create!'s merchant_account_gross_amount
+    # branch), which for an EUR-settling account paid in EUR is a native, conversion-free
+    # match rather than the USD-intent-on-EUR-account shape we already run today.
     return fallback(:future_charge_setup) if setup_future_charges
     return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?
