@@ -41,6 +41,24 @@ class SellerProfile < ApplicationRecord
     end
   end
 
+  # The text colour that goes on top of the seller's accent colour (pay button, offer banner
+  # price, and anything else using --contrast-accent). Picked by actual contrast rather than by
+  # a lightness threshold — see ContrastColor for why that distinction matters.
+  def text_color_on_highlight
+    ContrastColor.for(highlight_color)
+  end
+
+  # The text colour for body copy sitting directly on the seller's background colour.
+  def text_color_on_background
+    ContrastColor.for(background_color)
+  end
+
+  # --primary is the body text colour, so --contrast-primary is what sits on top of *it*: the
+  # readable colour against the body text colour, which is what a filled primary button needs.
+  def text_color_on_primary
+    ContrastColor.for(text_color_on_background)
+  end
+
   def font_family
     fallback = case font
                when "Domine", "Merriweather", "Roboto Slab"
@@ -54,7 +72,9 @@ class SellerProfile < ApplicationRecord
   end
 
   def custom_style_cache_name
-    "users/#{seller.id}/custom_styles_v2"
+    # Bumped to v3 when the text-colour choice moved from HSL lightness to WCAG contrast. Without
+    # the bump, sellers with already-cached CSS would keep being served the old unreadable colour.
+    "users/#{seller.id}/custom_styles_v3"
   end
 
   def validate_json_data
