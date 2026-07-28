@@ -190,10 +190,9 @@ $light-body-bg: #f4f4f0 !default;
     --#{$name}: #{$color};
     --contrast-#{$name}: #{split-color(fg-color(rgb($color)))};
   }
-  // The Gumroad-default accent needs no readability adjustment, so the plain and text-area accents
-  // are the same colour here. They diverge only on a storefront whose seller picked a colour that
-  // couldn't carry black or white text at 4.5:1 — see custom_styles/styles.scss.erb.
-  --accent-plain: var(--accent);
+  // The Gumroad-default accent needs no readability adjustment. A custom storefront may override
+  // this with a slightly adjusted colour for content-bearing accent fills.
+  --accent-with-text: var(--accent);
   --color: 0 0 0;
   --body-bg: #{$light-body-bg};
   --border-alpha: 1;
@@ -224,10 +223,6 @@ $border-width: math.div(size(1), 16);
 $border-color: rgb(var(--parent-color) / var(--border-alpha));
 $backdrop-bg: rgba(0, 0, 0, 0.8);
 $border: solid $border-width $border-color;
-// Note this feeds the `--outline` custom property, which nothing currently reads — the focus rings
-// that actually render come from Tailwind's `outline-accent` utility, which resolves through
-// --accent (the readability-adjusted colour). That is deliberate: the two differ by at most 32/255
-// per channel, and a focus ring is not a surface a seller picks a colour for.
 $outline: size(0.125) solid full-color(accent);
 $font-family: "ABC Favorit", Avenir, Montserrat, Corbel, "URW Gothic", source-sans-pro, sans-serif;
 $form-element-padding-x: spacer(4);

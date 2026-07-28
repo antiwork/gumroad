@@ -878,15 +878,13 @@ const LicenseKeyLookupPrompt = () => (
 export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; percentage: number }) => {
   const formattedPercentage = `${percentage}%`;
   const label = `${rating} ${rating === 1 ? "star" : "stars"}`;
-  // The bar is a decorative fill with no text on it, so it uses the seller's saved accent colour
-  // (--color-accent-plain) rather than the readability-adjusted accent used behind text.
   return (
     <>
       <div>{label}</div>
       <meter
         aria-label={label}
         value={percentage / 100}
-        className="h-[1lh] w-full appearance-none rounded border border-border bg-none [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent-plain)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent-plain)]"
+        className="h-[1lh] w-full appearance-none rounded border border-border bg-none [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
       />
       <div>{formattedPercentage}</div>
     </>

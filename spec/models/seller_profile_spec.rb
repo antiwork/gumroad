@@ -9,9 +9,9 @@ describe SellerProfile do
     it "has CSS for background color, accent color, and font" do
       # APCA reads white as the readable text colour on this green, but white on #009a49 is only
       # 3.67:1, so the displayed accent is darkened to #008941 (0 137 65) to clear 4.5:1. The saved
-      # colour is unchanged and is what --accent-plain carries.
-      expect(subject.custom_styles).to include("--accent: 0 137 65;--contrast-accent: 255 255 255")
-      expect(subject.custom_styles).to include("--accent-plain: 0 154 73")
+      # colour is unchanged and is what --accent carries.
+      expect(subject.custom_styles).to include("--accent: 0 154 73;--accent-with-text: 0 137 65")
+      expect(subject.custom_styles).to include("--contrast-accent: 255 255 255")
       expect(subject.reload.highlight_color).to eq("#009a49")
       expect(subject.custom_styles).to include("--filled: 0 0 0")
       expect(subject.custom_styles).to include("--body-bg: #000000")
@@ -22,7 +22,7 @@ describe SellerProfile do
     it "rebuilds CSS when custom style attribute is saved" do
       subject.update_attribute(:highlight_color, "#ff90e8")
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
-      expect(subject.custom_styles).to include("--accent: 255 144 232;--contrast-accent: 0 0 0")
+      expect(subject.custom_styles).to include("--accent: 255 144 232;--accent-with-text: 255 144 232;--contrast-accent: 0 0 0")
 
       subject.update_attribute(:background_color, "#fff")
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
@@ -40,7 +40,7 @@ describe SellerProfile do
       # cutoff) and used to get white text at 1.37:1. Black is 15.36:1 against it.
       subject.update_attribute(:highlight_color, "#19ff1d")
 
-      expect(subject.custom_styles).to include("--accent: 25 255 29;--contrast-accent: 0 0 0")
+      expect(subject.custom_styles).to include("--accent: 25 255 29;--accent-with-text: 25 255 29;--contrast-accent: 0 0 0")
     end
 
     it "gives a saturated red accent white text by darkening only the displayed colour" do
@@ -48,8 +48,8 @@ describe SellerProfile do
       # 4.00:1), so a red pay button rendered its price in black, which sellers read as broken.
       subject.update_attribute(:highlight_color, "#ff0000")
 
-      expect(subject.custom_styles).to include("--accent: 238 0 0;--contrast-accent: 255 255 255")
-      expect(subject.custom_styles).to include("--accent-plain: 255 0 0")
+      expect(subject.custom_styles).to include("--accent: 255 0 0;--accent-with-text: 238 0 0")
+      expect(subject.custom_styles).to include("--contrast-accent: 255 255 255")
       expect(subject.reload.highlight_color).to eq("#ff0000")
     end
 

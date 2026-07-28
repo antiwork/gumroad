@@ -596,9 +596,7 @@ const MobileAppAudioFileRow = ({ file }: { file: FileItem }) => {
               className={classNames(
                 "h-1 w-full appearance-none rounded border-0 bg-active-bg [&::-moz-meter-bar]:rounded [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded",
                 isPlaying
-                  ? // The progress fill carries no text, so it uses the seller's saved accent colour
-                    // (--color-accent-plain), not the readability-adjusted accent used behind text.
-                    "[&::-moz-meter-bar]:[background:var(--color-accent-plain)] [&::-webkit-meter-optimum-value]:[background:var(--color-accent-plain)]"
+                  ? "[&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
                   : "[&::-moz-meter-bar]:[background:currentColor] [&::-webkit-meter-optimum-value]:[background:currentColor]",
               )}
             />

@@ -5,7 +5,7 @@ declare module "react" {
     "--color"?: string;
     "--accent"?: string;
     "--contrast-accent"?: string;
-    "--accent-plain"?: string;
+    "--accent-with-text"?: string;
     "--filled"?: string;
     "--contrast-filled"?: string;
     "--primary"?: string;
@@ -17,7 +17,7 @@ declare module "react" {
     "--color-border"?: string;
     "--color-accent"?: string;
     "--color-accent-foreground"?: string;
-    "--color-accent-plain"?: string;
+    "--color-accent-with-text"?: string;
     "--color-primary"?: string;
     "--color-primary-foreground"?: string;
     "--color-active-bg"?: string;

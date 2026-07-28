@@ -70,14 +70,14 @@ export const PriceTag = ({
     <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
       <div className="relative grid grid-flow-col border border-r-0 border-border">
         <div
-          className="bg-accent px-2 py-1 text-accent-foreground"
+          className="bg-accent-with-text px-2 py-1 text-accent-foreground"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >
           {priceTag}
         </div>
         <div className={classNames("border-border", borderClasses)} />
-        <div className={classNames("absolute top-0 right-px bottom-0 border-accent", borderClasses)} />
+        <div className={classNames("absolute top-0 right-px bottom-0 border-accent-with-text", borderClasses)} />
       </div>
       <link itemProp="url" href={url} />
       <div itemProp="availability" className="hidden">

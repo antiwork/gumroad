@@ -7,15 +7,12 @@
 }
 
 :root {
-  // --accent is what fills accent areas that carry text (the pay button, the offer banner price),
-  // paired with --contrast-accent for that text. It is the seller's saved highlight colour unless
-  // that colour could not carry black or white text at the 4.5:1 WCAG AA minimum, in which case its
-  // brightness is nudged by the smallest amount that clears the floor. See ContrastColor.
-  --accent: #{split-color(<%= accent_color_for_text_areas %>)};
+  // Keep --accent as the seller's saved highlight colour so decorative fills, borders, focus
+  // indicators, and accent-coloured text do not change. Only surfaces that put content on the
+  // accent opt into --accent-with-text and its matching --contrast-accent.
+  --accent: #{split-color(<%= highlight_color %>)};
+  --accent-with-text: #{split-color(<%= accent_color_for_text_areas %>)};
   --contrast-accent: #{split-color(<%= text_color_on_highlight %>)};
-  // --accent-plain is the seller's saved highlight colour, untouched, for accent areas with no text
-  // on them: focus outlines, borders, tinted panels, decorative fills.
-  --accent-plain: #{split-color(<%= highlight_color %>)};
   --font-family: <%= font_family %>;
   --color: #{split-color(<%= text_color_on_background %>)};
     --primary: var(--color);

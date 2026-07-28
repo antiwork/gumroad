@@ -1,17 +1,14 @@
-export const hexToRgb = (hex: string) =>
-  `${parseInt(hex.slice(1, 3), 16)} ${parseInt(hex.slice(3, 5), 16)} ${parseInt(hex.slice(5), 16)}`;
-
 // WCAG AA requires 4.5:1 for normal-size text. This is a hard floor: no accent/text pair we render
 // is ever allowed below it.
 export const WCAG_AA_NORMAL_TEXT = 4.5;
 
-// How close the two APCA readability scores have to be before we stop trusting the winner and break
-// the tie on "which choice needs the accent changed least".
-const APCA_TIE_BAND = 10;
+// Up to this many 0-255 steps, use APCA's preferred text colour and move the displayed accent by the
+// minimum amount needed for WCAG AA. Above it, preserving the creator's colour becomes more important.
+const DISPLAY_SHIFT_TRANSITION_START = 32;
 
-// If the more readable text colour would force us to move the accent's brightness by more than this
-// many 0-255 steps, and the other text colour needs a smaller move, take the other one.
-const MAX_BRIGHTNESS_SHIFT = 32;
+// Taper the display adjustment to zero over the next 16 steps so adjacent input colours cannot jump
+// from a fully adjusted accent to the saved accent when the text polarity changes.
+const DISPLAY_SHIFT_TRANSITION_END = 48;
 
 const WHITE = "#ffffff";
 const BLACK = "#000000";
@@ -36,6 +33,8 @@ const parseHex = (hex: string) => {
     parseInt(channel, 16),
   );
 };
+
+export const hexToRgb = (hex: string) => (parseHex(hex) ?? [0, 0, 0]).join(" ");
 
 const toHex = (rgb: number[]) => `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 
@@ -69,29 +68,23 @@ const apcaScreenLuminance = (rgb: number[]) => {
   return y < 0.022 ? y + (0.022 - y) ** 1.414 : y;
 };
 
-// APCA lightness contrast (Lc), as an absolute 0-106ish score: how readable text of one colour is on
-// a background of another. Unlike the WCAG 2 ratio it is asymmetric — dark-on-light and light-on-dark
-// are scored with different exponents, which is the whole reason it agrees with the eye on saturated
-// hues where the WCAG ratio does not. Constants are from the APCA 0.1.9 formula.
+// APCA lightness contrast (Lc), as a signed score: positive for dark text on a light background and
+// negative for light text on a dark background. Unlike the WCAG 2 ratio it is asymmetric. We use
+// only its magnitude to rank black against white; WCAG 2.2 compliance still comes from the 4.5:1
+// floor below. Constants and clipping match APCA 0.1.9.
 // https://github.com/Myndex/SAPC-APCA
 const apcaLc = (textRgb: number[], backgroundRgb: number[]) => {
   const textY = apcaScreenLuminance(textRgb);
   const backgroundY = apcaScreenLuminance(backgroundRgb);
   if (Math.abs(backgroundY - textY) < 0.0005) return 0;
 
-  const contrast =
-    backgroundY > textY
-      ? (backgroundY ** 0.56 - textY ** 0.57) * 1.14 // dark text on a lighter background
-      : (backgroundY ** 0.65 - textY ** 0.62) * 1.14; // light text on a darker background
+  if (backgroundY > textY) {
+    const contrast = (backgroundY ** 0.56 - textY ** 0.57) * 1.14;
+    return contrast < 0.1 ? 0 : (contrast - 0.027) * 100;
+  }
 
-  // Near-zero contrast is clamped to 0 and low contrast is scaled down, so that trivially different
-  // colours don't report a misleadingly usable score.
-  let scaled;
-  if (Math.abs(contrast) < 0.001) scaled = 0;
-  else if (Math.abs(contrast) > 0.035991) scaled = contrast - (contrast > 0 ? 0.027 : -0.027);
-  else scaled = contrast * 27.7847239587675;
-
-  return Math.abs(scaled * 100);
+  const contrast = (backgroundY ** 0.65 - textY ** 0.62) * 1.14;
+  return contrast > -0.1 ? 0 : (contrast + 0.027) * 100;
 };
 
 // Mixes the colour `step`/255 of the way toward black (when the text will be white) or toward white
@@ -178,16 +171,15 @@ export const accentBrightnessShiftFor = (hex: string, whiteText: boolean) => {
  *
  * So we ask a better question in three steps.
  *
- * 1. Which text colour looks more readable? That is judged with APCA (the perceptual contrast model
- *    being developed for WCAG 3), because it models how text of a given lightness reads on a
- *    background far better than the WCAG 2 ratio does. APCA says white on pure red, which is what a
- *    designer would choose and what sellers expect.
+ * 1. Which text colour looks more readable? APCA is used as a non-normative perceptual ranking.
+ *    It says white on pure red, which is what sellers expect.
  * 2. Does that pair clear the 4.5:1 WCAG AA floor? White on #ff0000 does not (4.00:1). If it
  *    doesn't, darken the accent for white text (or lighten it for black text) by the smallest amount
  *    that does. #ff0000 becomes #ee0000 — same red to the eye, now 4.53:1 with white.
- * 3. Sanity-check the choice against its cost. If the two APCA scores are within APCA_TIE_BAND of
- *    each other, or if honouring the winner would move the accent by more than MAX_BRIGHTNESS_SHIFT
- *    steps, and the other text colour needs a smaller move, use the other one instead.
+ * 3. Sanity-check the choice against its cost. If honouring APCA would move the accent more than
+ *    DISPLAY_SHIFT_TRANSITION_START steps, use the other text colour. That text already passes on
+ *    the saved accent. Taper the previous adjustment to zero through DISPLAY_SHIFT_TRANSITION_END
+ *    so adjacent creator colours do not produce a large rendered-colour jump at the polarity edge.
  *
  * The floor in step 2 is never traded away, and the surrounding page background is deliberately not
  * an input — the same accent has to work on light and dark storefronts alike.
@@ -200,24 +192,27 @@ export const getAccessibleAccent = (accent: string): { accent: string; text: str
   const rgb = parseHex(accent);
   if (rgb === null) return { accent: BLACK, text: WHITE };
 
-  const apcaWithWhite = apcaLc([255, 255, 255], rgb);
-  const apcaWithBlack = apcaLc([0, 0, 0], rgb);
-  let whiteText = apcaWithWhite > apcaWithBlack;
+  const apcaWithWhite = Math.abs(apcaLc([255, 255, 255], rgb));
+  const apcaWithBlack = Math.abs(apcaLc([0, 0, 0], rgb));
+  const preferredWhiteText = apcaWithWhite > apcaWithBlack;
+  const preferredShift = brightnessShiftFor(rgb, preferredWhiteText);
 
-  const shiftForWhite = brightnessShiftFor(rgb, true);
-  const shiftForBlack = brightnessShiftFor(rgb, false);
-  let chosenShift = whiteText ? shiftForWhite : shiftForBlack;
-  const otherShift = whiteText ? shiftForBlack : shiftForWhite;
+  const whiteText = preferredShift <= DISPLAY_SHIFT_TRANSITION_START ? preferredWhiteText : !preferredWhiteText;
+  const displayShift =
+    preferredShift <= DISPLAY_SHIFT_TRANSITION_START
+      ? preferredShift
+      : Math.max(
+          Math.floor(
+            ((DISPLAY_SHIFT_TRANSITION_END - preferredShift) * DISPLAY_SHIFT_TRANSITION_START) /
+              (DISPLAY_SHIFT_TRANSITION_END - DISPLAY_SHIFT_TRANSITION_START),
+          ),
+          0,
+        );
 
-  if (
-    otherShift < chosenShift &&
-    (Math.abs(apcaWithWhite - apcaWithBlack) <= APCA_TIE_BAND || chosenShift > MAX_BRIGHTNESS_SHIFT)
-  ) {
-    whiteText = !whiteText;
-    chosenShift = otherShift;
-  }
-
-  return { accent: toHex(shiftBrightness(rgb, whiteText, chosenShift)), text: whiteText ? WHITE : BLACK };
+  return {
+    accent: toHex(shiftBrightness(rgb, preferredWhiteText, displayShift)),
+    text: whiteText ? WHITE : BLACK,
+  };
 };
 
 /** WCAG contrast ratio between two hex colours, e.g. 15.36 for black on bright green. */

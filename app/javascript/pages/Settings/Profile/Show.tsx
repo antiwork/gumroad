@@ -227,14 +227,14 @@ export default function SettingsPage() {
   }, [isMobileAppWebView, canSave]);
 
   // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the saved
-  // colour so its text clears 4.5:1; --accent-plain keeps the saved colour for text-free areas.
+  // colour so its text clears 4.5:1. Every other accent use keeps the saved colour.
   const accentColors = getAccessibleAccent(currentSeller?.profileHighlightColor ?? "#000000");
 
   const profileColors = currentSeller
     ? {
-        "--accent": hexToRgb(accentColors.accent),
+        "--accent": hexToRgb(currentSeller.profileHighlightColor),
+        "--accent-with-text": hexToRgb(accentColors.accent),
         "--contrast-accent": hexToRgb(accentColors.text),
-        "--accent-plain": hexToRgb(currentSeller.profileHighlightColor),
         "--filled": hexToRgb(currentSeller.profileBackgroundColor),
         "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
       }
@@ -332,7 +332,7 @@ export default function SettingsPage() {
               "--color-border": "rgb(var(--color) / var(--border-alpha))",
               "--color-accent": "rgb(var(--accent))",
               "--color-accent-foreground": "rgb(var(--contrast-accent))",
-              "--color-accent-plain": "rgb(var(--accent-plain))",
+              "--color-accent-with-text": "rgb(var(--accent-with-text))",
               "--color-primary": "rgb(var(--primary))",
               "--color-primary-foreground": "rgb(var(--contrast-primary))",
               "--color-active-bg": "rgb(var(--color) / var(--gray-1))",

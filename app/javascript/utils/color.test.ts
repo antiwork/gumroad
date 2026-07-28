@@ -94,6 +94,9 @@ describe("hexToRgb", () => {
   it("converts a hex colour to space-separated channel values for use in a CSS rgb()", () => {
     expect(hexToRgb("#19ff1d")).toBe("25 255 29");
     expect(hexToRgb("#000000")).toBe("0 0 0");
+    expect(hexToRgb("#f0a")).toBe("255 0 170");
+    expect(hexToRgb("  #19FF1D  ")).toBe("25 255 29");
+    expect(hexToRgb("not a colour")).toBe("0 0 0");
   });
 });
 
@@ -195,6 +198,22 @@ describe("getAccessibleAccent", () => {
     }
   });
 
+  it("keeps the rendered accent stable where the text polarity changes", () => {
+    // These saved colours differ by one green-channel step. A hard adjustment cap used to make
+    // them render 32 red-channel steps apart: #df3600/white versus #ff3f00/black.
+    const before = getAccessibleAccent("#ff3e00");
+    const after = getAccessibleAccent("#ff3f00");
+
+    expect(before).toStrictEqual({ accent: "#df3600", text: "#ffffff" });
+    expect(after).toStrictEqual({ accent: "#e13700", text: "#000000" });
+    expect(ratio(before)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+    expect(ratio(after)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+
+    const beforeRgb = before.accent.match(/[0-9a-f]{2}/giu)?.map((channel) => parseInt(channel, 16)) ?? [];
+    const afterRgb = after.accent.match(/[0-9a-f]{2}/giu)?.map((channel) => parseInt(channel, 16)) ?? [];
+    expect(Math.max(...beforeRgb.map((channel, index) => Math.abs(channel - (afterRgb[index] ?? 0))))).toBe(2);
+  });
+
   it("handles the 3-digit hex form the same way as its 6-digit equivalent", () => {
     expect(getAccessibleAccent("#f0a")).toStrictEqual(getAccessibleAccent("#ff00aa"));
     expect(getAccessibleAccent("#000")).toStrictEqual(getAccessibleAccent("#000000"));
@@ -253,7 +272,7 @@ describe("getAccessibleAccent", () => {
   });
 
   it("falls back to a readable pair rather than throwing on a value that isn't a hex colour", () => {
-    for (const invalid of ["", "red", "#ffff", "#gggggg", "#19ff1d; }"]) {
+    for (const invalid of ["", "red", "#ffff", "#gggggg", "#19ff1d; }", "\u0085#ff0000\u0085"]) {
       expect(getAccessibleAccent(invalid)).toStrictEqual({ accent: "#000000", text: "#ffffff" });
     }
   });

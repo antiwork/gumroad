@@ -77,6 +77,17 @@ describe ContrastColor do
     end
   end
 
+  describe ".apca_lc" do
+    it "uses APCA's low-contrast clip instead of inflating near-identical colours" do
+      black = described_class.parse("#000000")
+
+      expect(described_class.apca_lc(black, described_class.parse("#202020"))).to eq(0.0)
+      expect(described_class.apca_lc(black, described_class.parse("#ff0000"))).to be_within(0.01).of(39.95)
+      expect(described_class.apca_lc(described_class.parse("#ffffff"), described_class.parse("#ff0000")))
+        .to be_within(0.01).of(-69.62)
+    end
+  end
+
   describe "the readability guarantee" do
     # This is the point of the whole module: it is not merely "better than the old threshold", it
     # makes an unreadable result impossible. Whichever of black or white contrasts more against a
@@ -268,6 +279,22 @@ describe ContrastColor do
       end
     end
 
+    it "keeps the rendered accent stable where the text polarity changes" do
+      # These saved colours differ by one green-channel step. A hard adjustment cap used to make
+      # them render 32 red-channel steps apart: #df3600/white versus #ff3f00/black.
+      before = described_class.accessible_accent("#ff3e00")
+      after = described_class.accessible_accent("#ff3f00")
+
+      expect(before).to eq(accent: "#df3600", text: "#ffffff")
+      expect(after).to eq(accent: "#e13700", text: "#000000")
+      expect(described_class.ratio_between(before[:accent], before[:text])).to be >= ContrastColor::WCAG_AA_NORMAL_TEXT
+      expect(described_class.ratio_between(after[:accent], after[:text])).to be >= ContrastColor::WCAG_AA_NORMAL_TEXT
+
+      before_rgb = described_class.parse(before[:accent])
+      after_rgb = described_class.parse(after[:accent])
+      expect(before_rgb.zip(after_rgb).map { (_1 - _2).abs }.max).to eq(2)
+    end
+
     it "handles the 3-digit hex form the same way as its 6-digit equivalent" do
       expect(described_class.accessible_accent("#f0a")).to eq(described_class.accessible_accent("#ff00aa"))
       expect(described_class.accessible_accent("#000")).to eq(described_class.accessible_accent("#000000"))
@@ -291,7 +318,7 @@ describe ContrastColor do
     end
 
     it "falls back to a readable pair rather than raising on a value that isn't a hex colour" do
-      ["", nil, "red", "#ffff", "#gggggg"].each do |invalid|
+      ["", nil, "red", "#ffff", "#gggggg", "\u0085#ff0000\u0085"].each do |invalid|
         expect(described_class.accessible_accent(invalid)).to eq(accent: "#000000", text: "#ffffff")
       end
     end

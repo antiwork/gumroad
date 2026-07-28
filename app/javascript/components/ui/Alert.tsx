@@ -11,9 +11,7 @@ const alertVariants = cva("flex items-start gap-2 rounded border border-border p
       danger: "border-danger bg-danger/20",
       warning: "border-warning bg-warning/20",
       info: "border-info bg-info/20",
-      // No text sits on the accent itself here — the panel is a 20% tint under ordinary body text —
-      // so this uses the seller's colour exactly as saved rather than the readability-adjusted one.
-      accent: "border-accent-plain bg-accent-plain/20",
+      accent: "border-accent bg-accent/20",
     },
   },
 });

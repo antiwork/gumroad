@@ -42,9 +42,10 @@ class SellerProfile < ApplicationRecord
   end
 
   # The accent colour to actually fill text-bearing accent areas with (pay button, offer banner
-  # price, anything using --accent together with --contrast-accent), and the text colour to put on
-  # it. Usually this is exactly what the seller saved; where their colour cannot carry either black
-  # or white text at 4.5:1, its brightness is nudged by the smallest amount that clears the floor.
+  # price, anything using --accent-with-text together with --contrast-accent), and the text colour
+  # to put on it. Usually this is exactly what the seller saved; where their colour cannot carry
+  # either black or white text at 4.5:1, its brightness is nudged by the smallest amount that clears
+  # the floor.
   # The saved highlight_color is never changed — see ContrastColor#accessible_accent for why the
   # adjustment happens at display time and how the text colour is chosen.
   def accessible_accent
@@ -53,8 +54,8 @@ class SellerProfile < ApplicationRecord
     ContrastColor.accessible_accent(highlight_color)
   end
 
-  # The displayed accent for areas that carry text. Areas with no text on them keep the seller's
-  # colour exactly as saved (--accent-plain in the storefront CSS).
+  # The displayed accent for areas that carry text. Every other use keeps the seller's saved colour
+  # through --accent.
   def accent_color_for_text_areas
     accessible_accent[:accent]
   end

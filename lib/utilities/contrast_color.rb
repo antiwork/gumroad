@@ -34,25 +34,26 @@ module ContrastColor
   # render is ever allowed below it.
   WCAG_AA_NORMAL_TEXT = 4.5
 
-  # How close the two APCA readability scores have to be before we stop trusting the winner and
-  # break the tie on "which choice needs the accent changed least". Roughly the point where a
-  # person can no longer tell which of black or white reads better, so we may as well pick the one
-  # that leaves the seller's colour alone.
-  APCA_TIE_BAND = 10.0
+  # Up to this many 0-255 steps, use APCA's preferred text colour and move the displayed accent by
+  # the minimum amount needed for WCAG AA. Above it, the other text colour already passes on the
+  # saved accent, so preserving the creator's colour becomes more important.
+  DISPLAY_SHIFT_TRANSITION_START = 32
 
-  # If the more readable text colour would force us to move the accent's brightness by more than
-  # this many 0-255 steps, and the other text colour needs a smaller move, take the other one. This
-  # keeps "the seller's colour barely changes" as the priority when the readability difference is
-  # real but the cost of honouring it is a visibly different colour.
-  MAX_BRIGHTNESS_SHIFT = 32
+  # Do not jump straight from a 32-step adjustment to the saved colour when the text polarity
+  # changes. Taper that adjustment to zero over the next 16 steps instead. Without this transition,
+  # #ff3e00 rendered as #df3600 with white text while adjacent #ff3f00 rendered unchanged with black
+  # text — a large visual jump caused by a one-step input change.
+  DISPLAY_SHIFT_TRANSITION_END = 48
 
   # The largest brightness shift `accessible_accent` ever applies, measured by sweeping the sRGB
   # space (see the spec, which pins it). Expressed in 0-255 steps of the mix toward black/white.
-  # Note this is a MEASURED bound, not one MAX_BRIGHTNESS_SHIFT enforces: that constant only decides
-  # when to prefer the cheaper text colour, so on a colour where both choices are expensive the
-  # result is the cheaper of the two rather than something capped at 32. It happens that the cheaper
-  # option never exceeds 32 anywhere in the space, and the spec is what keeps that true.
+  # Note this is a measured bound, pinned by a sweep in the spec.
   WORST_CASE_BRIGHTNESS_SHIFT = 32
+
+  # Match JavaScript's String#trim exactly. Ruby's [[:space:]] also removes U+0085, which
+  # JavaScript keeps; using that broader class would make the live storefront accept a value that
+  # the editor preview rejects.
+  JAVASCRIPT_TRIM = /\A[\u{0009}-\u{000d}\u{0020}\u{00a0}\u{1680}\u{2000}-\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}\u{feff}]+|[\u{0009}-\u{000d}\u{0020}\u{00a0}\u{1680}\u{2000}-\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}\u{feff}]+\z/
 
   # Returns "#ffffff" or "#000000", whichever is more readable on top of the given colour.
   # Anything that isn't a #rrggbb hex string falls back to black, matching how the rest of the
@@ -84,18 +85,16 @@ module ContrastColor
   #
   # So we ask a better question in three steps.
   #
-  # 1. Which text colour looks more readable? That is judged with APCA (the perceptual contrast
-  #    model being developed for WCAG 3), because it models how text of a given lightness reads on
-  #    a background far better than the WCAG 2 ratio does. APCA says white on pure red, which is
-  #    what a designer would choose and what sellers expect.
+  # 1. Which text colour looks more readable? APCA is used as a non-normative perceptual ranking.
+  #    It says white on pure red, which is what sellers expect.
   # 2. Does that pair clear the 4.5:1 WCAG AA floor? White on #ff0000 does not (4.00:1). If it
   #    doesn't, darken the accent for white text (or lighten it for black text) by the smallest
   #    amount that does. #ff0000 becomes #ee0000 — same red to the eye, now 4.53:1 with white.
-  # 3. Sanity-check the choice against its cost. If the two APCA scores are within APCA_TIE_BAND of
-  #    each other, or if honouring the winner would move the accent by more than
-  #    MAX_BRIGHTNESS_SHIFT steps, and the other text colour needs a smaller move, use the other
-  #    one instead. This is what keeps "we changed your brand colour a lot" from being the price of
-  #    a readability difference nobody can see.
+  # 3. Sanity-check the choice against its cost. If honouring APCA would move the accent more than
+  #    DISPLAY_SHIFT_TRANSITION_START steps, use the other text colour. That text already passes on
+  #    the saved accent. To keep adjacent creator colours from producing a large rendered-colour
+  #    jump at the polarity boundary, taper the old adjustment to zero through
+  #    DISPLAY_SHIFT_TRANSITION_END rather than dropping it in one step.
   #
   # The floor in step 2 is never traded away — the point of this method is to satisfy it without
   # making the text colour flip on invisible boundaries, and without looking at the page background
@@ -110,17 +109,29 @@ module ContrastColor
     rgb = parse(hex_color)
     return { accent: BLACK, text: WHITE } if rgb.nil?
 
-    white_text = prefers_white_text?(rgb)
-    shift_for_white = brightness_shift_for(rgb, white_text: true)
-    shift_for_black = brightness_shift_for(rgb, white_text: false)
+    preferred_white_text = prefers_white_text?(rgb)
+    preferred_shift = brightness_shift_for(rgb, white_text: preferred_white_text)
 
-    chosen_shift, other_shift = white_text ? [shift_for_white, shift_for_black] : [shift_for_black, shift_for_white]
-    if other_shift < chosen_shift && (apca_scores_are_close?(rgb) || chosen_shift > MAX_BRIGHTNESS_SHIFT)
-      white_text = !white_text
-      chosen_shift = other_shift
+    if preferred_shift <= DISPLAY_SHIFT_TRANSITION_START
+      white_text = preferred_white_text
+      display_shift = preferred_shift
+    else
+      # The opposite text colour passes before the preferred colour reaches its minimum shift.
+      # Keep a shrinking amount of the previous display adjustment so the background changes
+      # smoothly at the text-polarity boundary. Because this step is smaller than preferred_shift,
+      # the colour remains on the WCAG-passing side for the opposite text colour.
+      white_text = !preferred_white_text
+      transition_width = DISPLAY_SHIFT_TRANSITION_END - DISPLAY_SHIFT_TRANSITION_START
+      display_shift = [
+        ((DISPLAY_SHIFT_TRANSITION_END - preferred_shift) * DISPLAY_SHIFT_TRANSITION_START / transition_width.to_f).floor,
+        0
+      ].max
     end
 
-    { accent: to_hex(shift_brightness(rgb, white_text:, step: chosen_shift)), text: white_text ? WHITE : BLACK }
+    {
+      accent: to_hex(shift_brightness(rgb, white_text: preferred_white_text, step: display_shift)),
+      text: white_text ? WHITE : BLACK
+    }
   end
 
   # WCAG contrast ratio between two #rrggbb colours, e.g. 15.36 for black on bright green.
@@ -154,33 +165,23 @@ module ContrastColor
     (lighter + 0.05) / (darker + 0.05)
   end
 
-  # APCA lightness contrast (Lc), as an absolute 0-106ish score: how readable text of one colour is
-  # on a background of another. Unlike the WCAG 2 ratio it is asymmetric — dark-on-light and
-  # light-on-dark are scored with different exponents, which is the whole reason it agrees with the
-  # eye on saturated hues where the WCAG ratio does not. Constants are from the APCA 0.1.9 formula.
+  # APCA lightness contrast (Lc), as a signed score: positive for dark text on a light background
+  # and negative for light text on a dark background. Unlike the WCAG 2 ratio it is asymmetric. We
+  # use only its magnitude to rank black against white; WCAG 2.2 compliance still comes from the
+  # 4.5:1 floor below. Constants and clipping match APCA 0.1.9.
   # https://github.com/Myndex/SAPC-APCA
   def self.apca_lc(text_rgb, background_rgb)
     text_y = apca_screen_luminance(text_rgb)
     background_y = apca_screen_luminance(background_rgb)
     return 0.0 if (background_y - text_y).abs < 0.0005
 
-    contrast = if background_y > text_y # dark text on a lighter background
-      ((background_y**0.56) - (text_y**0.57)) * 1.14
+    if background_y > text_y # dark text on a lighter background
+      contrast = ((background_y**0.56) - (text_y**0.57)) * 1.14
+      contrast < 0.1 ? 0.0 : (contrast - 0.027) * 100
     else # light text on a darker background
-      ((background_y**0.65) - (text_y**0.62)) * 1.14
+      contrast = ((background_y**0.65) - (text_y**0.62)) * 1.14
+      contrast > -0.1 ? 0.0 : (contrast + 0.027) * 100
     end
-
-    # Near-zero contrast is clamped to 0 and low contrast is scaled down, so that trivially
-    # different colours don't report a misleadingly usable score.
-    scaled = if contrast.abs < 0.001
-      0.0
-    elsif contrast.abs > 0.035991
-      contrast - (contrast.positive? ? 0.027 : -0.027)
-    else
-      contrast * 27.7847239587675
-    end
-
-    (scaled * 100).abs
   end
 
   # APCA's own luminance measure. Same idea as WCAG relative luminance but with a simple 2.4-power
@@ -195,14 +196,9 @@ module ContrastColor
 
   # True when APCA rates white text on this colour as more readable than black text.
   def self.prefers_white_text?(rgb)
-    apca_lc(parse(WHITE), rgb) > apca_lc(parse(BLACK), rgb)
+    apca_lc(parse(WHITE), rgb).abs > apca_lc(parse(BLACK), rgb).abs
   end
   private_class_method :prefers_white_text?
-
-  def self.apca_scores_are_close?(rgb)
-    (apca_lc(parse(WHITE), rgb) - apca_lc(parse(BLACK), rgb)).abs <= APCA_TIE_BAND
-  end
-  private_class_method :apca_scores_are_close?
 
   # Smallest number of 0-255 steps toward black (for white text) or toward white (for black text)
   # that brings the pair to the WCAG AA floor. Binary search is safe because mixing steadily toward
@@ -251,12 +247,7 @@ module ContrastColor
   # raw SQL all bypass that — and the SCSS `lightness()` function this replaced understood 3-digit
   # hex natively. Rejecting it here would have quietly changed the colour on any row holding one.
   def self.parse(hex_color)
-    # A Unicode-aware strip rather than String#strip, so this matches JavaScript's String#trim,
-    # which the browser implementation uses: strip only removes ASCII whitespace, while trim also
-    # removes a non-breaking space or a byte-order mark. A stored value carrying one of those
-    # (reachable only via update_column or raw SQL, since the validator rejects it) would otherwise
-    # parse in the editor and fall back to the invalid-value default on the server.
-    value = hex_color.to_s.gsub(/\A[[:space:]\u{feff}]+|[[:space:]\u{feff}]+\z/, "")
+    value = hex_color.to_s.gsub(JAVASCRIPT_TRIM, "")
     return [value[1, 2], value[3, 2], value[5, 2]].map { _1.to_i(16) } if value.match?(/\A#[0-9a-f]{6}\z/i)
     # In the 3-digit form each digit is doubled, so #f0a means the same colour as #ff00aa.
     return value[1..].chars.map { (_1 * 2).to_i(16) } if value.match?(/\A#[0-9a-f]{3}\z/i)
