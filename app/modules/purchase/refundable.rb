@@ -281,14 +281,21 @@ class Purchase
       canonical_gross_refund_cents = derived.canonical_gross_refund_cents
       presentment_refund ||= derived.presentment_refund
     end
-    # `funds_refunded` is canonical US dollar cents in both branches: either the caller
-    # supplied the canonical figure, or `flow_of_funds.issued_amount` is the canonical
-    # ("issued") leg, which is USD by construction even for a buyer-currency charge whose
-    # processor leg is in euros. That is what makes the comparison against
-    # `total_transaction_cents` below a canonical-to-canonical one. On a buyer-currency
-    # purchase the canonical figure is derived up top by
-    # `derive_presentment_refund_from_flow_of_funds`, which refuses rather than guess when
-    # the flow-of-funds currency does not match the presentment currency.
+    # `funds_refunded` is canonical US dollar cents in both branches, which is what makes the
+    # comparison against `total_transaction_cents` below a canonical-to-canonical one.
+    #
+    # On an ordinary (non-buyer-currency) purchase, `flow_of_funds.issued_amount` is already
+    # canonical US dollars — that is the leg Gumroad issues the charge in — so the fallback is
+    # safe to use directly.
+    #
+    # On a buyer-currency purchase, `flow_of_funds.issued_amount` is denominated in the buyer's
+    # presentment currency, NOT in US dollars, so it must never be booked as canonical cents.
+    # The block above guarantees that: either the caller passed the canonical figure, or
+    # `derive_presentment_refund_from_flow_of_funds` converts the presentment amount into a
+    # separate canonical US dollar value (and refuses, rather than guessing, when the
+    # flow-of-funds currency does not match the presentment currency). Either way
+    # `canonical_gross_refund_cents` is set by the time we get here, so the fallback below is
+    # unreachable for a presentment refund.
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
     ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.
