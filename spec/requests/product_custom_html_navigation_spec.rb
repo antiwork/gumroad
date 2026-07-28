@@ -19,6 +19,7 @@ describe "Product custom HTML landing page store navigation", type: :system, js:
         <h1>Landing Page</h1>
         <a id="sibling" href="#{other_product.long_url}">Sibling Product</a>
         <a id="external" href="https://evil.example/phish">External link</a>
+        <a id="buy" data-gumroad-action="buy" href="#{seller.subdomain_with_protocol}">Buy now</a>
         <button id="evil-post" type="button">Post evil</button>
         <script>
           // Simulates malicious seller HTML driving the bridge directly with a
@@ -49,6 +50,21 @@ describe "Product custom HTML landing page store navigation", type: :system, js:
 
     expect(page).to have_current_path(%r{/l/#{other_product.unique_permalink}}, url: true, wait: 10)
     expect(page.current_url).not_to eq(landing_url)
+  end
+
+  it "still routes the buy button to checkout instead of the navigation bridge" do
+    visit "#{seller.subdomain_with_protocol}/l/#{product.unique_permalink}"
+
+    within_frame(find("iframe#gumroad-landing-frame")) do
+      click_on "Buy now"
+    end
+
+    # The buy element is an <a> pointing at the storefront, which the
+    # navigation bridge would happily accept. The buy handler runs first and
+    # stops it, so the visitor goes to checkout (the ?wanted=true URL hands
+    # off to /checkout) and not the storefront.
+    expect(page).to have_current_path(%r{/(checkout|l/#{product.unique_permalink}\?wanted=true)}, url: true, wait: 10)
+    expect(page.current_url).not_to eq(seller.subdomain_with_protocol)
   end
 
   it "does not navigate the top level for a gumroad:navigate message pointing at a foreign host" do
