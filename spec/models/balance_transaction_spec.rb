@@ -332,12 +332,8 @@ describe BalanceTransaction, :vcr do
         context "when Gumroad holds the funds" do
           # The Gumroad-held platform account is the userless merchant account — that is exactly
           # what StripeChargeProcessor#holder_of_funds keys on to return GUMROAD (in production
-          # this is merchant_accounts.id = 1, currency USD). The explicit merchant id keeps this
-          # from colliding with the sibling contexts' accounts on the uniqueness validation.
-          let(:merchant_account) do
-            create(:merchant_account, user: nil, currency: Currency::USD,
-                                      charge_processor_merchant_id: "acct_gumroad_held_#{SecureRandom.hex(6)}")
-          end
+          # this is merchant_accounts.id = 1, currency USD).
+          let(:merchant_account) { create(:merchant_account, user: nil, currency: Currency::USD) }
           let(:amount) do
             BalanceTransaction::Amount.create_holding_amount_for_seller(
               flow_of_funds:,
@@ -423,11 +419,7 @@ describe BalanceTransaction, :vcr do
         end
 
         context "when a Stripe-held account holds the funds" do
-          # Explicit merchant id for the same uniqueness reason as the Gumroad-held context above.
-          let(:merchant_account) do
-            create(:merchant_account, currency: Currency::EUR,
-                                      charge_processor_merchant_id: "acct_stripe_held_#{SecureRandom.hex(6)}")
-          end
+          let(:merchant_account) { create(:merchant_account, currency: Currency::EUR) }
           let(:amount) do
             BalanceTransaction::Amount.create_holding_amount_for_seller(
               flow_of_funds:,
