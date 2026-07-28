@@ -52,20 +52,39 @@ class BalanceTransaction < ApplicationRecord
       )
     end
 
-    def self.create_holding_amount_for_seller(flow_of_funds:, issued_net_cents:, canonical_issued_amount: nil)
+    # `merchant_account` is what tells a Gumroad-held balance from a Stripe-held one. The two
+    # want opposite answers from the same flow of funds on a buyer-presentment charge, so
+    # without it this method cannot be correct for both (gumroad-private#1471).
+    def self.create_holding_amount_for_seller(flow_of_funds:, issued_net_cents:, canonical_issued_amount: nil, merchant_account: nil)
       if flow_of_funds.merchant_account_gross_amount
         new(
           currency: flow_of_funds.merchant_account_gross_amount.currency,
           gross_cents: flow_of_funds.merchant_account_gross_amount.cents,
           net_cents: flow_of_funds.merchant_account_net_amount.cents
         )
-      elsif canonical_issued_amount && flow_of_funds.settled_amount
+      elsif canonical_issued_amount && flow_of_funds.settled_amount && !gumroad_held?(merchant_account)
+        # A buyer-presentment charge into a connected account: the money really does land in the
+        # currency Stripe settled, which is that account's own currency, so the balance is
+        # labelled with it. Deliberately NOT used for Gumroad-held funds — see below.
         new(
           currency: flow_of_funds.settled_amount.currency,
           gross_cents: flow_of_funds.settled_amount.cents,
           net_cents: issued_net_cents
         )
       else
+        # Gumroad-held funds land here. `settled_amount` on a buyer-presentment charge is the
+        # currency the *buyer* was charged in (EUR), but the money physically arrives in
+        # Gumroad's own USD platform account no matter what the buyer paid in — so labelling
+        # the balance from `settled_amount` records a currency Gumroad does not hold.
+        #
+        # That mislabelling is not cosmetic. Payouts refuse to sum a Gumroad-held balance whose
+        # holding_currency is not USD (StripePayoutProcessor#prepare_payment_and_set_amount),
+        # and because is_balance_payable returns true for all Gumroad-held balances, the bad row
+        # is pulled into the payout and fails the seller's *whole* payment with
+        # currency_mismatch — including their correctly-labelled USD balances.
+        #
+        # The canonical issued amount is the right label here: it is the USD amount the seller
+        # actually earned, which is exactly what Gumroad is holding for them.
         issued_gross_amount = canonical_issued_amount || flow_of_funds.issued_amount
 
         new(
@@ -75,6 +94,19 @@ class BalanceTransaction < ApplicationRecord
         )
       end
     end
+
+    # Whether Gumroad itself is holding these funds, rather than a seller's own connected
+    # Stripe account.
+    #
+    # Returns false when no merchant account is given, which keeps the pre-existing behaviour
+    # for the callers that don't pass one (the affiliate legs and the historical backfill
+    # services). Every caller that books a seller balance for Gumroad-held funds passes it.
+    def self.gumroad_held?(merchant_account)
+      return false if merchant_account.nil?
+
+      merchant_account.holder_of_funds == HolderOfFunds::GUMROAD
+    end
+    private_class_method :gumroad_held?
   end
 
   MAX_ATTEMPTS_TO_UPDATE_BALANCE = 3

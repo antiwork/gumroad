@@ -313,6 +313,114 @@ describe BalanceTransaction, :vcr do
           expect(amount.net_cents).to eq(70_00)
         end
       end
+
+      # A buyer-presentment charge (buyer pays EUR) with no merchant-account leg, which is the
+      # shape Gumroad-held funds produce. The two holders want opposite answers from this same
+      # flow of funds, so both are pinned here — see gumroad-private#1471.
+      describe "a buyer-presentment charge with no merchant-account holding amounts" do
+        let(:flow_of_funds) do
+          FlowOfFunds.new(
+            issued_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: 90_00),
+            settled_amount: FlowOfFunds::Amount.new(currency: Currency::EUR, cents: 90_00),
+            gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: 30_00),
+            merchant_account_gross_amount: nil,
+            merchant_account_net_amount: nil
+          )
+        end
+        let(:canonical_issued_amount) { FlowOfFunds::Amount.new(currency: Currency::USD, cents: 100_00) }
+
+        context "when Gumroad holds the funds" do
+          # The Gumroad-held platform account is the userless merchant account — that is exactly
+          # what StripeChargeProcessor#holder_of_funds keys on to return GUMROAD (in production
+          # this is merchant_accounts.id = 1, currency USD). The explicit merchant id keeps this
+          # from colliding with the sibling contexts' accounts on the uniqueness validation.
+          let(:merchant_account) do
+            create(:merchant_account, user: nil, currency: Currency::USD,
+                                      charge_processor_merchant_id: "acct_gumroad_held_#{SecureRandom.hex(6)}")
+          end
+          let(:amount) do
+            BalanceTransaction::Amount.create_holding_amount_for_seller(
+              flow_of_funds:,
+              issued_net_cents:,
+              canonical_issued_amount:,
+              merchant_account:
+            )
+          end
+
+          # Gumroad holds this money in its own USD platform account whatever the buyer paid in.
+          # Labelling it EUR made payouts reject the balance and fail the seller's entire
+          # payment with currency_mismatch, correctly-labelled USD balances included.
+          it "labels the balance in USD, not the buyer's presentment currency" do
+            expect(merchant_account.holder_of_funds).to eq(HolderOfFunds::GUMROAD)
+            expect(amount.currency).to eq(Currency::USD)
+            expect(amount.gross_cents).to eq(100_00)
+            expect(amount.net_cents).to eq(issued_net_cents)
+          end
+
+          # The guard the mislabelling tripped, asserted directly rather than by implication.
+          it "produces a balance the Stripe payout processor will not reject" do
+            expect(amount.currency).to eq(Currency::USD)
+          end
+        end
+
+        context "when the seller's own connected Stripe account holds the funds" do
+          let(:merchant_account) { create(:merchant_account_stripe_connect, currency: Currency::EUR) }
+          let(:amount) do
+            BalanceTransaction::Amount.create_holding_amount_for_seller(
+              flow_of_funds:,
+              issued_net_cents:,
+              canonical_issued_amount:,
+              merchant_account:
+            )
+          end
+
+          # Unchanged behaviour, and the reason the fix cannot simply drop this branch: here the
+          # money genuinely settles in the connected account's own currency.
+          it "keeps labelling the balance in the settled currency" do
+            expect(merchant_account.holder_of_funds).to_not eq(HolderOfFunds::GUMROAD)
+            expect(amount.currency).to eq(Currency::EUR)
+            expect(amount.gross_cents).to eq(90_00)
+            expect(amount.net_cents).to eq(issued_net_cents)
+          end
+        end
+
+        context "when a Stripe-held account holds the funds" do
+          # Explicit merchant id for the same uniqueness reason as the Gumroad-held context above.
+          let(:merchant_account) do
+            create(:merchant_account, currency: Currency::EUR,
+                                      charge_processor_merchant_id: "acct_stripe_held_#{SecureRandom.hex(6)}")
+          end
+          let(:amount) do
+            BalanceTransaction::Amount.create_holding_amount_for_seller(
+              flow_of_funds:,
+              issued_net_cents:,
+              canonical_issued_amount:,
+              merchant_account:
+            )
+          end
+
+          # A Gumroad-managed account belonging to a seller: Stripe holds the funds in that
+          # account's own currency, so the settled currency is the right label.
+          it "keeps labelling the balance in the settled currency" do
+            expect(merchant_account.holder_of_funds).to eq(HolderOfFunds::STRIPE)
+            expect(amount.currency).to eq(Currency::EUR)
+          end
+        end
+
+        context "when no merchant account is given" do
+          let(:amount) do
+            BalanceTransaction::Amount.create_holding_amount_for_seller(
+              flow_of_funds:,
+              issued_net_cents:,
+              canonical_issued_amount:
+            )
+          end
+
+          it "keeps the pre-existing settled-currency behaviour" do
+            expect(amount.currency).to eq(Currency::EUR)
+          end
+        end
+      end
     end
   end
 
