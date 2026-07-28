@@ -252,14 +252,9 @@ pluralize() {
   if [[ $n -eq 1 ]]; then echo "$n $word"; else echo "$n ${word}s"; fi
 }
 
-# Run one test file with the right runner. Front-end tests live next to the
-# component they cover (app/javascript/**/*.test.tsx) and run under Vitest;
-# everything else is RSpec under spec/.
-#
-# The suffix check matters: a plan (or a stale cached plan) can name a plain
-# source file like app/javascript/components/Input.tsx. Vitest would collect no
-# tests from it and exit 0, which the gate would read as a passing test. So a
-# path only counts as a front-end test if it really is one.
+# Front-end tests live next to the component they cover and run under Vitest.
+# The .test suffix is required: handed a plain source file, Vitest collects
+# nothing and exits 0, which the gate would misread as a passing test.
 is_js_test() {
   case "$1" in
     app/javascript/*.test.ts | app/javascript/*.test.tsx) return 0 ;;
@@ -274,9 +269,8 @@ is_rspec_test() {
   esac
 }
 
-# A planned path is only runnable if it exists AND we know which runner owns it.
-# Anything else (a source file, a fixture, a renamed spec) is dropped from the
-# milestone rather than handed to a runner that would quietly find no tests.
+# Runnable = exists and has a known runner. Anything else (a source file, a
+# renamed spec) is dropped rather than handed to a runner that finds no tests.
 is_runnable_test() {
   local file=$1
   [[ -f "$file" ]] || return 1
@@ -290,8 +284,7 @@ run_test_file() {
   elif is_rspec_test "$file"; then
     bundle exec rspec --format progress --no-color "$file"
   else
-    # Unreachable via the milestone filter; loud rather than silently "passing"
-    # if some future caller skips that filter.
+    # Unreachable via the milestone filter; loud rather than silently passing.
     echo "not a recognized test file: $file" >&2
     return 1
   fi
@@ -307,23 +300,11 @@ cleanup_worktree() {
 }
 trap cleanup_worktree EXIT INT TERM
 
-# Did this Vitest run actually execute test cases?
-#
-# Vitest exits nonzero for two very different reasons, and the gate has to tell
-# them apart. A run that executed tests and had some fail reports a per-test
-# tally:
-#
-#     Tests  1 failed | 1 passed (2)
-#
-# A run that never got that far — a config that failed to load, a plugin that
-# threw during setup, a missing test environment, an import error while
-# collecting the file — reports no tally at all, or reports "Tests  no tests".
-# Its nonzero exit says nothing about whether the test would pass, so it must
-# not be read as "this test was already failing".
-#
-# Vitest colours its summary even when stdout is a pipe, so the tally line
-# really arrives as $'\033[2m      Tests\033[22m ...'. Strip the escapes before
-# matching or an anchored pattern silently never matches.
+# Did this Vitest run actually execute test cases? A run that executed tests
+# prints a tally ("Tests  1 failed | 1 passed (2)"); one that died during setup
+# or collection prints none, and its nonzero exit says nothing about the test.
+# Vitest colours the summary even through a pipe, so strip escapes before
+# matching or an anchored pattern never matches.
 vitest_executed_tests() {
   local output=$1
   local plain tally
@@ -337,17 +318,14 @@ vitest_executed_tests() {
   echo "$tally" | grep -qE '[0-9]+[[:space:]]+(failed|passed|skipped|todo)'
 }
 
-# Files whose contents decide what actually ends up inside node_modules. The
-# manifests are the obvious ones, but this repo's postinstall runs
-# `patch-package`, so a file under patches/ rewrites the installed copy of a
-# dependency without either manifest changing. .npmrc picks the registry and
-# install flags, and a package.json in a nested directory does the same job as
-# the root one. Anything on this list makes the installed tree branch-specific.
+# Files that decide what ends up in node_modules. Beyond the manifests: this
+# repo's postinstall runs patch-package, so a file under patches/ rewrites an
+# installed dependency with no manifest change. Any of these makes the
+# installed tree branch-specific.
 INSTALL_INPUT_RE='^(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|\.npmrc|patches/.+|.+/package\.json)$'
 
-# Install-time inputs this branch touches, one per line (empty if none).
-# Untracked files count too: a new patch that has already been installed is
-# invisible to `git diff` but very much present in node_modules.
+# Install-time inputs this branch touches. Untracked files count too: a new
+# patch already installed is invisible to `git diff` but present in node_modules.
 changed_install_inputs() {
   {
     printf '%s\n' "$CHANGED_ALL"
@@ -355,12 +333,10 @@ changed_install_inputs() {
   } | grep -v '^$' | sort -u | grep -E "$INSTALL_INPUT_RE" || true
 }
 
-# Replay a failing Vitest file on merge-base to decide pre-existing vs regression.
-#
-# The merge-base worktree has no node_modules of its own and installing one
-# would cost minutes, so we symlink this checkout's. That's sound only while
-# both sides would install the same tree, which is why any change to an
-# install-time input bails out as inconclusive instead.
+# Replay a failing Vitest file on merge-base to decide pre-existing vs
+# regression. The worktree has no node_modules, and installing one costs
+# minutes, so it borrows this checkout's — sound only while both sides would
+# install the same tree, hence the install-input bail-out below.
 #
 # Returns: 0 = confirmed pre-existing (red on merge-base too)
 #          1 = real regression (green on merge-base, red on HEAD)
@@ -415,20 +391,14 @@ verify_js_preexisting_on_merge_base() {
       elif vitest_executed_tests "$rerun_output"; then
         rc=0   # red on both, and we know tests really ran → pre-existing
       elif vitest_executed_tests "$head_output"; then
-        # The same file, with the same borrowed node_modules, executed tests on
-        # HEAD but couldn't even start on merge-base. Merge-base is main, and
-        # main's Vitest setup is green in CI, so this is anomalous rather than
-        # informative — and it is exactly the shape a broken-config replay takes.
-        # Refusing to decide would still halt the gate, but with a vaguer
-        # message; naming this case specifically points the reader at the
-        # Vitest config rather than at their own diff.
+        # Ran on HEAD but Vitest couldn't start on merge-base (= main, green in
+        # CI). Anomalous rather than informative, and the shape a broken config
+        # takes — so halt and point the reader at the config, not their diff.
         rc=1
         JS_REGRESSION_KIND="unreplayable"
       else
-        # Neither side executed anything — the replay is simply uninformative
-        # (a bad config, a plugin that failed to initialise, a missing
-        # environment, an import that blew up during collection). That is not
-        # evidence about the test, so it must not license "pre-existing".
+        # Neither side executed anything, so the replay learned nothing. That is
+        # not evidence, and must not license a "pre-existing" verdict.
         rc=2
         JS_UNVERIFIABLE_REASON="Vitest executed no tests on either side, so nothing was learned about this failure"
       fi
@@ -454,17 +424,11 @@ verify_preexisting_on_merge_base() {
   local rspec_output=$1
   local spec_file=${2:-}
 
-  # Front-end tests get a real replay too, just a different one: re-run the
-  # whole test file on merge-base under Vitest. The reason this needs its own
-  # branch is that the RSpec failure-id parsing below finds nothing in Vitest
-  # output and would return "inconclusive", which the caller treats as
-  # pre-existing — silently waving through a front-end regression.
-  #
-  # Replaying is what distinguishes "this test was already red" from "my diff
-  # broke it", and it is the only way to catch the case where the test file
-  # itself is unchanged but a shared dependency it imports was changed. A
-  # basename comparison cannot see that: Input.tsx and InputGroup.test.tsx
-  # share no name.
+  # Front-end tests need their own replay: the RSpec failure-id parsing below
+  # finds nothing in Vitest output and returns "inconclusive", which the caller
+  # treats as pre-existing — waving through real regressions. Replaying is also
+  # the only way to catch an unchanged test broken by a changed dependency
+  # (Input.tsx breaking InputGroup.test.tsx — no shared basename to match on).
   if [[ -n "$spec_file" ]] && is_js_test "$spec_file"; then
     if [[ -z "$MERGE_BASE" ]]; then
       JS_REGRESSION_KIND=""
@@ -536,18 +500,12 @@ for (( m=0; m<MILESTONES; m++ )); do
     echo "   ${CONF}%  ←  remaining tests"
   else
     # The header must show what will actually RUN, so it applies the same
-    # runnability filter as the run loop below. A plan naming a source file or a
-    # spec that no longer exists would otherwise be counted and displayed as a
-    # test, overstating what the gate verified.
+    # runnability filter as the loop below; otherwise an unrunnable planned path
+    # is displayed as a test and overstates what the gate verified.
     #
-    # `|| true` on grep -c: a milestone can legitimately end up with nothing
-    # runnable, and under `set -e` a non-matching grep would abort the whole
-    # script right after the banner.
-    # `|| true` on both assignments: a `while` loop exits with the status of the
-    # last command in its body, so a milestone whose final planned path is not
-    # runnable makes the substitution exit non-zero, and under `set -e` that
-    # aborts the whole script right after the banner. Same failure shape as the
-    # bare `grep "spec/"` this script used to die on.
+    # Every `|| true` here guards `set -e`: a milestone can legitimately have
+    # nothing runnable, and both a non-matching grep -c and a while-loop whose
+    # last iteration returned non-zero would otherwise abort the script.
     NAMES=$(echo "$TESTS_JSON" | while IFS= read -r t; do
       is_runnable_test "$t" && echo "$t"
     done) || true
@@ -562,8 +520,8 @@ for (( m=0; m<MILESTONES; m++ )); do
       [[ -z "$name" ]] && continue
       echo "          ${name#spec/}"
     done
-    # Show what the plan asked for but this run cannot execute, so a shrunken
-    # milestone is never a silent difference between planned and actual coverage.
+    # Show what the plan asked for but cannot run, so a shrunken milestone is
+    # never a silent gap between planned and actual coverage.
     echo "$SKIPPED_NAMES" | while IFS= read -r name; do
       [[ -z "$name" ]] && continue
       echo "          ⚠ discarded (not a runnable test file): $name"
@@ -628,10 +586,8 @@ for (( m=0; m<MILESTONES; m++ )); do
     done)
   fi
 
-  # A milestone that discards planned paths has not covered what the plan said it
-  # would, so say so out loud. Reporting a confidence number that came from fewer
-  # tests than were planned, silently, is the one failure mode a merge gate cannot
-  # have: the number is the only thing anyone reads.
+  # A milestone that discarded planned paths covered less than the plan said, and
+  # the confidence number is the only thing anyone reads — so say so out loud.
   if [[ ${#DISCARDED[@]} -gt 0 ]]; then
     for d in "${DISCARDED[@]}"; do
       echo "  ⚠ ${CONF}% milestone: discarded planned path (not a runnable test file): $d"
@@ -640,10 +596,9 @@ for (( m=0; m<MILESTONES; m++ )); do
 
   MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c . 2>/dev/null || true)
   if [[ -z "$MILESTONE_COUNT" || "$MILESTONE_COUNT" -eq 0 ]]; then
-    # Nothing left to run at this level. Advancing confidence is only honest when
-    # the milestone's tests really were executed — either just now, or in an
-    # earlier milestone (the SEEN_RUN dedupe). If the plan named nothing runnable
-    # at all, zero tests stand behind this number, so the gate must not claim it.
+    # Nothing left to run here. Advancing confidence is only honest if the tests
+    # ran — now, or in an earlier milestone via the SEEN_RUN dedupe. If the plan
+    # named nothing runnable, zero tests back this number, so don't claim it.
     if [[ "$PLAN_IS_ALL_REMAINING" != true && "$PLANNED_RUNNABLE" -eq 0 ]]; then
       echo "  ⚠ ${CONF}% not claimed — no runnable test in this milestone's plan; confidence stays at ${CURRENT_CONFIDENCE}%"
       continue
@@ -689,8 +644,8 @@ for (( m=0; m<MILESTONES; m++ )); do
         case $verify_rc in
           0) verdict="confirmed pre-existing" ;;
           1)
-            # A front-end test that never existed on merge-base can't be called
-            # a cross-file regression — it's simply failing on this branch.
+            # A test that never existed on merge-base can't be cross-file; it is
+            # simply failing on this branch.
             if is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "new" ]]; then
               verdict="regression"
             elif is_js_test "$spec" && [[ "${JS_REGRESSION_KIND:-}" == "unreplayable" ]]; then
@@ -701,20 +656,14 @@ for (( m=0; m<MILESTONES; m++ )); do
             ;;
           2)
             if is_js_test "$spec"; then
-              # A front-end failure with no replay behind it is not evidence of
-              # anything. Calling it pre-existing is how a shared-dependency
-              # regression gets waved through: the test file itself is
-              # unchanged, so every filename-based guess says "unrelated" even
-              # though the branch changed something it imports
-              # (Input.tsx breaking InputGroup.test.tsx, which share no name).
-              # There is no cheap substitute for the replay, so an unavailable
-              # replay halts the gate and says what to fix to make it available.
+              # No replay means no evidence, and there is no cheap substitute:
+              # a filename guess cannot see a shared-dependency break. So halt
+              # and report what would make the replay available.
               verdict="unverifiable regression"
             else
-              # RSpec keeps its heuristic fallback: merge-base verification is
-              # skipped for known-divergent states (a pending migration, a
-              # changed Gemfile.lock) where re-running on merge-base would fail
-              # for reasons unrelated to the test.
+              # RSpec keeps its heuristic fallback: verification is skipped for
+              # known-divergent states (pending migration, changed Gemfile.lock)
+              # where merge-base would fail for reasons unrelated to the test.
               verdict="likely pre-existing (unverified)"
             fi
             ;;

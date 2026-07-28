@@ -1,507 +1,137 @@
-=== BEFORE (main): planner picks Vitest tests -> gate dies at banner, 0 tests run ===
-  📂 4 files changed (fix/custom-receipt-text-char-limit-hint vs main)
-  🧠 Cached plan (00631f652234)
-  ⚡ Risk: low — Purely UI change to two React text input components in the receipt tab, adding a character counter and aria-describedby; tests are colocated Vitest specs with no backend impact.
+bin/test-confidence — Vitest support. Verified behaviour, before vs after.
 
-  ═══════════════════════════════════════════════════
+All transcripts below are real runs of bin/test-confidence in this repo, with a
+cached plan fixture pinning which test the gate selects. Fixtures were reverted
+after each run; `git status` showed only bin/test-confidence and this file.
+
+
+1. THE ORIGINAL BUG — planner picks a Vitest test, gate dies having run nothing
+------------------------------------------------------------------------------
+Diff: 4 files, a UI-only change to two React inputs whose only coverage is
+colocated Vitest tests.
+
+BEFORE (main)
     TEST CONFIDENCE
-  ───────────────────────────────────────────────────
-EXIT=1
+  EXIT=1          <- died at the banner on `grep "spec/"`, 0 tests run
 
-=== AFTER: same diff, gate runs both Vitest milestones + RSpec -> EXIT=0 ===
-       4 files changed (fix/custom-receipt-text-char-limit-hint vs main)
-       Cached plan (00631f652234)
-      Risk: low     Purely UI change to two React text input components in the receipt tab, adding a character counter and aria-describedby; tests are colocated Vitest specs with no backend impact.
-    TEST CONFIDENCE
-   80%       1 test
-          app/javascript/components/ProductEdit/ReceiptTab/CustomReceiptTextInput.test.tsx
-   95%       1 test
-          app/javascript/components/ProductEdit/ReceiptTab/CustomViewContentButtonTextInput.test.tsx
-   99%       1 test
-          requests/products/edit/receipt_spec.rb
-   100%       remaining tests
-                                                                                                                                                                        80%  1/1  1s
-      80%     1 test     1s
-                                                                                                                                                                        95%  1/1  2s
-      95%     1 test     2s
-  [K                                                                                                                               99%  0/1  92s       verifying requests/products/edit/receipt_spec.rb on merge-base...  [K                                                                                                                                                                       99%  1/1  122s      confirmed pre-existing: requests/products/edit/receipt_spec.rb
-      99% confidence     2 tests passed in 122s
-     (1 failure pre-existing, skipped     see list below)
-     Safe to commit.
-  100%       1760 tests     skipped
-  Pre-existing failures (skipped):
-        spec/requests/products/edit/receipt_spec.rb     confirmed pre-existing
-  Re-run with --strict to halt on these.
-  1761 tests more for 100%. Run with --full to continue.
-EXIT=0
-
-
-================================================================================
-REVIEW ROUND 2 — verifying the Vitest merge-base replay
-================================================================================
-
-Greptile raised two findings against the first version of this change. Both were
-real. The fix replaces the basename heuristic with an actual Vitest replay on
-merge-base, and enforces test-file suffixes before dispatching to a runner. The
-three transcripts below are real runs of bin/test-confidence, using a cached plan
-fixture to pin which test the gate selects.
-
-
---------------------------------------------------------------------------------
-CASE 1 — shared-dependency regression (Greptile P1)
---------------------------------------------------------------------------------
-Fixture: app/javascript/components/ui/Input.tsx is modified (wrap the <input> in
-an extra <div>). app/javascript/components/ui/InputGroup.test.tsx is UNCHANGED
-but imports Input, so it breaks. The names share no basename, which is exactly
-what the old heuristic could not see.
-
-  $ npx vitest run app/javascript/components/ui/InputGroup.test.tsx
-   Test Files  1 failed (1)
-        Tests  2 failed | 1 passed (3)
-
-BEFORE (commit e20d7b327) — regression waved through:
-
-  99% confidence — 0 tests passed in 1s
-     (1 failure pre-existing, skipped — see list below)
-     Safe to commit.
-  Pre-existing failures (skipped):
-    app/javascript/components/ui/InputGroup.test.tsx — likely pre-existing (unverified)
-  EXIT_BEFORE=0
-
-AFTER — replayed on merge-base, halts:
-
-    verifying app/javascript/components/ui/InputGroup.test.tsx on merge-base...
-  ═══════════════════════════════════════════════════
-    FAILED (cross-file regression) — app/javascript/components/ui/InputGroup.test.tsx
-  ───────────────────────────────────────────────────
-    These examples pass on merge-base but fail on your branch.
-  ═══════════════════════════════════════════════════
-    AssertionError: expected 'regression-fixture-wrapper' to contain 'forced-colors:border-dashed'
-  Fix this before committing.
-  EXIT=1
-
-
---------------------------------------------------------------------------------
-CASE 2 — genuinely pre-existing failure still skipped (no over-blocking)
---------------------------------------------------------------------------------
-Fixture: app/javascript/components/Search.test.tsx is red on merge-base already
-(verified by running the full Vitest suite in a detached merge-base worktree:
-"Test Files 3 failed | 53 passed"). Nothing about it is touched by the branch.
-
-AFTER — replay confirms it, gate proceeds:
-
-    99% confidence — 0 tests passed in 13s
-     (1 failure pre-existing, skipped — see list below)
-     Safe to commit.
-  Pre-existing failures (skipped):
-    app/javascript/components/Search.test.tsx — confirmed pre-existing
+AFTER
+   80%   app/javascript/.../CustomReceiptTextInput.test.tsx          1/1
+   95%   app/javascript/.../CustomViewContentButtonTextInput.test.tsx 1/1
+   99%   spec/requests/products/edit/receipt_spec.rb   confirmed pre-existing
+  99% confidence — 2 tests passed in 122s.  Safe to commit.
   EXIT=0
 
-Note the verdict wording: "confirmed pre-existing", not "likely pre-existing
-(unverified)". The replay actually ran.
+
+2. A FAILING FRONT-END TEST MUST BE REPLAYED, NOT GUESSED AT
+------------------------------------------------------------
+The old verdict came from comparing basenames, which cannot see a test broken by
+a differently-named dependency. Fixture: wrap Input.tsx's <input> in an extra
+<div>; leave InputGroup.test.tsx (which imports it) untouched.
+
+  HEAD tally: Tests  2 failed | 1 passed (3)
+  VERDICT: regression (kind=replayed) -> gate HALTS, EXIT=1   (correct)
+
+Control — a genuinely pre-existing failure must still be skipped, or a gate that
+halts on everything is useless. Search.test.tsx, already red on merge-base
+(3 failed | 10 passed), branch touches an unrelated file:
+
+  VERDICT: confirmed pre-existing -> skipped, EXIT=0
 
 
---------------------------------------------------------------------------------
-CASE 3 — non-test frontend path in the plan (Greptile P2)
---------------------------------------------------------------------------------
-Fixture: cached plan lists a source file alongside a real test:
-  "tests": ["app/javascript/components/ui/Input.tsx",
-            "app/javascript/components/ui/InputGroup.test.tsx"]
+3. A NONZERO REPLAY IS NOT EVIDENCE UNLESS TESTS ACTUALLY RAN
+--------------------------------------------------------------
+Vitest exits nonzero in three shapes and only the first says anything about the
+test:
 
-BEFORE (commit e20d7b327) — counts the source file as a test:
+  1. executed, some failed   "Tests  1 failed | 1 passed (2)"
+  2. collected nothing       "Tests  no tests"
+  3. never started           no "Tests" line at all (e.g. broken config)
 
-   99%  ←  2 tests
-          app/javascript/components/ui/Input.tsx
-          app/javascript/components/ui/InputGroup.test.tsx
+Fixture: merge-base has a broken vitest.config.ts (Vitest cannot start) and a
+test that would pass; the branch repairs the config and breaks a shared dep, so
+the test genuinely regresses.
 
-AFTER — source file dropped, count is honest:
+  BEFORE  rc=0 confirmed pre-existing -> "Safe to commit"  ** regression shipped **
+  AFTER   rc=1 regression (kind=unreplayable) -> gate HALTS
 
-   99%  ←  1 test
-          app/javascript/components/ui/InputGroup.test.tsx
+vitest_executed_tests() now requires a real per-test tally. Checked against all
+eight captured output shapes (real failure / all passing / skipped-only = ran;
+collection error / startup error / no test files / empty / the word "tests" in
+prose = did not run).
 
-
---------------------------------------------------------------------------------
-CASE 4 — clean tree still green
---------------------------------------------------------------------------------
-  99% confidence — 1 test passed in 1s
-     Safe to commit.
-  EXIT=0
-
-  $ bash -n bin/test-confidence      # clean
-  $ shellcheck -S error bin/test-confidence   # clean
-
-All fixtures reverted afterwards; `git status` shows only bin/test-confidence.
+Trap worth recording: Vitest colours its summary even through a pipe, so the
+tally arrives as $'\033[2m      Tests\033[22m ...'. The first version anchored on
+'^[[:space:]]*Tests' and silently never matched. ANSI is stripped before matching.
 
 
-================================================================================
-REVIEW ROUND 3 — invalid planned paths were discarded silently AND could still
-advance the milestone's confidence
-================================================================================
+4. AN UNAVAILABLE REPLAY IS NOT EVIDENCE EITHER
+------------------------------------------------
+Same shared-dependency regression as (2), but the replay is made unavailable the
+way a real branch would — touch package.json, the documented bail-out.
 
-Greptile round 3, on bin/test-confidence:
+  BEFORE  "likely pre-existing (unverified)" -> Safe to commit, EXIT=0
+  AFTER   FAILED (could not verify against merge-base), EXIT=1
+          Reason: package.json/package-lock.json changed on this branch, so this
+          checkout's node_modules is not the dependency set merge-base would install
 
-  "Invalid or stale planned test paths can be discarded while the script still
-   advances the milestone's confidence, allowing reported coverage to exceed the
-   tests actually executed."
-
-Correct. Round 2 stopped a non-test path from being COUNTED as a passing test,
-but the milestone loop still did:
-
-    MILESTONE_COUNT=$(echo "$MILESTONE_TESTS" | grep -c . || true)
-    if [[ ... "$MILESTONE_COUNT" -eq 0 ]]; then
-      CURRENT_CONFIDENCE=$CONF     # <-- claimed with zero tests behind it
-      continue
-    fi
-
-That branch is legitimate for a milestone whose tests all ran in an EARLIER
-milestone (the SEEN_RUN dedupe). It is not legitimate when the plan named
-nothing runnable at all: then the number is backed by no execution whatsoever.
-Both cases arrive at MILESTONE_COUNT=0, so the fix has to tell them apart —
-count the runnable PLANNED paths, not the post-dedupe list.
-
-The discards were also invisible, which is the half that makes it dangerous: a
-plan can go stale (a spec renamed, a component test deleted) and the gate would
-narrow silently while still printing a confidence number.
-
---------------------------------------------------------------------------------
-CASE 5 — 99% milestone names ONLY a stale path
---------------------------------------------------------------------------------
-Cached-plan fixture:
-
-  80%: app/javascript/components/ui/InputGroup.test.tsx     (real, passes)
-  99%: app/javascript/components/ui/DeletedLongAgo.test.tsx (does not exist)
-
-BEFORE (HEAD 64fb520) — dies at the banner, having run nothing:
-
-     80%  ←  1 test
-            app/javascript/components/ui/InputGroup.test.tsx
-  BEFORE_EXIT=1
-
-  Traced with `bash -x`: the 99% milestone's header block ends on a `while` loop
-  whose last body command is a failing `is_runnable_test`, so the command
-  substitution exits non-zero and `set -e` kills the script. Same failure shape
-  as the original `grep "spec/"` bug this PR set out to fix — a second instance
-  of it, not reported by the review, found while reproducing the reported one.
-
-AFTER — the discard is named, and 99% is refused:
-
-     80%  ←  1 test
-            app/javascript/components/ui/InputGroup.test.tsx
-     99%  ←  0 tests
-            ⚠ discarded (not a runnable test file): app/javascript/components/ui/DeletedLongAgo.test.tsx
-
-    ✅ 80% — 1 test — 1s
-    ⚠ 99% milestone: discarded planned path (not a runnable test file): app/javascript/components/ui/DeletedLongAgo.test.tsx
-    ⚠ 99% not claimed — no runnable test in this milestone's plan; confidence stays at 80%
-
-    ⚠️  Only reached 80% — 1 test in 1s
-  AFTER_EXIT=1
-
-Reported coverage now cannot exceed what ran: 80% claimed, 80% executed, exit 1
-because the gate never reached its 99% bar.
-
---------------------------------------------------------------------------------
-CASE 6 — non-test path in a LOWER milestone (the round-2 fixture, re-run)
---------------------------------------------------------------------------------
-  80%: app/javascript/components/ui/Input.tsx            (source file)
-  99%: app/javascript/components/ui/InputGroup.test.tsx  (real, passes)
-
-     80%  ←  0 tests
-            ⚠ discarded (not a runnable test file): app/javascript/components/ui/Input.tsx
-     99%  ←  1 test
-            app/javascript/components/ui/InputGroup.test.tsx
-
-    ⚠ 80% milestone: discarded planned path (not a runnable test file): app/javascript/components/ui/Input.tsx
-    ⚠ 80% not claimed — no runnable test in this milestone's plan; confidence stays at 0%
-    ✅ 99% confidence — 1 test passed in 2s
-       Safe to commit.
-  EXIT=0
-
-Still exits 0, correctly: the 99% milestone did run a real test. What changed is
-that 80% is no longer claimed off an empty run, and the dropped path is printed
-rather than vanishing.
-
---------------------------------------------------------------------------------
-CASE 7 — CONTROL: milestone whose tests all ran earlier must STILL advance
---------------------------------------------------------------------------------
-A guard that refuses every empty milestone would break the ordinary case where a
-later milestone re-lists a test an earlier one already ran.
-
-  80%: InputGroup.test.tsx
-  99%: InputGroup.test.tsx   (identical — nothing new to run at 99%)
-
-     ✅ 80% — 1 test — 3s
-     1760 tests more for 100%. Run with --full to continue.
-  EXIT=0
-
-No spurious "not claimed" warning, exit 0. The 99% milestone had a runnable
-planned path; it was simply already executed. This is the case the fix must not
-break, and the reason the guard keys on planned-runnable rather than on
-MILESTONE_COUNT.
-
-  And with a genuinely new test at 99% (PriceInput.test.tsx alongside the
-  repeated InputGroup.test.tsx): "✅ 99% confidence — 2 tests passed in 11s",
-  EXIT=0 — unchanged behaviour for a normal plan.
-
-  $ bash -n bin/test-confidence               # clean
-  $ shellcheck -S error bin/test-confidence   # clean
-
-All round-3 fixtures removed (tmp/test-confidence deleted, Input.tsx reverted);
-`git status` shows only bin/test-confidence.
+There is no cheap substitute for the replay, so the basename fallback is deleted
+rather than improved (`is_likely_preexisting` is gone; it had no other caller).
+Each inconclusive path now names its reason: manifests changed / no node_modules
+to lend / worktree or symlink failed / Vitest executed no tests on either side.
 
 
-═══════════════════════════════════════════════════════════════════════
-ROUND 4 — replay startup errors must not count as "pre-existing"
-═══════════════════════════════════════════════════════════════════════
+5. BRANCH PATCHES CONTAMINATE THE BORROWED node_modules
+--------------------------------------------------------
+postinstall runs `patch-package`, so a file under patches/ rewrites an installed
+dependency with neither manifest changing. Fixture: edit the installed copy of
+class-variance-authority so cva() returns "", add the patch file, leave both
+manifests untouched.
 
-Greptile P1: when the merge-base Vitest replay exits nonzero during config
-load, plugin init, environment setup, or module collection, the branch read
-that as proof the test failed on merge-base and labelled the failure
-"confirmed pre-existing" — gate prints "Safe to commit", exit 0, without ever
-establishing that the test ran.
+  BEFORE  "confirmed pre-existing" -> Safe to commit, EXIT=0
+          (worst case: the replay really ran — against the branch's own
+          contaminated tree)
+  AFTER   FAILED (could not verify against merge-base), EXIT=1
+          Reason: install-time inputs changed on this branch
+          (patches/class-variance-authority+0.7.1.patch)
 
-Confirmed against the real Vitest in this repo that a nonzero exit has three
-distinct shapes, and only one of them is evidence:
+The drift guard now covers package.json, package-lock.json, npm-shrinkwrap.json,
+yarn.lock, pnpm-lock.yaml, .npmrc, patches/**, and any nested */package.json.
+Untracked files count too — a newly added patch is invisible to `git diff` but
+already installed, which is exactly when the tree is contaminated.
 
-  1. Executed, some failed     →  "Tests  1 failed | 1 passed (2)"   rc=1
-  2. Collected nothing         →  "Tests  no tests"                  rc=1
-     (import error / assertion outside a test)
-  3. Never started             →  no "Tests" line at all             rc=1
-     (broken vitest.config.ts → "failed to load config from ...")
+Known limit: a node_modules hand-edited by something other than a tracked
+install-time input is undetectable from git. Not reachable through a branch,
+which is what this gate judges. Verified the guard does not latch: with the same
+contaminated dependency but the patch file deleted, the gate goes back to
+trusting the replay (EXIT=0).
 
-Cases 2 and 3 are indistinguishable from case 1 by exit code alone, which is
-exactly the bug.
 
-REPRO (git fixture, /tmp/vfix):
-  merge-base: vitest.config.ts is syntactically broken (Vitest cannot start),
-              thing.test.ts asserts label() === "ok" and would PASS
-  branch:     config repaired, shared dep thing.ts changed to return "BROKEN"
-              → the test genuinely regresses on this branch
+6. A MILESTONE MUST NOT CLAIM CONFIDENCE IT DIDN'T EARN
+--------------------------------------------------------
+A plan can name a stale or non-test path. Two problems: the discard was silent,
+and the milestone still advanced its confidence with zero tests behind it.
 
-Driving the real verify_js_preexisting_on_merge_base() from the script:
+  99% names only app/javascript/.../DeletedLongAgo.test.tsx (does not exist)
 
-  BEFORE (db7a2aa2, the reviewed commit)
-    merge-base=30483cf
-    changed:   app/javascript/utils/thing.ts vitest.config.ts
-    VERDICT: rc=0 confirmed pre-existing -> gate prints 'Safe to commit'
-             ** real regression waved through **
+  BEFORE  EXIT=1, dying at the banner — a second instance of the same
+          `set -e` + non-matching-grep bug this PR set out to fix
+  AFTER   ⚠ discarded (not a runnable test file): .../DeletedLongAgo.test.tsx
+          ⚠ 99% not claimed — no runnable test in this milestone's plan;
+            confidence stays at 80%
+          EXIT=1, because the gate never reached its bar
 
-  AFTER
-    merge-base=30483cf
-    changed:   app/javascript/utils/thing.ts vitest.config.ts
-    HEAD executed tests: yes
-    VERDICT: rc=1 regression (kind=unreplayable) -> gate HALTS
+Control — a milestone whose tests all ran in an EARLIER milestone must still
+advance (the SEEN_RUN dedupe), which is why the guard keys on planned-runnable
+rather than on the post-dedupe count:
 
-The fix adds vitest_executed_tests(), which requires a real per-test tally
-before a nonzero replay may be called pre-existing. Unit-checked against the
-captured shapes:
+  80%: InputGroup.test.tsx    99%: InputGroup.test.tsx (identical)
+  ✅ 80% — 1 test — 3s, no spurious warning, EXIT=0
 
-  PASS  real failure (1 failed | 1 passed)   ran
-  PASS  all passing                          ran
-  PASS  collection/import error (no tests)   notran
-  PASS  startup error, no summary at all     notran
-  PASS  no test files found                  notran
-  PASS  skipped only                         ran
-  PASS  empty output                         notran
-  PASS  the word tests in prose only         notran
+  And with a genuinely new test at 99%: 99% confidence — 2 tests passed, EXIT=0.
 
-One trap worth recording: Vitest colours the summary even when stdout is a
-pipe, so the tally really arrives as $'\033[2m      Tests\033[22m ...'. The
-first version of the helper anchored on '^[[:space:]]*Tests' and therefore
-never matched — it silently reported "HEAD executed tests: no" on a run that
-plainly had executed tests. The helper now strips ANSI before matching.
 
-Ran-on-HEAD-but-not-on-merge-base is resolved to a REGRESSION rather than to
-inconclusive. Inconclusive falls back to the filename heuristic, which is blind
-to the shared-dependency case (Input.tsx vs InputGroup.test.tsx share no
-basename) — the exact hole round 3 closed. Since merge-base is main and main's
-Vitest setup is green in CI, a merge-base that cannot start is anomalous, so
-the gate fails loudly with its own verdict rather than guessing.
-
-CONTROL — a genuinely pre-existing failure must still be skipped, or the gate
-blocks everything (/tmp/vfix2: test already red on merge-base, branch changes
-an unrelated file):
-
-    HEAD executed tests: yes
-    VERDICT: rc=0 confirmed pre-existing -> skipped, gate proceeds
-
-CONTROL — round 3's shared-dependency regression still caught, in the real
-repo (wrap Input.tsx's <input> in an extra <div>, leave InputGroup.test.tsx
-untouched):
-
-    broke:     app/javascript/components/ui/Input.tsx
-    test:      app/javascript/components/ui/InputGroup.test.tsx (unchanged)
-    HEAD tally: Tests  2 failed | 1 passed (3)
-    VERDICT: rc=1 regression (kind=replayed) -> gate HALTS  (correct)
-
+LINT
+-----
   $ bash -n bin/test-confidence                 # clean
   $ shellcheck -S error bin/test-confidence     # clean
   $ shellcheck -S warning bin/test-confidence   # clean
-
-All round-4 fixtures removed (/tmp/vfix, /tmp/vfix2 are outside the repo;
-Input.tsx reverted); `git status` shows only bin/test-confidence.
-
-════════════════════════════════════════════════════════════════════════════
-ROUND 5 — an UNAVAILABLE Vitest replay no longer counts as "pre-existing"
-════════════════════════════════════════════════════════════════════════════
-
-Greptile, round 5: when the merge-base replay comes back inconclusive, the code
-fell back to the basename heuristic, and the heuristic cannot associate an
-unchanged test with a differently-named shared dependency. So the failure was
-recorded as "likely pre-existing (unverified)" and the gate printed
-"Safe to commit". That is round 3's hole again, reachable through a different
-door: instead of the replay being absent, the replay is unavailable.
-
-Reproduced in the real repo before changing anything. Fixture (fixture.sh):
-
-  1. break a shared dependency:  app/javascript/components/ui/Input.tsx
-     (wrap the rendered <input> in an extra <div>)
-  2. leave the failing test untouched: app/javascript/components/ui/InputGroup.test.tsx
-     — it imports Input, and the two share no basename
-  3. make the replay UNAVAILABLE the way a real branch would: touch package.json,
-     which is the documented bail-out (the borrowed node_modules is no longer
-     provably merge-base's dependency set)
-  4. pin a cached plan so the gate runs exactly that test
-
-BEFORE (2dc57f0, current PR head)
-
-     80%  ←  1 test
-            app/javascript/components/ui/InputGroup.test.tsx
-     ⚠ likely pre-existing (unverified): app/javascript/components/ui/InputGroup.test.tsx
-     ✅ 99% confidence — 1 test passed in 5s
-        (1 failure pre-existing, skipped — see list below)
-        Safe to commit.
-  EXIT_CODE: 0
-
-The regression is real, the gate says ship it.
-
-AFTER (this commit)
-
-     ❌ FAILED (could not verify against merge-base) — app/javascript/components/ui/InputGroup.test.tsx
-     ───────────────────────────────────────────────────
-     The merge-base replay could not run, so there is no
-     evidence this failure is pre-existing rather than caused
-     by your branch.
-     Reason: package.json/package-lock.json changed on this branch, so this
-     checkout's node_modules is not the dependency set merge-base would install
-
-     ... real Vitest output ...
-      Test Files  1 failed (1)
-           Tests  2 failed | 1 passed (3)
-
-     Fix this before committing.
-  EXIT_CODE: 1
-
-What changed. There is no cheap substitute for the replay — any filename-based
-guess is blind to exactly the case the replay exists to catch — so the fallback
-is deleted rather than improved. `is_likely_preexisting` is gone entirely (it
-had no other caller once the JS path stopped using it), and an inconclusive JS
-replay now halts with the reason it was inconclusive, so the reader knows what
-to fix to get a verdict: run `npm ci`, or accept that a dependency-manifest
-change means merge-base cannot be replayed at all.
-
-The four inconclusive paths each now carry their reason:
-  - package.json / package-lock.json changed on this branch
-  - no node_modules in this checkout to lend
-  - could not create the merge-base worktree / link node_modules
-  - Vitest executed no tests on either side
-
-CONTROL — a genuinely pre-existing failure must still be SKIPPED, or a gate
-that halts on everything is no more useful than one that halts on nothing.
-app/javascript/components/Search.test.tsx is already red on merge-base
-(3 failed | 10 passed), replay available, branch touches an unrelated file:
-
-     ⚠ confirmed pre-existing: app/javascript/components/Search.test.tsx
-     ✅ 99% confidence — 1 test passed in 21s
-        Safe to commit.
-  EXIT_CODE: 0
-
-  $ bash -n bin/test-confidence                 # clean
-  $ shellcheck -S error bin/test-confidence     # clean
-
-All round-5 fixtures reverted; `git status` shows only bin/test-confidence and
-this transcript.
-
-
-════════════════════════════════════════════════════════════════════════════
-ROUND 6 — Greptile P1: branch patches contaminate the merge-base replay
-════════════════════════════════════════════════════════════════════════════
-
-The finding: the replay borrows this checkout's node_modules and only checked
-package.json / package-lock.json for drift. But this repo's postinstall is
-`patch-package && ts-patch install -s`, so a file under patches/ rewrites the
-installed copy of a dependency with neither manifest changing. A test broken by
-a branch-only patch then fails on BOTH sides and is filed as pre-existing.
-
-FIXTURE (reproduces the bot's scenario before touching the script):
-  - node_modules/class-variance-authority/dist/index.mjs edited in place so
-    cva() returns "" — the same effect patch-package would have had.
-  - patches/class-variance-authority+0.7.1.patch added (the install-time input).
-  - package.json and package-lock.json left untouched — that is the whole point.
-  - Branch edit: a comment appended to app/javascript/components/ui/Fieldset.tsx.
-  - Cached plan pinned to app/javascript/components/ui/InputGroup.test.tsx
-    (2 of 3 assertions fail with the contaminated dependency).
-
-BEFORE (the reviewed commit, 48952c8):
-
-    99%  ←  1 test
-           app/javascript/components/ui/InputGroup.test.tsx
-    ⚠ confirmed pre-existing: app/javascript/components/ui/InputGroup.test.tsx
-    ✅ 99% confidence — 0 tests passed in 8s
-       (1 failure pre-existing, skipped)
-       Safe to commit.
-  EXIT_CODE: 0
-
-A dependency broken by this branch, waved through as "confirmed pre-existing" —
-and "confirmed" is the worst part, because the replay really did run; it just
-ran against the branch's own contaminated tree.
-
-AFTER:
-
-    ❌ FAILED (could not verify against merge-base) —
-       app/javascript/components/ui/InputGroup.test.tsx
-    Reason: install-time inputs changed on this branch
-       (patches/class-variance-authority+0.7.1.patch), so this checkout's
-       node_modules is not the tree merge-base would install
-  EXIT_CODE: 1
-
-The drift guard now covers everything that decides what lands inside
-node_modules, not just the two manifests:
-
-  package.json, package-lock.json, npm-shrinkwrap.json, yarn.lock,
-  pnpm-lock.yaml, .npmrc, patches/**, and any nested */package.json
-
-Untracked files count too. A new patch file that has already been installed is
-invisible to `git diff`, so `git ls-files --others --exclude-standard` is folded
-into the check — otherwise the very first run after adding a patch, which is
-exactly when the tree is contaminated, would sail through the guard.
-
-CONTROL 1 — the guard keys on the install-time INPUT, not on the state of
-node_modules itself. With the same contaminated dependency but the patch file
-deleted, the gate cannot know the tree drifted and goes back to trusting the
-replay. That is a real remaining limit — a node_modules hand-edited by
-something other than a tracked install-time input is undetectable from git —
-but it is not reachable through a branch, which is what this gate judges. What
-must hold is that the guard does not latch on and halt forever once it has
-fired:
-
-    ⚠ confirmed pre-existing: app/javascript/components/ui/InputGroup.test.tsx
-    ✅ 99% confidence — Safe to commit.
-  EXIT_CODE: 0
-
-CONTROL 2 — a genuinely pre-existing failure is still SKIPPED. Dependency tree
-pristine (node_modules restored, no patches/ change),
-app/javascript/components/Search.test.tsx already red on merge-base
-(3 failed | 10 passed):
-
-    ⚠ confirmed pre-existing: app/javascript/components/Search.test.tsx
-    ✅ 99% confidence — Safe to commit.
-  EXIT_CODE: 0
-
-  $ bash -n bin/test-confidence                 # clean
-  $ shellcheck -S error bin/test-confidence     # clean
-
-All round-6 fixtures reverted: patch file deleted, node_modules copy of
-class-variance-authority restored from its pre-fixture backup and re-verified
-green (3 passed), Fieldset.tsx checked out, tmp/test-confidence removed.
-`git status` shows only bin/test-confidence and this transcript.
