@@ -244,13 +244,27 @@ describe CurrencyHelper do
       expect(props).to include(display_mode: "default", buyer_currency_shown: "usd")
     end
 
-    it "hides the buyer currency for a product not priced in USD, which the charge path never presents" do
+    it "shows the buyer currency for a product priced in a third currency, which the charge path does present" do
+      # What the seller priced in does not decide this: the charge converts the cart's
+      # canonical USD total into the buyer's currency whichever currency was listed.
       product.alive_prices.update_all(currency: "gbp")
       product.update!(price_currency_type: "gbp")
 
       props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
 
-      expect(props).to include(display_mode: "default", buyer_currency_shown: "gbp", rate: nil)
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    end
+
+    it "hides the buyer currency for a product already priced in the buyer's own currency" do
+      # Converting that listing to USD and back through an FX quote returns something near but
+      # not equal to the listed price, so the cart is withheld from quoting and charged
+      # canonical USD. Showing a converted price would promise a number the charge never uses.
+      product.alive_prices.update_all(currency: "eur")
+      product.update!(price_currency_type: "eur")
+
+      props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "default", buyer_currency_shown: "eur", rate: nil)
     end
 
     it "still shows the preview while charging in the buyer's currency is not enabled for the seller" do

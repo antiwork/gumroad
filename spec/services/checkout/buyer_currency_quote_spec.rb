@@ -244,11 +244,207 @@ describe Checkout::BuyerCurrencyQuote do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
     end
 
-    it "returns nil when any item in the cart is priced in a non-USD currency" do
+    it "quotes a cart priced in a non-USD currency that is not the buyer's own" do
+      # The seller pricing in euros says nothing about what a Canadian buyer should see:
+      # the cart total reaching this service is canonical USD either way, so it converts
+      # into the buyer's currency exactly as a USD-priced cart does.
       eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
-      expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(line_items: line_items_for(product, eur_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 25_00)
+    end
+
+    it "withholds the quote when a tip rides on a non-USD listing, because the two tip splits disagree" do
+      # REGRESSION for rmarescu's review finding on #6350.
+      #
+      # The tip is allocated twice in different units: the surcharge request that mints the
+      # quote splits it over each line's canonical USD price, while the submitted order
+      # splits it over each line's listed price and the server converts that back through
+      # get_usd_cents. For a USD listing the two agree; for any other listing currency they
+      # sit on either side of a division by the same rate and disagree by a cent, so verify!
+      # rejects the token and the buyer's payment fails. Until both sides split from the same
+      # figures, such a cart must fall back to the canonical USD checkout rather than be
+      # quoted into a payment that cannot complete.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      tipped_eur_line = described_class::LineItem.new(
+        permalink: eur_product.unique_permalink, product: eur_product,
+        price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+        gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      expect(described_class.create(line_items: [tipped_eur_line], canonical_total_cents: 11_00, ip: "24.48.0.1")).to be_nil
+    end
+
+    it "still quotes a non-USD listing when there is no tip on it" do
+      # The gate above must be scoped to the tip, not to the listing currency — withholding
+      # every non-USD cart would revert the whole point of this PR.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+
+      result = described_class.create(line_items: line_items_for(eur_product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 12_50)
+    end
+
+    it "still quotes a tip that rides on a USD listing" do
+      # A tip is only unsafe in combination with a non-USD listing. USD-listed tipping is the
+      # behaviour that already ships and must not regress.
+      tipped_usd_line = described_class::LineItem.new(
+        permalink: product.unique_permalink, product:,
+        price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+        gumroad_tax_cents: 0, shipping_cents: 0
+      )
+
+      result = described_class.create(line_items: [tipped_usd_line], canonical_total_cents: 11_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 13_75)
+    end
+
+    it "withholds the quote when a non-USD listing carries shipping, because the two sides convert it differently" do
+      # Same defect as the tip, reached a different way, so it needs the same gate.
+      #
+      # The surcharge endpoint sums the listed one-item and multiple-items shipping rates and
+      # converts that sum to USD once. Purchase#calculate_shipping converts each of the two
+      # rates on its own and adds them afterwards. Those disagree by a cent whenever both
+      # terms round the same way, and the signed token then fails verification at charge time.
+      # The listed-versus-converted shipping figure also reaches SalesTaxCalculator on the two
+      # sides, so the tax can move too.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      shipped_eur_line = described_class::LineItem.new(
+        permalink: eur_product.unique_permalink, product: eur_product,
+        price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+        gumroad_tax_cents: 0, shipping_cents: 5_00
+      )
+
+      expect(described_class.create(line_items: [shipped_eur_line], canonical_total_cents: 15_00, ip: "24.48.0.1")).to be_nil
+    end
+
+    it "still quotes shipping that rides on a USD listing" do
+      # Shipping is only unsafe in combination with a non-USD listing: with nothing to convert
+      # both sides compute the same figure. USD-listed shipping already ships and must not
+      # regress, so this is what stops the gate above quietly reverting the whole change.
+      shipped_usd_line = described_class::LineItem.new(
+        permalink: product.unique_permalink, product:,
+        price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+        gumroad_tax_cents: 0, shipping_cents: 5_00
+      )
+
+      result = described_class.create(line_items: [shipped_usd_line], canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+      expect(result).to have_attributes(currency: Currency::CAD, presentment_total_cents: 18_75)
+    end
+
+    it "withholds the quote for the whole cart when only one line pairs shipping with a non-USD listing" do
+      # One offending line is enough: the quote locks a single total for the entire cart.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      lines = [
+        described_class::LineItem.new(permalink: product.unique_permalink, product:,
+                                      price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+        described_class::LineItem.new(permalink: eur_product.unique_permalink, product: eur_product,
+                                      price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 5_00),
+      ]
+
+      expect(described_class.create(line_items: lines, canonical_total_cents: 25_00, ip: "24.48.0.1")).to be_nil
+    end
+
+    it "withholds the quote for the whole cart when only one line pairs a tip with a non-USD listing" do
+      # A mixed cart is not a special case, it is the same defect: one offending line is
+      # enough, because the quote locks a single total for the entire cart.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      lines = [
+        described_class::LineItem.new(permalink: product.unique_permalink, product:,
+                                      price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+        described_class::LineItem.new(permalink: eur_product.unique_permalink, product: eur_product,
+                                      price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+      ]
+
+      expect(described_class.create(line_items: lines, canonical_total_cents: 21_00, ip: "24.48.0.1")).to be_nil
+    end
+
+    it "withholds the quote when the tip landed on a USD line but the cart carries a non-USD listing" do
+      # The surcharge request and the submitted order split the tip with the same
+      # largest-remainder code but over different price bases (canonical USD vs listed),
+      # so a cent that lands on the USD line at quote time can land on the EUR line at
+      # submit. The gate must therefore key off the cart (any tip + any non-USD listing),
+      # not off which line the quote-time split happened to put the tip on: a token minted
+      # for this cart would fail per-line verification whenever the submit-time split
+      # moves the cent.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      lines = [
+        described_class::LineItem.new(permalink: product.unique_permalink, product:,
+                                      price_cents: 10_00, tip_cents: 1_00, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+        described_class::LineItem.new(permalink: eur_product.unique_permalink, product: eur_product,
+                                      price_cents: 10_00, tip_cents: 0, seller_tax_cents: 0,
+                                      gumroad_tax_cents: 0, shipping_cents: 0),
+      ]
+
+      expect(described_class.create(line_items: lines, canonical_total_cents: 21_00, ip: "24.48.0.1")).to be_nil
+    end
+
+    it "treats a non-USD line's submitted price as already-canonical USD, matching the purchase total" do
+      # LOAD-BEARING UNITS INVARIANT. The browser converts before it posts — getProducts in
+      # pages/Checkout/Show.tsx sends `price: convertToUSD(item, price)` — so the surcharge
+      # endpoint's `price` is USD cents for every cart, whatever currency the seller priced in.
+      # LineItem.from_surcharge must therefore pass it through untouched.
+      #
+      # A reviewer read the field as product-priced and proposed converting it here. That is a
+      # DOUBLE conversion, and it manufactures exactly the charge-time mismatch it was meant to
+      # prevent: a €10.00 product posts 1233 USD cents, and converting again yields 1520 against
+      # a purchase whose total_transaction_cents is 1233 — every such checkout would fail
+      # verification. This example pins the two figures to each other so the mistake reddens.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+
+      purchase = build(:purchase, link: eur_product, seller:, purchase_state: "in_progress")
+      purchase.set_price_and_rate
+      posted_price_cents = purchase.total_transaction_cents
+      expect(posted_price_cents).not_to eq(eur_product.price_cents), "expected the purchase total to be converted USD, not the listed EUR cents"
+
+      tax_result = double(price_cents: posted_price_cents, tax_cents: 0, zip_tax_rate: nil, used_taxjar: false, gumroad_is_mpf: false)
+      line_item = described_class::LineItem.from_surcharge(
+        permalink: eur_product.unique_permalink,
+        product: eur_product,
+        tax_result:,
+        tip_cents: 0,
+        shipping_usd_cents: 0
+      )
+
+      expect(line_item.canonical_total_cents).to eq(posted_price_cents)
+
+      result = described_class.create(line_items: [line_item], canonical_total_cents: posted_price_cents, ip: "24.48.0.1")
+      expect do
+        described_class.verify!(
+          token: result.token,
+          seller:,
+          merchant_account:,
+          currency: Currency::CAD,
+          canonical_total_cents: posted_price_cents,
+          canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: posted_price_cents }]
+        )
+      end.not_to raise_error
+    end
+
+    it "returns nil when an item is already priced in the buyer's own currency" do
+      # Converting a listed CAD price to USD and back through an FX quote would charge a
+      # Canadian buyer something a cent or two off the CAD price on the page. That cart is
+      # charged its listed price directly instead, so it must not be quoted here.
+      cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(cad_product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
+    it "returns nil when only one item of a mixed cart is priced in the buyer's currency" do
+      cad_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::CAD)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product, cad_product), canonical_total_cents: 20_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
     end
@@ -486,6 +682,57 @@ describe Checkout::BuyerCurrencyQuote do
       expect(verified_quote).to have_attributes(currency: Currency::CAD,
                                                 canonical_total_cents: 10_00,
                                                 presentment_total_cents: 12_50)
+    end
+
+    it "verifies a EUR-priced cart's token against the purchase totals the charge path computes" do
+      # Greptile P1 (2026-07-26) claimed the broadened gate locks LISTED-currency cents in the
+      # token while charge-time verification passes USD totals, so a non-USD listing could never
+      # complete. This walks both halves with real objects to settle it.
+      #
+      # Both sides are canonical USD, and neither reads price_currency_type: the checkout sends
+      # already-converted prices to the surcharge endpoint (getProducts does
+      # `price: convertToUSD(item, price)`), so the line item's price_cents is USD; and the
+      # purchase stores `price_cents = displayed_price_usd_cents` with
+      # `total_transaction_cents = price_cents`, which is what Order::ChargeService sums into
+      # amount_cents. The listing currency only decides how the USD figure was derived.
+      eur_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::EUR)
+      eur_purchase = build(:purchase, link: eur_product, seller:, purchase_state: "in_progress")
+      # Run the real pricing step rather than trusting the factory, which assigns
+      # price_cents straight from the product and so would not exercise the conversion.
+      eur_purchase.set_price_and_rate
+
+      # The charge path's own inputs, read off the purchase rather than restated by hand.
+      charge_total_cents = eur_purchase.total_transaction_cents
+      expect(charge_total_cents).to eq(eur_purchase.price_cents)
+      expect(charge_total_cents).not_to eq(eur_product.price_cents), "expected the purchase total to be converted USD, not the listed EUR cents"
+
+      result = described_class.create(
+        line_items: [
+          described_class::LineItem.new(
+            permalink: eur_product.unique_permalink,
+            product: eur_product,
+            price_cents: charge_total_cents,
+            tip_cents: 0,
+            seller_tax_cents: 0,
+            gumroad_tax_cents: 0,
+            shipping_cents: 0
+          )
+        ],
+        canonical_total_cents: charge_total_cents,
+        ip: "24.48.0.1"
+      )
+
+      verified_quote = described_class.verify!(
+        token: result.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: charge_total_cents,
+        canonical_line_items: [{ permalink: eur_product.unique_permalink, total_cents: charge_total_cents }]
+      )
+
+      expect(verified_quote.currency).to eq(Currency::CAD)
+      expect(verified_quote.canonical_total_cents).to eq(charge_total_cents)
     end
 
     it "rejects expired tokens" do
