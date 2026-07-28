@@ -22,15 +22,22 @@ describe "Buyer-currency quote recovery after the stored rate moves (#6484)", ty
   let(:render_time_eur_rate) { 0.9 }
   let(:charge_time_eur_rate) { 0.8 }
 
-  let(:france) do
+  # The buyer is Canadian. This matters for more than geography: a quote is deliberately withheld
+  # when the product is already listed in the buyer's own currency, because quoting it would be a
+  # round trip (listed €10 → canonical USD at our stored rate → back to EUR at Stripe's rate) that
+  # lands a cent or two off the listed price. Checkout::BuyerCurrencyQuote#quotable_product?
+  # returns false on that match. A French buyer of a euro listing would therefore be handed no
+  # quote at all, the first Pay would simply succeed, and this spec could never reach the rejection
+  # it exists to test. A Canadian buying a euro listing is the shape the fix is about.
+  let(:canada) do
     GeoIp::Result.new(
-      country_name: "France", country_code: "FR", region_name: "IDF",
-      city_name: "Paris", postal_code: "75001", latitude: nil, longitude: nil
+      country_name: "Canada", country_code: "CA", region_name: "Quebec",
+      city_name: "Montreal", postal_code: "H2X 1Y4", latitude: nil, longitude: nil
     )
   end
 
   before do
-    allow(GeoIp).to receive(:lookup).and_return(france)
+    allow(GeoIp).to receive(:lookup).and_return(canada)
     # Only the FX-quote boundary is stubbed; the surcharge request, the token, the display, and
     # the charge all run for real.
     allow(StripeFxQuote).to receive(:create).and_return(
@@ -59,9 +66,10 @@ describe "Buyer-currency quote recovery after the stored rate moves (#6484)", ty
     visit "/l/#{@product.unique_permalink}"
     add_to_cart(@product)
 
-    # The quote currency comes from the GeoIP lookup (France), not the billing country, so
+    # The quote currency comes from the GeoIP lookup (Canada), not the billing country, so
     # checking out with a US billing address keeps this spec off the EU-VAT and SCA paths while
-    # still quoting in EUR.
+    # still quoting in CAD. It also settles which postal field the form renders — the helper's
+    # default "ZIP code" only exists for a US address.
     fill_checkout_form(@product, email: "buyer@example.com", country: "United States")
 
     # Stand in for the hourly UpdateCurrenciesWorker tick landing while this checkout is open.
