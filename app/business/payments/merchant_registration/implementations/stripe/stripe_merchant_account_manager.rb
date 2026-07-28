@@ -40,6 +40,9 @@ module StripeMerchantAccountManager
   # whether waiting might help (directory miss) or whether they must re-enter the code (format).
   BANK_REJECTION_KIND_FORMAT = "format_rejected"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
+  # Prefix for the breadcrumb left when Stripe rejects account creation or an account update
+  # for a reason we do not handle specifically. See record_account_rejection_note below.
+  ACCOUNT_REJECTION_NOTE_PREFIX = "Stripe rejected payout setup"
 
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
@@ -709,6 +712,42 @@ module StripeMerchantAccountManager
     )
   rescue => e
     Rails.logger.error "Failed to record postal-code payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # Leave a private breadcrumb naming exactly which field Stripe rejected when payout setup
+  # fails for a reason we do not handle specifically.
+  #
+  # Why this exists: when Stripe refuses to create or update a connected account, the caller
+  # (UpdateUserComplianceInfo) shows the seller Stripe's message and rolls the half-built
+  # merchant account back. Nothing about the rejection was kept, so a seller stuck in this
+  # state was undiagnosable from support tooling — the only evidence was a row created and
+  # soft-deleted in the same second, with no error code and no indication of which field was
+  # at fault. Support then has to guess, and the seller's own description of the error is
+  # usually a paraphrase that points at the wrong field.
+  #
+  # Stripe puts the useful part in `code` and `param` rather than the message, so both are
+  # recorded. `param` is the field name Stripe objected to; that single value is normally
+  # enough to identify the problem without reproducing the failure.
+  #
+  # Not seller-visible: the seller already saw Stripe's message, and the raw parameter path
+  # is internal vocabulary that would confuse more than it helps.
+  def self.record_account_rejection_note(user, error)
+    return if user.blank?
+
+    code = error.respond_to?(:code) ? error.code : nil
+    param = error.respond_to?(:param) ? error.param : nil
+    details = ["code=#{code || 'unknown'}"]
+    details << "param=#{param}" if param.present?
+
+    user.add_payout_note(
+      content: "#{ACCOUNT_REJECTION_NOTE_PREFIX}: #{details.join(' ')} — #{error.message.to_s.truncate(300)}",
+      seller_visible: false
+    )
+  rescue => e
+    # A missing breadcrumb must never turn into a second failure on top of the original
+    # rejection: the seller's error message matters more than our diagnostics.
+    Rails.logger.error "Failed to record Stripe account-rejection payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 
