@@ -187,25 +187,40 @@ class Checkout::BuyerCurrencyQuote
     # the quote locked) means the whole cart falls back to canonical USD. The buyer's
     # currency is known by this point because one of the product gates depends on it.
     return unless products.all? { |product| quotable_product?(product, buyer_currency:) }
-    # A tip on a product listed in something other than USD is not yet safe to quote.
+    # On a non-USD listing, a tip or a shipping charge is not yet safe to quote.
     #
-    # The checkout allocates the buyer's tip twice, in two different units. The surcharge
-    # request that mints this quote splits the tip over each line's canonical USD price
+    # Both are computed twice on the way to a purchase: once by the surcharge request that
+    # mints this quote, and again by the code that builds the order. The two arrive at the
+    # canonical USD figure by converting at different points, and for a non-USD listing the
+    # roundings land on either side of a division by the same rate. They then disagree by a
+    # cent often enough to matter, `verify!` rejects the token on "total mismatch", and the
+    # buyer's payment fails outright. For a USD listing there is no conversion, both sides
+    # agree, and none of this bites, which is why it never mattered before: this change is
+    # what first lets a non-USD listing reach the quote at all.
+    #
+    # The tip. The surcharge request splits it over each line's canonical USD price
     # (`state.products[].price` is already run through `convertToUSD`), whereas the order
     # submitted later splits it over each line's *listed* price, and the server then runs
     # that figure back through `get_usd_cents` using the product's own currency
-    # (Purchase::CreateService, where the tip is built). For a USD listing the two are the
-    # same number, which is why this never mattered before — this PR is what first lets a
-    # non-USD listing reach the quote at all. For any other listing currency the two
-    # roundings sit on either side of a division by the same rate, so they disagree by a
-    # cent often enough to matter, `verify!` rejects the token on "total mismatch", and the
-    # buyer's payment fails outright.
+    # (Purchase::CreateService, where the tip is built).
     #
-    # Note this needs only ONE non-USD listing to go wrong, not a mixed-currency cart:
-    # a single-line EUR cart with a tip reproduces it.
+    # Shipping. CustomerSurchargeController asks ShippingDestination#calculate_shipping_rate
+    # for a rate with no currency, so it sums the listed one-item and multiple-items rates and
+    # converts that sum once. Purchase#calculate_shipping passes the product's currency to the
+    # same method, which converts each of the two terms separately and adds them afterwards.
+    # Convert-then-sum and sum-then-convert differ by a cent whenever both terms round the same
+    # way: a EUR listing at a stored rate of 0.879624 with 250 one-item and 200 multiple-items
+    # shipping, quantity 2, signs a token for 3922 against a charge that computes 3921.
+    # Shipping also feeds the tax calculation, and there the two sides differ by more than a
+    # rounding cent: the surcharge endpoint hands SalesTaxCalculator the listed-unit figure
+    # while Purchase#calculate_taxes hands it the converted USD one, so any tax that moves as a
+    # result fails the same total check.
     #
-    # The gate is cart-level (any tip anywhere + any non-USD listing anywhere), not
-    # per-line, because the two allocations can also move the tip BETWEEN lines: the
+    # Note either one needs only ONE non-USD listing to go wrong, not a mixed-currency cart:
+    # a single-line EUR cart with a tip reproduces it, as does one with shipping.
+    #
+    # The gate is cart-level (any tip or shipping anywhere + any non-USD listing anywhere),
+    # not per-line, because the tip allocation can also move the tip BETWEEN lines: the
     # largest-remainder split hands leftover cents to different lines depending on the
     # price basis, so a cent that lands on a USD line at quote time can land on the
     # non-USD line at submit. A per-line check (tip on a non-USD line) would mint a
@@ -213,12 +228,13 @@ class Checkout::BuyerCurrencyQuote
     #
     # Withholding the quote is the conservative answer: the cart simply falls back to the
     # canonical USD checkout, exactly as it does on main today, so nothing regresses and no
-    # payment can fail verification. The real fix is to make both sides allocate the tip
-    # from the same figures, which is a checkout-wide change to `computeTipsForLines` and
-    # its two call sites; it ships separately so this gate can be lifted deliberately,
-    # with a regression that completes exactly this payment.
-    if line_items.any? { |line| line.tip_cents.to_i.positive? } &&
-       products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD }
+    # payment can fail verification. The real fixes are to make both sides allocate the tip
+    # from the same figures (a checkout-wide change to `computeTipsForLines` and its two call
+    # sites) and to make both sides convert shipping and its tax base at the same point. Both
+    # ship separately so this gate can be lifted deliberately, with a regression that
+    # completes exactly the payment it currently withholds.
+    if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
+       line_items.any? { |line| line.tip_cents.to_i.positive? || line.shipping_cents.to_i.positive? }
       return
     end
     # Checked last because the marker is scoped to the presentment currency: a mismatch
