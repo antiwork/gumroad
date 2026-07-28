@@ -8,48 +8,71 @@ require "spec_helper"
 # `StripeBalanceEnforcer.ensure_sufficient_balance` is not a passive check. It
 # reads the balance live and, when the account is short, creates a payment method
 # and charges $999,999.99 to refill it — against the single Stripe test account
-# every CI shard shares. Gating it on `type: :system` meant that request was spent
-# on every browser-spec run before a single example executed.
+# every CI shard shares. Triggering it for `type: :system` meant that request was
+# spent on every browser-spec run before a single example executed.
 #
-# These examples call the real `needed_for?` predicate the suite hook uses, and
-# assert on its decision rather than on some other spec passing: a green suite is
-# exactly what we had while the enforcer was firing, so green was never evidence
-# the request had stopped.
+# These examples assert on the enforcer's own decision rather than on some other
+# spec passing: a green suite is exactly what we had while the enforcer was
+# firing, so green was never evidence the request had stopped.
 describe StripeBalanceEnforcer do
-  # Minimal stand-in for an RSpec example: the predicate only reads `.metadata`.
-  def example_with(metadata)
-    instance_double(RSpec::Core::Example, metadata:)
+  describe ".ensure_sufficient_balance_once" do
+    # The memo is process-global on purpose (one live top-up per RSpec process),
+    # so each example has to put it back the way it found it.
+    around do |example|
+      previous = described_class.instance_variable_get(:@balance_ensured)
+      example.run
+      described_class.instance_variable_set(:@balance_ensured, previous)
+    end
+
+    before { described_class.instance_variable_set(:@balance_ensured, nil) }
+
+    it "tops the account up the first time an example needs it" do
+      expect(described_class).to receive(:ensure_sufficient_balance).once
+
+      described_class.ensure_sufficient_balance_once
+    end
+
+    it "does not charge the account again for later examples in the same process" do
+      expect(described_class).to receive(:ensure_sufficient_balance).once
+
+      3.times { described_class.ensure_sufficient_balance_once }
+    end
+
+    it "does not retry after a failed attempt, so one bad response cannot become many charges" do
+      expect(described_class).to receive(:ensure_sufficient_balance).once
+        .and_raise(Stripe::APIError.new("boom"))
+
+      expect { described_class.ensure_sufficient_balance_once }.to output(/Stripe balance check failed/).to_stderr
+
+      described_class.ensure_sufficient_balance_once
+    end
+
+    it "reports whether this process has already attempted its top-up" do
+      allow(described_class).to receive(:ensure_sufficient_balance)
+
+      expect(described_class.balance_ensured?).to be false
+      described_class.ensure_sufficient_balance_once
+      expect(described_class.balance_ensured?).to be true
+    end
   end
 
-  describe ".needed_for?" do
-    it "is false for an ordinary browser spec" do
-      expect(described_class.needed_for?([example_with(type: :system, js: true)])).to be false
+  describe "the trigger lives on the example, not on the suite" do
+    # This is the part queue mode breaks. `rake knapsack_pro:queue:rspec` loads
+    # spec files in batches from inside the suite hooks, so
+    # `RSpec.world.filtered_examples` is empty while `before(:suite)` runs and a
+    # suite-level check would never see a tagged example. Asserting on the hook's
+    # shape is the only cheap way to keep someone from moving it back.
+    let(:source) { File.read(Rails.root.join("spec/spec_helper.rb")) }
+
+    it "hooks the top-up on the spend_stripe_balance tag per example" do
+      expect(source).to include("config.before(:each, :spend_stripe_balance)")
+      expect(source).to include("StripeBalanceEnforcer.ensure_sufficient_balance_once")
     end
 
-    it "is false for a non-system spec" do
-      expect(described_class.needed_for?([example_with({})])).to be false
-    end
+    it "does not decide from the loaded example list, which is empty in queue mode" do
+      suite_hook_bodies = source.scan(/config\.before\(:suite\) do(.*?)\n  end/m).flatten.join("\n")
 
-    it "is false for an empty run" do
-      expect(described_class.needed_for?([])).to be false
-    end
-
-    it "is true only when a spec opts in with spend_stripe_balance" do
-      expect(
-        described_class.needed_for?([example_with(type: :system, spend_stripe_balance: true)])
-      ).to be true
-    end
-
-    it "is true when any one spec in a mixed run opts in" do
-      expect(
-        described_class.needed_for?(
-          [
-            example_with(type: :system, js: true),
-            example_with({}),
-            example_with(spend_stripe_balance: true),
-          ]
-        )
-      ).to be true
+      expect(suite_hook_bodies).not_to include("StripeBalanceEnforcer")
     end
   end
 
@@ -64,24 +87,70 @@ describe StripeBalanceEnforcer do
   end
 
   describe "the premise: only the specs that move real funds opt in" do
-    # The claim this gate rests on. Stated as an assertion about the ONE context
-    # that genuinely transfers live funds, so that removing its tag fails here
-    # rather than surfacing as `balance_insufficient` in CI weeks later.
-    it "tags the balance-pages past-payouts context, which does a live transfer" do
-      source = File.read(Rails.root.join("spec/requests/balance_pages_spec.rb"))
-      expect(source).to include(%(describe "past payouts", spend_stripe_balance: true))
+    # The claim the gate rests on. Derived by sweeping the whole spec suite
+    # instead of naming files, so a new spec that transfers live funds without
+    # opting in fails here rather than surfacing as `balance_insufficient` in CI
+    # weeks later.
+    #
+    # The entry points below are the ones that end in a live `Stripe::Transfer`
+    # out of the shared platform balance.
+    BALANCE_MOVING_ENTRY_POINTS = [
+      "Payouts.create_payment",
+      "StripeTransferInternallyToCreator",
+      "StripeTransferExternallyToGumroad",
+      "InstantPayoutsService",
+    ].freeze
+
+    # A spec is safe if the call never reaches Stripe: it replays from a cassette,
+    # or the transfer-performing collaborator is doubled/stubbed/message-expected.
+    NEUTRALIZED = /
+      :vcr | VCR\.use_cassette |
+      instance_double | class_double |
+      allow_any_instance_of | allow\( |
+      expect\([^)]*\)\.(?:to|to_not|not_to)\s+receive
+    /x
+
+    # This gate spec names the entry points in order to grep for them.
+    EXEMPT_FROM_SWEEP = ["spec/config/stripe_balance_enforcer_gate_spec.rb"].freeze
+
+    def suspect_spec_files
+      Dir[Rails.root.join("spec/**/*_spec.rb")].sort.reject do |path|
+        EXEMPT_FROM_SWEEP.any? { |exempt| path.end_with?(exempt) }
+      end.select do |path|
+        source = File.read(path)
+        BALANCE_MOVING_ENTRY_POINTS.any? { |entry_point| source.include?(entry_point) }
+      end
     end
 
-    it "keeps every other balance-moving spec on VCR or a stub" do
-      %w[
-        spec/services/instant_payouts_service_spec.rb
-        spec/business/payments/transfers/stripe/stripe_transfer_internally_to_creator_spec.rb
-        spec/business/payments/transfers/stripe/stripe_transfer_externally_to_gumroad_spec.rb
-      ].each do |path|
-        source = File.read(Rails.root.join(path))
-        expect(source).to match(/:vcr|instance_double|allow_any_instance_of/),
-                          "#{path} moves a Stripe balance without VCR or a stub"
-      end
+    it "finds the balance-moving specs it is supposed to be checking" do
+      # Guards the sweep itself: if a rename empties this list, the assertion
+      # below would pass vacuously and prove nothing.
+      expect(suspect_spec_files.size).to be >= 5
+    end
+
+    it "keeps every balance-moving spec either tagged or neutralized" do
+      offenders = suspect_spec_files.reject do |path|
+        source = File.read(path)
+        source.include?("spend_stripe_balance") || source.match?(NEUTRALIZED)
+      end.map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
+
+      expect(offenders).to be_empty, <<~MESSAGE
+        These specs reach a live Stripe balance transfer without replaying it from a
+        cassette, stubbing the transfer, or tagging `spend_stripe_balance: true`:
+
+        #{offenders.join("\n")}
+
+        Prefer VCR or a stub. Only tag the spec when it genuinely has to transfer —
+        the tag charges the shared Stripe test account $999,999.99 when it runs low.
+        Note that VCR is turned off for `:js` specs, so a browser spec has to stub or tag.
+      MESSAGE
+    end
+
+    it "tags the balance-pages past-payouts context, which does a live transfer" do
+      # The one spec that genuinely spends the balance. Stated explicitly so that
+      # removing its tag fails here instead of draining the account.
+      source = File.read(Rails.root.join("spec/requests/balance_pages_spec.rb"))
+      expect(source).to include(%(describe "past payouts", spend_stripe_balance: true))
     end
 
     it "keeps the balance-pages instant-payout context on a stubbed service" do

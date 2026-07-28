@@ -12,34 +12,63 @@ class StripeBalanceEnforcer
   # a buffer should be sufficient for the foreseeable future.
   DEFAULT_MINIMUM_BALANCE_CENTS = 70_00 * 100
 
-  # Whether this run needs a live balance top-up.
+  MUTEX = Mutex.new
+
+  # Tops the shared Stripe test account up at most once per RSpec process, and
+  # only when an example that actually spends the balance is about to run.
   #
   # `ensure_sufficient_balance` is not a passive check: it reads the balance live
   # and, when the account is short, creates a payment method and charges
   # $999,999.99 to refill it — against the single Stripe test account every CI
-  # shard shares. This used to be gated on `type: :system`, so that request was
-  # spent on every browser-spec run before a single example executed, including
-  # the overwhelming majority that never touch a Stripe balance.
+  # shard shares. It used to be triggered from a `before(:suite)` hook that
+  # looked for `type: :system` examples, so that request was spent on every
+  # browser-spec run before a single example executed, including the
+  # overwhelming majority that never touch a Stripe balance.
   #
-  # One spec genuinely does spend it: the "past payouts" context in
+  # The trigger cannot live in `before(:suite)` at all. In CI the suite runs
+  # through knapsack_pro's queue mode (`rake knapsack_pro:queue:rspec`), which
+  # loads spec files in batches from *inside* the suite hooks, so
+  # `RSpec.world.filtered_examples` is still empty when `before(:suite)` fires
+  # and no tagged example is visible yet. Anything that decides based on the
+  # loaded examples at that point sees nothing and skips the top-up, which would
+  # leave the one spec that genuinely transfers funds failing with
+  # `balance_insufficient` once the shared account drains.
+  #
+  # So the decision is made per example instead: `spec_helper.rb` calls this from
+  # a `before(:each, :spend_stripe_balance)` hook, which works identically in
+  # queue mode and in a plain local `rspec` run. The memo keeps it to one live
+  # top-up per process no matter how many tagged examples run.
+  #
+  # One spec genuinely does spend the balance: the "past payouts" context in
   # `spec/requests/balance_pages_spec.rb`. It is a `:js` spec (so VCR is off) and
   # its setup calls `Payouts.create_payment`, which reaches
   # `StripeTransferInternallyToCreator.transfer_funds_to_account` and performs a
   # live `Stripe::Transfer` out of the shared platform balance. That context
-  # carries `spend_stripe_balance: true`, which is what keeps the top-up running
-  # for the shards that execute it.
-  #
-  # Everything else is safe to skip. Every other balance-moving spec
-  # (`InstantPayoutsService`, `StripeTransferInternallyToCreator`,
-  # `StripeTransferExternallyToGumroad`, `payouts_spec`) runs under `:vcr` or
-  # stubs the service, and the instant-payout context in `balance_pages_spec.rb`
-  # stubs `InstantPayoutsService#perform` and builds payout rows as factories.
+  # carries `spend_stripe_balance: true`.
   #
   # If a new spec starts moving real funds, tag it `spend_stripe_balance: true`.
   # The symptom of forgetting is a loud, attributable `balance_insufficient` from
   # Stripe in that one file — not a silent wrong answer.
-  def self.needed_for?(examples)
-    examples.any? { |example| example.metadata[:spend_stripe_balance] }
+  def self.ensure_sufficient_balance_once(minimum_balance_cents = DEFAULT_MINIMUM_BALANCE_CENTS)
+    MUTEX.synchronize do
+      return if @balance_ensured
+
+      # Set before the attempt: a failure is warned about and not retried, which
+      # is how the old suite-level hook behaved. Retrying per example could turn
+      # one bad Stripe response into hundreds of live requests.
+      @balance_ensured = true
+
+      begin
+        ensure_sufficient_balance(minimum_balance_cents)
+      rescue StandardError => e
+        warn "Stripe balance check failed: #{e.class} #{e.message}"
+      end
+    end
+  end
+
+  # Whether this process has already attempted its one top-up.
+  def self.balance_ensured?
+    MUTEX.synchronize { !!@balance_ensured }
   end
 
   def self.ensure_sufficient_balance(minimum_balance_cents = DEFAULT_MINIMUM_BALANCE_CENTS)
