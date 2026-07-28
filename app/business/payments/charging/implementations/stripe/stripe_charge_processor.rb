@@ -522,20 +522,29 @@ class StripeChargeProcessor
     return if credit.fee_retention_refund&.debited_stripe_transfer.present?
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
-    amount_cents = credit.amount_cents.abs
+    usd_amount_cents = credit.amount_cents.abs
+
+    # The fee being recovered (credit.amount_cents) is always in USD cents, but Stripe
+    # transfer reversals are denominated in the transfer's own currency. Internal payout
+    # transfers are created in USD, while older sale transfers to these non-US
+    # Gumroad-managed accounts may be in the account's local currency (see the note in
+    # debit_stripe_account_for_australia_backtaxes, which handles the same situation).
+    # Convert the owed USD amount into each candidate transfer's currency before comparing
+    # against its remaining balance and before reversing — otherwise we would reverse the
+    # raw USD figure in a foreign currency, debiting the creator the wrong amount.
+    amount_to_reverse_for = ->(transfer) { usd_cents_to_currency(transfer.currency, usd_amount_cents) }
 
     # First, try and reverse an internal transfer made from gumroad platform account
     # to the connect account, if possible.
-    transfers = credit.user.payments.completed
-                      .where(stripe_connect_account_id: stripe_account_id)
-                      .order(:created_at)
-                      .pluck(:stripe_internal_transfer_id)
-    transfer_id = transfers.compact_blank.find do |tr_id|
-      tr = Stripe::Transfer.retrieve(tr_id) rescue nil
-      tr.present? && (tr.amount - tr.amount_reversed > amount_cents)
-    end
-    if transfer_id.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer_id, { amount: amount_cents })
+    transfer_ids = credit.user.payments.completed
+                         .where(stripe_connect_account_id: stripe_account_id)
+                         .order(:created_at)
+                         .pluck(:stripe_internal_transfer_id)
+    transfer = transfer_ids.compact_blank.lazy
+                           .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
+                           .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+    if transfer.present?
+      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
       refund = credit.fee_retention_refund
       refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
@@ -551,10 +560,10 @@ class StripeChargeProcessor
     # reverse these transfers.
     transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
     transfer = transfers.find do |tr|
-      tr.present? && (tr.amount - tr.amount_reversed > amount_cents)
+      tr.present? && (tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr))
     end
     if transfer.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_cents })
+      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
       refund = credit.fee_retention_refund
       refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
@@ -610,6 +619,23 @@ class StripeChargeProcessor
 
     stripe_balance_amount = stripe_available_object.amount + stripe_pending_object.amount
 
+    # NOTE on currencies: stripe_balance_amount is denominated in the merchant account's own
+    # currency (stripe_currency), while owed_amount_cents_usd is USD. The US branch below
+    # compares them directly WITHOUT conversion, which is only correct because a US account's
+    # currency here is guaranteed to be "usd":
+    #   * Only Gumroad-controlled custom Stripe accounts reach this point — the
+    #     holder_of_funds == HolderOfFunds::STRIPE guard above excludes creator-owned Stripe
+    #     Connect accounts (see StripeChargeProcessor.holder_of_funds).
+    #   * Those accounts get their currency at creation from Country#payout_currency, which
+    #     for the US resolves (via Country#default_currency) to USD
+    #     (StripeMerchantAccountManager.create_account).
+    #   * Afterwards, currency is only ever rewritten together with country from the same
+    #     Stripe account object (StripeMerchantAccountManager's account.updated handling),
+    #     and Stripe only pays out US accounts in USD, so country == "US" implies
+    #     default_currency == "usd".
+    # If any of that stops holding, the US branch must convert the owed amount like the
+    # else branch does (usd_cents_to_currency) before comparing — otherwise it would compare
+    # cents across two different currencies and could debit the wrong amount.
     if credit.merchant_account.country == Compliance::Countries::USA.alpha2
       # Avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
       return unless stripe_balance_amount > owed_amount_cents_usd

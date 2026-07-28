@@ -16,11 +16,18 @@ class Order::PreparePaymentIntentService
   # Same reasoning as the Klarna message above: a Pix amount-window rejection is deterministic for
   # this cart, so telling the buyer to try again would send them in a loop.
   PIX_AMOUNT_INELIGIBLE_MESSAGE = "This order's total is outside the amount Pix supports. Please choose a different payment method (you have not been charged)."
-  # Gumroad absorbs the Brazilian IOF tax on the buyer's behalf so the amount in their banking app
-  # matches the price checkout quoted them, and recovers it from the seller as a fee component
+  # On a cross-border Pix payment charged on a GUMROAD-HELD account, Gumroad absorbs the Brazilian
+  # IOF tax on the buyer's behalf so the amount in their banking app matches the price checkout
+  # quoted them, and recovers it from the seller as a fee component
   # (Purchase::PIX_IOF_FEE_PER_THOUSAND) — the ruling on gumroad-private#1305. Stripe's default is
   # the opposite (`never`, marking the buyer's amount up 3.5%), which would undo the whole point of
-  # showing an honest local-currency price, so this option is always sent explicitly.
+  # showing an honest local-currency price.
+  #
+  # The option is about the buyer's amount, so it is sent on every cross-border Pix intent — not
+  # only the ones Gumroad settles. On a direct charge to a non-Brazilian connected account the tax
+  # comes out of the seller's own settlement and Gumroad absorbs nothing, so the option is sent and
+  # no fee is billed back. Withheld only on a direct charge to a Brazilian connected account, which
+  # stays inside Brazil and so incurs no IOF at all — see #pix_iof_applies?.
   PIX_AMOUNT_INCLUDES_IOF = "always"
   # How long the buyer has to pay the Pix key in their banking app before it expires. Stripe's
   # default is 4 hours; ours is 30 minutes because the purchase sits in progress until the payment
@@ -332,15 +339,53 @@ class Order::PreparePaymentIntentService
     # Per-method options Stripe wants at intent CREATE time. Only sent when the buyer actually
     # picked Pix — Stripe rejects options for a method the intent doesn't list, and the previewed
     # method is what decides whether pix rides this intent at all.
+    #
+    # amount_includes_iof only makes sense on a cross-border Pix payment. IOF is a Brazilian tax on
+    # transactions that involve foreign exchange, so it applies whenever the money leaves Brazil;
+    # that is the case the option exists for (it tells Stripe to bill the buyer exactly the listed
+    # price and take the tax out of what settles, rather than Stripe's default of marking the
+    # buyer's amount up by the tax — see Purchase::PIX_IOF_FEE_PER_THOUSAND). When the charge is
+    # created directly on a seller's own BRAZILIAN Stripe account the payment stays inside Brazil,
+    # there is no foreign exchange and therefore no IOF. Sending the option on that intent would be
+    # asking Stripe to price a tax that does not exist, and an option Stripe does not accept makes
+    # the whole intent create fail — which takes card down with it for that checkout, the failure
+    # shape from gumroad-private#1026.
+    #
+    # Nothing changes for today's traffic, where every Pix intent is created on the platform
+    # account; this is the gate that keeps the option correct once a connected account can reach
+    # Pix at all (gumroad-private#1442 widened the settlement gate that used to make it
+    # unreachable).
+    #
+    # expires_after_seconds is unconditional: it is a property of how long we are willing to hold
+    # the purchase open, not of who settles the money.
     def pix_payment_method_options
       return nil unless pix_selected?
 
-      {
-        pix: {
-          amount_includes_iof: PIX_AMOUNT_INCLUDES_IOF,
-          expires_after_seconds: PIX_EXPIRES_AFTER_SECONDS,
-        },
-      }
+      pix_options = { expires_after_seconds: PIX_EXPIRES_AFTER_SECONDS }
+      pix_options[:amount_includes_iof] = PIX_AMOUNT_INCLUDES_IOF if pix_iof_applies?
+
+      { pix: pix_options }
+    end
+
+    # True when the Pix payment crosses Brazil's border, which is what makes it subject to IOF.
+    # The only Pix charge that does NOT cross the border is one created directly on a seller's own
+    # Brazilian connected account; a Gumroad-held account is domiciled outside Brazil, and so is a
+    # connected account in any other country.
+    #
+    # Deliberately keyed on the account's COUNTRY, not on who owns it, and so deliberately NOT the
+    # same question Purchase#pix_iof_fee_per_thousand asks. The two gates answer different things:
+    # this one asks "is this payment cross-border, so does the tax exist at all", while the fee asks
+    # "did Gumroad absorb the tax and therefore have a cost to recover from the seller". They part
+    # company on a direct charge to a non-Brazilian connected account — the payment is cross-border
+    # so IOF applies and the option must be sent, but the tax comes out of the seller's own
+    # settlement rather than Gumroad's, so there is nothing for Gumroad to bill back. Nothing
+    # restricts Pix to Brazilian connected accounts: Checkout::PaymentMethodResolver's
+    # BR_LOCKED_PAYMENT_METHOD_TYPES gate is on the BUYER's country, and the only per-account
+    # condition is the Stripe capability snapshot, which sellers manage themselves.
+    #
+    # A missing merchant account means the platform account, which is outside Brazil.
+    def pix_iof_applies?
+      !merchant_account&.is_a_brazilian_stripe_connect_account?
     end
 
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at

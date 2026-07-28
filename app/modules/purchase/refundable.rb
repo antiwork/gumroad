@@ -635,19 +635,71 @@ class Purchase
 
     def reverse_excess_amount_from_stripe_transfer(refund:)
       return unless merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
-      return unless refund.purchase.gumroad_tax_cents > 0 && refund.purchase.gumroad_tax_cents == refund.purchase.gumroad_tax_refunded_cents
+      return unless refund.purchase.gumroad_tax_cents > 0 && refund.purchase.gumroad_tax_refunded_cents == refund.purchase.gumroad_tax_cents
 
-      amount_cents_to_be_reversed_usd = refund.balance_transactions.where(user_id: refund.purchase.seller_id).last.issued_amount_net_cents.abs
+      # A transfer reversal must be denominated in the TRANSFER's own currency, which is not
+      # always the merchant account's currency: a Gumroad-managed CAD account receives USD
+      # transfers for a USD charge, while a buyer-currency (presentment) charge settling in
+      # EUR produces a EUR transfer. So the currency has to be read off the transfer itself
+      # rather than assumed from either side.
+      #
+      # The refund's balance transaction carries the same money in both denominations:
+      #
+      #   issued_amount_net_cents  — canonical USD, what Gumroad's books are kept in
+      #   holding_amount_net_cents — the currency the merchant account holds
+      #
+      # Picking the leg that matches the transfer is what keeps this correct. Sending the
+      # canonical USD number against a EUR transfer is a real production defect: a live
+      # EUR-settling seller had a 366 EUR-cent transfer against a 416 USD-cent canonical
+      # figure, so the reversal took roughly 50 cents too much from the seller. It reads as
+      # a currency bug but it lands as lost seller money.
+      refund_balance_transaction = refund.balance_transactions.where(user_id: refund.purchase.seller_id).last
+      return if refund_balance_transaction.nil?
 
       stripe_charge = Stripe::Charge.retrieve(refund.purchase.stripe_transaction_id)
       transfer = Stripe::Transfer.retrieve(id: stripe_charge.transfer)
-      amount_cents_already_reversed_usd = transfer.reversals.data.find { |d| d.source_refund == refund.processor_refund_id }.amount.abs
+      transfer_currency = transfer.currency.to_s.downcase
 
-      return unless amount_cents_already_reversed_usd < amount_cents_to_be_reversed_usd
+      amount_to_reverse_cents =
+        if transfer_currency == Currency::USD
+          refund_balance_transaction.issued_amount_net_cents.abs
+        elsif transfer_currency == refund_balance_transaction.holding_amount_currency.to_s.downcase
+          refund_balance_transaction.holding_amount_net_cents.abs
+        end
 
-      reversal_amount_cents_usd = amount_cents_to_be_reversed_usd - amount_cents_already_reversed_usd
+      # Neither leg is denominated in the transfer's currency, so any number sent here would
+      # be a guess at the seller's expense. Better to move no money and leave a trace.
+      if amount_to_reverse_cents.nil?
+        Rails.logger.info(
+          "reverse_excess_amount_from_stripe_transfer: skipping refund #{refund.id} — transfer #{transfer.id} " \
+          "is in #{transfer_currency}, but the balance transaction only has " \
+          "#{refund_balance_transaction.issued_amount_currency}/#{refund_balance_transaction.holding_amount_currency}"
+        )
+        return
+      end
+      return unless amount_to_reverse_cents.positive?
 
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: reversal_amount_cents_usd })
+      existing_reversal = transfer.reversals.data.find { |reversal| reversal.source_refund == refund.processor_refund_id }
+      amount_already_reversed_cents = existing_reversal&.amount&.abs || 0
+
+      return unless amount_already_reversed_cents < amount_to_reverse_cents
+
+      reversal_amount_cents = amount_to_reverse_cents - amount_already_reversed_cents
+
+      # Gumroad's ledger stays in USD regardless of the transfer's currency, so the credit's
+      # canonical leg comes from the USD figure rather than by converting the reversal amount
+      # back (a second conversion would add its own rounding error). When the reversal is
+      # partial, the canonical leg takes the same proportion so both legs describe the same
+      # slice of money.
+      canonical_amount_cents = refund_balance_transaction.issued_amount_net_cents.abs
+      reversal_amount_usd_cents =
+        if reversal_amount_cents == amount_to_reverse_cents
+          canonical_amount_cents
+        else
+          (canonical_amount_cents * reversal_amount_cents.to_d / amount_to_reverse_cents).round
+        end
+
+      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: reversal_amount_cents })
 
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
                                                    stripe_account: refund.purchase.merchant_account.charge_processor_merchant_id)
@@ -655,7 +707,7 @@ class Purchase
       destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
                                                                             stripe_account: refund.purchase.merchant_account.charge_processor_merchant_id)
 
-      Credit.create_for_partial_refund_transfer_reversal!(amount_cents_usd: -reversal_amount_cents_usd,
+      Credit.create_for_partial_refund_transfer_reversal!(amount_cents_usd: -reversal_amount_usd_cents,
                                                           amount_cents_holding_currency: -destination_balance_transaction.net.abs,
                                                           merchant_account: refund.purchase.merchant_account)
     end
