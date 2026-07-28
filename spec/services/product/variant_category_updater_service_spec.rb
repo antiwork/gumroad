@@ -712,6 +712,42 @@ describe Product::VariantCategoryUpdaterService do
           }
         ).perform
       end
+
+      it "reports stale file embeds removed from variant content" do
+        foreign_product = create(:product, user: @product.user)
+        dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+        dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+        paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+        @rich_content.update_column(:description, [dead_foreign_embed])
+        id_mappings = { variants: {}, rich_content: {}, removed_file_embeds: {} }
+
+        Product::VariantCategoryUpdaterService.new(
+          product: @product,
+          category_params: {
+            id: @variant_category.external_id,
+            title: @variant_category.title,
+            options: [
+              {
+                id: @variant.external_id,
+                name: @variant.name,
+                rich_content: [
+                  {
+                    id: @rich_content.external_id,
+                    title: "Page title",
+                    description: [dead_foreign_embed, paragraph]
+                  }
+                ]
+              }
+            ]
+          },
+          id_mappings:
+        ).perform
+
+        expect(id_mappings[:removed_file_embeds]).to eq(
+          @rich_content.external_id => [dead_foreign_file.external_id]
+        )
+        expect(@rich_content.reload.description).to eq([paragraph])
+      end
     end
   end
 end

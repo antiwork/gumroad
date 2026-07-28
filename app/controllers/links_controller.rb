@@ -532,9 +532,10 @@ class LinksController < ApplicationController
           rich_content = existing_rich_contents.find { |c| c.external_id === product_rich_content[:id] } || @product.alive_rich_contents.build
           product_rich_content[:description] = SaveContentUpsellsService.new(seller: @product.user, content: product_rich_content[:description], old_content: rich_content.description || []).from_rich_content
           rich_content.assign_attributes(title: product_rich_content[:title].presence, description: product_rich_content[:description].presence || [], position: index)
-          rich_content.remove_stale_dead_cross_product_file_embeds
+          removed_file_embed_ids = rich_content.remove_stale_dead_cross_product_file_embeds
           rich_content.save!
           rich_contents_to_keep << rich_content
+          save_id_mappings[:removed_file_embeds][rich_content.external_id] = removed_file_embed_ids if removed_file_embed_ids.any?
           # A page submitted under an id the server didn't know was just
           # created with a canonical id — report the mapping so the editor's
           # next save addresses this page instead of re-creating it.
@@ -1294,13 +1295,14 @@ class LinksController < ApplicationController
     # Returned to the editor so its next save addresses the created records
     # instead of re-creating them (which would trip the deletion guards).
     def save_id_mappings
-      @_save_id_mappings ||= { variants: {}, rich_content: {} }
+      @_save_id_mappings ||= { variants: {}, rich_content: {}, removed_file_embeds: {} }
     end
 
     def save_id_mappings_response
       {
         variant_id_mappings: save_id_mappings[:variants],
         rich_content_id_mappings: save_id_mappings[:rich_content],
+        rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,
         # The revision token for the state this save just committed
         # (gumroad-private#1379). Every successful save moves the product's

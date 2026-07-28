@@ -27,12 +27,11 @@ class Product::VariantCategoryUpdaterService
     product_files
   ].freeze
 
-  # id_mappings: a per-request accumulator ({ variants: {}, rich_content: {} })
-  # the controller passes down and returns to the editor after a successful
-  # save. New variants arrive with a client-generated id (client_id) and new
-  # pages with a client-generated page id; the mappings tell the editor which
-  # canonical server ids they got, so its next save addresses the same records
-  # instead of re-creating them (and tripping the deletion guards).
+  # id_mappings: a per-request accumulator the controller passes down and
+  # returns to the editor after a successful save. It maps client-generated ids
+  # to canonical variant/page ids and records file embeds removed from stored
+  # pages, so the editor's next save addresses the same records and sends the
+  # same content the server persisted.
   # deletion_audit_context: who and which request is deleting, for the audit
   # trail (ProductVariantDeletionAudit). Carries :actor_user_id, :request_id and
   # :revision_token. Passed down the same way as deletion_guard_diagnostics
@@ -51,7 +50,7 @@ class Product::VariantCategoryUpdaterService
     @preserved_rich_content_ids = Array.wrap(preserved_rich_content_ids)
     @rewrite_budget = rewrite_budget
     @deletion_guard_diagnostics = deletion_guard_diagnostics
-    @id_mappings = id_mappings || { variants: {}, rich_content: {} }
+    @id_mappings = id_mappings || { variants: {}, rich_content: {}, removed_file_embeds: {} }
     @deletion_audit_context = deletion_audit_context || {}
     @contract = contract
   end
@@ -501,9 +500,10 @@ class Product::VariantCategoryUpdaterService
           old_content: rich_content.description || []
         ).from_rich_content
         rich_content.assign_attributes(title: variant_rich_content[:title].presence, description: variant_rich_content[:description].presence || [], position: index)
-        rich_content.remove_stale_dead_cross_product_file_embeds
+        removed_file_embed_ids = rich_content.remove_stale_dead_cross_product_file_embeds
         rich_content.save!
         rich_contents_to_keep << rich_content
+        id_mappings[:removed_file_embeds][rich_content.external_id] = removed_file_embed_ids if removed_file_embed_ids.any?
         # A page submitted under an id the server didn't know was just created
         # with a canonical id — report the mapping so the editor's next save
         # addresses this page instead of re-creating it.

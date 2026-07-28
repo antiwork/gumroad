@@ -1023,14 +1023,16 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_nil @product.reload.suggested_price_cents
   end
 
-  test "PUT update removes a stale dead cross-product file embed" do
+  test "PUT update reconciles a stale dead cross-product file embed before the next save" do
     own_file = @product.product_files.alive.first
     foreign_product = create_product(user: @seller)
     dead_foreign_file = create_product_file(link: foreign_product, deleted_at: Time.current)
     own_embed = { "type" => "fileEmbed", "attrs" => { "id" => own_file.external_id, "uid" => SecureRandom.uuid } }
     dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+    first_edit = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "First edit" }] }
     rich_content = create_product_rich_content(entity: @product, description: [own_embed])
     rich_content.update_column(:description, [own_embed, dead_foreign_embed])
+    submitted_content = [own_embed, dead_foreign_embed, first_edit]
 
     post :update, params: @params.merge(
       rich_content: [{
@@ -1038,14 +1040,38 @@ class LinksControllerUpdateTest < ActionController::TestCase
         title: "Updated page",
         description: {
           type: "doc",
-          content: [own_embed, dead_foreign_embed, { type: "paragraph", content: [{ type: "text", text: "Edit" }] }]
+          content: submitted_content
+        }
+      }]
+    ), format: :json
+
+    assert_response :success
+    removed_file_ids = response.parsed_body.dig("rich_content_removed_file_embed_ids", rich_content.external_id)
+    assert_equal [dead_foreign_file.external_id], removed_file_ids
+    assert_equal [own_file.id], rich_content.reload.embedded_product_file_ids_in_order
+    assert_equal "First edit", rich_content.description.last.dig("content", 0, "text")
+
+    # This is the browser's post-save state: it applies the returned ids to the
+    # same document it just submitted, then keeps editing without a reload.
+    reconciled_content = RichContent.reject_file_embeds(
+      submitted_content,
+      removed_file_ids.map { ObfuscateIds.decrypt(_1) }.to_set
+    )
+    second_edit = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Second edit" }] }
+    post :update, params: @params.merge(
+      rich_content: [{
+        id: rich_content.external_id,
+        title: "Updated page again",
+        description: {
+          type: "doc",
+          content: [*reconciled_content, second_edit]
         }
       }]
     ), format: :json
 
     assert_response :success
     assert_equal [own_file.id], rich_content.reload.embedded_product_file_ids_in_order
-    assert_equal "Edit", rich_content.description.last.dig("content", 0, "text")
+    assert_equal %w[First\ edit Second\ edit], rich_content.description.filter_map { _1.dig("content", 0, "text") }
   end
 
   test "POST publish includes error_message when publishing and user email is empty" do

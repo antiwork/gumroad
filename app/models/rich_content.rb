@@ -202,9 +202,17 @@ class RichContent < ApplicationRecord
   # Only file ids already present in the stored description are eligible. A new
   # page, or an existing page newly submitted with a dead foreign file, must
   # still fail the ownership validation rather than silently discard input.
+  #
+  # Returns the external ids it removed so an interactive caller can reconcile
+  # its in-memory document with the value that was actually saved. Without
+  # that, the editor resubmits the invisible node and its next save fails.
   def remove_stale_dead_cross_product_file_embeds
     cleaned_description = description_without_stale_dead_cross_product_file_embeds
-    self.description = cleaned_description if cleaned_description != description
+    return [] if cleaned_description == description
+
+    removed_ids = embedded_product_file_ids_in(description) - embedded_product_file_ids_in(cleaned_description)
+    self.description = cleaned_description
+    removed_ids.map { ObfuscateIds.encrypt(_1) }
   end
 
   # Trusted copy paths use the cleaned value when moving a stored page into a

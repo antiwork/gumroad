@@ -32,6 +32,7 @@ import { ReactSortable } from "react-sortablejs";
 import typia from "typia";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
+import { reconcileMountedEditorFileEmbeds } from "$app/data/product_edit";
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
@@ -177,6 +178,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     uniquePermalink,
     filesById,
     serverIdMappings,
+    richContentRemovedFileEmbedIds,
   } = useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -333,6 +335,16 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     extensions: contentEditorExtensions,
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
+  const removedFileEmbedIds = selectedPageId ? richContentRemovedFileEmbedIds[selectedPageId] : undefined;
+  React.useEffect(() => {
+    if (editor && removedFileEmbedIds?.length) {
+      // A save can remove a legacy file node from product state while this
+      // TipTap instance still holds the submitted document. Reconcile that
+      // mounted document from the explicit save response; a broad prop-sync
+      // effect could overwrite text the seller typed while the request ran.
+      reconcileMountedEditorFileEmbeds(editor, removedFileEmbedIds);
+    }
+  }, [editor, removedFileEmbedIds]);
   const updateContentRef = useRefToLatest(() => {
     if (!editor) return;
 

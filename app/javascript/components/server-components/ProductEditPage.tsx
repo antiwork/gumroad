@@ -8,6 +8,7 @@ import {
   HiddenVariantContentConflictError,
   SaveProductResponse,
   StaleContentConflictError,
+  removeFileEmbedsFromRichContent,
   saveProduct,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -125,6 +126,7 @@ const createContextValue = (props: Props) => ({
   saving: false,
   save: () => Promise.resolve(false),
   serverIdMappings: {},
+  richContentRemovedFileEmbedIds: {},
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
@@ -227,6 +229,7 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
   const pageTimestamps = response.rich_content_updated_at ?? {};
+  const removedFileEmbedIds = response.rich_content_removed_file_embed_ids ?? {};
   // Adopt the revision token for the state this save committed. The token the
   // page loaded with describes the pre-save snapshot, and the save moved it, so
   // keeping the old one would make the next deletion in this session look like
@@ -259,12 +262,20 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
       page.id = pageMappings[page.id] ?? page.id;
+      const removedIds = removedFileEmbedIds[page.id];
+      if (removedIds?.length) {
+        page.description = removeFileEmbedsFromRichContent(page.description, new Set(removedIds));
+      }
       const timestamp = pageTimestamps[page.id];
       if (timestamp) page.updated_at = timestamp;
     }
   }
   for (const page of product.rich_content) {
     page.id = pageMappings[page.id] ?? page.id;
+    const removedIds = removedFileEmbedIds[page.id];
+    if (removedIds?.length) {
+      page.description = removeFileEmbedsFromRichContent(page.description, new Set(removedIds));
+    }
     const timestamp = pageTimestamps[page.id];
     if (timestamp) page.updated_at = timestamp;
   }
@@ -326,6 +337,9 @@ const ProductEditPage = (props: Props) => {
   // responses; exposed via context so components holding an id in local state
   // (the content tab's selection) can follow the swap.
   const [serverIdMappings, setServerIdMappings] = React.useState<Record<string, string>>({});
+  const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
+    {},
+  );
   // Resolves true only when the save request actually succeeded — callers that
   // chain follow-up actions on save() (navigating to the next tab, opening the
   // preview) use this to stay put when the save failed or the seller cancelled
@@ -403,6 +417,7 @@ const ProductEditPage = (props: Props) => {
         ...response.variant_id_mappings,
         ...response.rich_content_id_mappings,
       }));
+      setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {
         applyCanonicalIds(current, response);
         current.confirmed_removed_variant_ids = (current.confirmed_removed_variant_ids ?? []).filter(
@@ -489,11 +504,20 @@ const ProductEditPage = (props: Props) => {
       save,
       saving,
       serverIdMappings,
+      richContentRemovedFileEmbedIds,
       contentUpdates,
       setContentUpdates,
       filesById,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles, filesById, serverIdMappings],
+    [
+      product,
+      updateProduct,
+      existingFiles,
+      setExistingFiles,
+      filesById,
+      serverIdMappings,
+      richContentRemovedFileEmbedIds,
+    ],
   );
 
   const imageSettings = React.useMemo(

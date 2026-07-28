@@ -403,12 +403,18 @@ describe ProductDuplicatorService do
       )
     end
 
-    it "drops a stale dead foreign embed when copying stored content" do
+    it "prunes a file embed group whose only child is a stale dead foreign embed" do
       foreign_product = create(:product, user: product.user)
       dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
       paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
-      dead_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
-      source = build(:product_rich_content, entity: product, description: [paragraph, dead_embed])
+      dead_embed_group = {
+        "type" => "fileEmbedGroup",
+        "attrs" => { "uid" => SecureRandom.uuid, "name" => "Stale folder" },
+        "content" => [
+          { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+        ]
+      }
+      source = build(:product_rich_content, entity: product, description: [paragraph, dead_embed_group])
       source.save!(validate: false)
 
       duplicate_product = ProductDuplicatorService.new(product.id).duplicate

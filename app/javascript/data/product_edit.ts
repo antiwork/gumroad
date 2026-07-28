@@ -1,4 +1,5 @@
 import { Editor, findChildren } from "@tiptap/core";
+import { EditorState, Transaction } from "@tiptap/pm/state";
 import typia from "typia";
 
 import { buildDeletionOperations } from "$app/data/product_save_contract";
@@ -18,6 +19,10 @@ export type SaveProductResponse = {
   // server's content deletion guard and duplicates variants).
   variant_id_mappings?: Record<string, string>;
   rich_content_id_mappings?: Record<string, string>;
+  // Canonical page id → file external ids removed while repairing legacy
+  // content. The editor removes the same invisible nodes from its live state,
+  // otherwise its next save would resubmit them as newly introduced embeds.
+  rich_content_removed_file_embed_ids?: Record<string, string[]>;
   // Canonical external id → fresh post-save snapshot timestamp for every
   // alive page/variant. The editor adopts these so its next save echoes the
   // timestamps this save produced — otherwise the second save of a session
@@ -72,6 +77,76 @@ export const filesForSave = <T extends { id: string }>(
   embeddedFileIds: Set<unknown>,
   keepAllFiles: boolean,
 ) => (keepAllFiles ? files : files.filter((file) => embeddedFileIds.has(file.id)));
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+const removeFileEmbeds = (value: unknown, fileIds: Set<string>): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((child) => removeFileEmbeds(child, fileIds)).filter((child) => child !== null);
+  }
+  if (!isRecord(value)) return value;
+
+  if (
+    value.type === "fileEmbed" &&
+    isRecord(value.attrs) &&
+    typeof value.attrs.id === "string" &&
+    fileIds.has(value.attrs.id)
+  ) {
+    return null;
+  }
+
+  if (!Array.isArray(value.content)) return value;
+
+  const content = value.content.map((child) => removeFileEmbeds(child, fileIds)).filter((child) => child !== null);
+  if (value.type === "fileEmbedGroup" && content.length === 0) return null;
+
+  return { ...value, content };
+};
+
+export const removeFileEmbedsFromRichContent = (description: object, fileIds: Set<string>): object => {
+  const cleaned = removeFileEmbeds(description, fileIds);
+  return isRecord(cleaned) ? cleaned : description;
+};
+
+export const buildRichContentReconciliationTransaction = (
+  state: EditorState,
+  removedFileIds: Set<string>,
+): Transaction => {
+  const deletions: { from: number; to: number }[] = [];
+  state.doc.descendants((node, pos) => {
+    if (node.type.name === "fileEmbedGroup") {
+      const removeWholeGroup =
+        node.childCount > 0 &&
+        Array.from({ length: node.childCount }, (_, index) => node.child(index)).every(
+          (child) => child.type.name === FileEmbed.name && removedFileIds.has(String(child.attrs.id)),
+        );
+      if (removeWholeGroup) {
+        deletions.push({ from: pos, to: pos + node.nodeSize });
+        return false;
+      }
+    }
+
+    if (node.type.name === FileEmbed.name && removedFileIds.has(String(node.attrs.id))) {
+      deletions.push({ from: pos, to: pos + node.nodeSize });
+      return false;
+    }
+
+    return true;
+  });
+
+  const transaction = state.tr;
+  for (const deletion of deletions.sort((left, right) => right.from - left.from)) {
+    transaction.delete(deletion.from, deletion.to);
+  }
+  transaction.setMeta("addToHistory", false);
+  transaction.setMeta("preventUpdate", true);
+  return transaction;
+};
+
+export const reconcileMountedEditorFileEmbeds = (editor: Editor, removedFileIds: string[]): void => {
+  const transaction = buildRichContentReconciliationTransaction(editor.state, new Set(removedFileIds));
+  if (transaction.docChanged) editor.view.dispatch(transaction);
+};
 
 export const saveProduct = async (
   permalink: string,

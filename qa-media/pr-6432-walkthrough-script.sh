@@ -37,10 +37,16 @@ bundle exec rspec spec/models/rich_content_spec.rb \
 sleep 2
 
 printf "%b\n" ""
-printf "%b\n" "=== Product editor save boundary removes only the stored dead embed ==="
-test_line="$(grep -n 'PUT update removes a stale dead cross-product file embed' test/controllers/links_controller_test.rb | cut -d: -f1)"
+printf "%b\n" "=== Product editor reconciles the cleanup and saves twice without a reload ==="
+test_line="$(grep -n 'PUT update reconciles a stale dead cross-product file embed before the next save' test/controllers/links_controller_test.rb | cut -d: -f1)"
 bundle exec rails test "test/controllers/links_controller_test.rb:$test_line" 2>&1 \
   | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
+sleep 2
+
+printf "%b\n" ""
+printf "%b\n" "=== Browser state removes the reported node and preserves every other edit ==="
+npx vitest run app/javascript/data/product_edit.test.ts 2>&1 \
+  | grep -vE "^$|^ RUN |^   Start at|^   Duration"
 sleep 2
 
 printf "%b\n" ""
@@ -52,11 +58,11 @@ bundle exec rspec spec/controllers/api/v2/variants_controller_spec.rb \
 sleep 2
 
 printf "%b\n" ""
-printf "%b\n" "=== Trusted stored-content copies clean the same stale embed explicitly ==="
+printf "%b\n" "=== Trusted stored-content copies prune stale embeds and empty groups explicitly ==="
 bundle exec rspec spec/controllers/api/v2/links_controller_spec.rb \
   -e "drops a stale dead foreign embed when copying" \
   spec/services/product_duplicator_service_spec.rb \
-  -e "drops a stale dead foreign embed when copying stored content" \
+  -e "prunes a file embed group whose only child is a stale dead foreign embed" \
   --format documentation --no-profile 2>&1 \
   | grep -vE "Elasticsearch|^warning|DEPRECATION|sidekiq-pro|^\[ES\]|Sidekiq 7|Run options|mysql_missing_table|makara|db/schema|boot\.rb|webmock|constant Net::HTTPSession|Tasks: TOP|full trace|bin/rails aborted|StatementInvalid|Mysql2::Error|Caused by:|^$"
 sleep 2

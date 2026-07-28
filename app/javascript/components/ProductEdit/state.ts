@@ -276,6 +276,10 @@ export const ProductEditContext = React.createContext<{
   // own state (e.g. the content tab's selection) use this map to follow the
   // swap instead of losing their reference.
   serverIdMappings: Record<string, string>;
+  // Canonical page id → file ids removed by the last successful save. The
+  // content tab uses this one-shot response signal to reconcile its mounted
+  // TipTap document; changing product state alone does not update that editor.
+  richContentRemovedFileEmbedIds: Record<string, string[]>;
   googleClientId: string;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;

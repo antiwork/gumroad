@@ -146,11 +146,12 @@ describe RichContent do
         rich_content = persist_with_foreign_embed([embed(own_file), embed(dead_foreign_file)])
 
         rich_content.description = [embed(own_file), embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "An unrelated edit" }] }]
-        rich_content.remove_stale_dead_cross_product_file_embeds
+        removed_file_ids = rich_content.remove_stale_dead_cross_product_file_embeds
         expect(rich_content.save).to be(true)
 
         # The seller's own file and their new edit both survive; only the dead
         # foreign embed is gone.
+        expect(removed_file_ids).to eq([dead_foreign_file.external_id])
         expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
         expect(rich_content.description.last["content"].first["text"]).to eq("An unrelated edit")
       end
@@ -195,8 +196,9 @@ describe RichContent do
         rich_content = create(:product_rich_content, entity: product, description: [embed(own_file)])
 
         rich_content.description = [embed(own_file), embed(dead_foreign_file)]
-        rich_content.remove_stale_dead_cross_product_file_embeds
+        removed_file_ids = rich_content.remove_stale_dead_cross_product_file_embeds
 
+        expect(removed_file_ids).to eq([])
         expect(rich_content.save).to be(false)
         expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
         expect(rich_content.embedded_product_file_ids_in_order).to include(dead_foreign_file.id)
