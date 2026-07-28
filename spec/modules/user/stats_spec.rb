@@ -421,10 +421,20 @@ describe User::Stats, :vcr do
                                   affiliate_credit_success_balance: create(:balance, user: affiliate_user))
       end
 
+      # Exercises the method under test over the affiliate's whole credit history. These are
+      # the scopes every caller narrows from: the `paid` rows the sum starts with, and the
+      # unfiltered set it looks in for partially refunded credits to add back.
+      def lifetime_affiliate_credit_sum
+        affiliate_user.affiliate_credit_sum_from_scope(
+          affiliate_user.affiliate_credits.paid,
+          affiliate_user.affiliate_credits
+        )
+      end
+
       it "counts an untouched credit at its full value" do
         affiliate_credit_for_new_purchase
 
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 200
+        expect(lifetime_affiliate_credit_sum).to eq 200
       end
 
       it "counts only the retained remainder of a partially reversed credit" do
@@ -435,7 +445,7 @@ describe User::Stats, :vcr do
 
         # 200 earned, 75 clawed back, 125 retained. The credit is out of `paid` because the
         # refund balance is set, so this figure comes entirely from the add-back.
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 125
+        expect(lifetime_affiliate_credit_sum).to eq 125
       end
 
       it "counts nothing for a credit that was clawed back in full" do
@@ -445,7 +455,7 @@ describe User::Stats, :vcr do
         # No affiliate_partial_refund row: Purchase only creates one when the affiliate credit
         # was reversed by less than its full value, so its absence means a full claw-back.
 
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 0
+        expect(lifetime_affiliate_credit_sum).to eq 0
       end
 
       it "counts a credit reversed over several partial refunds only once" do
@@ -457,7 +467,7 @@ describe User::Stats, :vcr do
 
         # 200 earned, 80 clawed back over two refunds, 120 retained. Guards against restricting
         # the add-back with a join, which would add the 200 once per refund row.
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 120
+        expect(lifetime_affiliate_credit_sum).to eq 120
       end
 
       it "keeps a fully clawed-back credit at zero even when the affiliate has other refunded credits" do
@@ -474,7 +484,7 @@ describe User::Stats, :vcr do
         # per credit whether an affiliate_partial_refunds row exists for THAT credit, so this
         # is what pins the subquery to the outer row: if it merely asked whether any refund row
         # exists at all, the fully reversed credit would be added back too and this would be 325.
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 125
+        expect(lifetime_affiliate_credit_sum).to eq 125
       end
 
       it "combines an untouched credit with a fully clawed-back one" do
@@ -483,7 +493,7 @@ describe User::Stats, :vcr do
         reversed.purchase.update!(stripe_partially_refunded: true)
         reversed.update!(affiliate_credit_refund_balance: create(:balance, user: affiliate_user))
 
-        expect(affiliate_user.affiliate_credits_sum_total).to eq 200
+        expect(lifetime_affiliate_credit_sum).to eq 200
       end
     end
 
