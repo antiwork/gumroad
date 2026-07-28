@@ -2122,7 +2122,7 @@ describe User, :vcr do
         @user.suspend_for_fraud(author_id: @admin_user.id)
         expect(@product_1.reload.banned_at).to_not be(nil)
         expect(@product_2.reload.banned_at).to_not be(nil)
-        @user.put_on_probation(author_id: @admin_user.id)
+        @user.put_on_probation(author_id: @admin_user.id, clear_suspension: true)
         expect(@user.on_probation?).to be(true)
         expect(@product_1.reload.banned_at).to be(nil)
       end
