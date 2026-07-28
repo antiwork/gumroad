@@ -34,6 +34,7 @@ import {
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
+import { buildCartSaveRefreshCallbacks } from "$app/components/Checkout/checkoutPaymentRefresh";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -677,6 +678,15 @@ const CheckoutIndexPage = () => {
     largeTipConfirmedRef.current = false;
   }, [state.tip]);
 
+  // A save can finish without delivering a recomputed configuration (dropped connection, timeout,
+  // 500). The hold on Pay is NOT released in that case — see checkoutPaymentRefresh for why a lost
+  // response cannot be read as "the edit didn't persist" — instead the configuration is
+  // re-requested from the server, and if that also fails the buyer is asked to reload.
+  const cartSaveRefreshCallbacks = buildCartSaveRefreshCallbacks({
+    reload: (options) => router.reload(options),
+    onUnrecoverable: (message) => showAlert(message, "error"),
+  });
+
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
       // checkout_payment comes back with the save because it is derived from the cart: which
@@ -686,19 +696,7 @@ const CheckoutIndexPage = () => {
       only: ["cart", "flash", "checkout_payment"],
       preserveUrl: true,
       preserveScroll: true,
-      // A save that finishes without delivering a configuration would otherwise leave it marked
-      // stale forever, stranding Pay disabled until the buyer edits the cart again or reloads.
-      //
-      // onFinish rather than onError: Inertia only calls onError when the response was a valid
-      // Inertia response carrying a props.errors payload. A dropped connection, a timeout, or a
-      // 500 that renders an HTML error page never reaches it — those settle in the request's
-      // finally block, which is exactly the transient-failure case the hold needs releasing for.
-      // onFinish runs for every terminal outcome, so the success case reaches it too; that is
-      // harmless because the reducer already cleared the flag when the refreshed configuration
-      // arrived, and clearing an already-clear flag is a no-op. Inertia skips onFinish for
-      // requests that were cancelled or superseded by a newer visit, so a save overtaken by the
-      // buyer's next edit does not release the hold that edit just took.
-      onFinish: () => dispatch({ type: "checkout-payment-refresh-failed" }),
+      ...cartSaveRefreshCallbacks,
     });
   }, cart_save_debounce_ms);
 
