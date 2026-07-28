@@ -68,6 +68,10 @@ Rails.application.routes.draw do
       end
 
       get "/user", to: "users#show"
+      # The seller's store theme (background colour, highlight colour, font). Read-only: these have
+      # no self-serve editor, but a caller — the store agent especially — needs to be able to SEE
+      # the theme that is already rendering on the seller's storefront and product pages.
+      get "/user/theme", to: "users#theme"
       match "/user", to: "users#update", via: [:put, :patch]
       get "/user/custom_html", to: "users#custom_html"
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
@@ -81,6 +85,10 @@ Rails.application.routes.draw do
       # SSRF protection) or a signed_blob_id; also the store agent's media ingestion path.
       resources :media, only: [:index, :create, :destroy]
       resources :categories, only: [:index]
+      # Gumroad's own help center articles, as plain text. Read-only and public (these are the
+      # same pages served at gumroad.com/help), so the store agent can check how a feature really
+      # works instead of guessing. Addressed by the article's slug, same as the web route.
+      resources :help_articles, only: [:index, :show], param: :slug, path: "help/articles"
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
       resources :links, path: "products", only: [:index, :show, :update, :create, :destroy] do
         resources :custom_fields, only: [:index, :create, :update, :destroy]
