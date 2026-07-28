@@ -16,6 +16,14 @@ class Order::CreateService
 
   PARAMS_TO_REMOVE_IF_BLANK = [:full_name, :email].freeze
 
+  # Terminal states a purchase can reach that mean its attempt is over and bought nothing. Used to
+  # decide whether the buyer's cart survives a wholly-failed checkout. It lists every way a purchase
+  # can end badly at checkout time — an ordinary decline, a declined preorder card authorization, a
+  # giftee purchase that could not be created — rather than only the one the current code paths
+  # produce, so that a change elsewhere cannot quietly start destroying carts. See the comment at
+  # the cart-cleanup branch in `perform` for which of these are reachable today.
+  CHECKOUT_FAILURE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
+
   def initialize(params:, buyer: nil)
     @params = params
     @buyer = buyer
@@ -125,7 +133,24 @@ class Order::CreateService
       #
       # So the question asked here is the narrow one: did anything survive? If the order holds no
       # purchase that is still live, nothing was bought and nothing is pending, and the cart stays.
-      nothing_survived = order.persisted? && order.purchases.any? && order.purchases.all?(&:failed?)
+      #
+      # "Failed" has more than one name. An ordinary decline leaves a purchase in `failed`, but a
+      # preorder whose card authorization is declined lands in its own terminal state,
+      # `preorder_authorization_failed`, and a giftee purchase that cannot be created gets
+      # `gift_receiver_purchase_failed` (see the state machine in Purchase). Neither of those can
+      # reach this code today — a preorder in a cart goes through the combined-charge path, which
+      # leaves it `in_progress` for the confirm step, and a giftee purchase is never appended to
+      # the order — so asking only `failed?` would be correct right now. They are listed anyway
+      # because the cost of being wrong is destroying a buyer's cart, and the reachability of a
+      # state is a property of code elsewhere that can change without anyone looking here.
+      #
+      # `preorder_concluded_unsuccessfully` is deliberately absent: it is reached much later, when
+      # a preorder is released and its card is charged, never during checkout.
+      #
+      # Any state not listed counts as surviving, so an unfamiliar state errs towards emptying the
+      # cart rather than silently keeping one after a real purchase.
+      nothing_survived = order.persisted? && order.purchases.any? &&
+        order.purchases.all? { CHECKOUT_FAILURE_STATES.include?(_1.purchase_state) }
 
       if order.persisted?
         cart.order = order
