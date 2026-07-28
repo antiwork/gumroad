@@ -62,6 +62,63 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  # gumroad-private#1463: with no documentation to read, the agent answered product questions from
+  # its own assumptions and told a seller a supported feature did not exist.
+  describe "help center endpoints" do
+    it "exposes a keyword search over Gumroad's own documentation" do
+      endpoint = described_class.find("search_help_articles")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.method).to eq(:get)
+      expect(endpoint.path).to eq("/help/articles")
+      expect(endpoint.params).to eq(%w[query])
+      # Public documentation — no seller-data scope needed, so every role can read it.
+      expect(endpoint.scope).to be_nil
+    end
+
+    it "exposes reading one article in full by slug" do
+      endpoint = described_class.find("get_help_article")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.path).to eq("/help/articles/:slug")
+      expect(endpoint.path_params).to eq(%w[slug])
+      expect(endpoint.scope).to be_nil
+    end
+
+    it "tells the model to check the docs before declaring something impossible" do
+      summary = described_class.find("search_help_articles").summary
+
+      expect(summary).to match(/before telling them something isn't possible/i)
+    end
+  end
+
+  describe "store theme endpoint" do
+    it "exposes the theme as a read the agent can run without confirmation" do
+      endpoint = described_class.find("get_user_theme")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.method).to eq(:get)
+      expect(endpoint.path).to eq("/user/theme")
+      expect(endpoint.scope).to eq("view_profile")
+    end
+
+    it "has no write counterpart, since the theme is support-applied" do
+      expect(described_class.write_ids.grep(/theme/)).to be_empty
+    end
+
+    # The false claim that started this: the agent said product pages could not be styled while the
+    # seller was looking at product pages rendering these very colours.
+    it "states in the manifest that the theme reaches product pages" do
+      manifest = described_class.manifest(:read)
+
+      expect(manifest).to include("get_user_theme")
+      expect(manifest).to match(/product pages are NOT unstyleable/i)
+    end
+  end
+
   describe "profile custom HTML endpoints" do
     it "exposes a targeted-edit write so an existing page never has to be fully regenerated" do
       endpoint = described_class.find("edit_user_custom_html")

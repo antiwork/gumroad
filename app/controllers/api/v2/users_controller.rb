@@ -1,7 +1,22 @@
 # frozen_string_literal: true
 
 class Api::V2::UsersController < Api::V2::BaseController
-  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html]
+  # Where the SellerProfile theme columns actually render, verified against every caller of
+  # SellerProfile#custom_styles. Listed in the theme response because the single most costly wrong
+  # belief about this feature is that it only styles the profile page: it styles product pages too,
+  # and an agent that assumes otherwise contradicts a seller who is looking straight at their own
+  # themed product page. Note the deliberate narrowness on emails — only the posts a seller sends
+  # to their audience carry the theme; Gumroad's own transactional mail (receipts and the like)
+  # does not.
+  THEME_SURFACES = [
+    "storefront profile page",
+    "product pages",
+    "the pages buyers see for products they bought",
+    "posts",
+    "the emails a seller sends to their audience",
+  ].freeze
+
+  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :theme]
   before_action(only: [:update, :update_custom_html, :edit_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
   before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :edit_custom_html, :preview_custom_html]
 
@@ -131,6 +146,29 @@ class Api::V2::UsersController < Api::V2::BaseController
 
   def ifttt_status
     render json: { status: "success" }
+  end
+
+  # The seller's store theme: the background colour, highlight (accent) colour, and font stored on
+  # their SellerProfile. Read-only on purpose — these have no self-serve editor in the dashboard,
+  # support changes them by request — but they were previously invisible to any API caller, which
+  # left the store agent unable to see a theme the seller could plainly see on their own pages.
+  # The theme is not profile-page-only: the same values render into the stylesheet served with the
+  # storefront, every product page, the pages buyers see for what they bought, posts, and the
+  # emails a seller sends to their own audience — see THEME_SURFACES.
+  def theme
+    profile = current_resource_owner.seller_profile
+
+    render_response(
+      true,
+      theme: {
+        background_color: profile.background_color,
+        highlight_color: profile.highlight_color,
+        font: profile.font,
+        applies_to: THEME_SURFACES,
+        editable_by_seller: false,
+        how_to_change: "Gumroad has no self-serve fonts-and-colors screen. To change these, the seller asks Gumroad support and support applies it.",
+      }
+    )
   end
 
   def ifttt_sale_trigger
