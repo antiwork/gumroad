@@ -132,46 +132,80 @@ describe StripeBalanceEnforcer do
     # opting in fails here rather than surfacing as `balance_insufficient` in CI
     # weeks later.
     #
-    # The entry points below are the ones that end in a live `Stripe::Transfer`
-    # out of the shared platform balance.
-    BALANCE_MOVING_ENTRY_POINTS = [
-      "Payouts.create_payment",
-      "StripeTransferInternallyToCreator",
-      "StripeTransferExternallyToGumroad",
-      "InstantPayoutsService",
-    ].freeze
+    # The sweep sees DIRECT textual references only. A spec can still reach a live
+    # transfer indirectly — `Purchase#increment_affiliates_balance!` reaches
+    # `StripeTransferAffiliateCredits` when an affiliate has their own Stripe
+    # merchant account, with no mention of any name below. Nothing does that today
+    # (affiliates in specs use Gumroad-held accounts), so this is a tripwire for
+    # the common case rather than a proof of absence.
+    #
+    # The entry points are the ones that end in a live `Stripe::Transfer` or
+    # `Stripe::Payout` out of the shared platform balance. `described_class` in a
+    # spec whose subject IS the entry point defeats class-name matching, so the
+    # bare method names are listed too.
+    def balance_moving_entry_points
+      [
+        "Payouts.create_payment",
+        "create_payments_for_balances",
+        "StripeTransferInternallyToCreator",
+        "StripeTransferExternallyToGumroad",
+        "StripeTransferAffiliateCredits",
+        "InstantPayoutsService",
+        "PayoutUsersService",
+        "Stripe::Transfer.create",
+        "Stripe::Payout.create",
+      ]
+    end
 
     # A spec is safe if the call never reaches Stripe: it replays from a cassette,
-    # or the transfer-performing collaborator is doubled/stubbed/message-expected.
-    NEUTRALIZED = /
-      :vcr | VCR\.use_cassette |
-      instance_double | class_double |
-      allow_any_instance_of | allow\( |
-      expect\([^)]*\)\.(?:to|to_not|not_to)\s+receive
-    /x
+    # or the transfer-performing collaborator is doubled or stubbed. A stub only
+    # counts when it names one of the entry points — a spec stubbing something
+    # unrelated should not buy itself a pass.
+    def neutralized?(source)
+      return true if source.match?(/:vcr\b|VCR\.use_cassette/)
+
+      stub_forms = /(?:instance_double|class_double|allow_any_instance_of|allow|expect)\(\s*([A-Za-z0-9_:.]+)/
+      source.scan(stub_forms).flatten.any? do |stubbed|
+        balance_moving_entry_points.any? { |entry_point| stubbed.include?(entry_point.split(".").first) }
+      end
+    end
 
     # This gate spec names the entry points in order to grep for them.
-    EXEMPT_FROM_SWEEP = ["spec/config/stripe_balance_enforcer_gate_spec.rb"].freeze
+    def exempt_from_sweep
+      ["spec/config/stripe_balance_enforcer_gate_spec.rb"]
+    end
 
     def suspect_spec_files
       Dir[Rails.root.join("spec/**/*_spec.rb")].sort.reject do |path|
-        EXEMPT_FROM_SWEEP.any? { |exempt| path.end_with?(exempt) }
+        exempt_from_sweep.any? { |exempt| path.end_with?(exempt) }
       end.select do |path|
         source = File.read(path)
-        BALANCE_MOVING_ENTRY_POINTS.any? { |entry_point| source.include?(entry_point) }
+        balance_moving_entry_points.any? { |entry_point| source.include?(entry_point) }
       end
     end
 
     it "finds the balance-moving specs it is supposed to be checking" do
       # Guards the sweep itself: if a rename empties this list, the assertion
       # below would pass vacuously and prove nothing.
-      expect(suspect_spec_files.size).to be >= 5
+      expect(suspect_spec_files.size).to be >= 10
+    end
+
+    it "sweeps the specs whose subject is the entry point itself" do
+      # `described_class.create_payments_for_balances_up_to_date` and a direct
+      # `Stripe::Transfer.create` are both invisible to a plain class-name grep,
+      # and both were missed by the earlier version of this sweep.
+      swept = suspect_spec_files.map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
+
+      expect(swept).to include(
+        "spec/business/payments/payouts/payouts_spec.rb",
+        "spec/services/payout_users_service_spec.rb"
+      )
     end
 
     it "keeps every balance-moving spec either tagged or neutralized" do
       offenders = suspect_spec_files.reject do |path|
         source = File.read(path)
-        source.include?("spend_stripe_balance") || source.match?(NEUTRALIZED)
+        source.include?("spend_stripe_balance") || neutralized?(source)
       end.map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
 
       expect(offenders).to be_empty, <<~MESSAGE

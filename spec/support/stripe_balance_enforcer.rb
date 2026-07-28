@@ -53,9 +53,11 @@ class StripeBalanceEnforcer
     MUTEX.synchronize do
       return if @balance_ensured
 
-      # Set before the attempt: a failure is warned about and not retried, which
-      # is how the old suite-level hook behaved. Retrying per example could turn
-      # one bad Stripe response into hundreds of live requests.
+      # Set before the attempt, so a failure is warned about once and not retried
+      # — the same warn-and-continue the old suite-level hook had. The upper bound
+      # on retries would be small (tagged examples times rspec-retry attempts),
+      # but a Stripe outage that dooms the first attempt dooms the rest of the
+      # process anyway, and one warning is easier to attribute than several.
       @balance_ensured = true
 
       begin
