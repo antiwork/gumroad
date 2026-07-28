@@ -26,8 +26,8 @@
   },
   {
     "input": "#ff6347",
-    "accent": "#ff6347",
-    "text": "#000000"
+    "accent": "#ca4e38",
+    "text": "#ffffff"
   },
   {
     "input": "#ff8c00",
@@ -61,8 +61,8 @@
   },
   {
     "input": "#23a094",
-    "accent": "#219a8f",
-    "text": "#000000"
+    "accent": "#1c847a",
+    "text": "#ffffff"
   },
   {
     "input": "#00ffff",
@@ -171,8 +171,8 @@
   },
   {
     "input": "#ff00ff",
-    "accent": "#fb00fb",
-    "text": "#000000"
+    "accent": "#d100d1",
+    "text": "#ffffff"
   },
   {
     "input": "#a0522d",
@@ -206,8 +206,8 @@
   },
   {
     "input": "#5f9ea0",
-    "accent": "#5f9ea0",
-    "text": "#000000"
+    "accent": "#4c7f81",
+    "text": "#ffffff"
   },
   {
     "input": "#d2691e",
@@ -216,8 +216,8 @@
   },
   {
     "input": "#6495ed",
-    "accent": "#6495ed",
-    "text": "#000000"
+    "accent": "#4f76bc",
+    "text": "#ffffff"
   },
   {
     "input": "#dda0dd",

@@ -34,21 +34,9 @@ module ContrastColor
   # render is ever allowed below it.
   WCAG_AA_NORMAL_TEXT = 4.5
 
-  # Up to this many 0-255 steps, use APCA's preferred text colour and move the displayed accent by
-  # the minimum amount needed for WCAG AA. Above it, the other text colour already passes on the
-  # saved accent, so preserving the creator's colour becomes more important.
-  DISPLAY_SHIFT_TRANSITION_START = 32
-
-  # Do not jump straight from a 32-step adjustment to the saved colour when the text polarity
-  # changes. Taper that adjustment to zero over the next 16 steps instead. Without this transition,
-  # #ff3e00 rendered as #df3600 with white text while adjacent #ff3f00 rendered unchanged with black
-  # text — a large visual jump caused by a one-step input change.
-  DISPLAY_SHIFT_TRANSITION_END = 48
-
-  # The largest brightness shift `accessible_accent` ever applies, measured by sweeping the sRGB
-  # space (see the spec, which pins it). Expressed in 0-255 steps of the mix toward black/white.
-  # Note this is a measured bound, pinned by a sweep in the spec.
-  WORST_CASE_BRIGHTNESS_SHIFT = 32
+  # If APCA rates black and white within 10 Lc of each other, neither has a strong perceptual lead.
+  # In that narrow case, prefer the one that changes the creator's colour less.
+  APCA_TIE_BAND = 10.0
 
   # Match JavaScript's String#trim exactly. Ruby's [[:space:]] also removes U+0085, which
   # JavaScript keeps; using that broader class would make the live storefront accept a value that
@@ -90,11 +78,9 @@ module ContrastColor
   # 2. Does that pair clear the 4.5:1 WCAG AA floor? White on #ff0000 does not (4.00:1). If it
   #    doesn't, darken the accent for white text (or lighten it for black text) by the smallest
   #    amount that does. #ff0000 becomes #ee0000 — same red to the eye, now 4.53:1 with white.
-  # 3. Sanity-check the choice against its cost. If honouring APCA would move the accent more than
-  #    DISPLAY_SHIFT_TRANSITION_START steps, use the other text colour. That text already passes on
-  #    the saved accent. To keep adjacent creator colours from producing a large rendered-colour
-  #    jump at the polarity boundary, taper the old adjustment to zero through
-  #    DISPLAY_SHIFT_TRANSITION_END rather than dropping it in one step.
+  # 3. If APCA rates black and white within APCA_TIE_BAND of each other, neither has a strong
+  #    perceptual lead, so use the one that changes the creator's colour less. Outside that tie,
+  #    honour APCA and apply exactly the minimum WCAG adjustment.
   #
   # The floor in step 2 is never traded away — the point of this method is to satisfy it without
   # making the text colour flip on invisible boundaries, and without looking at the page background
@@ -109,27 +95,17 @@ module ContrastColor
     rgb = parse(hex_color)
     return { accent: BLACK, text: WHITE } if rgb.nil?
 
-    preferred_white_text = prefers_white_text?(rgb)
-    preferred_shift = brightness_shift_for(rgb, white_text: preferred_white_text)
+    white_text = prefers_white_text?(rgb)
+    display_shift = brightness_shift_for(rgb, white_text:)
+    other_shift = brightness_shift_for(rgb, white_text: !white_text)
 
-    if preferred_shift <= DISPLAY_SHIFT_TRANSITION_START
-      white_text = preferred_white_text
-      display_shift = preferred_shift
-    else
-      # The opposite text colour passes before the preferred colour reaches its minimum shift.
-      # Keep a shrinking amount of the previous display adjustment so the background changes
-      # smoothly at the text-polarity boundary. Because this step is smaller than preferred_shift,
-      # the colour remains on the WCAG-passing side for the opposite text colour.
-      white_text = !preferred_white_text
-      transition_width = DISPLAY_SHIFT_TRANSITION_END - DISPLAY_SHIFT_TRANSITION_START
-      display_shift = [
-        ((DISPLAY_SHIFT_TRANSITION_END - preferred_shift) * DISPLAY_SHIFT_TRANSITION_START / transition_width.to_f).floor,
-        0
-      ].max
+    if other_shift < display_shift && apca_scores_are_close?(rgb)
+      white_text = !white_text
+      display_shift = other_shift
     end
 
     {
-      accent: to_hex(shift_brightness(rgb, white_text: preferred_white_text, step: display_shift)),
+      accent: to_hex(shift_brightness(rgb, white_text:, step: display_shift)),
       text: white_text ? WHITE : BLACK
     }
   end
@@ -199,6 +175,11 @@ module ContrastColor
     apca_lc(parse(WHITE), rgb).abs > apca_lc(parse(BLACK), rgb).abs
   end
   private_class_method :prefers_white_text?
+
+  def self.apca_scores_are_close?(rgb)
+    (apca_lc(parse(WHITE), rgb).abs - apca_lc(parse(BLACK), rgb).abs).abs <= APCA_TIE_BAND
+  end
+  private_class_method :apca_scores_are_close?
 
   # Smallest number of 0-255 steps toward black (for white text) or toward white (for black text)
   # that brings the pair to the WCAG AA floor. Binary search is safe because mixing steadily toward

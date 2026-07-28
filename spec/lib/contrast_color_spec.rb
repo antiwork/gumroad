@@ -178,11 +178,17 @@ describe ContrastColor do
       end
     end
 
-    it "changes the accent by the smallest amount that clears the floor" do
+    it "changes every adjusted example by the smallest amount that clears the floor" do
       # Provably minimal rather than merely sufficient: the step below the one chosen must fail.
       # Uses the same mixing function the implementation uses, so "one step less" is genuinely the
       # candidate the search rejected rather than a nearby colour that happens to fail.
-      { "#ff0000" => "#ffffff", "#009a49" => "#ffffff" }.each do |hex, text|
+      {
+        "#ff0000" => "#ffffff",
+        "#009a49" => "#ffffff",
+        "#ff3f00" => "#ffffff",
+        "#ff00ff" => "#ffffff",
+        "#23a094" => "#ffffff"
+      }.each do |hex, text|
         rgb = [hex[1, 2], hex[3, 2], hex[5, 2]].map { _1.to_i(16) }
         chosen_step = described_class.brightness_shift_for(rgb, white_text: text == "#ffffff")
         expect(chosen_step).to be > 0, "#{hex} needed no adjustment, so this case proves nothing"
@@ -226,31 +232,6 @@ describe ContrastColor do
       end
     end
 
-    it "never shifts a seller's colour by more than a barely-perceptible amount" do
-      # A readability fix that visibly recolours a storefront is not a fix. The sweep pins the
-      # largest shift the algorithm ever applies, in 0-255 steps of the mix toward black or white.
-      worst_shift = 0
-      worst_color = nil
-
-      (0..255).step(9) do |r|
-        (0..255).step(9) do |g|
-          (0..255).step(9) do |b|
-            color = format("#%02x%02x%02x", r, g, b)
-            rendered = described_class.accessible_accent(color).fetch(:accent)
-            shift = [r, g, b].each_with_index.map { |channel, index| (channel - rendered[1 + (index * 2), 2].to_i(16)).abs }.max
-
-            if shift > worst_shift
-              worst_shift = shift
-              worst_color = color
-            end
-          end
-        end
-      end
-
-      expect(worst_shift).to be <= ContrastColor::WORST_CASE_BRIGHTNESS_SHIFT,
-                             "#{worst_color} moved by #{worst_shift} of 255"
-    end
-
     it "never returns a pair below the WCAG AA minimum, for any colour a seller can pick" do
       # The floor from the previous fix is the good part and must survive this change. Same sampling
       # density as the `.for` sweep above.
@@ -279,20 +260,24 @@ describe ContrastColor do
       end
     end
 
-    it "keeps the rendered accent stable where the text polarity changes" do
-      # These saved colours differ by one green-channel step. A hard adjustment cap used to make
-      # them render 32 red-channel steps apart: #df3600/white versus #ff3f00/black.
+    it "does not flip polarity or add a needless adjustment at the old cost boundary" do
+      # These saved colours differ by one green-channel step. Both keep APCA's white text and receive
+      # exactly the minimum WCAG adjustment; there is no cost cap or taper to change the answer.
       before = described_class.accessible_accent("#ff3e00")
       after = described_class.accessible_accent("#ff3f00")
 
       expect(before).to eq(accent: "#df3600", text: "#ffffff")
-      expect(after).to eq(accent: "#e13700", text: "#000000")
+      expect(after).to eq(accent: "#de3600", text: "#ffffff")
       expect(described_class.ratio_between(before[:accent], before[:text])).to be >= ContrastColor::WCAG_AA_NORMAL_TEXT
       expect(described_class.ratio_between(after[:accent], after[:text])).to be >= ContrastColor::WCAG_AA_NORMAL_TEXT
 
       before_rgb = described_class.parse(before[:accent])
       after_rgb = described_class.parse(after[:accent])
-      expect(before_rgb.zip(after_rgb).map { (_1 - _2).abs }.max).to eq(2)
+      expect(before_rgb.zip(after_rgb).map { (_1 - _2).abs }.max).to eq(1)
+    end
+
+    it "preserves the saved colour when APCA has no strong polarity preference" do
+      expect(described_class.accessible_accent("#78aac0")).to eq(accent: "#78aac0", text: "#000000")
     end
 
     it "handles the 3-digit hex form the same way as its 6-digit equivalent" do

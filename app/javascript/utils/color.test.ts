@@ -132,11 +132,11 @@ describe("getAccessibleAccent", () => {
     }
   });
 
-  it("changes the accent by the smallest amount that clears the floor", () => {
+  it("changes every adjusted example by the smallest amount that clears the floor", () => {
     // Provably minimal rather than merely sufficient: the step below the one chosen must fail. Uses
     // the same mixing function the implementation uses, so "one step less" is genuinely the candidate
     // the search rejected rather than a nearby colour that happens to fail.
-    for (const hex of ["#ff0000", "#009a49"]) {
+    for (const hex of ["#ff0000", "#009a49", "#ff3f00", "#ff00ff", "#23a094"]) {
       const pair = getAccessibleAccent(hex);
       const whiteText = pair.text === "#ffffff";
       const chosenStep = accentBrightnessShiftFor(hex, whiteText) ?? 0;
@@ -153,13 +153,9 @@ describe("getAccessibleAccent", () => {
     }
   });
 
-  it("never returns a pair below the WCAG AA minimum, and never shifts a colour far", () => {
-    // Both guarantees at once over a sweep of the sRGB space: the readability floor from the
-    // previous fix survives, and the price of holding it is never a visibly different colour.
+  it("never returns a pair below the WCAG AA minimum", () => {
     let worstRatio = Infinity;
     let worstRatioColor = "";
-    let worstShift = 0;
-    let worstShiftColor = "";
 
     for (let r = 0; r < 256; r += 15) {
       for (let g = 0; g < 256; g += 15) {
@@ -171,15 +167,6 @@ describe("getAccessibleAccent", () => {
             worstRatio = contrast;
             worstRatioColor = color;
           }
-
-          const rendered = [pair.accent.substring(1, 3), pair.accent.substring(3, 5), pair.accent.substring(5, 7)].map(
-            (channel) => parseInt(channel, 16),
-          );
-          const shift = Math.max(...[r, g, b].map((channel, index) => Math.abs(channel - (rendered[index] ?? 0))));
-          if (shift > worstShift) {
-            worstShift = shift;
-            worstShiftColor = color;
-          }
         }
       }
     }
@@ -187,7 +174,6 @@ describe("getAccessibleAccent", () => {
     expect(worstRatio, `${worstRatioColor} only reaches ${worstRatio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
       WCAG_AA_NORMAL_TEXT,
     );
-    expect(worstShift, `${worstShiftColor} moved by ${worstShift} of 255`).toBeLessThanOrEqual(32);
   });
 
   it("resolves visually identical colours identically", () => {
@@ -198,20 +184,24 @@ describe("getAccessibleAccent", () => {
     }
   });
 
-  it("keeps the rendered accent stable where the text polarity changes", () => {
-    // These saved colours differ by one green-channel step. A hard adjustment cap used to make
-    // them render 32 red-channel steps apart: #df3600/white versus #ff3f00/black.
+  it("does not flip polarity or add a needless adjustment at the old cost boundary", () => {
+    // These saved colours differ by one green-channel step. Both keep APCA's white text and receive
+    // exactly the minimum WCAG adjustment; there is no cost cap or taper to change the answer.
     const before = getAccessibleAccent("#ff3e00");
     const after = getAccessibleAccent("#ff3f00");
 
     expect(before).toStrictEqual({ accent: "#df3600", text: "#ffffff" });
-    expect(after).toStrictEqual({ accent: "#e13700", text: "#000000" });
+    expect(after).toStrictEqual({ accent: "#de3600", text: "#ffffff" });
     expect(ratio(before)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
     expect(ratio(after)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
 
     const beforeRgb = before.accent.match(/[0-9a-f]{2}/giu)?.map((channel) => parseInt(channel, 16)) ?? [];
     const afterRgb = after.accent.match(/[0-9a-f]{2}/giu)?.map((channel) => parseInt(channel, 16)) ?? [];
-    expect(Math.max(...beforeRgb.map((channel, index) => Math.abs(channel - (afterRgb[index] ?? 0))))).toBe(2);
+    expect(Math.max(...beforeRgb.map((channel, index) => Math.abs(channel - (afterRgb[index] ?? 0))))).toBe(1);
+  });
+
+  it("preserves the saved colour when APCA has no strong polarity preference", () => {
+    expect(getAccessibleAccent("#78aac0")).toStrictEqual({ accent: "#78aac0", text: "#000000" });
   });
 
   it("handles the 3-digit hex form the same way as its 6-digit equivalent", () => {

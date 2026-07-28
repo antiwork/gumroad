@@ -2,13 +2,9 @@
 // is ever allowed below it.
 export const WCAG_AA_NORMAL_TEXT = 4.5;
 
-// Up to this many 0-255 steps, use APCA's preferred text colour and move the displayed accent by the
-// minimum amount needed for WCAG AA. Above it, preserving the creator's colour becomes more important.
-const DISPLAY_SHIFT_TRANSITION_START = 32;
-
-// Taper the display adjustment to zero over the next 16 steps so adjacent input colours cannot jump
-// from a fully adjusted accent to the saved accent when the text polarity changes.
-const DISPLAY_SHIFT_TRANSITION_END = 48;
+// If APCA rates black and white within 10 Lc of each other, neither has a strong perceptual lead.
+// In that narrow case, prefer the one that changes the creator's colour less.
+const APCA_TIE_BAND = 10;
 
 const WHITE = "#ffffff";
 const BLACK = "#000000";
@@ -176,10 +172,9 @@ export const accentBrightnessShiftFor = (hex: string, whiteText: boolean) => {
  * 2. Does that pair clear the 4.5:1 WCAG AA floor? White on #ff0000 does not (4.00:1). If it
  *    doesn't, darken the accent for white text (or lighten it for black text) by the smallest amount
  *    that does. #ff0000 becomes #ee0000 — same red to the eye, now 4.53:1 with white.
- * 3. Sanity-check the choice against its cost. If honouring APCA would move the accent more than
- *    DISPLAY_SHIFT_TRANSITION_START steps, use the other text colour. That text already passes on
- *    the saved accent. Taper the previous adjustment to zero through DISPLAY_SHIFT_TRANSITION_END
- *    so adjacent creator colours do not produce a large rendered-colour jump at the polarity edge.
+ * 3. If APCA rates black and white within APCA_TIE_BAND of each other, neither has a strong
+ *    perceptual lead, so use the one that changes the creator's colour less. Outside that tie,
+ *    honour APCA and apply exactly the minimum WCAG adjustment.
  *
  * The floor in step 2 is never traded away, and the surrounding page background is deliberately not
  * an input — the same accent has to work on light and dark storefronts alike.
@@ -194,23 +189,17 @@ export const getAccessibleAccent = (accent: string): { accent: string; text: str
 
   const apcaWithWhite = Math.abs(apcaLc([255, 255, 255], rgb));
   const apcaWithBlack = Math.abs(apcaLc([0, 0, 0], rgb));
-  const preferredWhiteText = apcaWithWhite > apcaWithBlack;
-  const preferredShift = brightnessShiftFor(rgb, preferredWhiteText);
+  let whiteText = apcaWithWhite > apcaWithBlack;
+  let displayShift = brightnessShiftFor(rgb, whiteText);
+  const otherShift = brightnessShiftFor(rgb, !whiteText);
 
-  const whiteText = preferredShift <= DISPLAY_SHIFT_TRANSITION_START ? preferredWhiteText : !preferredWhiteText;
-  const displayShift =
-    preferredShift <= DISPLAY_SHIFT_TRANSITION_START
-      ? preferredShift
-      : Math.max(
-          Math.floor(
-            ((DISPLAY_SHIFT_TRANSITION_END - preferredShift) * DISPLAY_SHIFT_TRANSITION_START) /
-              (DISPLAY_SHIFT_TRANSITION_END - DISPLAY_SHIFT_TRANSITION_START),
-          ),
-          0,
-        );
+  if (otherShift < displayShift && Math.abs(apcaWithWhite - apcaWithBlack) <= APCA_TIE_BAND) {
+    whiteText = !whiteText;
+    displayShift = otherShift;
+  }
 
   return {
-    accent: toHex(shiftBrightness(rgb, preferredWhiteText, displayShift)),
+    accent: toHex(shiftBrightness(rgb, whiteText, displayShift)),
     text: whiteText ? WHITE : BLACK,
   };
 };
