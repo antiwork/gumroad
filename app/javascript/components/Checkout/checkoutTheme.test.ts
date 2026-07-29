@@ -4,6 +4,7 @@ import {
   type CheckoutStyle,
   type CheckoutTheme,
   getApplicableCheckoutStyle,
+  getCheckoutIndicatorStyle,
   shouldInvertNativePayPalButton,
 } from "$app/components/Checkout/checkoutTheme";
 
@@ -43,5 +44,14 @@ describe("getApplicableCheckoutStyle", () => {
     expect(getApplicableCheckoutStyle(checkoutStyle, [])).toBeNull();
     expect(getApplicableCheckoutStyle(checkoutStyle, ["seller-a", "seller-b"])).toBeNull();
     expect(getApplicableCheckoutStyle(checkoutStyle, ["seller-b"])).toBeNull();
+  });
+});
+
+describe("getCheckoutIndicatorStyle", () => {
+  it("exposes the floored indicator without replacing the seller accent", () => {
+    expect(
+      getCheckoutIndicatorStyle({ ...theme("#ffffff"), accent_color: "#ffffff", indicator_color: "#949494" }),
+    ).toEqual({ "--indicator": "148 148 148" });
+    expect(getCheckoutIndicatorStyle(null)).toBeUndefined();
   });
 });

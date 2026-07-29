@@ -25,6 +25,9 @@ export const getApplicableCheckoutStyle = (checkoutStyle: CheckoutStyle | null |
     ? checkoutStyle
     : null;
 
+export const getCheckoutIndicatorStyle = (theme: CheckoutTheme | null): React.CSSProperties | undefined =>
+  theme ? { "--indicator": hexToRgb(theme.indicator_color) } : undefined;
+
 type CheckoutThemeContext = {
   theme: CheckoutTheme | null;
   stripe_fonts_css_source: string;

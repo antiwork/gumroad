@@ -4,6 +4,7 @@ declare module "react" {
   export interface CSSProperties {
     "--color"?: string;
     "--accent"?: string;
+    "--indicator"?: string;
     "--contrast-accent"?: string;
     "--accent-with-text"?: string;
     "--filled"?: string;
