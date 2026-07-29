@@ -114,6 +114,10 @@ class StripeFxQuote
     end
 
     def parsed_rate(rates, from_currency:)
+      # Stripe returns both the customer-facing `exchange_rate` (its FX fee and lock premium
+      # already priced in) and the interbank `rate_details.base_rate`. We keep only
+      # `exchange_rate`, because that is the rate the buyer is quoted and charged at — see the
+      # note on Balance's holding_currency for where the difference between the two lands.
       rate_data = rates.fetch(from_currency.to_sym) { rates.fetch(from_currency) }
       rate = rate_data.is_a?(Hash) ? rate_data.fetch(:exchange_rate) { rate_data.fetch("exchange_rate") } : rate_data
       BigDecimal(rate.to_s)

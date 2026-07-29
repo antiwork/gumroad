@@ -13,15 +13,26 @@ class PostEmailApi
     end
 
     if Feature.active?(:force_resend_for_post_emails, post&.seller)
-      return PostResendApi.process(**args)
+      # Even on the force-Resend flag, recipients at domains that reject
+      # Resend's sending IPs have to go via SendGrid or they receive nothing at
+      # all — see MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS.
+      blocked, resendable = recipients.partition do |recipient|
+        MailerInfo.force_sendgrid_for_recipients?(recipient[:email])
+      end
+
+      PostResendApi.process(**args.merge(recipients: resendable)) if resendable.any?
+      PostSendgridApi.process(**args.merge(recipients: blocked)) if blocked.any?
+      return
     end
 
     # Split recipients based on email provider determination
     recipients_by_provider = recipients.group_by do |recipient|
       email = recipient[:email]
 
-      # If the email contains non-ASCII characters or special characters, route it through SendGrid
-      if valid_email_address_for_resend?(email)
+      # If the email contains non-ASCII characters or special characters, route it through SendGrid.
+      # Recipients whose provider policy-blocks Resend's sending IPs go to
+      # SendGrid too (MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS).
+      if valid_email_address_for_resend?(email) && !MailerInfo.force_sendgrid_for_recipients?(email)
         MailerInfo::Router.determine_email_provider(MailerInfo::DeliveryMethod::DOMAIN_CREATORS)
       else
         MailerInfo::EMAIL_PROVIDER_SENDGRID
