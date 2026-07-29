@@ -35,6 +35,11 @@ class Pages::DefaultProfileDocument
     # hex color. Nothing seller-controlled can then reach the <style> block.
     background = css_hex_color(profile&.background_color, default: "#ffffff")
     highlight = css_hex_color(profile&.highlight_color, default: "#ff90e8")
+    # The price chip is filled with the accent and carries text, so it needs the display-adjusted
+    # accent/text pair rather than the raw colour — a saturated red accent with black text on it is
+    # exactly the readability problem ContrastColor#accessible_accent exists to solve. Everything
+    # else here (the hover shadow) has no text on the accent and keeps the seller's colour as saved.
+    accent_with_text = ContrastColor.accessible_accent(highlight)
     name = ERB::Util.h(seller.name_or_username.to_s)
     bio = ERB::Util.h(seller.bio.to_s)
     avatar = ERB::Util.h(seller.avatar_url.to_s)
@@ -48,7 +53,7 @@ class Pages::DefaultProfileDocument
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>#{name}</title>
           <style>
-            :root { --background: #{background}; --accent: #{highlight}; }
+            :root { --background: #{background}; --accent: #{highlight}; --accent-with-text: #{accent_with_text[:accent]}; --accent-text: #{accent_with_text[:text]}; }
             * { box-sizing: border-box; }
             body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--background); color: #000; line-height: 1.5; }
             main { max-width: 64rem; margin: 0 auto; padding: 3rem 1.5rem; }
@@ -63,7 +68,7 @@ class Pages::DefaultProfileDocument
             .products img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-bottom: 1px solid #000; }
             .products .details { padding: 0.75rem 1rem; }
             .products h3 { margin: 0 0 0.5rem; font-size: 1rem; }
-            .products .price { display: inline-block; padding: 0.125rem 0.5rem; border: 1px solid #000; border-radius: 4px; background: var(--accent); font-size: 0.875rem; }
+            .products .price { display: inline-block; padding: 0.125rem 0.5rem; border: 1px solid #000; border-radius: 4px; background: var(--accent-with-text); color: var(--accent-text); font-size: 0.875rem; }
             .posts { padding: 0; margin: 0; list-style: none; }
             .posts li { border-top: 1px solid rgba(0, 0, 0, 0.2); }
             .posts a { display: block; padding: 0.75rem 0; color: inherit; }

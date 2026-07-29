@@ -26,6 +26,10 @@ describe ValidateRecaptcha, type: :controller do
       render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score_trusted))
     end
 
+    def follow_action
+      render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "follow_site_key", surface: :follow))
+    end
+
     private
       def render_recaptcha_result(success)
         if success
@@ -43,6 +47,7 @@ describe ValidateRecaptcha, type: :controller do
       post :checkout_action, to: "anonymous#checkout_action"
       post :checkout_score_action, to: "anonymous#checkout_score_action"
       post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
+      post :follow_action, to: "anonymous#follow_action"
     end
 
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
@@ -133,6 +138,51 @@ describe ValidateRecaptcha, type: :controller do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(parsed_body["error"]).to eq("captcha_failed")
+    end
+
+    context "with the follow surface" do
+      it "passes when the reCAPTCHA API times out because follow fails open by default" do
+        allow(HTTParty).to receive(:post).and_raise(Net::OpenTimeout.new("execution expired"))
+
+        expect(Rails.logger).to receive(:info).with(/\[recaptcha_score\].*surface=follow.*decision=infra_error_fail_open/)
+
+        post :follow_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "fails on infrastructure errors when fail-open is disabled by config" do
+        allow(GlobalConfig).to receive(:get).with("RECAPTCHA_FAIL_OPEN_FOLLOW").and_return("false")
+        allow(HTTParty).to receive(:post).and_raise(Net::OpenTimeout.new("execution expired"))
+
+        post :follow_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      # An oversized token would otherwise be forwarded to Google, where it can
+      # make the verification request fail — and a verification failure on this
+      # surface fails OPEN, which would hand a visitor a bypass they can trigger
+      # on demand. It has to be treated as an invalid token instead.
+      it "fails closed on an absurdly long token without calling Google at all" do
+        expect(HTTParty).to_not receive(:post)
+
+        post :follow_action, params: { "g-recaptcha-response" => "A" * 40_000 }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      it "still verifies a token of realistic length" do
+        stub_recaptcha_response(valid: true, score: nil)
+
+        post :follow_action, params: { "g-recaptcha-response" => "A" * 2_000 }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
     end
 
     context "with the score-based checkout surface" do

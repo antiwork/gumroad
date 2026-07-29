@@ -829,7 +829,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                   {message.content ? (
                     isUser ? (
                       // Square off the sender-side corner (bottom-right) into a subtle tail.
-                      <div className="rounded-2xl rounded-br-md bg-accent px-4 py-2 text-accent-foreground">
+                      <div className="rounded-2xl rounded-br-md bg-accent-with-text px-4 py-2 text-accent-foreground">
                         <p className="break-words whitespace-pre-wrap">{message.content}</p>
                       </div>
                     ) : (

@@ -494,7 +494,7 @@ class Order::PreparePaymentIntentService
     def method_forced_presentment_for(charge)
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
-      forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type) || element_mount_forced_currency
+      forced_currency = intent_forced_currency
       return nil if forced_currency.blank?
       unless free_and_test_lines_share_currency?(forced_currency)
         # Every other way this method returns nil is either uninteresting (no forced currency at
@@ -553,6 +553,71 @@ class Order::PreparePaymentIntentService
       end
     end
 
+    # The currency the deferred PaymentIntent must be created in, or nil for the canonical USD
+    # intent. Two kinds of payment method decide this differently.
+    #
+    # A method that can only ever charge in one currency (iDEAL and Bancontact in euros, UPI in
+    # rupees, Pix in reais) decides for itself: the buyer picked it, so the intent has to be in
+    # that currency or Stripe rejects the confirm.
+    #
+    # Every other method (card, Link, the wallets) inherits whatever currency the Payment Element
+    # was mounted in when the browser minted the ConfirmationToken, so the ELEMENT decides. The
+    # browser tells us which currency that was (payment_element_mount_currency), and we follow it:
+    # an Element mounted in dollars gets the canonical USD intent even on a cart priced in euros,
+    # and an Element mounted in euros gets the euro intent. Following the browser matters because
+    # the two sides compute the currency at different moments — the checkout page computes it when
+    # it renders and this service recomputes it when the buyer pays — and anything feeding the
+    # decision can move in between (the seller's local-method launch flags, the connected account's
+    # settlement state, the cart itself). When they disagree the browser is right about what the
+    # token can confirm against, because the token was minted on the element the browser mounted.
+    # Without this, a checkout whose page mounted dollars but whose pay-time recomputation said
+    # euros produced a euro intent the buyer's dollar token could never confirm, and Stripe
+    # rejected it in the browser with "The provided currency (eur) does not match the expected
+    # currency (usd)" — no charge, no payment_failed webhook, a dead end for the buyer
+    # (gumroad-private#1382, 57 orders over four days).
+    #
+    # A reported non-USD currency we cannot legitimately build an intent in (the seller is not
+    # enabled for buyer-currency charging, we force no method in that currency, or the cart is not
+    # uniformly priced in it) returns nil here, and #method_forced_presentment_required? turns that
+    # into a clean synchronous failure rather than an intent the token can never confirm.
+    #
+    # Nothing reported at all means an older client, so fall back to inferring the mount currency
+    # server-side exactly as before.
+    def intent_forced_currency
+      method_type = @previewed_payment_method_type
+      return nil if method_type.blank?
+
+      method_forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
+      return method_forced_currency if method_forced_currency.present?
+
+      reported_currency = reported_element_mount_currency
+      return element_mount_forced_currency if reported_currency.nil?
+      return nil if reported_currency == Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      return reported_currency if honorable_element_mount_currency?(reported_currency)
+
+      Rails.logger.error("Client-confirm prepare cannot honor the reported Payment Element mount currency #{reported_currency.inspect} for order #{order.id}; failing closed rather than creating an intent the ConfirmationToken cannot confirm")
+      nil
+    end
+
+    # The currency the browser says the Payment Element was mounted in, downcased, or nil when the
+    # client sent nothing (an older client, or the saved-card lane that mounts no element).
+    def reported_element_mount_currency
+      params[:payment_element_mount_currency].to_s.downcase.presence
+    end
+
+    # Whether we can legitimately create the intent in the currency the browser reported. The
+    # browser is trusted about WHICH currency its element used, never about whether that currency
+    # is chargeable: that stays server-side, on the same conditions the checkout page renders on —
+    # the seller is enabled for buyer-currency charging, some payment method forces that currency,
+    # and every line in the charge is priced in it (the only shape where one PaymentIntent can be
+    # created in it). Anything else fails closed.
+    def honorable_element_mount_currency?(currency)
+      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+
+      uniform_method_forced_purchase_currency == currency
+    end
+
     # Once the buyer confirmed on a forced-currency Payment Element — with a forced-currency
     # method (iDEAL/Bancontact) or any other method the element offered (card, Link) — the
     # canonical USD intent is never a usable fallback: Stripe rejects confirming such a
@@ -561,29 +626,23 @@ class Order::PreparePaymentIntentService
     # failing cleanly here. A seller with buyer-currency disabled remains on the canonical USD
     # path; a forced-currency token received after its local-method flag rolls back fails cleanly
     # instead of creating an intent the token can never confirm.
+    #
+    # For card/Link the browser's report is the authority (see #intent_forced_currency): a
+    # non-USD mount currency REQUIRES a non-USD intent, so a presentment we could not build for it
+    # must fail the order rather than fall back to dollars. A reported USD mount currency requires
+    # nothing — the canonical USD intent is exactly what that token confirms against, which is the
+    # dominant shape in gumroad-private#1382.
     def method_forced_presentment_required?
       return false if @previewed_payment_method_type.blank?
 
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
         Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       else
-        element_mount_forced_currency.present? || client_reported_mount_currency.present?
+        reported_currency = reported_element_mount_currency
+        return element_mount_forced_currency.present? if reported_currency.nil?
+
+        reported_currency != Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       end
-    end
-
-    # The browser reports the Element's mount currency only to fail a stale token closed. It does
-    # not choose a presentment currency: #element_mount_forced_currency remains the current,
-    # server-authoritative launch and capability check. If a seller rolls a local method back
-    # after an EUR Element minted a card/Link ConfirmationToken, the current check returns nil;
-    # this shape check still prevents us from creating a USD intent that Stripe will reject.
-    def client_reported_mount_currency
-      return nil unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-
-      product_currency = uniform_method_forced_purchase_currency
-      return nil unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(product_currency)
-      return nil unless params[:payment_element_mount_currency].to_s.downcase == product_currency
-
-      product_currency
     end
 
     def create_unconfirmed_intent(charge, presentment = nil)
@@ -693,6 +752,29 @@ class Order::PreparePaymentIntentService
         # EUR/INR intent. Belt-and-braces, since the resolver already withholds Alipay whenever a
         # forced-currency method is on the cart (see launched_method_set).
         method_types -= [Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
+      end
+
+      # The mirror strip, for the intent this service now creates in dollars even though the cart
+      # is priced in a currency some local method forces (the buyer's Payment Element was mounted
+      # in dollars, so their ConfirmationToken can only confirm a dollar intent — see
+      # #intent_forced_currency). The resolver, which decides its method list from the cart's
+      # pricing rather than from the intent, still offers iDEAL/Bancontact/UPI/Pix on that cart,
+      # and Stripe rejects the intent CREATE outright when a listed method cannot charge the
+      # intent's currency ("Payments with ideal support the following currencies: eur"). That
+      # would fail the whole cart, card buyers included, so drop any method whose forced currency
+      # is not the intent's. A buyer who actually picked one of those methods never reaches here:
+      # the method decides the intent's currency for itself, so the intent is in its currency.
+      #
+      # One residual difference this leaves, deliberately: on a cart the page rendered as
+      # forced-currency-eligible, the element may have offered a method the intent no longer lists,
+      # so the intent's method list can be a strict subset of what the buyer saw. Stripe rejects a
+      # payment_method_types-scoped ConfirmationToken only when the CONFIRMED method is missing, so
+      # a card buyer confirming against this list is fine — and a subset that Stripe accepts is
+      # strictly better than a list Stripe refuses to create at all.
+      intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      method_types = method_types.reject do |method_type|
+        forced = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
+        forced.present? && forced != intent_currency
       end
 
       # Klarna is also amount-locked: Stripe validates its transaction limits against the
