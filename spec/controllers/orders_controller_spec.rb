@@ -2740,6 +2740,10 @@ describe OrdersController, :vcr do
         # deliberate fail-open direction of the denylist, and it was previously pinned only
         # incidentally by the truncation and rate-limit examples above, which omit the param
         # for unrelated reasons.
+        #
+        # stripe_error_type must be card_error here, which is the shape 177 of the 598 sampled
+        # blank-type events carry. Any other type short-circuits the attempt check before the
+        # denylist is consulted, so the example would pass even if blank were suppressed.
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
 
@@ -2750,8 +2754,8 @@ describe OrdersController, :vcr do
 
         post :confirm_error, params: {
           id: order.secure_external_id(scope: "confirm"),
-          stripe_error_type: "invalid_request_error",
-          stripe_error_code: "payment_intent_unexpected_state",
+          stripe_error_type: "card_error",
+          stripe_error_code: "card_declined",
         }
 
         expect(response.parsed_body["success"]).to be(true)
