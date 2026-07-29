@@ -79,13 +79,9 @@ module MailerInfo
     mail.com
   ].freeze
 
-  # `recipients` accepts a single email string (possibly in "Name <email>" form)
-  # or an array of them, taken from any header — callers pass a `to:` value, a
-  # single address, or the whole envelope recipient list (to + cc + bcc). The
-  # provider is chosen once for the whole message, so a blocked address in cc or
-  # bcc has to be considered too: otherwise that recipient's copy bounces while
-  # the others deliver, and nobody notices the copied party heard nothing.
-  # See ApplicationMailer#redirect_united_internet_recipients_to_sendgrid!
+  # `recipients` accepts one email string (possibly in "Name <email>" form) or an
+  # array of them, from any header — a `to:` value or a whole envelope recipient
+  # list. One provider is chosen per message, so cc and bcc count as well.
   def force_sendgrid_for_recipients?(recipients)
     Array(recipients).compact.any? do |recipient|
       # strip BEFORE removing the bracket: " Name <user@web.de> " ends in a

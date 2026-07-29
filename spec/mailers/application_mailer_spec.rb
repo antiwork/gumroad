@@ -27,17 +27,14 @@ describe ApplicationMailer do
           end
         end
 
-        # Stands in for the mailers that address one person and copy another —
-        # AffiliateMailer addresses the affiliate and copies the seller.
+        # Stands in for mailers that address one person and copy another.
         def test_email_to_with_cc(recipient, cc_recipient)
           mail(to: recipient, cc: cc_recipient, subject: "Test") do |format|
             format.text { render plain: "Test email content" }
           end
         end
 
-        # No mailer bcc's anyone today, but bcc is an envelope recipient just
-        # like cc, so the redirect has to cover it before someone adds the first
-        # one. This pins that third field.
+        # No mailer bcc's today, but bcc is an envelope recipient like cc, so pin it.
         def test_email_to_with_bcc(recipient, bcc_recipient)
           mail(to: recipient, bcc: bcc_recipient, subject: "Test") do |format|
             format.text { render plain: "Test email content" }
@@ -138,11 +135,8 @@ describe ApplicationMailer do
         expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
       end
 
-      # One provider is chosen per message, so a blocked address in cc has to
-      # count too — otherwise the cc'd party's copy bounces while the addressed
-      # party's delivers, and nothing surfaces the half-failure. AffiliateMailer
-      # is the live example: it addresses the affiliate and copies the seller,
-      # passing no recipient of its own to random_delivery_method_options.
+      # AffiliateMailer is the live case: it addresses the affiliate, cc's the seller,
+      # and passes no recipient of its own to random_delivery_method_options.
       it "redirects when the blocked recipient is in cc rather than to" do
         mail = described_class.test_email_to_with_cc("seller@gmail.com", "boss@web.de").message
 
