@@ -1,3 +1,4 @@
+import { shouldIntercept } from "@inertiajs/core";
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
@@ -9,6 +10,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import {
   Table,
   TableBody,
@@ -22,8 +24,31 @@ import {
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
+export const ProductEditLink = ({
+  children,
+  forceFullPageNavigation,
+  href,
+}: {
+  children: React.ReactNode;
+  forceFullPageNavigation: boolean;
+  href: string;
+}) => (
+  <StretchedLink
+    href={href}
+    onClick={(event) => {
+      if (!forceFullPageNavigation && shouldIntercept(event)) {
+        event.preventDefault();
+        router.visit(href);
+      }
+    }}
+  >
+    {children}
+  </StretchedLink>
+);
+
 export const ProductsPageProductsTable = (props: {
   entries: Product[];
+  forceFullPageProductEditNavigation: boolean;
   pagination: PaginationProps;
   selectedTab: Tab;
   query: string | null;
@@ -107,28 +132,39 @@ export const ProductsPageProductsTable = (props: {
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
               />
-              <TableCell hideLabel>
+              {/* The name cell is `relative` so StretchedLink can fill it. Before this, only the
+                  bold name text was clickable, which is a small target — sellers reported that
+                  clicking a product row "does nothing" when they had in fact tapped the dead space
+                  beside the name (gumroad-private#1469). Making the entire cell clickable is as far
+                  as we can widen it without nesting links: Safari doesn't support
+                  `position: relative` on <tr>, so the row itself can't be the link, and the Sales
+                  cell has its own link to the customers page. */}
+              <TableCell hideLabel className="relative">
                 <div>
-                  {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   {product.can_edit ? (
-                    <Link href={product.edit_url} style={{ textDecoration: "none" }}>
+                    <ProductEditLink
+                      forceFullPageNavigation={props.forceFullPageProductEditNavigation}
+                      href={product.edit_url}
+                    >
                       {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
                           (gumroad-private#1259; same fix as the product page in #6190). */}
-                      <h4 className="font-bold" dir="auto">
+                      <h4 className="relative font-bold" dir="auto">
                         {product.name}
                       </h4>
-                    </Link>
+                    </ProductEditLink>
                   ) : (
-                    <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
-                      <h4 className="font-bold" dir="auto">
+                    <StretchedLink href={product.url} title={product.url} target="_blank" rel="noreferrer">
+                      <h4 className="relative font-bold" dir="auto">
                         {product.name}
                       </h4>
-                    </a>
+                    </StretchedLink>
                   )}
 
-                  <Link href={product.url} title={product.url} target="_blank" rel="noreferrer">
+                  {/* Inertia's Link intercepts plain clicks even with target="_blank", so this must
+                      remain a native anchor to open the storefront in a new tab. */}
+                  <a href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative z-1">
                     <small className="block">{product.url_without_protocol}</small>
-                  </Link>
+                  </a>
                 </div>
               </TableCell>
 
