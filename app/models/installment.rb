@@ -321,10 +321,8 @@ class Installment < ApplicationRecord
 
   def member_cancellation_trigger?
     return true if workflow_trigger == MEMBER_CANCELLATION_WORKFLOW_TRIGGER
-    # Workflow::ManageService copies workflow.json_data down at save time, so an installment
-    # whose workflow became cancellation-triggered afterwards still carries the old (or no)
-    # trigger. Deferring to the workflow keeps the delivery guards from leaking a goodbye
-    # email on that drift.
+    # `workflow_trigger` is copied down at save time, so it goes stale when the workflow's own
+    # trigger changes afterwards. The workflow is the source of truth.
     workflow.present? && workflow.member_cancellation_trigger?
   end
 
@@ -428,9 +426,8 @@ class Installment < ApplicationRecord
   def send_installment_from_workflow_for_purchase(purchase_id)
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
-    # This branch cannot evaluate a cancellation post: it only ever runs for a live
-    # membership, so `subscription.alive?` below can never be the "has ended" state such a
-    # post is written for. Jobs enqueued before the reschedule filter existed still land here.
+    # Cancellation posts are delivered on the subscription path, which rechecks the membership
+    # is still ended. This path can't, so stale enqueued jobs bail out here.
     return if member_cancellation_trigger?
 
     sale = sale.original_purchase
