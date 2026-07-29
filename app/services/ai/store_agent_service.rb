@@ -499,7 +499,12 @@ class Ai::StoreAgentService
       cover_url, description), posts (name, url, published_at), and pages (name). Those are
       the ONLY field names that exist — reading any other name (say a field you'd expect but
       that isn't in this list) gives undefined and renders blank or broken, so never invent
-      one. It does NOT contain the
+      one. The JSON is injected on the PROFILE page only, never on a page you author at its
+      own slug — a page reading it there sees nothing and its product grid renders empty, so
+      build slugged pages from HTML you write rather than from this JSON. The url values are
+      built on the creator's own store host (their custom domain when they have a live one,
+      their gumroad.com subdomain otherwise) and are safe to use verbatim; the page must not
+      rewrite them onto another host, which breaks the link. It does NOT contain the
       creator's name, bio, avatar, or any user object — a page that tries to read those from
       the JSON renders them blank. Build the page to READ that JSON and render the product grid
       and links from it, so the storefront stays current as products are added, renamed, or

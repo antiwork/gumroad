@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  # Bumped when the shape of the cached payload changes (v4 added products' cover_url),
-  # so already-cached entries built by the previous shape are not served to pages that
-  # now expect the new keys.
-  CACHE_VERSION = "v4"
+  # Bumped when the shape of the cached payload changes (v4 added products' cover_url,
+  # v5 moved product/post URLs onto the seller's live custom domain), so already-cached
+  # entries built by the previous shape are not served to pages that now expect the new keys.
+  CACHE_VERSION = "v5"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
@@ -14,9 +14,10 @@ class Pages::ProfileData
     # no profile row yet, so every read off this is nil-safe.
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     Rails.cache.fetch(cache_key(seller, seller_profile)) do
+      base_url = seller.store_base_url
       {
-        products: products(seller),
-        posts: posts(seller),
+        products: products(seller, base_url),
+        posts: posts(seller, base_url),
         pages: pages(seller_profile),
       }
     end
@@ -26,25 +27,26 @@ class Pages::ProfileData
     [
       "profile_data",
       CACHE_VERSION,
-      # The cached payload embeds full product URLs built from the seller's subdomain
-      # (Link#long_url -> User#subdomain_with_protocol), so the key must change when the
-      # username does — otherwise a renamed seller keeps serving links to their old
-      # subdomain, which 404s. Keying on the username itself (rather than the whole user
-      # record) avoids rebuilding the cache on unrelated user-row updates.
+      # The cached payload embeds full product and post URLs built from User#store_base_url,
+      # so the key must change when either input to that can move: the username, and the
+      # custom domain row whose activation or removal flips which host is emitted. Keying on
+      # the username itself (rather than the whole user record) avoids rebuilding the cache
+      # on unrelated user-row updates.
       seller.username,
+      seller.custom_domain&.cache_key_with_version,
       seller.products.cache_key_with_version,
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
     ].join("/")
   end
 
-  def self.products(seller)
+  def self.products(seller, base_url = seller.store_base_url)
     seller.products.alive.not_archived.not_draft
           .includes(:thumbnail_alive, display_asset_previews: { file_attachment: :blob })
           .order(created_at: :desc).limit(MAX_ITEMS).map do |product|
       {
         name: product.name,
-        url: product.long_url,
+        url: product.long_url(host: base_url),
         price: product.price_formatted_verbose,
         native_type: product.native_type,
         thumbnail_url: page_renderable_image_url(product.thumbnail_alive),
@@ -76,11 +78,11 @@ class Pages::ProfileData
     image.url
   end
 
-  def self.posts(seller)
+  def self.posts(seller, base_url = seller.store_base_url)
     seller.installments.visible_on_profile.includes(:seller).order(published_at: :desc).limit(MAX_ITEMS).map do |post|
       {
         name: post.name,
-        url: post.full_url,
+        url: post.full_url(host: base_url),
         published_at: post.published_at&.iso8601,
       }
     end

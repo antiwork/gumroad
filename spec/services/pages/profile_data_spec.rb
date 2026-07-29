@@ -155,5 +155,56 @@ describe Pages::ProfileData do
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(old_key)
       end
     end
+
+    context "when the seller has a live custom domain" do
+      let!(:product) { create(:product, user: seller, name: "My product") }
+      let!(:post) { create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update") }
+
+      it "builds product and post URLs on the custom domain, not the subdomain" do
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to eq("#{PROTOCOL}://shop.example.com/l/#{product.general_permalink}")
+        expect(payload[:posts].first[:url]).to start_with("#{PROTOCOL}://shop.example.com/p/")
+        expect(payload.to_json).not_to include(seller.subdomain)
+      end
+
+      it "stays on the subdomain while the domain is only verified, with no certificate yet" do
+        create(:custom_domain, user: seller, domain: "shop.example.com", state: "verified")
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to include(seller.subdomain)
+        expect(payload[:posts].first[:url]).to include(seller.subdomain)
+      end
+
+      it "moves the URLs off the old host when the domain goes live after the payload was cached" do
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
+
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
+      end
+
+      it "moves the URLs back to the subdomain when the domain is removed" do
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
+
+        custom_domain.mark_deleted!
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
+      end
+
+      it "keeps the emitted host inside the navigation bridge's allowlist" do
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        seller.reload
+
+        payload = Pages::ProfileData.build(seller)
+        hosts = (payload[:products] + payload[:posts]).map { URI(_1[:url]).host }.uniq
+
+        expect(hosts).to all(be_in(seller.custom_html_store_hostnames))
+      end
+    end
   end
 end
