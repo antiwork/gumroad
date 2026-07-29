@@ -254,9 +254,11 @@ class Checkout::BuyerCurrencyEligibility
     # is a fallback because a saved card implies a later off-session charge whose amount we
     # could not previously honor in the buyer's currency. A membership signup in the
     # subscription ramp is the exception: the later charges now have a stored fixed
-    # presentment amount to reuse (SubscriptionPresentment), so the reason for the gate no
+    # presentment amount to reuse (LaterChargePresentment), so the reason for the gate no
     # longer holds. Card-saving for other reasons (a one-off "save my card" tick, a preorder
-    # authorization) still falls back — see #subscription_setup_in_ramp?.
+    # authorization) still falls back — see #subscription_setup_in_ramp?, which also refuses a
+    # cart mixing a membership with anything else. BuyerCurrencyQuote withholds the quote for
+    # that same mixed cart, so it arrives here without a token and falls back quietly.
     return fallback(:future_charge_setup) if setup_future_charges && !subscription_setup_in_ramp?
     return fallback(:no_purchases) if purchases.empty?
     # A cart spanning several sellers becomes several charges (the order pipeline groups
