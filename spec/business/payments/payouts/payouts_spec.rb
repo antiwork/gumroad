@@ -3,9 +3,14 @@
 require "spec_helper"
 
 describe Payouts do
-  # A wording the "can this seller see an explanation of the block" check recognises. It matches any
-  # note containing one of the seller-facing rejection reasons, current or historical, so this is one
-  # example of that shape rather than the only string that works.
+  # A wording the broad "can this seller see an explanation of a terminal PayPal block" check
+  # recognises. It matches any note containing one of the seller-facing rejection reasons, current or
+  # historical, so this is one example of that shape rather than the only string that works.
+  #
+  # Deliberately NOT the explanation of any particular rejection: the date is not one a real note
+  # carries, which is what the narrower "is this the explanation of THIS rejection" check keys on.
+  # Use seller_blocked_by_paypal_reading_the_explanation when the seller has to be reading the
+  # genuine explanation of the rejection blocking them.
   def terminal_paypal_explanation_note_content
     "Your payout on July 1st, 2026 could not be sent because " \
       "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
@@ -14,13 +19,18 @@ describe Payouts do
 
   # A seller under a live terminal PayPal rejection — no bank account, no Stripe Connect route, and
   # a failed payout to the address on file — who is currently reading the explanation of it.
+  #
+  # The note is generated from the rejection itself rather than hand-written, because the payout walk
+  # decides whether the seller still needs telling by asking whether the note on their page explains
+  # that specific rejection (its payout date plus its restriction). A hand-typed date would make this
+  # seller look unexplained and every example built on it would silently exercise the restore path.
   def seller_blocked_by_paypal_reading_the_explanation
     seller = create(:compliant_user, payment_address: "stuck@example.com")
     create(:user_compliance_info, user: seller)
     create(:balance, user: seller, amount_cents: 100_00, date: Date.today - 3)
-    seller.add_payout_note(content: terminal_paypal_explanation_note_content, seller_visible: true)
-    create(:payment_failed, user: seller, payment_address: "stuck@example.com",
-                            failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+    rejection = create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                        failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+    seller.add_payout_note(content: rejection.terminal_paypal_failure_seller_note, seller_visible: true)
     seller
   end
 
@@ -1078,6 +1088,32 @@ describe Payouts do
         # And the explanation is still what the seller sees.
         expect(seller.reload.latest_seller_visible_payout_note.content)
           .to include("payments cannot be received in the country on that account's address")
+      end
+
+      # A held seller can be reading an explanation of a rejection they have already left behind:
+      # rejected on one PayPal address, switched to another, rejected again. The note on their page
+      # names the address they abandoned, so it quotes a payout date that is not the one that
+      # stopped their money and — because the two rejections say different things — possibly the
+      # wrong restriction. They are held, so the PayPal processor's own re-explain never runs for
+      # them; this walk is the only thing that can correct it.
+      it "restores the explanation for a held seller reading one about an address they left" do
+        seller = create(:compliant_user, payment_address: "old@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        old_rejection = create(:payment_failed, user: seller, payment_address: "old@example.com",
+                                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller.add_payout_note(content: old_rejection.terminal_paypal_failure_seller_note, seller_visible: true)
+
+        # They moved to a different PayPal account, which PayPal refused for a different reason.
+        seller.update!(payment_address: "new@example.com")
+        create(:payment_failed, user: seller, payment_address: "new@example.com",
+                                failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("your PayPal account cannot receive US dollars")
       end
 
       # The hold is checked before any processor runs, so a held seller never reaches the PayPal

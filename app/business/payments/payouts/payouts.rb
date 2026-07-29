@@ -82,44 +82,58 @@ class Payouts
         # unpaid balance are held internally, so 1.7% of the walk pays for it, and the queries are
         # cheap existence checks. That is not the shape that caused the walk's past latency
         # incidents (#1021, #1284), which were per-seller work across the whole cohort.
-        newest_visible_note = user.latest_seller_visible_payout_note
         terminal_paypal_block = user.payouts_paused_internally? &&
                                 PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
+
+        # Make sure the seller can read an explanation of the block they are under NOW, before
+        # deciding anything about this week's pause note.
+        #
+        # This runs first because "can the seller see an explanation of THIS rejection" is a
+        # narrower question than "can the seller see an explanation at all", and only the narrow one
+        # is safe to skip a restore on. A seller rejected on one PayPal address, who switched to
+        # another and was rejected again, carries an explanation naming the address they abandoned:
+        # a payout date that is not the one that stopped their money, and — since the two rejections
+        # say different things — possibly the wrong restriction. Asking the broad question first
+        # would count that stale note as an explanation and never reach the restore, and because a
+        # held seller never reaches PaypalPayoutProcessor's own re-explain (the hold is checked
+        # here, before any processor runs), nothing else would ever correct it.
+        #
+        # Writes nothing in the ordinary case: PaypalPayoutProcessor.ensure_terminal_failure_
+        # explanation_visible returns false when the explanation of the current rejection is
+        # already the newest note the seller can see.
+        #
+        # A held seller reaches this every week and would otherwise never be told. Holds are the
+        # norm in this population, since dozens of failed payouts trip the automatic one. Measured
+        # on production in July 2026, 24 sellers are simultaneously held and carrying a terminal
+        # PayPal rejection, 19 of them holding $5,020.87 in unpaid balance between them. Without
+        # this, a seller whose explanation was buried by another blocker's note (an account under
+        # review, say) stays permanently in the gumroad-private#1478 dead end: they read "payouts
+        # were paused by the system" every week, with nothing telling them PayPal is what stopped
+        # the money, and so no reason to contact us. Same for anyone who was suspended when the
+        # one-time backfill ran and has since been reinstated.
+        explanation_restored = terminal_paypal_block &&
+                               PaypalPayoutProcessor.ensure_terminal_failure_explanation_visible(user)
+
+        # Whether to hide this week's pause note. Deliberately the BROAD question — any
+        # terminal-PayPal explanation the seller is reading answers "would this note bury something
+        # more useful than itself", which is all this decides.
         keep_explanation_visible =
-          terminal_paypal_block &&
-          Payment::FailureReason.terminal_paypal_explanation_note?(newest_visible_note&.content)
+          explanation_restored ||
+          (terminal_paypal_block &&
+            Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content))
 
         # Don't stack identical hidden notes. Suppressed or not, each run adds a payout_note row,
-        # and both this lookup and the Payouts banner only scan back
+        # and both the note lookups and the Payouts banner only scan back
         # PayoutNoteVisibility::MAX_NOTES_SCANNED notes — so a seller on daily payouts would push
-        # the explanation out of that window within a month, at which point the lookup returns nil
+        # the explanation out of that window within a month, at which point the lookups return nil
         # and the suppression disarms itself. Skipping the repeat also spares these accounts, which
         # already carry hundreds of automated comments, one row per payout run.
-        if keep_explanation_visible
+        #
+        # Not skipped on the run that just restored the explanation: the pause note above it is
+        # what makes the restored note the newest visible one, and support still gets its standing
+        # record. From the next run on this settles into the ordinary suppressed-and-deduped state.
+        if keep_explanation_visible && !explanation_restored
           return false if newest_note_is_hidden_repeat?(user, PAUSED_PAYOUT_NOTE_REGEX)
-        elsif terminal_paypal_block
-          # The PayPal block is live but the seller cannot see the explanation of it, so restore
-          # the explanation instead of writing them another generic pause note.
-          #
-          # A held seller reaches this every week and would otherwise never be told: the hold is
-          # checked here, before any processor runs, so PaypalPayoutProcessor's own re-explain
-          # never fires for them — and holds are the norm in this population, since dozens of
-          # failed payouts trip the automatic one. Measured on production in July 2026, 24 sellers
-          # are simultaneously held and carrying a terminal PayPal rejection, 19 of them holding
-          # $5,020.87 in unpaid balance between them. Without this, a seller whose explanation was
-          # buried by another blocker's note (an account under review, say) stays permanently in
-          # the gumroad-private#1478 dead end: they read "payouts were paused by the system" every
-          # week, with nothing telling them PayPal is what stopped the money, and so no reason to
-          # contact us. Same for anyone who was suspended when the one-time backfill ran and has
-          # since been reinstated.
-          #
-          # The pause note itself is still recorded for support, just hidden, exactly as it is when
-          # an explanation is already visible. From the next run on the note above is the newest
-          # visible one, so this settles into the ordinary suppressed-and-deduped state.
-          if PaypalPayoutProcessor.ensure_terminal_failure_explanation_visible(user)
-            user.add_payout_note(content:, seller_visible: false)
-            return false
-          end
         end
 
         user.add_payout_note(content:, seller_visible: !keep_explanation_visible)
