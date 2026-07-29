@@ -116,6 +116,18 @@ describe InvisibleCharacterRecipientSanitizer do
       expect(mail.to).to eq ["\u200Fbuyer@example.com", "someone-else@example.com"]
     end
 
+    # The deliberate other side of the rule. A dirty address that no account stores is typing
+    # noise on a purchase, follower or contact row, and the clean form is the mailbox the person
+    # meant, so it must still be cleaned even when some account happens to own that clean form.
+    # Without this example, tightening the check to "any equivalent row blocks" would start
+    # bouncing receipts and nothing would fail.
+    it "cleans a dirty address that no account stores, even when another account owns the clean form" do
+      other = stored_as("buyer@example.com")
+
+      expect(deliver_to("\u200Fbuyer@example.com").to).to eq ["buyer@example.com"]
+      expect(other.reload.email).to eq "buyer@example.com"
+    end
+
     it "cleans it when the same account owns both variants" do
       user = stored_as("\u200Fbuyer@example.com")
 
