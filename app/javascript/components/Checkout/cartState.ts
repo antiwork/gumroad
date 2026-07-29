@@ -154,9 +154,11 @@ export const withRefreshedExchangeRates = (cart: CartState, refreshedRates: Read
   let changed = false;
   const items = cart.items.map((item) => {
     const rate = refreshedRates.get(item.product.permalink);
-    // A rate of 0 (or a missing item) would make convertToUSD produce Infinity/NaN, so keep
-    // the rate the cart already has rather than adopting an unusable one. 0 is the reachable
-    // case: the server's get_rate returns 0.0 for a currency it has no stored rate for.
+    // Keep the rate the cart already has rather than adopting an unusable one: a rate of 0 would
+    // make convertToUSD produce Infinity. This is defence for the exported helper rather than a
+    // case the checkout reaches — refreshedRatesFromLineItems already drops non-positive rates
+    // before building the map, and that is where the server's 0.0 for an unknown currency is
+    // actually filtered out.
     if (rate === undefined || !(rate > 0) || rate === item.product.exchange_rate) return item;
     changed = true;
     return { ...item, product: { ...item.product, exchange_rate: rate } };

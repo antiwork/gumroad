@@ -24,8 +24,7 @@ import { type CartState, withRefreshedExchangeRates } from "$app/components/Chec
 // `Order::CreateService` sees `order.persisted?` and soft-deletes the buyer's cart before
 // responding. A partial reload of the `cart` prop after that point returns `cart: null` — there
 // is no cart left to read a rate from — so a reload-based recovery silently degraded to
-// re-quoting on the stale rate, which is exactly the behaviour it was meant to fix. Verified
-// failing on the hosted preview app; see the PR body.
+// re-quoting on the stale rate, which is exactly the behaviour it was meant to fix.
 //
 // The caller injects its form plumbing so this stays a plain function that can be exercised
 // without mounting the checkout page.
@@ -60,9 +59,7 @@ export const useLatestCartGetter = (cart: CartState): (() => CartState) => {
   // That safety depends on this page rendering synchronously, where a render that starts also
   // commits. If a cart edit is ever moved into startTransition, or a Suspense boundary is added
   // around the cart rows, React can abandon a render after this assignment and the ref would
-  // hold a cart the buyer never saw committed. The fix at that point is an external store read
-  // through useSyncExternalStore, not an effect — no commit follows an abandoned render, so no
-  // effect would run to correct it.
+  // hold a cart the buyer never saw committed.
   latest.current = cart;
   return React.useCallback(() => latest.current, []);
 };
@@ -102,3 +99,30 @@ export const recoverFromInvalidBuyerCurrencyQuote = ({
   if (updated !== cart) setCart(updated);
   requote(updated);
 };
+
+// Builds the recovery's plumbing from the checkout page's own pieces.
+//
+// This exists as its own function purely so the wiring can be tested. The bug this whole module
+// fixes was a single line in the refusal branch that re-quoted straight from the in-memory cart,
+// and every unit test here exercises the helpers rather than the call site — so putting that line
+// back would leave the suite green while restoring the loop. Two things have to hold and are
+// asserted against this factory: `requote` must convert the cart it is HANDED (the merged one),
+// not re-read the page's cart, and `setCart` must write through the caller's form.
+//
+// Generic over what getProducts returns so the caller's own type flows through to
+// dispatchUpdateProducts without an assertion.
+export const buildBuyerCurrencyQuoteRecoveryDeps = <Products>({
+  getLatestCart,
+  setCart,
+  getProducts,
+  dispatchUpdateProducts,
+}: {
+  getLatestCart: () => CartState;
+  setCart: (cart: CartState) => void;
+  getProducts: (cart: CartState) => Products;
+  dispatchUpdateProducts: (products: Products) => void;
+}): BuyerCurrencyQuoteRecoveryDeps => ({
+  getCart: getLatestCart,
+  setCart,
+  requote: (cart) => dispatchUpdateProducts(getProducts(cart)),
+});

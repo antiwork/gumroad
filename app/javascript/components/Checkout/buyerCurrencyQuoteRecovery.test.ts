@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CartPurchaseResult } from "$app/data/purchase";
 
 import {
+  buildBuyerCurrencyQuoteRecoveryDeps,
   recoverFromInvalidBuyerCurrencyQuote,
   refreshedRatesFromLineItems,
   useLatestCartGetter,
@@ -270,5 +271,46 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     expect(setCart.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
     expect(requote.mock.calls[0]?.[0].items[0]?.quantity).toBe(3);
     expect(requote.mock.calls[0]?.[0].items[0]?.product.exchange_rate).toBe(0.9);
+  });
+});
+
+describe("buildBuyerCurrencyQuoteRecoveryDeps", () => {
+  // The bug being fixed was one line in the checkout's refusal branch that re-quoted straight
+  // from the cart already in memory. Every test above exercises the helpers, so restoring that
+  // line would leave them all green while restoring the loop. These two cover the wiring itself.
+  it("converts the merged cart it is handed, not the cart still on the page", () => {
+    const staleCart = cartWith([cartItem()]);
+    const mergedCart = cartWith([cartItem({ product: cartProduct({ exchange_rate: 0.78 }) })]);
+    const getProducts = vi.fn((cart: CartState) => cart.items.map((item) => item.product.exchange_rate));
+    const dispatchUpdateProducts = vi.fn();
+
+    const deps = buildBuyerCurrencyQuoteRecoveryDeps({
+      // Deliberately the pre-merge cart: re-reading the page's cart instead of using the argument
+      // is exactly the regression, so this getter must not be what requote converts.
+      getLatestCart: () => staleCart,
+      setCart: vi.fn(),
+      getProducts,
+      dispatchUpdateProducts,
+    });
+    deps.requote(mergedCart);
+
+    expect(getProducts).toHaveBeenCalledWith(mergedCart);
+    expect(dispatchUpdateProducts).toHaveBeenCalledWith([0.78]);
+  });
+
+  it("persists through the caller's setter and reads the latest cart", () => {
+    const latest = cartWith([cartItem({ quantity: 5 })]);
+    const setCart = vi.fn();
+
+    const deps = buildBuyerCurrencyQuoteRecoveryDeps({
+      getLatestCart: () => latest,
+      setCart,
+      getProducts: (cart: CartState) => cart.items,
+      dispatchUpdateProducts: vi.fn(),
+    });
+
+    expect(deps.getCart()).toBe(latest);
+    deps.setCart(latest);
+    expect(setCart).toHaveBeenCalledWith(latest);
   });
 });

@@ -26,6 +26,7 @@ import {
   getCheckoutBuyerCurrencyQuoteToken,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
+  buildBuyerCurrencyQuoteRecoveryDeps,
   recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote,
   useLatestCartGetter,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
@@ -396,9 +397,12 @@ const CheckoutIndexPage = () => {
   function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"]) {
     recoverBuyerCurrencyQuote({
       lineItems,
-      getCart: getLatestCart,
-      setCart: (cart) => cartForm.setData({ cart }),
-      requote: (cart) => dispatch({ type: "update-products", products: getProducts(cart) }),
+      ...buildBuyerCurrencyQuoteRecoveryDeps({
+        getLatestCart,
+        setCart: (cart) => cartForm.setData({ cart }),
+        getProducts,
+        dispatchUpdateProducts: (products) => dispatch({ type: "update-products", products }),
+      }),
     });
   }
 
