@@ -51,6 +51,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                us_states: STATES,
                                              })
       expect(inertia.props[:recommended_products]).to be_nil
+      expect(inertia.props[:stripe_fonts_css_source]).to eq(SellerProfile.seller_fonts_css_source)
       meta_by_property = inertia.props[:_inertia_meta].filter_map { |t| [t[:property], t[:content]] if t[:property] }.to_h
       expect(meta_by_property).to include(
         "gr:google_analytics:enabled" => "true",
@@ -67,7 +68,7 @@ describe CheckoutController, type: :controller, inertia: true do
       expect(response).to be_successful
     end
 
-    describe "custom_styles prop" do
+    describe "checkout_style prop" do
       let(:browser_guid) { SecureRandom.uuid }
       let(:branded_seller) do
         create(:user).tap do |seller|
@@ -88,7 +89,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show
 
-        expect(inertia.props[:custom_styles]).to eq(branded_seller.seller_profile.custom_styles)
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
       it "sends the whole palette, not just the accent" do
@@ -99,31 +100,39 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show
 
-        styles = inertia.props[:custom_styles]
+        checkout_style = inertia.props[:checkout_style]
+        styles = checkout_style[:css]
         # Note the space after each colon: SassC's :compressed output keeps it inside a custom
         # property's value, so these are the literals the browser actually receives.
         expect(styles).to include("--accent: 0 154 73")
         expect(styles).to include("--body-bg: #f8efe3")
         expect(styles).to include(%(--font-family: "Roboto Mono"))
-        # custom_styles also carries a body { } rule, which is what actually repaints the page
+        # checkout_style.css also carries a body { } rule, which is what actually repaints the page
         # background rather than only exposing the custom property for components to opt into.
         expect(styles).to include("body{background-color:#f8efe3")
+        expect(checkout_style[:theme]).to eq({
+                                               accent_color: "#009a49",
+                                               background_color: "#f8efe3",
+                                               text_color: "#000000",
+                                               danger_color: "#9b1c12",
+                                               font_family: %("Roboto Mono", "ABC Favorit", monospace),
+                                             })
       end
 
       it "sends no styles for a cart spanning two sellers" do
         # A mixed cart has no seller whose branding could fairly represent it — see
-        # Cart#visible_seller_ids and CheckoutController#sole_seller_custom_styles.
+        # Cart#visible_seller_ids and CheckoutController#sole_seller_checkout_style.
         cart_with(create(:product, user: branded_seller), create(:product, user: create(:user)))
 
         get :show
 
-        expect(inertia.props[:custom_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
       it "sends no styles when there is no cart and no product parameter" do
         get :show
 
-        expect(inertia.props[:custom_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
       it "sends no styles for an empty cart" do
@@ -131,7 +140,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show
 
-        expect(inertia.props[:custom_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
       it "carries the seller's palette for a direct product arrival with no saved cart" do
@@ -142,7 +151,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show, params: { product: product.unique_permalink }
 
-        expect(inertia.props[:custom_styles]).to eq(branded_seller.seller_profile.custom_styles)
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
       it "sends no styles when the arriving product's seller differs from the saved cart's" do
@@ -153,7 +162,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show, params: { product: arriving.unique_permalink }
 
-        expect(inertia.props[:custom_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
       it "still carries the palette when the arriving product's seller matches the saved cart's" do
@@ -162,25 +171,56 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show, params: { product: arriving.unique_permalink }
 
-        expect(inertia.props[:custom_styles]).to eq(branded_seller.seller_profile.custom_styles)
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
-      it "sends no styles when the stored colour is not a usable hex value" do
-        # HexColorValidator anchors per line rather than per string, and update_column bypasses it
-        # entirely, so unparseable values are persistable. custom_styles interpolates the value into
-        # SCSS, so an unusable colour makes the compile raise — the controller has to degrade to no
-        # CSS (Gumroad's default palette) rather than 500 the payment page over one seller's corrupt
-        # branding row.
+      it "carries the seller's palette for products added from a wishlist" do
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when wishlist products differ from the saved cart's seller" do
+        cart_with(create(:product, user: branded_seller))
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "ignores the saved cart when a gift-wishlist arrival clears it" do
+        cart_with(create(:product, user: create(:user)))
+        wishlist_product = create(
+          :wishlist_product,
+          wishlist: create(:wishlist),
+          product: create(:product, user: branded_seller)
+        )
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when the stored colour contains injected SCSS" do
         seller = create(:user)
         # tap(&:save!) first: seller_profile is built-but-unsaved until something persists it, and
         # update_column on a new record raises.
-        seller.seller_profile.tap(&:save!).update_column(:highlight_color, "not a colour")
+        seller.seller_profile.tap(&:save!).update_column(
+          :highlight_color,
+          "#ffffff\n)}; } body { display:none !important; } :root { --x: \#{split-color(#ffffff"
+        )
         cart_with(create(:product, user: seller))
 
         get :show
 
         expect(response).to be_successful
-        expect(inertia.props[:custom_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
       it "recomputes the palette on the partial request the frontend makes when the cart changes" do
@@ -194,12 +234,12 @@ describe CheckoutController, type: :controller, inertia: true do
         cart_with(create(:product, user: branded_seller))
         request.headers["X-Inertia"] = "true"
         request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
-        request.headers["X-Inertia-Partial-Data"] = "cart,flash,custom_styles"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,checkout_style"
 
         get :show
 
-        expect(response.parsed_body["props"]).to include("custom_styles")
-        expect(response.parsed_body["props"]["custom_styles"]).to include("--accent: 0 154 73")
+        expect(response.parsed_body["props"]).to include("checkout_style")
+        expect(response.parsed_body.dig("props", "checkout_style", "css")).to include("--accent: 0 154 73")
       end
     end
 

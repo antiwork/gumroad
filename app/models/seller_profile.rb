@@ -2,6 +2,16 @@
 
 class SellerProfile < ApplicationRecord
   FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"]
+  DANGER_COLOR_CHOICES = ["#dc341e", "#9b1c12", "#ffb4ab"]
+
+  def self.google_fonts_css_source(fonts)
+    families = fonts.sort.map { "family=#{_1}:wght@400;600" }.join("&")
+    Addressable::URI.encode("https://fonts.googleapis.com/css2?#{families}&display=swap")
+  end
+
+  def self.seller_fonts_css_source
+    google_fonts_css_source(FONT_CHOICES.without("ABC Favorit"))
+  end
 
   belongs_to :seller, class_name: "User"
 
@@ -27,6 +37,8 @@ class SellerProfile < ApplicationRecord
   end
 
   def custom_styles
+    return "" unless custom_style_attributes_safe?
+
     Rails.cache.fetch(custom_style_cache_name) do
       component_path = File.read(Rails.root.join("app", "views", "layouts", "custom_styles", "styles.scss.erb"))
       sass = ERB.new(component_path).result(binding)
@@ -76,6 +88,16 @@ class SellerProfile < ApplicationRecord
     ContrastColor.for(text_color_on_background)
   end
 
+  def danger_color
+    DANGER_COLOR_CHOICES.find do |color|
+      ContrastColor.ratio_between(color, background_color).to_f >= ContrastColor::WCAG_AA_NORMAL_TEXT
+    end || text_color_on_background
+  end
+
+  def text_color_on_danger
+    ContrastColor.for(danger_color)
+  end
+
   def font_family
     fallback = case font
                when "Domine", "Merriweather", "Roboto Slab"
@@ -88,11 +110,16 @@ class SellerProfile < ApplicationRecord
     %("#{font}", "ABC Favorit", #{fallback})
   end
 
+  def font_css_source
+    return if font == "ABC Favorit"
+
+    self.class.google_fonts_css_source([font])
+  end
+
   def custom_style_cache_name
-    # Bumped to v4 when text-bearing accent areas started rendering a brightness-adjusted accent so
-    # their text could clear 4.5:1 (v3 was the move from HSL lightness to WCAG contrast). Without the
-    # bump, sellers with already-cached CSS would keep being served the old colour pair.
-    "users/#{seller.id}/custom_styles_v4"
+    # v5 invalidated CSS compiled before persisted style values were checked as a complete string.
+    # Without the bump, a previously cached injection could outlive a repaired database row.
+    "users/#{seller.id}/custom_styles_v5"
   end
 
   def validate_json_data
@@ -111,6 +138,12 @@ class SellerProfile < ApplicationRecord
   end
 
   private
+    def custom_style_attributes_safe?
+      HexColorValidator.safe_for_css?(highlight_color) &&
+        HexColorValidator.safe_for_css?(background_color) &&
+        font.in?(FONT_CHOICES)
+    end
+
     def clear_custom_style_cache
       Rails.cache.delete custom_style_cache_name
     end
