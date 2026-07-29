@@ -324,28 +324,55 @@ module Purchase::Blockable
     # distinct cards have failed.
     #
     # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
-    # record one — so for a recurring charge we also block the card the subscription holds. That
-    # card is read straight off the subscription record, which is the payment instrument this
-    # renewal was actually charged on.
+    # record one — so for a recurring charge we also block the card that renewal was charged on,
+    # when we can prove which card that was. See #subscription_card_fingerprint for what counts as
+    # proof; when there is none, we block nothing beyond the failed charge's own fingerprint.
     #
-    # It is deliberately NOT looked up from the email or the account on the purchase. Both of those
-    # can belong to somebody else: a membership can be started under an established customer's
+    # The card is deliberately NOT looked up from the email or the account on the purchase. Both of
+    # those can belong to somebody else: a membership can be started under an established customer's
     # address at an unauthenticated checkout (see #buyer_has_clean_payment_history?), so "the newest
     # card on any purchase sharing this email or account" — what #recent_stripe_fingerprint returns
     # — can be a bystander's working card, and a fingerprint-less renewal would get that card
     # blocked platform-wide. Subscription#credit_card_to_charge is avoided for the same reason: it
     # falls back to the account owner's card when the subscription has none of its own, and the
-    # account is exactly the identity we cannot trust here. When the subscription holds no card, we
-    # block nothing beyond the failed charge's own fingerprint.
+    # account is exactly the identity we cannot trust here.
     def block_buyer_payment_method!
       block_by_charge_processor_fingerprint!
       block_by_subscription_card_fingerprint! if is_recurring_subscription_charge
     end
 
-    # The fingerprint of the card attached to this purchase's subscription, or nil when there is no
-    # subscription or it has no card of its own.
+    # The fingerprint of the card this failed renewal was charged on — but only when the
+    # subscription's own purchase records prove that card was already paying for it before this
+    # attempt. Nil otherwise, including when there is no subscription.
+    #
+    # Two things are going on here, and both matter.
+    #
+    # The card is read from this purchase's own `credit_card_id`, not from the subscription row.
+    # `credit_card_id` is a snapshot taken when the renewal was built and charged, and nothing
+    # rewrites it afterwards. `subscription.credit_card_id` moves: the buyer can replace their card,
+    # and a charge held for Strong Customer Authentication fails up to a quarter of an hour after it
+    # was attempted, so by the time this failure callback runs the subscription row can already point
+    # at a different card. Reading it then would block a card this charge never touched while leaving
+    # the one that actually declined alone.
+    #
+    # The snapshot on its own is not trustworthy either, because of where it can come from. When the
+    # subscription holds no card of its own, both Subscription#build_purchase and
+    # Purchase#load_chargeable_for_charging fall back to the card on the purchaser's account — and
+    # that account is the identity we cannot trust, for the reason set out in
+    # #buyer_has_clean_payment_history?: somebody can open a membership under an established
+    # customer's email address at an unauthenticated checkout, and the account resolved from that
+    # address carries the real customer's saved card. So we additionally require that an earlier
+    # purchase of this same subscription was charged successfully on the same card. That is the
+    # subscription itself having paid us with that card, recorded in purchase rows nobody edits
+    # later. A card appearing for the first time on the failed attempt gets no fallback block: on a
+    # genuine card-testing attempt the charge normally records its own fingerprint anyway, and being
+    # wrong in the other direction blocks a bystander's working card platform-wide.
     def subscription_card_fingerprint
-      subscription&.credit_card&.stripe_fingerprint
+      return if credit_card_id.blank?
+      return if subscription.blank?
+      return unless subscription.purchases.successful.where.not(id:).exists?(credit_card_id:)
+
+      credit_card&.stripe_fingerprint
     end
 
     def block_by_subscription_card_fingerprint!

@@ -327,23 +327,78 @@ describe Purchase::Blockable do
         expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
       end
 
-      # The card the subscription itself holds is the instrument the renewal was charged on, so it
-      # is still blocked even when the failed charge recorded no fingerprint of its own.
-      it "blocks the card the subscription holds when a renewal on it fails" do
-        # Built directly rather than through the factory, which reaches out to Stripe to create a
-        # real payment method. Only the fingerprint matters here.
-        credit_card = CreditCard.create!(stripe_fingerprint: different_card, visual: "**** **** **** 4242",
-                                         card_type: CardType::VISA, charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                                         stripe_customer_id: "cus_test_blockable", expiry_month: 1, expiry_year: 2040)
-        subscription = create(:membership_purchase).subscription
+      # Built directly rather than through the factory, which reaches out to Stripe to create a real
+      # payment method. Only the fingerprint matters in these examples.
+      def a_card(fingerprint)
+        CreditCard.create!(stripe_fingerprint: fingerprint, visual: "**** **** **** 4242",
+                           card_type: CardType::VISA, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                           stripe_customer_id: "cus_test_blockable", expiry_month: 1, expiry_year: 2040)
+      end
+
+      # The card that renewal was charged on is still blocked even when the failed charge recorded no
+      # fingerprint of its own — but only because the subscription's earlier renewals settled on that
+      # same card, which is what proves it belongs to this subscription rather than to whoever the
+      # membership was opened under.
+      it "blocks the card a renewal was charged on when earlier renewals settled on it too" do
+        credit_card = a_card(different_card)
+        subscription = a_subscription
         subscription.update!(credit_card:)
+        create(:purchase, link: subscription.link, subscription:, credit_card:,
+                          purchase_state: "successful", created_at: long_ago)
         purchase = renewal_of(subscription,
+                              credit_card:,
                               stripe_fingerprint: nil,
                               error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         purchase.mark_failed!
 
         expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_present
+      end
+
+      # A charge held for Strong Customer Authentication fails up to a quarter of an hour after it
+      # was attempted, and the buyer can replace their card in the meantime. Reading the subscription
+      # row at failure time would then block the replacement card, which this charge never touched,
+      # and leave the card that actually declined alone. The renewal's own credit_card_id is a
+      # snapshot of what was charged, so it is read instead.
+      it "blocks the card the renewal was charged on, not one attached after the attempt" do
+        charged_card = a_card(different_card)
+        replacement_card = a_card("fingerprint-of-a-replacement-card")
+        subscription = a_subscription
+        subscription.update!(credit_card: charged_card)
+        create(:purchase, link: subscription.link, subscription:, credit_card: charged_card,
+                          purchase_state: "successful", created_at: long_ago)
+        purchase = renewal_of(subscription,
+                              credit_card: charged_card,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        purchase.save!
+        subscription.update!(credit_card: replacement_card)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_present
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: "fingerprint-of-a-replacement-card")).to be_empty
+      end
+
+      # When the subscription holds no card of its own, both Subscription#build_purchase and
+      # Purchase#load_chargeable_for_charging fall back to the card saved on the purchaser's account
+      # — and that account can be an established customer's, because the membership could have been
+      # opened under their email address at an unauthenticated checkout. So a card that has never
+      # settled a charge for this subscription grants no fallback block.
+      it "does not block a card that never paid for this subscription" do
+        established_buyer = create(:user)
+        their_card = a_card(known_card)
+        subscription = a_subscription
+        subscription.update!(credit_card: their_card)
+        purchase = renewal_of(subscription,
+                              purchaser: established_buyer,
+                              credit_card: their_card,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
       end
     end
   end
