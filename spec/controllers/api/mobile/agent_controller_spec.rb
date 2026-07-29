@@ -26,6 +26,22 @@ describe Api::Mobile::AgentController do
     )
   end
 
+  def store_agent_turn(reply:, proposed_action: nil, objects: [])
+    outcome =
+      if proposed_action
+        Ai::StoreAgentService::TURN_OUTCOME_PROPOSAL_READY
+      else
+        Ai::StoreAgentService::TURN_OUTCOME_REPLY_ONLY
+      end
+
+    {
+      outcome:,
+      reply:,
+      proposed_action:,
+      objects:,
+    }
+  end
+
   describe "GET meta" do
     it "returns the greeting and starter suggestions" do
       get :meta, params: @auth_params
@@ -57,7 +73,7 @@ describe Api::Mobile::AgentController do
     it "returns the agent's reply and any proposed action" do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond).and_return(reply: "You have 3 products.", proposed_action: nil)
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(reply: "You have 3 products."))
 
       post :create, params: valid_params
 
@@ -74,22 +90,23 @@ describe Api::Mobile::AgentController do
     it "returns the persisted proposal message id" do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond).and_return(
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(
         reply: "Confirm this discount.",
         proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_discount" } },
-      )
+      ))
 
       post :create, params: valid_params
 
       message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
       expect(response.parsed_body["proposal_message_id"]).to eq(message.external_id)
+      expect(response.parsed_body).not_to have_key("outcome")
     end
 
     it "scopes the agent service to the authenticated seller" do
       expect(Ai::StoreAgentService).to receive(:new) do |args|
         expect(args[:seller]).to eq(@seller)
         expect(args[:pundit_user].seller).to eq(@seller)
-        instance_double(Ai::StoreAgentService, respond: { reply: "ok", proposed_action: nil })
+        instance_double(Ai::StoreAgentService, respond: store_agent_turn(reply: "ok"))
       end
 
       post :create, params: valid_params
@@ -113,6 +130,68 @@ describe Api::Mobile::AgentController do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body).to eq("success" => false, "error" => "The assistant is unavailable.")
+    end
+
+    it "replaces an unpersisted proposal with an honest non-confirmable reply" do
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(
+        reply: "Confirm this discount.",
+        proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_discount" } },
+      ))
+
+      allow(controller).to receive(:record_agent_assistant_message!).and_raise(ActiveRecord::StatementInvalid)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+
+      post :create, params: valid_params
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["reply"]).to eq(
+        "I couldn't save that proposed change, so there is nothing to confirm. Please ask me to prepare it again.",
+      )
+      expect(response.parsed_body["proposed_action"]).to be_nil
+      expect(response.parsed_body).not_to have_key("proposal_message_id")
+    end
+
+    it "rolls back both messages when the outcome does not match the proposed action" do
+      proposal = { "type" => "api_write", "params" => { "endpoint" => "create_discount" } }
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond).and_return(
+        store_agent_turn(reply: "Confirm this discount.", proposed_action: proposal).merge(
+          outcome: Ai::StoreAgentService::TURN_OUTCOME_REPLY_ONLY,
+        ),
+      )
+      expect(ErrorNotifier).to receive(:notify).with(
+        an_instance_of(ArgumentError).and(having_attributes(
+          message: "Store agent turn outcome does not match its proposed action.",
+        )),
+      )
+
+      expect do
+        post :create, params: valid_params
+      end.to not_change { @seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["reply"]).to eq(
+        "I couldn't save that proposed change, so there is nothing to confirm. Please ask me to prepare it again.",
+      )
+      expect(response.parsed_body["proposed_action"]).to be_nil
+      expect(response.parsed_body).not_to have_key("outcome")
+    end
+
+    it "still returns a non-proposal reply when persistence fails" do
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(reply: "Sales are up."))
+      allow(controller).to receive(:record_agent_assistant_message!).and_raise(ActiveRecord::StatementInvalid)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+
+      post :create, params: valid_params
+
+      expect(response).to be_successful
+      expect(response.parsed_body["reply"]).to eq("Sales are up.")
     end
 
     it "halts on throttle without invoking the agent (429 stops the action)" do
@@ -552,7 +631,7 @@ describe Api::Mobile::AgentController do
     def stub_agent_service(reply: "You have 3 products.", proposed_action: nil)
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond).and_return(reply:, proposed_action:)
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(reply:, proposed_action:))
       service_double
     end
 
@@ -587,7 +666,7 @@ describe Api::Mobile::AgentController do
             { role: "assistant", content: "Earlier answer" },
             { role: "user", content: "And this month?" },
           ],
-        ).and_return(reply: "Better.", proposed_action: nil)
+        ).and_return(store_agent_turn(reply: "Better."))
 
         expect do
           post :create,
@@ -644,12 +723,15 @@ describe Api::Mobile::AgentController do
       it "rolls back the whole turn when the assistant write fails, leaving no stray user message" do
         stub_agent_service
         allow(controller).to receive(:record_agent_assistant_message!).and_raise(ActiveRecord::RecordInvalid)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordInvalid))
 
         expect do
           post :create, params: valid_params
         end.to not_change { @seller.ai_conversations.count }.and not_change { AiMessage.count }
 
-        expect(response).to have_http_status(:internal_server_error)
+        # Persistence failure degrades to the generated reply instead of discarding it as a 500.
+        expect(response).to be_successful
+        expect(response.parsed_body["reply"]).to eq("You have 3 products.")
       end
     end
 

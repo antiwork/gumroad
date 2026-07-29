@@ -21,6 +21,22 @@ describe Api::Mobile::AgentStreamsController do
     )
   end
 
+  def store_agent_turn(reply:, proposed_action: nil, objects: [])
+    outcome =
+      if proposed_action
+        Ai::StoreAgentService::TURN_OUTCOME_PROPOSAL_READY
+      else
+        Ai::StoreAgentService::TURN_OUTCOME_REPLY_ONLY
+      end
+
+    {
+      outcome:,
+      reply:,
+      proposed_action:,
+      objects:,
+    }
+  end
+
   describe "POST create" do
     let(:valid_params) { @auth_params.merge(messages: [{ role: "user", content: "How are my sales?" }]) }
 
@@ -42,7 +58,7 @@ describe Api::Mobile::AgentStreamsController do
       allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
         emit.call(:token, { text: "You have " })
         emit.call(:token, { text: "3 products." })
-        turn = { reply: "You have 3 products.", proposed_action: nil, objects: [] }
+        turn = store_agent_turn(reply: "You have 3 products.")
         on_reply_complete&.call(turn)
         turn.merge(suggestions: ["What sold this week?"])
       end
@@ -64,7 +80,7 @@ describe Api::Mobile::AgentStreamsController do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
       allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs|
-        turn = { reply: "Done.", proposed_action: nil, objects: [] }
+        turn = store_agent_turn(reply: "Done.")
         on_reply_complete&.call(turn)
         turn.merge(suggestions: [])
       end
@@ -78,11 +94,10 @@ describe Api::Mobile::AgentStreamsController do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
       allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &_emit|
-        turn = {
+        turn = store_agent_turn(
           reply: "Confirm this discount.",
           proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_discount" } },
-          objects: [],
-        }
+        )
         on_reply_complete&.call(turn)
         turn.merge(suggestions: [])
       end
@@ -92,6 +107,7 @@ describe Api::Mobile::AgentStreamsController do
       message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
       done_data = JSON.parse(response.body[/event: done\ndata: (.*)/, 1])
       expect(done_data["proposal_message_id"]).to eq(message.external_id)
+      expect(done_data).not_to have_key("outcome")
     end
 
     it "replays the stored transcript when resuming a conversation" do
@@ -107,7 +123,7 @@ describe Api::Mobile::AgentStreamsController do
         ],
         on_reply_complete: kind_of(Proc),
       ) do |on_reply_complete:, **|
-        turn = { reply: "Up.", proposed_action: nil, objects: [] }
+        turn = store_agent_turn(reply: "Up.")
         on_reply_complete.call(turn)
         turn.merge(suggestions: [])
       end
@@ -124,9 +140,9 @@ describe Api::Mobile::AgentStreamsController do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
       allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
-        turn = { reply: "Confirm this discount.", proposed_action: proposal, objects: [] }
-        emit.call(:token, { text: turn[:reply] })
+        turn = store_agent_turn(reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY, proposed_action: proposal)
         on_reply_complete&.call(turn)
+        emit.call(:token, { text: turn[:reply] })
         emit.call(:objects, { objects: [{ type: "product", title: "Course" }] })
         emit.call(:proposed_action, { proposed_action: proposal })
         emit.call(:suggestions, { suggestions: ["Show my products"] })
@@ -140,14 +156,14 @@ describe Api::Mobile::AgentStreamsController do
       post :create, params: valid_params.merge(client_turn_id:)
 
       expect(response.body).to include("event: done")
-      expect(response.body).to include("event: reset")
+      expect(response.body).not_to include("event: reset")
       expect(response.body).to include("there is nothing to confirm")
       expect(response.body).not_to include("event: error")
       expect(response.body).to include("event: objects")
       expect(response.body).not_to include("event: suggestions")
       expect(response.body).not_to include("event: proposed_action")
       expect(response.body.scan(/^event: (.+)$/).flatten).to eq(
-        %w[token reset token objects done],
+        %w[token objects done],
       )
 
       # The key must be absent from the done payload, not present-with-null: the client validates
@@ -161,6 +177,7 @@ describe Api::Mobile::AgentStreamsController do
       expect(done_data["proposed_action"]).to be_nil
       expect(done_data["suggestions"]).to eq([])
       expect(done_data).not_to have_key("proposal_message_id")
+      expect(done_data).not_to have_key("outcome")
       expect($redis.get(turn_status_key)).to eq("failed")
     ensure
       $redis.del(turn_status_key) if turn_status_key
@@ -191,7 +208,7 @@ describe Api::Mobile::AgentStreamsController do
           # Mid-generation, before the turn persists, the marker must already read in_progress.
           expect($redis.get(turn_status_key)).to eq("in_progress")
           emit.call(:token, { text: "You have 3 products." })
-          turn = { reply: "You have 3 products.", proposed_action: nil, objects: [] }
+          turn = store_agent_turn(reply: "You have 3 products.")
           on_reply_complete&.call(turn)
           turn.merge(suggestions: [])
         end
@@ -210,7 +227,7 @@ describe Api::Mobile::AgentStreamsController do
           $redis.expire(turn_status_key, 1)
           sleep 0.1
           expect($redis.ttl(turn_status_key)).to be > 1
-          turn = { reply: "Done.", proposed_action: nil, objects: [] }
+          turn = store_agent_turn(reply: "Done.")
           on_reply_complete&.call(turn)
           turn.merge(suggestions: [])
         end
