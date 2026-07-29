@@ -6,4 +6,13 @@ Project skills live in `.agents/skills/<name>/SKILL.md`. The `.claude/skills/<na
 
 ## Code comments
 
-Write comments for a reader who is new to the codebase but familiar with the goal of the project. Avoid jargon-dense shorthand: explain *why* the code does what it does in plain language, spell out non-obvious context (invariants, gotchas, links to the decision), and don't assume the reader knows internal nicknames, prior incidents, or module history. A good test: someone on day one who knows what the product does should understand the comment without grepping elsewhere.
+Write comments for a reader who already knows this codebase. They are a colleague, not a
+student — so say the one thing the code cannot say, and stop.
+
+Keep: the non-obvious *why*, ordering constraints, and traps that will bite the next person
+to edit this. Cut: vendor or company history, anything restating the line below it, narration
+of how the bug was found, and re-explanations of a named constant the reader can click
+through to. If a comment runs past about three lines, ask what you would delete.
+
+A good test: would a maintainer who knows this file find this line worth reading? If not, it
+is noise — and noise is what teaches people to skip the comments that matter.
