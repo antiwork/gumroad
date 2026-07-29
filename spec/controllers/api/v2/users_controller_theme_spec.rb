@@ -57,12 +57,12 @@ describe Api::V2::UsersController, "GET 'theme'" do
       expect(response.parsed_body["theme"]["applies_to"]).to include("the emails a seller sends to their audience")
     end
 
-    it "says the seller cannot change the theme themselves and points at support" do
+    it "says the seller changes the theme themselves and points at the settings screen" do
       get :theme, params: { access_token: token.token }
 
       theme = response.parsed_body["theme"]
-      expect(theme["editable_by_seller"]).to be(false)
-      expect(theme["how_to_change"]).to include("support")
+      expect(theme["editable_by_seller"]).to be(true)
+      expect(theme["how_to_change"]).to include("Settings > Profile > Design")
     end
   end
 end

@@ -243,8 +243,7 @@ export default function SettingsPage() {
     postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
-  // Preview colours/font come from the FORM state, not the saved seller record, so editing a colour
-  // or font repaints the preview on the spot instead of waiting for a save + reload.
+  // Read the FORM state so the preview repaints as the seller edits, before any save.
   //
   // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the chosen
   // colour so its text clears 4.5:1. Every other accent use keeps the chosen colour.
@@ -493,8 +492,8 @@ export default function SettingsPage() {
                         className={classNames(
                           "items-start! justify-start! gap-3! text-left",
                           // Accent outline only for the selected state — no lift or drop shadow
-                          // (Sahil, #6233). aria-checked above carries the state for assistive tech,
-                          // which is what keeps this legible when a seller's accent matches the border.
+                          // (Sahil, #6233). These cards sit in the dashboard, not the preview, so
+                          // --accent here is the fixed dashboard pink and cannot match the border.
                           isSelected && "border-accent! ring-1 ring-accent",
                         )}
                       >

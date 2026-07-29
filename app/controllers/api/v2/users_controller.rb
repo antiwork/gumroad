@@ -149,9 +149,8 @@ class Api::V2::UsersController < Api::V2::BaseController
   end
 
   # The seller's store theme: the background colour, highlight (accent) colour, and font stored on
-  # their SellerProfile. Read-only on purpose — these have no self-serve editor in the dashboard,
-  # support changes them by request — but they were previously invisible to any API caller, which
-  # left the store agent unable to see a theme the seller could plainly see on their own pages.
+  # their SellerProfile. Read-only here: sellers edit these directly in Settings > Profile > Design,
+  # and the agent changes them through the profile settings surface rather than this endpoint.
   # The theme is not profile-page-only: the same values render into the stylesheet served with the
   # storefront, every product page, the pages buyers see for what they bought, posts, and the
   # emails a seller sends to their own audience — see THEME_SURFACES.
@@ -165,8 +164,8 @@ class Api::V2::UsersController < Api::V2::BaseController
         highlight_color: profile.highlight_color,
         font: profile.font,
         applies_to: THEME_SURFACES,
-        editable_by_seller: false,
-        how_to_change: "Gumroad has no self-serve fonts-and-colors screen. To change these, the seller asks Gumroad support and support applies it.",
+        editable_by_seller: true,
+        how_to_change: "The seller changes these themselves in Settings > Profile > Design, which previews the change before saving.",
       }
     )
   end
