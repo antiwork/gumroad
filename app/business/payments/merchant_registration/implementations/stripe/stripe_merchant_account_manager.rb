@@ -361,17 +361,31 @@ module StripeMerchantAccountManager
     entity_key = user_compliance_info.is_business? ? :company : :individual
     switching_to_business = user_compliance_info.is_business? && last_user_compliance_info&.is_individual?
 
-    # A switch that failed after the account update but before the person update leaves the account
-    # as a company whose representative was never given an ownership share. The metadata marker read
-    # above has already moved forward by then, so switching_to_business is false on every later
-    # attempt and nothing seeds the representative again — the seller stays blocked on
-    # company.owners_provided indefinitely. Detect that shape from Stripe's own persons list rather
-    # than from our marker, so the next payout-settings save heals it.
+    # A switch that failed partway leaves the account as a company that Stripe still holds on
+    # company.owners_provided. The metadata marker read above has already moved forward by then, so
+    # switching_to_business is false on every later attempt and nothing repairs the account again.
+    # Detect the shape from Stripe's live state instead, so the seller's next payout-settings save
+    # heals it.
     #
-    # Gated on Stripe already asking for the attestation, which is true on exactly the stuck
-    # accounts. A company account that is fine costs no extra Stripe calls here.
-    owners_provided_due = user_compliance_info.is_business? && !switching_to_business && owners_provided_outstanding?(stripe_account)
-    seed_representative_ownership = switching_to_business || (owners_provided_due && representative_owns_nothing?(stripe_account))
+    # An empty owner list on its own is a legitimate resting state for an account created as a
+    # business — the seller never filled the beneficial-owners form, or no individual holds a
+    # reportable share — and seeding a 100% owner there would invent an ownership claim the seller
+    # never made. Requiring an earlier individual compliance record is what separates an interrupted
+    # migration from an ordinary business account.
+    owners_provided_blocking = user_compliance_info.is_business? && !switching_to_business &&
+                               owners_provided_blocking_payouts?(stripe_account) &&
+                               user.user_compliance_infos.where(is_business: false).exists?
+
+    # nil means the read failed, which is not the same as "nobody owns anything" — both the seeding
+    # and the attestation below stay off in that case rather than guessing.
+    recorded_ownership_percent = owners_provided_blocking ? recorded_ownership_percent_on(stripe_account.id) : nil
+    stuck_mid_migration = recorded_ownership_percent&.zero? || false
+    seed_representative_ownership = switching_to_business || stuck_mid_migration
+
+    # The other half of the stuck population: a representative who already holds a share, on an
+    # account still blocked because nothing ever attested the list. Seeding would be wrong there and
+    # the attestation is the whole fix, so the two conditions cannot share one flag.
+    owner_list_complete = seed_representative_ownership || recorded_ownership_percent.to_f.positive?
 
     # Read the ownership Stripe already has on file BEFORE the account update below, because that
     # update rewrites the metadata marker we use to detect the switch (see last_user_compliance_info
@@ -392,11 +406,10 @@ module StripeMerchantAccountManager
     person_address_submitted = false
     if user_compliance_info.is_business?
       person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, seed_representative_ownership:, unclaimed_percent_ownership:)
-      # Stripe keeps payouts blocked on company.owners_provided until we state the owner list is
-      # complete, and until this was added nothing ever stated it — so seeding the representative
-      # correctly was not by itself enough to unblock a seller. The update's own response carries the
-      # post-update requirements, so accounts Stripe is not asking pay nothing for this check.
-      attest_owners_provided(stripe_account.id) if owners_provided_outstanding?(updated_stripe_account)
+      # Stripe keeps a company's payouts blocked on company.owners_provided until the platform
+      # states the owner list is complete. Scoped to accounts where we have actually confirmed the
+      # ownership on file, so it can never become a blanket attestation across the seller base.
+      attest_owners_provided(stripe_account.id) if owner_list_complete && owners_provided_blocking_payouts?(updated_stripe_account)
     end
 
     if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
@@ -497,63 +510,53 @@ module StripeMerchantAccountManager
   # free is how Stripe's "combined ownership would exceed 100 percent" rejection happens, and our own
   # beneficial-owner form accepts shares with more than two decimals.
   def self.unclaimed_percent_ownership_on_stripe(stripe_account)
-    persons = Stripe::Account.list_persons(stripe_account.id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
-    # Read through to_h: a person Stripe returns without a relationship object at all raises
-    # NoMethodError on a plain `person.relationship`, and this must never be the thing that breaks
-    # a payout-settings save.
-    relationships = persons.filter_map { |person| person.to_h[:relationship] }
-    claimed = relationships.reject { |relationship| relationship[:representative] }
-                           .sum { |relationship| relationship[:percent_ownership].to_f }
+    claimed = owner_relationships_on(stripe_account.id)
+              .reject { |relationship| relationship[:representative] }
+              .sum { |relationship| relationship[:percent_ownership].to_f }
     [(100 - claimed).floor(2), 0].max
   end
 
   private_class_method
-  # Whether Stripe is still waiting on the platform's statement that the company's owner list is
-  # complete. Read off the account object the caller already retrieved, so this costs no extra
-  # Stripe call and lets the healing work below run only on accounts that actually need it.
-  def self.owners_provided_outstanding?(stripe_account)
+  # Read through to_h: a person Stripe returns without a relationship object at all raises
+  # NoMethodError on a plain `person.relationship`, and this must never be the thing that breaks a
+  # payout-settings save.
+  def self.owner_relationships_on(stripe_account_id)
+    persons = Stripe::Account.list_persons(stripe_account_id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
+    persons.filter_map { |person| person.to_h[:relationship] }
+  end
+
+  private_class_method
+  # Whether company.owners_provided is one of the requirements actually holding this account's
+  # payouts. eventually_due is deliberately excluded: it lists requirements that only bind at a
+  # future volume threshold, so an account with the field there is not blocked and needs no repair.
+  def self.owners_provided_blocking_payouts?(stripe_account)
     account = stripe_account.to_h
     company = account[:company] || {}
     return false if company[:owners_provided]
 
     requirements = account[:requirements] || {}
-    outstanding = requirements[:currently_due].to_a + requirements[:past_due].to_a + requirements[:eventually_due].to_a
-    outstanding.include?("company.owners_provided")
+    blocking = requirements[:currently_due].to_a + requirements[:past_due].to_a
+    blocking.include?("company.owners_provided")
   end
 
   private_class_method
-  # True when no person on the account holds any ownership share. For a company account that is not
-  # a legitimate resting state — at minimum the representative should be recorded as an owner — so it
-  # means an individual-to-business switch died partway through, after the account became a company
-  # but before the representative was given a share.
-  def self.representative_owns_nothing?(stripe_account)
-    company_ownership_unclaimed_on?(stripe_account.id)
+  # Total ownership share recorded on the account, or nil when Stripe could not be read. Callers must
+  # treat nil as "unknown" — a failed read must never take down a payout-settings save, and must not
+  # be mistaken for a confirmed empty owner list.
+  def self.recorded_ownership_percent_on(stripe_account_id)
+    owner_relationships_on(stripe_account_id).sum { |relationship| relationship[:percent_ownership].to_f }
   rescue Stripe::StripeError => e
-    # This only decides whether to re-seed ownership. A failed read must never take down a
-    # payout-settings save, so fall back to the metadata-marker behaviour.
     ErrorNotifier.notify(e)
-    false
-  end
-
-  private_class_method
-  def self.company_ownership_unclaimed_on?(stripe_account_id)
-    persons = Stripe::Account.list_persons(stripe_account_id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
-    persons.filter_map { |person| person.to_h[:relationship] }
-           .sum { |relationship| relationship[:percent_ownership].to_f }
-           .zero?
+    nil
   end
 
   private_class_method
   # Stripe holds a company account's payouts on company.owners_provided until the platform states
-  # that the owner list is complete. Nothing else in the codebase sets it, so an account whose
-  # representative was seeded correctly still sits with owners_provided outstanding forever. We know
-  # the list is complete once someone holds ownership: the seller gave us their own details plus
-  # whatever beneficial owners they added under Settings → Payments, and that is the whole list we
-  # ever collect. Attesting to an empty owner list would be a false statement to Stripe and would
-  # also hide the real problem — a switch that never seeded anybody — behind a cleared requirement.
+  # that the owner list is complete, and nothing else in the codebase states it — so seeding the
+  # representative correctly is not by itself enough to unblock a seller. Callers must have
+  # established that someone actually owns something; attesting an empty list is a false statement
+  # to Stripe (see owner_list_complete).
   def self.attest_owners_provided(stripe_account_id)
-    return if company_ownership_unclaimed_on?(stripe_account_id)
-
     Stripe::Account.update(stripe_account_id, { company: { owners_provided: true } })
   rescue Stripe::StripeError => e
     # The seller's compliance details are already saved on Stripe at this point; only the
