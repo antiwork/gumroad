@@ -27,6 +27,15 @@
 // and its `onFinish` reports `interrupted`, so it neither adopts a stale configuration nor starts a
 // recovery for a hold the newer save now owns.
 //
+// Adoption is the other half, and it belongs here rather than in a watcher on the page's props. A
+// response arriving is not by itself evidence that the configuration it carries describes the cart
+// the buyer is looking at: the checkout controller answers a rejected edit with a redirect that
+// re-renders the configuration from the cart it still holds, and a save whose response is overtaken
+// by the buyer's next edit describes the cart from before that edit. Both look exactly like a
+// successful refresh to anything watching only for "the prop changed". So the decision to adopt is
+// made by the save that asked, which is the only place that knows which cart was sent, whether the
+// server said it kept it, and whether the buyer has since moved on.
+//
 // If the recovery save also comes back empty-handed the hold stays on: Pay remains disabled and the
 // buyer is told to reload, the only direction that cannot charge through a mismatched element.
 
@@ -118,42 +127,55 @@ export const createLaneInvalidationSuppressor = () => {
 };
 
 /**
- * Builds the callbacks for a cart save so that a save which does not deliver a payment
- * configuration recovers by saving again.
+ * Builds the callbacks for a cart save so that the save decides both whether the configuration it
+ * got back may be adopted and, when it may not, whether to ask again.
  *
- * `save` re-issues the cart PATCH with a fresh set of these callbacks, and `onUnrecoverable`
- * reports that the hold could not be lifted — the buyer has to reload the page. `recoveriesLeft`
- * bounds the chain so an outage cannot retry forever; it is an internal detail of the chain rather
- * than something callers are expected to pass.
+ * `onDelivered` receives a configuration only when this save established that it describes the cart
+ * the save sent: the server did not reject the edit, and no newer edit has displaced this save. It
+ * is the only path that lifts the hold on Pay. `save` re-issues the cart PATCH with a fresh set of
+ * these callbacks, and `onUnrecoverable` reports that the hold could not be lifted — the buyer has
+ * to reload the page. `recoveriesLeft` bounds the chain so an outage cannot retry forever; it is an
+ * internal detail of the chain rather than something callers are expected to pass.
  */
 export const buildCartSaveRefreshCallbacks = ({
   save,
+  onDelivered,
   onUnrecoverable,
   recoveriesLeft = 1,
 }: {
   save: (callbacks: CartSaveCallbacks) => void;
+  onDelivered: (checkoutPayment: unknown) => void;
   onUnrecoverable: (message: string) => void;
   recoveriesLeft?: number;
 }): CartSaveCallbacks => {
   // Read off the response rather than inferred from which callback fired: Inertia calls onError
   // only for a valid Inertia response carrying a props.errors payload, so "onError did not run"
   // does not mean a configuration arrived.
-  let delivered = false;
+  let delivered: { checkoutPayment: unknown } | null = null;
 
   return {
     onSuccess: (page) => {
       // A configuration that came back alongside an error flash describes the cart the server
       // still holds, not the edited one on screen, so it is treated as non-delivery: the recovery
       // below re-saves and asks again rather than lifting the hold against the wrong cart.
-      delivered = deliveredCheckoutPayment(page) && !reportedSaveFailure(page);
+      if (!deliveredCheckoutPayment(page) || reportedSaveFailure(page)) return;
+      // Held rather than adopted here, because whether this save is still the one that speaks for
+      // the buyer's cart is only known at onFinish: Inertia reports displacement there. Adopting in
+      // onSuccess would let a save the buyer's next edit has already overtaken lift the hold that
+      // edit just re-took.
+      delivered = { checkoutPayment: page.props[CHECKOUT_PAYMENT_PROP] };
     },
     onFinish: (visit) => {
-      if (delivered) return;
-
       // A newer save took this one's place. It carries the buyer's latest cart and its response is
-      // what will lift the hold, so this save must not recover on its behalf — doing so would race
-      // two saves and let the older one's answer be adopted for the newer one's cart.
+      // what will lift the hold, so this save neither adopts its own answer — which describes the
+      // cart from before that newer edit — nor recovers on the newer save's behalf, which would
+      // race two saves and let this older one's answer be adopted for the newer one's cart.
       if (visit?.cancelled === true || visit?.interrupted === true) return;
+
+      if (delivered) {
+        onDelivered(delivered.checkoutPayment);
+        return;
+      }
 
       if (recoveriesLeft <= 0) {
         // Fail closed. The hold is left in place and the buyer is told the only thing that can fix
@@ -162,7 +184,7 @@ export const buildCartSaveRefreshCallbacks = ({
         return;
       }
 
-      save(buildCartSaveRefreshCallbacks({ save, onUnrecoverable, recoveriesLeft: recoveriesLeft - 1 }));
+      save(buildCartSaveRefreshCallbacks({ save, onDelivered, onUnrecoverable, recoveriesLeft: recoveriesLeft - 1 }));
     },
   };
 };

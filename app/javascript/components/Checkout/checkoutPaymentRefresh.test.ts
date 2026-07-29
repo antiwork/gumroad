@@ -13,16 +13,76 @@ const CONFIG = { type: "payment-element" };
 const neverAnswers = (_callbacks: CartSaveCallbacks) => {};
 
 describe("buildCartSaveRefreshCallbacks", () => {
-  it("does nothing further when the save delivered a configuration", () => {
+  it("adopts the configuration and does nothing further when the save delivered one", () => {
     const save = vi.fn();
+    const onDelivered = vi.fn();
     const onUnrecoverable = vi.fn();
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save, onUnrecoverable });
 
     callbacks.onSuccess({ props: { cart: {}, checkout_payment: CONFIG } });
     callbacks.onFinish({});
 
+    expect(onDelivered).toHaveBeenCalledWith(CONFIG);
     expect(save).not.toHaveBeenCalled();
     expect(onUnrecoverable).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt before the save finishes", () => {
+    // Whether this save still speaks for the buyer's cart is only known at onFinish, which is where
+    // Inertia reports displacement. Adopting in onSuccess would lift a hold the buyer's next edit
+    // has already re-taken.
+    const onDelivered = vi.fn();
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save: vi.fn(), onUnrecoverable: vi.fn() });
+
+    callbacks.onSuccess({ props: { checkout_payment: CONFIG } });
+
+    expect(onDelivered).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a configuration from a save a newer edit displaced", () => {
+    // The response arrived, but the buyer edited the cart again while it was in flight, so this
+    // configuration describes the cart from before that edit. Adopting it would clear the hold the
+    // newer edit placed and re-enable Pay against an element mounted for the previous cart. The
+    // newer save's own response is what lifts the hold.
+    const onDelivered = vi.fn();
+    const save = vi.fn();
+    const onUnrecoverable = vi.fn();
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save, onUnrecoverable });
+
+    callbacks.onSuccess({ props: { checkout_payment: CONFIG } });
+    callbacks.onFinish({ interrupted: true });
+
+    expect(onDelivered).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(onUnrecoverable).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a configuration from a cancelled save that had answered", () => {
+    const onDelivered = vi.fn();
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save: vi.fn(), onUnrecoverable: vi.fn() });
+
+    callbacks.onSuccess({ props: { checkout_payment: CONFIG } });
+    callbacks.onFinish({ cancelled: true });
+
+    expect(onDelivered).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt the configuration the server sent back with a rejected edit", () => {
+    // The rejected save's redirect re-renders the configuration from the cart the server kept, so
+    // it describes the pre-edit cart while the buyer is still looking at the edited one.
+    const onDelivered = vi.fn();
+    const callbacks = buildCartSaveRefreshCallbacks({
+      onDelivered,
+      save: vi.fn(neverAnswers),
+      onUnrecoverable: vi.fn(),
+    });
+
+    callbacks.onSuccess({
+      props: { checkout_payment: CONFIG, flash: { message: "Sorry, something went wrong.", status: "danger" } },
+    });
+    callbacks.onFinish({});
+
+    expect(onDelivered).not.toHaveBeenCalled();
   });
 
   it("re-issues the save when the response is lost entirely", () => {
@@ -31,7 +91,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     // re-sends the cart the client holds so the answer describes that same cart.
     const save = vi.fn(neverAnswers);
     const onUnrecoverable = vi.fn();
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable });
 
     callbacks.onFinish({});
 
@@ -44,7 +104,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     // A transport-level truncation or a response that simply omitted the prop leaves the same
     // question open: which cart does the server hold now?
     const save = vi.fn(neverAnswers);
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable: vi.fn() });
 
     callbacks.onSuccess({ props: {} });
     callbacks.onFinish({});
@@ -59,7 +119,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     // describes the PRE-edit cart while the buyer is still looking at the edited one. Adopting it
     // would clear the hold and re-enable Pay against an element mounted for a different cart.
     const save = vi.fn(neverAnswers);
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable: vi.fn() });
 
     callbacks.onSuccess({
       props: {
@@ -76,8 +136,9 @@ describe("buildCartSaveRefreshCallbacks", () => {
     // Only an error flash means the edit was rejected. A notice or warning riding along with a
     // successful save must not send the hold into a pointless recovery round trip.
     const save = vi.fn(neverAnswers);
+    const onDelivered = vi.fn();
     const onUnrecoverable = vi.fn();
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save, onUnrecoverable });
 
     callbacks.onSuccess({
       props: {
@@ -87,6 +148,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     });
     callbacks.onFinish({});
 
+    expect(onDelivered).toHaveBeenCalledWith({ integration: "payment_element" });
     expect(save).not.toHaveBeenCalled();
     expect(onUnrecoverable).not.toHaveBeenCalled();
   });
@@ -99,7 +161,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     // one's answer for a cart the buyer no longer has.
     const save = vi.fn(neverAnswers);
     const onUnrecoverable = vi.fn();
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable });
 
     callbacks.onFinish({ interrupted: true });
 
@@ -110,7 +172,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
   it("does not recover when the save was cancelled", () => {
     const save = vi.fn(neverAnswers);
     const onUnrecoverable = vi.fn();
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable });
 
     callbacks.onFinish({ cancelled: true });
 
@@ -122,7 +184,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
     const onUnrecoverable = vi.fn();
     // Every save is lost, so the chain runs out of recoveries.
     const save = vi.fn((callbacks: CartSaveCallbacks) => callbacks.onFinish({}));
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable });
 
     callbacks.onFinish({});
 
@@ -130,25 +192,25 @@ describe("buildCartSaveRefreshCallbacks", () => {
     expect(onUnrecoverable).toHaveBeenCalledWith(CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE);
   });
 
-  it("stays quiet when the recovery save delivers the configuration", () => {
-    // The reducer adopts it through the page's props and the hold lifts on its own, so there is
-    // nothing to tell the buyer.
+  it("stays quiet and adopts when the recovery save delivers the configuration", () => {
+    const onDelivered = vi.fn();
     const onUnrecoverable = vi.fn();
     const save = vi.fn((callbacks: CartSaveCallbacks) => {
       callbacks.onSuccess({ props: { checkout_payment: CONFIG } });
       callbacks.onFinish({});
     });
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered, save, onUnrecoverable });
 
     callbacks.onFinish({});
 
+    expect(onDelivered).toHaveBeenCalledWith(CONFIG);
     expect(onUnrecoverable).not.toHaveBeenCalled();
   });
 
   it("does not recover forever while the server keeps failing", () => {
     // Bounded so an outage cannot turn one edit into an unbounded chain of saves.
     const save = vi.fn((callbacks: CartSaveCallbacks) => callbacks.onFinish({}));
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable: vi.fn() });
 
     callbacks.onFinish({});
 
@@ -158,7 +220,7 @@ describe("buildCartSaveRefreshCallbacks", () => {
   it("does not recover when a recovery save is itself interrupted by a newer edit", () => {
     const onUnrecoverable = vi.fn();
     const save = vi.fn((callbacks: CartSaveCallbacks) => callbacks.onFinish({ interrupted: true }));
-    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+    const callbacks = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable });
 
     callbacks.onFinish({});
 
@@ -170,12 +232,12 @@ describe("buildCartSaveRefreshCallbacks", () => {
   it("does not recover after a save that did deliver, even if a later save is lost", () => {
     // Each save builds its own callbacks, so one save's outcome can never be read as another's.
     const save = vi.fn(neverAnswers);
-    const delivered = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+    const delivered = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable: vi.fn() });
     delivered.onSuccess({ props: { checkout_payment: CONFIG } });
     delivered.onFinish({});
     expect(save).not.toHaveBeenCalled();
 
-    const lost = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+    const lost = buildCartSaveRefreshCallbacks({ onDelivered: vi.fn(), save, onUnrecoverable: vi.fn() });
     lost.onFinish({});
 
     expect(save).toHaveBeenCalledTimes(1);

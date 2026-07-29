@@ -756,6 +756,15 @@ const CheckoutIndexPage = () => {
     saveCartRef.current(
       buildCartSaveRefreshCallbacks({
         save: (callbacks) => saveCartRef.current(callbacks),
+        // The one path that lifts the hold on Pay. The save that asked is the only place that knows
+        // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
+        // Re-validated here because it is read straight off the response rather than out of the
+        // props typia has already checked.
+        onDelivered: (checkoutPayment) =>
+          dispatch({
+            type: "update-checkout-payment",
+            checkoutPayment: typia.assert<CheckoutPaymentConfig>(checkoutPayment),
+          }),
         onUnrecoverable: (message) => showAlert(message, "error"),
       }),
     );
@@ -799,12 +808,12 @@ const CheckoutIndexPage = () => {
     if (laneInvalidation.shouldSuppressLaneInvalidation(paymentLaneCartKey)) return;
     dispatch({ type: "invalidate-checkout-payment" });
   }, [paymentLaneCartKey]);
-  // The recomputed configuration, from the save's partial reload. Inertia builds a fresh props
-  // object for every response, so this also clears the stale flag when the lane did not change.
-  useOnChange(
-    () => dispatch({ type: "update-checkout-payment", checkoutPayment: checkout_payment }),
-    [checkout_payment],
-  );
+  // Deliberately NOT a watcher on the checkout_payment prop. A configuration arriving in the props
+  // is not evidence that it describes the cart on screen — a rejected edit and a save the buyer's
+  // next edit overtook both deliver a well-formed configuration for a cart the buyer no longer has,
+  // and a prop watcher adopts all three cases identically. Adoption is dispatched by the save that
+  // asked instead, via onDelivered above; the cart PATCH is the only request that asks for this
+  // prop, so nothing else can supply one.
   useOnChange(() => {
     if (state.email.trim() === "" || isValidEmail(state.email.trim())) {
       // @ts-expect-error FormDataKeys recurses into Product.cross_sells; CartState is still correct at runtime
