@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
 class HexColorValidator < ActiveModel::EachValidator
-  HEX_COLOR_REGEX = /^#[0-9a-f]{6}$/i
+  # \A and \z, not ^ and $: Ruby's $ matches before a trailing newline, so "#ffffff\nbody{...}"
+  # satisfied the old anchors. These values are interpolated straight into the storefront SCSS
+  # (app/views/layouts/custom_styles/styles.scss.erb), so anything past the newline lands in the
+  # rendered stylesheet.
+  HEX_COLOR_REGEX = /\A#[0-9a-f]{6}\z/i
 
   def validate_each(record, attribute, value)
     return if self.class.matches?(value)

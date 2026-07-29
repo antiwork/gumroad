@@ -100,4 +100,18 @@ describe SellerProfile do
       expect(subject.font_family).to eq(%("Roboto Mono", "ABC Favorit", monospace))
     end
   end
+
+  describe "FONT_CHOICES" do
+    it "matches the list the profile settings editor offers" do
+      # The editor hardcodes its own copy of this list, so a font added here alone would never be
+      # offered to sellers, and one added there alone would fail the inclusion validation on save.
+      source = File.read(Rails.root.join("app", "javascript", "pages", "Settings", "Profile", "Show.tsx"))
+      declaration = source[/const FONT_CHOICES = \[(.*?)\];/m, 1]
+      expect(declaration).to be_present, "could not find FONT_CHOICES in Show.tsx"
+
+      editor_fonts = declaration.scan(/"([^"]+)"/).flatten
+      # The editor's first entry is the DEFAULT_PROFILE_FONT constant rather than a literal.
+      expect([SellerProfile::FONT_CHOICES.first] + editor_fonts).to eq(SellerProfile::FONT_CHOICES)
+    end
+  end
 end
