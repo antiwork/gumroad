@@ -5,6 +5,8 @@ import { getContrastColor, hexToRgb } from "$app/utils/color";
 import { getCssVariable } from "$app/utils/styles";
 
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
+import { useRefToLatest } from "$app/components/useRefToLatest";
+
 export type CheckoutTheme = {
   accent_color: string;
   indicator_color: string;
@@ -39,8 +41,7 @@ export const getCheckoutIndicatorCss = (theme: CheckoutTheme) =>
 // seller's style after that render — snapshotting the closed-over value would pin the older one.
 export const useCheckoutStyle = (checkoutStyle: CheckoutStyle | null | undefined, cartSellerIds: string[]) => {
   const [purchasedStyle, setPurchasedStyle] = React.useState<CheckoutStyle | null | undefined>(undefined);
-  const checkoutStyleRef = React.useRef(checkoutStyle);
-  checkoutStyleRef.current = checkoutStyle;
+  const checkoutStyleRef = useRefToLatest(checkoutStyle);
 
   const capturePurchased = React.useCallback(
     (purchasedSellerIds: string[]) =>
