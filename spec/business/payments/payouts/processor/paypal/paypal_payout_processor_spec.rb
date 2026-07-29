@@ -132,6 +132,29 @@ describe PaypalPayoutProcessor do
           expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
         end
 
+        # Same shape, but both rejections carry the SAME PayPal code, so the restriction sentence is
+        # identical and the payout date is the only thing separating the two notes. This is the more
+        # common real case — a seller moving between accounts in one country hits 3148 both times —
+        # and it is the half of the predicate that a same-day fixture cannot exercise.
+        it "explains the current rejection when only the payout date tells the two notes apart" do
+          older = user.comments.with_type_payout_note.last
+          expect(older.content).to eq(@refused.terminal_paypal_failure_seller_note)
+
+          user.update!(payment_address: "third@gr.co")
+          current = create(:payment_failed, user:, payment_address: "third@gr.co",
+                                            failure_reason: "PAYPAL 3148", txn_id: nil,
+                                            processor_fee_cents: nil, created_at: 3.weeks.ago)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(current.terminal_paypal_failure_seller_note)
+          expect(note.content).to include(current.created_at.to_fs(:formatted_date_full_month))
+          expect(note.content).not_to eq(older.content)
+        end
+
         it "returns true again once the seller switches to a different PayPal address" do
           user.update!(payment_address: "another@gr.co")
 
