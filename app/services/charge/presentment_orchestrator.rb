@@ -187,7 +187,7 @@ class Charge::PresentmentOrchestrator
     # base_rate was signed in, or a Stripe response without rate_details), which tells
     # the charge processor to keep today's fx_rate-derived amounts rather than guess.
     def connect_leg_amounts(presentment_total_cents, rounding_delta_cents)
-      base_rate = locked_quote.respond_to?(:base_rate) ? locked_quote.base_rate : nil
+      base_rate = locked_quote.base_rate
       return [nil, nil] if base_rate.blank? || !base_rate.positive?
 
       # Gumroad still absorbs the whole rounding difference (a presentment-currency

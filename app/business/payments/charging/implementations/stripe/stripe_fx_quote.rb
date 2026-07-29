@@ -116,10 +116,21 @@ class StripeFxQuote
       return nil unless rate_data.is_a?(Hash)
 
       rate_details = rate_data[:rate_details] || rate_data["rate_details"]
-      return nil unless rate_details.is_a?(Hash)
+      base_rate = rate_details.is_a?(Hash) ? (rate_details[:base_rate] || rate_details["base_rate"]) : nil
 
-      base_rate = rate_details[:base_rate] || rate_details["base_rate"]
-      return nil if base_rate.nil?
+      # Falling back to the buyer-facing rate is safe (it is what we did before base_rate
+      # existed), but it silently reintroduces the fee/transfer drift this class exists to
+      # remove. A fresh Stripe response missing the field therefore means the pinned preview
+      # API changed shape on us, and we want to hear about it rather than quietly convert the
+      # Connect legs at the wrong rate forever. Quotes rehydrated from an older checkout token
+      # legitimately have no rate_details and never reach here.
+      if base_rate.nil?
+        ErrorNotifier.notify(
+          "StripeFxQuote: Stripe returned no rate_details.base_rate (API version #{API_VERSION}); " \
+          "Connect legs will convert at the buyer-facing rate instead of the settlement rate."
+        )
+        return nil
+      end
 
       BigDecimal(base_rate.to_s)
     end

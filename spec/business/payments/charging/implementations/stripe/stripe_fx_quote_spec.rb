@@ -39,7 +39,7 @@ describe StripeFxQuote do
     expect(quote.expires_at).to be_within(1.second).of(Time.zone.at(response.data[:lock_expires_at]))
   end
 
-  it "returns a nil base_rate when Stripe omits rate_details, so callers fall back to fx_rate" do
+  it "returns a nil base_rate and reports it when Stripe omits rate_details, so callers fall back to fx_rate" do
     response = Stripe::StripeResponse.new
     response.data = {
       id: "fxq_test",
@@ -50,6 +50,10 @@ describe StripeFxQuote do
       }
     }
     allow(Stripe).to receive(:raw_request).and_return(response)
+
+    # The fallback is safe but reintroduces the drift the base_rate conversion removes, so a
+    # fresh response without the field has to be visible rather than silently degrading.
+    expect(ErrorNotifier).to receive(:notify).with(/no rate_details\.base_rate/)
 
     quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
 
