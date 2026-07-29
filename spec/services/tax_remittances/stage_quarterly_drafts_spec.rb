@@ -10,6 +10,50 @@ describe TaxRemittances::StageQuarterlyDrafts do
     purchase
   end
 
+  # A remittance for an authority this quarter's purchases never touch, so the
+  # calculator never produces a liability for it — the "vanished authority"
+  # shape.
+  def create_hmrc_remittance(status: "draft")
+    TaxRemittance.create!(
+      authority: "HMRC",
+      jurisdiction: "GB",
+      period:,
+      currency: "GBP",
+      usd_amount_cents: 25_00,
+      target_amount_cents: 20_00,
+      rail: "wise",
+      attempt: 1,
+      status: "draft",
+    ).tap { advance_to(_1, status) unless status == "draft" }
+  end
+
+  # Walks a draft through the lifecycle to the requested status, since the model
+  # only allows the real transitions. `paid_at` is required from `sent` onward.
+  def advance_to(remittance, status)
+    return remittance if remittance.status == status
+
+    case status
+    when "pending_approval"
+      remittance.submit_for_approval!(
+        reviewed_amount_cents: remittance.usd_amount_cents,
+        reviewed_target_amount_cents: remittance.target_amount_cents,
+      )
+    when "cancelled"
+      remittance.update!(status: "cancelled")
+    when "failed"
+      remittance.update!(status: "failed")
+    else
+      advance_to(remittance, "pending_approval")
+      remittance.update!(status: "funded")
+      return remittance if status == "funded"
+
+      remittance.update!(status: "sent", paid_at: Time.current)
+      remittance.update!(status:) unless status == "sent"
+    end
+
+    remittance
+  end
+
   let(:period) { "2027-Q1" }
   let(:in_period) { Time.find_zone("UTC").local(2027, 2, 10) }
   let(:product) { create(:product, price_cents: 100_00, native_type: "digital") }
@@ -211,6 +255,9 @@ describe TaxRemittances::StageQuarterlyDrafts do
     it "refuses a reviewer's submission that carries an amount the refresh replaced" do
       described_class.new(period).process
       ato = TaxRemittance.find_by!(authority: "Australian Taxation Office", period:)
+      # An authority is paid in its own currency, so the target amount has to
+      # be recorded before the row can enter approval at all.
+      ato.record_target_amount!(14_00)
       # What the reviewer had on screen before the re-run.
       reviewed_amount_cents = ato.usd_amount_cents
       expect(reviewed_amount_cents).to eq(10_00)
@@ -223,14 +270,14 @@ describe TaxRemittances::StageQuarterlyDrafts do
       expect(service.refreshed.map { _1[:authority] }).to include("Australian Taxation Office")
       expect(ato.reload.usd_amount_cents).to eq(15_00)
 
-      expect { ato.submit_for_approval!(reviewed_amount_cents:) }
+      expect { ato.submit_for_approval!(reviewed_amount_cents:, reviewed_target_amount_cents: 14_00) }
         .to raise_error(TaxRemittance::AmountChangedSinceReview)
 
       # The row stays a draft: nothing unreviewed entered the approval flow.
       expect(ato.reload.status).to eq("draft")
 
       # Once the reviewer re-reads the refreshed amount, the submission lands.
-      ato.submit_for_approval!(reviewed_amount_cents: 15_00)
+      ato.submit_for_approval!(reviewed_amount_cents: 15_00, reviewed_target_amount_cents: 14_00)
       expect(ato.reload.status).to eq("pending_approval")
     end
 
@@ -261,25 +308,85 @@ describe TaxRemittances::StageQuarterlyDrafts do
     # An authority can drop out of the computation entirely once refunds cancel
     # its collections, and then nothing in the staging loop ever looks at its
     # draft again.
-    it "surfaces a draft for an authority the quarter no longer owes" do
-      hmrc = TaxRemittance.create!(
-        authority: "HMRC",
-        jurisdiction: "GB",
-        period:,
-        currency: "GBP",
-        usd_amount_cents: 25_00,
-        rail: "wise",
-        attempt: 1,
-        status: "draft",
-      )
+    it "surfaces a draft for an authority the quarter no longer owes, and blocks on it" do
+      hmrc = create_hmrc_remittance
 
       service = described_class.new(period).process
 
-      expect(service.orphaned_drafts.map { _1[:authority] }).to eq(["HMRC"])
-      expect(service.orphaned_drafts.first[:recorded_cents]).to eq(25_00)
+      expect(service.vanished_authorities.map { _1[:authority] }).to eq(["HMRC"])
+      expect(service.vanished_authorities.first[:recorded_cents]).to eq(25_00)
+      expect(service.vanished_authorities.first[:status]).to eq("draft")
+      expect(service).to be_blocking
       # Reported, not deleted — a draft can't move money, and cancelling a
       # filing is a human's call.
       expect(hmrc.reload.status).to eq("draft")
+    end
+
+    # The case a draft-only check missed completely: a human has already moved
+    # the row along, so it is heading toward a payment the quarter no longer
+    # says is owed, and nothing anywhere said so.
+    %w[pending_approval funded sent].each do |status|
+      it "surfaces a #{status} remittance for an authority the quarter no longer owes, without touching it" do
+        hmrc = create_hmrc_remittance
+        advance_to(hmrc, status)
+
+        service = described_class.new(period).process
+
+        vanished = service.vanished_authorities.find { _1[:authority] == "HMRC" }
+        expect(vanished[:status]).to eq(status)
+        expect(vanished[:recorded_cents]).to eq(25_00)
+        expect(vanished[:action_required]).to be_present
+        expect(service).to be_blocking
+        expect(service.blocking_diagnostics).to include(vanished)
+
+        # Nothing is cancelled or rewritten: deciding between withdrawing,
+        # adjusting the next return, and reconciling a sent payment is a
+        # filing decision.
+        expect(hmrc.reload.status).to eq(status)
+        expect(hmrc.usd_amount_cents).to eq(25_00)
+      end
+    end
+
+    # Terminal rows are history, not a live payment heading out the door.
+    # Flagging a completed filing every run would train a reviewer to ignore
+    # the diagnostic that matters.
+    %w[completed failed cancelled].each do |status|
+      it "leaves a #{status} remittance out of the vanished-authority report" do
+        hmrc = create_hmrc_remittance
+        advance_to(hmrc, status)
+
+        service = described_class.new(period).process
+
+        expect(service.vanished_authorities.map { _1[:authority] }).not_to include("HMRC")
+      end
+    end
+
+    # An authority whose refunds exceeded its collections owes us rather than
+    # the reverse. That is why its liability disappeared, so the credit is
+    # reported beside the vanished row instead of being left for a reviewer to
+    # work out.
+    it "reports a negative position as an authority credit alongside the vanished row" do
+      hmrc = create_hmrc_remittance
+      advance_to(hmrc, "pending_approval")
+
+      travel_to(in_period) do
+        gb_purchase = create_taxed_purchase(product, country: "United Kingdom", gumroad_tax_cents: 20_00)
+        # A refund larger than what was collected in the quarter: this
+        # authority's net position is a credit.
+        create(:refund, purchase: gb_purchase, total_transaction_cents: 120_00, gumroad_tax_cents: 30_00)
+      end
+
+      service = described_class.new(period).process
+
+      credit = service.coverage_gaps[:authority_credits].find { _1.authority == "HMRC" }
+      expect(credit.credit_cents).to eq(10_00)
+      expect(credit.currency).to eq("GBP")
+
+      vanished = service.vanished_authorities.find { _1[:authority] == "HMRC" }
+      expect(vanished[:credit_cents]).to eq(10_00)
+
+      # A credit is never staged as a payment.
+      expect(service.created.map(&:authority)).not_to include("HMRC")
     end
 
     # A failed attempt is retryable, so staging continues the filing's

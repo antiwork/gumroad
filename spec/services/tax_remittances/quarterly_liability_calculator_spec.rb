@@ -187,7 +187,7 @@ describe TaxRemittances::QuarterlyLiabilityCalculator do
       expect(liability_for(calculator, "Australian Taxation Office").tax_collected_cents).to eq(10_00)
     end
 
-    it "drops an authority whose refunds exceed its collections for the quarter" do
+    it "reports an authority whose refunds exceed its collections as a credit, not a payment" do
       travel_to(in_period + 5.days) do
         create(:refund, purchase: @purchase, total_transaction_cents: 119_00, gumroad_tax_cents: 12_00)
       end
@@ -195,9 +195,46 @@ describe TaxRemittances::QuarterlyLiabilityCalculator do
       calculator = described_class.new(period).process
 
       # Nothing is owed, so no payment is proposed — the credit is carried on
-      # the next return rather than sent as a negative transfer.
+      # the next return rather than sent as a negative transfer. It is still
+      # reported: a negative position is real money owed back to us, and an
+      # authority silently missing from the output is indistinguishable from
+      # one that had no activity at all.
       expect(liability_for(calculator, "Australian Taxation Office")).to be_nil
       expect(calculator.total_usd_cents).to eq(0)
+
+      credit = calculator.authority_credits.find { _1.authority == "Australian Taxation Office" }
+      expect(credit.credit_cents).to eq(2_00) # 12.00 refunded against 10.00 collected
+      expect(credit.jurisdiction).to eq("AU")
+      expect(credit.currency).to eq("AUD")
+      expect(credit.country_codes).to eq(["AU"])
+    end
+
+    # A quarter that exactly cancels out is settled, not a credit: there is
+    # nothing to pay and nothing to carry forward.
+    it "reports no credit for an authority whose refunds exactly match its collections" do
+      travel_to(in_period + 5.days) do
+        create(:refund, purchase: @purchase, total_transaction_cents: 110_00, gumroad_tax_cents: 10_00)
+      end
+
+      calculator = described_class.new(period).process
+
+      expect(liability_for(calculator, "Australian Taxation Office")).to be_nil
+      expect(calculator.authority_credits).to be_empty
+    end
+
+    # Credits are recomputed like everything else, so a re-run can neither
+    # duplicate one nor keep one the quarter no longer has.
+    it "rebuilds credits on each process call rather than accumulating them" do
+      travel_to(in_period + 5.days) do
+        create(:refund, purchase: @purchase, total_transaction_cents: 119_00, gumroad_tax_cents: 12_00)
+      end
+
+      calculator = described_class.new(period)
+      calculator.process
+      expect(calculator.authority_credits.size).to eq(1)
+
+      calculator.process
+      expect(calculator.authority_credits.size).to eq(1)
     end
   end
 

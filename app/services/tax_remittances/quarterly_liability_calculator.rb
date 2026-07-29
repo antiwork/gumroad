@@ -87,7 +87,15 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     keyword_init: true
   )
 
-  attr_reader :period, :liabilities, :unmapped_countries, :unresolved_country_names, :countryless_tax_cents
+  # An authority whose refunds and chargebacks exceeded its collections for
+  # the quarter. No payment is made, so it is not a liability — but the
+  # position is real money owed back to us, carried onto the next return as an
+  # adjustment. Reported separately from liabilities so it is never mistaken
+  # for "nothing happened here".
+  Credit = Struct.new(:authority, :jurisdiction, :currency, :credit_cents, :country_codes, keyword_init: true)
+
+  attr_reader :period, :liabilities, :authority_credits, :unmapped_countries, :unresolved_country_names,
+              :countryless_tax_cents
 
   # period — a quarter string like "2026-Q2", matching TaxRemittance#period.
   def initialize(period)
@@ -117,6 +125,7 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     Rails.logger.info(
       "#{self.class.name}: period=#{period} authorities=#{liabilities.size} " \
       "total_usd_cents=#{total_usd_cents} unmapped_countries=#{unmapped_countries.size} " \
+      "authority_credits=#{authority_credits.size} " \
       "unresolved_country_names=#{unresolved_country_names.size} " \
       "countryless_tax_cents=#{countryless_tax_cents}"
     )
@@ -281,6 +290,7 @@ class TaxRemittances::QuarterlyLiabilityCalculator
 
     def reset_results
       @liabilities = []
+      @authority_credits = []
       @unmapped_countries = {}
       @unresolved_country_names = Hash.new(0)
       @countryless_tax_cents = 0
@@ -325,12 +335,27 @@ class TaxRemittances::QuarterlyLiabilityCalculator
 
       @liabilities = per_authority.filter_map do |authority, bucket|
         net = bucket[:sales] - bucket[:refunds] - bucket[:chargebacks]
-        # Nothing owed means nothing to remit: a zero or negative net (more
-        # refunded than collected this quarter) is carried on the next return
-        # as an adjustment by the tax agent, not sent as a payment.
-        next if net <= 0
-
         meta = TaxRemittance::KNOWN_AUTHORITIES.fetch(authority)
+
+        # Nothing owed means nothing to remit. A negative net (more refunded
+        # than collected this quarter) is not nothing, though: it is a credit
+        # the tax agent carries onto the next return. Recording it separately
+        # keeps it out of the payment set while still making it visible —
+        # dropping it silently made an authority with a real negative position
+        # indistinguishable from one that simply had no activity.
+        if net <= 0
+          if net.negative?
+            @authority_credits << Credit.new(
+              authority:,
+              jurisdiction: meta[:jurisdiction],
+              currency: meta[:currency],
+              credit_cents: -net,
+              country_codes: bucket[:countries].sort,
+            )
+          end
+
+          next
+        end
 
         Liability.new(
           authority:,

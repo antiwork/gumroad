@@ -31,7 +31,7 @@ class TaxRemittances::StageQuarterlyDrafts
   # because it is the rail these seven authorities are paid through today.
   DEFAULT_RAIL = "wise"
 
-  attr_reader :period, :rail, :created, :refreshed, :skipped, :orphaned_drafts, :calculator
+  attr_reader :period, :rail, :created, :refreshed, :skipped, :vanished_authorities, :calculator
 
   def initialize(period, rail: DEFAULT_RAIL)
     raise ArgumentError, "unknown rail #{rail.inspect}" unless rail.in?(TaxRemittance::RAILS)
@@ -43,7 +43,7 @@ class TaxRemittances::StageQuarterlyDrafts
     @created = []
     @refreshed = []
     @skipped = []
-    @orphaned_drafts = []
+    @vanished_authorities = []
   end
 
   def process
@@ -54,7 +54,7 @@ class TaxRemittances::StageQuarterlyDrafts
     @created = []
     @refreshed = []
     @skipped = []
-    @orphaned_drafts = []
+    @vanished_authorities = []
 
     calculator.process
 
@@ -62,14 +62,36 @@ class TaxRemittances::StageQuarterlyDrafts
       stage(liability)
     end
 
-    collect_orphaned_drafts
+    collect_vanished_authorities
 
     Rails.logger.info(
       "#{self.class.name}: period=#{period} rail=#{rail} created=#{created.size} " \
-      "refreshed=#{refreshed.size} skipped=#{skipped.size} orphaned_drafts=#{orphaned_drafts.size}"
+      "refreshed=#{refreshed.size} skipped=#{skipped.size} " \
+      "vanished_authorities=#{vanished_authorities.size} blocking=#{blocking?}"
     )
 
     self
+  end
+
+  # True when the run turned up something a human has to resolve before this
+  # quarter's payments can be trusted. Callers (a rake task, a cron, the
+  # eventual approval UI) are meant to stop on this rather than present the
+  # staged rows as a finished set.
+  #
+  # Today the only blocking condition is a vanished authority: a remittance
+  # exists for a filing the recomputed quarter no longer owes anything to. At
+  # `draft` that is a proposal to be withdrawn; at `pending_approval`/`funded`
+  # someone is about to send money the quarter says is not owed; at `sent` the
+  # money is already gone and the difference has to be reconciled. All of them
+  # need a person, so none of them may be resolved by this service.
+  def blocking?
+    vanished_authorities.any?
+  end
+
+  # Every diagnostic that requires a human, in one place, so a caller doesn't
+  # have to know which accessor holds which class of problem.
+  def blocking_diagnostics
+    vanished_authorities
   end
 
   # Coverage gaps found while computing the quarter, passed through from the
@@ -83,6 +105,11 @@ class TaxRemittances::StageQuarterlyDrafts
       unmapped_countries: calculator.unmapped_country_report,
       unresolved_country_names: calculator.unresolved_country_names,
       countryless_tax_cents: calculator.countryless_tax_cents,
+      # An authority whose refunds exceeded its collections this quarter owes
+      # us rather than the reverse. No payment is staged for it, but the
+      # position is real and gets carried onto the next return, so it is
+      # reported instead of vanishing between runs.
+      authority_credits: calculator.authority_credits,
     }
   end
 
@@ -223,24 +250,67 @@ class TaxRemittances::StageQuarterlyDrafts
       { recorded_cents: existing.usd_amount_cents, computed_cents: liability.tax_collected_cents }
     end
 
-    # Drafts for authorities the quarter no longer owes anything to. The
-    # calculator drops an authority entirely once refunds and chargebacks
-    # cancel out its collections, so those filings are never visited by the
-    # staging loop above and their drafts would otherwise sit there proposing a
-    # payment that is no longer owed. Left in place rather than deleted — a
-    # draft cannot move money, and whether the right answer is cancelling it or
-    # carrying an adjustment onto the next return is a filing decision.
-    def collect_orphaned_drafts
+    # Remittances for authorities the recomputed quarter no longer owes
+    # anything to. The calculator drops an authority entirely once refunds and
+    # chargebacks cancel out its collections, so those filings are never
+    # visited by the staging loop above — and if we only looked at `draft`
+    # rows, a row a human had already advanced would keep moving toward payment
+    # with nothing anywhere saying the quarter had stopped owing it.
+    #
+    # So every in-progress status is checked (draft, pending_approval, funded,
+    # sent), and each one is a blocking diagnostic rather than something this
+    # service fixes:
+    #
+    # - draft — a proposal that is no longer owed; a human withdraws it.
+    # - pending_approval / funded — someone is in the middle of approving or
+    #   funding a payment the quarter now says is not owed. This is the case
+    #   the narrower draft-only check missed entirely.
+    # - sent — the money has already left the account. Nothing can be undone
+    #   here; the difference has to be reconciled against the filing.
+    #
+    # Terminal rows (completed, failed, cancelled) are deliberately NOT
+    # reported: they are history. A completed payment for a filing that later
+    # netted to zero is exactly the situation the tax agent carries as an
+    # adjustment on the next return, and flagging it every run would train a
+    # reviewer to ignore the diagnostic.
+    #
+    # Nothing is cancelled or modified. A draft cannot move money on its own,
+    # and for every other status deciding between cancelling, adjusting on the
+    # next return, and reconciling a sent payment is a filing decision that
+    # only a person can make.
+    def collect_vanished_authorities
       staged_authorities = calculator.liabilities.map(&:authority)
+      credit_by_authority = calculator.authority_credits.index_by(&:authority)
 
-      TaxRemittance.where(period:, status: "draft")
+      TaxRemittance.where(period:)
+                   .where.not(status: TaxRemittance::TERMINAL_STATUSES)
                    .where.not(authority: staged_authorities)
                    .find_each do |remittance|
-        @orphaned_drafts << {
+        credit = credit_by_authority[remittance.authority]
+
+        @vanished_authorities << {
           remittance:,
           authority: remittance.authority,
+          status: remittance.status,
           recorded_cents: remittance.usd_amount_cents,
-        }
+          # A negative position for the same authority is why the liability
+          # disappeared, so it is attached here rather than left for a reviewer
+          # to correlate by hand.
+          credit_cents: credit&.credit_cents,
+          action_required: action_required_for(remittance.status),
+        }.compact
+      end
+    end
+
+    # What a human has to do about a vanished authority, per status. Spelled
+    # out on the diagnostic itself so the reviewer isn't left to infer the
+    # difference between "withdraw this" and "the money is already gone".
+    def action_required_for(status)
+      case status
+      when "draft" then "withdraw the draft or carry the position onto the next return"
+      when "pending_approval", "funded" then "do not approve or send; the quarter no longer owes this filing"
+      when "sent" then "payment already sent — reconcile against the filing"
+      else "review"
       end
     end
 

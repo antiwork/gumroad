@@ -24,12 +24,29 @@ class TaxRemittance < ApplicationRecord
   # number enter the approval flow.
   class AmountChangedSinceReview < StandardError; end
 
+  # Raised when a row is submitted for approval without a target-currency
+  # amount. An authority is paid in its own currency, so a row whose
+  # target_amount_cents is still nil describes only half a payment: the
+  # approver would be signing off on a USD estimate while the amount that
+  # actually leaves the account is decided later by whoever funds it.
+  class TargetAmountMissing < StandardError; end
+
   RAILS = %w[wise stripe_global_payouts mercury].freeze
   STATUSES = %w[draft pending_approval funded sent completed failed cancelled].freeze
   TERMINAL_STATUSES = %w[completed failed cancelled].freeze
   # Terminal statuses that a retry attempt may follow. `completed` is absent
   # on purpose: the money arrived, there is nothing to retry.
   RETRYABLE_STATUSES = %w[failed cancelled].freeze
+
+  # Statuses where a human has already approved (or is approving) specific
+  # numbers, but no money has moved yet. The approved figures are frozen here
+  # for the same reason they are frozen once sent: they are what somebody
+  # signed off on. Changing them requires revoking the approval first (back to
+  # draft) so the row is reviewed and submitted again — see #revoke_approval!.
+  APPROVAL_BOUND_STATUSES = %w[pending_approval funded].freeze
+  # The figures an approval binds: the reviewed USD estimate and the
+  # target-currency amount that will actually be sent.
+  APPROVAL_BOUND_AMOUNTS = %w[usd_amount_cents target_amount_cents].freeze
 
   # Statuses from which the row describes a real payment: `sent` means money
   # has already left the account, so even though the row isn't terminal yet,
@@ -93,6 +110,7 @@ class TaxRemittance < ApplicationRecord
   scope :awaiting_approval, -> { where(status: "pending_approval") }
 
   validate :payment_locked_rows_immutable, on: :update
+  validate :approved_amounts_immutable, on: :update
   validate :single_live_attempt_per_filing
 
   def self.period_for(date)
@@ -103,8 +121,42 @@ class TaxRemittance < ApplicationRecord
     status.in?(TERMINAL_STATUSES)
   end
 
-  # Moves a draft to pending_approval, but only if the amount is still the one
-  # the reviewer was shown.
+  # Records the target-currency amount that will actually be sent to the
+  # authority. Only allowed while the row is still a draft: from
+  # pending_approval onward the target amount is part of what an approver
+  # signed off on, so it is bound (see #approved_amounts_immutable) and
+  # changing it means revoking the approval and having the numbers reviewed
+  # again.
+  def record_target_amount!(cents)
+    with_lock do
+      raise ArgumentError, "can only set a target amount on a draft (status is #{status})" unless status == "draft"
+
+      update!(target_amount_cents: cents)
+    end
+
+    self
+  end
+
+  # Returns an approved (or approval-pending) row to draft so its amounts can
+  # be corrected. The approval is deliberately discarded: whoever changes the
+  # numbers has to submit them for approval again, so nothing is ever funded
+  # on figures no human reviewed. Refused once money has moved — a sent or
+  # terminal row is a record of a real payment, not a proposal.
+  def revoke_approval!
+    with_lock do
+      unless status.in?(APPROVAL_BOUND_STATUSES)
+        raise ArgumentError, "can only revoke approval on a pending_approval or funded remittance (status is #{status})"
+      end
+
+      update!(status: "draft")
+    end
+
+    self
+  end
+
+  # Moves a draft to pending_approval, but only if BOTH amounts are still the
+  # ones the reviewer was shown: the USD estimate and the target-currency
+  # amount that will actually be sent.
   #
   # Why the check exists: the staging service (TaxRemittances::StageQuarterlyDrafts)
   # is meant to be re-run while a quarter is still settling, and it rewrites an
@@ -114,21 +166,34 @@ class TaxRemittance < ApplicationRecord
   # amount into the approval flow that nobody reviewed — the reviewer approves
   # "the row", and the row now says something else.
   #
-  # `reviewed_amount_cents` is the amount the reviewer actually saw. It is
+  # `reviewed_amount_cents` and `reviewed_target_amount_cents` are the amounts
+  # the reviewer actually saw. They are
   # compared inside the same SELECT ... FOR UPDATE + UPDATE transaction the
   # staging refresh uses, so the two orderings both end safely: if the refresh
   # commits first we raise here and the reviewer re-reads; if this commits
   # first the refresh sees a non-draft row and backs off.
   #
+  # A row with no target_amount_cents cannot enter approval at all: the
+  # approver would be binding a USD estimate while leaving the amount that
+  # actually leaves the account for someone downstream to pick. Set it with
+  # #record_target_amount! first.
+  #
   # Raises AmountChangedSinceReview if it moved, ArgumentError if the row is
-  # not a draft.
-  def submit_for_approval!(reviewed_amount_cents:)
+  # not a draft, TargetAmountMissing if no target amount is recorded.
+  def submit_for_approval!(reviewed_amount_cents:, reviewed_target_amount_cents:)
     with_lock do
       raise ArgumentError, "can only submit a draft for approval (status is #{status})" unless status == "draft"
+
+      raise TargetAmountMissing, "no target_amount_cents recorded for #{authority} #{period}" if target_amount_cents.nil?
 
       if usd_amount_cents != reviewed_amount_cents
         raise AmountChangedSinceReview,
               "amount is now #{usd_amount_cents} cents, not the #{reviewed_amount_cents} reviewed"
+      end
+
+      if target_amount_cents != reviewed_target_amount_cents
+        raise AmountChangedSinceReview,
+              "target amount is now #{target_amount_cents} cents, not the #{reviewed_target_amount_cents} reviewed"
       end
 
       update!(status: "pending_approval")
@@ -207,6 +272,29 @@ class TaxRemittance < ApplicationRecord
         elsif field.in?(ENRICHABLE_WHEN_LOCKED) && attribute_was(field).present?
           errors.add(field, "cannot change once set on a #{status_was} remittance")
         end
+      end
+    end
+
+    # Once a row is in pending_approval or funded, a human has reviewed and
+    # signed off on specific numbers, so those numbers stop being freely
+    # writable. Previously only `sent`/terminal rows were protected, which
+    # meant the target-currency amount — the figure that actually leaves the
+    # account — could be rewritten between approval and funding, and the
+    # payment sent would not be the payment approved.
+    #
+    # Correcting an approved amount is still possible; it just costs the
+    # approval. #revoke_approval! puts the row back to draft, the amounts are
+    # editable again, and it has to be submitted for approval a second time.
+    def approved_amounts_immutable
+      return unless status_was.in?(APPROVAL_BOUND_STATUSES)
+      # Going back to draft IS the sanctioned way to change these, and that
+      # transition clears the approval, so a same-save amount change is fine.
+      return if status == "draft"
+
+      APPROVAL_BOUND_AMOUNTS.each do |field|
+        next unless changed.include?(field)
+
+        errors.add(field, "cannot change on a #{status_was} remittance without revoking the approval first")
       end
     end
 
