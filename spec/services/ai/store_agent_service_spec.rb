@@ -848,6 +848,15 @@ describe Ai::StoreAgentService do
           "Staged deletion of the draft that I carefully reviewed is ready for your confirmation.",
           "Staged the change that you requested. Approve it, then I'll apply it.",
           "Staged the update that will apply to all products. Confirm the card.",
+          # A verb that ENDS its clause is part of the relative clause the filler walked through,
+          # not the predicate of a subject — without that distinction these read as feature prose
+          # and the claim escapes.
+          "Staged the change that you want. Approve it.",
+          "Staged the price change that you need. Tap the card.",
+          # "and" only continues the subject when another noun phrase follows it. A pronoun starts a
+          # new clause, so the general-property predicate after it belongs to that clause and must
+          # not disqualify the claim.
+          "Staged the update and they are permanent. Tap the card.",
           # The model's instruction vocabulary is not limited to "confirm". Each of these needs
           # the new vocabulary to be caught at all: the simple past and the change-noun openers
           # only read as current claims when the same sentence tells the creator to act.
