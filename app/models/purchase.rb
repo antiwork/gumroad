@@ -5248,7 +5248,7 @@ class Purchase < ApplicationRecord
     # nobody can see. Removing it means the receipt reaches them, which is the whole point.
     def downcase_email
       return if email.blank?
-      self.email = InvisibleCharacters.normalize_email(email).downcase
+      self.email = InvisibleCharacters.remove_from_email(email).downcase
     end
 
     def all_workflows

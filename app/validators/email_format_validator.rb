@@ -33,10 +33,14 @@ class EmailFormatValidator < ActiveModel::EachValidator
 
     # True when the address would be valid if it did not carry invisible characters. Used to
     # pick the error message, so we can explain the actual problem.
+    #
+    # This removes the invisible characters WITHOUT trimming ordinary whitespace on purpose: an
+    # address that also has a visible stray space is not a hidden-character problem, and telling
+    # the person about a hidden character would send them looking for the wrong thing.
     def invisible_characters_only?(email)
       return false if email.blank?
       return false unless InvisibleCharacters.present_in?(email)
-      InvisibleCharacters.normalize_email(email).match?(EMAIL_REGEX)
+      InvisibleCharacters.remove_from_email(email).match?(EMAIL_REGEX)
     end
 
     # Whether we should attempt to DELIVER to this address, which is a different question from

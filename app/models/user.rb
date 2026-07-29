@@ -291,10 +291,11 @@ class User < ApplicationRecord
   # payment_address is validated on every save rather than only when it changes, so an address
   # stored before we started refusing invisible characters would otherwise make the whole user
   # record unsaveable — every settings change and every background job that saves the user would
-  # raise, over a field the current operation never touched. Stripping it means such a row heals
-  # itself on the next save instead. This is a payout address we hand to PayPal, not something
-  # the person is identified by, so repairing beats refusing here.
-  stripped_fields :payment_address
+  # raise, over a field the current operation never touched. See HealsInvisibleEmail. This is a
+  # payout address we hand to PayPal, not something the person is identified by, so repairing
+  # beats refusing here. Only invisible characters are touched, so a blank payout address stays
+  # blank rather than becoming nil.
+  heals_invisible_email :payment_address
 
   validates :payment_address, email_format: true, allow_blank: true
 

@@ -57,19 +57,32 @@ module InvisibleCharacters
     value.to_s.gsub(FORMAT_CHARS, "").gsub(UNICODE_SPACES, " ")
   end
 
-  # Normalizes an email address: no invisible characters, no surrounding whitespace, and no
-  # interior spaces at all. An email address never legitimately contains a space, so unlike
-  # names we delete rather than preserve the word boundary — someone whose address arrived with
-  # a no-break space in it meant no space at all.
+  # Removes only the characters a person cannot see from an email address, leaving ordinary
+  # ASCII whitespace exactly where it was.
+  #
+  # Unlike a name, an address has no word boundaries, so a Unicode space is deleted rather than
+  # folded to a plain space — someone whose address arrived with a no-break space in it meant no
+  # space at all.
+  #
+  # Ordinary spaces and tabs are left alone on purpose. They are visible in the input field, so
+  # an address with a stray trailing space is a mistake the person can see and existing
+  # validation already refuses it; repairing that here would quietly widen what we accept
+  # everywhere, which is not what this change is for.
   #
   # One deliberate imprecision: RFC 5321 permits a quoted local part that really does contain a
-  # space (`"a b"@example.com`), and this collapses it to `"ab"@example.com`. That shape is
-  # vanishingly rare, most mail providers reject it outright, and accepting an interior space
-  # would mean accepting the far more common case of an address that picked one up by accident.
-  # If a real address is ever reported broken by this, the fix is to skip normalization when the
-  # local part is quoted rather than to allow bare spaces.
+  # Unicode space (`"a\u00A0b"@example.com`), and this deletes it. That shape is vanishingly
+  # rare and most mail providers reject it outright. If a real address is ever reported broken
+  # by this, the fix is to skip normalization when the local part is quoted.
+  def remove_from_email(value)
+    return value if value.nil?
+    value.to_s.gsub(FORMAT_CHARS, "").gsub(UNICODE_SPACES, "")
+  end
+
+  # remove_from_email plus a trim of the surrounding ASCII whitespace, for the paths that accept
+  # an address a person pasted (a settings text area, a password-reset lookup) where a leading
+  # or trailing space is noise rather than a mistake worth reporting.
   def normalize_email(value)
     return value if value.nil?
-    remove(value).gsub(/\s/, "")
+    remove_from_email(value).strip
   end
 end

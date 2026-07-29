@@ -65,6 +65,31 @@ RSpec.describe InvisibleCharacters do
     end
   end
 
+  describe ".remove_from_email" do
+    it "removes the invisible characters" do
+      expect(described_class.remove_from_email("\u200Fbuyer@example.com")).to eq "buyer@example.com"
+      expect(described_class.remove_from_email("buyer\u00ADx@example.com")).to eq "buyerx@example.com"
+    end
+
+    # Unlike a name, an address never legitimately contains a space, so a Unicode space must be
+    # deleted rather than preserved as a word boundary.
+    it "deletes rather than preserves a Unicode space, because an address has no word boundaries" do
+      expect(described_class.remove_from_email("buyer\u00A0@example.com")).to eq "buyer@example.com"
+      expect(described_class.remove_from_email("bu\u3000yer@example.com")).to eq "buyer@example.com"
+    end
+
+    # An ordinary space IS visible in the input field, so it is a mistake the person can see and
+    # existing validation already refuses it. Repairing it here would quietly widen what we accept.
+    it "leaves ordinary whitespace exactly where it was" do
+      expect(described_class.remove_from_email(" buyer@example.com ")).to eq " buyer@example.com "
+      expect(described_class.remove_from_email("bu yer@example.com")).to eq "bu yer@example.com"
+    end
+
+    it "passes nil through so callers can tell an absent address from an empty one" do
+      expect(described_class.remove_from_email(nil)).to be_nil
+    end
+  end
+
   describe ".normalize_email" do
     it "removes the invisible characters" do
       expect(described_class.normalize_email("\u200Fbuyer@example.com")).to eq "buyer@example.com"
@@ -73,10 +98,16 @@ RSpec.describe InvisibleCharacters do
 
     # Unlike a name, an address never legitimately contains a space, so a folded Unicode space
     # must be deleted rather than preserved as a word boundary.
-    it "deletes rather than preserves a space, because an address has no word boundaries" do
+    it "deletes a Unicode space and trims the surrounding ordinary whitespace" do
       expect(described_class.normalize_email("buyer\u00A0@example.com")).to eq "buyer@example.com"
       expect(described_class.normalize_email("bu\u3000yer@example.com")).to eq "buyer@example.com"
       expect(described_class.normalize_email(" buyer@example.com ")).to eq "buyer@example.com"
+    end
+
+    # Only the SURROUNDING whitespace is trimmed. An interior space is left for validation to
+    # refuse, the same as it always has been.
+    it "leaves an interior ordinary space alone" do
+      expect(described_class.normalize_email("bu yer@example.com")).to eq "bu yer@example.com"
     end
 
     it "leaves an ordinary address untouched" do

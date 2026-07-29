@@ -190,12 +190,13 @@ class Link < ApplicationRecord
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
   # Keep in sync with Product::BulkUpdateSupportEmailService.
-  # Stripped as well as validated: support_email is checked on every save rather than only when it
+  # Healed as well as validated: support_email is checked on every save rather than only when it
   # changes, so an address stored before we started refusing invisible characters would otherwise
   # make the whole product unsaveable — publishing, price edits and any background job that saves
-  # the product would raise over a field the current operation never touched. Stripping lets such
-  # a row heal itself on the next save.
-  stripped_fields :support_email
+  # the product would raise over a field the current operation never touched. See
+  # HealsInvisibleEmail; this touches invisible characters only, so a blank or badly-spaced
+  # address is still refused exactly as before.
+  heals_invisible_email :support_email
 
   validates :support_email, email_format: true, not_reserved_email_domain: true, allow_nil: true
   validates :default_price_cents, presence: true
