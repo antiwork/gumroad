@@ -316,6 +316,20 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_empty @user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE)
   end
 
+  test "prepare_payment_and_set_amount error handling when Stripe is unreachable records the transient failure reason" do
+    setup_prepare_payment_error_handling
+    StripeTransferInternallyToCreator.stubs(:transfer_funds_to_account).raises(Stripe::APIConnectionError.new("Connection refused"))
+
+    assert_raises(Stripe::APIConnectionError) do
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
+    end
+
+    # This rescue re-raises, but the ensure still marks the payment failed on the way out, so the
+    # reason has to be set here or the row lands unexplained and counts against the seller.
+    assert_equal "failed", @payment.reload.state
+    assert_equal Payment::FailureReason::PROCESSOR_UNAVAILABLE, @payment.failure_reason
+  end
+
   # ---------------------------------------------------------------------------
   # destination_balance_drift_error
   # ---------------------------------------------------------------------------

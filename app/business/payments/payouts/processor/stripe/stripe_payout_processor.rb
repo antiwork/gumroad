@@ -259,6 +259,7 @@ class StripePayoutProcessor
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   rescue Stripe::RateLimitError => e
@@ -275,6 +276,7 @@ class StripePayoutProcessor
     [e.message]
   rescue RuntimeError => e
     failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   ensure
@@ -432,6 +434,7 @@ class StripePayoutProcessor
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   rescue Stripe::RateLimitError => e

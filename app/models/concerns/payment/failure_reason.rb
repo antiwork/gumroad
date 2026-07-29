@@ -12,12 +12,13 @@ module Payment::FailureReason
   BELOW_STRIPE_PAYOUT_MINIMUM = "below_stripe_payout_minimum"
   STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
   PROCESSOR_RATE_LIMITED = "processor_rate_limited"
+  PROCESSOR_UNAVAILABLE = "processor_unavailable"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
-  # Failures caused by us, not by the seller's payout details. They must not count toward
-  # MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no STRIPE_FAILURE_SOLUTIONS entry, because there
-  # is nothing for the seller to fix.
-  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED].freeze
+  # Failures caused by us or by the processor being unreachable, never by the seller's payout
+  # details. They must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no
+  # STRIPE_FAILURE_SOLUTIONS entry, because there is nothing for the seller to fix.
+  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
 
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",
