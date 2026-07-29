@@ -275,6 +275,26 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/Never author an empty image slot/)
       end
 
+      # Both payload arrays are capped at Pages::ProfileData::MAX_ITEMS, so a page that renders
+      # either one has to be told to disclose the cap. Products alone is not enough: a posts
+      # archive rendering the first 100 of 260 reads to the creator as posts having vanished,
+      # which is the same defect (gumroad-private#1522).
+      it "requires a visible count whenever either the product or the post list is capped" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("products_total")
+        expect(captured[:system]).to include("posts_total")
+        expect(captured[:system]).to match(/posts_total\s+exceeds posts\.length/)
+        expect(captured[:system]).to match(/MUST show a visible count for that section/)
+        expect(captured[:system]).to match(/Showing 100 of 260 posts/)
+      end
+
       it "rejects an unknown endpoint id without calling the API" do
         expect(api_client).not_to receive(:get)
         captured = nil

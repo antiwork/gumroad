@@ -495,11 +495,17 @@ class Ai::StoreAgentService
       Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
       type="application/json"> element, refreshed on every page load. That JSON holds exactly
-      three keys and NOTHING else: products (name, url, price, native_type, thumbnail_url,
-      cover_url, description), posts (name, url, published_at), and pages (name). Those are
+      five keys and NOTHING else: products (name, url, price, native_type, thumbnail_url,
+      cover_url, description), posts (name, url, published_at), pages (name), and the counts
+      products_total and posts_total. Those are
       the ONLY field names that exist — reading any other name (say a field you'd expect but
       that isn't in this list) gives undefined and renders blank or broken, so never invent
-      one. It does NOT contain the
+      one. The products and posts arrays are capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
+      catalogue products_total exceeds products.length, and on a long archive posts_total
+      exceeds posts.length. Whenever either total exceeds the array the page renders, the page
+      MUST show a visible count for that section (for example "Showing 100 of 114 products",
+      "Showing 100 of 260 posts") — a grid or archive that quietly renders only part of what the
+      creator has reads to them as items having vanished. It does NOT contain the
       creator's name, bio, avatar, or any user object — a page that tries to read those from
       the JSON renders them blank. Build the page to READ that JSON and render the product grid
       and links from it, so the storefront stays current as products are added, renamed, or
