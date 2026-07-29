@@ -43,16 +43,16 @@
 #      user_id would have missed mislabelled balances that still break payouts.
 #      Only the Stripe implementation distinguishes by owner, and there a nil
 #      user_id is exactly what makes an account Gumroad-held (a Stripe Connect
-#      account always has a user and reports CREATOR). So the SQL below narrows
-#      to "platform-owned OR not Stripe", which is an exact superset of
-#      Gumroad-held, and holder_of_funds is then confirmed per row in Ruby -- the
-#      same call the payout processors make, so the monitor cannot drift from them
-#      if that logic changes. Without the SQL narrowing this would load every
-#      seller's foreign-currency balance: measured against production, 418 rows a
-#      day and rising, against 0 that are actually Gumroad-held. The join is a LEFT
-#      join because a balance with no merchant account at all breaks payouts too --
-#      is_balance_payable dereferences it -- and an inner join would have hidden
-#      exactly that row.
+#      account always has a user and reports CREATOR). So the SQL below excludes
+#      only one shape -- a Stripe account belonging to a seller -- which leaves a
+#      superset of Gumroad-held, and holder_of_funds is then confirmed per row in
+#      Ruby, the same call the payout processors make, so the monitor cannot drift
+#      from them if that logic changes. Without that exclusion this would load
+#      every seller's foreign-currency balance: measured against production, 418
+#      rows a day and rising, against 0 that are actually Gumroad-held. The join is
+#      a LEFT join because a balance with no merchant account at all breaks payouts
+#      too -- is_balance_payable dereferences it -- and an inner join would have
+#      hidden exactly that row.
 class MonitorGumroadHeldBalanceCurrencyJob
   include Sidekiq::Job
   # lock alone, without on_conflict: :replace -- CONTRIBUTING.md warns that :replace has to
