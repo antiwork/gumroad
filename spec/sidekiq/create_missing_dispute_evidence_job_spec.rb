@@ -86,6 +86,22 @@ describe CreateMissingDisputeEvidenceJob do
 
           expect(dispute.reload.dispute_evidence.seller_contacted_at).to be_present
         end
+
+        it "leaves a window another path opened in the meantime alone" do
+          allow(ErrorNotifier).to receive(:notify)
+          # Formalization stamps the same row between our commit and the failed enqueue, and it
+          # sends its own notice — clearing that stamp would restart a window the seller has
+          # already been told about.
+          formalization_stamped_at = 30.minutes.ago.change(usec: 0)
+          allow(ContactingCreatorMailer).to receive(:chargeback_notice) do
+            DisputeEvidence.last.update!(seller_contacted_at: formalization_stamped_at)
+            raise Redis::CannotConnectError
+          end
+
+          described_class.new.perform
+
+          expect(dispute.reload.dispute_evidence.seller_contacted_at).to eq(formalization_stamped_at)
+        end
       end
 
       it "is idempotent — a second run does not create a second record, re-open the window, or re-email" do

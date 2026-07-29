@@ -107,12 +107,27 @@ class CreateMissingDisputeEvidenceJob
       # the notice they got at formalization had no link, because there was no evidence record
       # to link to. Only worth sending while they still have time to act on it; when the
       # deadline is too close for that, what we already assembled is submitted without them.
+      stamped_at = dispute_evidence.seller_contacted_at
       begin
         ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later if dispute_evidence.hours_left_to_submit_evidence.positive?
       rescue => e
         # Enqueueing can fail on its own (Redis unreachable, for instance). Clear the stamp so
         # the sweep sees this dispute again instead of leaving a started window the seller was
         # never told about — a window with no notice is worse than no window.
+        #
+        # Only clear the window this run opened. Formalization stamps the same row and sends its
+        # own notice, and its check-then-stamp is not atomic against this one, so it can land
+        # between our commit and this rescue. Clearing that stamp would erase a window the
+        # seller has already been told about, and the next sweep would re-notify and restart it.
+        dispute_evidence.reload
+        if dispute_evidence.seller_contacted_at != stamped_at
+          ErrorNotifier.notify(
+            "CreateMissingDisputeEvidenceJob: could not notify the seller for dispute #{dispute.id}: " \
+            "#{e.class} #{e.message}. Another path stamped this evidence in the meantime, so its " \
+            "window was left alone."
+          )
+          return
+        end
         dispute_evidence.update_as_not_seller_contacted!
         ErrorNotifier.notify("CreateMissingDisputeEvidenceJob: could not notify the seller for dispute #{dispute.id}: #{e.class} #{e.message}")
         return
