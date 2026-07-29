@@ -9415,7 +9415,7 @@ describe StripeMerchantAccountManager, :vcr do
           stripe_account
         end
         expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(expected_account_params)).and_call_original
-        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false).and_call_original
+        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, unclaimed_percent_ownership: nil).and_call_original
         expect(Stripe::Account).to receive(:update_person).with(kind_of(String), kind_of(String), a_hash_including(expected_person_params).and(excluding(:first_name))).and_call_original
         subject.update_account(user, passphrase: "1234")
       end
@@ -12904,15 +12904,13 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     context "individual→company transition" do
-      it "seeds owner: true, title, percent_ownership: 100 when transitioning from individual to business" do
-        last_individual_info = create(:user_compliance_info, user:)
-        last_individual_info.mark_deleted!
-        create(:user_compliance_info_business, user:)
+      def stub_owner_list(persons)
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { owner: true }, limit: 100)
+          .and_return("data" => persons)
+      end
 
-        expect(Stripe::Account).to receive(:list_persons)
-          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
-          .and_return("data" => [representative_person])
-
+      def capture_person_update(last_individual_info)
         captured_attributes = nil
         expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
           captured_attributes = attributes
@@ -12920,6 +12918,26 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234")
+        captured_attributes
+      end
+
+      let(:last_individual_info) do
+        info = create(:user_compliance_info, user:)
+        info.mark_deleted!
+        create(:user_compliance_info_business, user:)
+        info
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+      end
+
+      it "seeds owner: true, title, percent_ownership: 100 when nobody else owns any of the company" do
+        stub_owner_list([representative_person])
+
+        captured_attributes = capture_person_update(last_individual_info)
 
         expect(captured_attributes[:relationship]).to include(
           representative: true,
@@ -12927,6 +12945,198 @@ describe StripeMerchantAccountManager, :vcr do
           percent_ownership: 100,
         )
         expect(captured_attributes[:relationship][:title]).to be_present
+      end
+
+      it "claims only the ownership the existing beneficial owners have not, so Stripe does not reject the switch for exceeding 100 percent" do
+        stub_owner_list([co_director_owner, third_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship]).to include(
+          representative: true,
+          owner: true,
+          percent_ownership: 33.33,
+        )
+      end
+
+      it "rounds the claimed share DOWN so a fractional remainder cannot push the company over 100 percent" do
+        almost_everything_owner = Stripe::Person.construct_from(
+          id: "person_almost_everything",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: false, owner: true, percent_ownership: 99.995 }
+        )
+        stub_owner_list([almost_everything_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        # Rounding to the nearest hundredth would ask for 0.01 here, totalling 100.005 and drawing
+        # the very rejection this guard exists to prevent. Rounding down leaves nothing to claim.
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
+        expect(captured_attributes[:relationship]).not_to have_key(:owner)
+      end
+
+      it "treats an owner with no recorded share as owning nothing" do
+        share_less_owner = Stripe::Person.construct_from(
+          id: "person_share_less",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: false, owner: true, percent_ownership: nil }
+        )
+        stub_owner_list([share_less_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship][:percent_ownership]).to eq(100)
+      end
+
+      it "claims nothing when the recorded owners already add up to more than the whole company" do
+        over_claimed = [
+          Stripe::Person.construct_from(id: "person_a", object: "person", account: stripe_account.id,
+                                        relationship: { representative: false, owner: true, percent_ownership: 80 }),
+          Stripe::Person.construct_from(id: "person_b", object: "person", account: stripe_account.id,
+                                        relationship: { representative: false, owner: true, percent_ownership: 40 }),
+        ]
+        stub_owner_list(over_claimed)
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship]).not_to have_key(:owner)
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
+      end
+
+      it "uses the ownership figure the caller already read instead of asking Stripe again" do
+        expect(Stripe::Account).not_to receive(:list_persons)
+          .with(stripe_account.id, relationship: { owner: true }, limit: 100)
+
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234", unclaimed_percent_ownership: 25.0)
+
+        expect(captured_attributes[:relationship][:percent_ownership]).to eq(25.0)
+      end
+
+      it "claims no ownership at all when the existing beneficial owners already account for the whole company" do
+        full_owner = Stripe::Person.construct_from(
+          id: "person_full_owner",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: false, owner: true, percent_ownership: 100 }
+        )
+        stub_owner_list([full_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship]).to include(representative: true)
+        expect(captured_attributes[:relationship]).not_to have_key(:owner)
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
+        expect(captured_attributes[:relationship][:title]).to be_present
+      end
+
+      it "ignores the representative's own existing ownership share when working out what is unclaimed" do
+        stub_owner_list([representative_person, co_director_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship][:percent_ownership]).to eq(66.67)
+      end
+
+      context "when a beneficial owner changes between the caller's ownership read and the person update" do
+        # The caller reads the unclaimed share BEFORE Stripe::Account.update, so a beneficial owner
+        # added or enlarged in that window makes the number stale and too large. Stripe then rejects
+        # the person update for exceeding 100% — the exact seller-visible breakage this code prevents
+        # — after the account update has already committed, so it must recover in place.
+        let(:exceeded_error) do
+          Stripe::InvalidRequestError.new(
+            "The total combined ownership of the company would exceed 100 percent.",
+            "relationship[percent_ownership]"
+          )
+        end
+
+        it "re-reads the live ownership and retries with the smaller share" do
+          # A new owner took 60% after the caller read 100% as unclaimed.
+          stub_owner_list([
+                            Stripe::Person.construct_from(id: "person_new", object: "person", account: stripe_account.id,
+                                                          relationship: { representative: false, owner: true, percent_ownership: 60 })
+                          ])
+
+          attempts = []
+          call_count = 0
+          allow(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+            call_count += 1
+            attempts << attributes[:relationship].dup
+            raise exceeded_error if call_count == 1
+            true
+          end
+
+          described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234", unclaimed_percent_ownership: 100)
+
+          expect(attempts.length).to eq(2)
+          expect(attempts.first[:percent_ownership]).to eq(100)
+          expect(attempts.last[:percent_ownership]).to eq(40)
+          expect(attempts.last[:owner]).to be(true)
+        end
+
+        it "drops the ownership claim entirely when the new owners now account for the whole company" do
+          stub_owner_list([
+                            Stripe::Person.construct_from(id: "person_new", object: "person", account: stripe_account.id,
+                                                          relationship: { representative: false, owner: true, percent_ownership: 100 })
+                          ])
+
+          attempts = []
+          call_count = 0
+          allow(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+            call_count += 1
+            attempts << attributes[:relationship].dup
+            raise exceeded_error if call_count == 1
+            true
+          end
+
+          described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234", unclaimed_percent_ownership: 100)
+
+          expect(attempts.length).to eq(2)
+          expect(attempts.last).not_to have_key(:percent_ownership)
+          expect(attempts.last).not_to have_key(:owner)
+          expect(attempts.last[:representative]).to be(true)
+        end
+
+        it "does not retry when the live ownership is unchanged, so a genuine rejection still surfaces" do
+          # Nothing moved: retrying would send the identical payload and fail identically.
+          stub_owner_list([representative_person])
+
+          call_count = 0
+          allow(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, _attributes|
+            call_count += 1
+            raise exceeded_error
+          end
+
+          expect do
+            described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234", unclaimed_percent_ownership: 100)
+          end.to raise_error(Stripe::InvalidRequestError, /exceed 100/)
+
+          expect(call_count).to eq(1)
+        end
+
+        it "does not swallow unrelated Stripe rejections" do
+          stub_owner_list([representative_person])
+          other_error = Stripe::InvalidRequestError.new("Invalid postal code", "person[address][postal_code]")
+
+          call_count = 0
+          allow(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, _attributes|
+            call_count += 1
+            raise other_error
+          end
+
+          expect do
+            described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234", unclaimed_percent_ownership: 100)
+          end.to raise_error(Stripe::InvalidRequestError, /postal code/)
+
+          expect(call_count).to eq(1)
+        end
       end
     end
   end

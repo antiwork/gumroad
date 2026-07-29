@@ -127,6 +127,10 @@ module StripeMerchantAccountManager
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
   DEFAULT_RELATIONSHIP_TITLE = "CEO"
 
+  # Upper bound when listing an account's beneficial owners. Matches
+  # StripeBeneficialOwnersManager::PERSON_LIST_LIMIT and Stripe's own page maximum.
+  OWNER_LIST_LIMIT = 100
+
   def self.create_account(user, passphrase:, from_admin: false, notify: true)
     tos_agreement = nil
     user_compliance_info = nil
@@ -355,6 +359,14 @@ module StripeMerchantAccountManager
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
     entity_key = user_compliance_info.is_business? ? :company : :individual
+    switching_to_business = user_compliance_info.is_business? && last_user_compliance_info&.is_individual?
+
+    # Read the ownership Stripe already has on file BEFORE the account update below, because that
+    # update rewrites the metadata marker we use to detect the switch (see last_user_compliance_info
+    # above). If this read fails after the marker has moved, every later retry sees "already a
+    # business" and skips seeding the representative entirely, leaving the seller stuck with a
+    # company whose representative owns nothing — the state this whole code path exists to avoid.
+    unclaimed_percent_ownership = switching_to_business ? unclaimed_percent_ownership_on_stripe(stripe_account) : nil
 
     # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
     # diffed out and Stripe never re-validates it. Re-add the address from the current attributes so a
@@ -367,7 +379,7 @@ module StripeMerchantAccountManager
 
     person_address_submitted = false
     if user_compliance_info.is_business?
-      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
+      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, unclaimed_percent_ownership:)
     end
 
     if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
@@ -378,7 +390,7 @@ module StripeMerchantAccountManager
     raise
   end
 
-  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false)
+  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false, unclaimed_percent_ownership: nil)
     stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
@@ -388,11 +400,21 @@ module StripeMerchantAccountManager
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
     if last_user_compliance_info&.is_individual? && user_compliance_info.is_business?
-      current_attributes.deep_merge!(relationship: {
-                                       owner: true,
-                                       title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE,
-                                       percent_ownership: 100
-                                     })
+      # Switching a seller from individual to business normally means one person who owns the whole
+      # company, so the representative is seeded as a 100% owner. That is wrong whenever the Stripe
+      # account already has beneficial owners on it — someone the seller added under Settings →
+      # Payments, or people left over from an earlier business registration. Stripe rejects the
+      # entire account update with "The total combined ownership of the company would exceed 100
+      # percent" when the representative's share plus theirs goes over 100, so the switch fails
+      # outright and the seller is left mid-migration. Claim only the ownership nobody else holds,
+      # and claim none at all when the existing owners already account for the whole company.
+      relationship = { title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE }
+      unclaimed = unclaimed_percent_ownership || unclaimed_percent_ownership_on_stripe(stripe_account)
+      if unclaimed.positive?
+        relationship[:owner] = true
+        relationship[:percent_ownership] = unclaimed
+      end
+      current_attributes.deep_merge!(relationship:)
     end
     diff_attributes = current_attributes
     last_attributes = person_hash(last_user_compliance_info, passphrase)
@@ -413,8 +435,58 @@ module StripeMerchantAccountManager
     # actually re-validates a previously rejected representative postal code.
     force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
 
-    Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    begin
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    rescue Stripe::InvalidRequestError => e
+      # The unclaimed share was read before the account update above, so a beneficial owner added or
+      # enlarged in the window between that read and this call makes our number stale and too large,
+      # and Stripe rejects the whole person update. That is the same seller-visible breakage this
+      # method exists to prevent, so re-read the live ownership and try once more rather than letting
+      # a few seconds of bad luck strand the seller mid-migration. Only retry when we actually sent an
+      # ownership share and the retry would send a smaller one, so this can never loop.
+      raise unless combined_ownership_exceeded_error?(e) && diff_attributes.dig(:relationship, :percent_ownership).present?
+
+      fresh_unclaimed = unclaimed_percent_ownership_on_stripe(stripe_account)
+      raise if fresh_unclaimed >= diff_attributes[:relationship][:percent_ownership]
+
+      if fresh_unclaimed.positive?
+        diff_attributes[:relationship][:percent_ownership] = fresh_unclaimed
+      else
+        # The other owners now account for the entire company, so the representative claims nothing.
+        diff_attributes[:relationship].delete(:percent_ownership)
+        diff_attributes[:relationship].delete(:owner)
+      end
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    end
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+  end
+
+  private_class_method
+  # Stripe rejects a person update whose ownership share would push the company's combined ownership
+  # over 100%. It surfaces as an InvalidRequestError on the percent_ownership param rather than a
+  # dedicated error code, so match on the param plus the message.
+  def self.combined_ownership_exceeded_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    error.message.to_s.match?(/combined ownership/i) ||
+      error.try(:param).to_s.include?("percent_ownership")
+  end
+
+  private_class_method
+  # How much of the company nobody has claimed yet, ignoring the representative's own recorded share
+  # so a partially-completed earlier attempt does not count against them on a retry. Rounds DOWN:
+  # under-claiming by a hundredth of a percent is harmless, whereas rounding up past what is actually
+  # free is how Stripe's "combined ownership would exceed 100 percent" rejection happens, and our own
+  # beneficial-owner form accepts shares with more than two decimals.
+  def self.unclaimed_percent_ownership_on_stripe(stripe_account)
+    persons = Stripe::Account.list_persons(stripe_account.id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
+    # Read through to_h: a person Stripe returns without a relationship object at all raises
+    # NoMethodError on a plain `person.relationship`, and this must never be the thing that breaks
+    # a payout-settings save.
+    relationships = persons.filter_map { |person| person.to_h[:relationship] }
+    claimed = relationships.reject { |relationship| relationship[:representative] }
+                           .sum { |relationship| relationship[:percent_ownership].to_f }
+    [(100 - claimed).floor(2), 0].max
   end
 
   private_class_method
