@@ -11,6 +11,7 @@ class Api::V2::UsersController < Api::V2::BaseController
   THEME_SURFACES = [
     "storefront profile page",
     "product pages",
+    "the checkout page, but only when every product being bought is this seller's",
     "the pages buyers see for products they bought",
     "posts",
     "the emails a seller sends to their audience",
@@ -152,8 +153,9 @@ class Api::V2::UsersController < Api::V2::BaseController
   # their SellerProfile. Read-only here: sellers edit these directly in Settings > Profile > Design,
   # and the agent changes them through the profile settings surface rather than this endpoint.
   # The theme is not profile-page-only: the same values render into the stylesheet served with the
-  # storefront, every product page, the pages buyers see for what they bought, posts, and the
-  # emails a seller sends to their own audience — see THEME_SURFACES.
+  # storefront, every product page, checkout when the cart is all one seller's, the pages buyers see
+  # for what they bought, posts, and the emails a seller sends to their own audience — see
+  # THEME_SURFACES.
   def theme
     profile = current_resource_owner.seller_profile
 
