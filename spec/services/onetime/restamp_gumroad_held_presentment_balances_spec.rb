@@ -6,31 +6,25 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 10_00) }
 
-  # The Gumroad-held platform account: a userless merchant account is exactly what
-  # StripeChargeProcessor#holder_of_funds keys on to return GUMROAD (in production this is
-  # merchant_accounts.id = 1, currency USD). The explicit merchant id avoids colliding with any
-  # sibling account on the uniqueness validation.
+  # Userless merchant account = Gumroad-held (holder_of_funds GUMROAD). The explicit merchant id
+  # avoids the uniqueness collision with the gumroad_stripe fixture row.
   let(:gumroad_account) do
     create(:merchant_account, user: nil, currency: Currency::USD,
                               charge_processor_merchant_id: "acct_gumroad_held_#{SecureRandom.hex(6)}")
   end
 
-  # Inside the regression window: buyer-currency charging was at 100% of sellers for these days.
+  # Inside the regression window.
   let(:mislabelled_at) { Time.utc(2026, 7, 24, 9, 0) }
 
-  # #6505's production deployment time. In a real run this comes from the release that contains the
-  # fix; here it just has to be after every row the specs build.
+  # Stands in for #6505's production deploy time; just has to be after every row built here.
   let(:fix_deployed_at) { Time.utc(2026, 7, 29, 12, 0) }
 
   def service(balance_ids:, dry_run: true)
     described_class.new(balance_ids:, fix_deployed_at:, dry_run:)
   end
 
-  # A purchase carrying presentment records, which is the signature the service requires: the broken
-  # branch only fired when `presentment_canonical_issued_amount` was non-nil, and that needs a
-  # PurchasePresentment. Deliberately with NO Stripe FX quote — forced-currency local methods take no
-  # quote and are the majority of the affected production rows, so the fixtures have to be able to
-  # represent that shape.
+  # A purchase with presentment records — the provenance the service requires. Deliberately no
+  # Stripe FX quote: forced-currency local methods take none, and they are most of the affected rows.
   def create_presentment_purchase(canonical_gross_cents:, presentment_cents:, presentment_currency: Currency::EUR, created_at: mislabelled_at)
     purchase = create(:purchase, seller:, link: product,
                                  price_cents: canonical_gross_cents,
@@ -39,9 +33,6 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
                                  created_at:, succeeded_at: created_at)
     purchase.update_columns(merchant_account_id: gumroad_account.id)
 
-    # The charge is built explicitly against the Gumroad-held account. Left to the factory it builds
-    # its own `create(:merchant_account)`, which draws the first value of the merchant-id sequence
-    # and collides with the `gumroad_stripe` fixture row the Minitest suite keeps in this database.
     charge_presentment = create(:charge_presentment,
                                 charge: create(:charge, seller:, merchant_account: gumroad_account),
                                 processor: StripeChargeProcessor.charge_processor_id,
@@ -63,9 +54,8 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     purchase.reload
   end
 
-  # Recreates a row exactly as the broken branch of create_holding_amount_for_seller wrote it: the
-  # holding side carries the buyer's presentment currency and its cent amount, while the issued side
-  # (and crucially holding_amount_net_cents) already carries the canonical USD figure.
+  # A row exactly as the broken branch wrote it: buyer's currency on the holding side, canonical
+  # USD on the issued side and in holding_amount_net_cents.
   def create_mislabelled_balance(canonical_gross_cents: 100_00, net_cents: 70_00,
                                  presentment_cents: 90_00, presentment_currency: Currency::EUR)
     purchase = create_presentment_purchase(canonical_gross_cents:, presentment_cents:, presentment_currency:)
@@ -78,7 +68,6 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
         issued_amount: BalanceTransaction::Amount.new(
           currency: Currency::USD, gross_cents: canonical_gross_cents, net_cents:,
         ),
-        # What the bug produced: the buyer's currency and cents, but the canonical USD net.
         holding_amount: BalanceTransaction::Amount.new(
           currency: presentment_currency, gross_cents: presentment_cents, net_cents:,
         ),
@@ -108,8 +97,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(summary[:from_holding_currency]).to eq(Currency::EUR)
       expect(summary[:to_holding_currency]).to eq(Currency::USD)
       expect(summary[:balance_transaction_ids]).to eq([bt.id])
-      # The whole safety case in one number: what the balance holds and what re-deriving it from
-      # the rows' issued amounts produces are the same, so relabelling moves no money.
+      # Same total both ways = relabelling moves no money.
       expect(summary[:rederived_holding_amount_cents]).to eq(summary[:holding_amount_cents])
     end
   end
@@ -118,22 +106,14 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     it "relabels the balance USD and makes it payable on both payout processors" do
       balance, bt, purchase = create_mislabelled_balance
 
-      # The two ways the mislabelling blocks money, asserted before the repair so the assertions
-      # after it are meaningful.
-      #
-      # Stripe is the loud one: is_balance_payable admits every Gumroad-held balance regardless of
-      # currency, so the rejection lands one step later in the aggregate guard — and it fails the
-      # whole payment, taking the seller's correctly-labelled USD rows with it.
+      # Before the repair: Stripe pulls the row in and fails the whole payment (its
+      # is_balance_payable admits every Gumroad-held balance); PayPal silently drops it.
       create(:merchant_account, user: seller, currency: Currency::USD,
                                 charge_processor_merchant_id: "acct_seller_#{SecureRandom.hex(6)}")
       failing_payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE)
       errors = StripePayoutProcessor.prepare_payment_and_set_amount(failing_payment, [balance])
       expect(errors.first).to include("holding_currency that does not match the payout currency")
       expect(failing_payment.failure_reason).to eq(Payment::FailureReason::CURRENCY_MISMATCH)
-
-      # PayPal is the silent one, and the one that gates most of these sellers: its
-      # is_balance_payable requires USD, so the row is dropped before a payment object exists. No
-      # failed payment, no failure reason — the seller is just short-paid.
       expect(PaypalPayoutProcessor.is_balance_payable(balance)).to eq(false)
 
       held_before = balance.holding_amount_cents
@@ -142,9 +122,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       result = service(balance_ids: [balance.id], dry_run: false).process
       expect(result[:stats][:corrected]).to eq(1)
 
-      # The audit record has to describe the row as it was BEFORE the repair. This write has no
-      # undo, so a summary built after the save — reporting "usd" as the currency it corrected away
-      # from — would be a record claiming nothing had been wrong.
+      # The audit record must describe the pre-repair state, not read the corrected label back.
       summary = result[:corrected].first
       expect(summary[:from_holding_currency]).to eq(Currency::EUR)
       expect(summary[:to_holding_currency]).to eq(Currency::USD)
@@ -152,15 +130,13 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
 
       balance.reload
       expect(balance.holding_currency).to eq(Currency::USD)
-      # No value moves. Only the label and the informational gross_cents were ever wrong, because
-      # the broken branch already wrote the canonical USD figure into net_cents.
+      # No value moves — only the label and the informational gross were wrong.
       expect(balance.holding_amount_cents).to eq(held_before)
       expect(balance.amount_cents).to eq(earned_before)
       expect(balance.currency).to eq(Currency::USD)
       expect(balance.state).to eq("unpaid")
 
-      # The transaction's holding fields now carry what the deployed fix (#6505) would have written
-      # for this charge, which is this row's own canonical issued amounts.
+      # The holding fields now carry what the fixed code (#6505) writes: the issued amounts.
       bt.reload
       expect(bt.holding_amount_currency).to eq(Currency::USD)
       expect(bt.holding_amount_gross_cents).to eq(100_00)
@@ -168,23 +144,11 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(bt.issued_amount_currency).to eq(Currency::USD)
       expect(bt.purchase_id).to eq(purchase.id)
 
-      # And now the payout outcome, per processor.
-      #
-      # For Stripe the assertion is on #prepare_payment_and_set_amount rather than on
-      # is_balance_payable, because is_balance_payable returns true for every Gumroad-held balance
-      # regardless of currency — it would have passed before the repair too, and asserting it would
-      # prove nothing. It runs on a fresh payment object because the earlier one is already marked
-      # failed.
-      #
-      # What is asserted is that the currency guard did NOT fire, not that the whole method
-      # succeeded: once past the guard it goes on to make a real Stripe internal transfer, which is
-      # a network call well downstream of the currency decision this repair is about. The guard is
-      # the first thing the method does, and `currency_mismatch` is exactly what stranded the
-      # seller, so its absence is the signal.
+      # Stripe: assert the currency guard does not fire (is_balance_payable would pass either way,
+      # so it proves nothing). Reaching the transfer — stubbed, since it moves real money — is the
+      # proof the guard passed; everything past it is downstream of the decision under test.
       repaired_payment = create(:payment, user: seller, processor: PayoutProcessorType::STRIPE)
 
-      # The transfer is stubbed rather than recorded: everything past the guard moves real money into
-      # the seller's Stripe account, and reaching it is itself the proof the guard passed.
       transferred = nil
       allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account) do |**kwargs|
         transferred = kwargs
@@ -202,8 +166,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(transferred[:currency]).to eq(Currency::USD)
       expect(transferred[:amount_cents]).to eq(balance.holding_amount_cents)
 
-      # For PayPal is_balance_payable IS the right assertion — unlike Stripe's, it is currency-aware,
-      # and it is the exact check that was silently dropping these rows.
+      # PayPal's is_balance_payable IS currency-aware — the exact check that dropped these rows.
       expect(PaypalPayoutProcessor.is_balance_payable(balance)).to eq(true)
     end
 
@@ -221,8 +184,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
           update_user_balance: true,
         )
       end
-      # Both land on the same balance: find_or_create_balance keys on the holding currency, which is
-      # why a mislabelled balance collects only mislabelled rows.
+      # Balances are keyed on holding currency, so both rows land on the same balance.
       expect(second_bt.balance_id).to eq(balance.id)
 
       result = service(balance_ids: [balance.id], dry_run: false).process
@@ -237,9 +199,9 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     end
 
     it "restamps a negative dispute leg, the one non-purchase shape in the affected set" do
-      # Production balance 16800893: a chargeback leg with negative amounts, booked after the
-      # ramp-down, whose dispute is recorded against the whole Charge (charge_id set, purchase_id
-      # empty). Reading only dispute.purchase silently skips this balance as having no purchase.
+      # Production balance 16800893: a chargeback leg with negative amounts whose dispute is
+      # recorded against the whole Charge (charge_id set, purchase_id empty). Reading only
+      # dispute.purchase silently skips this balance as having no purchase.
       dispute_time = Time.utc(2026, 7, 28, 15, 18, 5)
       disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 45_51, presentment_currency: Currency::GBP)
       charge = disputed_purchase.purchase_presentment.charge_presentment.charge
@@ -300,9 +262,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     it "refuses a row whose holding net disagrees with its issued net, rather than moving money" do
       balance, bt, _purchase = create_mislabelled_balance
 
-      # Break the property the repair rests on: copying the issued amounts onto this row would change
-      # its held value, not just its label. Every row the broken branch wrote satisfies the property
-      # by construction, so a row that does not came from somewhere else and must not be touched.
+      # Copying the issued amounts onto this row would change its held value, not just its label.
       bt.update_columns(issued_amount_net_cents: 55_00)
 
       result = service(balance_ids: [balance.id], dry_run: false).process
@@ -316,9 +276,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     it "refuses at the sum assertion when a balance's stored total does not match its rows" do
       balance, bt, _purchase = create_mislabelled_balance
 
-      # Per-row nets still agree, so eligibility passes — but the balance's own stored total has
-      # drifted from the sum of its rows. Relabelling would rewrite that total, so the service must
-      # refuse rather than silently reconcile it.
+      # Per-row nets agree but the balance's stored total drifted; relabelling would rewrite it.
       balance.update_columns(holding_amount_cents: 65_00)
 
       result = service(balance_ids: [balance.id], dry_run: false).process
@@ -378,9 +336,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(balance.reload.holding_currency).to eq(Currency::EUR)
     end
 
-    # The late edge of the window is the fix's deployment, and this is what it buys: a row written
-    # after the deployed code stopped being able to produce one is not from this regression. Either
-    # the cutoff is wrong or the fix is not working, and both need a human rather than a relabel.
+    # Deployed code cannot write these rows, so a later transaction needs a human, not a relabel.
     it "skips balances whose transactions were written after the fix deployed" do
       balance, bt, _purchase = create_mislabelled_balance
       bt.update_columns(created_at: fix_deployed_at + 1.hour)
@@ -399,9 +355,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(balance.reload.holding_currency).to eq(Currency::EUR)
     end
 
-    # Positive proof of origin rather than inference from "non-USD on a Gumroad-held account". The
-    # broken branch needed a canonical issued amount, which needs a PurchasePresentment — so a
-    # non-USD Gumroad-held row without presentment records was mislabelled by something else.
+    # A non-USD Gumroad-held row without presentment records was mislabelled by something else.
     it "skips a balance whose purchase has no presentment records" do
       balance, _bt, purchase = create_mislabelled_balance
       purchase.purchase_presentment.destroy!
@@ -413,8 +367,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     end
 
     it "skips a balance whose transaction reaches no purchase at all" do
-      # A credit leg: no purchase, no refund, no dispute, so there is no way to show it came from
-      # the presentment path.
+      # A credit leg: no purchase, refund or dispute to trace provenance through.
       credit_time = mislabelled_at
       bt = travel_to(credit_time) do
         BalanceTransaction.create!(
