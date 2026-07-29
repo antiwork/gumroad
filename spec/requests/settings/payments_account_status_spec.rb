@@ -42,8 +42,10 @@ describe "Settings::Payments account_status", type: :request do
   end
 
   it "redirects to login after TOS suspension invalidates the session" do
-    seller.flag_for_tos_violation!(author_name: "test", bulk: true)
-    seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
+    travel_to(1.minute.from_now) do
+      seller.flag_for_tos_violation!(author_name: "test", bulk: true)
+      seller.suspend_for_tos_violation!(author_name: "test", bulk: true)
+    end
 
     get settings_payments_path, headers: { "X-Inertia" => "true" }
 
@@ -51,8 +53,10 @@ describe "Settings::Payments account_status", type: :request do
   end
 
   it "redirects to login after fraud suspension invalidates the session" do
-    seller.flag_for_fraud!(author_name: "test")
-    seller.suspend_for_fraud!(author_name: "test")
+    travel_to(1.minute.from_now) do
+      seller.flag_for_fraud!(author_name: "test")
+      seller.suspend_for_fraud!(author_name: "test")
+    end
 
     get settings_payments_path, headers: { "X-Inertia" => "true" }
 

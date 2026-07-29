@@ -649,6 +649,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     // connection is left alone, because the server may still be generating on it.
     const streamAbort = new AbortController();
     let turnSettled = false;
+    const turnWasReset = { current: false };
 
     const handlers: AgentStreamHandlers = {
       onToken: (chunk) => {
@@ -656,11 +657,16 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         appendToken(chunk);
       },
       onReset: () => {
+        turnWasReset.current = true;
         // An intermediate tool-use turn streamed preamble text; clear it so the real reply replaces
-        // it instead of appending to it.
-        setMessages((prev) =>
-          prev.map((msg, i) => (i === assistantIndex && msg.role === "assistant" ? { ...msg, content: "" } : msg)),
-        );
+        // it instead of appending to it. Remove the empty turn entirely so a retry failure can insert
+        // its fallback, and restore the working state while the next model turn is silent.
+        setIsStreaming(false);
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next[assistantIndex]?.role === "assistant") next.splice(assistantIndex, 1);
+          return next;
+        });
       },
       onObjects: (objects) => upsertAssistant({ objects }),
       onProposedAction: (proposedAction) => upsertAssistant({ proposedAction }),
@@ -699,9 +705,21 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       // misrepresents a reply that exists (or will exist) in full server-side. Recover this exact
       // turn by its id before treating this as a failure. Server-reported errors (`error` events)
       // skip this: those turns were never saved, and the server already closed the stream, so the
-      // turn counts as settled.
+      // turn counts as settled. An error after a reset is the exception: it may follow replacement
+      // text from the retry, so reconcile that exact turn rather than preserving another false
+      // staging fragment or deleting a fallback that already persisted.
       let recovered = false;
-      if (e instanceof AgentStreamInterruptedError) {
+      if (e instanceof AgentStreamInterruptedError || (turnWasReset.current && !(e instanceof RateLimitError))) {
+        // The missing frame may have been the safety reset that replaces a false staging claim.
+        // Hide partial text before polling so the seller does not spend the recovery wait looking
+        // for a confirmation card the completed turn may say does not exist.
+        setIsStreaming(false);
+        setFollowUps([]);
+        setMessages((prev) => {
+          const next = [...prev];
+          if (next[assistantIndex]?.role === "assistant") next.splice(assistantIndex, 1);
+          return next;
+        });
         const outcome = await recoverInterruptedTurn(clientTurnId, assistantIndex);
         recovered = outcome === "recovered";
         turnSettled = outcome !== "inconclusive";
@@ -722,8 +740,9 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
         showAlert(message, isRateLimited ? "warning" : "error");
         setMessages((prev) => {
           const next = [...prev];
-          // If nothing streamed, drop in a fallback; otherwise keep what arrived. A rate-limited
-          // turn never streams anything, so its bubble always carries the explanation.
+          // Interrupted turns were removed before recovery, and a reset with no replacement token
+          // also leaves this slot empty. Preserve text for other explicit stream errors: the turn
+          // may have persisted before a trailing write failed.
           if (!next[assistantIndex] || next[assistantIndex]?.role !== "assistant") {
             next[assistantIndex] = {
               role: "assistant",
@@ -810,7 +829,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                   {message.content ? (
                     isUser ? (
                       // Square off the sender-side corner (bottom-right) into a subtle tail.
-                      <div className="rounded-2xl rounded-br-md bg-accent px-4 py-2 text-accent-foreground">
+                      <div className="rounded-2xl rounded-br-md bg-accent-with-text px-4 py-2 text-accent-foreground">
                         <p className="break-words whitespace-pre-wrap">{message.content}</p>
                       </div>
                     ) : (

@@ -47,7 +47,7 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         // The selected background belongs on the cell rather than the button: react-day-picker puts the
         // `selected` class on the <td>, and the button stretches over it, so anything opaque on the
         // button would cover this.
-        selected: classNames("bg-accent text-accent-foreground", defaultClassNames.selected),
+        selected: classNames("bg-accent-with-text text-accent-foreground", defaultClassNames.selected),
         // Disabled days should read as "unavailable" by fading out, matching how every other disabled
         // control in the app is styled (see Button/Input/Checkbox, all opacity-30).
         disabled: classNames("opacity-30", defaultClassNames.disabled),
