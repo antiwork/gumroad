@@ -194,6 +194,13 @@ $light-body-bg: #f4f4f0 !default;
   // this with a slightly adjusted colour for content-bearing accent fills.
   --accent-with-text: var(--accent);
   --color: 0 0 0;
+  // Stable stock-palette tokens for cross-origin payment fields. Seller CSS overrides the live
+  // tokens above, while these remain neutral through cart-driven theme transitions.
+  --neutral-accent: #{map-get($base-colors, "accent")};
+  --neutral-color: 0 0 0;
+  --neutral-danger: #{map-get($base-colors, "danger")};
+  --neutral-filled: 255 255 255;
+  --neutral-border-alpha: 1;
   --body-bg: #{$light-body-bg};
   --border-alpha: 1;
   --font-family: #{$font-family};
@@ -213,6 +220,9 @@ $light-body-bg: #f4f4f0 !default;
     --contrast-primary: 0 0 0;
     --color: 221 221 221;
     --filled: 0 0 0;
+    --neutral-color: 221 221 221;
+    --neutral-filled: 0 0 0;
+    --neutral-border-alpha: 0.35;
     --contrast-filled: 221 221 221;
     --contrast-black: 221 221 221;
     --border-alpha: 0.35;

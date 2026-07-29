@@ -10,8 +10,13 @@ import * as React from "react";
 
 import { paymentElementBillingDetailsCollection } from "$app/data/card_payment_method_data";
 import { getCheckoutStripeInstance } from "$app/utils/stripe_loader";
-import { getCssVariable } from "$app/utils/styles";
 
+import {
+  getCheckoutThemeColors,
+  useCheckoutTheme,
+  useCheckoutStripeFonts,
+  useNeutralCheckoutThemeColors,
+} from "$app/components/Checkout/checkoutTheme";
 import {
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
   type PaymentElementConfig,
@@ -406,12 +411,15 @@ const StripePaymentElementProvider = ({
     onMountedPaymentMethodTypes?.(mountedPaymentMethodTypes);
   }, [mountedPaymentMethodTypes, onMountedPaymentMethodTypes]);
   const font = useFont();
-  const color = getCssVariable("color").split(" ").join(",");
-  const backgroundColor = `rgb(${getCssVariable("filled").split(" ").join(",")})`;
-  const borderColor = `rgb(${color}, ${getCssVariable("border-alpha")})`;
-  const dangerColor = `rgb(${getCssVariable("danger").split(" ").join(",")})`;
-  const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
-  const fontFamily = `${font.name}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  const checkoutTheme = useCheckoutTheme();
+  const neutralColors = useNeutralCheckoutThemeColors();
+  const colors = React.useMemo(
+    () => (checkoutTheme ? getCheckoutThemeColors(checkoutTheme) : neutralColors),
+    [checkoutTheme, neutralColors],
+  );
+  const fontFamily =
+    checkoutTheme?.font_family ?? `${font.name}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  const stripeFonts = useCheckoutStripeFonts(font);
 
   const options = React.useMemo<StripeElementsOptions>(
     () => ({
@@ -423,7 +431,7 @@ const StripePaymentElementProvider = ({
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
         : {}),
-      fonts: [{ family: font.name, src: `url(${font.url})` }],
+      fonts: stripeFonts,
       appearance: {
         variables: {
           fontFamily,
@@ -433,12 +441,13 @@ const StripePaymentElementProvider = ({
           spacingUnit: "0.25rem",
           gridRowSpacing: "1rem",
           gridColumnSpacing: "1rem",
-          colorText: `rgb(${color})`,
-          colorTextPlaceholder: placeholderColor,
-          colorBackground: backgroundColor,
-          colorDanger: dangerColor,
+          colorText: colors.text,
+          colorTextPlaceholder: colors.placeholder,
+          colorBackground: colors.background,
+          colorDanger: colors.danger,
+          colorPrimary: colors.text,
           borderRadius: "4px",
-          focusOutline: `2px solid rgb(${getCssVariable("accent").split(" ").join(",")})`,
+          focusOutline: `2px solid ${colors.indicator}`,
           focusBoxShadow: "none",
         },
         rules: {
@@ -449,7 +458,7 @@ const StripePaymentElementProvider = ({
           ...(flatLayout
             ? {
                 ".AccordionItem": {
-                  borderColor,
+                  borderColor: colors.border,
                   boxShadow: "none",
                   borderRadius: "4px",
                   // Match the flat PayPal row appended below the element (p-4 in
@@ -467,7 +476,7 @@ const StripePaymentElementProvider = ({
             fontWeight: "400",
           },
           ".Input": {
-            borderColor,
+            borderColor: colors.border,
             boxShadow: "none",
             minHeight: "3rem",
             padding: "0.75rem 1rem",
@@ -475,8 +484,17 @@ const StripePaymentElementProvider = ({
           ".Input:focus": {
             boxShadow: "none",
           },
+          ".AccordionItem--selected": {
+            borderColor: colors.indicator,
+          },
+          ".RadioIconOuter--checked": {
+            stroke: colors.indicator,
+          },
+          ".RadioIconInner--checked": {
+            fill: colors.indicator,
+          },
           ".Label": {
-            color: `rgb(${color})`,
+            color: colors.text,
             fontSize: "1rem",
             fontWeight: "400",
             marginBottom: "0.5rem",
@@ -485,20 +503,15 @@ const StripePaymentElementProvider = ({
       },
     }),
     [
-      backgroundColor,
-      borderColor,
-      color,
+      colors,
       creation.currency,
       creation.mode,
-      dangerColor,
       elementsOptions,
-      font.name,
-      font.url,
       fontFamily,
       initialAmount,
       mountedPaymentMethodTypes,
-      placeholderColor,
       flatLayout,
+      stripeFonts,
     ],
   );
 

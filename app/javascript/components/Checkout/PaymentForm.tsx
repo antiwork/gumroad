@@ -39,6 +39,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
+import { useShouldInvertNativePayPalButton } from "$app/components/Checkout/checkoutTheme";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import { resolveHeldWalletPayment, type HeldWalletPayment } from "$app/components/Checkout/heldWalletPayment";
@@ -78,7 +79,6 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
 import { Select } from "$app/components/ui/Select";
-import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import {
   RECAPTCHA_UNAVAILABLE_MESSAGE,
@@ -1274,7 +1274,7 @@ const BraintreePayPal = ({ token }: { token: string }) => {
 const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
-  const isDarkTheme = useIsDarkTheme();
+  const shouldInvert = useShouldInvertNativePayPalButton();
 
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -1358,7 +1358,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
       <div
         ref={ref}
         className={classNames(isProcessing(state) && "hidden")}
-        style={isDarkTheme ? { filter: "invert(1) grayscale(1)" } : undefined}
+        style={shouldInvert ? { filter: "invert(1) grayscale(1)" } : undefined}
       />
       {isProcessing(state) ? <LoadingSpinner /> : null}
     </>

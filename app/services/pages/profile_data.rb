@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  # Bumped when the shape of the cached payload changes (v4 added products' cover_url),
+  # Bumped when the shape of the cached payload changes (v5 added the *_total counts),
   # so already-cached entries built by the previous shape are not served to pages that
   # now expect the new keys.
-  CACHE_VERSION = "v4"
+  CACHE_VERSION = "v5"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
 
@@ -14,10 +14,18 @@ class Pages::ProfileData
     # no profile row yet, so every read off this is nil-safe.
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     Rails.cache.fetch(cache_key(seller, seller_profile)) do
+      products = products(seller)
+      posts = posts(seller)
       {
-        products: products(seller),
-        posts: posts(seller),
+        products:,
+        posts:,
         pages: pages(seller_profile),
+        # A page has no way to discover what MAX_ITEMS dropped: CUSTOM_HTML_CSP sets
+        # connect-src 'none', so this payload is its only product source. Emitting the
+        # true totals lets a page say "showing 100 of 114" instead of silently
+        # advertising an incomplete catalogue (gumroad-private#1522).
+        products_total: products_total(seller),
+        posts_total: posts_total(seller),
       }
     end
   end
@@ -74,6 +82,14 @@ class Pages::ProfileData
     return if image.nil? || image.unsplash_url.present?
 
     image.url
+  end
+
+  def self.products_total(seller)
+    seller.products.alive.not_archived.not_draft.count
+  end
+
+  def self.posts_total(seller)
+    seller.installments.visible_on_profile.count
   end
 
   def self.posts(seller)

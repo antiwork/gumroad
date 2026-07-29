@@ -19,9 +19,21 @@ describe Ai::StoreAgentService do
     allow(Ai::StoreAgentApiClient).to receive(:new).and_return(api_client)
   end
 
-  # A model turn with plain assistant text and no tool use.
-  def text_result(text)
+  # A model turn with assistant text and the required typed terminal marker.
+  def text_result(text, outcome: "reply_only")
+    complete_turn_result(text, outcome:)
+  end
+
+  def untyped_text_result(text)
     Ai::AnthropicClient::Result.new(text:, tool_uses: [], stop_reason: "end_turn")
+  end
+
+  def complete_turn_result(text, outcome:)
+    Ai::AnthropicClient::Result.new(
+      text:,
+      tool_uses: [{ id: "toolu_complete", name: "complete_turn", input: { "outcome" => outcome } }],
+      stop_reason: "tool_use",
+    )
   end
 
   # A model turn that asks to use a tool (Anthropic tool_use block).
@@ -82,9 +94,118 @@ describe Ai::StoreAgentService do
       service.respond(messages: [{ role: "user", content: "hi" }])
 
       expect(captured[:system]).to include("Gumroad's store assistant")
-      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write")
+      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "complete_turn")
       # System prompt is NOT echoed into the messages array (it's Anthropic's top-level param).
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
+    end
+
+    context "when the model completes a turn" do
+      it "rejects an untyped staging claim that the prose backstop does not recognize" do
+        false_claim = "Your edit is waiting in the action panel. Use the button there."
+        expect(described_class::STAGED_CLAIM_PATTERNS.none? { |pattern| false_claim.match?(pattern) }).to be(true)
+        allow(client).to receive(:messages).and_return(
+          untyped_text_result(false_claim),
+          complete_turn_result("I couldn't prepare that change. Please ask me to try again.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).not_to eq(false_claim)
+        expect(result[:outcome]).to eq("reply_only")
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "uses server-owned confirmation copy for a typed proposal" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_offer_code",
+                        "path_params" => { "link_id" => "prod_1" },
+                        "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                      }),
+          complete_turn_result("The action panel is ready.", outcome: "proposal_ready"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(result[:reply]).to eq("I prepared that change. Review it below, then confirm it when you're ready.")
+        expect(result[:outcome]).to eq("proposal_ready")
+        expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "uses the honest no-proposal fallback when proposal_ready never has a proposal" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("The action panel is ready.", outcome: "proposal_ready"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result).to include(
+          outcome: "reply_only",
+          reply: described_class::NOTHING_STAGED_REPLY,
+          proposed_action: nil,
+        )
+      end
+
+      it "keeps a real proposal when the model reports reply_only twice" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_offer_code",
+                        "path_params" => { "link_id" => "prod_1" },
+                        "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                      }),
+          complete_turn_result("Nothing changed.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(client).to have_received(:messages).exactly(3).times
+        expect(result[:outcome]).to eq("proposal_ready")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+        expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "rejects complete_turn mixed with an API tool without running the API tool" do
+        mixed_turn = Ai::AnthropicClient::Result.new(
+          text: "Done.",
+          tool_uses: [
+            {
+              id: "toolu_write",
+              name: "api_write",
+              input: {
+                "endpoint" => "create_offer_code",
+                "path_params" => { "link_id" => "prod_1" },
+                "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+              },
+            },
+            { id: "toolu_complete", name: "complete_turn", input: { "outcome" => "proposal_ready" } },
+          ],
+          stop_reason: "tool_use",
+        )
+        allow(client).to receive(:messages).and_return(
+          mixed_turn,
+          complete_turn_result("I did not prepare that change.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(result[:outcome]).to eq("reply_only")
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "shares one retry budget across different terminal failures" do
+        allow(client).to receive(:messages).and_return(
+          untyped_text_result("I need to retry."),
+          complete_turn_result("Staged. Confirm that card.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+        expect(result[:proposed_action]).to be_nil
+      end
     end
 
     describe "api_read" do
@@ -210,6 +331,24 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/two copies of an action that is\s+unsafe to run twice/)
       end
 
+      # The server replaces the model's final prose with PROPOSAL_READY_REPLY on every proposal
+      # turn, so the prompt must say so — otherwise the model authors answer text there that is
+      # always discarded, losing the informational half of a combined ask.
+      it "teaches the model that proposal-turn text is replaced by server copy, so answers go before api_write" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to match(/your final\s+text is replaced with fixed server copy/)
+        expect(captured[:system]).to match(/answer any informational part of their request BEFORE calling api_write/)
+        expect(captured[:system]).to match(/on a proposal turn that text is replaced with\s+fixed server copy and never shown/)
+        expect(captured[:system]).not_to match(/After api_write, tell the creator you've prepared it/)
+      end
+
       # Regression for gumroad-private#1463: asked whether product pages could be styled like the
       # storefront, the agent said no — product pages "aren't customizable", there is "no endpoint
       # and no dashboard setting" for their colours — while the seller's product pages were already
@@ -273,6 +412,26 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/Placeholder text you write inside\s+these elements is always overwritten/)
         expect(captured[:system]).to match(/Only include\s+an avatar, logo, or photo when you have a real Gumroad-hosted image url/)
         expect(captured[:system]).to match(/Never author an empty image slot/)
+      end
+
+      # Both payload arrays are capped at Pages::ProfileData::MAX_ITEMS, so a page that renders
+      # either one has to be told to disclose the cap. Products alone is not enough: a posts
+      # archive rendering the first 100 of 260 reads to the creator as posts having vanished,
+      # which is the same defect (gumroad-private#1522).
+      it "requires a visible count whenever either the product or the post list is capped" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("products_total")
+        expect(captured[:system]).to include("posts_total")
+        expect(captured[:system]).to match(/posts_total\s+exceeds posts\.length/)
+        expect(captured[:system]).to match(/MUST show a visible count for that section/)
+        expect(captured[:system]).to match(/Showing 100 of 260 posts/)
       end
 
       it "rejects an unknown endpoint id without calling the API" do
@@ -342,7 +501,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "link_id" => "prod_1" },
                         "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
                       }),
-          text_result("I've prepared a 20% off code called LAUNCH for your confirmation."),
+          text_result("I've prepared a 20% off code called LAUNCH for your confirmation.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "Make a 20% off code LAUNCH" }])
@@ -369,7 +528,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "id" => "prod_1" },
                         "params" => { "price" => { "unexpected" => "object" } },
                       }),
-          text_result("Prepared the change."),
+          text_result("Prepared the change.", outcome: "proposal_ready"),
         )
 
         result = nil
@@ -386,7 +545,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "id" => "prod_1" },
                         "params" => { "description" => long_description },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "update the description" }])
@@ -400,7 +559,7 @@ describe Ai::StoreAgentService do
                         "path_params" => {},
                         "params" => { "name" => "P", "price" => "" },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "make a product with no price yet" }])
@@ -414,7 +573,7 @@ describe Ai::StoreAgentService do
                         "path_params" => {},
                         "params" => { "name" => "P", "price" => "free" },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "make it free" }])
@@ -428,7 +587,7 @@ describe Ai::StoreAgentService do
                         "path_params" => {},
                         "params" => { "name" => "P", "price" => true },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = nil
@@ -443,7 +602,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "link_id" => "prod_1" },
                         "params" => { "name" => "X", "amount_off" => { "unexpected" => "object" } },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         expect { service.respond(messages: [{ role: "user", content: "make a code" }]) }.not_to raise_error
@@ -456,7 +615,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "id" => "prod_1" },
                         "params" => { "description" => "" },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "clear the description" }])
@@ -548,7 +707,7 @@ describe Ai::StoreAgentService do
             first = false
             two_write_uses
           else
-            text_result("I've prepared the FIRST code for your confirmation.")
+            text_result("I've prepared the FIRST code for your confirmation.", outcome: "proposal_ready")
           end
         end
 
@@ -573,13 +732,17 @@ describe Ai::StoreAgentService do
       end
 
       it "re-asks the model to stage it for real and returns the recovered turn" do
-        replies = [text_result("Staged. Confirm that card and the discount goes live."), write_use, text_result("Staged now — confirm the card.")]
+        replies = [
+          text_result("Staged. Confirm that card and the discount goes live."),
+          write_use,
+          text_result("Staged now — confirm the card.", outcome: "proposal_ready"),
+        ]
         allow(client).to receive(:messages) { replies.shift }
 
         result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
         expect(result[:proposed_action]).to include(type: "api_write")
-        expect(result[:reply]).to eq("Staged now — confirm the card.")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
         expect(replies).to be_empty
       end
 
@@ -599,10 +762,17 @@ describe Ai::StoreAgentService do
 
         expect(result[:reply]).to eq(correction_reply)
         expect(captured.last[:role]).to eq("user")
-        expect(captured.last[:content]).to eq(described_class::STAGED_CLAIM_CORRECTION)
-        # The model's own false claim is replayed as the assistant turn it is, so the correction
-        # reads as a response to it.
-        expect(captured[-2]).to eq(role: "assistant", content: "Staged. Confirm that card.")
+        correction_result = captured.last[:content].sole
+        expect(JSON.parse(correction_result[:content])).to eq("error" => described_class::STAGED_CLAIM_CORRECTION)
+        # Rejected terminal tools are replayed with a matching tool_result, which keeps the
+        # correction valid under Anthropic's tool-use message protocol.
+        expect(captured[-2][:role]).to eq("assistant")
+        expect(captured[-2][:content]).to include(
+          type: "tool_use",
+          id: "toolu_complete",
+          name: "complete_turn",
+          input: { "outcome" => "reply_only" },
+        )
       end
 
       it "does not ask for a correction the guard would reject" do
@@ -650,12 +820,12 @@ describe Ai::StoreAgentService do
       end
 
       it "leaves a legitimate staging claim alone when the action really was proposed" do
-        replies = [write_use, text_result("Staged. Confirm that card and it's live.")]
+        replies = [write_use, text_result("Staged. Confirm that card and it's live.", outcome: "proposal_ready")]
         allow(client).to receive(:messages) { replies.shift }
 
         result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
-        expect(result[:reply]).to eq("Staged. Confirm that card and it's live.")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
         expect(result[:proposed_action]).to include(type: "api_write")
       end
 
@@ -839,15 +1009,15 @@ describe Ai::StoreAgentService do
       it "reserves enough recovery turns when the claim arrives at the normal iteration cap" do
         stub_const("#{described_class}::MAX_TOOL_ITERATIONS", 1)
         claim = "Staged. Confirm that card."
-        replies = [text_result(claim), write_use, text_result("Staged now — confirm the card.")]
+        replies = [text_result(claim), write_use, text_result("Staged now — confirm the card.", outcome: "proposal_ready")]
         allow(client).to receive(:messages) { replies.shift }
 
         result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
         expect(client).to have_received(:messages)
-          .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::STAGED_CLAIM_RECOVERY_ITERATIONS).times
+          .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::TURN_CONTRACT_RECOVERY_ITERATIONS).times
         expect(replies).to be_empty
-        expect(result[:reply]).to eq("Staged now — confirm the card.")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
         expect(result[:proposed_action]).to include(type: "api_write")
       end
     end
@@ -931,6 +1101,30 @@ describe Ai::StoreAgentService do
       [events, result]
     end
 
+    it "clears unvalidated text when the model stream fails before the terminal outcome" do
+      allow(client).to receive(:stream_messages) do |**_args, &on_text|
+        on_text.call("I prepared that change.")
+        raise Ai::AnthropicClient::Error, "stream failed"
+      end
+      events = []
+      reply_completed = false
+
+      expect do
+        service.respond_streaming(
+          messages: [{ role: "user", content: "fix my header" }],
+          on_reply_complete: ->(_turn) { reply_completed = true },
+        ) { |event, payload| events << [event, payload] }
+      end.to raise_error(Ai::AnthropicClient::Error, "stream failed")
+
+      expect(events).to eq(
+        [
+          [:token, { text: "I prepared that change." }],
+          [:reset, {}],
+        ],
+      )
+      expect(reply_completed).to be(false)
+    end
+
     it "streams the reply token-by-token and then suggests follow-up prompts" do
       stub_stream_turns(stream: ["You have ", "3 products."], result: text_result("You have 3 products."))
       # The follow-up suggestions use the buffered (non-streaming) call.
@@ -969,14 +1163,22 @@ describe Ai::StoreAgentService do
       # suggestions LLM call and before any trailing event is written to the (possibly already
       # dead) client socket — so callers can persist it no matter what happens afterwards.
       expect(order).to eq([:reply_complete, :suggestions_call, :suggestions])
-      expect(completed_turn).to eq(reply: "Here are your numbers.", proposed_action: nil, objects: [])
+      expect(completed_turn).to eq(
+        outcome: "reply_only",
+        reply: "Here are your numbers.",
+        proposed_action: nil,
+        objects: [],
+      )
       expect(result[:suggestions]).to eq(["Show my sales"])
     end
 
     it "emits a proposed action over the stream without mutating" do
       stub_stream_turns(
         { stream: [], result: tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" } }) },
-        { stream: ["I've prepared that discount for your confirmation."], result: text_result("I've prepared that discount for your confirmation.") },
+        {
+          stream: ["I've prepared that discount for your confirmation."],
+          result: text_result("I've prepared that discount for your confirmation.", outcome: "proposal_ready"),
+        },
       )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
@@ -987,6 +1189,35 @@ describe Ai::StoreAgentService do
         expect(action_event.last[:proposed_action]).to include(type: "api_write")
         expect(result[:proposed_action]).to include(type: "api_write")
       end.not_to change { seller.offer_codes.count }
+    end
+
+    it "persists a proposal before streaming its server-owned confirmation" do
+      model_reply = "The action panel is ready."
+      stub_stream_turns(
+        { stream: [], result: tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" } }) },
+        {
+          stream: [model_reply],
+          result: text_result(model_reply, outcome: "proposal_ready"),
+        },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+      order = []
+
+      result = service.respond_streaming(
+        messages: [{ role: "user", content: "make a 20% code" }],
+        on_reply_complete: ->(turn) { order << [:persist, turn.dup] },
+      ) do |event, payload|
+        order << [event, payload]
+      end
+
+      persisted_index = order.index { |event, _| event == :persist }
+      reply_index = order.index { |event, payload| event == :token && payload[:text] == described_class::PROPOSAL_READY_REPLY }
+      proposal_index = order.index { |event, _| event == :proposed_action }
+      expect(persisted_index).to be < reply_index
+      expect(reply_index).to be < proposal_index
+      expect(order).not_to include([:token, { text: model_reply }])
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+      expect(result[:outcome]).to eq("proposal_ready")
     end
 
     it "still returns a reply when the follow-up suggestion call fails" do
@@ -1077,6 +1308,26 @@ describe Ai::StoreAgentService do
       expect(events.any? { |event, _| event == :proposed_action }).to be(false)
     end
 
+    it "rejects untyped streamed text even when the prose backstop does not recognize it" do
+      false_claim = "Your edit is waiting in the action panel. Use the button there."
+      honest_reply = "I couldn't prepare that change. Please ask me to try again."
+      stub_stream_turns(
+        { stream: [false_claim], result: untyped_text_result(false_claim) },
+        { stream: [honest_reply], result: text_result(honest_reply) },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "fix my header" }])
+      visible_reply = events.each_with_object(+"") do |(event, payload), text|
+        text.clear if event == :reset
+        text << payload[:text] if event == :token
+      end
+
+      expect(visible_reply).to eq(honest_reply)
+      expect(result[:reply]).to eq(honest_reply)
+      expect(result[:proposed_action]).to be_nil
+    end
+
     it "finalizes the honest fallback before writing its terminal reset to the socket" do
       claim = "Staged. Confirm that card."
       stub_stream_turns(
@@ -1103,6 +1354,7 @@ describe Ai::StoreAgentService do
 
       expect(completed_turns).to contain_exactly(
         {
+          outcome: "reply_only",
           reply: described_class::NOTHING_STAGED_REPLY,
           proposed_action: nil,
           objects: [],
@@ -1120,13 +1372,16 @@ describe Ai::StoreAgentService do
       stub_stream_turns(
         { stream: [claim], result: text_result(claim) },
         { stream: [], result: write_turn },
-        { stream: ["Staged now — confirm the card."], result: text_result("Staged now — confirm the card.") },
+        {
+          stream: ["Staged now — confirm the card."],
+          result: text_result("Staged now — confirm the card.", outcome: "proposal_ready"),
+        },
       )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
       events, result = collect_events([{ role: "user", content: "make a 20% code" }])
 
-      expect(result[:reply]).to eq("Staged now — confirm the card.")
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:proposed_action]).to include(type: "api_write")
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end
@@ -1142,18 +1397,21 @@ describe Ai::StoreAgentService do
       stub_stream_turns(
         { stream: [claim], result: text_result(claim) },
         { stream: [], result: write_turn },
-        { stream: ["Staged now — confirm the card."], result: text_result("Staged now — confirm the card.") },
+        {
+          stream: ["Staged now — confirm the card."],
+          result: text_result("Staged now — confirm the card.", outcome: "proposal_ready"),
+        },
       )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
       events, result = collect_events([{ role: "user", content: "make a 20% code" }])
 
       expect(client).to have_received(:stream_messages)
-        .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::STAGED_CLAIM_RECOVERY_ITERATIONS).times
+        .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::TURN_CONTRACT_RECOVERY_ITERATIONS).times
       reset_index = events.index { |event, _| event == :reset }
-      recovered_reply_index = events.index { |event, payload| event == :token && payload[:text] == "Staged now — confirm the card." }
+      recovered_reply_index = events.index { |event, payload| event == :token && payload[:text] == described_class::PROPOSAL_READY_REPLY }
       expect(reset_index).to be < recovered_reply_index
-      expect(result[:reply]).to eq("Staged now — confirm the card.")
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:proposed_action]).to include(type: "api_write")
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end

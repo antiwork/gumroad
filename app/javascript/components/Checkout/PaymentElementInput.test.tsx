@@ -3,6 +3,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { type CheckoutTheme, CheckoutThemeProvider } from "$app/components/Checkout/checkoutTheme";
 import {
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
@@ -22,6 +23,16 @@ const elementsMounts = vi.hoisted<{
   paymentMethodTypes: [],
   unmounts: 0,
 }));
+
+const elementsRender = vi.hoisted<{
+  options: {
+    fonts?: unknown;
+    appearance?: {
+      variables?: Record<string, string>;
+      rules?: Record<string, Record<string, string>>;
+    };
+  } | null;
+}>(() => ({ options: null }));
 
 // Captures the options the PaymentElement was last rendered with, plus its onChange handler so
 // tests can simulate the buyer selecting a payment-method row inside the element.
@@ -47,8 +58,18 @@ vi.mock("@stripe/react-stripe-js", async () => {
       options,
     }: {
       children: React.ReactNode;
-      options: { currency: string; amount?: number; paymentMethodTypes?: readonly string[] };
+      options: {
+        currency: string;
+        amount?: number;
+        paymentMethodTypes?: readonly string[];
+        fonts?: unknown;
+        appearance?: {
+          variables?: Record<string, string>;
+          rules?: Record<string, Record<string, string>>;
+        };
+      };
     }) => {
+      elementsRender.options = options;
       React.useEffect(() => {
         elementsMounts.currencies.push(options.currency);
         elementsMounts.amounts.push(options.amount);
@@ -82,7 +103,17 @@ vi.mock("@stripe/react-stripe-js", async () => {
 });
 
 vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn() }));
-vi.mock("$app/utils/styles", () => ({ getCssVariable: () => "0 0 0" }));
+vi.mock("$app/utils/styles", () => ({
+  getCssVariable: (name: string) =>
+    ({
+      "gray-3": "0.5",
+      "neutral-accent": "255 144 232",
+      "neutral-border-alpha": prefersDark ? "0.35" : "1",
+      "neutral-color": prefersDark ? "221 221 221" : "0 0 0",
+      "neutral-danger": "220 52 30",
+      "neutral-filled": prefersDark ? "0 0 0" : "255 255 255",
+    })[name] ?? "9 9 9",
+}));
 vi.mock("$app/components/DesignSettings", () => ({ useFont: () => ({ name: "Inter", url: "inter.woff2" }) }));
 vi.mock("$app/components/LoadingSpinner", () => ({ LoadingSpinner: () => null }));
 vi.mock("$app/components/ui/Fieldset", () => ({
@@ -97,6 +128,18 @@ const elementsOptions: PaymentElementConfig = {
   payment_method_creation: "manual",
   stripe_link_enabled: true,
 };
+
+const stripeFontsCssSource =
+  "https://fonts.googleapis.com/css2?family=Domine:wght@400;600&family=Inter:wght@400;600&family=Merriweather:wght@400;600&family=Roboto%20Mono:wght@400;600&family=Roboto%20Slab:wght@400;600&display=swap";
+const sellerTheme: CheckoutTheme = {
+  accent_color: "#009a49",
+  indicator_color: "#009a49",
+  background_color: "#f8efe3",
+  text_color: "#000000",
+  danger_color: "#9b1c12",
+  font_family: '"Roboto Mono", "ABC Favorit", monospace',
+};
+let prefersDark = false;
 
 const props = {
   elementsOptions,
@@ -113,14 +156,27 @@ const props = {
 
 describe("PaymentElementInput", () => {
   beforeEach(() => {
+    prefersDark = false;
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({
+        matches: prefersDark,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
     elementsMounts.currencies = [];
     elementsMounts.amounts = [];
     elementsMounts.paymentMethodTypes = [];
     elementsMounts.unmounts = 0;
+    elementsRender.options = null;
     props.onReady.mockClear();
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   // The client-confirm lane is the one with a resolver-computed method list (the server-confirm
   // config is pinned to card), so the narrowing tests mount that config.
@@ -241,6 +297,117 @@ describe("PaymentElementInput", () => {
 
     expect(elementsMounts.currencies).toEqual(["cad"]);
     expect(elementsMounts.unmounts).toBe(0);
+  });
+
+  it("uses the seller theme instead of CSS sampled before the Inertia head update", () => {
+    render(
+      <CheckoutThemeProvider value={{ theme: sellerTheme, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsRender.options?.fonts).toEqual([
+      { family: "Inter", src: "url(inter.woff2)" },
+      { cssSrc: stripeFontsCssSource },
+    ]);
+    expect(elementsRender.options?.appearance?.variables).toMatchObject({
+      colorText: "rgb(0,0,0)",
+      colorTextPlaceholder: "rgb(0,0,0, 0.5)",
+      colorBackground: "rgb(248,239,227)",
+      colorDanger: "rgb(155,28,18)",
+      colorPrimary: "rgb(0,0,0)",
+      fontFamily: sellerTheme.font_family,
+      focusOutline: "2px solid rgb(0,154,73)",
+    });
+    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0)");
+  });
+
+  it("draws the focus ring and selected-method marker from the floored indicator, not the saved accent", () => {
+    const theme: CheckoutTheme = {
+      ...sellerTheme,
+      accent_color: "#ffffff",
+      indicator_color: "#949494",
+      background_color: "#ffffff",
+    };
+
+    render(
+      <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsRender.options?.appearance?.variables).toMatchObject({
+      colorPrimary: "rgb(0,0,0)",
+      focusOutline: "2px solid rgb(148,148,148)",
+    });
+    expect(elementsRender.options?.appearance?.rules).toMatchObject({
+      ".AccordionItem--selected": { borderColor: "rgb(148,148,148)" },
+      ".RadioIconOuter--checked": { stroke: "rgb(148,148,148)" },
+      ".RadioIconInner--checked": { fill: "rgb(148,148,148)" },
+    });
+  });
+
+  it("loads seller fonts before a cart-driven theme change without remounting", () => {
+    const { rerender } = render(
+      <CheckoutThemeProvider value={{ theme: null, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+    const initialFonts = elementsRender.options?.fonts;
+
+    rerender(
+      <CheckoutThemeProvider value={{ theme: sellerTheme, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsMounts.currencies).toEqual(["usd"]);
+    expect(elementsMounts.unmounts).toBe(0);
+    expect(elementsRender.options?.fonts).toEqual(initialFonts);
+    expect(elementsRender.options?.appearance?.variables?.fontFamily).toBe(sellerTheme.font_family);
+  });
+
+  it("restores the neutral palette when a cart becomes multi-seller", () => {
+    const { rerender } = render(
+      <CheckoutThemeProvider value={{ theme: sellerTheme, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    rerender(
+      <CheckoutThemeProvider value={{ theme: null, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsMounts.currencies).toEqual(["usd"]);
+    expect(elementsMounts.unmounts).toBe(0);
+    expect(elementsRender.options?.appearance?.variables).toMatchObject({
+      colorText: "rgb(0,0,0)",
+      colorTextPlaceholder: "rgb(0,0,0, 0.5)",
+      colorBackground: "rgb(255,255,255)",
+      colorDanger: "rgb(220,52,30)",
+      colorPrimary: "rgb(0,0,0)",
+      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      focusOutline: "2px solid rgb(255,144,232)",
+    });
+  });
+
+  it("uses the immutable neutral dark tokens", () => {
+    prefersDark = true;
+
+    render(
+      <CheckoutThemeProvider value={{ theme: null, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsRender.options?.appearance?.variables).toMatchObject({
+      colorText: "rgb(221,221,221)",
+      colorTextPlaceholder: "rgb(221,221,221, 0.5)",
+      colorBackground: "rgb(0,0,0)",
+    });
+    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(221,221,221, 0.35)");
   });
 
   it("remounts when the currency genuinely changes", () => {
@@ -366,7 +533,9 @@ describe("PaymentElementInput", () => {
           mountCurrency="inr"
         />,
       );
-      act(() => vi.advanceTimersByTime(1_000)); // past the prefill debounce
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
       // The element's options must carry the just-typed name, not a frozen snapshot.
       act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
       expect(paymentElementRender.options?.defaultValues).toEqual({
