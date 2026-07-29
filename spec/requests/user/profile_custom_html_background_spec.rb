@@ -407,4 +407,84 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
   end
+
+  # A mutation record names only the node that moved. Templating a chunk of
+  # markup in — innerHTML, a cloned <template>, a framework mount — hands the
+  # observer one container element, and the stylesheet that repaints the canvas
+  # rides inside it. Checking the container alone sees an ordinary <div>.
+  context "when the page changes its background by inserting a nested stylesheet" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="insert" type="button">Add theme</button>
+        </main>
+        <script>
+          document.getElementById("insert").addEventListener("click", function () {
+            var wrapper = document.createElement("div");
+            wrapper.innerHTML = "<section><style>body{background:#101010}</style></section>";
+            document.body.appendChild(wrapper);
+          });
+        </script>
+      HTML
+    end
+
+    it "re-reports the new color to the wrapper" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Add theme" }
+
+      expect_wrapper_background("rgb(16, 16, 16)")
+      expect(theme_color).to eq("rgb(16, 16, 16)")
+    end
+  end
+
+  # The nested case compounds with the late-load one: the container's insertion
+  # is the only mutation, and the sheet it carries applies after it. So the
+  # descendant walk has to hand that <link> its load listener too, or the one
+  # report this ever queues reads the pre-stylesheet color.
+  context "when the page changes its background by inserting a nested external stylesheet" do
+    let(:stylesheet_path) { Rails.root.join("public", "spec-nested-late-theme.css") }
+
+    before do
+      File.write(stylesheet_path, "body{background:#101010}")
+      # Same-origin would be simplest, but this document's CSP has no 'self' in
+      # style-src, so the sheet has to come from the allowed asset host.
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="load" type="button">Load theme</button>
+        </main>
+        <script>
+          document.getElementById("load").addEventListener("click", function () {
+            var wrapper = document.createElement("div");
+            var section = document.createElement("section");
+            var link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = "#{PROTOCOL}://#{ASSET_DOMAIN}/spec-nested-late-theme.css";
+            section.appendChild(link);
+            wrapper.appendChild(section);
+            document.body.appendChild(wrapper);
+          });
+        </script>
+      HTML
+    end
+
+    after { FileUtils.rm_f(stylesheet_path) }
+
+    it "re-reports the new color once the nested stylesheet has loaded" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Load theme" }
+
+      expect_wrapper_background("rgb(16, 16, 16)")
+      expect(theme_color).to eq("rgb(16, 16, 16)")
+    end
+  end
 end

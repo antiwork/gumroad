@@ -303,6 +303,16 @@ module RendersCustomHtmlPages
         function watchStylesheetLoad(node) {
           if (node && node.nodeName === "LINK") node.addEventListener("load", queueReport);
         }
+        // A record names only the node that moved, so a seller script appending
+        // or dropping a container carries its <style>/<link> descendants past
+        // any check that looks at the container alone. Walk into it.
+        function eachStylesheet(node, fn) {
+          if (!node) return;
+          if (stylesheetNode(node)) fn(node);
+          if (!node.querySelectorAll) return;
+          var found = node.querySelectorAll("style,link");
+          for (var i = 0; i < found.length; i++) fn(found[i]);
+        }
         function affectsCanvas(records) {
           var affects = false;
           for (var i = 0; i < records.length; i++) {
@@ -320,13 +330,13 @@ module RendersCustomHtmlPages
             if (stylesheetNode(record.target)) affects = true;
             if (stylesheetNode(record.target.parentNode)) affects = true;
             for (var j = 0; j < record.addedNodes.length; j++) {
-              if (stylesheetNode(record.addedNodes[j])) {
+              eachStylesheet(record.addedNodes[j], function (sheet) {
                 affects = true;
-                watchStylesheetLoad(record.addedNodes[j]);
-              }
+                watchStylesheetLoad(sheet);
+              });
             }
             for (var k = 0; k < record.removedNodes.length; k++) {
-              if (stylesheetNode(record.removedNodes[k])) affects = true;
+              eachStylesheet(record.removedNodes[k], function () { affects = true; });
             }
           }
           return affects;
