@@ -48,6 +48,6 @@ class QatarBankAccount < BankAccount
 
     def validate_account_number
       return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
-      errors.add :base, "The account number is invalid." unless account_number_decrypted.present?
+      errors.add :base, "The account number is invalid."
     end
 end

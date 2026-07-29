@@ -21,9 +21,9 @@ const bankAccountDetails: BankAccountDetails = {
   bank_account: null,
 };
 
-const makeUser = (countryCode: string): User => ({
+const makeUser = (countryCode: string, supportsIban = false): User => ({
   country_supports_native_payouts: true,
-  country_supports_iban: false,
+  country_supports_iban: supportsIban,
   need_full_ssn: false,
   country_code: countryCode,
   payout_currency: "usd",
@@ -40,7 +40,7 @@ const makeUser = (countryCode: string): User => ({
 
 // The section keeps the entered account number in its parent, so a stateful wrapper is what
 // lets these tests exercise the rendered field rather than a single passed-in prop.
-const renderForCountry = (countryCode: string) => {
+const renderForCountry = (countryCode: string, supportsIban = false) => {
   const Harness = () => {
     const [bankAccount, setBankAccount] = React.useState<Partial<BankAccount> | null>(null);
     return (
@@ -49,7 +49,7 @@ const renderForCountry = (countryCode: string) => {
         bankAccount={bankAccount}
         updateBankAccount={(next) => setBankAccount((prev) => ({ ...prev, ...next }))}
         hasConnectedStripe={false}
-        user={makeUser(countryCode)}
+        user={makeUser(countryCode, supportsIban)}
         isFormDisabled={false}
         feeInfoText=""
         showNewBankAccount
@@ -67,48 +67,88 @@ const accountNumberField = (label: string) => {
   return field;
 };
 
-// Each entry is a country whose bank-account model rejects the generic "1234567890" example,
-// paired with the value its model does accept (mirrors spec/requests/settings/payments_spec.rb).
-const COUNTRY_EXAMPLES: { code: string; label: string; example: string; maxLength: number }[] = [
-  { code: "MZ", label: "Account #", example: "001234567890123456789", maxLength: 21 },
-  { code: "QA", label: "IBAN", example: "QA87CITI123456789012345678901", maxLength: 29 },
-  { code: "MK", label: "IBAN", example: "MK49250120000058907", maxLength: 19 },
-  { code: "GA", label: "Account #", example: "00001234567890123456789", maxLength: 23 },
-  { code: "DZ", label: "Account #", example: "00001234567890123456", maxLength: 20 },
-  { code: "ET", label: "Account #", example: "0000000012345", maxLength: 16 },
-  { code: "BD", label: "Account #", example: "0000123456789", maxLength: 17 },
+// Every country in COUNTRY_ACCOUNT_NUMBER_HINTS, paired with the field label it renders and a
+// value its bank-account model accepts (the same fixtures spec/requests/settings/payments_spec.rb
+// posts). The `pattern` is pinned literally rather than read back off the element, because a
+// pattern that merely rejects "1234567890" can still be the wrong pattern for the country.
+//
+// Labels differ by country: countries whose expected value is an IBAN say "IBAN", the handful
+// listed in the section as using the spelled-out label say "Account number", and the rest get the
+// abbreviated "Account #".
+const COUNTRY_EXAMPLES: {
+  code: string;
+  label: string;
+  example: string;
+  pattern: string;
+}[] = [
+  { code: "MA", label: "IBAN", example: "MA64011519000001205000534921", pattern: "MA[0-9]{20,26}" },
+  { code: "SN", label: "IBAN", example: "SN08SN0100152000048500003035", pattern: "SN[0-9SN]{20,26}" },
+  { code: "RS", label: "IBAN", example: "RS35260005601001611379", pattern: "RS[0-9]{18,20}" },
+  { code: "MD", label: "IBAN", example: "MD24AG000225100013104168", pattern: "MD[0-9]{2}[A-Z0-9]{20}" },
+  { code: "GM", label: "Account #", example: "000123000456000789", pattern: "[0-9A-Za-z]{18}" },
+  { code: "MZ", label: "Account #", example: "001234567890123456789", pattern: "[0-9A-Za-z]{21}" },
+  { code: "QA", label: "IBAN", example: "QA87CITI123456789012345678901", pattern: "[0-9A-Za-z]{29}" },
+  { code: "MK", label: "IBAN", example: "MK49250120000058907", pattern: "[0-9A-Za-z]{19}" },
+  { code: "GA", label: "Account #", example: "00001234567890123456789", pattern: "[0-9]{23}" },
+  { code: "DZ", label: "Account #", example: "00001234567890123456", pattern: "[0-9]{20}" },
+  { code: "ET", label: "Account #", example: "0000000012345", pattern: "[0-9A-Za-z]{13,16}" },
+  { code: "BD", label: "Account #", example: "0000123456789", pattern: "[0-9A-Za-z]{13,17}" },
+  { code: "AM", label: "Account #", example: "00001234567890", pattern: "[0-9]{11,16}" },
+  { code: "AR", label: "Account number", example: "0110000600000000000000", pattern: "[0-9]{22}" },
+  { code: "PE", label: "Account number", example: "99934500012345670024", pattern: "[0-9]{20}" },
+  { code: "MX", label: "Account number", example: "032180000118359719", pattern: "[0-9]{18}" },
+  { code: "KR", label: "Account #", example: "00012345678901", pattern: "[0-9]{11,16}" },
+  { code: "NZ", label: "Account #", example: "1100000000000010", pattern: "[0-9]{15,16}" },
+  { code: "JP", label: "Account #", example: "1234567", pattern: "[0-9]{4,8}" },
 ];
+
+const confirmationLabelFor = (label: string) => {
+  if (label === "IBAN") return "Confirm IBAN";
+  return label === "Account number" ? "Confirm account number" : "Confirm account #";
+};
 
 describe("BankAccountSection account-number hints", () => {
   it.each(COUNTRY_EXAMPLES)(
     "shows $code an example its bank-account model accepts, not the generic one",
-    ({ code, label, example, maxLength }) => {
+    ({ code, label, example }) => {
       renderForCountry(code);
       const field = accountNumberField(label);
 
       expect(field.placeholder).toBe(example);
       expect(field.placeholder).not.toBe("1234567890");
-      expect(field.maxLength).toBe(maxLength);
-      // A hint longer than the field allows would be un-enterable, so it has to fit.
-      expect(example.length).toBeLessThanOrEqual(maxLength);
     },
   );
 
-  it.each(COUNTRY_EXAMPLES)("gives $code a pattern that rejects the generic example", ({ code, label, example }) => {
+  it.each(COUNTRY_EXAMPLES)("gives $code the pattern its bank-account model expects", ({ code, label, pattern }) => {
+    renderForCountry(code);
+
+    expect(accountNumberField(label).pattern).toBe(pattern);
+  });
+
+  it.each(COUNTRY_EXAMPLES)("lets $code's own example satisfy the pattern it advertises", ({ code, label }) => {
     renderForCountry(code);
     const field = accountNumberField(label);
 
-    expect(field.pattern).not.toBe("");
+    // The browser anchors `pattern` implicitly, so mirror that when checking it here.
     const pattern = new RegExp(`^(?:${field.pattern})$`, "u");
-    expect(pattern.test(example)).toBe(true);
+    expect(pattern.test(field.placeholder)).toBe(true);
     expect(pattern.test("1234567890")).toBe(false);
   });
 
   it.each(COUNTRY_EXAMPLES)("applies $code's hint to the confirmation field too", ({ code, label, example }) => {
     renderForCountry(code);
 
-    const confirmLabel = label === "IBAN" ? "Confirm IBAN" : "Confirm account #";
-    expect(accountNumberField(confirmLabel).placeholder).toBe(example);
+    expect(accountNumberField(confirmationLabelFor(label)).placeholder).toBe(example);
+  });
+
+  // The account number is valid with the separators banks print it with — a New Zealand seller's
+  // "12-3456-7890123-00" saves today because UpdatePayoutMethod strips them before validating — so
+  // a length cap sized to the bare number would silently swallow the seller's last few characters.
+  it.each(COUNTRY_EXAMPLES)("puts no length cap on $code that a formatted number would hit", ({ code, label }) => {
+    renderForCountry(code);
+
+    expect(accountNumberField(label).getAttribute("maxlength")).toBeNull();
+    expect(accountNumberField(confirmationLabelFor(label)).getAttribute("maxlength")).toBeNull();
   });
 
   // Stripe rejects a bare local account number for these two with "must be an IBAN of the
@@ -137,5 +177,20 @@ describe("BankAccountSection account-number hints", () => {
 
     expect(field.placeholder).toBe("1234567890");
     expect(field.pattern).toBe("");
+  });
+
+  // Madagascar renders through the IBAN branch (its country supports IBAN), and Gibraltar and Oman
+  // through their own branches, so they need checking separately from the table above. Same
+  // reasoning as the cap test there: a separator-formatted number is valid, so a cap sized to the
+  // bare number truncates it.
+  it.each([
+    ["MG", "IBAN", "Confirm IBAN", true],
+    ["GI", "Account #", "Confirm account #", false],
+    ["OM", "Account #", "Confirm account #", false],
+  ])("puts no length cap on %s either", (code, label, confirmLabel, supportsIban) => {
+    renderForCountry(code, supportsIban);
+
+    expect(accountNumberField(label).getAttribute("maxlength")).toBeNull();
+    expect(accountNumberField(confirmLabel).getAttribute("maxlength")).toBeNull();
   });
 });

@@ -42,4 +42,14 @@ describe QatarBankAccount do
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXXXX")).not_to be_valid
     end
   end
+
+  describe "#validate_account_number" do
+    it "allows 29 characters only" do
+      expect(build(:qatar_bank_account, account_number: "QA87CITI123456789012345678901")).to be_valid
+      expect(build(:qatar_bank_account, account_number: "QA87CITI12345678901234567890")).not_to be_valid
+      expect(build(:qatar_bank_account, account_number: "QA87CITI1234567890123456789012")).not_to be_valid
+      expect(build(:qatar_bank_account, account_number: "1234567890")).not_to be_valid
+      expect(build(:qatar_bank_account, account_number: "")).not_to be_valid
+    end
+  end
 end
