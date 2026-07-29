@@ -126,9 +126,38 @@ type Props = {
 
 export const Nav = ({ title, children, footer }: Props) => {
   const [open, setOpen] = React.useState(false);
+  const [showScrollFade, setShowScrollFade] = React.useState(false);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const close = React.useCallback((): void => setOpen(false), []);
   const toggle = React.useCallback((): void => setOpen((prev) => !prev), []);
   const contextValue = React.useMemo<NavContextValue>(() => ({ open, close }), [open, close]);
+  const updateScrollFade = React.useCallback(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) {
+      setShowScrollFade(false);
+      return;
+    }
+
+    setShowScrollFade(
+      scrollContainer.scrollHeight > scrollContainer.clientHeight &&
+        scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight > 1,
+    );
+  }, []);
+
+  React.useLayoutEffect(() => {
+    updateScrollFade();
+
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer || typeof ResizeObserver === "undefined") return;
+
+    const resizeObserver = new ResizeObserver(updateScrollFade);
+    resizeObserver.observe(scrollContainer);
+    scrollContainer.childNodes.forEach((child) => {
+      if (child instanceof Element) resizeObserver.observe(child);
+    });
+
+    return () => resizeObserver.disconnect();
+  }, [children, updateScrollFade]);
 
   return (
     <NavContext.Provider value={contextValue}>
@@ -154,14 +183,15 @@ export const Nav = ({ title, children, footer }: Props) => {
           </a>
         </header>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-          {/* Fades the last visible row when the list overflows, so it's clear there is more below.
-              macOS/iOS hide their overlay scrollbars until you scroll, so on first paint the list
-              would otherwise just look like it ends. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black"
-          />
+          <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto" onScroll={updateScrollFade}>
+            {children}
+          </div>
+          {showScrollFade ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black"
+            />
+          ) : null}
         </div>
         <footer className={classNames("hidden lg:grid", { grid: open })}>{footer}</footer>
       </nav>
