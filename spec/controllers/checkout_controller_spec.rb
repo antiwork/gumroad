@@ -111,7 +111,8 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "sends no styles for a cart spanning two sellers" do
-        # A mixed cart has no seller whose branding could fairly represent it — see Cart#sole_seller.
+        # A mixed cart has no seller whose branding could fairly represent it — see
+        # Cart#visible_seller_ids and CheckoutController#sole_seller_custom_styles.
         cart_with(create(:product, user: branded_seller), create(:product, user: create(:user)))
 
         get :show
@@ -119,7 +120,7 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.props[:custom_styles]).to be_nil
       end
 
-      it "sends no styles when there is no cart at all" do
+      it "sends no styles when there is no cart and no product parameter" do
         get :show
 
         expect(inertia.props[:custom_styles]).to be_nil
@@ -131,6 +132,74 @@ describe CheckoutController, type: :controller, inertia: true do
         get :show
 
         expect(inertia.props[:custom_styles]).to be_nil
+      end
+
+      it "carries the seller's palette for a direct product arrival with no saved cart" do
+        # The main journey: clicking "I want this!" links to /checkout?product=<permalink> and the
+        # product is not persisted until the frontend saves the cart afterwards, in a partial visit.
+        # Reading only the saved cart would make the feature a no-op for every first-time buyer.
+        product = create(:product, user: branded_seller)
+
+        get :show, params: { product: product.unique_permalink }
+
+        expect(inertia.props[:custom_styles]).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when the arriving product's seller differs from the saved cart's" do
+        # The page renders the saved cart plus the arriving product, so this checkout shows two
+        # sellers' products. Branding it with either one misrepresents the other.
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: create(:user))
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props[:custom_styles]).to be_nil
+      end
+
+      it "still carries the palette when the arriving product's seller matches the saved cart's" do
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: branded_seller)
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props[:custom_styles]).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when the stored colour is not a usable hex value" do
+        # HexColorValidator anchors per line rather than per string, and update_column bypasses it
+        # entirely, so unparseable values are persistable. custom_styles interpolates the value into
+        # SCSS, so an unusable colour makes the compile raise — the controller has to degrade to no
+        # CSS (Gumroad's default palette) rather than 500 the payment page over one seller's corrupt
+        # branding row.
+        seller = create(:user)
+        # tap(&:save!) first: seller_profile is built-but-unsaved until something persists it, and
+        # update_column on a new record raises.
+        seller.seller_profile.tap(&:save!).update_column(:highlight_color, "not a colour")
+        cart_with(create(:product, user: seller))
+
+        get :show
+
+        expect(response).to be_successful
+        expect(inertia.props[:custom_styles]).to be_nil
+      end
+
+      it "recomputes the palette on the partial request the frontend makes when the cart changes" do
+        # Saving the cart is a partial Inertia visit (see the `only:` list in Checkout/Show.tsx),
+        # and the palette depends on which sellers are in the cart. If this prop stopped being
+        # served on a partial request, a buyer emptying a mixed cart down to one seller would keep
+        # whatever branding the page loaded with. Asserting the server half of that contract here.
+        #
+        # Reads the response body rather than the `inertia` matcher helper, which only captures
+        # props for a full page render.
+        cart_with(create(:product, user: branded_seller))
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,custom_styles"
+
+        get :show
+
+        expect(response.parsed_body["props"]).to include("custom_styles")
+        expect(response.parsed_body["props"]["custom_styles"]).to include("--accent: 0 154 73")
       end
     end
 

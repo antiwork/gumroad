@@ -69,10 +69,11 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
-  // The seller's full custom-styles CSS, when every product in the cart belongs to one seller —
+  // The seller's full custom-styles CSS, when a single seller owns everything on this checkout —
   // the same string the storefront and post-purchase content page render.
-  // Optional rather than `| null` because the controller omits it for empty carts, and typia
-  // rejects a missing key on a nullable-but-required prop.
+  // The controller always evaluates it, so on a full page load the key is present and merely null
+  // for empty and multi-seller checkouts; declared optional so a partial reload omitting it still
+  // satisfies validation.
   custom_styles?: string | null;
   checkout: {
     add_products: ProductToAdd[];
@@ -675,7 +676,12 @@ const CheckoutIndexPage = () => {
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
-      only: ["cart", "flash"],
+      // `custom_styles` is derived from the cart's contents (see CheckoutController#show), so it has
+      // to be refreshed by the same request that saves them. Without it, removing or adding an item
+      // that changes the cart between one seller and several would save the new cart while the
+      // injected <head> style kept the old seller's palette — branding that no longer matches what
+      // the buyer is paying for.
+      only: ["cart", "flash", "custom_styles"],
       preserveUrl: true,
       preserveScroll: true,
     });
@@ -768,11 +774,11 @@ const CheckoutIndexPage = () => {
   return (
     <StateContext.Provider value={reducer}>
       {/* Applies the seller's palette — accent, background, body text colour and font — to the
-          checkout page. Rendered into <head> via Inertia's Head so it lands after the stylesheet
-          <link> and therefore wins the cascade: the defaults it overrides are :root custom
-          properties from the same specificity, so the later declaration is the one that applies.
+          checkout page. The defaults it overrides are declared inside `@layer base`
+          (stylesheets/_global.scss), and an unlayered style beats a layered one wherever it sits
+          in the document — so this wins the cascade by layer precedence, not by insertion order.
           The CSS also carries a `body { }` rule, which is why the background follows too.
-          Absent for empty and multi-seller carts. */}
+          Absent for empty and multi-seller checkouts. */}
       {props.custom_styles ? (
         <Head>
           <style>{props.custom_styles}</style>

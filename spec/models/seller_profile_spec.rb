@@ -62,6 +62,17 @@ describe SellerProfile do
 
       expect(just_under_the_old_cutoff).to eq(just_over_the_old_cutoff)
     end
+
+    it "expands a legacy three-digit accent colour rather than breaking on it" do
+      # HexColorValidator only runs on normal saves, so update_column and raw SQL have written
+      # three-digit values historically. Checkout now serves this same CSS (see
+      # CheckoutController#sole_seller_custom_styles), so those legacy rows have to keep producing
+      # a usable accent — SassC's split-color() understands short hex natively.
+      subject.update_column(:highlight_color, "#0f0")
+      subject.reload
+
+      expect(subject.custom_styles).to include("--accent: 0 255 0")
+    end
   end
 
   describe "text colour helpers" do
