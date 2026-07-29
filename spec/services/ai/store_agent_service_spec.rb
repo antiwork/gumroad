@@ -755,6 +755,15 @@ describe Ai::StoreAgentService do
           "Staged renaming of the product that you flagged last week is instant. Click the card when you're sure.",
           "Staged deletion of the draft and the archived copy is permanent. Tap the card when you're sure.",
           "Staged the price change that you asked about and the discount rule is permanent. Confirm the card.",
+          # An aside that closes inside the clause modifies the subject; only an unpaired mark ends it.
+          "Staged deletion of the draft (the one from March) is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft, the one from March, is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft — the one from March — is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft \"March notes\" is permanent. Tap the card when you're sure.",
+          "Staged renaming of the product #2 in your archive is instant. Click the card when you're sure.",
+          "Staged deletion of the 3rd draft is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft (the one from March) that I reviewed is permanent. Tap the card.",
+          "Staged the price change (20% off) is not something I can undo. Confirm the card only when sure.",
           # pointing back at a card on an earlier message is truthful — that card is still there
           # to click, so replacing the reply would deny a change that really is pending
           "I staged the price change in my previous message — tap the card above to apply it.",
@@ -846,6 +855,11 @@ describe Ai::StoreAgentService do
           # A relative clause qualifying the staged object leaves it an object, so walking through
           # one must not cost the catch.
           "Staged deletion of the draft that I carefully reviewed is ready for your confirmation.",
+          # ...and so must an aside, at every shape that can hold one.
+          "Staged deletion of the draft (the one from March) is ready for your confirmation.",
+          "Staged deletion of the draft, the one from March, is ready for your confirmation.",
+          "Staged deletion of the draft — the one from March — is ready for your confirmation.",
+          "Staged deletion of the 3rd draft is ready for your confirmation.",
           "Staged the change that you requested. Approve it, then I'll apply it.",
           "Staged the update that will apply to all products. Confirm the card.",
           # A verb that ENDS its clause is part of the relative clause the filler walked through,

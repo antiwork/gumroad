@@ -202,13 +202,33 @@ class Ai::StoreAgentService
   # after the conjunction, or a verb straight after the relative pronoun, really does start a new
   # clause, which is what keeps "Staged the change and it is ready to confirm" and "Staged the
   # update that will apply to all products" matching as claims.
+  #
+  # An aside is punctuation that opens and CLOSES inside the clause, so it modifies the subject
+  # rather than ending it ("of the draft (the one from March) is permanent"). Requiring the closing
+  # mark is what separates it from a sentence break: one unpaired comma or dash still ends the
+  # subject, and the words after it belong to the instruction.
+  STAGED_CLAIM_SUBJECT_ASIDE = /
+    (?:
+      \s*\([^()\n]*\)
+      |
+      \s*"[^"\n]*"
+      |
+      \s*[“][^”\n]*[”]
+      |
+      \s*,[^,.!?\n]*,
+      |
+      \s*[—–][^—–.!?\n]*[—–]
+    )
+  /x
   STAGED_CLAIM_SUBJECT_FILLER = /
     (?:
+      #{STAGED_CLAIM_SUBJECT_ASIDE}
+      |
       \s+(?:and|but)(?=\s+(?:the|a|an|your|its|their|my|two|both)\b)
       |
       \s+(?:that|which|who)(?=\s+(?!#{STAGED_CLAIM_PREDICATE_VERB})[a-z])
       |
-      \s+(?!(?:and|but|so|then|it|that|this|which|who)\b)[a-z][-'’a-z]*
+      \s+(?!(?:and|but|so|then|it|that|this|which|who)\b)\#?[a-z0-9][-'’a-z0-9]*
     )*
   /ix
   # Noun-phrase-then-verb, i.e. the noun was the subject. The verb is only disqualifying when its
