@@ -3911,9 +3911,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Austria")
 
-      # Stripe's Mexico test card now triggers a 3D Secure challenge, so tell the checkout
-      # helper to complete it or the purchase never finishes.
-      check_out(@product, country: "Mexico", zip_code: nil, credit_card: { number: "4000004840008001" }, sca: true)
+      # Stripe may or may not 3DS-challenge this Mexico card; these specs are about tax, not
+      # authentication, so clear the challenge only if it shows up.
+      check_out(@product, country: "Mexico", zip_code: nil, credit_card: { number: "4000004840008001" }, sca: :if_challenged)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Mexico")
@@ -3943,9 +3943,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       select("Mexico", from: "Country")
 
-      # Stripe's Mexico test card now triggers a 3D Secure challenge, so tell the checkout
-      # helper to complete it or the purchase never finishes.
-      check_out(@product, zip_code: nil, credit_card: { number: "4000004840008001" }, sca: true)
+      # Stripe may or may not 3DS-challenge this Mexico card; these specs are about tax, not
+      # authentication, so clear the challenge only if it shows up.
+      check_out(@product, zip_code: nil, credit_card: { number: "4000004840008001" }, sca: :if_challenged)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Mexico")
@@ -4081,9 +4081,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
 
       expect(page).to have_select("Country", selected: "Mexico")
 
-      # Stripe's Mexico test card now triggers a 3D Secure challenge, so tell the checkout
-      # helper to complete it or the purchase never finishes.
-      check_out(@product, country: "Austria", zip_code: nil, credit_card: { number: "4000004840008001" }, sca: true)
+      # Stripe may or may not 3DS-challenge this Mexico card; these specs are about tax, not
+      # authentication, so clear the challenge only if it shows up.
+      check_out(@product, country: "Austria", zip_code: nil, credit_card: { number: "4000004840008001" }, sca: :if_challenged)
 
       purchase = Purchase.last
       expect(purchase.country).to eq("Austria")
