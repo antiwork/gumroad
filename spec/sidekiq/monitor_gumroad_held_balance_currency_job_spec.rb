@@ -293,15 +293,38 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
   end
 
   # Once the ceiling is hit the counts describe only the rows that were read, so the alert has
-  # to say so -- otherwise a mislabelling at scale reads as exactly MAX_ROWS_LOADED balances.
-  it "says the row ceiling was hit, so the counts are not mistaken for the whole picture" do
+  # to say so -- otherwise a mislabelling at scale reads as exactly MAX_ROWS_LOADED balances --
+  # and it reports the true total, because "500" reads the same whether the real number is 501
+  # or 50,000.
+  it "says the row ceiling was hit and reports the true total, so the counts are not mistaken for the whole picture" do
     stub_const("#{described_class}::MAX_ROWS_LOADED", 2)
     3.times { create_balance_at(after_baseline, holding_currency: Currency::EUR) }
 
     described_class.new.perform
 
     expect(ErrorNotifier).to have_received(:notify).with(
-      anything, hash_including(balance_count: 2, hit_row_limit: true)
+      anything, hash_including(balance_count: 2, hit_row_limit: true, matching_row_count: 3)
+    )
+  end
+
+  # The SQL excludes a seller's own Stripe Connect account rather than leaning on the Ruby
+  # holder_of_funds check alone, and that exclusion is load-bearing rather than a mere
+  # optimisation: production carries hundreds of legitimately non-USD seller-Connect balances,
+  # and with rows read oldest-first under a fixed ceiling they would crowd a genuinely
+  # mislabelled Gumroad-held balance out of every run -- permanent silence. Delete the
+  # exclusion from the query and this example goes red.
+  it "does not let seller Stripe Connect balances crowd a Gumroad-held one out of the row budget" do
+    stub_const("#{described_class}::MAX_ROWS_LOADED", 1)
+    seller_account = create(:merchant_account_stripe_connect, currency: Currency::EUR)
+    travel_to(after_baseline) do
+      create(:balance, merchant_account: seller_account, currency: Currency::EUR, holding_currency: Currency::EUR)
+    end
+    gumroad_held = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(sample: [hash_including(balance_id: gumroad_held.id)])
     )
   end
 
@@ -311,6 +334,6 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     entry = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml")).values.find { _1["class"] == described_class.name }
 
     expect(entry).to be_present
-    expect(entry["cron"].sub(/#.*/, "").strip).to eq("30 7 * * *")
+    expect(entry["cron"]).to eq("30 7 * * *")
   end
 end

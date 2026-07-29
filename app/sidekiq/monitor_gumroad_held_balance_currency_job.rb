@@ -44,28 +44,33 @@
 #      Only the Stripe implementation distinguishes by owner, and there a nil
 #      user_id is exactly what makes an account Gumroad-held (a Stripe Connect
 #      account always has a user and reports CREATOR). So the SQL below excludes
-#      only one shape -- a Stripe account belonging to a seller -- which leaves a
-#      superset of Gumroad-held in every case except one that does not arise in
-#      normal operation: merchant_accounts carries no database foreign key on
-#      user_id and users are soft-deleted, but a Stripe account whose user row was
-#      HARD-deleted would resolve to GUMROAD in Ruby (holder_of_funds tests the
-#      association, not the column) while the SQL sees a non-nil user_id and
-#      excludes it. Everything the SQL does admit has holder_of_funds confirmed per
-#      row in Ruby, the same call the payout processors make, so the monitor cannot
+#      only one shape -- a Stripe account belonging to a seller. One row would be
+#      excluded that Ruby still calls Gumroad-held: a Stripe account whose user row
+#      was HARD-deleted (holder_of_funds tests the association, the SQL reads the
+#      column). Everything the SQL does admit has holder_of_funds confirmed per row
+#      in Ruby, the same call the payout processors make, so the monitor cannot
 #      drift from them if that logic changes.
 #      Without that exclusion this would load every seller's foreign-currency
 #      balance: measured against production, 418 rows and rising, against 0 that are
-#      actually Gumroad-held. The join is a LEFT join because a balance with no
-#      merchant account at all breaks payouts too -- is_balance_payable dereferences
-#      it -- and an inner join would have hidden exactly that row.
+#      actually Gumroad-held. That is not only wasted work -- those rows would eat
+#      the MAX_ROWS_LOADED budget below and could push a genuinely mislabelled
+#      Gumroad-held balance out of every run's window, which is silence. The join is
+#      a LEFT join because a balance with no merchant account at all breaks payouts
+#      too -- is_balance_payable dereferences it -- and an inner join would have
+#      hidden exactly that row.
+#
+# Deliberately OUT of scope: a Gumroad-MANAGED Stripe balance (holder_of_funds
+# STRIPE) whose holding_currency does not match its merchant account's own
+# currency. StripePayoutProcessor.is_balance_payable drops those silently too, but
+# they are non-USD by design, so "is it USD?" is the wrong test for them and a
+# monitor of that invariant would compare against the account currency instead.
+# This job watches the Gumroad-held/USD invariant only.
 class MonitorGumroadHeldBalanceCurrencyJob
   include Sidekiq::Job
-  # lock alone, without on_conflict: :replace -- CONTRIBUTING.md warns that :replace has to
-  # scroll the Scheduled Set to find the job it is replacing. This job takes no arguments, so
-  # until_executed already makes a duplicate enqueue a no-op, which is all that is wanted.
-  # queue :default rather than :low because the schedule places this run half an hour ahead of
-  # the daily payouts, which only means anything if the job is not sitting in a backed-up
-  # queue when the payouts start; CONTRIBUTING.md says to use :default for a time-sensitive job.
+  # This job takes no arguments, so until_executed already makes a duplicate enqueue a
+  # no-op; :replace is not used because it has to scroll the Scheduled Set to find the job
+  # it would replace. Queue :default rather than :low because the run only means anything if
+  # it lands before the 08:00 payouts, which a backed-up low queue cannot promise.
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
   # The historical cohort that prompted this monitor was enumerated and corrected by hand,
@@ -81,7 +86,10 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # wrong on an older row is the same incident this monitor watches for, and keying off
   # created_at would never see it. updated_at is a strict superset of created_at (it starts
   # equal and only moves forward) and costs no extra noise: an old row that was touched but
-  # is correctly labelled still reads "usd" and does not match the currency test below.
+  # is correctly labelled still reads "usd" and does not match the currency test below. The
+  # one case it cannot see is a raw update_all/update_column that rewrites the currency on a
+  # PRE-baseline row without bumping the timestamp; the repair services in this codebase set
+  # updated_at explicitly when they use update_columns, so that stays hypothetical.
   BASELINE_CUTOFF = Time.zone.parse("2026-07-29T00:00:00Z")
 
   # Enough balances to act on without turning the alert into a wall of text.
@@ -90,37 +98,19 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # A ceiling on rows loaded into memory, so a regression that mislabels balances at
   # scale produces an alert rather than a job that dies trying to describe it. The
   # alert reports whether it hit this ceiling, since the loaded rows are then only
-  # part of the picture. Ordered oldest-first when it does: an old stuck balance has
-  # been blocking that seller's payouts for longer and is the more urgent one to see.
+  # part of the picture, and a separate count reports the true total. Rows come
+  # oldest-first, so when the ceiling truncates, the balances that have been blocking
+  # payouts longest are the ones that survive into the alert.
   MAX_ROWS_LOADED = 500
 
   def perform
-    candidates = Balance
-      .where(state: "unpaid")
-      .where("balances.updated_at >= ?", BASELINE_CUTOFF)
-      .where("balances.holding_currency IS NULL OR CAST(balances.holding_currency AS BINARY) <> ?", Currency::USD)
-      .left_joins(:merchant_account)
-      # Everything except a Stripe account that belongs to a seller. Written as a NOT
-      # around the one excluded shape rather than as a list of included ones, so that
-      # an unfamiliar row shape is kept and answered for in Ruby rather than dropped.
-      # The CAST and the COALESCE are load-bearing for the same collation and NULL
-      # reasons as the currency test above -- see header notes 1 and 2.
-      .where.not(
-        "merchant_accounts.user_id IS NOT NULL AND " \
-        "CAST(COALESCE(merchant_accounts.charge_processor_id, '') AS BINARY) = ?",
-        StripeChargeProcessor.charge_processor_id
-      )
-      # preload rather than includes: after a left_joins on the same association, includes
-      # resolves to a preload only via Rails' eager-loading heuristics, and an accidental
-      # switch to eager loading would turn the LEFT join into an INNER one and drop exactly
-      # the balance-with-no-merchant-account row this job has to report.
-      .preload(:merchant_account)
-      .order(id: :asc)
-      .limit(MAX_ROWS_LOADED)
-      .to_a
+    scope = candidate_scope
+    candidates = scope.order(id: :asc).limit(MAX_ROWS_LOADED).to_a
 
     offending, unresolved = partition_by_holder_of_funds(candidates)
     return if offending.empty? && unresolved.empty?
+
+    hit_row_limit = candidates.size >= MAX_ROWS_LOADED
 
     # A stable message keeps every run of this alert in one Sentry issue instead of
     # opening a new one each day; everything that varies goes in the context.
@@ -132,7 +122,12 @@ class MonitorGumroadHeldBalanceCurrencyJob
       created_since: BASELINE_CUTOFF.iso8601,
       # True when the query hit MAX_ROWS_LOADED, in which case the counts above describe
       # the rows that were read rather than everything that matches.
-      hit_row_limit: candidates.size >= MAX_ROWS_LOADED,
+      hit_row_limit:,
+      # How many rows match the query in total, asked for only when the ceiling truncated
+      # the run: without it "500 balances" reads the same whether the real number is 501 or
+      # 50,000, which is the difference between a stray row and an incident. The count runs
+      # over the same indexed range as the scan, so it is cheap on the rare day it is asked.
+      matching_row_count: hit_row_limit ? scope.count : candidates.size,
       sample: offending.first(SAMPLE_LIMIT).map { describe(_1) },
       # Rows whose holder_of_funds could not be answered at all, each with the reason. Reported
       # separately so a resolution failure never masquerades as a mislabelled balance, and kept
@@ -142,6 +137,29 @@ class MonitorGumroadHeldBalanceCurrencyJob
   end
 
   private
+    def candidate_scope
+      Balance
+        .where(state: "unpaid")
+        .where("balances.updated_at >= ?", BASELINE_CUTOFF)
+        .where("balances.holding_currency IS NULL OR CAST(balances.holding_currency AS BINARY) <> ?", Currency::USD)
+        .left_joins(:merchant_account)
+        # Everything except a Stripe account that belongs to a seller. Written as a NOT
+        # around the one excluded shape rather than as a list of included ones, so that
+        # an unfamiliar row shape is kept and answered for in Ruby rather than dropped.
+        # The CAST and the COALESCE are load-bearing for the same collation and NULL
+        # reasons as the currency test above -- see header notes 1 and 2.
+        .where.not(
+          "merchant_accounts.user_id IS NOT NULL AND " \
+          "CAST(COALESCE(merchant_accounts.charge_processor_id, '') AS BINARY) = ?",
+          StripeChargeProcessor.charge_processor_id
+        )
+        # preload, so the merchant accounts arrive in one extra query and the per-row
+        # holder_of_funds check below does not issue one query per balance. The left_joins
+        # above stays regardless: the exclusion is a string condition naming
+        # merchant_accounts, so the join has to be in the query for it to resolve at all.
+        .preload(:merchant_account)
+    end
+
     # holder_of_funds resolves through the charge processor. It falls back to GUMROAD for a
     # processor it no longer recognises, so today it does not raise -- but a monitor that
     # dies on one row stops watching every other row, so a row it cannot answer for is

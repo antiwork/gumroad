@@ -95,6 +95,10 @@ release_chargeback_rate_payout_pauses:
   class: ReleaseChargebackRatePayoutPausesJob
   queue: low
   description: Lifts automatic chargeback-rate payout holds for sellers whose rate is back under the limit
+monitor_gumroad_held_balance_currency:
+  cron: "30 7 * * *" # UTC 07:30 daily, before the 08:00 daily payouts job so a bad row is reported before it fails a payment
+  class: MonitorGumroadHeldBalanceCurrencyJob
+  description: Alert on Gumroad-held balances labelled in a currency other than USD, which block payouts
 expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker
@@ -403,10 +407,6 @@ verify_finance_reports_delivery:
   cron: "0 18 * * *" # UTC 18:00 every day (after the monthly 11:00 fires + 6h grace period)
   class: VerifyFinanceReportsDeliveryJob
   description: Re-enqueue and alert on scheduled finance report runs that never completed
-monitor_gumroad_held_balance_currency:
-  cron: "30 7 * * *" # UTC 07:30 every day, before the 08:00 daily payouts job so a bad row is reported before it fails a payment
-  class: MonitorGumroadHeldBalanceCurrencyJob
-  description: Alert on Gumroad-held balances labelled in a currency other than USD, which block payouts
 delete_old_sent_email_info_records:
   cron: "0 1 1 * *" # UTC 01:00 on 1st of every month
   class: DeleteOldSentEmailInfoRecordsJob
