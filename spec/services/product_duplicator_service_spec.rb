@@ -402,6 +402,25 @@ describe ProductDuplicatorService do
         ]
       )
     end
+
+    it "prunes a file embed group whose only child is a stale dead foreign embed" do
+      foreign_product = create(:product, user: product.user)
+      dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+      paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+      dead_embed_group = {
+        "type" => "fileEmbedGroup",
+        "attrs" => { "uid" => SecureRandom.uuid, "name" => "Stale folder" },
+        "content" => [
+          { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+        ]
+      }
+      source = build(:product_rich_content, entity: product, description: [paragraph, dead_embed_group])
+      source.save!(validate: false)
+
+      duplicate_product = ProductDuplicatorService.new(product.id).duplicate
+
+      expect(duplicate_product.alive_rich_contents.sole.description).to eq([paragraph])
+    end
   end
 
   describe "error handling" do

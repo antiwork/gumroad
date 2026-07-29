@@ -759,7 +759,9 @@ class Api::V2::LinksController < Api::V2::BaseController
           content: description,
           old_content: rich_content.description || []
         ).from_rich_content
-        rich_content.update!(title: page[:title].presence, description: description.presence || [], position: index)
+        rich_content.assign_attributes(title: page[:title].presence, description: description.presence || [], position: index)
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        rich_content.save!
         rich_contents_to_keep << rich_content
       end
 
@@ -832,7 +834,9 @@ class Api::V2::LinksController < Api::V2::BaseController
 
         record = existing_rich_contents.find { |c| c.external_id == page_id } || @product.alive_rich_contents.build
         description_content = SaveContentUpsellsService.new(seller: @product.user, content: description_content, old_content: record.description || []).from_rich_content
-        record.update!(title: page_title.presence, description: description_content.presence || [], position: index)
+        record.assign_attributes(title: page_title.presence, description: description_content.presence || [], position: index)
+        record.remove_stale_dead_cross_product_file_embeds
+        record.save!
         rich_contents_to_keep << record
       end
 
@@ -868,7 +872,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       if @product.alive_rich_contents.empty? && variants_with_content.any?
         source_variant = variants_with_content.first
         source_variant.alive_rich_contents.sort_by(&:position).each_with_index do |rc, index|
-          @product.alive_rich_contents.create!(title: rc.title, description: rc.description, position: index)
+          @product.alive_rich_contents.create!(title: rc.title, description: rc.description_without_stale_dead_cross_product_file_embeds, position: index)
         end
       end
 
@@ -912,7 +916,7 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
 
       created = product_pages.each_with_index.map do |rc, index|
-        destination_variant.alive_rich_contents.create!(title: rc.title, description: rc.description, position: index)
+        destination_variant.alive_rich_contents.create!(title: rc.title, description: rc.description_without_stale_dead_cross_product_file_embeds, position: index)
       end
       file_ids = created.flat_map { _1.embedded_product_file_ids_in_order }.uniq
       destination_variant.product_files = file_ids.any? ? @product.product_files.alive.where(id: file_ids) : []
@@ -922,7 +926,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     def canonicalize_rich_contents(entity)
       entity.alive_rich_contents.sort_by(&:position).map do |rc|
-        [rc.title, strip_upsell_ids(rc.description)]
+        [rc.title, strip_upsell_ids(rc.description_without_stale_dead_cross_product_file_embeds)]
       end
     end
 

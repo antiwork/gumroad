@@ -40,6 +40,11 @@
   --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
   --color-accent-foreground: rgb(var(--contrast-accent));
+  /*
+   * A slightly brightness-adjusted accent for surfaces that put text or a meaningful icon on the
+   * accent. --color-accent stays exactly as the seller saved it for every other use.
+   */
+  --color-accent-with-text: rgb(var(--accent-with-text));
   --color-primary: rgb(var(--primary));
   --color-primary-foreground: rgb(var(--contrast-primary));
   --color-active-bg: rgb(var(--color) / var(--gray-1));

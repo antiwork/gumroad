@@ -22,8 +22,25 @@ class Balance < ApplicationRecord
   has_and_belongs_to_many :payments, join_table: "payments_balances"
 
   # currency = The currency the balance was collected in.
-  # holding_currency = The currency the balance is being held in.
-  # Different if the funds were charged in USD, then settled and held in a merchant account in CAD, AUD, etc.
+  #
+  # holding_currency = The currency the balance is being held in, which means different things
+  # depending on who holds the funds:
+  #
+  #   - A seller's own connected account (merchant_account.holder_of_funds STRIPE or CREATOR):
+  #     the currency that account's balance is denominated in. Legitimately non-USD — funds
+  #     charged in USD can settle and be held in CAD, AUD, GBP, etc.
+  #   - Gumroad-held funds (holder_of_funds GUMROAD): ALWAYS USD. Here holding_currency and
+  #     holding_amount_cents are Gumroad's canonical record of what it owes the seller — a
+  #     liability — not a statement about which currency Stripe is physically holding. Stripe's
+  #     platform account does carry real foreign-currency balances, but that is an account-level
+  #     treasury position spanning every seller, and it is not recorded here. Payouts of
+  #     Gumroad-held funds are computed and wired in USD, and both StripePayoutProcessor and
+  #     PaypalPayoutProcessor reject a Gumroad-held balance whose holding_currency is not USD, so
+  #     a foreign currency on one of these rows blocks the seller's money rather than merely
+  #     describing it oddly (see gumroad-private#1471).
+  #
+  # Note that balances are keyed on holding_currency (see find_or_create_balance), so a seller
+  # would get parallel same-day balances if this ever varied within a day for one account.
   validates :merchant_account, :currency, :holding_currency, presence: true
   validate :validate_amounts_are_only_changed_when_unpaid, on: :update
 

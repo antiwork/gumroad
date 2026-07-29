@@ -144,6 +144,37 @@ describe CustomerSurchargeController, :vcr do
       expect(quote_props["line_allocations"].sum { _1["total_cents"] }).to eq(quote_props["presentment_total_cents"])
     end
 
+    it "locks one quote per seller and returns their sum for a cart spanning several sellers" do
+      # Two sellers means two charges (two PaymentIntents), each with its own locked quote.
+      # The cart total the buyer sees is the sum, so nothing is ever split across intents.
+      other_seller = create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true)
+      other_product = create(:product, user: other_seller)
+      [@user, other_seller].each do |seller|
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+      end
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: @product.unique_permalink, price: 100, quantity: 1 },
+          { permalink: other_product.unique_permalink, price: 200, quantity: 1 },
+        ],
+      }, as: :json
+
+      quote_props = response.parsed_body["buyer_currency_quote"]
+      expect(quote_props).to include("canonical_total_cents" => 300, "presentment_total_cents" => 375)
+      expect(quote_props["line_allocations"].map { _1["permalink"] })
+        .to eq([@product.unique_permalink, other_product.unique_permalink])
+      expect(quote_props["line_allocations"].sum { _1["total_cents"] }).to eq(375)
+    ensure
+      [other_seller].compact.each do |seller|
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+      [@user, other_seller].compact.each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+    end
+
     it "returns no quote props for buyer currencies Gumroad stores in different minor units than Stripe charges" do
       allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 

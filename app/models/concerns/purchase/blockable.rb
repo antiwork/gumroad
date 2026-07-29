@@ -25,11 +25,13 @@ module Purchase::Blockable
   # Max number of failed purchase card fingerprints before a buyer's browser guid gets banned
   MAX_NUMBER_OF_FAILED_FINGERPRINTS = 4
 
+  # Not private, unlike the other card-testing settings below: Onetime::ClearMistakenBuyerBlocks
+  # has to reproduce these two velocity checks exactly, so that a one-off cleanup never clears a
+  # block row that a velocity rule also wanted. Reading the same constant is what keeps the two
+  # from drifting apart.
   CARD_TESTING_WATCH_PERIOD = 7.days
-  private_constant :CARD_TESTING_WATCH_PERIOD
 
   CARD_TESTING_IP_ADDRESS_WATCH_PERIOD = 1.day
-  private_constant :CARD_TESTING_IP_ADDRESS_WATCH_PERIOD
 
   CARD_TESTING_IP_ADDRESS_BLOCK_DURATION = 7.days
   private_constant :CARD_TESTING_IP_ADDRESS_BLOCK_DURATION
@@ -44,6 +46,18 @@ module Purchase::Blockable
   private_constant :IGNORED_ERROR_CODES
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
+
+  # How many settled purchases a buyer needs behind them before a fraud-flavoured decline from
+  # their card issuer stops being treated as a fraud signal about the person. Three is well above
+  # what a card tester accumulates and well below what an ordinary repeat customer or a membership
+  # subscriber has.
+  MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY = 3
+
+  # Purchases only start counting towards clean history once they are this old. A card tester whose
+  # stolen card went through today has a "successful" purchase; what they do not have is a purchase
+  # old enough for the cardholder to have noticed and disputed it. Comfortably longer than the usual
+  # dispute-notification lag, and no obstacle to a real customer, who by definition bought before.
+  MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY = 60.days
 
   MAX_PURCHASER_AGE_FOR_SUSPENSION = 6.hours
   private_constant :MAX_PURCHASER_AGE_FOR_SUSPENSION
@@ -198,6 +212,45 @@ module Purchase::Blockable
     ContactingCreatorMailer.refund_policy_enforced_notification(seller.id).deliver_later
   end
 
+  # True when the person behind this purchase has a payment record that speaks for itself: several
+  # settled purchases they actually paid for, none refunded, none under a standing dispute, and old
+  # enough that a defrauded cardholder would have complained by now.
+  #
+  # Free purchases are excluded on purpose. They always succeed, so counting them would let anybody
+  # mint the history that exempts them from the block below by downloading three free products.
+  #
+  # Whose history counts is the delicate part, and it is deliberately NOT "whoever this purchase
+  # says it belongs to".
+  #
+  # The only identity we accept here is the card itself. A Stripe fingerprint is derived from the
+  # card number, so a run of settled, undisputed purchases on this fingerprint is proof that THIS
+  # CARD has paid us before and nobody complained. Nothing the person filling in a checkout form
+  # can type gets them somebody else's fingerprint.
+  #
+  # Email addresses and accounts are not accepted, on a renewal either. An unauthenticated
+  # checkout supplies its own email address and purchase creation resolves an account from it
+  # (Purchase::CreateService#set_purchaser_for) without ever proving the person owns it — and that
+  # unproven identity is what a subscription then persists as its own (`subscription.user`) and
+  # copies onto every later charge (Subscription#build_purchase). So "this came from our records,
+  # not from this request" is true of a renewal and still says nothing about who the buyer is:
+  # somebody can start a membership under an established customer's address today and have a
+  # later renewal on a stolen card inherit that customer's clean record. Until we persist identity
+  # that was actually authenticated, the card is the only provenance we have.
+  #
+  # The subscriber this exemption exists for — a long-standing member whose bank reissued their
+  # card (gumroad-private#1480) — is still covered: the card on file that just declined is the
+  # same card their previous renewals settled on, so its own history clears them.
+  def buyer_has_clean_payment_history?
+    return false if stripe_fingerprint.blank?
+
+    Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+            .where(created_at: ..MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
+            .where.not(id:)
+            .where(stripe_fingerprint:)
+            .limit(MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
+            .count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
+  end
+
   private
     def recent_stripe_fingerprint
       Purchase.with_stripe_fingerprint
@@ -230,11 +283,111 @@ module Purchase::Blockable
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
     end
 
+    # A single fraud-flavoured decline from the card issuer used to platform-block everything we
+    # know about the person who attempted the payment: their browser, their email addresses, their
+    # IP address and their card. That is the right response to somebody testing a stolen card on us.
+    # It is the wrong response to a long-standing customer whose bank reissued their card, which is
+    # what the "lost card" and "pickup card" codes almost always mean in practice — and because we
+    # blocked the email and the browser too, those customers could not pay us with a replacement
+    # card either, so a renewal that should have recovered by itself turned into a lost membership
+    # (gumroad-private#1480).
+    #
+    # Two guards now stand in front of the block:
+    #
+    #   1. Only the codes where the issuer is actually reporting card misuse count
+    #      (PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES). Lost/pickup declines still fail the charge,
+    #      they just do not brand the buyer.
+    #   2. A buyer with real successful payment history behind them is not blocked at all. Somebody
+    #      who has paid us repeatedly, with nothing refunded and nothing charged back, is not a card
+    #      tester; whatever the issuer is reporting, the right outcome is that they can put a new
+    #      card in and carry on. Only history that the card itself proves counts — see
+    #      #buyer_has_clean_payment_history?.
+    #
+    # And when we do block, we block the payment method only — see #block_buyer_payment_method!.
     def ban_buyer_on_fraud_related_error_code!
       failure_code = stripe_error_code || error_code
-      return if PurchaseErrorCode::FRAUD_RELATED_ERROR_CODES.exclude?(failure_code)
+      return if PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES.exclude?(failure_code)
+      return if buyer_has_clean_payment_history?
 
-      block_buyer!
+      block_buyer_payment_method!
+    end
+
+    # Blocks the card this decline came in on, and — on a renewal, where the card is ours to look
+    # up rather than the buyer's to claim — the card on file for the subscriber.
+    #
+    # Deliberately narrower than #block_buyer!: blocking the buyer's email, browser and IP takes
+    # away the only route they have to fix the problem themselves (add a different card, pay
+    # through PayPal), and there is no version of "your card was reported stolen" where we want to
+    # stop the actual human from paying with a card that is fine. Somebody spraying many stolen
+    # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
+    # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
+    # distinct cards have failed.
+    #
+    # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
+    # record one — so for a recurring charge we also block the card that renewal was charged on,
+    # when we can prove which card that was. See #subscription_card_fingerprint for what counts as
+    # proof; when there is none, we block nothing beyond the failed charge's own fingerprint.
+    #
+    # The card is deliberately NOT looked up from the email or the account on the purchase. Both of
+    # those can belong to somebody else: a membership can be started under an established customer's
+    # address at an unauthenticated checkout (see #buyer_has_clean_payment_history?), so "the newest
+    # card on any purchase sharing this email or account" — what #recent_stripe_fingerprint returns
+    # — can be a bystander's working card, and a fingerprint-less renewal would get that card
+    # blocked platform-wide. Subscription#credit_card_to_charge is avoided for the same reason: it
+    # falls back to the account owner's card when the subscription has none of its own, and the
+    # account is exactly the identity we cannot trust here.
+    def block_buyer_payment_method!
+      block_by_charge_processor_fingerprint!
+      block_by_subscription_card_fingerprint! if is_recurring_subscription_charge
+    end
+
+    # The fingerprint of the card this failed renewal was charged on — but only when the
+    # subscription's own purchase records prove that card was already paying for it before this
+    # attempt. Nil otherwise, including when there is no subscription.
+    #
+    # Two things are going on here, and both matter.
+    #
+    # The card is read from this purchase's own `credit_card_id`, not from the subscription row.
+    # `credit_card_id` is a snapshot taken when the renewal was built and charged, and nothing
+    # rewrites it afterwards. `subscription.credit_card_id` moves: the buyer can replace their card,
+    # and a charge held for Strong Customer Authentication fails up to a quarter of an hour after it
+    # was attempted, so by the time this failure callback runs the subscription row can already point
+    # at a different card. Reading it then would block a card this charge never touched while leaving
+    # the one that actually declined alone.
+    #
+    # The snapshot on its own is not trustworthy either, because of where it can come from. When the
+    # subscription holds no card of its own, both Subscription#build_purchase and
+    # Purchase#load_chargeable_for_charging fall back to the card on the purchaser's account — and
+    # that account is the identity we cannot trust, for the reason set out in
+    # #buyer_has_clean_payment_history?: somebody can open a membership under an established
+    # customer's email address at an unauthenticated checkout, and the account resolved from that
+    # address carries the real customer's saved card. So we additionally require that an earlier
+    # purchase of this same subscription was charged successfully on the same card. That is the
+    # subscription itself having paid us with that card, recorded in purchase rows nobody edits
+    # later. A card appearing for the first time on the failed attempt gets no fallback block: on a
+    # genuine card-testing attempt the charge normally records its own fingerprint anyway, and being
+    # wrong in the other direction blocks a bystander's working card platform-wide.
+    #
+    # That earlier purchase also has to be one money actually moved for. A renewal whose price came
+    # out at zero — fully covered by a discount or by credit — is still recorded as `successful` and
+    # still carries whichever card was on file at the time, even though nothing was charged to it.
+    # Counting such a row would hand provenance to a card that never paid us: open a membership under
+    # an established customer's email address at an unauthenticated checkout, let one zero-priced
+    # renewal record their saved card, and a later fingerprint-less decline would block that
+    # bystander's working card platform-wide. `non_free` keeps the proof to charges that settled.
+    def subscription_card_fingerprint
+      return if credit_card_id.blank?
+      return if subscription.blank?
+      return unless subscription.purchases.successful.non_free.where.not(id:).exists?(credit_card_id:)
+
+      credit_card&.stripe_fingerprint
+    end
+
+    def block_by_subscription_card_fingerprint!
+      fingerprint = subscription_card_fingerprint
+      return if fingerprint.blank?
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: fingerprint)
     end
 
     def suspend_buyer_on_fraudulent_card_decline!
