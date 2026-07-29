@@ -143,6 +143,46 @@ describe FollowersController, inertia: true do
         end
       end
 
+      # Following a suspended seller must fail at the controller, before
+      # Follower::CreateService is ever invoked: creating the Follower row is
+      # what sends the "Please confirm your follow request" email, which a
+      # phishing ring used as a relay to mail harvested addresses from
+      # Gumroad's own domain — and kept using after the accounts were banned,
+      # because this public POST endpoint never checked suspension. The
+      # response must be indistinguishable from an unknown seller_id so the
+      # endpoint doesn't disclose that an account is suspended.
+      context "when the followed seller is suspended" do
+        before do
+          admin = create(:admin_user)
+          seller.flag_for_fraud!(author_id: admin.id)
+          seller.suspend_for_fraud!(author_id: admin.id)
+        end
+
+        it "creates no follower, sends no confirmation email, and never reaches the service" do
+          expect(Follower::CreateService).not_to receive(:perform)
+
+          expect do
+            expect do
+              post :create, params: { email: "stranger@example.com", seller_id: seller.external_id }
+            end.not_to change { Follower.count }
+          end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+        end
+
+        it "responds like an unknown seller (HTML)" do
+          post :create, params: { email: "stranger@example.com", seller_id: seller.external_id }
+
+          expect(response).to redirect_to(custom_domain_subscribe_path)
+          expect(flash[:alert]).to eq("Sorry, something went wrong.")
+        end
+
+        it "responds like an unknown seller (JSON)" do
+          post :create, params: { email: "stranger@example.com", seller_id: seller.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body).to eq("success" => false, "message" => "Sorry, something went wrong.")
+        end
+      end
+
       describe "create follow object with email, create a user with same email, and log in" do
         it "follow should update the existing follower and not create another one or throw an exception" do
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
@@ -289,6 +329,30 @@ describe FollowersController, inertia: true do
           expect(inertia.component).to eq("Followers/FromEmbedForm")
           expect(inertia.props[:success]).to be(true)
           expect(inertia.props[:message]).to eq("You are now following #{seller.name_or_username}!")
+        end
+      end
+
+      # Same suspension guard as POST create: from_embed_form goes through the
+      # shared create_follower helper, and the embed form is just as reachable
+      # by a bot as the main /follow endpoint.
+      context "when the followed seller is suspended" do
+        before do
+          admin = create(:admin_user)
+          seller.flag_for_fraud!(author_id: admin.id)
+          seller.suspend_for_fraud!(author_id: admin.id)
+        end
+
+        it "creates no follower and sends no confirmation email" do
+          expect(Follower::CreateService).not_to receive(:perform)
+
+          expect do
+            expect do
+              post :from_embed_form, params: { email: "stranger@example.com", seller_id: seller.external_id }, format: :json
+            end.not_to change { Follower.count }
+          end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["success"]).to be(false)
         end
       end
 
