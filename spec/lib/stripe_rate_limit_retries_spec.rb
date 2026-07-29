@@ -91,8 +91,6 @@ describe "Stripe rate-limit retries in the test environment" do
     it "retries inside a cassette that ignores the Stripe host, where Stripe is live" do
       # The shipping and taxjar specs record TaxJar only and let every other host
       # through, so a cassette is open while Stripe is being called for real.
-      # Treating that as a replay is what left ten Test Slow shards red on
-      # 2026-07-29 with 46 unretried 429s.
       error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
 
       vcr_turned_on do

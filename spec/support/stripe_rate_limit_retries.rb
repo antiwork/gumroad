@@ -131,9 +131,8 @@ module StripeTestRateLimitRetries
     # An OPEN cassette does not mean Stripe is coming from it. The shipping and
     # taxjar specs wrap themselves in only_matching_vcr_request_from(["taxjar"])
     # (see spec_helper), which tells VCR to ignore every host but TaxJar — so
-    # Stripe inside those cassettes is live and rate-limitable, and refusing to
-    # retry there is what reddens those shards. Ask VCR whether it would
-    # intercept a Stripe request, not whether a cassette happens to be open.
+    # Stripe inside those cassettes is live and rate-limitable. Ask VCR whether
+    # it would intercept a Stripe request, not whether a cassette is open.
     def stripe_served_from_a_cassette?
       return false unless defined?(VCR) && VCR.current_cassette.present?
 
