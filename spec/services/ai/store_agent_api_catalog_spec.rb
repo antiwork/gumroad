@@ -119,6 +119,77 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  # Regression for gumroad-private#1466. The agent could read the profile's custom HTML and nothing
+  # else, so a seller with no custom HTML looked to it like a seller with a bare default storefront —
+  # and it told him the heading on his own live page did not exist, and that standalone pages and the
+  # `gumroad pages` CLI commands were not real Gumroad features.
+  describe "default profile layout endpoint" do
+    it "exposes the seller's tabs and section headings as a read" do
+      endpoint = described_class.find("get_user_profile_layout")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.method).to eq(:get)
+      expect(endpoint.path).to eq("/user/profile_layout")
+      expect(endpoint.scope).to eq("view_profile")
+    end
+
+    # The section editor is a structured surface the seller owns, and the agent's only appearance
+    # write path is deliberately custom HTML (gumroad-private#984). Reading it must not grow a write.
+    it "has no write counterpart, since the seller edits sections in the dashboard" do
+      expect(described_class.write_ids.grep(/profile_layout/)).to be_empty
+    end
+
+    # The exact inference that produced the incident, stated in the manifest so the model reads it
+    # even when it never calls the endpoint.
+    it "states in the manifest that no custom HTML does not mean a default profile" do
+      manifest = described_class.manifest(:read)
+
+      expect(manifest).to include("get_user_profile_layout")
+      expect(manifest).to match(/does NOT mean the profile is Gumroad's untouched default/i)
+    end
+  end
+
+  describe "standalone storefront pages endpoints" do
+    it "exposes reads for the pages list and one page by slug" do
+      list = described_class.find("list_pages")
+      show = described_class.find("get_page")
+
+      expect(list.read?).to eq(true)
+      expect(list.path).to eq("/pages")
+      expect(show.read?).to eq(true)
+      expect(show.path).to eq("/pages/:id")
+      expect(show.path_params).to eq(%w[id])
+    end
+
+    it "exposes an update that can write either the rich text or the custom HTML" do
+      endpoint = described_class.find("update_page")
+
+      expect(endpoint.write?).to eq(true)
+      expect(endpoint.method).to eq(:patch)
+      expect(endpoint.scope).to eq("edit_profile")
+      expect(endpoint.params).to match_array(%w[title content custom_html])
+    end
+
+    # Sending both clears one of them server-side (Api::V2::PagesController#assign_content), so the
+    # summary has to say it or the agent will wipe a seller's editor content by accident.
+    it "warns that content and custom_html are mutually exclusive" do
+      expect(described_class.find("update_page").summary).to match(/mutually exclusive and sending one CLEARS the other/)
+    end
+
+    # Creating and deleting pages is deliberately not exposed: those change what urls a storefront
+    # serves. The agent must not offer what it cannot do.
+    it "exposes no create or delete for pages" do
+      expect(described_class.write_ids).not_to include("create_page")
+      expect(described_class.write_ids).not_to include("delete_page")
+    end
+
+    # The claim it made to the seller: that these pages are not a real feature.
+    it "states in the manifest that standalone pages are real" do
+      expect(described_class.manifest(:read)).to match(/never tell a creator standalone pages do not exist/i)
+    end
+  end
+
   describe "profile custom HTML endpoints" do
     it "exposes a targeted-edit write so an existing page never has to be fully regenerated" do
       endpoint = described_class.find("edit_user_custom_html")

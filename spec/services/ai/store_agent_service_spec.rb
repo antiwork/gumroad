@@ -274,6 +274,40 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/Never author an empty image slot/)
       end
 
+      # Regression for gumroad-private#1466: a seller asked about the `<h2>Albums</h2>` on his own
+      # live storefront and about the pages he had created. The agent could read only the profile's
+      # custom HTML, which was nil, so it concluded his profile was Gumroad's untouched default and
+      # spent 45 minutes telling him: the heading was "actually Products, not Albums", it was
+      # probably his browser cache, standalone pages don't exist on Gumroad, and the CLI's own
+      # `pages push`/`pages preview` commands "aren't real Gumroad features". Every one of those was
+      # false. The heading was his own section header; the pages feature and the CLI commands ship.
+      #
+      # The prompt now has to name all three storefront surfaces, and — the load-bearing part —
+      # state that an empty custom HTML read does NOT mean the profile is the default.
+      it "teaches the model that the storefront has three surfaces and that empty custom HTML is not an empty profile" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        # The inference that caused the whole incident.
+        expect(captured[:system]).to match(/get_user_custom_html coming back empty means\s+only "no custom HTML" — it does NOT mean the storefront is Gumroad's untouched default/)
+        # Headings on the default profile are the seller's own, and are readable.
+        expect(captured[:system]).to include("get_user_profile_layout")
+        expect(captured[:system]).to match(/never claim the\s+default profile ships a heading of its own/)
+        # Standalone pages, and the CLI that drives them, are real.
+        expect(captured[:system]).to include("list_pages")
+        expect(captured[:system]).to match(/gumroad pages pull\/preview\/push/)
+        expect(captured[:system]).to match(/NEVER tell a creator that standalone\s+pages don't exist on Gumroad/)
+        # The rule that replaces "it isn't there".
+        expect(captured[:system]).to match(/the answer is which surface it lives on —\s+not that it isn't there/)
+        # It can read and change pages but not create or delete them, so it must not offer to.
+        expect(captured[:system]).to match(/you cannot create or delete them/)
+      end
+
       it "rejects an unknown endpoint id without calling the API" do
         expect(api_client).not_to receive(:get)
         captured = nil
