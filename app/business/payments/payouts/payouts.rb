@@ -88,7 +88,7 @@ class Payouts
         # Matched on shape rather than on the exact string, because the note embeds its own payout
         # date and so is never byte-identical between runs.
         if keep_explanation_visible
-          newest_note = user.comments.with_type_payout_note.last
+          newest_note = user.latest_payout_note
           if newest_note.present? && !PayoutNoteVisibility.seller_visible?(newest_note) &&
              newest_note.content.to_s.match?(PAUSED_PAYOUT_NOTE_REGEX)
             return false

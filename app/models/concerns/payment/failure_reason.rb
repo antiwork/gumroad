@@ -23,15 +23,22 @@ module Payment::FailureReason
   # receiving account (3015) and a declined transaction (9302) are deliberately NOT here: the
   # seller can clear those with PayPal without touching the address we hold, and the block below
   # is keyed on the address, so it would have no way to notice they had been resolved.
-  TERMINAL_PAYPAL_FAILURE_REASONS = ["PAYPAL 3148", "PAYPAL 14159"].freeze
-
-  # What the seller is told when a payout hits one of those rejections. Written in the second
-  # person because, unlike every other PayPal failure note, these are shown to the seller: the
-  # money stops moving until they act, so they have to know PayPal is the blocker and what to do.
+  #
+  # The keys are the rejections; the values are what the seller is told about each. Written in the
+  # second person because, unlike every other PayPal failure note, these are shown to the seller:
+  # the money stops moving until they act, so they have to know PayPal is the blocker and what to do.
   TERMINAL_PAYPAL_FAILURE_SELLER_REASONS = {
     "PAYPAL 3148" => "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
     "PAYPAL 14159" => "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
   }.freeze
+
+  # Which rejections stop the retries, derived from the copy above rather than listed separately.
+  #
+  # Every code treated as terminal has to have seller-facing wording, because the payout walk looks
+  # that wording up by code (Payment#terminal_paypal_failure_seller_note) while deciding whether to
+  # explain the block. Two hand-maintained lists would let a third code be added to one and not the
+  # other, and the failure mode is a KeyError raised inside the weekly payout run.
+  TERMINAL_PAYPAL_FAILURE_REASONS = TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.keys.freeze
 
   # Whether a payout note is one of the terminal-PayPal explanations above.
   #

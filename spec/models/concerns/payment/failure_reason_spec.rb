@@ -5,6 +5,32 @@ require "spec_helper"
 describe Payment::FailureReason do
   let(:payment) { create(:payment) }
 
+  # The payout walk looks the seller-facing wording up by rejection code while deciding whether to
+  # explain the block, so a code treated as terminal without wording would raise inside the weekly
+  # payout run. The constant is derived rather than listed twice; this holds that invariant.
+  describe "TERMINAL_PAYPAL_FAILURE_REASONS" do
+    it "has seller-facing wording for every rejection it treats as terminal" do
+      expect(described_class::TERMINAL_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159"])
+      expect(described_class::TERMINAL_PAYPAL_FAILURE_REASONS)
+        .to match_array(described_class::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.keys)
+    end
+
+    # Recognising an already-written note by its wording is how the pipeline knows whether the
+    # seller can still see an explanation, so a reword has to keep matching the old rows.
+    it "still recognises every wording ever shipped" do
+      described_class::HISTORICAL_SELLER_REASONS.each do |reason|
+        expect(described_class.terminal_paypal_explanation_note?("Your payout could not be sent because #{reason}."))
+          .to eq(true)
+      end
+    end
+
+    it "does not recognise an unrelated payout note" do
+      expect(described_class.terminal_paypal_explanation_note?("Payout on July 1st, 2026 was skipped because the account was under review."))
+        .to eq(false)
+      expect(described_class.terminal_paypal_explanation_note?(nil)).to eq(false)
+    end
+  end
+
   describe "#add_payment_failure_reason_comment" do
     context "when failure_reason is not present" do
       it "doesn't add payout note to the user" do

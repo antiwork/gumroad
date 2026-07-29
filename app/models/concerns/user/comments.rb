@@ -25,11 +25,25 @@ module User::Comments
   # caps it: an account can carry a long tail of internal breadcrumbs, and a seller-facing note
   # buried under that many newer ones is too stale to matter.
   def latest_seller_visible_payout_note
-    comments.with_type_payout_note
-            .alive
-            .where(author_id: GUMROAD_ADMIN_ID)
-            .order(created_at: :desc, id: :desc)
-            .limit(PayoutNoteVisibility::MAX_NOTES_SCANNED)
-            .find { |note| PayoutNoteVisibility.seller_visible?(note) }
+    recent_payout_notes.find { |note| PayoutNoteVisibility.seller_visible?(note) }
   end
+
+  # The newest payout note on the account, seller-facing or internal.
+  #
+  # Same scoping and ordering as latest_seller_visible_payout_note on purpose — the payout pipeline
+  # compares the two to decide whether a note it is about to write would repeat the newest one, and
+  # a different `alive`/author filter or ordering between them would have it comparing different
+  # rows.
+  def latest_payout_note
+    recent_payout_notes.first
+  end
+
+  private
+    def recent_payout_notes
+      comments.with_type_payout_note
+              .alive
+              .where(author_id: GUMROAD_ADMIN_ID)
+              .order(created_at: :desc, id: :desc)
+              .limit(PayoutNoteVisibility::MAX_NOTES_SCANNED)
+    end
 end
