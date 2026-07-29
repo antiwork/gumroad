@@ -127,12 +127,14 @@ class CheckoutController < ApplicationController
       seller_ids = products.pluck(:seller_id).uniq
       return unless seller_ids.one?
 
-      profile = User.find_by(id: seller_ids.first)&.seller_profile
+      seller = User.find_by(id: seller_ids.first)
+      profile = seller&.seller_profile
       css = profile&.custom_styles.presence
       return unless css
 
       {
         css:,
+        seller_id: seller.external_id,
         theme: {
           accent_color: profile.highlight_color,
           indicator_color: profile.accent_color_for_indicators,

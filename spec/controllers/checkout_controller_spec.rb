@@ -89,7 +89,9 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show
 
-        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+        checkout_style = inertia.props[:checkout_style]
+        expect(checkout_style[:css]).to eq(branded_seller.seller_profile.custom_styles)
+        expect(checkout_style[:seller_id]).to eq(branded_seller.external_id)
       end
 
       it "sends the whole palette, not just the accent" do

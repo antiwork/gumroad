@@ -40,7 +40,11 @@ import {
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
-import { type CheckoutTheme, CheckoutThemeProvider } from "$app/components/Checkout/checkoutTheme";
+import {
+  type CheckoutStyle,
+  CheckoutThemeProvider,
+  getApplicableCheckoutStyle,
+} from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -77,7 +81,7 @@ type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
   // Optional because partial reloads can omit a prop that full renders always include.
-  checkout_style?: { css: string; theme: CheckoutTheme } | null;
+  checkout_style?: CheckoutStyle | null;
   stripe_fonts_css_source: string;
   checkout: {
     add_products: ProductToAdd[];
@@ -172,6 +176,10 @@ const CheckoutIndexPage = () => {
   });
   const initialCheckout = initialCheckoutRef.current;
   const cartForm = useForm<{ cart: CartState }>({ cart: initialCheckout.cart });
+  const checkoutStyle = getApplicableCheckoutStyle(
+    props.checkout_style,
+    cartForm.data.cart.items.map(({ product }) => product.creator.id),
+  );
 
   // Flush the initial cart's side effects exactly once, off the render path.
   useRunOnce(() => {
@@ -797,9 +805,9 @@ const CheckoutIndexPage = () => {
   return (
     <StateContext.Provider value={reducer}>
       {/* Unlayered seller styles override the stock values declared in `@layer base`. */}
-      {props.checkout_style ? (
+      {checkoutStyle ? (
         <Head>
-          <style>{props.checkout_style.css}</style>
+          <style>{checkoutStyle.css}</style>
         </Head>
       ) : null}
       {redirecting ? null : results ? (
@@ -814,7 +822,7 @@ const CheckoutIndexPage = () => {
       ) : (
         <CheckoutThemeProvider
           value={{
-            theme: props.checkout_style?.theme ?? null,
+            theme: checkoutStyle?.theme ?? null,
             stripe_fonts_css_source: props.stripe_fonts_css_source,
           }}
         >

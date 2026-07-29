@@ -14,6 +14,17 @@ export type CheckoutTheme = {
   font_family: string;
 };
 
+export type CheckoutStyle = {
+  css: string;
+  seller_id: string;
+  theme: CheckoutTheme;
+};
+
+export const getApplicableCheckoutStyle = (checkoutStyle: CheckoutStyle | null | undefined, sellerIds: string[]) =>
+  checkoutStyle && sellerIds.length > 0 && sellerIds.every((sellerId) => sellerId === checkoutStyle.seller_id)
+    ? checkoutStyle
+    : null;
+
 type CheckoutThemeContext = {
   theme: CheckoutTheme | null;
   stripe_fonts_css_source: string;
