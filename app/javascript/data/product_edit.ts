@@ -72,6 +72,49 @@ export class StaleContentConflictError extends Error {
   }
 }
 
+// The save contract's refusal of a deletion authorised by a token that no
+// longer describes the stored state (see Product::SaveContract). Raised before
+// any mutation, so the removals are still pending in the database and still
+// pending in this editor session — this is emphatically not a failed save to
+// recover from by reloading, which would discard them.
+//
+// Carries the fresh token the server issued alongside the 409 precisely so the
+// editor can adopt it and resubmit the same removals. Without that, the seller
+// has no path back to the deletion they already confirmed.
+export class StaleDeletionConflictError extends Error {
+  constructor(
+    message: string,
+    public editorRevision: string | null,
+  ) {
+    super(message);
+  }
+}
+
+// The server's error payload for a rejected save. Every conflict the editor can
+// act on is discriminated by `error_code`, never by HTTP status: stale-content
+// and stale-deletion both answer 409 but demand opposite handling (reload vs.
+// retry), so status alone cannot tell them apart.
+export type SaveProductErrorPayload = {
+  error_message: string;
+  error_code?: string;
+  editor_revision?: string | null;
+  hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
+  stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
+};
+
+export const saveProductError = (error: SaveProductErrorPayload): Error => {
+  switch (error.error_code) {
+    case "hidden_variant_content_conflict":
+      return new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? []);
+    case "stale_content_conflict":
+      return new StaleContentConflictError(error.error_message, error.stale_records ?? []);
+    case "stale_deletion_conflict":
+      return new StaleDeletionConflictError(error.error_message, error.editor_revision ?? null);
+    default:
+      return new ResponseError(error.error_message);
+  }
+};
+
 export const filesForSave = <T extends { id: string }>(
   files: T[],
   embeddedFileIds: Set<unknown>,
@@ -393,19 +436,7 @@ export const saveProduct = async (
       installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
-  if (!response.ok) {
-    const error = typia.assert<{
-      error_message: string;
-      error_code?: string;
-      hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
-      stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
-    }>(await response.json());
-    if (error.error_code === "hidden_variant_content_conflict")
-      throw new HiddenVariantContentConflictError(error.error_message, error.hidden_variant_pages ?? []);
-    if (error.error_code === "stale_content_conflict")
-      throw new StaleContentConflictError(error.error_message, error.stale_records ?? []);
-    throw new ResponseError(error.error_message);
-  }
+  if (!response.ok) throw saveProductError(typia.assert<SaveProductErrorPayload>(await response.json()));
   if (response.status === 204) return {};
   return typia.assert<SaveProductResponse>(await response.json());
 };

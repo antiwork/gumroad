@@ -12,6 +12,7 @@ import {
   richContentMoveSourceIds,
   SaveProductResponse,
   StaleContentConflictError,
+  StaleDeletionConflictError,
   saveProduct,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -347,6 +348,14 @@ const ProductEditPage = (props: Props) => {
   const [staleContentConflict, setStaleContentConflict] = React.useState<
     { type: "page" | "variant"; id: string; name: string | null }[] | null
   >(null);
+  // The save contract refused this session's deletions as stale-token. Distinct
+  // from staleContentConflict above: nothing was written and the removals are
+  // still pending, so the resolution is retry-with-the-fresh-token, never a
+  // reload (which would silently drop what the seller asked to delete).
+  const [staleDeletionConflict, setStaleDeletionConflict] = React.useState<{
+    message: string;
+    editorRevision: string | null;
+  } | null>(null);
   // Client-generated id → canonical server id, accumulated separately because
   // variant and page external ids are not distinct namespaces.
   const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
@@ -367,10 +376,18 @@ const ProductEditPage = (props: Props) => {
   //   content for all versions", and preserve the hidden version pages (their
   //   ids go into preserved_rich_content_ids — they can't appear in the
   //   payload because this editor session never loaded them).
-  const performSave = async (conflictResolution?: {
-    choice: "keep_shared" | "keep_version";
-    hiddenPageIds: string[];
-  }): Promise<boolean> => {
+  //
+  // freshEditorRevision: the token returned with a stale_deletion_conflict,
+  // used to resubmit the same removals. It is threaded as an argument rather
+  // than read back off `product`, because the retry runs in the closure that
+  // caught the conflict and would otherwise see the pre-update token.
+  const performSave = async (
+    conflictResolution?: {
+      choice: "keep_shared" | "keep_version";
+      hiddenPageIds: string[];
+    },
+    freshEditorRevision?: string | null,
+  ): Promise<boolean> => {
     let saved = false;
     let productToSave = product;
     if (conflictResolution?.choice === "keep_shared") {
@@ -398,6 +415,7 @@ const ProductEditPage = (props: Props) => {
     // those later edits without pretending they were part of this request.
     const sentConfirmedPageIds = new Set(productToSave.confirmed_removed_rich_content_ids ?? []);
     const productSent = structuredClone(productToSave);
+    if (freshEditorRevision !== undefined) productSent.editor_revision = freshEditorRevision;
     productSent.confirmed_removed_rich_content_ids = [
       ...new Set([...(productSent.confirmed_removed_rich_content_ids ?? []), ...richContentMoveSourceIds(productSent)]),
     ];
@@ -475,6 +493,14 @@ const ProductEditPage = (props: Props) => {
         setHiddenContentConflict(e.hiddenPages);
       } else if (e instanceof StaleContentConflictError) {
         setStaleContentConflict(e.staleRecords);
+      } else if (e instanceof StaleDeletionConflictError) {
+        // Nothing was written and the pending removals are intact, so the only
+        // thing this session lacks is a token the server will accept. Adopt the
+        // fresh one and offer the retry the server's 409 was designed for. The
+        // token is also written back onto product state so an unrelated later
+        // save in this session isn't refused for the same reason.
+        if (e.editorRevision !== null) updateProduct((current) => (current.editor_revision = e.editorRevision));
+        setStaleDeletionConflict({ message: e.message, editorRevision: e.editorRevision });
       } else {
         assertResponseError(e);
         showAlert(e.message, "error");
@@ -712,6 +738,39 @@ const ProductEditPage = (props: Props) => {
               <p>
                 Nothing was saved. Reload the page to get the latest content — your unsaved edits in this session will
                 be lost, so copy anything you need first.
+              </p>
+            </div>
+          </Modal>
+        ) : null}
+        {staleDeletionConflict ? (
+          <Modal
+            open
+            onClose={() => setStaleDeletionConflict(null)}
+            title="Confirm the changes you asked to delete"
+            footer={
+              <>
+                <Button onClick={() => setStaleDeletionConflict(null)}>Keep editing</Button>
+                <Button
+                  color="accent"
+                  onClick={() => {
+                    const revision = staleDeletionConflict.editorRevision;
+                    setStaleDeletionConflict(null);
+                    void performSave(undefined, revision);
+                  }}
+                >
+                  Save again
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <p>
+                This product changed after you opened it, so we did not delete anything yet — deleting from an outdated
+                view could remove the wrong thing.
+              </p>
+              <p>
+                Nothing was saved and the items you removed are still marked for deletion here. Save again to apply them
+                against the current version of the product.
               </p>
             </div>
           </Modal>
