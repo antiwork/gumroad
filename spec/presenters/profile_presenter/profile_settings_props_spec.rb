@@ -37,10 +37,15 @@ describe ProfilePresenter do
       expect(profile_settings_for(seller)).not_to have_key(:username)
     end
 
-    it "does not include profile design settings" do
+    it "includes the profile design settings" do
       seller = create_seller!(username: "designless", email: "designless@example.com")
+      seller.seller_profile.update!(background_color: "#000000", highlight_color: "#009a49", font: "Roboto Mono")
 
-      expect(profile_settings_for(seller)).not_to include(:background_color, :highlight_color, :font)
+      expect(profile_settings_for(seller)).to include(
+        background_color: "#000000",
+        highlight_color: "#009a49",
+        font: "Roboto Mono",
+      )
     end
   end
 end

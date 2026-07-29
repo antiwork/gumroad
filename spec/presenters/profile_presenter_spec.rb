@@ -190,6 +190,9 @@ describe ProfilePresenter do
           profile_settings: {
             name: seller.name,
             bio: seller.bio,
+            font: seller.seller_profile.font,
+            background_color: seller.seller_profile.background_color,
+            highlight_color: seller.seller_profile.highlight_color,
             profile_picture_blob_id: nil,
           },
           editable_profile: {

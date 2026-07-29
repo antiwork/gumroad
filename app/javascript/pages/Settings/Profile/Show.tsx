@@ -1,4 +1,4 @@
-import { TwitterX } from "@boxicons/react";
+import { FontFamily, TwitterX } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
@@ -6,12 +6,12 @@ import typia from "typia";
 
 import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
 import { CreatorProfile } from "$app/parsers/profile";
+import { classNames } from "$app/utils/classNames";
 import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -27,6 +27,7 @@ import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
+import { ColorPicker } from "$app/components/ui/ColorPicker";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -35,7 +36,7 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
-type ProfileSettingsTab = "about" | "pages" | "share";
+type ProfileSettingsTab = "about" | "design" | "pages" | "share";
 
 // How long the user's most recent answer to the unsaved-changes prompt stays reusable for a
 // retry of the same navigation. Long enough to absorb a burst of repeated attempts (the bug
@@ -45,7 +46,24 @@ const LEAVE_ANSWER_REUSE_WINDOW_MS = 2000;
 type ProfileSettingsForm = {
   name: string | null;
   bio: string | null;
+  font: string;
+  background_color: string;
+  highlight_color: string;
   profile_picture_blob_id: string | null;
+};
+
+// Mirrors SellerProfile::FONT_CHOICES and the after_initialize defaults in app/models/seller_profile.rb.
+// The model validates inclusion, so adding a font here without adding it there fails the save.
+const DEFAULT_PROFILE_FONT = "ABC Favorit";
+const DEFAULT_PROFILE_BACKGROUND_COLOR = "#ffffff";
+const FONT_CHOICES = [DEFAULT_PROFILE_FONT, "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"];
+const FONT_DESCRIPTIONS: Record<string, string> = {
+  "ABC Favorit": "Quirky and unique sans-serif",
+  Inter: "Simple and modern sans-serif",
+  Domine: "Modern and bold serif",
+  Merriweather: "Sturdy and pleasant serif",
+  "Roboto Slab": "Personable and fun serif",
+  "Roboto Mono": "Technical and monospace",
 };
 
 type ProfilePageProps = {
@@ -68,7 +86,6 @@ export default function SettingsPage() {
     username,
   } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
-  const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
@@ -226,23 +243,32 @@ export default function SettingsPage() {
     postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
-  // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the saved
-  // colour so its text clears 4.5:1. Every other accent use keeps the saved colour.
-  const accentColors = getAccessibleAccent(currentSeller?.profileHighlightColor ?? "#000000");
+  // Preview colours/font come from the FORM state, not the saved seller record, so editing a colour
+  // or font repaints the preview on the spot instead of waiting for a save + reload.
+  //
+  // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the chosen
+  // colour so its text clears 4.5:1. Every other accent use keeps the chosen colour.
+  const accentColors = getAccessibleAccent(profileSettings.highlight_color);
 
-  const profileColors = currentSeller
-    ? {
-        "--accent": hexToRgb(currentSeller.profileHighlightColor),
-        "--accent-with-text": hexToRgb(accentColors.accent),
-        "--contrast-accent": hexToRgb(accentColors.text),
-        "--filled": hexToRgb(currentSeller.profileBackgroundColor),
-        "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
-      }
-    : {};
+  // The accent is always pinned — it's the branding worth previewing and it reads on either scheme.
+  // The background/foreground pair is pinned only when the seller moved off the default white, so a
+  // default-theme preview follows the dashboard's own colour scheme instead of glaring white in dark
+  // mode (Sahil, #5888 → #5992).
+  const profileColors = {
+    "--accent": hexToRgb(profileSettings.highlight_color),
+    "--accent-with-text": hexToRgb(accentColors.accent),
+    "--contrast-accent": hexToRgb(accentColors.text),
+    ...(profileSettings.background_color.toLowerCase() !== DEFAULT_PROFILE_BACKGROUND_COLOR
+      ? {
+          "--filled": hexToRgb(profileSettings.background_color),
+          "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
+        }
+      : {}),
+  };
 
   const fontUrl =
-    currentSeller?.profileFont && currentSeller.profileFont !== "ABC Favorit"
-      ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
+    profileSettings.font !== DEFAULT_PROFILE_FONT
+      ? `https://fonts.googleapis.com/css2?family=${profileSettings.font}:wght@400;600&display=swap`
       : null;
 
   const handleUnlinkTwitter = asyncVoid(async () => {
@@ -277,6 +303,7 @@ export default function SettingsPage() {
   const tabBar = (
     <Tabs aria-label="Profile settings sections">
       {renderTab("about", "About")}
+      {renderTab("design", "Design")}
       {showPagesTab ? renderTab("pages", "Pages") : null}
       {renderTab("share", "Share")}
     </Tabs>
@@ -320,7 +347,7 @@ export default function SettingsPage() {
           <Preview
             scaleFactor={0.4}
             style={{
-              fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+              fontFamily: profileSettings.font === DEFAULT_PROFILE_FONT ? undefined : profileSettings.font,
               ...profileColors,
               "--primary": "var(--color)",
               "--body-bg": "rgb(var(--filled))",
@@ -447,6 +474,64 @@ export default function SettingsPage() {
                   )}
                 </Fieldset>
               ) : null}
+            </section>
+          ) : tab === "design" ? (
+            <section className="grid gap-8 p-4! md:p-8!">
+              <Fieldset>
+                <FieldsetTitle>Font</FieldsetTitle>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" role="radiogroup">
+                  {FONT_CHOICES.map((font) => {
+                    const isSelected = font === profileSettings.font;
+                    return (
+                      <Button
+                        role="radio"
+                        key={font}
+                        aria-checked={isSelected}
+                        onClick={() => updateProfileSettings({ font })}
+                        style={{ fontFamily: font === DEFAULT_PROFILE_FONT ? undefined : font }}
+                        disabled={!canUpdate}
+                        className={classNames(
+                          "items-start! justify-start! gap-3! text-left",
+                          // Accent outline only for the selected state — no lift or drop shadow
+                          // (Sahil, #6233). aria-checked above carries the state for assistive tech,
+                          // which is what keeps this legible when a seller's accent matches the border.
+                          isSelected && "border-accent! ring-1 ring-accent",
+                        )}
+                      >
+                        <FontFamily className="size-5 shrink-0" />
+                        <div>
+                          <h4 className="font-bold">{font}</h4>
+                          {FONT_DESCRIPTIONS[font]}
+                        </div>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </Fieldset>
+              <div className="flex flex-wrap gap-4">
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-backgroundColor`}>Background color</Label>
+                  </FieldsetTitle>
+                  <ColorPicker
+                    id={`${uid}-backgroundColor`}
+                    value={profileSettings.background_color}
+                    onChange={(evt) => updateProfileSettings({ background_color: evt.target.value })}
+                    disabled={!canUpdate}
+                  />
+                </Fieldset>
+                <Fieldset>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}-highlightColor`}>Highlight color</Label>
+                  </FieldsetTitle>
+                  <ColorPicker
+                    id={`${uid}-highlightColor`}
+                    value={profileSettings.highlight_color}
+                    onChange={(evt) => updateProfileSettings({ highlight_color: evt.target.value })}
+                    disabled={!canUpdate}
+                  />
+                </Fieldset>
+              </div>
             </section>
           ) : tab === "pages" && showPagesTab ? (
             <>

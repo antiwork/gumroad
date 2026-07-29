@@ -63,7 +63,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(seller.reload.name).to eq("New name")
     end
 
-    it "does not allow profile design fields to be updated from profile settings" do
+    it "updates the profile design fields" do
       seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
 
       put :update, params: { seller_profile: { background_color: "#000000", highlight_color: "#009a49", font: "Roboto Mono" } }
@@ -72,10 +72,26 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.reload.seller_profile).to have_attributes(
-        background_color: "#ffffff",
-        highlight_color: "#ff90e8",
-        font: "ABC Favorit",
+        background_color: "#000000",
+        highlight_color: "#009a49",
+        font: "Roboto Mono",
       )
+    end
+
+    it "rejects a font outside the allowed choices" do
+      seller.seller_profile.update!(font: "ABC Favorit")
+
+      put :update, params: { seller_profile: { font: "Comic Sans" } }
+
+      expect(seller.reload.seller_profile.font).to eq("ABC Favorit")
+    end
+
+    it "rejects a colour that is not a hex value" do
+      seller.seller_profile.update!(highlight_color: "#ff90e8")
+
+      put :update, params: { seller_profile: { highlight_color: "not-a-colour" } }
+
+      expect(seller.reload.seller_profile.highlight_color).to eq("#ff90e8")
     end
 
     describe "when the user has not confirmed their email address" do
