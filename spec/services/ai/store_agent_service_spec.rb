@@ -745,6 +745,8 @@ describe Ai::StoreAgentService do
           # an instruction to tap a card "again" is about a card that IS there
           "I staged the discount in my previous message — tap that card again.",
           "I staged the update in my previous message; tap it again if the page didn't refresh.",
+          "I staged the changes in my previous message — tap that card again.",
+          "I staged the price change in my previous message — tap that card again.",
           "It's staged on my earlier message — scroll up and confirm it again.",
           # a compound subject is still a subject, however many nouns it has
           "Staged changes and updates wait for your approval.",
@@ -844,6 +846,10 @@ describe Ai::StoreAgentService do
           # the re-staging verb takes a named object as often as a pronoun.
           "I've staged it since the card on my earlier message was missing. Tap the card below.",
           "I've staged the discount again because the card on my earlier message was hidden. Tap the card.",
+          # The object of the re-staging verb is plural or two words as often as it is singular —
+          # "the changes" is the phrasing the model reaches for most.
+          "I've staged the changes again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the price change again because the card on my earlier message was hidden. Tap the card.",
         ]
 
         phantoms.each do |reply|

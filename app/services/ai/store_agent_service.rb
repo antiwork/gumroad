@@ -95,9 +95,17 @@ class Ai::StoreAgentService
       # ("I staged it again"), because "tap that card again" is an instruction about a card that
       # IS there, and treating it as re-staging would swallow the truthful point-back.
       # The re-staging verb takes a named object as readily as a pronoun ("I've staged the discount
-      # again"), so the anchor has to allow both or the signal is lost on the commoner phrasing.
+      # again"), so the anchor allows both, in the plural and two-word forms the model writes
+      # ("the changes", "the price change") as well.
       (?!\s+(?:(?:it|that|this)\s+|
-        (?:the|that|this|your|my)\s+(?:change|update|discount|offer|code|edit)\s+)?again\b)
+        (?:the|that|this|your|my)\s+
+        (?:price\s+changes?|offer\s+codes?|changes?|updates?|discounts?|offers?|codes?|edits?|
+          deletions?|removals?|renames?)\s+)?again\b)
+      # The dead-card markers scan to the end of the sentence, not the clause: "I've staged the
+      # update in my previous message; that card is gone now" is a re-staging claim, and narrowing
+      # the scan to `;` and dashes loses it. The cost is that a marker word used innocently in a
+      # later clause ("...tap that card again; your product photo is missing") also cancels the
+      # escape, which is the behavior in production today.
       (?![^.!?\n]*\b(?:new\s+card|another\s+card|gone|expired|disappeared|vanished|missing|empty|
         didn['’]t\s+render|no\s+longer|isn['’]t\s+there|not\s+there|can['’]t\s+see|
         couldn['’]t\s+(?:see|find))\b)
