@@ -119,37 +119,43 @@ class MonitorGumroadHeldBalanceCurrencyJob
     return if offending.empty? && unresolved.empty?
 
     hit_row_limit = candidates.size >= MAX_ROWS_LOADED
-    # How many rows match the query in total, asked for only when the ceiling truncated the
-    # run: without it "500 balances" reads the same whether the real number is 501 or 50,000,
-    # which is the difference between a stray row and an incident. The count runs over the
-    # same indexed range as the scan, so it is cheap on the rare day it is asked.
-    matching_row_count = hit_row_limit ? scope.count : candidates.size
+    # How many rows the QUERY matched, asked for only when the ceiling truncated the run:
+    # without it "500 balances" reads the same whether the real number is 501 or 50,000, which
+    # is the difference between a stray row and an incident. The count runs over the same
+    # indexed range as the scan, so it is cheap on the rare day it is asked.
+    #
+    # Named for the candidate scope, not for either bucket: it spans both, and on a truncated
+    # run neither bucket's true total is knowable, since which side of the split a row falls on
+    # is decided per row by holder_of_funds in Ruby and the unread rows were never resolved. A
+    # bucket-shaped name next to balance_count would read as the confirmed-violation total.
+    candidate_row_count = hit_row_limit ? scope.count : candidates.size
 
     # The two buckets get their own alerts with their own wording, because they call for
     # different responses: a confirmed mislabelled balance is a payout that will break, while
     # an unresolvable row means the monitor itself could not answer the question. Sending both
     # under the currency-violation message would report a monitor failure as a payout incident.
-    notify_offending(offending, hit_row_limit:, matching_row_count:) if offending.any?
-    notify_unresolved(unresolved, hit_row_limit:, matching_row_count:) if unresolved.any?
+    notify_offending(offending, hit_row_limit:, candidate_row_count:) if offending.any?
+    notify_unresolved(unresolved, hit_row_limit:, candidate_row_count:) if unresolved.any?
   end
 
   private
-    def notify_offending(offending, hit_row_limit:, matching_row_count:)
+    def notify_offending(offending, hit_row_limit:, candidate_row_count:)
       ErrorNotifier.notify(
         OFFENDING_MESSAGE,
         balance_count: offending.size,
         seller_count: offending.map(&:user_id).uniq.size,
         currencies: offending.map(&:holding_currency).uniq,
         created_since: BASELINE_CUTOFF.iso8601,
-        # True when the query hit MAX_ROWS_LOADED, in which case the counts above describe
-        # the rows that were read rather than everything that matches.
+        # True when the query hit MAX_ROWS_LOADED, in which case balance_count is a floor:
+        # candidate_row_count rows matched, and the unread remainder splits between this
+        # bucket and the unresolved one in a proportion the run never learned.
         hit_row_limit:,
-        matching_row_count:,
+        candidate_row_count:,
         sample: offending.first(SAMPLE_LIMIT).map { describe(_1) }
       )
     end
 
-    def notify_unresolved(unresolved, hit_row_limit:, matching_row_count:)
+    def notify_unresolved(unresolved, hit_row_limit:, candidate_row_count:)
       ErrorNotifier.notify(
         UNRESOLVED_MESSAGE,
         unresolved_count: unresolved.size,
@@ -157,7 +163,7 @@ class MonitorGumroadHeldBalanceCurrencyJob
         reasons: unresolved.map { |_balance, reason| reason }.uniq,
         created_since: BASELINE_CUTOFF.iso8601,
         hit_row_limit:,
-        matching_row_count:,
+        candidate_row_count:,
         unresolved_sample: unresolved.first(SAMPLE_LIMIT).map { |balance, reason| describe(balance).merge(reason:) }
       )
     end

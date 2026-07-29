@@ -298,17 +298,45 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
 
   # Once the ceiling is hit the counts describe only the rows that were read, so the alert has
   # to say so -- otherwise a mislabelling at scale reads as exactly MAX_ROWS_LOADED balances --
-  # and it reports the true total, because "500" reads the same whether the real number is 501
-  # or 50,000.
-  it "says the row ceiling was hit and reports the true total, so the counts are not mistaken for the whole picture" do
+  # and it reports how many rows the query matched, because "500" reads the same whether the
+  # real number is 501 or 50,000.
+  it "says the row ceiling was hit and reports the candidate total, so the counts are not mistaken for the whole picture" do
     stub_const("#{described_class}::MAX_ROWS_LOADED", 2)
     3.times { create_balance_at(after_baseline, holding_currency: Currency::EUR) }
 
     described_class.new.perform
 
     expect(ErrorNotifier).to have_received(:notify).with(
-      anything, hash_including(balance_count: 2, hit_row_limit: true, matching_row_count: 3)
+      anything, hash_including(balance_count: 2, hit_row_limit: true, candidate_row_count: 3)
     )
+  end
+
+  # The truncation total spans both buckets, so it must not be reported under a name that reads
+  # as either one's total: with a mixed truncated run, a "matching balances" figure in the
+  # currency-violation alert would count the unresolvable rows as confirmed violations.
+  it "keeps the truncation total distinct from each bucket's own count when a truncated run finds both" do
+    stub_const("#{described_class}::MAX_ROWS_LOADED", 2)
+    offending = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    unresolvable = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    unresolvable.update_column(:merchant_account_id, nil)
+    create_balance_at(after_baseline, holding_currency: Currency::EUR)
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      described_class::OFFENDING_MESSAGE,
+      hash_including(
+        balance_count: 1,
+        hit_row_limit: true,
+        candidate_row_count: 3,
+        sample: [hash_including(balance_id: offending.id)]
+      )
+    )
+    expect(ErrorNotifier).to have_received(:notify).with(
+      described_class::UNRESOLVED_MESSAGE,
+      hash_including(unresolved_count: 1, hit_row_limit: true, candidate_row_count: 3)
+    )
+    expect(ErrorNotifier).to have_received(:notify).twice
   end
 
   # The SQL excludes a seller's own Stripe Connect account rather than leaning on the Ruby
