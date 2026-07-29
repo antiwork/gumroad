@@ -94,8 +94,11 @@ class Ai::StoreAgentService
       # so those must still reach the guard. "again" has to sit on the staging verb itself
       # ("I staged it again"), because "tap that card again" is an instruction about a card that
       # IS there, and treating it as re-staging would swallow the truthful point-back.
-      (?!\s+(?:(?:it|that|this)\s+)?again\b)
-      (?![^.!?\n]*\b(?:new\s+card|another\s+card|gone|expired|disappeared|vanished|
+      # The re-staging verb takes a named object as readily as a pronoun ("I've staged the discount
+      # again"), so the anchor has to allow both or the signal is lost on the commoner phrasing.
+      (?!\s+(?:(?:it|that|this)\s+|
+        (?:the|that|this|your|my)\s+(?:change|update|discount|offer|code|edit)\s+)?again\b)
+      (?![^.!?\n]*\b(?:new\s+card|another\s+card|gone|expired|disappeared|vanished|missing|empty|
         didn['’]t\s+render|no\s+longer|isn['’]t\s+there|not\s+there|can['’]t\s+see|
         couldn['’]t\s+(?:see|find))\b)
       [^.!?\n]*\b(?:my|the)\s+(?:earlier|previous)\s+message\b
@@ -258,6 +261,10 @@ class Ai::StoreAgentService
         |
         #{STAGED_CLAIM_ACTION_NOUN}
           (?=\s*(?:[.!—–]|\s-\s|
+            # A conjoined noun has to end the clause too, or a compound SUBJECT ("Staged changes
+            # and updates wait for your approval") reads as an object. That deliberately gives up
+            # "Staged deletion and rename of the draft", which the agent has no way to produce
+            # while it stages one action per turn.
             and\s+#{STAGED_CLAIM_ACTION_NOUN}\b(?=\s*(?:[.!—–]|\s-\s))))
       )
       (?!#{STAGED_CLAIM_HISTORICAL_TAIL})

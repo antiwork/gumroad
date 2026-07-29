@@ -840,6 +840,10 @@ describe Ai::StoreAgentService do
           "Staged the update — confirm it and it applies after the next refresh.",
           # re-staging for a reason no marker list will ever fully enumerate
           "I've staged it again because you couldn't find the card on my earlier message. Tap the card.",
+          # "missing" and "empty" are the creator's own words for a card that never rendered, and
+          # the re-staging verb takes a named object as often as a pronoun.
+          "I've staged it since the card on my earlier message was missing. Tap the card below.",
+          "I've staged the discount again because the card on my earlier message was hidden. Tap the card.",
         ]
 
         phantoms.each do |reply|
