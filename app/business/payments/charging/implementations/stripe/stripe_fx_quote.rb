@@ -113,9 +113,12 @@ class StripeFxQuote
     # Older cached quotes (minted before this field was read) and any response where Stripe
     # omits rate_details yield nil, which callers treat as "convert at fx_rate as before".
     def parsed_base_rate(rate_data)
-      return nil unless rate_data.is_a?(Hash)
-
-      rate_details = rate_data[:rate_details] || rate_data["rate_details"]
+      # A scalar rate_data is the shape parsed_rate above also accepts, so it is a response we
+      # keep working with rather than reject — but it carries no rate_details at all, so it has
+      # to reach the notification below rather than return early. Returning nil here silently
+      # would leave every fresh quote converting the Connect legs at the buyer-facing rate with
+      # nothing to notice, which is the one failure this notification exists to prevent.
+      rate_details = rate_data.is_a?(Hash) ? (rate_data[:rate_details] || rate_data["rate_details"]) : nil
       base_rate = rate_details.is_a?(Hash) ? (rate_details[:base_rate] || rate_details["base_rate"]) : nil
 
       # Falling back to the buyer-facing rate is safe (it is what we did before base_rate

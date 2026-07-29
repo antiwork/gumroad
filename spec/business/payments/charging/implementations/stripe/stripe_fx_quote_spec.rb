@@ -61,6 +61,30 @@ describe StripeFxQuote do
     expect(quote.base_rate).to be_nil
   end
 
+  it "reports a missing base_rate even when the rate is a bare scalar rather than a hash" do
+    # parsed_rate accepts a scalar rate, so this is a response shape we keep working with. It
+    # carries no rate_details at all, which means every fresh quote would convert the Connect
+    # legs at the buyer-facing rate — exactly the silent degradation the notification exists to
+    # catch, so it has to fire here too and not only for the hash-with-no-rate_details shape.
+    response = Stripe::StripeResponse.new
+    response.data = {
+      id: "fxq_test",
+      lock_expires_at: 1.hour.from_now.to_i,
+      to_currency: "usd",
+      rates: {
+        cad: "0.800000000000000"
+      }
+    }
+    allow(Stripe).to receive(:raw_request).and_return(response)
+
+    expect(ErrorNotifier).to receive(:notify).with(/no rate_details\.base_rate/)
+
+    quote = described_class.create(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: "acct_test")
+
+    expect(quote.fx_rate).to eq(BigDecimal("0.8"))
+    expect(quote.base_rate).to be_nil
+  end
+
   it "creates platform-account quotes without Stripe-Account options" do
     response = Stripe::StripeResponse.new
     response.data = {
