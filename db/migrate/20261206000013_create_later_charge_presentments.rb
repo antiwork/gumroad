@@ -27,15 +27,6 @@ class CreateLaterChargePresentments < ActiveRecord::Migration[7.1]
       # fixed amount was worth when they agreed to it, so the drift Gumroad absorbs afterwards can
       # be measured per owner.
       t.decimal :signup_currency_units_per_usd, precision: 30, scale: 15, null: false
-      # The canonical US-dollar price this fixing was made against — the staleness anchor.
-      #
-      # A subscription's canonical price legitimately moves mid-life: a limited-duration discount
-      # runs out, Subscription#update_current_plan! handles an upgrade/downgrade or quantity
-      # change, a SubscriptionPlanChange applies. The fixed presentment amount cannot follow those
-      # on its own, so a charge MUST compare the price it is about to bill against this value and
-      # fall back to canonical dollars when they disagree. Without it a reader cannot tell a
-      # still-valid fixing from one that silently under- or over-charges after a price change.
-      t.bigint :canonical_price_cents, null: false
       # When this amount started applying. The newest row that has taken effect is the one a
       # charge should read.
       t.datetime :effective_from, null: false
