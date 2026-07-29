@@ -1475,6 +1475,28 @@ describe User, :vcr do
           expect(@user.email).to eq "buyer@example.com"
         end
       end
+
+      # payment_address is validated on EVERY save, not only when it changes, so an address stored
+      # before this change would otherwise make the whole user record unsaveable — every settings
+      # change and every background job that saves the user would raise, over a field the current
+      # operation never touched.
+      context "when payment_address carries an invisible character" do
+        it "is repaired rather than refused, so the user stays saveable" do
+          @user.payment_address = "\u200Fpayouts@example.com"
+
+          expect(@user).to be_valid
+          expect(@user.payment_address).to eq "payouts@example.com"
+        end
+
+        it "lets an existing user with a stored invisible character save an unrelated change" do
+          @user.save!
+          @user.update_column(:payment_address, "\u200Fpayouts@example.com")
+          @user.reload
+
+          expect { @user.update!(name: "Ada Lovelace") }.not_to raise_error
+          expect(@user.reload.payment_address).to eq "payouts@example.com"
+        end
+      end
     end
 
     describe "kindle_email" do

@@ -288,6 +288,14 @@ class User < ApplicationRecord
   validate :account_created_ip_is_not_blocked, on: :create
   validate :email_not_from_suspended_gmail_variant, on: :create
   validate :facebook_meta_tag_is_valid
+  # payment_address is validated on every save rather than only when it changes, so an address
+  # stored before we started refusing invisible characters would otherwise make the whole user
+  # record unsaveable — every settings change and every background job that saves the user would
+  # raise, over a field the current operation never touched. Stripping it means such a row heals
+  # itself on the next save instead. This is a payout address we hand to PayPal, not something
+  # the person is identified by, so repairing beats refusing here.
+  stripped_fields :payment_address
+
   validates :payment_address, email_format: true, allow_blank: true
 
   before_validation { self.tiktok_pixel_id = tiktok_pixel_id.strip if tiktok_pixel_id.present? }

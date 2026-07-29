@@ -44,7 +44,13 @@ class BlockedCustomerObject < ApplicationRecord
   end
 
   def self.comparable_email(email:)
-    local_part, domain = email.downcase.split("@")
+    # Invisible characters are removed before comparing so a block still matches regardless of
+    # whether the block or the incoming purchase carries one. Blocks recorded before we started
+    # normalizing hold the character in object_value, while incoming purchase emails are now
+    # cleaned — without this, such a block would silently stop matching and a buyer blocked for
+    # fraud could purchase again. Normalizing both sides of the comparison fixes those rows
+    # without needing to rewrite them.
+    local_part, domain = InvisibleCharacters.normalize_email(email).downcase.split("@")
     local_part = local_part.split("+").first # normalize plus sub-addressing
     local_part = local_part.delete(".") # remove dots
 

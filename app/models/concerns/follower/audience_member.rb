@@ -8,8 +8,12 @@ module Follower::AudienceMember
     after_destroy :remove_from_audience_member_details
   end
 
+  # deliverable? rather than valid?: a follower whose address was stored before we started refusing
+  # invisible characters is still reachable, because the delivery-time sanitizer cleans the
+  # recipient. Asking valid? here would drop them out of the seller's audience on the next
+  # unrelated touch of this row.
   def should_be_audience_member?
-    confirmed_at.present? && EmailFormatValidator.valid?(email)
+    confirmed_at.present? && EmailFormatValidator.deliverable?(email)
   end
 
   def audience_member_details

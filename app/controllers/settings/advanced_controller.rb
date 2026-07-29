@@ -73,7 +73,14 @@ class Settings::AdvancedController < Settings::BaseController
     end
 
     def set_emails_to_block
-      @emails_to_block = (params[:blocked_customer_emails].presence || "").split(/[\r\n]+/)
+      # Invisible characters are removed from each pasted line. The realistic flow is a seller
+      # copying a buyer's address out of our own interface — if that buyer's stored address was
+      # saved before we started refusing these characters, it still carries one, and refusing the
+      # paste would show a generic "invalid email" error for an address that looks perfect. This is
+      # a blocking control, so it has to accept the address and record the block.
+      @emails_to_block = (params[:blocked_customer_emails].presence || "")
+        .split(/[\r\n]+/)
+        .map { InvisibleCharacters.normalize_email(_1) }
     end
 
     def set_invalid_blocked_email_if_exists

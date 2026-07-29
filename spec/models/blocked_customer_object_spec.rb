@@ -71,6 +71,19 @@ describe BlockedCustomerObject do
           .not_to raise_error
         expect(described_class.email_blocked?(email: "buyer@example.com", seller_id: seller.id)).to be true
       end
+
+      # This is the one that matters for pre-existing rows. A block recorded before we started
+      # normalizing holds the character in object_value, while incoming purchase emails are now
+      # cleaned — so without normalizing the comparison too, the block silently stops matching and
+      # a buyer blocked for fraud can purchase again.
+      it "still matches a block whose STORED address carries the character" do
+        seller = create(:user)
+        blocked = create(:blocked_customer_object, seller:, object_type: "email",
+                                                   object_value: "buyer@example.com", blocked_at: DateTime.current)
+        blocked.update_column(:object_value, "\u200Fbuyer@example.com")
+
+        expect(described_class.email_blocked?(email: "buyer@example.com", seller_id: seller.id)).to be true
+      end
     end
   end
 

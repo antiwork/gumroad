@@ -43,7 +43,12 @@ module Purchase::AudienceMember
     result = can_contact?
     result &= purchase_state.in?(%w[successful gift_receiver_purchase_successful not_charged])
     result &= !is_gift_sender_purchase?
-    result &= EmailFormatValidator.valid?(email)
+    # deliverable? rather than valid?: an address stored before we started refusing invisible
+    # characters still carries one, and the delivery-time sanitizer cleans the recipient, so the
+    # person is still reachable. Asking valid? here would drop them out of the seller's audience on
+    # the next unrelated save of this purchase — losing them from counts, exports and workflows on
+    # top of the delivery problem they already have.
+    result &= EmailFormatValidator.deliverable?(email)
     if subscription_id.nil?
       result &= !stripe_refunded?
       result &= chargeback_date.blank? || chargeback_reversed?

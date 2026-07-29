@@ -61,6 +61,13 @@ module InvisibleCharacters
   # interior spaces at all. An email address never legitimately contains a space, so unlike
   # names we delete rather than preserve the word boundary — someone whose address arrived with
   # a no-break space in it meant no space at all.
+  #
+  # One deliberate imprecision: RFC 5321 permits a quoted local part that really does contain a
+  # space (`"a b"@example.com`), and this collapses it to `"ab"@example.com`. That shape is
+  # vanishingly rare, most mail providers reject it outright, and accepting an interior space
+  # would mean accepting the far more common case of an address that picked one up by accident.
+  # If a real address is ever reported broken by this, the fix is to skip normalization when the
+  # local part is quoted rather than to allow bare spaces.
   def normalize_email(value)
     return value if value.nil?
     remove(value).gsub(/\s/, "")

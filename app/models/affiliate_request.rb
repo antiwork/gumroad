@@ -10,6 +10,12 @@ class AffiliateRequest < ApplicationRecord
 
   validates :seller, :name, :email, :promotion_text, presence: true
   validates :name, length: { maximum: User::MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." }
+  # Stripped so a request submitted before we started refusing invisible characters can still be
+  # approved or ignored. The email is validated on every save, and approve/ignore save the record,
+  # so without this the seller could neither accept nor dismiss such a request. By that point this
+  # is stored data rather than something anyone is typing, so repairing beats refusing.
+  stripped_fields :email
+
   validates :email, email_format: true
   validate :duplicate_request_validation, on: :create
   validate :requester_is_not_seller, on: :create
