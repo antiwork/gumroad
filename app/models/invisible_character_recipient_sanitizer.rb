@@ -54,14 +54,14 @@ class InvisibleCharacterRecipientSanitizer
   end
   private_class_method :sanitized_recipient
 
-  # True when one live account stores the address exactly as it was addressed here and a
-  # DIFFERENT live account stores the cleaned form.
+  # True when one account stores the address exactly as it was addressed here and a DIFFERENT
+  # account stores the cleaned form.
   def self.owned_by_a_different_account?(address, normalized)
     # One query returns both rows: the email column collates as utf8mb4_unicode_ci, which treats
     # these characters as ignorable, so `WHERE email = '<RLM>buyer@example.com'` matches the plain
     # `buyer@example.com` row as well. The database therefore cannot tell the two variants apart
     # at all, and the rows have to be compared here in Ruby, byte for byte.
-    rows = User.alive.where(email: [address, normalized]).select(:id, :email).to_a
+    rows = User.where(email: [address, normalized]).select(:id, :email).to_a
     exact_owner = rows.find { _1.email == address }
     cleaned_owner = rows.find { _1.email == normalized }
 

@@ -106,13 +106,14 @@ describe InvisibleCharacterRecipientSanitizer do
       expect(deliver_to(user.email).to).to eq ["buyer@example.com"]
     end
 
-    # A deleted account cannot receive anything, so it is not a mailbox the message could leak
-    # into and it must not block the legacy account from hearing from us.
-    it "cleans it when the account owning the cleaned form is deleted" do
+    # Delivery goes to the external mailbox, not to a Gumroad account. A deleted Gumroad account
+    # that once owned the cleaned address still proves somebody else may receive that mailbox, so
+    # the sanitizer must fail closed rather than rewrite a dirty account's reset link there.
+    it "leaves it alone when the account owning the cleaned form is deleted" do
       legacy = stored_as("\u200Fbuyer@example.com")
       stored_as("buyer@example.com").mark_deleted!
 
-      expect(deliver_to(legacy.email).to).to eq ["buyer@example.com"]
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
     end
   end
 
