@@ -3,12 +3,22 @@ import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
+import {
+  STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+  type PaymentElementClientConfirmConfig,
+  type PaymentElementConfig,
+} from "$app/components/Checkout/payment";
 import { PaymentElementInput, type PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
 
-const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | undefined)[]; unmounts: number }>(() => ({
+const elementsMounts = vi.hoisted<{
+  currencies: string[];
+  amounts: (number | undefined)[];
+  paymentMethodTypes: (readonly string[] | undefined)[];
+  unmounts: number;
+}>(() => ({
   currencies: [],
   amounts: [],
+  paymentMethodTypes: [],
   unmounts: 0,
 }));
 
@@ -36,11 +46,12 @@ vi.mock("@stripe/react-stripe-js", async () => {
       options,
     }: {
       children: React.ReactNode;
-      options: { currency: string; amount?: number };
+      options: { currency: string; amount?: number; paymentMethodTypes?: readonly string[] };
     }) => {
       React.useEffect(() => {
         elementsMounts.currencies.push(options.currency);
         elementsMounts.amounts.push(options.amount);
+        elementsMounts.paymentMethodTypes.push(options.paymentMethodTypes);
         return () => {
           elementsMounts.unmounts += 1;
         };
@@ -103,11 +114,90 @@ describe("PaymentElementInput", () => {
   beforeEach(() => {
     elementsMounts.currencies = [];
     elementsMounts.amounts = [];
+    elementsMounts.paymentMethodTypes = [];
     elementsMounts.unmounts = 0;
     props.onReady.mockClear();
   });
 
   afterEach(cleanup);
+
+  // The client-confirm lane is the one with a resolver-computed method list (the server-confirm
+  // config is pinned to card), so the narrowing tests mount that config.
+  const clientConfirmOptions = (paymentMethodTypes: string[]): PaymentElementClientConfirmConfig => ({
+    stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+    currency: "usd",
+    presentment_amount_cents: null,
+    listed_currency_display: null,
+    payment_method_types: paymentMethodTypes,
+    stripe_link_enabled: true,
+    stripe_connect_account_id: null,
+  });
+
+  // gumroad-private#1528: Stripe fixes paymentMethodTypes at Elements creation and offers no update
+  // path, so a config refresh after mount does NOT reach the live element. #prepare narrows the
+  // deferred intent against the reported list, which therefore has to be the list the element was
+  // actually created with — reporting the current config would defeat the whole narrowing.
+  it("reports the method list the element was created with, and keeps it frozen across a config change", () => {
+    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[]) => void>();
+    const { rerender } = render(
+      <PaymentElementInput
+        {...props}
+        amount={1_000}
+        mountCurrency="usd"
+        elementsOptions={clientConfirmOptions(["card", "link"])}
+        onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
+      />,
+    );
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link"]]);
+    expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(["card", "link"]);
+
+    // The server now says Klarna is available. The mounted element cannot show it, so the report
+    // must not start claiming it either.
+    rerender(
+      <PaymentElementInput
+        {...props}
+        amount={1_000}
+        mountCurrency="usd"
+        elementsOptions={clientConfirmOptions(["card", "link", "klarna"])}
+        onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
+      />,
+    );
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link"]]);
+    expect(elementsMounts.unmounts).toBe(0);
+    expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(["card", "link"]);
+  });
+
+  // A currency change DOES remount Elements, so the new instance's list is the one that counts.
+  it("re-reports the method list when a currency change remounts the element", () => {
+    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[]) => void>();
+    const { rerender } = render(
+      <PaymentElementInput
+        {...props}
+        amount={1_000}
+        mountCurrency="usd"
+        elementsOptions={clientConfirmOptions(["card", "link"])}
+        onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
+      />,
+    );
+
+    rerender(
+      <PaymentElementInput
+        {...props}
+        amount={1_625}
+        mountCurrency="cad"
+        elementsOptions={clientConfirmOptions(["card", "ideal"])}
+        onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
+      />,
+    );
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([
+      ["card", "link"],
+      ["card", "ideal"],
+    ]);
+    expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(["card", "ideal"]);
+  });
 
   it("keeps the mounted currency while a surcharge refresh is in flight", () => {
     const { rerender } = render(<PaymentElementInput {...props} amount={1_625} mountCurrency="cad" />);

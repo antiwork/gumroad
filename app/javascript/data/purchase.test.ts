@@ -102,6 +102,7 @@ describe("getPaymentDetailsSource", () => {
       cardCountry: "US",
       walletType: null,
       mountCurrency: "usd",
+      mountedPaymentMethodTypes: ["card", "link"],
     };
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");
@@ -155,6 +156,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
         cardCountry: "US",
         walletType: "google_pay",
         mountCurrency: "usd",
+        mountedPaymentMethodTypes: ["card", "link"],
       }),
       {},
     );
@@ -170,6 +172,53 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     );
 
     expect(data).not.toHaveProperty("wallet_type");
+  });
+
+  // gumroad-private#1528: #prepare narrows the deferred intent's payment_method_types to the list
+  // the Payment Element actually mounted with, so that list has to reach the server. Omitted rather
+  // than sent as null when the element never reported one, because the server treats "absent" as an
+  // older checkout page and applies its own conservative narrowing.
+  describe("reporting the mounted Payment Element method list", () => {
+    it("sends the mounted method list on the client-confirm lane", () => {
+      const data = createPurchasesRequestData(
+        payloadWith({
+          type: "payment-element-client-confirm",
+          confirmationTokenId: "ctoken_123",
+          cardCountry: "US",
+          walletType: null,
+          mountCurrency: "usd",
+          mountedPaymentMethodTypes: ["card", "link", "cashapp"],
+        }),
+        {},
+      );
+
+      expect(data.payment_element_mounted_payment_method_types).toEqual(["card", "link", "cashapp"]);
+    });
+
+    it("omits the key when the element never reported a list", () => {
+      const data = createPurchasesRequestData(
+        payloadWith({
+          type: "payment-element-client-confirm",
+          confirmationTokenId: "ctoken_123",
+          cardCountry: "US",
+          walletType: null,
+          mountCurrency: "usd",
+          mountedPaymentMethodTypes: null,
+        }),
+        {},
+      );
+
+      expect(data).not.toHaveProperty("payment_element_mounted_payment_method_types");
+    });
+
+    it("omits the key entirely off the client-confirm lane", () => {
+      const data = createPurchasesRequestData(
+        payloadWith({ type: "new", cardParamsResult: { type: "cc", cardParams, keepOnFile: false, zipCode: null } }),
+        {},
+      );
+
+      expect(data).not.toHaveProperty("payment_element_mounted_payment_method_types");
+    });
   });
 
   // Buyer-currency presentment: an eligible wallet purchase must carry the quote token, or the
@@ -212,6 +261,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
           cardCountry: "US",
           walletType: "google_pay",
           mountCurrency: "usd",
+          mountedPaymentMethodTypes: ["card", "link"],
         }),
         {},
       );

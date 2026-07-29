@@ -32,6 +32,7 @@ const requestData: StartCartPurchaseRequestPayload = {
     cardCountry: "US",
     walletType: null,
     mountCurrency: "usd",
+    mountedPaymentMethodTypes: ["card", "link"],
   },
   email: "buyer@example.com",
   fullName: "Buyer",

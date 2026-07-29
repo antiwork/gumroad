@@ -48,6 +48,7 @@ export const PaymentElementInput = ({
   amount,
   mountCurrency,
   elementsOptions,
+  onMountedPaymentMethodTypes,
   walletsEnabled,
   flatLayout,
   applePayOption,
@@ -73,6 +74,14 @@ export const PaymentElementInput = ({
   // while a surcharge refresh is merely in flight.
   mountCurrency?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
+  // Reports the payment-method list the Elements instance was actually CREATED with, each time it
+  // is created. Stripe fixes paymentMethodTypes at creation and the provider only remounts on a
+  // currency change, so a later config refresh (e.g. reloading the checkout payment props after a
+  // cart change) does not reach the live element — the mounted list, not the current config, is
+  // what the ConfirmationToken can confirm against. #prepare narrows the intent's list against
+  // this so a server rule that widened after page load cannot produce an unconfirmable intent
+  // (gumroad-private#1528).
+  onMountedPaymentMethodTypes?: ((paymentMethodTypes: readonly string[]) => void) | undefined;
   // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
   // Payment Element instead of via the separate Payment Request Button.
   walletsEnabled: boolean;
@@ -168,6 +177,7 @@ export const PaymentElementInput = ({
           amount={mountedAmount}
           currencyOverride={mountedCurrency}
           elementsOptions={elementsOptions}
+          onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
           flatLayout={flatLayout}
         >
           <PaymentElementControllerInput
@@ -358,12 +368,14 @@ const StripePaymentElementProvider = ({
   amount,
   currencyOverride,
   elementsOptions,
+  onMountedPaymentMethodTypes,
   flatLayout,
   children,
 }: {
   amount: number | null;
   currencyOverride?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
+  onMountedPaymentMethodTypes?: ((paymentMethodTypes: readonly string[]) => void) | undefined;
   flatLayout: boolean;
   children: React.ReactNode;
 }) => {
@@ -373,17 +385,29 @@ const StripePaymentElementProvider = ({
     ),
   );
   const currency = currencyOverride ?? elementsOptions.currency;
-  // The amount and currency Elements is CREATED with, captured together. Later amount
-  // changes reach the live element through elements.update() in
+  // The amount, currency and payment-method list Elements is CREATED with, captured together.
+  // Later amount changes reach the live element through elements.update() in
   // PaymentElementControllerInput, so this deliberately does not follow every amount
   // change. But a currency change remounts Elements (the currency is part of its key
   // below), and the new instance must not be created with an amount captured under the
   // previous currency — that value is denominated in the previous currency's minor
   // units (e.g. a CAD total reused for a USD mount). Re-capture the amount at the
   // moment the currency changes so creation options are always internally consistent.
-  const [creation, setCreation] = React.useState({ currency, amount });
-  if (creation.currency !== currency) setCreation({ currency, amount });
+  // paymentMethodTypes rides the same capture because Stripe fixes it at creation and offers no
+  // update path: a config refresh that changes it does not reach the live element, so the captured
+  // list stays the truth about what the buyer's ConfirmationToken can confirm against.
+  const [creation, setCreation] = React.useState({
+    currency,
+    amount,
+    paymentMethodTypes: elementsOptions.payment_method_types,
+  });
+  if (creation.currency !== currency)
+    setCreation({ currency, amount, paymentMethodTypes: elementsOptions.payment_method_types });
   const initialAmount = creation.amount;
+  const mountedPaymentMethodTypes = creation.paymentMethodTypes;
+  React.useEffect(() => {
+    onMountedPaymentMethodTypes?.(mountedPaymentMethodTypes);
+  }, [mountedPaymentMethodTypes, onMountedPaymentMethodTypes]);
   const font = useFont();
   const color = getCssVariable("color").split(" ").join(",");
   const backgroundColor = `rgb(${getCssVariable("filled").split(" ").join(",")})`;
@@ -397,7 +421,7 @@ const StripePaymentElementProvider = ({
       mode: elementsOptions.stripe_elements_mode,
       currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
-      paymentMethodTypes: elementsOptions.payment_method_types,
+      paymentMethodTypes: mountedPaymentMethodTypes,
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
@@ -474,6 +498,7 @@ const StripePaymentElementProvider = ({
       font.url,
       fontFamily,
       initialAmount,
+      mountedPaymentMethodTypes,
       placeholderColor,
       flatLayout,
     ],

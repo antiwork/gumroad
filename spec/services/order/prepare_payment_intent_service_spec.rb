@@ -561,10 +561,13 @@ describe Order::PreparePaymentIntentService, :vcr do
 
       # Klarna joins the intent only when its launch flag is on AND the final charged total sits
       # inside Stripe's Klarna USD window — the same resolver both the presenter and this service
-      # read, so the Element's list and the intent's list stay equal.
+      # read, so the Element's list and the intent's list stay equal. The page reports the list it
+      # mounted with, which the intent is then narrowed against (see the narrowing context below);
+      # here the two agree, so Klarna rides.
       it "adds Klarna to the deferred intent for a flagged seller and eligible US cart" do
         Feature.activate_user(:checkout_local_method_klarna, seller)
         order, params = build_order
+        params = params.merge(payment_element_mounted_payment_method_types: %w[card link cashapp klarna])
         order.purchases.each { _1.update!(ip_country: "United States") }
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
@@ -1208,6 +1211,192 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to include("card")
       ensure
         Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
+      # The narrowing contract (gumroad-private#1528). The Element's method list is frozen when it
+      # mounts; this service re-resolves at pay time. Stripe rejects the ConfirmationToken on ANY
+      # difference, but only one direction is recoverable — so the intent may only ever be a SUBSET
+      # of what the page mounted, and the browser reports that list.
+      context "narrowing the intent to the methods the Payment Element mounted with" do
+        def prepare_with_reported_methods(reported, preview:, token:, order:, params:)
+          allow(Stripe::ConfirmationToken).to receive(:retrieve)
+            .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+          charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+          create_args = nil
+          allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+            create_args = kwargs
+            charge_intent
+          end
+
+          reported_params = reported.nil? ? params : params.merge(payment_element_mounted_payment_method_types: reported)
+          responses = described_class.new(order:, params: reported_params, confirmation_token: token).perform
+          [create_args, responses]
+        end
+
+        # The reported occurrence: the page mounted card/link/cashapp, the server re-resolved WITH
+        # klarna, and the buyer's card confirm was rejected. Narrowing drops the method the buyer
+        # never saw and the card payment proceeds.
+        it "drops a method the page never mounted, so a card buyer's confirm still matches the intent" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, responses = prepare_with_reported_methods(
+            %w[card link cashapp],
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_narrowed", order:, params:
+          )
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
+
+        # The narrowing is one-directional: a reported list may only remove methods, never add
+        # them. A server rule that tightened after page load stays authoritative.
+        it "never adds a reported method the server rules no longer allow" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, = prepare_with_reported_methods(
+            %w[card link cashapp klarna afterpay_clearpay],
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_no_widen", order:, params:
+          )
+
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+        end
+
+        # A buyer who genuinely chose Klarna keeps it: the resolver still lists it and the page
+        # reported mounting it, so the narrowing is a no-op for the confirmed method.
+        it "keeps Klarna when the buyer chose it and both sides still allow it" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, responses = prepare_with_reported_methods(
+            %w[card link cashapp klarna],
+            preview: Stripe::StripeObject.construct_from(type: "klarna", klarna: {}),
+            token: "ctoken_klarna_kept", order:, params:
+          )
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:payment_method_types]).to include("klarna")
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
+
+        # Fail safe, not closed: a report that excludes the method the buyer is confirming with
+        # cannot describe the element the token was minted on, so honoring it would guarantee the
+        # confirm fails. Keep the resolved list instead — no worse than before this narrowing.
+        it "ignores a reported list that excludes the confirmed method" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, = prepare_with_reported_methods(
+            %w[card link],
+            preview: Stripe::StripeObject.construct_from(type: "klarna", klarna: {}),
+            token: "ctoken_report_excludes_confirmed", order:, params:
+          )
+
+          expect(create_args[:payment_method_types]).to include("klarna")
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
+
+        # An empty intersection means the report does not describe this cart's element at all.
+        it "ignores a reported list that intersects nothing the server resolved" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, = prepare_with_reported_methods(
+            %w[ideal bancontact],
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_disjoint", order:, params:
+          )
+
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+        end
+
+        # A non-array report (a scalar, a hash) carries nothing to narrow against and must not
+        # raise — it degrades to the older-client path.
+        it "treats a malformed report as no report at all" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, = prepare_with_reported_methods(
+            "card",
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_malformed", order:, params:
+          )
+
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+        end
+
+        # Older checkout pages report nothing. Klarna is the one method whose gate moves with the
+        # cart total, so it is the one that must not be added to a card or Link payment.
+        it "never adds Klarna to a card payment from a page that reported no method list" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, responses = prepare_with_reported_methods(
+            nil,
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_legacy_card", order:, params:
+          )
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
+
+        # ...but a Klarna buyer on an older page still pays: only their own chosen method survives.
+        it "keeps Klarna for a Klarna buyer from a page that reported no method list" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, responses = prepare_with_reported_methods(
+            nil,
+            preview: Stripe::StripeObject.construct_from(type: "klarna", klarna: {}),
+            token: "ctoken_legacy_klarna", order:, params:
+          )
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:payment_method_types]).to include("klarna")
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
+
+        # The pay-what-you-want drift shape: the buyer typed $0.99 when the Element mounted (below
+        # Klarna's $1 floor, so the page mounted without it), then raised their amount before
+        # paying. Prepare re-resolves from the persisted price and now WOULD list Klarna — the
+        # method the buyer's Element never offered. #6486 covers the cart-item-change case; this
+        # asserts the intent stays narrow regardless of whether a refresh happened.
+        it "keeps Klarna off when the buyer's pay-what-you-want amount rose past the floor after the page mounted" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
+          pwyw_product = create(:product, user: seller, price_cents: 99, customizable_price: true)
+          params = { line_items: [{ uid: "unique-id-0", permalink: pwyw_product.unique_permalink, perceived_price_cents: 5_00, quantity: 1 }] }.merge(common_params)
+          order, order_responses = Order::CreateService.new(params:).perform
+          expect(order_responses.values).to all(include(success: true))
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, responses = prepare_with_reported_methods(
+            %w[card link cashapp],
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_pwyw_drift", order:, params:
+          )
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
       end
 
       # The presenter derives the Element's Link config from the same resolver output, so the

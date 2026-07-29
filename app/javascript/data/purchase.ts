@@ -20,6 +20,9 @@ export type PurchasePaymentMethod =
       cardCountry: string | null;
       walletType: string | null;
       mountCurrency: string;
+      // The method list the element was MOUNTED with (null if it never reported one). #prepare
+      // narrows the deferred intent to it — see the ref in PaymentForm.
+      mountedPaymentMethodTypes: readonly string[] | null;
     };
 
 export type SuccessfulLineItemResult = {
@@ -316,6 +319,11 @@ export const createPurchasesRequestData = (
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
   if (payload.paymentMethod.type === "payment-element-client-confirm") {
     data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;
+    // Omitted rather than sent as null when the element never reported a list: #prepare treats
+    // "nothing reported" as an older checkout page and applies its own conservative narrowing.
+    if (payload.paymentMethod.mountedPaymentMethodTypes) {
+      data.payment_element_mounted_payment_method_types = [...payload.paymentMethod.mountedPaymentMethodTypes];
+    }
   }
 
   // Client-confirm wallet payments: the payment details live in the ConfirmationToken, so the
