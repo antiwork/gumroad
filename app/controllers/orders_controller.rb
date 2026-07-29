@@ -123,9 +123,8 @@ class OrdersController < ApplicationController
     # scripted caller replaying a valid token could otherwise flood Sentry. The log line
     # above stays unconditional so full forensics are always in the logs.
     #
-    # One issue for everything is the wrong shape once routine declines are excluded below, but
-    # splitting the title on an attacker-controlled param is what the cap above exists to prevent.
-    # Splitting on a bounded dimension is the follow-up; gp#1514 carries it.
+    # Splitting the issue per method would read better but must not key on this
+    # attacker-controlled param; a bounded split is tracked in gp#1514.
     if confirm_error_reportable?(error_details) && confirm_error_notify_allowed?(order)
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
@@ -134,37 +133,26 @@ class OrdersController < ApplicationController
   end
 
   private
-    # Payment methods whose confirm-time failure is already durably recorded server-side.
-    # These confirm in-page, so a failed attempt transitions the intent and Stripe sends
-    # `payment_intent.payment_failed`; `Purchase::ChargeEventsHandler#handle_event_failed!`
-    # then writes the code to `purchases.stripe_error_code` — queryable without this endpoint.
+    # Methods that confirm in-page: a failed attempt transitions the intent, so
+    # `payment_intent.payment_failed` fires and `Purchase::ChargeEventsHandler#handle_event_failed!`
+    # writes the code to `purchases.stripe_error_code`.
     CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link].freeze
 
-    # Stripe error type raised only when an attempt to charge was actually made. It is the
-    # condition that makes the constant above true: no attempt means no intent transition and
-    # therefore no webhook, whatever the payment method was.
+    # The error type that proves a charge was actually attempted, and therefore that the webhook
+    # above fired at all.
     CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE = "card_error"
 
-    # Whether a browser-reported confirm failure is worth a Sentry event, as opposed to only the
-    # unconditional log line above.
+    # Report only failures nothing else records. A redirect method's rejected confirm creates no
+    # charge and no webhook, so the browser is the only witness; an in-page decline is already a
+    # row in the database.
     #
-    # This endpoint exists because a redirect-based method's confirm failure leaves NO server-side
-    # trace: the buyer never reaches the provider, so no charge and no
-    # `payment_intent.payment_failed` webhook is ever created, and the purchase is
-    # indistinguishable from an abandoned tab.
+    # Both conditions are required. Stripe attaches `payment_method` to any error involving one,
+    # not just to declines, so a card-typed `invalid_request_error` (consumed ConfirmationToken,
+    # intent in an unexpected state) never transitions the intent and never webhooks — 6.4% of
+    # live events. Suppressing on the method alone would make those log-only.
     #
-    # Card and Link declines are not like that (see the constant above), and reporting them here
-    # is redundant with a row we already have.
-    #
-    # Both conditions are required, and the second is the subtle one: Stripe attaches
-    # `payment_method` to any error involving one, not just to declines, so a card-typed
-    # `invalid_request_error` (a consumed ConfirmationToken, an intent in an unexpected state)
-    # never transitions the intent and fires no webhook. Suppressing on the method alone would
-    # make those failures log-only — 38 of a 597-event live sample, 6.4%.
-    #
-    # Deliberately a denylist, not an allowlist: anything unrecognised — a blank type, or a
-    # payment method added after this code was written — keeps reporting, so a new method cannot
-    # go silently unmonitored just because nobody updated this list.
+    # Denylist rather than allowlist so an unrecognised or blank type keeps reporting: a method
+    # added later must not go unmonitored because nobody updated this list.
     def confirm_error_reportable?(error_details)
       return true unless error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
 

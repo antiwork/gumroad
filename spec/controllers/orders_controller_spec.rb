@@ -2648,11 +2648,9 @@ describe OrdersController, :vcr do
     end
 
     context "when the failure is already visible server-side" do
-      # A failed card/Link ATTEMPT transitions the intent, so Stripe sends
-      # payment_intent.payment_failed and Purchase::ChargeEventsHandler persists its code to
-      # purchases.stripe_error_code. Those declines must NOT also be reported to Sentry: they
-      # share this endpoint's single fixed message, so they land in the same Sentry issue and
-      # bury the redirect-method signal the endpoint was built to capture.
+      # These declines already land in purchases.stripe_error_code via
+      # payment_intent.payment_failed, and every report here shares one fixed message — so
+      # reporting them buries the redirect-method signal in the same Sentry issue.
       %w[card link].each do |payment_method_type|
         it "logs but does not notify for #{payment_method_type}" do
           params = { line_items: line_items.map(&:dup) }.merge(common_params)
@@ -2694,8 +2692,7 @@ describe OrdersController, :vcr do
     end
 
     context "when the failure leaves no server-side trace" do
-      # These hand the buyer off to an external provider page, so a rejected confirm creates no
-      # charge and no payment_intent.payment_failed webhook — the browser is the only witness.
+      # A rejected confirm here creates no charge and no webhook — the browser is the only witness.
       StripeIntentStatus::CLIENT_REDIRECT_PAYMENT_METHOD_TYPES.each do |payment_method_type|
         it "notifies for #{payment_method_type}" do
           params = { line_items: line_items.map(&:dup) }.merge(common_params)
@@ -2735,16 +2732,11 @@ describe OrdersController, :vcr do
       end
 
       it "notifies when payment_method_type is blank" do
-        # 31% of live events arrive with no payment_method_type at all (187 of 597): Stripe
-        # omits payment_method on errors raised before one is attached. Reporting those is the
-        # deliberate fail-open direction of the denylist, and it was previously pinned only
-        # incidentally by the truncation and rate-limit examples above, which omit the param
-        # for unrelated reasons.
+        # 31% of live events arrive with no payment_method_type at all, and reporting them is the
+        # denylist's deliberate fail-open direction.
         #
-        # stripe_error_type must be card_error here, which is the shape all 177 blank-type events
-        # in the 597-event sample carry. Any other type short-circuits the attempt check
-        # before the denylist is consulted, so the example would pass even if blank were
-        # suppressed.
+        # stripe_error_type MUST be card_error: any other type returns early at the attempt check
+        # and the example would pass even with blank suppressed.
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
 
@@ -2763,10 +2755,9 @@ describe OrdersController, :vcr do
       end
 
       it "notifies for a card error that never reached an attempt, so no webhook recorded it" do
-        # Stripe attaches payment_method to any error involving one, not just to declines. A
-        # card-typed invalid_request_error (consumed ConfirmationToken, intent in an unexpected
-        # state) leaves the intent untransitioned, so payment_intent.payment_failed never fires
-        # and this endpoint is again the only witness. 38 of a 597-event live sample.
+        # A card-typed invalid_request_error (consumed ConfirmationToken, intent in an unexpected
+        # state) leaves the intent untransitioned, so no webhook records it and this endpoint is
+        # again the only witness.
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
 
