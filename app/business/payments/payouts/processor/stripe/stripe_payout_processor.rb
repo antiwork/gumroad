@@ -39,7 +39,7 @@ class StripePayoutProcessor
     end
 
     # Return true if user has a Stripe account connected
-    return true if user.has_stripe_account_connected? && !user.stripe_connect_account.is_a_brazilian_stripe_connect_account?
+    return true if pays_user_via_stripe_connect?(user)
 
     # Don't payout users who don't have a bank account
     if user.active_bank_account.nil?
@@ -66,6 +66,20 @@ class StripePayoutProcessor
     end
 
     true
+  end
+
+  # Whether this seller is paid through a Stripe account they connected themselves.
+  #
+  # Such a seller is paid by Stripe directly, with no bank account on file with us at all, which is
+  # why is_user_payable returns true for them before it looks for one. Brazilian connected accounts
+  # are the exception: Stripe cannot pay them out, so they fall through to the PayPal processor.
+  #
+  # Kept here as one predicate because PaypalPayoutProcessor.terminal_failure_blocking_payouts?
+  # has to agree with this gate exactly — it decides whether to tell a seller their payouts have
+  # stopped, and a second copy of the condition would drift from the gate and start saying that to
+  # sellers Stripe is paying every week.
+  def self.pays_user_via_stripe_connect?(user)
+    user.has_stripe_account_connected? && !user.stripe_connect_account.is_a_brazilian_stripe_connect_account?
   end
 
   def self.has_valid_payout_info?(user)

@@ -144,6 +144,18 @@ describe PaypalPayoutProcessor do
 
             expect(described_class.terminal_failure_blocking_payouts?(user.reload)).to eq(false)
           end
+
+          # This has to agree with the gate that actually pays them, not merely happen to match it
+          # today: the two conditions used to be written out twice, and a change to one would have
+          # left us telling a seller Stripe pays every week that their payouts had stopped.
+          it "asks the same question the Stripe gate asks" do
+            create(:merchant_account_stripe_connect, user:)
+            user.update!(check_merchant_account_is_linked: true)
+
+            expect(StripePayoutProcessor).to receive(:pays_user_via_stripe_connect?).with(user).and_return(true)
+
+            expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(false)
+          end
         end
 
         it "is considered blocked while PayPal is still the only payout method on file" do

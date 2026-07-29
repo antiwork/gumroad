@@ -110,15 +110,7 @@ class PaypalPayoutProcessor
       # So the explanation is restored, not repeated: nothing is written while one is already the
       # newest note they can see, which is the ordinary case and keeps this off the weekly-note
       # treadmill these accounts are already buried under.
-      if add_comment && !Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
-        last_failure = user.payments
-                           .where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email,
-                                  state: Payment::FAILED,
-                                  failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
-                           .order(created_at: :desc, id: :desc)
-                           .first
-        user.add_payout_note(content: last_failure.terminal_paypal_failure_seller_note, seller_visible: true) if last_failure
-      end
+      ensure_terminal_failure_explanation_visible(user) if add_comment
 
       return false
     end
@@ -164,12 +156,42 @@ class PaypalPayoutProcessor
   # below; without this check a seller paid weekly through Stripe Connect would still look stuck.
   def self.terminal_failure_blocking_payouts?(user)
     return false if user.active_bank_account.present?
-    return false if user.has_stripe_account_connected? && !user.stripe_connect_account.is_a_brazilian_stripe_connect_account?
+    return false if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
 
     payout_email = user.paypal_payout_email
     return false if payout_email.blank?
 
     terminal_failure_for_payout_email?(user, payout_email)
+  end
+
+  # Put the terminal-PayPal explanation back in front of the seller if they can no longer see it.
+  #
+  # Called from two places that both leave a blocked seller with nothing to read otherwise: this
+  # processor's block above, and the weekly "payouts were paused" note in Payouts.is_user_payable
+  # for a seller who is also under an internal hold. That second caller matters because the hold is
+  # checked first and returns before any processor runs, so a held seller never reaches the block
+  # here — and holds are common in this population, since dozens of failed payouts trip the
+  # automatic one (Payment#pause_payouts_after_repeated_failures).
+  #
+  # Writes nothing when an explanation is already the newest note the seller can see, so a seller
+  # who has one keeps the one they have rather than collecting a fresh copy every payout run.
+  # Returns true when a note was written.
+  def self.ensure_terminal_failure_explanation_visible(user)
+    return false if Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
+
+    payout_email = user.paypal_payout_email
+    return false if payout_email.blank?
+
+    last_failure = user.payments
+                       .where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email,
+                              state: Payment::FAILED,
+                              failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+                       .order(created_at: :desc, id: :desc)
+                       .first
+    return false if last_failure.nil?
+
+    user.add_payout_note(content: last_failure.terminal_paypal_failure_seller_note, seller_visible: true)
+    true
   end
 
   def self.has_valid_payout_info?(user)
