@@ -248,12 +248,11 @@ def within_sca_frame(wait: 240, &block)
   end
 end
 
-# Stripe's risk engine decides per card whether to challenge at all, and it has flipped on us
-# in both directions (the Mexico test card started challenging on 2026-07-07 and stopped on
-# 2026-07-29, breaking main each time). Use this only where 3DS is incidental to what the spec
-# asserts; specs whose subject IS authentication must keep the strict `within_sca_frame`.
-def within_sca_frame_if_challenged(wait: 30, &block)
-  return unless has_selector?(SCA_CHALLENGE_IFRAME, wait:)
+# Stripe decides per card whether to challenge, and has flipped this card both ways.
+# Use only where 3DS is incidental; specs whose subject IS authentication must keep
+# the strict `within_sca_frame` so a vanished challenge still fails them.
+def within_sca_frame_if_challenged(wait: 60, &block)
+  return unless page.has_selector?(SCA_CHALLENGE_IFRAME, wait:)
 
   within_sca_frame(wait: 0, &block)
 end
