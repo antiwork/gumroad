@@ -95,6 +95,9 @@ class LinkPolicy < ApplicationPolicy
       :duration_in_months,
       :subscription_duration,
       :has_same_rich_content_for_all_variants,
+      # Request protocol marker only; LinksController excludes it before
+      # assigning product attributes.
+      :rich_content_provenance_version,
       :require_shipping,
       :is_multiseat_license,
       :community_chat_enabled,
@@ -226,6 +229,15 @@ class LinkPolicy < ApplicationPolicy
     end
 
     def rich_content
-      [:id, :title, :updated_at, { description: {} }]
+      [
+        :id,
+        # A page copied in the editor gets a new client id. Its source id lets
+        # the server prove that an otherwise-new dead foreign embed came from
+        # stored content in this same product before repairing it.
+        :source_id,
+        :title,
+        :updated_at,
+        { description: {} }
+      ]
     end
 end

@@ -1,6 +1,8 @@
 import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
+import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
+
 import { Button } from "$app/components/Button";
 import { PriceInput } from "$app/components/PriceInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
@@ -25,10 +27,12 @@ export const SuggestedAmountsEditor = ({
   // the id for the server-side wipe guard — a persisted suggested amount has a
   // custom price, which the guard treats as configuration worth protecting.
   const removeVersion = (version: Version) => {
-    if (!version.newlyAdded)
-      updateProduct((product) => {
+    updateProduct((product) => {
+      if (!version.newlyAdded) {
         product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), version.id];
-      });
+      }
+      confirmRichContentMoveSourceDeletions(product, version.rich_content);
+    });
     onChange(versions.filter(({ id }) => id !== version.id));
   };
 
