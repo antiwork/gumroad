@@ -750,6 +750,11 @@ describe Ai::StoreAgentService do
           "I staged a change in my previous message — tap that card again.",
           "I staged them in my previous message — tap that card again.",
           "It's staged on my earlier message — scroll up and confirm it again.",
+          # The rows just above and below exist to catch the guard reaching too far, so they pass
+          # both before and after any widening of the anchor: a point-back names the same objects a
+          # re-staging claim does, and only the missing-card wording separates them.
+          "I staged the offer in my previous message — tap that card again.",
+          "I staged the discount code in my previous message — tap that card again.",
           # a compound subject is still a subject, however many nouns it has
           "Staged changes and updates wait for your approval.",
           "Staged changes and updates appear below — tap the card to apply them.",
@@ -857,6 +862,16 @@ describe Ai::StoreAgentService do
           "I've staged a change again because the card on my earlier message was hidden. Tap the card.",
           "I've staged them again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the product update again because the card on my earlier message was hidden. Tap the card.",
+          # Every noun in the shared list needs a row here, because a word dropped from it is
+          # invisible: the reply stops matching and the creator is sent to hunt a card again.
+          # These four are the ones creators and the model use most for a staged offer.
+          "I've staged the offer again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the code again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the discount code again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged those products again because the card on my earlier message was hidden. Tap the card.",
+          # A count or a plural demonstrative in front of the object reads as a determiner, and the
+          # model writes one whenever it staged more than one thing at once.
+          "I've staged both changes again because the card on my earlier message was hidden. Tap the card.",
         ]
 
         phantoms.each do |reply|

@@ -81,7 +81,8 @@ class Ai::StoreAgentService
   STAGED_CLAIM_ACTION_NOUN = /
     (?:deletions?|removals?|creations?|additions?|renames?|renaming|archival|
        updates?|changes?|edits?|fixe?s?|
-       discounts?|offer\s+codes?|price\s+changes?|products?(?:\s+updates?)?|
+       discounts?|discount\s+codes?|offer\s+codes?|offers?|codes?|
+       price\s+changes?|products?(?:\s+updates?)?|
        publish(?:ing)?|unpublish(?:ing)?)
   /ix
   STAGED_CLAIM_HISTORICAL_TAIL = /
@@ -109,7 +110,7 @@ class Ai::StoreAgentService
       # again"), so the anchor allows both. The object list is STAGED_CLAIM_ACTION_NOUN rather than
       # a copy of it, so widening what the agent can stage widens this anchor with it.
       (?!\s+(?:(?:it|that|this|them|those|both)\s+|
-        (?:a|an|the|that|this|your|my)\s+#{STAGED_CLAIM_ACTION_NOUN}\s+)?again\b)
+        (?:a|an|the|that|this|these|those|your|my|two|both)\s+#{STAGED_CLAIM_ACTION_NOUN}\s+)?again\b)
       # The dead-card markers scan to the end of the sentence, not just the clause holding the
       # staging verb: "I've staged the update in my previous message; that card is gone now" is a
       # re-staging claim, and stopping the scan at `;` or a dash loses it. The cost is that a
