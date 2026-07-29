@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
-# Server-authoritative policy boundary for the client-confirmed Intent path (Lane B): which Stripe
-# payment methods a cart may use. The frontend cannot widen it — payment_method_types is the
-# intersection of the eligible set with a hardcoded launched set.
+# Server-authoritative policy boundary for the client-confirmed Intent path (Lane B): whether a cart
+# may confirm client-side at all, and which Stripe payment methods it may use. The frontend cannot
+# widen it — payment_method_types is the intersection of the eligible set with a hardcoded launched
+# set.
 #
+#   - client_confirm_eligible?: may this cart take Lane B, or must it fall back to Lane A.
 #   - eligible_payment_method_types: the policy set the cart *could* use. Logged, and intersected
 #     downstream with per-method launch/PPP gates.
 #   - payment_method_types: what Stripe actually receives today.
