@@ -173,12 +173,13 @@ class PaypalPayoutProcessor
   # here — and holds are common in this population, since dozens of failed payouts trip the
   # automatic one (Payment#pause_payouts_after_repeated_failures).
   #
-  # Writes nothing when an explanation is already the newest note the seller can see, so a seller
-  # who has one keeps the one they have rather than collecting a fresh copy every payout run.
-  # Returns true when a note was written.
+  # Writes nothing when the explanation of THIS rejection is already the newest note the seller can
+  # see, so a seller who has one keeps the one they have rather than collecting a fresh copy every
+  # payout run. Deliberately not "already has any terminal-PayPal explanation": a seller rejected
+  # on one PayPal address and now blocked on another carries an explanation naming the address they
+  # abandoned, and leaving that as the only thing they can read means a stale date and possibly the
+  # wrong restriction of the two. Returns true when a note was written.
   def self.ensure_terminal_failure_explanation_visible(user)
-    return false if Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
-
     payout_email = user.paypal_payout_email
     return false if payout_email.blank?
 
@@ -189,6 +190,10 @@ class PaypalPayoutProcessor
                        .order(created_at: :desc, id: :desc)
                        .first
     return false if last_failure.nil?
+
+    return false if Payment::FailureReason.terminal_paypal_explanation_note_for?(
+      user.latest_seller_visible_payout_note&.content, last_failure
+    )
 
     user.add_payout_note(content: last_failure.terminal_paypal_failure_seller_note, seller_visible: true)
     true

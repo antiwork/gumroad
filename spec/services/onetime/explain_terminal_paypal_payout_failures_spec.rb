@@ -6,8 +6,8 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
   describe ".process" do
     let(:seller) { create(:user, payment_address: "stuck@example.com") }
 
-    def terminal_failure_for(user, reason: "PAYPAL 3148", created_at: 2.weeks.ago)
-      create(:payment_failed, user:, payment_address: user.payment_address,
+    def terminal_failure_for(user, reason: "PAYPAL 3148", created_at: 2.weeks.ago, payment_address: nil)
+      create(:payment_failed, user:, payment_address: payment_address || user.payment_address,
                               failure_reason: reason, created_at:,
                               txn_id: nil, processor_fee_cents: nil)
     end
@@ -136,6 +136,25 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect do
         described_class.process
       end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
+    # A note about the address they walked away from is not an explanation of the block they are
+    # under now: it names a different date, and possibly the other of the two PayPal restrictions.
+    it "explains the current block even when an older address was already explained" do
+      terminal_failure_for(seller, reason: "PAYPAL 3148", created_at: 10.weeks.ago)
+      described_class.process
+      expect(seller.comments.with_type_payout_note.count).to eq(1)
+
+      seller.update!(payment_address: "current@example.com")
+      current = terminal_failure_for(seller, reason: "PAYPAL 14159", created_at: 1.week.ago)
+
+      expect do
+        described_class.process
+      end.to change { seller.comments.with_type_payout_note.count }.from(1).to(2)
+
+      expect(seller.comments.with_type_payout_note.last.content)
+        .to include("your PayPal account cannot receive US dollars")
+        .and include(current.created_at.to_fs(:formatted_date_full_month))
     end
 
     it "skips a seller who has since switched to a bank account" do

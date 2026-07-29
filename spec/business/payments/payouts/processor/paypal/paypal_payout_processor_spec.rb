@@ -112,6 +112,26 @@ describe PaypalPayoutProcessor do
           end.not_to change { user.comments.with_type_payout_note.count }
         end
 
+        # A seller can be rejected on one PayPal address, switch to another, and be rejected there
+        # too. The note they are already reading names the address they left: it quotes a date that
+        # is not the one that stopped their money, and here also the other of the two PayPal
+        # restrictions. Treating it as "already explained" would leave them acting on the wrong
+        # information with no way to find the right one.
+        it "explains the current rejection even when the seller is reading one about an older address" do
+          user.update!(payment_address: "second@gr.co")
+          current = create(:payment_failed, user:, payment_address: "second@gr.co",
+                                            failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(current.terminal_paypal_failure_seller_note)
+          expect(note.content).to include("your PayPal account cannot receive US dollars")
+          expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+        end
+
         it "returns true again once the seller switches to a different PayPal address" do
           user.update!(payment_address: "another@gr.co")
 

@@ -18,16 +18,69 @@ describe Payment::FailureReason do
     # Recognising an already-written note by its wording is how the pipeline knows whether the
     # seller can still see an explanation, so a reword has to keep matching the old rows.
     it "still recognises every wording ever shipped" do
-      described_class::HISTORICAL_SELLER_REASONS.each do |reason|
-        expect(described_class.terminal_paypal_explanation_note?("Your payout could not be sent because #{reason}."))
-          .to eq(true)
+      described_class::HISTORICAL_SELLER_REASONS.each_value do |reasons|
+        reasons.each do |reason|
+          expect(described_class.terminal_paypal_explanation_note?("Your payout could not be sent because #{reason}."))
+            .to eq(true)
+        end
       end
+    end
+
+    # Every code treated as terminal needs its own historical-wording entry, because the
+    # per-rejection match below looks its restriction sentences up by code — a code missing from
+    # the map would silently match nothing and the seller would get a duplicate note every run.
+    it "records historical wording for every rejection it treats as terminal" do
+      expect(described_class::HISTORICAL_SELLER_REASONS.keys)
+        .to match_array(described_class::TERMINAL_PAYPAL_FAILURE_REASONS)
     end
 
     it "does not recognise an unrelated payout note" do
       expect(described_class.terminal_paypal_explanation_note?("Payout on July 1st, 2026 was skipped because the account was under review."))
         .to eq(false)
       expect(described_class.terminal_paypal_explanation_note?(nil)).to eq(false)
+    end
+  end
+
+  # Deciding whether the seller still needs telling is a narrower question than "carries some
+  # terminal-PayPal explanation": a note about a rejection on a PayPal address they have since
+  # replaced explains a block they are no longer under.
+  describe ".terminal_paypal_explanation_note_for?" do
+    let(:rejection) do
+      create(:payment_failed, failure_reason: "PAYPAL 14159", created_at: 3.weeks.ago,
+                              txn_id: nil, processor_fee_cents: nil)
+    end
+
+    it "recognises the note written for that rejection" do
+      expect(described_class.terminal_paypal_explanation_note_for?(rejection.terminal_paypal_failure_seller_note, rejection))
+        .to eq(true)
+    end
+
+    it "recognises a note written under an earlier wording of the same restriction" do
+      historical = described_class::HISTORICAL_SELLER_REASONS.fetch("PAYPAL 14159").first
+      note = "Your payout on #{rejection.created_at.to_fs(:formatted_date_full_month)} could not be sent " \
+             "because #{historical}. Add a bank account in your payout settings."
+
+      expect(described_class.terminal_paypal_explanation_note_for?(note, rejection)).to eq(true)
+    end
+
+    it "does not accept a note about a different rejection date" do
+      other = create(:payment_failed, user: rejection.user, failure_reason: "PAYPAL 14159",
+                                      created_at: 10.weeks.ago, txn_id: nil, processor_fee_cents: nil)
+
+      expect(described_class.terminal_paypal_explanation_note_for?(other.terminal_paypal_failure_seller_note, rejection))
+        .to eq(false)
+    end
+
+    it "does not accept a note about the other PayPal restriction" do
+      other = create(:payment_failed, user: rejection.user, failure_reason: "PAYPAL 3148",
+                                      created_at: rejection.created_at, txn_id: nil, processor_fee_cents: nil)
+
+      expect(described_class.terminal_paypal_explanation_note_for?(other.terminal_paypal_failure_seller_note, rejection))
+        .to eq(false)
+    end
+
+    it "does not accept a blank note" do
+      expect(described_class.terminal_paypal_explanation_note_for?(nil, rejection)).to eq(false)
     end
   end
 

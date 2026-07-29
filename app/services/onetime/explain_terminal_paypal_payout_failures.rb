@@ -42,13 +42,13 @@ module Onetime
           next
         end
 
-        if already_explained?(user)
+        # Quote the rejection the seller is actually stuck on, not merely their newest one.
+        payment = latest_terminal_failure_for_current_address(user) || payment
+
+        if already_explained?(user, payment)
           skipped += 1
           next
         end
-
-        # Quote the rejection the seller is actually stuck on, not merely their newest one.
-        payment = latest_terminal_failure_for_current_address(user) || payment
 
         if dry_run
           puts "[dry run] would explain #{payment.failure_reason} to User #{user.id}"
@@ -115,12 +115,15 @@ module Onetime
         PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
       end
 
-      # Re-running the task must not stack duplicate notes on the same account. The note names
-      # PayPal and the restriction, which no other payout note does, so matching on the reason
-      # sentence is enough to recognise one we already wrote.
-      def already_explained?(user)
+      # Re-running the task must not stack duplicate notes on the same account. Matched against the
+      # rejection about to be described — its date and its restriction — rather than against
+      # "carries any terminal-PayPal explanation": a seller can already hold a note about a
+      # rejection on a PayPal address they have since replaced, and that note does not explain the
+      # block they are under today. Recognising it as one would leave them with the stale date and
+      # possibly the wrong restriction of the two, which is the silence this task exists to end.
+      def already_explained?(user, payment)
         user.comments.with_type_payout_note.any? do |comment|
-          Payment::FailureReason.terminal_paypal_explanation_note?(comment.content)
+          Payment::FailureReason.terminal_paypal_explanation_note_for?(comment.content, payment)
         end
       end
   end

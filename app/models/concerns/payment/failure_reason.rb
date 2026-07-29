@@ -51,17 +51,53 @@ module Payment::FailureReason
   # copy: it stops recognising every note already written, which would let the weekly pause note
   # bury explanations that are on real sellers' Payouts pages today, and would let the one-time
   # backfill write a second note to sellers who already have one. HISTORICAL_SELLER_REASONS
-  # records every wording ever shipped so a reword stays backwards-compatible — add the old
-  # sentence here in the same commit that changes the constant.
-  HISTORICAL_SELLER_REASONS = [
-    "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
-    "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
-  ].freeze
+  # records every wording ever shipped, per rejection code, so a reword stays
+  # backwards-compatible — add the old sentence under its code in the same commit that changes
+  # the constant.
+  HISTORICAL_SELLER_REASONS = {
+    "PAYPAL 3148" => [
+      "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
+    ].freeze,
+    "PAYPAL 14159" => [
+      "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
+    ].freeze,
+  }.freeze
 
   def self.terminal_paypal_explanation_note?(content)
     text = content.to_s
-    (TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values | HISTORICAL_SELLER_REASONS).any? { |reason| text.include?(reason) }
+    all_seller_reasons.any? { |reason| text.include?(reason) }
   end
+
+  # Whether a payout note is the explanation of one PARTICULAR rejection.
+  #
+  # A seller can be blocked on one PayPal address after having been rejected on another, so
+  # "carries a terminal-PayPal explanation" is not the same question as "has been told about the
+  # block they are under now". Anything deciding whether the seller still needs telling has to ask
+  # this narrower one — otherwise a note about an address they abandoned counts as an explanation
+  # of the current block, and they are left reading a stale date and possibly the wrong PayPal
+  # restriction (the two rejections say different things).
+  #
+  # The pair that identifies a rejection in the note's own wording is its payout date and its
+  # restriction sentence. Both come from the note the payment itself generates
+  # (Payment#terminal_paypal_failure_seller_note), and the restriction is matched across every
+  # wording ever shipped for that code so notes written before a reword still match.
+  def self.terminal_paypal_explanation_note_for?(content, payment)
+    text = content.to_s
+    return false unless text.include?(payment.created_at.to_fs(:formatted_date_full_month))
+
+    seller_reasons_for(payment.failure_reason).any? { |reason| text.include?(reason) }
+  end
+
+  def self.seller_reasons_for(failure_reason)
+    ([TERMINAL_PAYPAL_FAILURE_SELLER_REASONS[failure_reason]] |
+      HISTORICAL_SELLER_REASONS.fetch(failure_reason, [])).compact
+  end
+  private_class_method :seller_reasons_for
+
+  def self.all_seller_reasons
+    TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values | HISTORICAL_SELLER_REASONS.values.flatten
+  end
+  private_class_method :all_seller_reasons
 
   # What the seller can actually do about it, and what happens next. Both halves have to be true
   # for the individual seller, so each is chosen separately.
