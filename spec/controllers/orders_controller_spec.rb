@@ -2648,11 +2648,11 @@ describe OrdersController, :vcr do
     end
 
     context "when the failure is already visible server-side" do
-      # Card, Link and the wallets confirm in-page, so Stripe sends
-      # payment_intent.payment_failed and we persist its error to purchases.stripe_error_code.
-      # Those declines must NOT also be reported to Sentry: they share this endpoint's single
-      # fixed message, so they land in the same Sentry issue and bury the redirect-method
-      # signal the endpoint was built to capture.
+      # A failed card/Link ATTEMPT transitions the intent, so Stripe sends
+      # payment_intent.payment_failed and Purchase::ChargeEventsHandler persists its code to
+      # purchases.stripe_error_code. Those declines must NOT also be reported to Sentry: they
+      # share this endpoint's single fixed message, so they land in the same Sentry issue and
+      # bury the redirect-method signal the endpoint was built to capture.
       %w[card link].each do |payment_method_type|
         it "logs but does not notify for #{payment_method_type}" do
           params = { line_items: line_items.map(&:dup) }.merge(common_params)
@@ -2685,7 +2685,7 @@ describe OrdersController, :vcr do
         )
 
         (described_class::CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER + 3).times do
-          post :confirm_error, params: { id: token, payment_method_type: "card", stripe_error_code: "card_declined" }
+          post :confirm_error, params: { id: token, payment_method_type: "card", stripe_error_type: "card_error", stripe_error_code: "card_declined" }
         end
         post :confirm_error, params: { id: token, payment_method_type: "ideal", stripe_error_code: "payment_intent_unexpected_state" }
 
@@ -2728,6 +2728,52 @@ describe OrdersController, :vcr do
         post :confirm_error, params: {
           id: order.secure_external_id(scope: "confirm"),
           payment_method_type: "some_new_method",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies when payment_method_type is blank" do
+        # ~18% of live events arrive with no payment_method_type at all: Stripe omits
+        # payment_method on errors raised before one is attached. Reporting those is the
+        # deliberate fail-open direction of the denylist, and it was previously pinned only
+        # incidentally by the truncation and rate-limit examples above, which omit the param
+        # for unrelated reasons.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies for a card error that never reached an attempt, so no webhook recorded it" do
+        # Stripe attaches payment_method to any error involving one, not just to declines. A
+        # card-typed invalid_request_error (consumed ConfirmationToken, intent in an unexpected
+        # state) leaves the intent untransitioned, so payment_intent.payment_failed never fires
+        # and this endpoint is again the only witness. 8 of a 44-event live sample.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "card", stripe_error_type: "invalid_request_error")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          payment_method_type: "card",
+          stripe_error_type: "invalid_request_error",
           stripe_error_code: "payment_intent_unexpected_state",
         }
 

@@ -122,7 +122,11 @@ class OrdersController < ApplicationController
     # order token can emit — payload size caps alone don't bound the NUMBER of events, so a
     # scripted caller replaying a valid token could otherwise flood Sentry. The log line
     # above stays unconditional so full forensics are always in the logs.
-    if confirm_error_reportable?(error_details[:payment_method_type]) && confirm_error_notify_allowed?(order)
+    #
+    # One issue for everything is the wrong shape once routine declines are excluded below, but
+    # splitting the title on an attacker-controlled param is what the cap above exists to prevent.
+    # Splitting on a bounded dimension is the follow-up; gp#1514 carries it.
+    if confirm_error_reportable?(error_details) && confirm_error_notify_allowed?(order)
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
 
@@ -131,10 +135,15 @@ class OrdersController < ApplicationController
 
   private
     # Payment methods whose confirm-time failure is already durably recorded server-side.
-    # These confirm in-page, so Stripe sends `payment_intent.payment_failed` and
-    # StripeChargeProcessor persists its `last_payment_error` to `purchases.stripe_error_code`
-    # — the decline is queryable in our own database without this endpoint.
+    # These confirm in-page, so a failed attempt transitions the intent and Stripe sends
+    # `payment_intent.payment_failed`; `Purchase::ChargeEventsHandler#handle_event_failed!`
+    # then writes the code to `purchases.stripe_error_code` — queryable without this endpoint.
     CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link].freeze
+
+    # Stripe error type raised only when an attempt to charge was actually made. It is the
+    # condition that makes the constant above true: no attempt means no intent transition and
+    # therefore no webhook, whatever the payment method was.
+    CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE = "card_error"
 
     # Whether a browser-reported confirm failure is worth a Sentry event, as opposed to only the
     # unconditional log line above.
@@ -145,15 +154,22 @@ class OrdersController < ApplicationController
     # indistinguishable from an abandoned tab.
     #
     # Card and Link declines are not like that (see the constant above), and reporting them here
-    # is actively harmful rather than merely redundant: every report shares one fixed message, so
-    # they land in the SAME Sentry issue as the redirect-method reports and bury the signal this
-    # instrument was built to surface under several hundred routine declines a day.
+    # is redundant with a row we already have.
+    #
+    # Both conditions are required, and the second is the subtle one: Stripe attaches
+    # `payment_method` to any error involving one, not just to declines, so a card-typed
+    # `invalid_request_error` (a consumed ConfirmationToken, an intent in an unexpected state)
+    # never transitions the intent and fires no webhook. Suppressing on the method alone would
+    # make those failures log-only — 8 of a 44-event live sample, 18%, all of them
+    # card + invalid_request_error.
     #
     # Deliberately a denylist, not an allowlist: anything unrecognised — a blank type, or a
     # payment method added after this code was written — keeps reporting, so a new method cannot
     # go silently unmonitored just because nobody updated this list.
-    def confirm_error_reportable?(payment_method_type)
-      !payment_method_type.in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
+    def confirm_error_reportable?(error_details)
+      return true unless error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
+
+      !error_details[:payment_method_type].in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
     end
 
     # Fail-open per-order throttle for confirm_error Sentry reports. Counts reports per order
