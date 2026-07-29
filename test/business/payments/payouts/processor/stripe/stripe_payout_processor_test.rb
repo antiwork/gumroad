@@ -231,6 +231,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     create_merchant_account_stripe_connect(user:, country: "BR", currency: "brl")
     user.reload
     assert_equal true, user.has_stripe_account_connected?
+    assert_equal false, StripePayoutProcessor.has_valid_payout_info?(user)
     assert_equal false, user.has_valid_payout_info?
   end
 
@@ -241,7 +242,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     create_merchant_account(user:)
     create_ach_account(user:, stripe_bank_account_id: "ba_bankaccountid")
     user.reload
-    assert_equal true, user.has_valid_payout_info?
+    assert_equal true, StripePayoutProcessor.has_valid_payout_info?(user)
   end
 
   test "has_valid_payout_info? returns true for a non-Brazilian connected account with no bank account" do
@@ -250,7 +251,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     create_merchant_account_stripe_connect(user:, country: "US", currency: "usd")
     user.reload
     assert_equal true, user.has_stripe_account_connected?
-    assert_equal true, user.has_valid_payout_info?
+    assert_equal true, StripePayoutProcessor.has_valid_payout_info?(user)
   end
 
   # ---------------------------------------------------------------------------
