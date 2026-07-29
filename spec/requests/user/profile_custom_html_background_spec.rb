@@ -113,12 +113,29 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
   # of what they contain, so the wrapper resolves to a computed color and
   # rejects anything landing on transparent.
   #
+  # The zero-alpha rows are here for a different reason: they resolve to a
+  # perfectly real color that simply paints nothing. `getComputedStyle` echoes
+  # modern color functions back in their own syntax rather than normalizing to
+  # rgba(), so a wrapper-local check that only understood `rgba(…)` accepted
+  # `oklch(… / 0)` and painted a transparent canvas — while the child, which
+  # locates alpha by token, refused the same value. Both halves share one
+  # implementation now, and these rows fail if that sharing is undone.
+  #
   # The page declares NO background of its own, so the hostile message is the
   # only candidate the wrapper ever sees. That is what makes these load-bearing:
   # with a parse-only check the value is accepted and shows up in the canvas and
   # the meta tag, and the polling refusal assertion fails.
   context "when the page reports values that parse but resolve to nothing" do
-    ["var(--x)", "var(--x, url(https://evil.example/pixel))", "inherit", "revert"].each do |hostile|
+    [
+      "var(--x)",
+      "var(--x, url(https://evil.example/pixel))",
+      "inherit",
+      "revert",
+      "oklch(0.7 0.1 200 / 0)",
+      "lab(50 40 30 / 0)",
+      "color(display-p3 0.5 0.2 0.9 / 0)",
+      "oklab(0.5 0.1 0.1 / 0)",
+    ].each do |hostile|
       context "reporting #{hostile}" do
         before do
           seller.update!(custom_html: <<~HTML)

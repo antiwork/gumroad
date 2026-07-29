@@ -21,6 +21,7 @@ describe "Custom HTML background bridge wiring", type: :request do
       expect(response).to be_successful
       expect(response.body).to include("data-gumroad-background-bridge")
       expect(response.body).to include("gumroad:background")
+      expect(response.body).to include(RendersCustomHtmlPages::CANVAS_OPAQUE_FN.strip)
     end
 
     it "injects the listener into the trusted wrapper" do
@@ -29,6 +30,11 @@ describe "Custom HTML background bridge wiring", type: :request do
       expect(response).to be_successful
       expect(response.body).to include("data-gumroad-background-wrapper")
       expect(response.body).to include("theme-color")
+      # Both halves answer "is this color opaque?" and must answer it the same
+      # way — a wrapper-local copy drifted and painted a transparent
+      # oklch(… / 0). Pinning the shared source on both sides is what makes a
+      # re-fork fail here rather than in a browser months later.
+      expect(response.body).to include(RendersCustomHtmlPages::CANVAS_OPAQUE_FN.strip)
     end
   end
 

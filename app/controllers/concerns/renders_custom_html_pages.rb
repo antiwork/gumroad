@@ -202,6 +202,34 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  # Shared by both halves of the background bridge: the child uses it to decide
+  # whether a candidate canvas color is worth reporting, and the wrapper to
+  # decide whether a reported color is worth painting. Both are asking the same
+  # question, so they get the same answer from one implementation — a second
+  # copy drifted from this one once already (the wrapper's rgba()-only check
+  # painted a fully transparent `oklch(… / 0)`, gumroad-private#1530).
+  #
+  # Alpha is the token after the slash in every modern color function, or the
+  # fourth comma-separated value in legacy rgba()/hsla(). It has to be located
+  # that way and not matched positionally: a trailing zero in ANY channel looks
+  # identical at the end of the string, so `rgb(0, 0, 0)` — plain black, the
+  # most common dark-theme canvas there is — reads as transparent to a pattern
+  # that only checks what precedes the closing paren.
+  CANVAS_OPAQUE_FN = <<~JS
+    function opaque(color) {
+      if (!color || color === "transparent") return false;
+      var body = color.match(/\\(([^)]*)\\)\\s*$/);
+      if (!body) return true;
+      var parts = body[1].split("/");
+      var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
+      if (alpha === null) {
+        var channels = body[1].split(",");
+        if (channels.length > 3) alpha = channels[3];
+      }
+      return alpha === null || parseFloat(alpha) > 0;
+    }
+  JS
+
   # Injected into the sandboxed landing document at serve time (never authored
   # by the seller). The seller's CSS can only style the document *inside* the
   # iframe, so the wrapper around it stays transparent — which paints white in
@@ -231,27 +259,9 @@ module RendersCustomHtmlPages
       (function () {
         // Viewed directly (not framed) there is no wrapper to color.
         if (window.parent === window) return;
-        function opaque(color) {
-          if (!color || color === "transparent") return false;
-          // A fully transparent canvas is the same as none, so fall through to
-          // the next candidate rather than reporting it. Alpha is the token
-          // after the slash in every modern color function, or the fourth
-          // comma-separated value in legacy rgba()/hsla(). It has to be located
-          // that way and not matched positionally: a trailing zero in ANY
-          // channel looks identical at the end of the string, so `rgb(0, 0, 0)`
-          // — plain black, the most common dark-theme canvas there is — reads
-          // as transparent to a pattern that only checks what precedes the
-          // closing paren.
-          var body = color.match(/\\(([^)]*)\\)\\s*$/);
-          if (!body) return true;
-          var parts = body[1].split("/");
-          var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
-          if (alpha === null) {
-            var channels = body[1].split(",");
-            if (channels.length > 3) alpha = channels[3];
-          }
-          return alpha === null || parseFloat(alpha) > 0;
-        }
+        // A fully transparent canvas is the same as none, so fall through to
+        // the next candidate rather than reporting it.
+        #{CANVAS_OPAQUE_FN}
         // CSS propagates body's background to the canvas only when html has
         // none of its own, so html has to be consulted first or a page that
         // sets both would report the wrong band color.
@@ -645,6 +655,7 @@ module RendersCustomHtmlPages
           (function () {
             var frame = document.getElementById("gumroad-landing-frame");
             var meta = null;
+            #{CANVAS_OPAQUE_FN}
             // Must be IN the document: computed values resolve against the
             // element's context, and a detached node has none.
             var probe = document.createElement("div");
@@ -662,14 +673,12 @@ module RendersCustomHtmlPages
               probe.style.backgroundColor = "";
               probe.style.backgroundColor = value;
               var computed = window.getComputedStyle(probe).backgroundColor;
-              if (!computed || computed === "transparent") return null;
               // Zero alpha is what an unresolvable var()/keyword collapses to,
-              // and painting it would leave the bands white anyway.
-              var parts = computed.match(/^rgba?\\(([^)]+)\\)$/i);
-              if (parts) {
-                var channels = parts[1].split(/[,\\/]/);
-                if (channels.length > 3 && parseFloat(channels[3]) === 0) return null;
-              }
+              // and painting it would leave the bands white anyway. Uses the
+              // same check as the child so the two cannot disagree about which
+              // colors count — a wrapper-local rgba()-only version painted a
+              // transparent oklch(… / 0) that the child would have refused.
+              if (!opaque(computed)) return null;
               return computed;
             }
             function clear() {
