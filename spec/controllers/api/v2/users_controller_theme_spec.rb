@@ -57,6 +57,16 @@ describe Api::V2::UsersController, "GET 'theme'" do
       expect(response.parsed_body["theme"]["applies_to"]).to include("the emails a seller sends to their audience")
     end
 
+    # Checkout follows the theme only when every product being bought belongs to this seller, so an
+    # unqualified "the checkout page" would overclaim for mixed carts — the qualifier is the point.
+    it "names checkout among the surfaces, qualified to single-seller carts" do
+      get :theme, params: { access_token: token.token }
+
+      applies_to = response.parsed_body["theme"]["applies_to"]
+      expect(applies_to).to include("the checkout page, but only when every product being bought is this seller's")
+      expect(applies_to).not_to include("the checkout page")
+    end
+
     it "says the seller changes the theme themselves and points at the settings screen" do
       get :theme, params: { access_token: token.token }
 

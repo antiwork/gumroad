@@ -16,6 +16,7 @@ describe SellerProfile do
       expect(subject.custom_styles).to include("--filled: 0 0 0")
       expect(subject.custom_styles).to include("--body-bg: #000000")
       expect(subject.custom_styles).to include("--color: 255 255 255")
+      expect(subject.custom_styles).to include("--danger: 220 52 30;--contrast-danger: 255 255 255")
       expect(subject.custom_styles).to include("--font-family: \"Roboto Mono\", \"ABC Favorit\", monospace")
     end
 
@@ -62,6 +63,40 @@ describe SellerProfile do
 
       expect(just_under_the_old_cutoff).to eq(just_over_the_old_cutoff)
     end
+
+    it "expands a legacy three-digit accent colour rather than breaking on it" do
+      # Normal saves reject short hex, but legacy raw writes bypassed the validator.
+      subject.update_column(:highlight_color, "#0f0")
+      subject.reload
+
+      expect(subject.custom_styles).to include("--accent: 0 255 0")
+    end
+
+    it "does not compile stored values that can inject SCSS" do
+      subject.custom_styles
+      subject.update_column(
+        :highlight_color,
+        "#ffffff\n)}; } body { display:none !important; } :root { --x: \#{split-color(#ffffff"
+      )
+
+      expect(subject.reload.custom_styles).to eq("")
+    end
+
+    it "does not return cached CSS for an unsafe stored font" do
+      subject.custom_styles
+      subject.update_column(:font, "Roboto Mono; } body { display: none }")
+
+      expect(subject.reload.custom_styles).to eq("")
+    end
+  end
+
+  describe "validations" do
+    it "rejects a colour with a valid first line and trailing content" do
+      subject = build(:seller_profile, highlight_color: "#ffffff\nbody { display: none }")
+
+      expect(subject).not_to be_valid
+      expect(subject.errors[:highlight_color]).to include("is not a valid hexadecimal color")
+    end
   end
 
   describe "text colour helpers" do
@@ -80,6 +115,29 @@ describe SellerProfile do
     it "picks text that contrasts with the body text colour for filled primary surfaces" do
       # --primary is the body text colour, so --contrast-primary sits on top of that.
       expect(subject.text_color_on_primary).to eq("#000000")
+    end
+  end
+
+  describe "danger colour helpers" do
+    it "keeps the standard red when it contrasts with the background" do
+      subject = build(:seller_profile, background_color: "#ffffff")
+
+      expect(subject.danger_color).to eq("#dc341e")
+      expect(subject.text_color_on_danger).to eq("#ffffff")
+    end
+
+    it "uses a darker red on a light background where the standard red is not legible" do
+      subject = build(:seller_profile, background_color: "#f8efe3")
+
+      expect(subject.danger_color).to eq("#9b1c12")
+      expect(ContrastColor.ratio_between(subject.danger_color, subject.background_color)).to be >= 4.5
+    end
+
+    it "falls back to readable neutral text when no red candidate contrasts" do
+      subject = build(:seller_profile, background_color: "#dc341e")
+
+      expect(subject.danger_color).to eq("#ffffff")
+      expect(subject.text_color_on_danger).to eq("#000000")
     end
   end
 
@@ -112,6 +170,48 @@ describe SellerProfile do
       editor_fonts = declaration.scan(/"([^"]+)"/).flatten
       # The editor's first entry is the DEFAULT_PROFILE_FONT constant rather than a literal.
       expect([SellerProfile::FONT_CHOICES.first] + editor_fonts).to eq(SellerProfile::FONT_CHOICES)
+    end
+  end
+
+  describe "#accent_color_for_indicators" do
+    it "keeps the saved accent when it is already visible on the background" do
+      subject = build(:seller_profile, highlight_color: "#009a49", background_color: "#f8efe3")
+
+      expect(subject.accent_color_for_indicators).to eq("#009a49")
+    end
+
+    it "moves an accent that matches the background far enough to be seen" do
+      subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
+
+      indicator = subject.accent_color_for_indicators
+      expect(indicator).not_to eq("#ffffff")
+      expect(ContrastColor.ratio_between(indicator, "#ffffff")).to be >= ContrastColor::WCAG_AA_NON_TEXT
+    end
+
+    it "leaves the saved accent itself untouched" do
+      subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
+      subject.accent_color_for_indicators
+
+      expect(subject.highlight_color).to eq("#ffffff")
+    end
+  end
+
+  describe "font CSS sources" do
+    it "builds one Stripe-compatible stylesheet containing every seller font" do
+      source = described_class.seller_fonts_css_source
+
+      expect(source).not_to include("ABC%20Favorit")
+      described_class::FONT_CHOICES.without("ABC Favorit").each do |font|
+        expect(source).to include("family=#{Addressable::URI.encode(font)}:wght@400;600")
+      end
+    end
+
+    it "builds the active font's storefront stylesheet from the same source" do
+      subject = build(:seller_profile, font: "Roboto Mono")
+
+      expect(subject.font_css_source).to eq(
+        "https://fonts.googleapis.com/css2?family=Roboto%20Mono:wght@400;600&display=swap"
+      )
     end
   end
 end
