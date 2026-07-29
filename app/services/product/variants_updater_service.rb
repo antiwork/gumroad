@@ -155,7 +155,31 @@ class Product::VariantsUpdaterService
       # Deleted ids name versions OR groupings — the editor removes a whole
       # grouping by naming it, and removes versions by naming them. A grouping
       # is swept only when it is named directly.
-      existing_categories.select { ids.include?(_1.external_id) }
+      #
+      # An external id does not say WHICH KIND of row it names. `external_id` is
+      # `ObfuscateIds.encrypt(id)` of the primary key with nothing mixed in to
+      # identify the table (see ExternalId), and `variants` and
+      # `variant_categories` are separate tables with independent auto-increment
+      # counters. So a version and a grouping whose primary keys happen to line
+      # up have the SAME external id string — an everyday coincidence, not an
+      # exotic one, and the reason the save-contract controller test covering a
+      # second grouping was intermittently red.
+      #
+      # Matching every named id against grouping external ids therefore let a
+      # request that deletes one VERSION sweep an unrelated GROUPING whose
+      # primary key collided with that version's, taking every version in it and
+      # leaving the version the seller actually named alive. When an id names a
+      # version of this product, read it as a version: that is what the editor
+      # meant, and it is the interpretation that cannot destroy data the seller
+      # never mentioned.
+      version_ids = BaseVariant.where(variant_category_id: existing_categories.map(&:id))
+                               .where(id: ids.filter_map { BaseVariant.from_external_id(_1) })
+                               .pluck(:id)
+                               .to_set
+
+      existing_categories.select do |category|
+        ids.include?(category.external_id) && !version_ids.include?(category.id)
+      end
     end
 
     # A grouping whose versions have purchases is never swept by omission. This

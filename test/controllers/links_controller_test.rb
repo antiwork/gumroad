@@ -6893,6 +6893,47 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert kept.reload.alive?
   end
 
+  # Regression test for the intermittent red that this file's sibling test above
+  # hit on main (run 30431791476): a version and a grouping can share an external
+  # id, because ExternalId#external_id is ObfuscateIds.encrypt(id) of the primary
+  # key with no table discriminator, and `variants` / `variant_categories` are
+  # separate tables with independent auto-increment counters. Whether the two
+  # counters happened to line up decided whether the save was correct, so the
+  # sibling test passed or failed depending on how many rows earlier tests in the
+  # shard had created. Forcing the collision makes the bug deterministic.
+  test "flag on: a named version is not read as a grouping when their ids collide" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    removed = create_variant(variant_category: other_category, name: "Removed elsewhere")
+    sibling = create_variant(variant_category: other_category, name: "Sibling elsewhere")
+
+    # Give the version the seller names for deletion the same primary key as the
+    # grouping that must survive, so the two carry the same external id.
+    collided_id = VariantCategory.maximum(:id).to_i + BaseVariant.maximum(:id).to_i + 1
+    other_category.update_columns(id: collided_id)
+    removed.update_columns(id: collided_id, variant_category_id: collided_id)
+    sibling.update_columns(variant_category_id: collided_id)
+    other_category = VariantCategory.find(collided_id)
+    removed = Variant.find(collided_id)
+    assert_equal removed.external_id, other_category.external_id,
+                 "this test is only meaningful while the two ids collide"
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    # The id named a version, so a version is what gets deleted.
+    assert_not removed.reload.alive?
+    # ...and the grouping that merely shares its id keeps everything in it.
+    assert other_category.reload.alive?
+    assert sibling.reload.alive?
+    assert kept.reload.alive?
+  end
+
   test "flag on: a second grouping is left alone when the save names no deletions" do
     enable_contract!
     kept = create_variant(variant_category: @category, name: "Kept")

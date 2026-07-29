@@ -32,20 +32,11 @@ class ApplicationMailer < ActionMailer::Base
   end
 
   private
-    # Safety net for the web.de / GMX policy block described in
-    # MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS: those providers reject
-    # everything Resend sends us from, so a buyer there pays and never receives
-    # their receipt.
-    #
-    # Individual mailer methods pass `to:` to MailerInfo.random_delivery_method_options
-    # so the right provider is chosen up front. This runs afterwards and catches
-    # any mailer that did not — there are dozens of mailer methods and a new one
-    # is easy to write without knowing this constraint exists. By the time
-    # #process has returned, the message exists and its recipients are known, so
-    # the check needs no cooperation from the mailer method at all.
-    #
-    # It must run before set_custom_headers, because the X-GUM-Email-Provider
-    # header is derived from the SMTP address the message ends up with.
+    # Safety net for MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS. Mailers pass
+    # `to:` so the provider is picked up front; this catches the ones that don't,
+    # which is easy to miss when writing a new mailer. Runs post-build so the
+    # recipients are already known, and before set_custom_headers, which derives
+    # X-GUM-Email-Provider from the SMTP address we end up with.
     def redirect_united_internet_recipients_to_sendgrid!
       return if message.class == ActionMailer::Base::NullMail
       return unless MailerInfo.force_sendgrid_for_recipients?(message.to)

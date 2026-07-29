@@ -63,27 +63,16 @@ module MailerInfo
     decrypt(header_value)
   end
 
-  # Recipient domains operated by United Internet's 1&1 Mail & Media, which runs
-  # web.de, GMX and mail.com — together Germany's largest consumer mail estate,
-  # and all three on one inbound platform (mail.com was migrated onto the GMX
-  # platform after United Internet acquired it in 2010, and the three brands
-  # share a postmaster/blocklist operation). United Internet policy-blocks the
-  # Amazon SES IP range that Resend sends from: every send bounces with
-  # "550 Reject due to policy restrictions" (their code r1102), so a buyer at
-  # these domains who gets routed to Resend pays and never receives their
-  # receipt or download link. The very same addresses accept our SendGrid mail
-  # without issue, so we pin them to SendGrid instead of letting the random
-  # provider split pick Resend.
+  # These domains reject Resend's sending IPs outright ("550 Reject due to policy
+  # restrictions", their code r1102), so a buyer there pays and never gets their
+  # receipt. They accept our SendGrid mail, so pin them rather than letting the
+  # random provider split pick Resend.
   #
-  # Matched exactly rather than by suffix: these are consumer mailboxes that
-  # exist only at the apex, and suffix matching would also capture unrelated
-  # third-party subdomains that happen to end in one of these names.
-  #
-  # mail.com additionally fronts a large family of vanity domains (email.com,
-  # usa.com, …) on the same platform. Those are NOT listed here because the set
-  # has not been verified against United Internet's own documentation; add them
-  # if a bounce is actually observed rather than guessing at the list.
-  # See https://github.com/antiwork/gumroad-private/issues/1462
+  # Exact match, not suffix: these are consumer mailboxes that only exist at the
+  # apex, so suffix matching would catch unrelated third-party subdomains.
+  # mail.com's vanity domains (email.com, usa.com, …) are deliberately absent —
+  # add one when a bounce is observed, not on a guess.
+  # https://github.com/antiwork/gumroad-private/issues/1462
   UNITED_INTERNET_RECIPIENT_DOMAINS = %w[
     web.de
     gmx.de gmx.net gmx.com gmx.at gmx.ch gmx.us gmx.fr gmx.es gmx.co.uk
