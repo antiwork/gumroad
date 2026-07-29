@@ -240,7 +240,11 @@ class Payment < ApplicationRecord
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY
     end
 
-    next_step = if user.payouts_paused?
+    # Only a hold WE placed. A seller who paused their own payouts in their settings can resume
+    # them whenever they like, so sending them to support to have it "reviewed" would be busywork
+    # for both of us — the plain next-payout-date wording is the truthful thing to tell them, since
+    # the payout runs as soon as they un-pause and have a working method on file.
+    next_step = if user.payouts_paused_internally?
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED
     else
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP
@@ -358,6 +362,18 @@ class Payment < ApplicationRecord
 
       last_completed_at = payouts_to_destination.completed.maximum(:created_at)
       failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
+      # Don't count the rejections that are already handled by the terminal-failure block, for the
+      # same reason this method returns early for them: a hold undoes what we told the seller to do.
+      # Without this, a terminal rejection still contributes to the count and a couple of unrelated
+      # later rows can push the account over the threshold — unclaimed payouts to the same address
+      # turning into returns weeks afterwards is enough — and the seller who followed our
+      # instructions ends up held anyway, which is the outcome this whole change removes.
+      # `failure_reason` is NULL on most non-PayPal rows, and NOT IN never matches NULL, so the
+      # NULL case has to be spelled out or those rows silently stop counting.
+      failed_payouts = failed_payouts.where(
+        "failure_reason IS NULL OR failure_reason NOT IN (?)",
+        FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
+      )
       failed_payouts = failed_payouts.where("created_at > ?", last_completed_at) if last_completed_at
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS

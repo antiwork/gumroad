@@ -57,16 +57,33 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("placed a hold on payouts for your account")
+      expect(mail.body.encoded).to include("Payouts on your account are also on hold")
       expect(mail.body.encoded).to include("reply to this email")
       expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "does not blame the hold on the failed payouts, since support or Stripe may have placed it" do
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("placed a hold")
+    end
+
+    it "still promises the payout date to a seller who paused their own payouts, which they can undo" do
+      payment.user.update!(payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to_not include("on hold")
     end
 
     it "promises the next payout date when the account is not under a payout hold" do
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
       expect(mail.body.encoded).to include("next payout date")
-      expect(mail.body.encoded).to_not include("placed a hold on payouts")
+      expect(mail.body.encoded).to_not include("on hold")
     end
 
     it "does not tell a seller in a PayPal-only country to add a bank account" do

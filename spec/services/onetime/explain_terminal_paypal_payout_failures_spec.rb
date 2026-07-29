@@ -60,7 +60,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       described_class.process
 
       note = seller.comments.with_type_payout_note.last
-      expect(note.content).to include("placed a hold on payouts for your account")
+      expect(note.content).to include("Payouts on your account are also on hold")
       expect(note.content).to_not include("next payout date")
     end
 

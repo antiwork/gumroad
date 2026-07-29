@@ -185,7 +185,8 @@ class ContactingCreatorMailer < ApplicationMailer
     )
     # A hold on the account outlives the payout method fix and only support can lift it, so the
     # email has to ask a seller in that position to reply instead of promising the next payout date.
-    @payouts_on_hold = @seller.payouts_paused?
+    # Only holds WE placed count: a seller who paused their own payouts can just un-pause them.
+    @payouts_on_hold = @seller.payouts_paused_internally?
     # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
     # PayPal-only countries, where "add a bank account" is advice they cannot act on.
     @can_use_bank_account = @seller.can_setup_bank_payouts?

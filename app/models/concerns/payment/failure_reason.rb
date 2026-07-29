@@ -55,11 +55,17 @@ module Payment::FailureReason
   # Stripe-sourced hold (UpdatePayoutMethod), and the one automatic release job covers
   # chargeback-rate holds, not this one. Someone on support has to resume it — so promising the
   # next payout date would be a second false promise on top of the one we are fixing.
+  #
+  # The wording does not say what CAUSED the hold. A hold that reaches this message can equally be
+  # one support placed, one Stripe asked for, or one the seller set on themselves in their own
+  # payout settings; blaming it on the failed payouts would be wrong in most of those cases. What
+  # is always true is that a hold is on the account and it is why fixing the payout method alone
+  # will not release the money, so that is all we claim.
   TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP =
     "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
   TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED =
-    "Your balance is safe. Because these repeated failures also placed a hold on payouts for your account, " \
-    "reply to this message once a working payout method is on file and we will review the hold and release your balance."
+    "Your balance is safe. Payouts on your account are also on hold, so once a working payout method is on file, " \
+    "reply to this message and we will review the hold and release your balance."
 
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",

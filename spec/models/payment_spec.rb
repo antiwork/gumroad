@@ -187,6 +187,20 @@ describe Payment do
       expect(compliant_creator.reload.payouts_paused?).to eq(true)
     end
 
+    it "does not let a terminal rejection push later returned payouts over the pause threshold" do
+      payment.mark_failed!("PAYPAL 3148")
+      # PayPal payouts to an address with no account behind it sit unclaimed and are returned about
+      # 30 days later, so these rows can land well after the rejection that stopped the retries.
+      returned_payouts = 2.times.map do
+        create(:payment_unclaimed, user: compliant_creator, payment_address: payment.payment_address,
+                                   created_at: 1.day.from_now)
+      end
+
+      returned_payouts.each(&:mark_returned!)
+
+      expect(compliant_creator.reload.payouts_paused?).to eq(false)
+    end
+
     it "does not email for a retryable PayPal rejection" do
       expect do
         payment.mark_failed!("PAYPAL 3015")
