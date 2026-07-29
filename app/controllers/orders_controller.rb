@@ -124,7 +124,7 @@ class OrdersController < ApplicationController
     # above stays unconditional so full forensics are always in the logs.
     #
     # Splitting the issue per method would read better but must not key on this
-    # attacker-controlled param; a bounded split is tracked in gp#1514.
+    # attacker-controlled param; a bounded split is tracked in gumroad-private#1514.
     if confirm_error_reportable?(error_details) && confirm_error_notify_allowed?(order)
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
