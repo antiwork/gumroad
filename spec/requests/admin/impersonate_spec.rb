@@ -3,12 +3,14 @@
 require "spec_helper"
 
 describe "Impersonate", type: :system, js: true do
-  include StripeMerchantAccountHelper
-
   let(:admin) { create(:admin_user, name: "Gumlord") }
   let(:seller) do
     user = create(:named_seller)
-    create(:merchant_account, user:, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+    # Admin lookup by Stripe account ID is a plain database find_by on this
+    # string (Admin::BaseController#find_user), so the account only has to exist
+    # in our own records. Creating a real verified Stripe account here made every
+    # run of this file wait about a minute for Stripe to verify it. See #6502.
+    create(:merchant_account, user:, charge_processor_merchant_id: "acct_1TestImpersonate")
     user
   end
 

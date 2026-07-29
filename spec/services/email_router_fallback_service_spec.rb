@@ -40,6 +40,16 @@ describe EmailRouterFallbackService do
         expect(EmailRouterFallbackService.email_provider_for_two_factor(user:)).to eq MailerInfo::EMAIL_PROVIDER_RESEND
         expect(EmailRouterFallbackService.email_provider_for_two_factor(user: other_user)).to be_nil
       end
+
+      it "stays on SendGrid for a web.de/GMX user instead of falling back to a provider that rejects them" do
+        # The fallback exists because the first email may not have arrived. For
+        # these domains Resend is the provider that definitely cannot deliver, so
+        # switching to it would lock the user out of login entirely.
+        blocked_user = create(:user, email: "buyer@web.de")
+        EmailRouterFallbackService.record_email_sent(user: blocked_user)
+
+        expect(EmailRouterFallbackService.email_provider_for_two_factor(user: blocked_user)).to be_nil
+      end
     end
   end
 

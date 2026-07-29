@@ -409,7 +409,12 @@ class Installment < ApplicationRecord
       recipient[:url_redirect] = UrlRedirect.find_or_create_by!(installment: self, purchase: nil) if has_files?
       begin
         PostEmailApi.process(post: self, recipients: [recipient], preview: true)
-      rescue ResendApiResponseError
+      rescue ResendApiResponseError, SendGridApiResponseError
+        # Either provider can be the one that actually sends this preview: the
+        # recipient's domain decides (see
+        # MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS), as does the random
+        # split, so a failure from either has to become the same friendly error
+        # rather than an unhandled 500 on the preview request.
         raise PreviewEmailError, "Failed to send preview email. Please try again later."
       end
     end

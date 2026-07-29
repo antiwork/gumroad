@@ -5,7 +5,10 @@ require("spec_helper")
 describe "/follow page", type: :system, js: true do
   before do
     @email = generate(:email)
-    @creator = create(:named_user)
+    # Reviewed and marked compliant: the subscribe form only accepts a follow
+    # with no challenge for sellers we have reviewed (see FollowRecaptcha), and
+    # a headless browser has no Google challenge to solve.
+    @creator = create(:named_user, user_risk_state: "compliant")
     @user = create(:user)
   end
 
