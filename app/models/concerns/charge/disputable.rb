@@ -203,13 +203,9 @@ module Charge::Disputable
 
       purchase.mark_product_purchases_as_chargeback_reversed!
 
-      # Read the purchase's own subscription rather than asking the product whether it is a
-      # membership today. A seller can convert a membership product into a one-off product
-      # after the fact, and when they do, link.is_recurring_billing flips to false for every
-      # past sale — including subscriptions that are still live and still billing. Deciding
-      # a historical subscription purchase's fate from the product's current type is what
-      # left subscription purchases un-cancelled after their charges were charged back
-      # (gumroad-private#1456).
+      # Read the purchase's own subscription, not the product's current type: converting a
+      # membership to a one-off flips link.is_recurring_billing for every past sale, including
+      # subscriptions still live and still billing (gumroad-private#1456).
       subscription = Subscription.find_by(id: purchase.subscription_id)
       if subscription.present?
         logger.info("Chargeback event won; re-activating subscription: #{subscription.id}")
@@ -301,12 +297,9 @@ module Charge::Disputable
         # has a purchase_chargeback_balance, so a replay never debits the seller twice.
         purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
 
-        # Read the purchase's own subscription rather than asking the product whether it is a
-        # membership today. A seller can convert a membership product into a one-off product
-        # after the fact, and when they do, link.is_recurring_billing flips to false for every
-        # past sale — so this gate stopped cancelling subscriptions that were still live and
-        # still billing, even after every charge on them had been charged back
-        # (gumroad-private#1456).
+        # Read the purchase's own subscription, not the product's current type: converting a
+        # membership to a one-off flips link.is_recurring_billing for every past sale, so live
+        # subscriptions stopped being cancelled on chargeback (gumroad-private#1456).
         subscription = Subscription.find_by(id: purchase.subscription_id)
         # Only cancel a live subscription: re-cancelling one that a previous attempt already
         # deactivated would re-fire the cancellation webhooks and customer emails on replay.
