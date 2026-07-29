@@ -78,7 +78,14 @@ describe "UPI Payment Element billing handling", type: :system, js: true do
 
     # The reviewed repro: the buyer touches the element FIRST (clicks the Card row's number
     # field), then types their name into checkout's own Full name field...
+    #
+    # Which accordion pane opens on mount is Stripe's choice, not ours, and for this INR/India
+    # element it is not stable — UPI can come up expanded, with no Card number field at all.
+    # Open Card when it isn't already the expanded row.
     within_payment_element_frame do
+      unless has_selector?(:fillable_field, "Card number", visible: false, wait: 0)
+        first(:xpath, ".//*[normalize-space(text())='Card']", visible: :all, wait: 20).click
+      end
       first(:fillable_field, "Card number", visible: false, wait: 20).click
     end
     fill_in "Full name", with: "Priya Prefill Test"

@@ -201,8 +201,36 @@ class Checkout::StripePaymentPresenter
     # cart-shape policy (single-seller, non-connect, one-time). One ConfirmationToken funds one
     # PaymentIntent, so client-confirm is limited to one seller.
     def client_confirm_eligible?
+      return false if price_still_pending?(items)
+
       sellers.all? { Feature.active?(STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, _1) } &&
         payment_method_resolver.resolve.client_confirm_eligible?
+    end
+
+    # A cart that reads as zero here only because the buyer has not named their price yet (see the
+    # zero-total comment in fallback_reason_for). Such a cart keeps the Payment Element, but it must
+    # take the canonical server-confirm lane rather than the client-confirm one, because everything
+    # the client-confirm lane fixes at page load is derived from a total that does not exist yet:
+    #
+    #   1. The method-forced surface mounts the Element with a server-rendered
+    #      presentment_amount_cents — the cart's listed subtotal in the forced currency. On a
+    #      pay-what-you-want cart that number is 0, and the browser prefers it over its own total
+    #      for the whole session (getStripePaymentElementAmount returns it whenever it is non-null),
+    #      so the Element would still be mounted at zero after the buyer typed $25.
+    #   2. The Element's payment_method_types must equal the deferred intent's, or Stripe rejects
+    #      the payment_method_types-scoped ConfirmationToken and the buyer cannot pay with ANY
+    #      method, card included. Klarna's gate is cart-total-dependent
+    #      (KLARNA_MIN_USD_CHARGE_CENTS), so a cart that mounts at zero resolves without Klarna
+    #      while Order::PreparePaymentIntentService — which re-resolves from the real purchase
+    #      amounts — adds it back once the buyer has named an eligible amount.
+    #
+    # The canonical server-confirm Payment Element has neither property: its amount is derived in
+    # the browser from the loaded total (and the browser declines to mount below Stripe's minimum
+    # until a real total exists), and it carries a fixed ["card"] method list with no deferred
+    # intent to match. So a pending-price cart still gets the Payment Element and its wallets; it
+    # gives up only the local payment methods, which it could not have mounted correctly anyway.
+    def price_still_pending?(items)
+      !items.sum { _1[:price_cents].to_i }.positive? && items.any? { _1[:has_customizable_price] }
     end
 
     def payment_method_resolver
@@ -378,8 +406,27 @@ class Checkout::StripePaymentPresenter
 
       # Initial eligibility uses pre-tax item prices; the browser waits for the final loaded total.
       total_price_cents = items.sum { _1[:price_cents].to_i }
-      return "not_charged" unless total_price_cents.positive?
-      return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+      # A zero total normally means nothing will be charged (a free product), so the legacy card
+      # surface is the right place for it. But a pay-what-you-want product listed from zero also
+      # reads as zero HERE, because this runs when the page loads — before the buyer has typed an
+      # amount into the price field. Treating that as "free" picked the checkout surface for a
+      # cart the buyer then paid real money on: they entered $25 and were charged on the legacy
+      # CardElement, losing the Payment Element's local payment methods and wallets for no
+      # reason (gumroad-private#1430).
+      #
+      # So a zero total is only "not charged" when no item could still acquire a price. For a
+      # pay-what-you-want item the amount is unknown at load rather than zero, and the browser
+      # re-runs eligibility once the buyer commits a total, which is what decides the real charge.
+      if !total_price_cents.positive? && items.none? { _1[:has_customizable_price] }
+        return "not_charged"
+      end
+      # Skipped for a pay-what-you-want cart at load for the same reason as the zero check above:
+      # its total is not yet the amount that will be charged, so comparing it against Stripe's
+      # minimum would reject the Payment Element on a cart the buyer may well pay $25 on. The
+      # browser re-runs this once a real total exists, and the minimum is enforced then.
+      if total_price_cents.positive? && total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
+        return "stripe_payment_element_amount_below_minimum"
+      end
       if items.any? { buyer_currency_presentment_candidate?(_1) }
         # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
         # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
@@ -537,7 +584,7 @@ class Checkout::StripePaymentPresenter
     def cart_items
       return [] if cart.blank?
 
-      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(product: [:user, :installment_plan]).map do |cart_product|
+      cart.alive_cart_products.joins(:product).merge(Link.not_archived).includes(:option, product: [:user, :installment_plan]).map do |cart_product|
         product = cart_product.product
         item(
           seller: product.user,
@@ -551,7 +598,8 @@ class Checkout::StripePaymentPresenter
           native_type: product.native_type,
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
           product_currency: product.price_currency_type.to_s.downcase,
-          ppp_discounted: product.ppp_details(ip).present?
+          ppp_discounted: product.ppp_details(ip).present?,
+          has_customizable_price: cart_line_buyer_can_name_price?(cart_product)
         )
       end
     end
@@ -576,14 +624,88 @@ class Checkout::StripePaymentPresenter
           # currency_code is the product's own pricing currency (price_currency_type), set by
           # CheckoutPresenter#product_common on every add_products entry.
           product_currency: product[:currency_code].to_s.downcase.presence,
-          ppp_discounted: product[:ppp_details].present?
+          ppp_discounted: product[:ppp_details].present?,
+          has_customizable_price: buyer_can_name_price?(checkout_product)
         )
       end
     end
 
+    # The saved-cart twin of buyer_can_name_price? below. A cart line records the tier the buyer
+    # picked in `option`, so the same rule applies: what decides whether a price is still unknown
+    # is the SELECTED tier, not whether the membership happens to offer a pay-what-you-want tier
+    # somewhere. `Link#has_customizable_price_option?` answers the latter — it scans every alive
+    # tier — so a cart line on a free non-pay-what-you-want tier of a membership that also sells a
+    # pay-what-you-want tier reported a customizable price, suppressed the "not_charged"
+    # classification, and mounted the Payment Element on a checkout that charges nothing.
+    #
+    # Only a TIERED MEMBERSHIP's option carries the flag. `Variant::Prices#set_customizable_price`
+    # returns early for anything else, so an ordinary product's variants always read false even
+    # when the product itself is pay-what-you-want — reading the option there would wrongly call a
+    # real pay-what-you-want cart free. For a non-membership the product's own
+    # `customizable_price` column is authoritative, which is what has_customizable_price_option?
+    # returns for that case.
+    #
+    # A membership line with NO tier recorded reads false rather than deferring to the product.
+    # Both of the product-level answers available here are wrong for it: the tier scan inside
+    # has_customizable_price_option? is the product-wide question this method exists to stop
+    # asking (one pay-what-you-want tier would speak for a line that selected none), and the
+    # `customizable_price` column is unreliable on memberships — it can be stale-true, which is
+    # why buyer_can_name_price? guards it too. On a membership the buyer names a price only
+    # through a tier, so with no tier there is no pending amount and the price is known.
+    def cart_line_buyer_can_name_price?(cart_product)
+      product = cart_product.product
+      return product.has_customizable_price_option? unless product.is_tiered_membership?
+
+      option = cart_product.option
+      option.present? && option.customizable_price?
+    end
+
+    # Whether the buyer can still name their own price for this line, which fallback_reason_for
+    # must not read as "free" (see the zero-total comment there).
+    #
+    # The product-level `pwyw` field is not enough on its own, because it is not tier-aware. For a
+    # tiered membership the TIER carries the flag, via `Variant::Prices` — so the tier is what has
+    # to be consulted, and the product column must not be trusted. A $0 pay-what-you-want
+    # membership opened through /checkout?product=… fell back to CardElement while the same product
+    # added from a saved cart did not.
+    #
+    # Note the product column can be STALE-true on a membership, which is why this reads
+    # `is_tiered_membership` before trusting `pwyw` at all. During create,
+    # `Product::Prices#write_customizable_price` runs (via `price_range=`) while
+    # `is_tiered_membership` is still false, so any membership created with a $0 starting price
+    # persists `customizable_price = true`; the `set_customizable_price` after_save callback
+    # early-returns for memberships, so nothing ever clears it. `customizable_price` is also a
+    # directly writable param on both the web and v2 API update paths. Trusting it here would mount
+    # the Payment Element on a genuinely free membership tier — the defect this method's
+    # selected-tier check exists to prevent — and would disagree with
+    # cart_line_buyer_can_name_price?, which already guards on the membership flag first.
+    #
+    # The tier-level check has to look at the tier the buyer actually SELECTED, not at every tier
+    # the product offers. `options` lists all of them, so asking "does any option allow naming a
+    # price" says yes for a membership that merely HAS a pay-what-you-want tier somewhere — which
+    # would suppress the "free" classification even when the buyer picked a genuinely free tier
+    # with no amount to charge, and mount the Payment Element on a checkout that charges nothing.
+    # `option_id` is the selected tier (CheckoutPresenter sets it from the accepted upsell, the
+    # cart item, or an upgrading subscription's current tier), so scope the check to that option.
+    # A membership with no option_id has no selected tier, and a membership's price can only be
+    # named through a tier, so there is no pending amount and the price is known — the same answer
+    # cart_line_buyer_can_name_price? gives a cart line with no option.
+    def buyer_can_name_price?(checkout_product)
+      product = checkout_product[:product]
+      return product[:pwyw].present? unless product[:is_tiered_membership]
+
+      selected_option_id = checkout_product[:option_id]
+      return false if selected_option_id.blank?
+
+      # An unrecognized option id means the payload and the product disagree; treat the price as
+      # known rather than assuming the buyer can name one, so the minimum/free checks still run.
+      selected = product[:options].to_a.find { _1[:id] == selected_option_id }
+      selected.present? && selected[:is_pwyw].present?
+    end
+
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
         price_cents:,
@@ -597,6 +719,7 @@ class Checkout::StripePaymentPresenter
         buyer_currency_display:,
         product_currency:,
         ppp_discounted:,
+        has_customizable_price:,
       }
     end
 end

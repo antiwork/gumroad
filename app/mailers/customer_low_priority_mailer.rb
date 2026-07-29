@@ -66,7 +66,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       from: from_email_address_with_name(@user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       to: email,
       subject: "It's pay day!",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @user, to: email)
     )
   end
 
@@ -197,7 +197,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
     mail to: user.email,
          subject: "Important changes to your membership",
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller:),
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller:, to: user.email),
          reply_to: seller.support_or_form_email,
          template_name: "subscription_price_change_notification"
   end
@@ -252,7 +252,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       to: purchase.email,
       reply_to: "noreply@#{CUSTOMERS_MAIL_DOMAIN}",
       subject: @subject,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: purchase.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: purchase.seller, to: purchase.email)
     )
   end
 
@@ -268,7 +268,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       from: "Gumroad <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
       reply_to: [@product.user.email, "Gumroad <noreply@#{CUSTOMERS_MAIL_DOMAIN}>"],
       subject: "Could not charge your credit card for #{@product.name}",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: authorization_purchase.email)
     )
   end
 
@@ -280,7 +280,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: authorization_purchase.email,
       subject: "Your pre-order has been canceled.",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @preorder.preorder_link.link.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @preorder.preorder_link.link.user, to: authorization_purchase.email)
     )
   end
 
@@ -295,7 +295,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       to: purchase.email,
       reply_to: @product.user.support_or_form_email,
       subject: "Your order has shipped!",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @product.user, to: purchase.email)
     )
   end
 
@@ -306,7 +306,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: @disputable.purchase_for_dispute_evidence.email,
       subject: "Regarding your recent dispute.",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @disputable.purchase_for_dispute_evidence.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @disputable.purchase_for_dispute_evidence.seller, to: @disputable.purchase_for_dispute_evidence.email)
     )
   end
 
@@ -335,7 +335,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: @purchase.email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller, to: @purchase.email)
     )
   end
 
@@ -363,7 +363,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: @purchase.email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller, to: @purchase.email)
     )
   end
 
@@ -382,7 +382,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: first_purchase.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: first_purchase.seller, to: email)
     )
   end
 
@@ -398,7 +398,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: @wishlist_follower.follower_user.email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @wishlist_follower.wishlist.user)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @wishlist_follower.wishlist.user, to: @wishlist_follower.follower_user.email)
     )
   end
 
@@ -416,7 +416,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: @subscription.email,
       subject: "Someone tried to purchase a membership you already have",
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @subscription.seller)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @subscription.seller, to: @subscription.email)
     )
   end
 
@@ -433,7 +433,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       options = {
         to: @subscription.email,
         subject: @subject,
-        delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @subscription.original_purchase.seller)
+        delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @subscription.original_purchase.seller, to: @subscription.email)
       }.merge(@delivery_options || {})
 
       mail options
