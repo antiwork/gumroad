@@ -176,10 +176,6 @@ const CheckoutIndexPage = () => {
   });
   const initialCheckout = initialCheckoutRef.current;
   const cartForm = useForm<{ cart: CartState }>({ cart: initialCheckout.cart });
-  const checkoutStyle = getApplicableCheckoutStyle(
-    props.checkout_style,
-    cartForm.data.cart.items.map(({ product }) => product.creator.id),
-  );
 
   // Flush the initial cart's side effects exactly once, off the render path.
   useRunOnce(() => {
@@ -252,6 +248,10 @@ const CheckoutIndexPage = () => {
   const listedProductTotalCents = listedTipLines.reduce((sum, line) => sum + line.price, 0);
   const listedTipCents = listedCurrency ? computeTipForListedLines(state, listedTipLines) : 0;
   const [results, setResults] = React.useState<Result[] | null>(null);
+  const checkoutStyleSellerIds = results
+    ? results.map(({ item }) => item.product.creator.id)
+    : cartForm.data.cart.items.map(({ product }) => product.creator.id);
+  const checkoutStyle = getApplicableCheckoutStyle(props.checkout_style, checkoutStyleSellerIds);
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
