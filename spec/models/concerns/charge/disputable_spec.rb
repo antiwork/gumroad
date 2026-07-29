@@ -371,6 +371,26 @@ describe Charge::Disputable, :vcr do
         end
       end
 
+      context "when the purchase is an installment plan" do
+        let(:product) { create(:product, :with_installment_plan, user: seller) }
+        let!(:purchase) do
+          subscription = create(:subscription, link: product, is_installment_plan: true, cancelled_at: nil)
+          purchase = create(:purchase, link: product, stripe_transaction_id: "ch_zitkxbhds3zqlt")
+          purchase.update!(is_original_subscription_purchase: true, subscription:)
+          purchase
+        end
+
+        # The model rejects a by_buyer cancel on an installment plan, so cancelling here would
+        # raise mid-side-effects and strand the payout pause and dispute evidence on every retry.
+        it "leaves the plan alone and still runs the rest of the side effects" do
+          expect { Purchase.handle_charge_event(event) }.to_not raise_error
+
+          expect(purchase.reload.subscription.cancelled_at).to be_nil
+          expect(purchase.chargeback_date).to be_present
+          expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+        end
+      end
+
       it "sends emails to admin, creator, and customer" do
         mail = double("mail")
         expect(mail).to receive(:deliver_later).exactly(3).times

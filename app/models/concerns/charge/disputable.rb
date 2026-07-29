@@ -206,8 +206,13 @@ module Charge::Disputable
       # Read the purchase's own subscription, not the product's current type: converting a
       # membership to a one-off flips link.is_recurring_billing for every past sale, including
       # subscriptions still live and still billing (gumroad-private#1456).
+      #
+      # Installment plans also carry a Subscription on a non-recurring link, and they are not
+      # memberships: Subscription::UpdaterService refuses to restart a completed one, and
+      # resubscribe! leaves ended_at set, so restarting one would email the buyer about a
+      # "restarted" plan that cannot bill again.
       subscription = Subscription.find_by(id: purchase.subscription_id)
-      if subscription.present?
+      if subscription.present? && !subscription.is_installment_plan?
         logger.info("Chargeback event won; re-activating subscription: #{subscription.id}")
         terminated_or_scheduled_for_termination = subscription.termination_date.present?
         subscription.resubscribe!
@@ -300,7 +305,13 @@ module Charge::Disputable
         # Read the purchase's own subscription, not the product's current type: converting a
         # membership to a one-off flips link.is_recurring_billing for every past sale, so live
         # subscriptions stopped being cancelled on chargeback (gumroad-private#1456).
+        #
+        # Installment plans are excluded: they also carry a Subscription on a non-recurring link,
+        # and Subscription#installment_plans_cannot_be_cancelled_by_buyer rejects the by_buyer
+        # cancel below, so including them would raise here and leave every later side effect
+        # (payout pause, dispute evidence, FightDisputeJob) unrun on every webhook redelivery.
         subscription = Subscription.find_by(id: purchase.subscription_id)
+        subscription = nil if subscription&.is_installment_plan?
         # Only cancel a live subscription: re-cancelling one that a previous attempt already
         # deactivated would re-fire the cancellation webhooks and customer emails on replay.
         # The review exclusion stays inside this guard because it is tied to the cancellation.
