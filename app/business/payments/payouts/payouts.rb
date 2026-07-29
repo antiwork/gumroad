@@ -22,6 +22,9 @@ class Payouts
   # Recognises the weekly "payouts were paused" note this class writes, whatever the payout date or
   # pause source in it. Used to avoid writing another one when the newest note already is one.
   PAUSED_PAYOUT_NOTE_REGEX = /\APayout on .+ was skipped because payouts on the account were paused by the .+\.\z/
+  # Same idea for the daily "not eligible for instant payouts" note below: recognise one this class
+  # already wrote, whatever payout date it names.
+  INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX = /\APayout on .+ was skipped because the account is not eligible for instant payouts\.\z/
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -75,9 +78,10 @@ class Payouts
         #
         # The liveness check costs a few queries, and it runs for every internally-held seller in
         # the walk rather than only the PayPal-blocked ones, because both branches below need the
-        # answer. That is a small, bounded set — an internal hold is placed deliberately, by
-        # support or by repeated payout failures — and the queries are cheap existence checks, so
-        # this is not the shape that caused the walk's past latency incidents (#1021, #1284).
+        # answer. Measured on production in July 2026: 3,989 of the 240,341 sellers holding an
+        # unpaid balance are held internally, so 1.7% of the walk pays for it, and the queries are
+        # cheap existence checks. That is not the shape that caused the walk's past latency
+        # incidents (#1021, #1284), which were per-seller work across the whole cohort.
         newest_visible_note = user.latest_seller_visible_payout_note
         terminal_paypal_block = user.payouts_paused_internally? &&
                                 PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
@@ -107,7 +111,9 @@ class Payouts
           # A held seller reaches this every week and would otherwise never be told: the hold is
           # checked here, before any processor runs, so PaypalPayoutProcessor's own re-explain
           # never fires for them — and holds are the norm in this population, since dozens of
-          # failed payouts trip the automatic one. Without this, a seller whose explanation was
+          # failed payouts trip the automatic one. Measured on production in July 2026, 24 sellers
+          # are simultaneously held and carrying a terminal PayPal rejection, 19 of them holding
+          # $5,020.87 in unpaid balance between them. Without this, a seller whose explanation was
           # buried by another blocker's note (an account under review, say) stays permanently in
           # the gumroad-private#1478 dead end: they read "payouts were paused by the system" every
           # week, with nothing telling them PayPal is what stopped the money, and so no reason to
@@ -145,10 +151,35 @@ class Payouts
         # PayPal account can never receive the money it would bury the one note telling them why —
         # the same burial the weekly pause note is suppressed for above. Instant payouts are not
         # what stopped their money, so the explanation is the more useful of the two to show.
+        #
+        # Tied to the live PayPal block, not just to the wording of the note the seller happens to
+        # be reading, for the same reason the weekly pause note is: a seller who has since fixed
+        # their PayPal account still carries the old explanation as their newest visible note, and
+        # hiding today's note from them would leave a stale explanation on their page as the only
+        # thing they can read.
         if add_comment
-          explanation_visible = Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
-          user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts.",
-                               seller_visible: !explanation_visible)
+          content = "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts."
+          explanation_visible =
+            Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content) &&
+            PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
+
+          # Don't stack identical hidden notes. Suppressed or not, every daily run adds a
+          # payout_note row, and both the lookup above and the Payouts banner only scan back
+          # PayoutNoteVisibility::MAX_NOTES_SCANNED notes — so within a month of daily runs these
+          # rows would push the explanation out of the window, the lookup would return nil, and
+          # this note would go back to being written seller-visible, re-burying the explanation the
+          # suppression exists to protect. Skipping the repeat keeps that from happening at all,
+          # and spares accounts that already carry hundreds of automated comments one row a day.
+          # Matched on shape rather than exact text because the note embeds its own payout date.
+          if explanation_visible
+            newest_note = user.latest_payout_note
+            if newest_note.present? && !PayoutNoteVisibility.seller_visible?(newest_note) &&
+               newest_note.content.to_s.match?(INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX)
+              return false
+            end
+          end
+
+          user.add_payout_note(content:, seller_visible: !explanation_visible)
         end
         return false
       end
