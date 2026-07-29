@@ -205,6 +205,39 @@ describe Pages::ProfileData do
 
         expect(hosts).to all(be_in(seller.custom_html_store_hostnames))
       end
+
+      it "ignores a custom domain belonging to one of the seller's products" do
+        create(:custom_domain, :verified_with_certificate, user: nil, product:, domain: "oneproduct.example.com")
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to include(seller.subdomain)
+        expect(payload.to_json).not_to include("oneproduct.example.com")
+      end
+
+      it "leaves the custom-domain host behind when the certificate ages out with no DB write" do
+        domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
+
+        # active? goes false purely by the clock, so the domain row's updated_at never moves.
+        domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
+      end
+    end
+
+    context "when the seller has neither a subdomain nor a live custom domain" do
+      # store_base_url returns nil here rather than the shared gumroad.com root, so posts keep
+      # their relative /:username/p/:slug form — https://gumroad.com/p/:slug routes nowhere.
+      it "does not build post URLs on the shared root domain" do
+        create(:product, user: seller, name: "My product")
+        create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update")
+        allow_any_instance_of(User).to receive(:subdomain_with_protocol).and_return(nil)
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:posts].first[:url]).not_to start_with("#{UrlService.domain_with_protocol}/p/")
+      end
     end
   end
 end

@@ -28,12 +28,14 @@ class Pages::ProfileData
       "profile_data",
       CACHE_VERSION,
       # The cached payload embeds full product and post URLs built from User#store_base_url,
-      # so the key must change when either input to that can move: the username, and the
-      # custom domain row whose activation or removal flips which host is emitted. Keying on
-      # the username itself (rather than the whole user record) avoids rebuilding the cache
-      # on unrelated user-row updates.
+      # so the key carries that host itself rather than the custom-domain row's version: the
+      # row's `active?` is partly time-relative (the certificate ages out after a week with no
+      # write), so an updated_at-based segment would keep serving a host the live navigation
+      # bridge has already dropped from its allowlist, and those links go dead. Keying on the
+      # username too (rather than the whole user record) avoids rebuilding the cache on
+      # unrelated user-row updates.
       seller.username,
-      seller.custom_domain&.cache_key_with_version,
+      seller.store_base_url,
       seller.products.cache_key_with_version,
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,

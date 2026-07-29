@@ -1044,10 +1044,14 @@ class User < ApplicationRecord
   # UrlService.widget_product_link_base_url, whose live DNS resolution would land in the
   # profile render path — and `active?` is already what custom_html_store_hostnames trusts
   # to decide the same question for the navigation bridge on the same pages.
+  #
+  # nil when the seller has neither, because the shared gumroad.com root is not a store host:
+  # only /:username/p/:slug exists there, so forcing it on Installment#full_url would build
+  # https://gumroad.com/p/:slug, which routes nowhere. Callers fall back to their own default.
   def store_base_url
     return "#{PROTOCOL}://#{custom_domain.domain}" if custom_domain&.active?
 
-    subdomain_with_protocol || UrlService.domain_with_protocol
+    subdomain_with_protocol
   end
 
   def auto_transcode_videos?
