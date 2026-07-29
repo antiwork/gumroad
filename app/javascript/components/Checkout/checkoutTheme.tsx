@@ -34,12 +34,23 @@ export const getCheckoutIndicatorCss = (theme: CheckoutTheme) =>
 // the purchased line items instead — call it once the purchase is committed, past every early
 // return, or a retried payment serves the snapshot to a cart the buyer has since changed.
 // `undefined` means "no purchase yet", distinct from a purchase that resolved to no theme.
+// It reads the style through a ref because payment spans awaits: the caller's closure is from the
+// render that started payment, and a debounced cart save landing mid-payment can deliver the
+// seller's style after that render — snapshotting the closed-over value would pin the older one.
 export const useCheckoutStyle = (checkoutStyle: CheckoutStyle | null | undefined, cartSellerIds: string[]) => {
   const [purchasedStyle, setPurchasedStyle] = React.useState<CheckoutStyle | null | undefined>(undefined);
+  const checkoutStyleRef = React.useRef(checkoutStyle);
+  checkoutStyleRef.current = checkoutStyle;
+
+  const capturePurchased = React.useCallback(
+    (purchasedSellerIds: string[]) =>
+      setPurchasedStyle(getApplicableCheckoutStyle(checkoutStyleRef.current, purchasedSellerIds)),
+    [],
+  );
 
   return [
     purchasedStyle === undefined ? getApplicableCheckoutStyle(checkoutStyle, cartSellerIds) : purchasedStyle,
-    (purchasedSellerIds: string[]) => setPurchasedStyle(getApplicableCheckoutStyle(checkoutStyle, purchasedSellerIds)),
+    capturePurchased,
   ] as const;
 };
 

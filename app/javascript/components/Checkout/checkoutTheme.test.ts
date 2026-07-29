@@ -98,4 +98,17 @@ describe("useCheckoutStyle", () => {
 
     expect(result.current[0]).toBeNull();
   });
+
+  // Payment spans awaits, so the capture the payment started with is from an older render. A cart
+  // save landing mid-payment can deliver the seller's style after that render, and the receipt has
+  // to show the theme the purchase resolved to rather than whatever was on screen at submit.
+  it("captures the style the purchase resolved to, not the one from the submitting render", () => {
+    const { result, rerender } = renderCheckoutStyle({ style: null, cartSellerIds: ["seller-a", "seller-b"] });
+    const captureFromSubmittingRender = result.current[1];
+
+    rerender({ style: checkoutStyle, cartSellerIds: ["seller-a"] });
+    act(() => captureFromSubmittingRender(["seller-a"]));
+
+    expect(result.current[0]).toBe(checkoutStyle);
+  });
 });
