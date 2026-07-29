@@ -3,11 +3,19 @@
 require "spec_helper"
 
 describe CreateMissingDisputeEvidenceJob do
-  # The real evidence builder screenshots the receipt page with headless Chrome. That is not
-  # what this job is about, so stub the screenshot and let the rest of the creation path run.
+  # The real evidence builder screenshots the receipt page with headless Chrome, and the
+  # deadline lookup calls the processor. Neither is what this job is about, so stub both and
+  # let the rest of the creation path run for real.
   before do
     allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(
       File.binread(Rails.root.join("spec", "support", "fixtures", "smilie.png"))
+    )
+    stub_processor_deadline(30.days.from_now)
+  end
+
+  def stub_processor_deadline(time)
+    allow(Stripe::Dispute).to receive(:retrieve).and_return(
+      double(evidence_details: double(due_by: time&.to_i))
     )
   end
 
@@ -15,12 +23,19 @@ describe CreateMissingDisputeEvidenceJob do
     create(:purchase).tap { _1.update_column(:chargeback_date, Time.current) }
   end
 
+  # The deadline lookup only runs for a dispute we can actually identify at the processor.
+  def stripe_dispute_for(purchase)
+    create(:dispute_formalized, purchase:,
+                                charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                charge_processor_dispute_id: "du_#{SecureRandom.hex(8)}")
+  end
+
   describe "#perform" do
     context "when an open dispute has no evidence record" do
       let!(:purchase) { charged_back_purchase }
       let!(:dispute) { create(:dispute_formalized, purchase:) }
 
-      it "creates the evidence and stamps the seller-contacted window" do
+      it "creates the evidence and opens the seller's submission window" do
         expect do
           described_class.new.perform
         end.to change { dispute.reload.dispute_evidence }.from(nil)
@@ -73,12 +88,13 @@ describe CreateMissingDisputeEvidenceJob do
         end
       end
 
-      it "is idempotent — a second run does not create a second record or re-stamp the window" do
+      it "is idempotent — a second run does not create a second record, re-open the window, or re-email" do
         described_class.new.perform
         dispute_evidence = dispute.reload.dispute_evidence
         contacted_at = dispute_evidence.seller_contacted_at
 
         expect do
+          expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
           described_class.new.perform
         end.not_to change { DisputeEvidence.count }
 
@@ -99,15 +115,104 @@ describe CreateMissingDisputeEvidenceJob do
 
         expect(dispute_evidence.reload.seller_contacted_at).to be_present
       end
+
+      context "when the window cannot be opened" do
+        before do
+          allow_any_instance_of(DisputeEvidence).to receive(:update_as_seller_contacted!).and_raise("boom")
+        end
+
+        it "keeps the record it did not create, so a later run can still submit what the seller uploaded" do
+          expect(ErrorNotifier).to receive(:notify).with(/could not build evidence for dispute #{dispute.id}/)
+
+          described_class.new.perform
+
+          expect(dispute_evidence.reload).to be_present
+          expect(dispute_evidence.seller_contacted_at).to be_nil
+        end
+      end
+    end
+
+    context "when the processor's deadline is closer than a full submission window" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before { stub_processor_deadline(12.hours.from_now) }
+
+      it "backdates the window so the evidence is submitted before the deadline, and tells the seller the hours they really have" do
+        expect do
+          described_class.new.perform
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice).with(dispute.id)
+
+        dispute_evidence = dispute.reload.dispute_evidence
+        expect(dispute_evidence).to be_present
+        # FightDisputesJob submits once the window has elapsed, so the window has to end before
+        # the processor's cutoff — here 6 hours short of the 12 hours left, not the full 72 the
+        # notice would otherwise promise.
+        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(6)
+        expect(dispute_evidence.seller_contacted_at).to be < Time.current
+      end
+    end
+
+    context "when the processor's deadline has already passed" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before { stub_processor_deadline(1.day.ago) }
+
+      it "does not build evidence for a dispute that can no longer be answered" do
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+      end
+    end
+
+    context "when the processor's deadline cannot be read" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before { allow(Stripe::Dispute).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("boom")) }
+
+      it "still builds the evidence, because doing nothing is the worse default" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.new.perform
+        end.to change { DisputeEvidence.count }.by(1)
+      end
+    end
+
+    context "when the row this run created cannot have its window opened" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { create(:dispute_formalized, purchase:) }
+
+      before do
+        allow_any_instance_of(DisputeEvidence).to receive(:update_as_seller_contacted!).and_raise("boom")
+      end
+
+      it "leaves no half-finished record behind, so the next run can try again" do
+        expect(ErrorNotifier).to receive(:notify).with(/could not build evidence for dispute #{dispute.id}/)
+
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+
+        expect(dispute.reload.dispute_evidence).to be_nil
+      end
     end
 
     context "when the dispute already has an evidence record" do
       let!(:dispute_evidence) { create(:dispute_evidence) }
 
-      it "leaves it alone" do
+      it "leaves it alone entirely" do
+        contacted_at = dispute_evidence.seller_contacted_at
+        expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+        expect(ErrorNotifier).not_to receive(:notify)
+
         expect do
           described_class.new.perform
         end.not_to change { DisputeEvidence.count }
+
+        expect(dispute_evidence.reload.seller_contacted_at).to eq(contacted_at)
       end
     end
 
@@ -121,7 +226,22 @@ describe CreateMissingDisputeEvidenceJob do
         purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
       end
 
-      it "does not create evidence" do
+      it "does not create evidence or notify anybody" do
+        expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+      end
+    end
+
+    context "when the dispute is on a service charge" do
+      let!(:dispute) { create(:dispute_formalized, purchase: nil, service_charge: create(:service_charge)) }
+
+      it "skips it, because service charges carry no dispute-evidence behaviour" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
         expect do
           described_class.new.perform
         end.not_to change { DisputeEvidence.count }
@@ -156,7 +276,7 @@ describe CreateMissingDisputeEvidenceJob do
       let!(:purchase) { charged_back_purchase }
       let!(:dispute) { create(:dispute_formalized, purchase:) }
 
-      before { dispute.update_column(:created_at, 90.days.ago) }
+      before { dispute.update_column(:event_created_at, 90.days.ago) }
 
       it "does not create evidence, because any deadline has long passed" do
         expect do
@@ -179,7 +299,7 @@ describe CreateMissingDisputeEvidenceJob do
       end
 
       it "reports it and still handles the rest of the sweep" do
-        expect(ErrorNotifier).to receive(:notify).with(/failed to create evidence for dispute #{broken_dispute.id}/)
+        expect(ErrorNotifier).to receive(:notify).with(/could not build evidence for dispute #{broken_dispute.id}/)
         allow(ErrorNotifier).to receive(:notify).with(/was never asked for evidence/)
 
         described_class.new.perform
