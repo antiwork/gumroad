@@ -644,6 +644,35 @@ describe Checkout::StripePaymentPresenter do
     expect(props[:integration]).to eq("payment_element")
   end
 
+  # Keeping a pending-price cart on the Payment Element must not put it on the CLIENT-CONFIRM
+  # lane, because that lane commits to a payment-method list at page load and the deferred intent
+  # has to match it exactly — Stripe rejects a payment_method_types-scoped ConfirmationToken
+  # against an intent with a different list, which fails the confirm for EVERY method the buyer
+  # could pick, card and Link included. Klarna's gate is cart-total dependent
+  # (KLARNA_MIN_USD_CHARGE_CENTS is $1), so a cart mounting at zero resolves WITHOUT Klarna while
+  # Order::PreparePaymentIntentService, which re-resolves from the real purchase amounts, adds it
+  # back once the buyer names an eligible amount. The server-confirm element carries a fixed
+  # ["card"] list and no deferred intent, so it has nothing to drift from.
+  it "keeps a pay-what-you-want cart off the client-confirm lane, where the method list would drift once an amount is named" do
+    seller = create(:user)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+    Feature.activate_user(:checkout_local_method_klarna, seller)
+    pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
+    stub_geoip_country("104.28.0.1", "United States")
+
+    # The premise: at $25 this same cart IS a Klarna cart on the client-confirm lane, so the two
+    # lanes really would resolve different method lists across the buyer entering an amount.
+    priced_props = stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 25_00)], ip: "104.28.0.1")
+    expect(priced_props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+    expect(priced_props[:elements_options][:payment_method_types]).to include("klarna")
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(pwyw_product, price: 0)], ip: "104.28.0.1"))
+      .to eq(payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT))
+  ensure
+    Feature.deactivate_user(:checkout_local_method_klarna, seller) if seller
+  end
+
   # A product that genuinely cannot be paid for must keep falling back, but "free and not
   # pay-what-you-want" is not that product: Product::Prices#set_customizable_price forces
   # customizable_price to true on any $0 product, so CheckoutPresenter never emits that
@@ -1327,6 +1356,45 @@ describe Checkout::StripePaymentPresenter do
           disable_wallets: true,
         )
       )
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    # The same lane, for a cart whose listed amount is not yet known. A pay-what-you-want product
+    # in a forced currency reads as zero at page load, and this surface mounts the Element with a
+    # server-rendered presentment_amount_cents — so it would mount at 0. That number is not a
+    # harmless placeholder: getStripePaymentElementAmount prefers it over checkout's own total for
+    # the whole session (it returns presentment_amount_cents whenever it is non-null), so the
+    # Element would still be at zero after the buyer named $25. Such a cart takes the canonical
+    # server-confirm element instead, where the browser derives the amount from the loaded total.
+    it "keeps a forced-currency pay-what-you-want cart off the method-forced element, which would mount at a zero listed amount" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 0)
+      product.update!(customizable_price: true)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      platform_merchant_account
+      add_products = [
+        checkout_product_for(
+          product,
+          price: 0,
+          buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::EUR }
+        )
+      ]
+
+      # The premise: priced, this same cart really is the method-forced lane mounting a listed
+      # EUR amount — so the zero case below is this lane declining a cart it would have taken.
+      priced = stripe_payment_props(add_products: [checkout_product_for(product, price: 1500, buyer_currency_display: { display_mode: "default", buyer_currency_shown: Currency::EUR })])
+      expect(priced[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+      expect(priced[:elements_options][:presentment_amount_cents]).to eq(1500)
+
+      props = stripe_payment_props(add_products:)
+
+      expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+      expect(props[:fallback_reason]).to be_nil
+      # The canonical element carries no server-rendered amount at all, so there is no zero for
+      # the browser to prefer once the buyer names a price.
+      expect(props[:elements_options]).not_to have_key(:presentment_amount_cents)
+      expect(props[:elements_options][:currency]).to eq("usd")
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end
