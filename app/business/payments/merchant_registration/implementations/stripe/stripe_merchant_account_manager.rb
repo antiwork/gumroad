@@ -435,8 +435,41 @@ module StripeMerchantAccountManager
     # actually re-validates a previously rejected representative postal code.
     force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
 
-    Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    begin
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    rescue Stripe::InvalidRequestError => e
+      # The unclaimed share was read before the account update above, so a beneficial owner added or
+      # enlarged in the window between that read and this call makes our number stale and too large,
+      # and Stripe rejects the whole person update. That is the same seller-visible breakage this
+      # method exists to prevent, so re-read the live ownership and try once more rather than letting
+      # a few seconds of bad luck strand the seller mid-migration. Only retry when we actually sent an
+      # ownership share and the retry would send a smaller one, so this can never loop.
+      raise unless combined_ownership_exceeded_error?(e) && diff_attributes.dig(:relationship, :percent_ownership).present?
+
+      fresh_unclaimed = unclaimed_percent_ownership_on_stripe(stripe_account)
+      raise if fresh_unclaimed >= diff_attributes[:relationship][:percent_ownership]
+
+      if fresh_unclaimed.positive?
+        diff_attributes[:relationship][:percent_ownership] = fresh_unclaimed
+      else
+        # The other owners now account for the entire company, so the representative claims nothing.
+        diff_attributes[:relationship].delete(:percent_ownership)
+        diff_attributes[:relationship].delete(:owner)
+      end
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    end
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+  end
+
+  private_class_method
+  # Stripe rejects a person update whose ownership share would push the company's combined ownership
+  # over 100%. It surfaces as an InvalidRequestError on the percent_ownership param rather than a
+  # dedicated error code, so match on the param plus the message.
+  def self.combined_ownership_exceeded_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    error.message.to_s.match?(/combined ownership/i) ||
+      error.try(:param).to_s.include?("percent_ownership")
   end
 
   private_class_method
