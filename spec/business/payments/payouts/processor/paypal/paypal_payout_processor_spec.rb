@@ -67,6 +67,45 @@ describe PaypalPayoutProcessor do
         end
       end
 
+      describe "when PayPal permanently refused a payout to this address" do
+        before do
+          create(:payment_failed, user:, payment_address: user.payment_address,
+                                  failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        end
+
+        it "returns false instead of re-attempting the same doomed payout" do
+          expect(described_class.is_user_payable(user, 10_01)).to eq(false)
+        end
+
+        it "does not record another payout note, so the seller-facing one stays the newest" do
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.not_to change { user.comments.with_type_payout_note.count }
+        end
+
+        it "returns true again once the seller switches to a different PayPal address" do
+          user.update!(payment_address: "another@gr.co")
+
+          expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+
+        it "returns true again once a later payout to the same address completed" do
+          create(:payment_completed, user:, payment_address: user.payment_address)
+
+          expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+
+        it "still allows a payout issued from admin, which is how support pays a fixed account" do
+          expect(described_class.is_user_payable(user, 10_01, from_admin: true)).to eq(true)
+        end
+
+        it "keeps retrying failures that are not terminal" do
+          user.payments.failed.each { |payment| payment.update!(failure_reason: "PAYPAL 3015") }
+
+          expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+      end
+
       describe "payment address contains non-ascii characters" do
         before do
           user.payment_address = "sebastian.ripenås@example.com"

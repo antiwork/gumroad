@@ -24,6 +24,29 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "paypal payout permanently failed" do
+    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
+
+    it "names PayPal, the restriction, and the fix" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.to).to eq [payment.user.email]
+      expect(mail.subject).to eq("Your PayPal account can't receive your payout.")
+      expect(mail.body.encoded).to include("$439.13")
+      expect(mail.body.encoded).to include("payments cannot be received in the country on that account&#39;s address")
+      expect(mail.body.encoded).to include("add a bank account in your payout settings")
+      expect(mail.body.encoded).to include("stopped retrying it")
+    end
+
+    it "names the currency restriction for a currency rejection" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("your PayPal account cannot receive US dollars")
+    end
+  end
+
   describe "purchase refunded" do
     it "sends notification to the seller about refunded purchase" do
       purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)

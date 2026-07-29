@@ -69,7 +69,41 @@ class PaypalPayoutProcessor
       return false
     end
 
+    # Stop re-sending a payout PayPal has permanently refused for this address.
+    #
+    # A terminal rejection (see Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS) is a fact
+    # about the destination PayPal account — its country cannot receive PayPal payments, or it
+    # cannot receive US dollars — so every weekly batch that re-attempted it got the same
+    # rejection back. Sellers sat through dozens of identical failures with their balance frozen
+    # and nothing but a generic "payouts were paused" note to go on (gumroad-private#1478).
+    #
+    # Deliberately no note is written here. The failure that ended the retries already recorded a
+    # seller-facing note naming PayPal and the fix, and it stays the newest payout note precisely
+    # because this path is silent — a weekly internal note would bury it and add another row to
+    # the hundreds of automated comments these accounts already carry.
+    #
+    # Three things lift the block on their own, so this is not a dead end: adding a bank account
+    # (handled at the top of this method, and the fix we point sellers at), switching to a
+    # different PayPal address (the check is keyed on the address, so a new one has no terminal
+    # failure against it), and a support-issued payout from admin, which is how we pay someone
+    # whose PayPal account has genuinely been fixed in place.
+    return false if !from_admin && terminal_failure_for_payout_email?(user, payout_email)
+
     true
+  end
+
+  # Whether PayPal has already permanently refused a payout to this address for this seller.
+  # Scoped to failures since the seller's last completed payout to the same address, so an
+  # account that was paid successfully after the rejection is not held back by the old row.
+  def self.terminal_failure_for_payout_email?(user, payout_email)
+    payouts_to_address = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email)
+    terminal_failures = payouts_to_address.where(
+      state: Payment::FAILED,
+      failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
+    )
+    last_completed_at = payouts_to_address.completed.maximum(:created_at)
+    terminal_failures = terminal_failures.where("created_at > ?", last_completed_at) if last_completed_at
+    terminal_failures.exists?
   end
 
   def self.has_valid_payout_info?(user)

@@ -1,0 +1,10 @@
+<%= header_section("Your PayPal account can't receive your payout.") %>
+<div>
+  <p>Hi there. We tried to send you <%= @amount %> through PayPal, but <%= @reason %>.</p>
+  <p>
+    This will keep happening until you change how you get paid, so we've stopped retrying it. Your balance is safe and stays on your account.
+  </p>
+  <p>
+    To get paid, <a href='<%= settings_payments_url %>'>add a bank account in your payout settings</a>, or switch to a different PayPal account that can receive US dollars. Your balance will be sent on the next payout date after that.
+  </p>
+</div>

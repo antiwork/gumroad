@@ -168,6 +168,23 @@ class ContactingCreatorMailer < ApplicationMailer
     @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
   end
 
+  # PayPal permanently refused a payout to the seller's PayPal address (their country cannot
+  # receive PayPal payments, or the account cannot receive US dollars). Unlike a normal failed
+  # payout, we have stopped re-attempting it, so this email has to say what is wrong and what
+  # they need to change — otherwise their balance just sits there.
+  def paypal_payout_permanently_failed(payment_id)
+    @payment = Payment.find(payment_id)
+    @seller = @payment.user
+    @subject = "Your PayPal account can't receive your payout."
+    @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
+    @reason = Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(
+      @payment.failure_reason,
+      # Only reachable from the mailer preview, which has to render against whatever payout rows
+      # the local database happens to have.
+      Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
+    )
+  end
+
   def flagged_for_explicit_nsfw_tos_violation(user_id)
     @seller = User.find(user_id)
     @subject = "Your account has been temporarily suspended for selling sexually explicit / fetish-related content"

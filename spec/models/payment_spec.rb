@@ -127,6 +127,34 @@ describe Payment do
     end
   end
 
+  describe "a terminal PayPal rejection" do
+    let(:compliant_creator) { create(:user, user_risk_state: "compliant") }
+    let(:payment) do
+      create(:payment, state: "processing", processor: PayoutProcessorType::PAYPAL,
+                       processor_fee_cents: 0, user: compliant_creator, payment_address: "seller@example.com")
+    end
+
+    it "emails the seller the reason and the fix" do
+      expect do
+        payment.mark_failed!("PAYPAL 3148")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+    end
+
+    it "emails only once per payout period" do
+      compliant_creator.update!(payout_date_of_last_payment_failure_email: payment.payout_period_end_date)
+
+      expect do
+        payment.reload.mark_failed!("PAYPAL 3148")
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+    end
+
+    it "does not email for a retryable PayPal rejection" do
+      expect do
+        payment.mark_failed!("PAYPAL 3015")
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+    end
+  end
+
   describe "send_payout_failure_email" do
     let(:compliant_creator) { create(:user, user_risk_state: "compliant") }
     let(:payment) { create(:payment, state: "processing", processor: PayoutProcessorType::PAYPAL, processor_fee_cents: 0, failure_reason: "account_closed", user: compliant_creator) }

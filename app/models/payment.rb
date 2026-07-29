@@ -84,6 +84,7 @@ class Payment < ApplicationRecord
     after_transition %i[creating processing] => %i[cancelled failed], do: :mark_balances_as_unpaid
     after_transition processing: :failed, do: :send_cannot_pay_email, if: ->(payment) { payment.failure_reason == FailureReason::CANNOT_PAY }
     after_transition processing: :failed, do: :send_debit_card_limit_email, if: ->(payment) { payment.failure_reason == FailureReason::DEBIT_CARD_LIMIT }
+    after_transition processing: :failed, do: :send_paypal_terminal_failure_email, if: ->(payment) { payment.terminal_paypal_failure? }
     after_transition processing: :failed, do: :add_payment_failure_reason_comment
 
     after_transition %i[processing unclaimed] => :completed, do: :mark_balances_as_paid
@@ -183,12 +184,33 @@ class Payment < ApplicationRecord
     ContactingCreatorMailer.debit_card_limit_reached(id).deliver_later(queue: "critical")
   end
 
+  # Tell the seller their PayPal account cannot receive the payout, and that we have stopped
+  # retrying it. Sent once per payout period, like the other payout-failure emails, so a
+  # support-issued retry in the same week doesn't email them twice.
+  def send_paypal_terminal_failure_email
+    return if user.payout_date_of_last_payment_failure_email.present? &&
+              Date.parse(user.payout_date_of_last_payment_failure_email) >= payout_period_end_date
+
+    ContactingCreatorMailer.paypal_payout_permanently_failed(id).deliver_later(queue: "critical")
+
+    user.payout_date_of_last_payment_failure_email = payout_period_end_date
+    user.save!
+  end
+
   def humanized_failure_reason
     if processor == PayoutProcessorType::PAYPAL
       failure_reason.present? ? "#{failure_reason}: #{PAYPAL_MASS_PAY[failure_reason]}" : nil
     else
       failure_reason
     end
+  end
+
+  # True when PayPal rejected this payout for a reason that describes the destination PayPal
+  # account rather than this attempt, so sending the same payout to the same address again can
+  # never succeed. See Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.
+  def terminal_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.include?(failure_reason)
   end
 
   def reversed_by?(reversing_payout_id)

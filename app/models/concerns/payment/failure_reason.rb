@@ -13,6 +13,32 @@ module Payment::FailureReason
   STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
+  # PayPal rejections that describe the destination PayPal account itself rather than something
+  # about this one attempt, so re-sending the same payout to the same address can never succeed.
+  # Both are properties of the receiving account: 3148 means the country on that account's address
+  # cannot receive PayPal payments at all, and 14159 means the account cannot receive US dollars
+  # (Gumroad always pays PayPal out in USD).
+  #
+  # Everything else in PAYPAL_MASS_PAY stays retryable. In particular a locked or inactive
+  # receiving account (3015) and a declined transaction (9302) are deliberately NOT here: the
+  # seller can clear those with PayPal without touching the address we hold, and the block below
+  # is keyed on the address, so it would have no way to notice they had been resolved.
+  TERMINAL_PAYPAL_FAILURE_REASONS = ["PAYPAL 3148", "PAYPAL 14159"].freeze
+
+  # What the seller is told when a payout hits one of those rejections. Written in the second
+  # person because, unlike every other PayPal failure note, these are shown to the seller: the
+  # money stops moving until they act, so they have to know PayPal is the blocker and what to do.
+  TERMINAL_PAYPAL_FAILURE_SELLER_REASONS = {
+    "PAYPAL 3148" => "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
+    "PAYPAL 14159" => "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
+  }.freeze
+
+  # The way out, for both rejections. Most sellers in this position can be paid by bank transfer
+  # in their own country, so that is the first suggestion.
+  TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION =
+    "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars. " \
+    "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",
     "PAYPAL 1000" => "Unknown error",
@@ -52,22 +78,17 @@ module Payment::FailureReason
   }
   private_constant :PAYPAL_MASS_PAY
 
+  # Terminal rejections are absent from this list on purpose: the retry loop is stopped for them
+  # and the seller is told directly (see TERMINAL_PAYPAL_FAILURE_SELLER_REASONS), so there is no
+  # support-facing "what to tell them" entry to write.
   PAYPAL_FAILURE_SOLUTIONS = {
     "PAYPAL 11711" => {
       reason: "per-transaction sending limit exceeded",
       solution: "Contact PayPal to get receiving limit on the account increased. If that's not possible, Gumroad can split their payout, please contact Gumroad Support"
     },
-    "PAYPAL 14159" => {
-      reason: "transaction currency cannot be received by the recipient",
-      solution: "Use a different PayPal account which supports receiving USD"
-    },
     "PAYPAL 3015" => {
       reason: "receiver's account is locked or inactive",
       solution: "Log in to your PayPal account and ensure there are no restrictions on it, or contact PayPal Support for more information"
-    },
-    "PAYPAL 3148" => {
-      reason: "receiver's address is in a non-receivable country or a PayPal zero country",
-      solution: "Use a different PayPal account which supports receiving USD"
     },
     "PAYPAL 8330" => {
       reason: "receiving limit exceeded",
@@ -171,6 +192,19 @@ module Payment::FailureReason
   private
     def add_payment_failure_reason_comment
       return unless failure_reason.present?
+
+      # A terminal PayPal rejection stops the weekly retry, so this note is the seller's only
+      # explanation of why their money stopped moving — it names PayPal and the fix, and it is
+      # shown to them on their Payouts page.
+      if terminal_paypal_failure?
+        user.add_payout_note(
+          content: "Your payout on #{created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
+                   "#{TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(failure_reason)}. " \
+                   "#{TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION}",
+          seller_visible: true
+        )
+        return
+      end
 
       solution = if processor == PayoutProcessorType::PAYPAL
         PAYPAL_FAILURE_SOLUTIONS[failure_reason]

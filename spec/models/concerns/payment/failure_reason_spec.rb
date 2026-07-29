@@ -36,6 +36,31 @@ describe Payment::FailureReason do
             end.to_not change { payment.user.comments.count }
           end
         end
+
+        context "when the rejection is terminal" do
+          it "tells the seller PayPal will not send the payout and what to change" do
+            expect do
+              payment.mark_failed!("PAYPAL 3148")
+            end.to change { payment.user.comments.count }.by(1)
+
+            note = payment.user.comments.last
+            expect(note.content).to eq(
+              "Your payout on #{payment.created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
+              "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address. " \
+              "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars. " \
+              "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+            )
+            expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+          end
+
+          it "names the currency restriction when PayPal cannot send US dollars to the account" do
+            payment.mark_failed!("PAYPAL 14159")
+
+            expect(payment.user.comments.last.content).to include(
+              "your PayPal account cannot receive US dollars"
+            )
+          end
+        end
       end
 
       context "when processor is Stripe" do

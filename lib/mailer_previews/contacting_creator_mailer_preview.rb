@@ -5,6 +5,14 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.cannot_pay(Payment.last&.id)
   end
 
+  def paypal_payout_permanently_failed
+    payment = Payment.where(
+      processor: PayoutProcessorType::PAYPAL,
+      failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
+    ).last || Payment.last
+    ContactingCreatorMailer.paypal_payout_permanently_failed(payment&.id)
+  end
+
   def preorder_release_reminder
     ContactingCreatorMailer.preorder_release_reminder(PreorderLink.last&.link&.id)
   end
