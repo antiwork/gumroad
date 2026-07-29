@@ -177,6 +177,13 @@ describe Ai::StoreAgentApiCatalog do
       expect(described_class.find("update_page").summary).to match(/mutually exclusive and sending one CLEARS the other/)
     end
 
+    # Api::V2::PagesController#update only touches the body when content or custom_html is sent, so a
+    # rename keeps the existing body. The summary must not imply otherwise, or the agent resends a
+    # page's whole body just to change its title and risks overwriting content nobody asked to change.
+    it "says a title-only update keeps the existing body" do
+      expect(described_class.find("update_page").summary).to match(/title-only update leaves the existing body alone/)
+    end
+
     # Creating and deleting pages is deliberately not exposed: those change what urls a storefront
     # serves. The agent must not offer what it cannot do.
     it "exposes no create or delete for pages" do
