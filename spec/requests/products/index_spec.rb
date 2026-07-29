@@ -72,16 +72,24 @@ describe "Products Page Scenario", type: :system, js: true do
       # rather than being swallowed by the overlay behind it. Asserting only that we stayed on
       # /products would pass even if the click hit nothing at all — the new tab is the thing that
       # proves the click landed on the URL link, since nothing else in the row opens one.
+      #
+      # `window_opened_by` rather than comparing `windows.size` before and after: opening a tab is
+      # asynchronous, and `windows` is an immediate read with no waiting behaviour, so the bare size
+      # comparison loses a race against the browser on a fast runner. This helper polls up to
+      # Capybara's default wait and raises unless exactly one window opened, which is both the wait
+      # we need and a tighter assertion than a count.
       it "still opens the storefront URL when the URL line under the name is clicked" do
         product = create(:product, user: seller)
         visit(products_path)
 
-        within find_product_row(product) do
-          find("a", text: product.long_url(include_protocol: false)).click
+        new_tab = window_opened_by do
+          within find_product_row(product) do
+            find("a", text: product.long_url(include_protocol: false)).click
+          end
         end
 
         expect(page).to have_current_path(products_path)
-        expect(windows.size).to eq(2)
+        within_window(new_tab) { expect(page).to have_current_path(product.long_url(include_protocol: false), url: false) }
       end
     end
   end

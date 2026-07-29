@@ -63,17 +63,27 @@ export const CollabsProductsTable = (props: { entries: Product[]; pagination: Pa
                 thumbnail={product.thumbnail?.url ?? null}
               />
 
-              <TableCell hideLabel>
+              {/* The name cell is `relative` so the product link inside it can stretch to fill the
+                  whole cell — see the `absolute inset-0` overlay below and the same pattern in
+                  ProductsPage/ProductsTable.tsx. Only the bold name text used to be clickable, which
+                  is a small target, and sellers reported that clicking a row "does nothing" when
+                  they had in fact tapped the dead space beside the name (gumroad-private#1469).
+                  Safari doesn't support `position: relative` on <tr>, so the row itself can't be the
+                  link. */}
+              <TableCell hideLabel className="relative">
                 <div>
-                  {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
                   <a href={product.can_edit ? product.edit_url : product.url} style={{ textDecoration: "none" }}>
+                    {/* This empty overlay is what widens the hit area: it stretches the surrounding
+                        link over the full cell. It sits behind the positioned link below, so the
+                        storefront URL still wins a tap on its own text. */}
+                    <span className="absolute inset-0" aria-hidden="true" />
                     {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
-                    <h4 className="font-bold" dir="auto">
+                    <h4 className="relative font-bold" dir="auto">
                       {product.name}
                     </h4>
                   </a>
 
-                  <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
+                  <a href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative">
                     <small className="block">{product.url_without_protocol}</small>
                   </a>
                 </div>
