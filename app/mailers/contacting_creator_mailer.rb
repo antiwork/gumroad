@@ -190,8 +190,12 @@ class ContactingCreatorMailer < ApplicationMailer
     # it. Two narrower cases are deliberately swept in with it: a hold Stripe placed is lifted
     # automatically when the seller changes their payout details (UpdatePayoutMethod), so for them
     # the ask is merely over-cautious rather than wrong. A seller who paused their own payouts is
-    # excluded entirely — that is their own toggle to flip, so they get the plain wording.
+    # excluded entirely — that is their own toggle to flip, so they are pointed at the toggle
+    # instead of at support (@payouts_paused_by_seller). They cannot be told plainly to expect the
+    # next payout date either: the payout gate checks the broader payouts_paused? and skips them
+    # while their own pause is on.
     @payouts_on_hold = @seller.payouts_paused_internally?
+    @payouts_paused_by_seller = !@payouts_on_hold && @seller.payouts_paused_by_user?
     # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
     # PayPal-only countries, where "add a bank account" is advice they cannot act on.
     @can_use_bank_account = @seller.can_setup_bank_payouts?

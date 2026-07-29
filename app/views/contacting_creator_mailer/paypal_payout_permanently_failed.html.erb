@@ -18,6 +18,11 @@
     <p>
       Payouts on your account are also on hold. Once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
     </p>
+  <% elsif @payouts_paused_by_seller %>
+    <p>
+      Payouts on your account are also paused in your settings. Once a working payout method is on file and you
+      <a href='<%= settings_payments_url %>'>resume payouts there</a>, your balance will be sent on the next payout date.
+    </p>
   <% else %>
     <p>
       Your balance will be sent on the next payout date after that.

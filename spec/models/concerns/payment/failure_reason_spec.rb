@@ -59,25 +59,33 @@ describe Payment::FailureReason do
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
           end
 
-          it "tells a seller whose account is also on hold to reply instead of promising a date" do
+          it "tells a seller whose account is also on hold to contact support instead of promising a date" do
             payment.user.update!(payouts_paused_internally: true)
 
             payment.mark_failed!("PAYPAL 3148")
 
             note = payment.user.comments.last
             expect(note.content).to include("Payouts on your account are also on hold")
-            expect(note.content).to include("reply to this message")
+            # A payout note is not repliable; only the email version says "reply to this email".
+            expect(note.content).to include("contact support")
+            expect(note.content).to_not include("reply to this message")
             expect(note.content).to_not include("next payout date")
             expect(note.content).to_not include("placed a hold")
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
           end
 
-          it "still promises the payout date to a seller who paused their own payouts" do
+          # The payout gate checks the broader payouts_paused?, so this seller is skipped as well —
+          # the promise only comes true once they flip their own switch back, so the note says so.
+          it "names their own pause for a seller who paused their own payouts" do
             payment.user.update!(payouts_paused_by_user: true)
 
             payment.mark_failed!("PAYPAL 3148")
 
-            expect(payment.user.comments.last.content).to include("next payout date")
+            note = payment.user.comments.last
+            expect(note.content).to include("paused in your settings")
+            expect(note.content).to include("resume payouts there")
+            expect(note.content).to include("next payout date")
+            expect(note.content).to_not include("contact support")
           end
 
           it "names the currency restriction when PayPal cannot send US dollars to the account" do

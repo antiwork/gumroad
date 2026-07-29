@@ -74,9 +74,17 @@ module Payment::FailureReason
   # will not release the money, so that is all we claim.
   TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP =
     "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+  # "Contact support" rather than "reply to this message": these constants are rendered into the
+  # payout note shown on the Payouts page, which is not something a seller can reply to. The email
+  # that carries the same message says "reply to this email" in its own template, where that is true.
   TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED =
     "Your balance is safe. Payouts on your account are also on hold, so once a working payout method is on file, " \
-    "reply to this message and we will review the hold and release your balance."
+    "contact support and we will review the hold and release your balance."
+  # A seller who paused their own payouts owns the switch, so the honest next step names it instead
+  # of promising a payout date that will not arrive while their own pause is on.
+  TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_SELF_PAUSED =
+    "Your balance is safe. Payouts on your account are paused in your settings, so once a working payout method " \
+    "is on file and you resume payouts there, your balance will be paid out on the next payout date."
 
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",

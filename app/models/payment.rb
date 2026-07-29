@@ -242,10 +242,13 @@ class Payment < ApplicationRecord
 
     # Only a hold WE placed. A seller who paused their own payouts in their settings can resume
     # them whenever they like, so sending them to support to have it "reviewed" would be busywork
-    # for both of us — the plain next-payout-date wording is the truthful thing to tell them, since
-    # the payout runs as soon as they un-pause and have a working method on file.
+    # for both of us. They still cannot be told plainly to expect the next payout date, because the
+    # payout gate (Payouts.is_user_payable) checks the broader payouts_paused? and skips them while
+    # their own pause is on — so they get wording that names the switch they own.
     next_step = if user.payouts_paused_internally?
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED
+    elsif user.payouts_paused_by_user?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_SELF_PAUSED
     else
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP
     end

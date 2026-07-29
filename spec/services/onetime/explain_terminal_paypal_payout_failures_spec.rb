@@ -64,6 +64,32 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(note.content).to_not include("next payout date")
     end
 
+    # A payout note is not something a seller can reply to — only the email is.
+    it "sends a seller on hold to support rather than telling them to reply to the note" do
+      terminal_failure_for(seller)
+      seller.update!(payouts_paused_internally: true)
+
+      described_class.process
+
+      note = seller.comments.with_type_payout_note.last
+      expect(note.content).to include("contact support")
+      expect(note.content).to_not include("reply to this message")
+    end
+
+    # The payout gate checks the broader payouts_paused?, so a self-paused seller is skipped as
+    # well — the plain "next payout date" promise on its own would not come true for them.
+    it "names their own pause for a seller who paused their payouts themselves" do
+      terminal_failure_for(seller)
+      seller.update!(payouts_paused_by_user: true)
+
+      described_class.process
+
+      note = seller.comments.with_type_payout_note.last
+      expect(note.content).to include("paused in your settings")
+      expect(note.content).to include("resume payouts there")
+      expect(note.content).to_not include("contact support")
+    end
+
     it "describes the most recent rejection when the seller has several" do
       terminal_failure_for(seller, created_at: 10.weeks.ago)
       latest = terminal_failure_for(seller, reason: "PAYPAL 14159", created_at: 1.week.ago)
@@ -73,6 +99,34 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(seller.comments.with_type_payout_note.last.content)
         .to include("your PayPal account cannot receive US dollars")
         .and include(latest.created_at.to_fs(:formatted_date_full_month))
+    end
+
+    # The note quotes a date and a restriction, and the block is keyed on the address the seller
+    # uses now — so a newer rejection against an address they have since abandoned must not be the
+    # one described, or the seller reads about a payout to an old address and the wrong restriction.
+    it "describes the rejection for the address the seller is stuck on, not a newer one for an old address" do
+      stuck = terminal_failure_for(seller, created_at: 6.weeks.ago)
+      create(:payment_failed, user: seller, payment_address: "old@example.com",
+                              failure_reason: "PAYPAL 14159", created_at: 1.week.ago,
+                              txn_id: nil, processor_fee_cents: nil)
+
+      described_class.process
+
+      note = seller.comments.with_type_payout_note.last
+      expect(note.content).to include("payments cannot be received in the country on that account's address")
+      expect(note.content).to include(stuck.created_at.to_fs(:formatted_date_full_month))
+      expect(note.content).to_not include("cannot receive US dollars")
+    end
+
+    # The live block refuses a payout on a terminal rejection of any age, so an old rejection that
+    # is still blocking has to be explained too — otherwise the oldest cases stay silent forever,
+    # which is the whole failure this task exists to end.
+    it "explains a rejection that is years old but still blocking" do
+      terminal_failure_for(seller, created_at: 3.years.ago)
+
+      expect do
+        described_class.process
+      end.to change { seller.comments.with_type_payout_note.count }.from(0).to(1)
     end
 
     it "does not write a second note when run again" do
@@ -153,14 +207,6 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
 
     it "ignores retryable rejections" do
       terminal_failure_for(seller, reason: "PAYPAL 3015")
-
-      expect do
-        described_class.process
-      end.to_not change { seller.comments.with_type_payout_note.count }
-    end
-
-    it "ignores rejections older than the lookback window" do
-      terminal_failure_for(seller, created_at: (described_class::LOOKBACK + 10.days).ago)
 
       expect do
         described_class.process

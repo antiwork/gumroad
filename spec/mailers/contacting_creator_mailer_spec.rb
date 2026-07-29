@@ -70,13 +70,17 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to_not include("placed a hold")
     end
 
-    it "still promises the payout date to a seller who paused their own payouts, which they can undo" do
+    # The payout gate checks the broader payouts_paused?, so this seller is skipped too — but the
+    # switch is theirs, so they are pointed at it rather than at support.
+    it "points a seller who paused their own payouts at their own setting, not at support" do
       payment.user.update!(payouts_paused_by_user: true)
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
+      expect(mail.body.encoded).to include("paused in your settings")
       expect(mail.body.encoded).to include("next payout date")
       expect(mail.body.encoded).to_not include("on hold")
+      expect(mail.body.encoded).to_not include("reply to this email")
     end
 
     it "promises the next payout date when the account is not under a payout hold" do

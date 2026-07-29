@@ -19,10 +19,6 @@ module Onetime
   class ExplainTerminalPaypalPayoutFailures
     BATCH_SIZE = 500
 
-    # Deliberately not "all time". Anything older is long past being actionable for the seller, and
-    # the rejection almost certainly no longer reflects the state of their PayPal account.
-    LOOKBACK = 300.days
-
     def self.process(batch_size: BATCH_SIZE, dry_run: false)
       new.process(batch_size:, dry_run:)
     end
@@ -51,6 +47,9 @@ module Onetime
           next
         end
 
+        # Quote the rejection the seller is actually stuck on, not merely their newest one.
+        payment = latest_terminal_failure_for_current_address(user) || payment
+
         if dry_run
           puts "[dry run] would explain #{payment.failure_reason} to User #{user.id}"
         else
@@ -65,14 +64,16 @@ module Onetime
     end
 
     private
-      # The most recent terminal failure per seller — that is the one whose reason and date describe
-      # why their payouts are stopped today.
+      # One terminal failure per seller, to enumerate the population. No date bound on purpose: the
+      # live block (PaypalPayoutProcessor.terminal_failure_for_payout_email?) refuses a payout on a
+      # terminal rejection of any age, so bounding the scan here would leave sellers blocked by the
+      # live check but never told why — the same silence this task exists to end. Whether each
+      # seller is still stuck is decided per seller below, against the live predicate itself.
       def terminal_failures_by_user(batch_size:)
         latest = {}
 
         Payment.where(processor: PayoutProcessorType::PAYPAL, state: Payment::FAILED,
                       failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
-               .where("created_at > ?", LOOKBACK.ago)
                .in_batches(of: batch_size) do |batch|
           ReplicaLagWatcher.watch
           batch.each do |payment|
@@ -82,6 +83,21 @@ module Onetime
         end
 
         latest
+      end
+
+      # A seller can have terminal rejections against more than one PayPal address: one against an
+      # address they have since replaced, and one against the address they are stuck on now. The
+      # note quotes a date and a restriction, so both have to come from a rejection against the
+      # address the block is keyed on — otherwise the seller is told about a payout to an address
+      # they no longer use, and possibly the wrong restriction of the two.
+      def latest_terminal_failure_for_current_address(user)
+        user.payments
+            .where(processor: PayoutProcessorType::PAYPAL,
+                   payment_address: user.paypal_payout_email,
+                   state: Payment::FAILED,
+                   failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+            .order(created_at: :desc, id: :desc)
+            .first
       end
 
       def still_blocked?(user)
