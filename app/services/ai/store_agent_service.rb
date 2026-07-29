@@ -128,6 +128,75 @@ class Ai::StoreAgentService
       \b(?:staged|prepared)\s+(?:if|when|whenever)\b
     )
   /ix
+  # Two subjectless forms survived the original guard in production: a bounded action followed by
+  # a card instruction, and "Staged again" followed by a replacement-card instruction. Keep this
+  # grammar anchored to the whole reply and to the measured action shapes. Widening it into a noun
+  # phrase parser would make explanatory or quoted prose eligible for destructive replacement.
+  STAGED_CLAIM_SUBJECTLESS_DETAIL = /
+    (?>[[:blank:]]*)
+    \((?>[-[:alnum:]&+'’]+),(?>[[:blank:]]*)
+    \$[[:digit:]][[:digit:],]*(?:\.[[:digit:]]{1,2})?\)
+  /x
+  STAGED_CLAIM_SUBJECTLESS_ACTION = /
+    (?:
+      deletion(?>[[:blank:]]+)of(?>[[:blank:]]+)
+      (?:the|a|an|your)(?>[[:blank:]]+)
+      (?:last(?>[[:blank:]]+))?
+      (?:(?>[-[:alnum:]#$%&+'’]+)(?>[[:blank:]]+))?
+      draft\b
+      (?:#{STAGED_CLAIM_SUBJECTLESS_DETAIL})?
+      |
+      removal(?>[[:blank:]]+)of(?>[[:blank:]]+)
+      (?:the|a|an|your)(?>[[:blank:]]+)
+      (?:duplicate(?>[[:blank:]]+))?
+      (?:mobile(?>[[:blank:]]+))?
+      block\b
+      (?:#{STAGED_CLAIM_SUBJECTLESS_DETAIL})?
+      |
+      the(?>[[:blank:]]+)price(?>[[:blank:]]+)change\b
+    )
+  /ix
+  STAGED_CLAIM_SUBJECTLESS_LIVE_TAIL = /
+    (?>[[:blank:]]+)and(?>[[:blank:]]+)
+    (?:it|that|this|the(?>[[:blank:]]+)archive)
+    (?>[[:blank:]]+)(?:goes|becomes)(?>[[:blank:]]+)live
+  /ix
+  STAGED_CLAIM_SUBJECTLESS_CARD_INSTRUCTION = /
+    (?:please(?>[[:blank:]]+))?
+    (?:approve|confirm|tap|click|hit|press)(?>[[:blank:]]+)
+    (?:on(?>[[:blank:]]+))?
+    (?:
+      it|that|this
+      |
+      (?:the|that|this|your)(?>[[:blank:]]+)
+      (?:confirm(?:ation)?(?>[[:blank:]]+))?(?:card|button)
+    )\b
+    (?:
+      (?>[[:blank:]]+)to(?>[[:blank:]]+)(?:apply|approve|confirm|finalize)
+        (?:(?>[[:blank:]]+)(?:it|that|this))?
+      |
+      (?>[[:blank:]]+)(?:when|whenever)(?>[[:blank:]]+)
+        (?:you(?:['’]re|(?>[[:blank:]]+)are)(?>[[:blank:]]+))?(?:ready|happy|sure)
+        (?:#{STAGED_CLAIM_SUBJECTLESS_LIVE_TAIL})?
+      |
+      #{STAGED_CLAIM_SUBJECTLESS_LIVE_TAIL}
+      |
+      ,(?>[[:blank:]]*)(?:then(?>[[:blank:]]+))?tell(?>[[:blank:]]+)me
+        (?>[[:blank:]]+)if(?>[[:blank:]]+)you(?>[[:blank:]]+)want
+        (?>[[:blank:]]+)to(?>[[:blank:]]+)move(?>[[:blank:]]+)on
+        (?:
+          (?>[[:blank:]]+)to(?>[[:blank:]]+)creating(?>[[:blank:]]+)
+          (?:(?>[-[:alnum:]&+'’]+)(?>[[:blank:]]+)){1,5}
+          at(?>[[:blank:]]+)\$[[:digit:]][[:digit:],]*(?:\.[[:digit:]]{1,2})?
+        )?
+    )?
+    (?>[[:blank:]]*)[.!]?(?>[[:blank:]]*)\z
+  /ix
+  STAGED_CLAIM_REPLACEMENT_CARD_STATUS = /
+    (?:the|a)(?>[[:blank:]]+)confirm(?:ation)?(?>[[:blank:]]+)(?:card|button)
+    (?>[[:blank:]]+)(?:should(?>[[:blank:]]+)be|will(?>[[:blank:]]+)be|is)
+    (?>[[:blank:]]+)(?:back|below|here)(?>[[:blank:]]*)[—–-](?>[[:blank:]]*)
+  /ix
 
   STAGED_CLAIM_PATTERNS = [
     # First-person staging is current when it uses the present-perfect/current modifiers, or when
@@ -199,6 +268,28 @@ class Ai::StoreAgentService
       (?=\s*(?:\z|[.!]|[—–-]|\band\b|,\s*but\b|
         :\s*(?:please\s+)?(?:confirm|approve)\b|
         ,\s*(?:please\s+)?(?:confirm|approve)\b))
+    /ix,
+    # Production emits a subjectless participle when it skips api_write. Only the measured frame
+    # and two bounded sibling shapes qualify, and the action must end its clause before an exact
+    # card instruction. Feature prose such as "Staged deletion of the draft is permanent" cannot
+    # enter this arm.
+    /
+      \Astaged(?>[[:blank:]]+)#{STAGED_CLAIM_SUBJECTLESS_ACTION}
+      (?>[[:blank:]]*)[.!:](?>[[:space:]]*)
+      #{STAGED_CLAIM_SUBJECTLESS_CARD_INSTRUCTION}
+    /ix,
+    # A bare re-staging claim is unambiguous at the start of the reply. Any continuation must be
+    # either the measured replacement-card status or an exact card instruction; references to an
+    # earlier card and already-applied changes therefore remain untouched.
+    /
+      \Astaged(?>[[:blank:]]+)again(?>[[:blank:]]*)[.!:]?
+      (?>[[:space:]]*)
+      (?:
+        \z
+        |
+        (?:#{STAGED_CLAIM_REPLACEMENT_CARD_STATUS})?
+        #{STAGED_CLAIM_SUBJECTLESS_CARD_INSTRUCTION}
+      )
     /ix,
     # Prepared/queued phrasing only counts with an instruction or explicit confirmation purpose in
     # the same sentence. Draft content and explanations can be reviewed without an action card.
@@ -720,9 +811,14 @@ class Ai::StoreAgentService
       # that attributed clause; a later current claim in the same reply still goes through the guard.
       candidate = reply.gsub(
         /\b(?:the\s+)?(?:earlier|previous)\s+(?:reply|message)\s+
-          (?:said|claimed|read)\s*:\s*[^.!?;\n]*/ix,
-        "",
-      )
+          (?:said|claimed|read)\s*:\s*[^.!?;\n]*
+          (?:[.!?;]+|\n+|\z)[[:space:]]*/ix,
+      ) do
+        # A leading quote can disappear entirely so a current subjectless claim becomes the new
+        # start. A quote after introductory prose still needs a sentence boundary so the existing
+        # subjectful patterns can recognize the current assertion that follows it.
+        Regexp.last_match.pre_match.blank? ? "" : ". "
+      end
       STAGED_CLAIM_PATTERNS.any? { |pattern| candidate.match?(pattern) }
     end
 

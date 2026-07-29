@@ -323,6 +323,39 @@ describe Order::CreateService, :vcr do
       expect(cart.reload).to be_alive
     end
 
+    # The example above only covers failures so early that no purchase row is ever written, which
+    # leaves the order unpersisted. The everyday failure — a real product the buyer cannot actually
+    # be sold — does write a failed purchase row, and appending that row to the order persists the
+    # order. The cart cleanup used to key off `order.persisted?` alone, so a checkout where nothing
+    # at all was bought still had its cart destroyed, and the buyer landed back on an empty checkout
+    # with no way to retry short of re-adding every item by hand.
+    #
+    # Every line item here exceeds its product's remaining stock, which is the same mechanism the
+    # "returns failure responses with correct errors" example above relies on to produce a persisted
+    # failed purchase — so this is the real service path, not a stubbed one.
+    it "keeps the cart when every line item is attempted and fails" do
+      buyer = create(:user, email: "buyer@gumroad.com")
+      cart = create(:cart, user: buyer, browser_guid:)
+
+      [product_1, product_2, product_3, product_4, product_5].each do |product|
+        product.update!(max_purchase_count: 1)
+      end
+      params[:line_items].each { _1[:quantity] = 2 }
+
+      order, purchase_responses, _ = Order::CreateService.new(params:, buyer:).perform
+
+      # The failed attempts are recorded, which is what persists the order...
+      expect(order).to be_persisted
+      expect(order.purchases).to be_present
+      expect(order.purchases.map(&:purchase_state).uniq).to eq(["failed"])
+      expect(purchase_responses.values).to all(include(success: false))
+
+      # ...but nothing was bought, so the buyer keeps their cart and can retry.
+      expect(cart.reload).to be_alive
+      # The order is still linked, so the failed attempt stays traceable to the cart it came from.
+      expect(cart.order).to eq(order)
+    end
+
     it "creates an order along with the associated purchases in progress when merchant account is a Brazilian Stripe Connect account" do
       seller_2.update!(check_merchant_account_is_linked: true)
       create(:merchant_account_stripe_connect, charge_processor_merchant_id: "acct_1QADdCGy0w4tFIUe", country: "BR", user: seller_2)

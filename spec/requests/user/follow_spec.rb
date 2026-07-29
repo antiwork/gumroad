@@ -6,7 +6,14 @@ require "shared_examples/authorize_called"
 describe "User Follow Page Scenario", type: :system, js: true do
   include FillInUserProfileHelpers
 
-  let(:seller) { create(:named_seller) }
+  # Reviewed and marked compliant, because these examples drive the subscribe
+  # form as an ordinary visitor and assert the follow lands with no friction.
+  # Sellers we have not reviewed now have to clear a CAPTCHA first (see
+  # FollowRecaptcha), and a headless browser has no Google challenge to solve —
+  # so an unreviewed seller here would be testing the challenge, not the follow.
+  # Coverage that the challenge is actually demanded lives in the presenter and
+  # controller specs.
+  let(:seller) { create(:named_seller, user_risk_state: "compliant") }
   let(:product) { create(:product, user: seller) }
   let(:other_user) { create(:user) }
   let(:follower_email) { generate(:email) }
