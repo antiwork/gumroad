@@ -41,8 +41,14 @@ class SellerProfile < ApplicationRecord
   # #6511 fixed.
   def accent_styles
     Rails.cache.fetch(accent_style_cache_name) do
+      accent = rgb_triplet(highlight_color)
+      # An unusable stored colour means emit nothing rather than a broken custom property: a
+      # malformed `--accent` takes the pay button, links and focus rings down to their unset state,
+      # which is worse on a payment page than simply keeping Gumroad's default palette.
+      next if accent.nil?
+
       <<~CSS.strip
-        :root{--accent:#{rgb_triplet(highlight_color)};--accent-with-text:#{rgb_triplet(accent_color_for_text_areas)};--contrast-accent:#{rgb_triplet(text_color_on_highlight)}}
+        :root{--accent:#{accent};--accent-with-text:#{rgb_triplet(accent_color_for_text_areas)};--contrast-accent:#{rgb_triplet(text_color_on_highlight)}}
       CSS
     end
   end
@@ -144,13 +150,21 @@ class SellerProfile < ApplicationRecord
       Rails.cache.delete accent_style_cache_name
     end
 
-    # The "R G B" triple the CSS custom properties expect, matching the SCSS split-color() function
-    # used by custom_styles so both paths produce byte-identical values for the same hex colour.
+    # The "R G B" triple the CSS custom properties expect, or nil for a value that is not a colour.
     #
-    # Six-digit form only, which is all that can reach here: HexColorValidator::HEX_COLOR_REGEX
-    # requires exactly six digits, and it validates both highlight_color and background_color.
-    # accessible_accent's derived colours come from ContrastColor, which also emits six digits.
+    # Parsed by ContrastColor.parse — the same parser the contrast maths already uses, so all three
+    # emitted properties agree about what a stored value means. Going through it also handles the two
+    # stored shapes a naive six-digit split gets wrong:
+    #
+    #   - Three-digit hex (#f0a). These rows exist: HexColorValidator only runs on normal saves, so
+    #     update_column and raw SQL have written short forms historically. Splitting into pairs drops
+    #     the last digit and emits a one-number accent, which is not a valid colour — the pay button
+    #     and focus rings would lose their colour on checkout while the seller's own storefront still
+    #     rendered correctly, because SassC's split-color() understands short hex.
+    #   - Anything else, including a multiline value. HexColorValidator's regex uses line anchors
+    #     (^...$) rather than string anchors, so a value like "#abcdef\n<more css>" passes validation
+    #     and is persistable. parse rejects it and accent_styles then emits nothing at all.
     def rgb_triplet(hex_color)
-      hex_color.to_s.delete_prefix("#").scan(/../).map { _1.to_i(16) }.join(" ")
+      ContrastColor.parse(hex_color)&.join(" ")
     end
 end

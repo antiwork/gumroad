@@ -69,9 +69,10 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
-  // The seller's accent custom properties, when every product in the cart belongs to one seller.
-  // Optional rather than `| null` because the controller omits it for empty carts, and typia
-  // rejects a missing key on a nullable-but-required prop.
+  // The seller's accent custom properties, when a single seller owns everything on this checkout.
+  // The controller always evaluates it, so on a full page load the key is present and merely null
+  // for empty and multi-seller carts; declared optional so a partial reload omitting it still
+  // satisfies validation.
   accent_styles?: string | null;
   checkout: {
     add_products: ProductToAdd[];
@@ -771,10 +772,10 @@ const CheckoutIndexPage = () => {
 
   return (
     <StateContext.Provider value={reducer}>
-      {/* Applies the seller's accent to the pay button, links and focus rings. Rendered into <head>
-          via Inertia's Head so it lands after the stylesheet <link> and therefore wins the cascade
-          — the defaults it overrides are :root custom properties from the same specificity, so the
-          later declaration is the one that applies. Absent for empty and multi-seller carts. */}
+      {/* Applies the seller's accent to the pay button, links and focus rings. The defaults it
+          overrides are declared inside `@layer base` (stylesheets/_global.scss), and an unlayered
+          style beats a layered one wherever it sits in the document — so this wins the cascade by
+          layer precedence, not by insertion order. Absent for empty and multi-seller carts. */}
       {props.accent_styles ? (
         <Head>
           <style>{props.accent_styles}</style>

@@ -196,37 +196,48 @@ describe Cart do
     end
   end
 
-  describe "#sole_seller" do
+  describe "#visible_seller_ids" do
     let(:cart) { create(:cart) }
     let(:seller) { create(:user) }
 
-    it "returns the seller when every product belongs to them" do
+    it "returns the one seller when every product belongs to them" do
       create(:cart_product, cart:, product: create(:product, user: seller))
       create(:cart_product, cart:, product: create(:product, user: seller))
 
-      expect(cart.sole_seller).to eq(seller)
+      expect(cart.visible_seller_ids).to eq([seller.id])
     end
 
-    it "returns nil when the cart spans two sellers" do
+    it "returns both sellers when the cart spans two" do
       # A cart can be paid for in one transaction across sellers, so there is no seller whose
       # branding could represent it. Checkout keeps Gumroad's palette in this case.
+      other_seller = create(:user)
       create(:cart_product, cart:, product: create(:product, user: seller))
-      create(:cart_product, cart:, product: create(:product, user: create(:user)))
+      create(:cart_product, cart:, product: create(:product, user: other_seller))
 
-      expect(cart.sole_seller).to be_nil
+      expect(cart.visible_seller_ids).to match_array([seller.id, other_seller.id])
     end
 
-    it "returns nil for an empty cart" do
-      expect(cart.sole_seller).to be_nil
+    it "returns nothing for an empty cart" do
+      expect(cart.visible_seller_ids).to be_empty
     end
 
-    it "ignores deleted cart products when deciding" do
+    it "ignores deleted cart products" do
       # Removing the second seller's product from the cart must make it single-seller again, or a
       # buyer who deletes an item keeps seeing the neutral palette.
       create(:cart_product, cart:, product: create(:product, user: seller))
       create(:cart_product, cart:, product: create(:product, user: create(:user)), deleted_at: 1.minute.ago)
 
-      expect(cart.sole_seller).to eq(seller)
+      expect(cart.visible_seller_ids).to eq([seller.id])
+    end
+
+    it "ignores archived products, matching what the checkout page actually renders" do
+      # CartPresenter#cart_props renders `alive.joins(:product).merge(Link.not_archived)`, so an
+      # archived product is not on the page. Counting it here would treat a cart the buyer sees as
+      # belonging to one seller as mixed, suppressing that seller's branding with no visible cause.
+      create(:cart_product, cart:, product: create(:product, user: seller))
+      create(:cart_product, cart:, product: create(:product, user: create(:user), archived: true))
+
+      expect(cart.visible_seller_ids).to eq([seller.id])
     end
   end
 end

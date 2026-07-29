@@ -96,7 +96,53 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.props[:accent_styles]).to be_nil
       end
 
-      it "sends no accent when there is no cart at all" do
+      it "sends no accent when there is no cart and no product parameter" do
+        get :show
+
+        expect(inertia.props[:accent_styles]).to be_nil
+      end
+
+      it "carries the seller's accent for a direct product arrival with no saved cart" do
+        # The main journey: clicking "I want this!" links to /checkout?product=<permalink> and the
+        # product is not persisted until the frontend saves the cart afterwards, in a partial visit.
+        # Reading only the saved cart would make the feature a no-op for every first-time buyer.
+        product = create(:product, user: branded_seller)
+
+        get :show, params: { product: product.unique_permalink }
+
+        expect(inertia.props[:accent_styles]).to eq(branded_seller.seller_profile.accent_styles)
+      end
+
+      it "sends no accent when the arriving product's seller differs from the saved cart's" do
+        # The page renders the saved cart plus the arriving product, so this checkout shows two
+        # sellers' products. Branding it with either one misrepresents the other.
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: create(:user))
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props[:accent_styles]).to be_nil
+      end
+
+      it "still carries the accent when the arriving product's seller matches the saved cart's" do
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: branded_seller)
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props[:accent_styles]).to eq(branded_seller.seller_profile.accent_styles)
+      end
+
+      it "sends no accent when the stored colour is not a usable hex value" do
+        # HexColorValidator anchors per line rather than per string, and update_column bypasses it
+        # entirely, so unparseable values are persistable. A malformed --accent would unset the pay
+        # button's colour; no CSS at all leaves Gumroad's default palette in place instead.
+        seller = create(:user)
+        # tap(&:save!) first: seller_profile is built-but-unsaved until something persists it, and
+        # update_column on a new record raises.
+        seller.seller_profile.tap(&:save!).update_column(:highlight_color, "not a colour")
+        cart_with(create(:product, user: seller))
+
         get :show
 
         expect(inertia.props[:accent_styles]).to be_nil
@@ -110,8 +156,12 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show
 
-        expect(inertia.props[:accent_styles]).not_to include("--body-bg")
-        expect(inertia.props[:accent_styles]).not_to include("--font-family")
+        # Asserted on a present value rather than a bare `not_to include`, which nil would satisfy
+        # trivially and so would pass even if the prop were missing altogether.
+        styles = inertia.props[:accent_styles]
+        expect(styles).to be_present
+        expect(styles).not_to include("--body-bg")
+        expect(styles).not_to include("--font-family")
       end
 
       it "recomputes the accent on the partial request the frontend makes when the cart changes" do

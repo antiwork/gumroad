@@ -108,11 +108,31 @@ describe SellerProfile do
     end
 
     it "handles a colour whose channels have leading zeroes" do
-      # Only six-digit hex can reach rgb_triplet (HexColorValidator requires exactly six digits, so
-      # a three-digit colour cannot be saved at all). "#0a0b0c" is the case a naive to_i would get
-      # wrong by dropping the leading zero of each channel.
+      # "#0a0b0c" is the case a naive to_i gets wrong by dropping each channel's leading zero.
       subject.update!(highlight_color: "#0a0b0c")
+
       expect(subject.accent_styles).to include("--accent:10 11 12")
+    end
+
+    it "expands a legacy three-digit colour rather than truncating it" do
+      # HexColorValidator only runs on normal saves, so update_column and raw SQL have written
+      # three-digit values historically. Splitting into pairs would drop the trailing digit and emit
+      # a one-number accent, which is not a valid colour — the pay button and focus rings would lose
+      # their colour on checkout while the seller's storefront still rendered correctly.
+      subject.update_column(:highlight_color, "#0f0")
+      subject.reload
+
+      expect(subject.accent_styles).to include("--accent:0 255 0")
+    end
+
+    it "emits nothing at all when the stored colour cannot be parsed" do
+      # A malformed --accent unsets the pay button's colour, which is worse on a payment page than
+      # keeping Gumroad's default palette. Multiline values are persistable because the validator's
+      # regex anchors per line rather than per string.
+      subject.update_column(:highlight_color, "#abcdef\n} body{display:none}")
+      subject.reload
+
+      expect(subject.accent_styles).to be_nil
     end
 
     it "is invalidated when the seller changes their accent colour" do

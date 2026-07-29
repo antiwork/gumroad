@@ -19,7 +19,7 @@ class CheckoutController < ApplicationController
       # background and font are deliberately left as Gumroad's.
       #
       # nil for empty and multi-seller carts, in which case the page keeps the stock palette.
-      accent_styles: -> { cart_presenter.cart&.sole_seller&.seller_profile&.accent_styles },
+      accent_styles: -> { sole_seller_accent_styles(cart_presenter.cart) },
     }
   end
 
@@ -110,6 +110,46 @@ class CheckoutController < ApplicationController
   end
 
   private
+    # The seller accent CSS for this checkout, or nil when there is no single seller to take it from.
+    #
+    # The seller has to be resolved from the saved cart AND from the `?product=` parameter together,
+    # because the two arrival paths carry the products differently and the page renders the union of
+    # both. A buyer clicking "I want this!" on a product page lands on /checkout?product=<permalink>
+    # with the product not yet persisted — the frontend merges it in from `checkout.add_products` and
+    # only saves it to the cart afterwards, in a partial visit. Reading the saved cart alone would
+    # therefore mean:
+    #
+    #   - a first-time buyer, who has no saved cart at all, never sees the seller's accent. That is
+    #     exactly the product-page-to-payment-screen journey this is meant to fix, so the feature
+    #     would be a no-op on its main path.
+    #   - a buyer who already had seller X's product saved and clicks buy on seller Y's product page
+    #     would get X's accent over a checkout showing both sellers' products, which is the
+    #     misbranding the single-seller rule exists to prevent.
+    #
+    # So both sources are unioned, and the accent is used only when the union is exactly one seller.
+    def sole_seller_accent_styles(cart)
+      seller_ids = cart ? cart.visible_seller_ids : []
+      seller_ids = (seller_ids + [arriving_product&.user_id]).compact.uniq
+      return unless seller_ids.one?
+
+      User.find_by(id: seller_ids.first)&.seller_profile&.accent_styles
+    end
+
+    # The product named by `?product=<permalink>`, resolved the same way CheckoutPresenter's
+    # add_single_product_props resolves it, so the accent and the cart item rendered from that same
+    # parameter cannot disagree about which seller this checkout is for.
+    #
+    # Guarded on String because the parameter is buyer-supplied and can arrive as a nested hash
+    # (`?product[x]=y`), which the query builder cannot quote — see the "nested values" spec.
+    def arriving_product
+      return @arriving_product if defined?(@arriving_product)
+
+      permalink = params[:product]
+      return @arriving_product = nil unless permalink.is_a?(String) && permalink.present?
+
+      @arriving_product = logged_in_user ? Link.fetch_leniently(permalink, user: logged_in_user) : Link.find_by_unique_permalink(permalink)
+    end
+
     # True when the exception is a CartProduct validation failure caused ONLY by a
     # quantity or price above its column limit (see CartProduct::MAX_QUANTITY /
     # CartProduct::MAX_PRICE) — the known, expected shape of buyer-supplied bad input.
