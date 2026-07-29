@@ -988,6 +988,22 @@ describe "PurchaseInstallments", :vcr do
           expect(SendWorkflowInstallmentWorker).to_not have_enqueued_sidekiq_job(abandoned_cart_workflow_installment.id, abandoned_cart_workflow_installment_rule.version, @purchase.id, nil)
         end
       end
+
+      it "does not reschedule member-cancellation workflow installments" do
+        unsubscribed_interval = 4.days
+
+        cancellation_workflow = create(:workflow, seller: @purchase.seller, link: @purchase.link,
+                                                  workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER,
+                                                  published_at: Time.current)
+        cancellation_installment = create(:installment, link: @purchase.link, workflow: cancellation_workflow, published_at: Time.current)
+        create(:installment_rule, installment: cancellation_installment, delayed_delivery_time: 2.days)
+
+        travel_to(@purchase.created_at + unsubscribed_interval) do
+          @purchase.reschedule_workflow_installments(send_delay: unsubscribed_interval)
+
+          expect(SendWorkflowInstallmentWorker).to_not have_enqueued_sidekiq_job(cancellation_installment.id, 1, @purchase.id, nil)
+        end
+      end
     end
   end
 end

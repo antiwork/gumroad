@@ -423,6 +423,10 @@ class Installment < ApplicationRecord
   def send_installment_from_workflow_for_purchase(purchase_id)
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
+    # This branch cannot evaluate a cancellation post: it only ever runs for a live
+    # membership, so `subscription.alive?` below can never be the "has ended" state such a
+    # post is written for. Jobs enqueued before the reschedule filter existed still land here.
+    return if member_cancellation_trigger?
 
     sale = sale.original_purchase
     return unless sale.can_contact?
