@@ -101,11 +101,12 @@ class Ai::StoreAgentService
         (?:the|that|this|your|my)\s+
         (?:price\s+changes?|offer\s+codes?|changes?|updates?|discounts?|offers?|codes?|edits?|
           deletions?|removals?|renames?)\s+)?again\b)
-      # The dead-card markers scan to the end of the sentence, not the clause: "I've staged the
-      # update in my previous message; that card is gone now" is a re-staging claim, and narrowing
-      # the scan to `;` and dashes loses it. The cost is that a marker word used innocently in a
-      # later clause ("...tap that card again; your product photo is missing") also cancels the
-      # escape, which is the behavior in production today.
+      # The dead-card markers scan to the end of the sentence, not just the clause holding the
+      # staging verb: "I've staged the update in my previous message; that card is gone now" is a
+      # re-staging claim, and stopping the scan at `;` or a dash loses it. The cost is that a
+      # marker word used innocently in a later clause ("...tap that card again; your product photo
+      # is missing") also cancels the escape. That trade is deliberate: the narrow scan was tried
+      # and reverted because it let four real dead-card shapes slip past the guard.
       (?![^.!?\n]*\b(?:new\s+card|another\s+card|gone|expired|disappeared|vanished|missing|empty|
         didn['’]t\s+render|no\s+longer|isn['’]t\s+there|not\s+there|can['’]t\s+see|
         couldn['’]t\s+(?:see|find))\b)
