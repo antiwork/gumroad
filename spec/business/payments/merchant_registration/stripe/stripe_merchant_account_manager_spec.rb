@@ -13563,6 +13563,23 @@ describe StripeMerchantAccountManager, :vcr do
       described_class.send(:attest_owners_provided, account_id)
     end
 
+    # The tolerance absorbs decimal rounding, nothing more: a total short by a whole percentage point
+    # is a list missing a share, not a list that rounded.
+    it "does not attest a total that falls short by more than the rounding allowance" do
+      owner_list([
+                   Stripe::Person.construct_from(
+                     id: "person_representative",
+                     object: "person",
+                     account: account_id,
+                     relationship: { representative: true, owner: true, percent_ownership: 99 }
+                   )
+                 ])
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
     it "does not attest when the ownership read fails" do
       allow(Stripe::Account).to receive(:list_persons).and_raise(Stripe::APIError.new("Stripe is down"))
       allow(ErrorNotifier).to receive(:notify)

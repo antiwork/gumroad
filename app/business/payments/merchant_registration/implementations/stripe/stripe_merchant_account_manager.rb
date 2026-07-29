@@ -134,6 +134,8 @@ module StripeMerchantAccountManager
   # Recorded ownership at or above this counts as accounting for the whole company. Just under 100 to
   # absorb the rounding in shares Stripe and our own form accept with more than two decimals
   # (33.33 x 3 = 99.99); it is a rounding allowance, not slack for a list that is genuinely short.
+  # Stripe caps combined ownership at 100%, so the untracked remainder can never exceed 0.5% — far
+  # below the 25% share that makes someone a reportable beneficial owner in the first place.
   FULLY_ACCOUNTED_OWNERSHIP_PERCENT = 99.5
 
   def self.create_account(user, passphrase:, from_admin: false, notify: true)
