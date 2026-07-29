@@ -77,9 +77,15 @@ class Purchase::BaseService
         signup_currency_units_per_usd: 1 / fx_rate.to_d,
         effective_from: Time.current
       )
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    rescue StandardError => e
       # A missing fixing means later charges bill canonical US dollars — the pre-feature
       # behaviour — so it must never fail a charge the buyer already paid for.
+      #
+      # Deliberately catching everything rather than the two ActiveRecord validation errors this
+      # started with. The buyer has already been charged by the time this runs, so there is no
+      # exception worth failing their purchase over, and the list was already incomplete: a
+      # database still missing canonical_price_cents raises ActiveModel::UnknownAttributeError,
+      # which is neither of them. The notify call is what makes a skipped fixing visible.
       Rails.logger.warn("Could not fix later-charge presentment for purchase #{purchase.id}: #{e.message}")
       ErrorNotifier.notify(e, purchase_id: purchase.id)
     end
