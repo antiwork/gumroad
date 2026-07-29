@@ -26,6 +26,22 @@ describe Api::Mobile::AgentController do
     )
   end
 
+  def store_agent_turn(reply:, proposed_action: nil, objects: [])
+    outcome =
+      if proposed_action
+        Ai::StoreAgentService::TURN_OUTCOME_PROPOSAL_READY
+      else
+        Ai::StoreAgentService::TURN_OUTCOME_REPLY_ONLY
+      end
+
+    {
+      outcome:,
+      reply:,
+      proposed_action:,
+      objects:,
+    }
+  end
+
   describe "GET meta" do
     it "returns the greeting and starter suggestions" do
       get :meta, params: @auth_params
@@ -57,7 +73,7 @@ describe Api::Mobile::AgentController do
     it "returns the agent's reply and any proposed action" do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond).and_return(reply: "You have 3 products.", proposed_action: nil)
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(reply: "You have 3 products."))
 
       post :create, params: valid_params
 
@@ -74,22 +90,23 @@ describe Api::Mobile::AgentController do
     it "returns the persisted proposal message id" do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond).and_return(
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(
         reply: "Confirm this discount.",
         proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_discount" } },
-      )
+      ))
 
       post :create, params: valid_params
 
       message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
       expect(response.parsed_body["proposal_message_id"]).to eq(message.external_id)
+      expect(response.parsed_body).not_to have_key("outcome")
     end
 
     it "scopes the agent service to the authenticated seller" do
       expect(Ai::StoreAgentService).to receive(:new) do |args|
         expect(args[:seller]).to eq(@seller)
         expect(args[:pundit_user].seller).to eq(@seller)
-        instance_double(Ai::StoreAgentService, respond: { reply: "ok", proposed_action: nil })
+        instance_double(Ai::StoreAgentService, respond: store_agent_turn(reply: "ok"))
       end
 
       post :create, params: valid_params
@@ -552,7 +569,7 @@ describe Api::Mobile::AgentController do
     def stub_agent_service(reply: "You have 3 products.", proposed_action: nil)
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond).and_return(reply:, proposed_action:)
+      allow(service_double).to receive(:respond).and_return(store_agent_turn(reply:, proposed_action:))
       service_double
     end
 
@@ -587,7 +604,7 @@ describe Api::Mobile::AgentController do
             { role: "assistant", content: "Earlier answer" },
             { role: "user", content: "And this month?" },
           ],
-        ).and_return(reply: "Better.", proposed_action: nil)
+        ).and_return(store_agent_turn(reply: "Better."))
 
         expect do
           post :create,

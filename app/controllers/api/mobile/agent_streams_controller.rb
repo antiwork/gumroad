@@ -134,10 +134,6 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         Rails.logger.error("Mobile store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
         unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
-        if unpersisted_proposal
-          write_event.call({}, "reset")
-          write_event.call({ text: turn[:reply] }, "token")
-        end
       end
       result = ::Ai::StoreAgentService.new(seller:, pundit_user:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|

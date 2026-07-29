@@ -161,6 +161,16 @@ module AgentConversationPersistence
     # is findable by the exact id the client generated, independent of which conversation is
     # currently the seller's latest.
     def record_agent_assistant_message!(conversation, result, client_turn_id: nil)
+      expected_outcome =
+        if result[:proposed_action].present?
+          Ai::StoreAgentService::TURN_OUTCOME_PROPOSAL_READY
+        else
+          Ai::StoreAgentService::TURN_OUTCOME_REPLY_ONLY
+        end
+      unless result[:outcome] == expected_outcome
+        raise ArgumentError, "Store agent turn outcome does not match its proposed action."
+      end
+
       metadata = {
         proposed_action: result[:proposed_action],
         objects: result[:objects].presence,
