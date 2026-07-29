@@ -119,6 +119,7 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
       # proposal behind it.
       turn_persisted = false
       assistant_message = nil
+      unpersisted_proposal = false
       on_reply_complete = lambda do |turn|
         conversation, assistant_message = persist_agent_turn!(
           conversation,
@@ -132,7 +133,8 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         mark_agent_turn_failed!(client_turn_id)
         Rails.logger.error("Mobile store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
-        if replace_unpersisted_proposal_reply!(turn)
+        unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
+        if unpersisted_proposal
           write_event.call({}, "reset")
           write_event.call({ text: turn[:reply] }, "token")
         end
@@ -147,6 +149,9 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         # claim. finish_stream invokes on_reply_complete first, so suppress the proposal event when
         # that persistence step failed.
         next if event.to_s == "proposed_action" && assistant_message.nil?
+        # Suggestions generated from discarded confirmation wording would contradict the
+        # replacement reply, so suppress them when no persisted proposal backs this turn.
+        next if event.to_s == "suggestions" && unpersisted_proposal
 
         write_event.call(payload, event)
       end
@@ -160,7 +165,7 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         reply: result[:reply],
         proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        suggestions: result[:suggestions] || [],
+        suggestions: unpersisted_proposal ? [] : result[:suggestions] || [],
       }
       done_payload[:conversation_id] = conversation.external_id if conversation
       done_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message

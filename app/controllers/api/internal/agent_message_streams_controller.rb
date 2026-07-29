@@ -147,6 +147,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # replace the already-streamed confirmation wording because no stored proposal can back it.
       turn_persisted = false
       assistant_message = nil
+      unpersisted_proposal = false
       on_reply_complete = lambda do |turn|
         conversation, assistant_message = persist_agent_turn!(
           conversation,
@@ -160,7 +161,8 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         mark_agent_turn_failed!(client_turn_id)
         Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
-        if replace_unpersisted_proposal_reply!(turn)
+        unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
+        if unpersisted_proposal
           write_event.call({}, "reset")
           write_event.call({ text: turn[:reply] }, "token")
         end
@@ -175,6 +177,9 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         # failed, suppress that event: without a stored assistant message there is no proposal id
         # the confirmation endpoint can claim.
         next if event.to_s == "proposed_action" && assistant_message.nil?
+        # The suggestion call still used the discarded confirmation wording. Do not pair the
+        # honest fallback with prompts derived from a write that cannot be confirmed.
+        next if event.to_s == "suggestions" && unpersisted_proposal
 
         write_event.call(payload, event)
       end
@@ -188,7 +193,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         reply: result[:reply],
         proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        suggestions: result[:suggestions] || [],
+        suggestions: unpersisted_proposal ? [] : result[:suggestions] || [],
       }
       done_payload[:conversation_id] = conversation.external_id if conversation
       done_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message

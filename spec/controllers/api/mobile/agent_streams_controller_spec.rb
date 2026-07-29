@@ -130,7 +130,7 @@ describe Api::Mobile::AgentStreamsController do
         emit.call(:objects, { objects: [{ type: "product", title: "Course" }] })
         emit.call(:proposed_action, { proposed_action: proposal })
         emit.call(:suggestions, { suggestions: ["Show my products"] })
-        turn.merge(suggestions: [])
+        turn.merge(suggestions: ["Show my products"])
       end
       allow(controller).to receive(:create_agent_conversation!).and_raise(ActiveRecord::StatementInvalid)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
@@ -144,10 +144,10 @@ describe Api::Mobile::AgentStreamsController do
       expect(response.body).to include("there is nothing to confirm")
       expect(response.body).not_to include("event: error")
       expect(response.body).to include("event: objects")
-      expect(response.body).to include("event: suggestions")
+      expect(response.body).not_to include("event: suggestions")
       expect(response.body).not_to include("event: proposed_action")
       expect(response.body.scan(/^event: (.+)$/).flatten).to eq(
-        %w[token reset token objects suggestions done],
+        %w[token reset token objects done],
       )
 
       # The key must be absent from the done payload, not present-with-null: the client validates
@@ -159,6 +159,7 @@ describe Api::Mobile::AgentStreamsController do
       )
       expect(done_data).not_to have_key("conversation_id")
       expect(done_data["proposed_action"]).to be_nil
+      expect(done_data["suggestions"]).to eq([])
       expect(done_data).not_to have_key("proposal_message_id")
       expect($redis.get(turn_status_key)).to eq("failed")
     ensure
