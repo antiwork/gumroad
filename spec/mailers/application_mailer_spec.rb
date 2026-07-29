@@ -34,6 +34,15 @@ describe ApplicationMailer do
             format.text { render plain: "Test email content" }
           end
         end
+
+        # No mailer bcc's anyone today, but bcc is an envelope recipient just
+        # like cc, so the redirect has to cover it before someone adds the first
+        # one. This pins that third field.
+        def test_email_to_with_bcc(recipient, bcc_recipient)
+          mail(to: recipient, bcc: bcc_recipient, subject: "Test") do |format|
+            format.text { render plain: "Test email content" }
+          end
+        end
       end
 
       ActionMailer::Base.delivery_method = :test
@@ -145,6 +154,12 @@ describe ApplicationMailer do
         mail = described_class.test_email_to_with_cc("seller@gmail.com", "boss@gmail.com").message
 
         expect(mail.delivery_method.settings[:address]).to eq(RESEND_SMTP_ADDRESS)
+      end
+
+      it "redirects when the blocked recipient is in bcc" do
+        mail = described_class.test_email_to_with_bcc("seller@gmail.com", "archive@gmx.de").message
+
+        expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
       end
 
       it "leaves other recipients on the provider the Router chose" do

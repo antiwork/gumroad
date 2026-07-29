@@ -79,10 +79,13 @@ module MailerInfo
     mail.com
   ].freeze
 
-  # `to` accepts whatever a mailer passes as the `to:` header: a single email
-  # string (possibly in "Name <email>" form) or an array of them.
-  def force_sendgrid_for_recipients?(to)
-    Array(to).compact.any? do |recipient|
+  # `recipients` accepts a single email string (possibly in "Name <email>" form)
+  # or an array of them, taken from any header — callers pass a `to:` value, a
+  # single address, or the whole envelope recipient list (to + cc + bcc), since
+  # one blocked address anywhere on an SMTP send loses the message for everyone
+  # on it. See ApplicationMailer#redirect_united_internet_recipients_to_sendgrid!
+  def force_sendgrid_for_recipients?(recipients)
+    Array(recipients).compact.any? do |recipient|
       # strip BEFORE removing the bracket: " Name <user@web.de> " ends in a
       # space, so delete_suffix(">") would be a no-op and the domain would keep
       # its bracket and never match.
