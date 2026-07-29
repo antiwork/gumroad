@@ -56,7 +56,15 @@ class Payouts
         # "payouts were paused by the system", which is exactly the dead end gumroad-private#1478
         # exists to remove. Support still gets the note either way; only the seller's view of it
         # changes.
+        #
+        # Only while that explanation is still true of the account. Hiding a pause note is taking
+        # information away from the seller, so it is tied to the live PayPal block rather than to
+        # the wording of an old note: a seller who has since fixed their PayPal account, or been
+        # paid, still carries the explanation as their newest visible note, and keying only on that
+        # text would hide every future pause note from them — including pauses placed for reasons
+        # that have nothing to do with PayPal.
         keep_explanation_visible =
+          PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user) &&
           Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
 
         user.add_payout_note(content:, seller_visible: !keep_explanation_visible)

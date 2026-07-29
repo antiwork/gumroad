@@ -931,6 +931,8 @@ describe Payouts do
                    "Add a bank account in your payout settings.",
           seller_visible: true
         )
+        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
 
         expect do
@@ -955,6 +957,33 @@ describe Payouts do
         described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
 
         paused_note = seller.comments.with_type_payout_note.last
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
+      end
+
+      # Hiding a pause note takes information away from the seller, so it lasts only as long as the
+      # PayPal block does. The explanation stays their newest visible note forever once written, so
+      # keying on its wording alone would hide every future pause note — including pauses placed for
+      # reasons that have nothing to do with PayPal.
+      it "shows the paused-payout note again once the seller is no longer blocked by PayPal" do
+        seller = create(:compliant_user, payment_address: "stuck@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.add_payout_note(
+          content: "Your payout on July 1st, 2026 could not be sent because " \
+                   "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
+                   "Add a bank account in your payout settings.",
+          seller_visible: true
+        )
+        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        # The seller fixed it the way we asked them to.
+        create(:ach_account, user: seller)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(paused_note.content).to include("payouts on the account were paused by the system")
         expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
       end
     end

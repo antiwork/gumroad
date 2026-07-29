@@ -121,6 +121,26 @@ class PaypalPayoutProcessor
     terminal_failures.where("created_at > ?", last_completed_at).exists?
   end
 
+  # Whether this seller's payouts are stopped right now by a permanent PayPal refusal.
+  #
+  # The same question as the block above, asked about the seller rather than one address, for
+  # callers outside the PayPal payout path: the payout pipeline uses it to decide whether the
+  # explanation note is still the seller's live situation, and the one-time backfill uses it to
+  # decide who to write that note to. Keeping it in one place is the point — a second copy would
+  # drift from the block itself, and then we would be telling sellers things the code no longer
+  # does.
+  #
+  # A seller with a bank account on file is not stopped by this, even with a PayPal address still
+  # on record: the top of is_user_payable pays them by bank instead.
+  def self.terminal_failure_blocking_payouts?(user)
+    return false if user.active_bank_account.present?
+
+    payout_email = user.paypal_payout_email
+    return false if payout_email.blank?
+
+    terminal_failure_for_payout_email?(user, payout_email)
+  end
+
   def self.has_valid_payout_info?(user)
     payout_email = user.paypal_payout_email
 
