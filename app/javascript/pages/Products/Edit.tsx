@@ -4,6 +4,7 @@ import typia from "typia";
 
 import { useDropbox } from "$app/hooks/useDropbox";
 
+import { ProductEditBoundary } from "$app/components/ProductEdit/Boundary";
 import { LazyProductEditPage } from "$app/components/ProductEdit/load";
 import { ProductEditLoadingSkeleton } from "$app/components/ProductEdit/LoadingSkeleton";
 // Type-only: importing the editor's props must not pull its (large) module into this chunk.
@@ -22,10 +23,14 @@ export default function ProductEditInertiaPage() {
   // The editor's own code is loaded on demand (see ProductEdit/load), so this page can appear the
   // moment the server responds and show a skeleton of the editor while the rest arrives. The
   // Products list starts fetching that code while the seller is still reading it, so most of the
-  // time the editor is ready immediately and the skeleton never appears.
+  // time the editor is ready immediately and the skeleton never appears. If that code cannot be
+  // downloaded at all, the boundary shows a way out instead of letting the failed load blank the
+  // page.
   return (
-    <React.Suspense fallback={<ProductEditLoadingSkeleton title={editProps.product.name} />}>
-      <LazyProductEditPage {...editProps} />
-    </React.Suspense>
+    <ProductEditBoundary>
+      <React.Suspense fallback={<ProductEditLoadingSkeleton title={editProps.product.name} />}>
+        <LazyProductEditPage {...editProps} />
+      </React.Suspense>
+    </ProductEditBoundary>
   );
 }

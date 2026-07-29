@@ -9,11 +9,14 @@
 //     the product, rather than by the previous page.
 //
 // The editor itself is a large separate chunk, so both are load-order behaviour rather than
-// rendering behaviour, and neither is visible in a spec that only asserts the finished page.
+// rendering behaviour, and neither is visible in a spec that only asserts the finished page. That
+// chunk arrives over the network, so the tests below also cover what happens when it does not
+// arrive: one retry, then a visible way out rather than a blank page.
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ProductEditBoundary } from "$app/components/ProductEdit/Boundary";
 import { ProductEditLoadingSkeleton } from "$app/components/ProductEdit/LoadingSkeleton";
 
 // Count fetches of the editor's chunk without loading the real thing.
@@ -57,5 +60,72 @@ describe("product editor loading", () => {
 
     expect(screen.getByText("Loading product…")).toBeTruthy();
     expect(screen.queryByRole("heading")).toBeNull();
+  });
+
+  it("retries once when the editor's code fails to download, so a blip doesn't cost the seller the page", async () => {
+    const { fetchWithOneRetry } = await import("$app/components/ProductEdit/load");
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Failed to fetch dynamically imported module"))
+      .mockResolvedValueOnce("editor chunk");
+
+    // Pass 0 so the test does not sit through the real pause.
+    await expect(fetchWithOneRetry(fetch, 0)).resolves.toBe("editor chunk");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after the retry rather than fetching forever, and reports the original failure", async () => {
+    const { fetchWithOneRetry } = await import("$app/components/ProductEdit/load");
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Failed to fetch dynamically imported module"))
+      .mockRejectedValueOnce(new Error("retry also failed"));
+
+    await expect(fetchWithOneRetry(fetch, 0)).rejects.toThrow("Failed to fetch dynamically imported module");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry when the first fetch succeeds", async () => {
+    const { fetchWithOneRetry } = await import("$app/components/ProductEdit/load");
+    const fetch = vi.fn().mockResolvedValue("editor chunk");
+
+    await expect(fetchWithOneRetry(fetch, 0)).resolves.toBe("editor chunk");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a way out instead of a blank page when the editor cannot be loaded at all", () => {
+    // React logs the caught error; the boundary handling it is the point, so keep the output quiet.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const Exploding = () => {
+      throw new Error("Failed to fetch dynamically imported module");
+    };
+
+    render(
+      <ProductEditBoundary>
+        <Exploding />
+      </ProductEditBoundary>,
+    );
+
+    // Before this boundary existed, a failed chunk load unmounted the whole tree and the seller saw
+    // nothing at all — indistinguishable from the dead-click complaint behind this change.
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: /couldn’t open this product|couldn't open this product/u }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to products" })).toBeTruthy();
+
+    consoleError.mockRestore();
+  });
+
+  it("renders its children untouched while nothing is failing", () => {
+    render(
+      <ProductEditBoundary>
+        <div>editor</div>
+      </ProductEditBoundary>,
+    );
+
+    expect(screen.getByText("editor")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
