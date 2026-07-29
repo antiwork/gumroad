@@ -46,12 +46,13 @@
 #      account always has a user and reports CREATOR). So the SQL below excludes
 #      only one shape -- a Stripe account belonging to a seller -- which leaves a
 #      superset of Gumroad-held in every case except one that does not arise in
-#      normal operation: this codebase has no database foreign keys and soft-deletes
-#      users, but a Stripe account whose user row was HARD-deleted would resolve to
-#      GUMROAD in Ruby (holder_of_funds tests the association, not the column) while
-#      the SQL sees a non-nil user_id and excludes it. Everything the SQL does admit
-#      has holder_of_funds confirmed per row in Ruby, the same call the payout
-#      processors make, so the monitor cannot drift from them if that logic changes.
+#      normal operation: merchant_accounts carries no database foreign key on
+#      user_id and users are soft-deleted, but a Stripe account whose user row was
+#      HARD-deleted would resolve to GUMROAD in Ruby (holder_of_funds tests the
+#      association, not the column) while the SQL sees a non-nil user_id and
+#      excludes it. Everything the SQL does admit has holder_of_funds confirmed per
+#      row in Ruby, the same call the payout processors make, so the monitor cannot
+#      drift from them if that logic changes.
 #      Without that exclusion this would load every seller's foreign-currency
 #      balance: measured against production, 418 rows and rising, against 0 that are
 #      actually Gumroad-held. The join is a LEFT join because a balance with no
