@@ -272,6 +272,13 @@ class Onetime::ClearMistakenBuyerBlocks
     # strangers' purchases, and without a cap every one of their cards would become a clearable pair
     # and an OR clause in the query below. The newest few around the window are the only ones the
     # old rule could plausibly have picked.
+    #
+    # Keyed the same way the old rule keyed its own lookup, so the reconstruction can only see cards
+    # the old rule could have seen. Note the `purchaser_id = ?` half does nothing on a guest
+    # checkout: the value is NULL there, and a SQL comparison against NULL is never true, so the
+    # lookup narrows to the email alone rather than widening to every guest on the platform. Keep it
+    # that way — a NULL-safe comparison here (`<=>`) would match all of them at once, and a
+    # stranger's card block could then be lifted while the rule that wrote it still means it.
     def possible_recent_stripe_fingerprints(purchase)
       Purchase.with_stripe_fingerprint
               .where("purchaser_id = ? or email = ?", purchase.purchaser_id, purchase.email)

@@ -242,4 +242,27 @@ describe Onetime::ClearMistakenBuyerBlocks do
       expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
     end
   end
+
+  # Most buyers here checked out as guests, so the purchase has no account attached and the
+  # reconstruction query above looks up cards by `purchaser_id = <nil> or email = <theirs>`. In SQL
+  # a comparison against NULL is never true, so on a guest that first condition matches nothing and
+  # the lookup is the email alone — it does NOT quietly widen to every other guest on the platform.
+  # That is easy to misread, and getting it wrong would be serious: a stranger's card block could
+  # become a clearable pair and be lifted while the fraud rule that wrote it still means it. This
+  # spec pins the behaviour so a later change to the query cannot make the misreading true.
+  it "never reconstructs a card from an unrelated guest's purchase" do
+    expect(failed_purchase.purchaser_id).to be_nil
+
+    strangers_card = "unrelated-guest-card"
+    create(:purchase, email: "stranger@example.com", purchase_state: "successful",
+                      stripe_fingerprint: strangers_card, created_at: failed_purchase.created_at)
+    travel_to(failed_purchase.created_at) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: strangers_card)
+    end
+
+    described_class.new(dry_run: false).process
+
+    expect(PlatformBlock.active.pluck(:object_type, :object_value))
+      .to eq([[PlatformBlock::TYPES[:charge_processor_fingerprint], strangers_card]])
+  end
 end
