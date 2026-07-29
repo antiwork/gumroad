@@ -39,7 +39,13 @@ class ApplicationMailer < ActionMailer::Base
     # X-GUM-Email-Provider from the SMTP address we end up with.
     def redirect_united_internet_recipients_to_sendgrid!
       return if message.class == ActionMailer::Base::NullMail
-      return unless MailerInfo.force_sendgrid_for_recipients?(message.to)
+      # `destinations` is every envelope recipient — to, cc and bcc together.
+      # SMTP delivers one message to all of them over a single connection, so a
+      # blocked address anywhere in that list is enough to lose the whole send:
+      # AffiliateMailer, for instance, addresses the affiliate and copies the
+      # seller, and a seller at web.de would never learn their collaborator
+      # status changed.
+      return unless MailerInfo.force_sendgrid_for_recipients?(message.destinations)
 
       sendgrid_settings = MailerInfo::DeliveryMethod.sendgrid_equivalent_options(message.delivery_method.settings)
       return if sendgrid_settings.nil?
