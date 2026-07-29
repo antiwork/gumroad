@@ -40,6 +40,9 @@ module StripeMerchantAccountManager
   # whether waiting might help (directory miss) or whether they must re-enter the code (format).
   BANK_REJECTION_KIND_FORMAT = "format_rejected"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
+  # Prefix for the breadcrumb left when Stripe rejects account creation or an account update
+  # for a reason we do not handle specifically. See record_account_rejection_note below.
+  ACCOUNT_REJECTION_NOTE_PREFIX = "Stripe rejected payout setup"
 
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
@@ -123,6 +126,10 @@ module StripeMerchantAccountManager
 
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
   DEFAULT_RELATIONSHIP_TITLE = "CEO"
+
+  # Upper bound when listing an account's beneficial owners. Matches
+  # StripeBeneficialOwnersManager::PERSON_LIST_LIMIT and Stripe's own page maximum.
+  OWNER_LIST_LIMIT = 100
 
   def self.create_account(user, passphrase:, from_admin: false, notify: true)
     tos_agreement = nil
@@ -237,7 +244,32 @@ module StripeMerchantAccountManager
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
+    # A seller who has no connected account yet fails here, not in update_account: the settings
+    # page calls create_account once the bank account exists, and every rejection used to leave
+    # nothing behind except a merchant-account row created and soft-deleted in the same second.
+    # Record which field Stripe objected to unless the rejection already has its own dedicated
+    # breadcrumb above, so support can read the cause off the account instead of reproducing it.
+    record_account_rejection_note(user, e) if notify && undiagnosed_stripe_rejection?(e)
     raise
+  end
+
+  # True for Stripe rejections that would otherwise leave no trace. Postal-code and bank-account
+  # rejections are excluded because they each already record a more specific note (and the
+  # postal-code one drives the weekly automatic retry), so adding a second note for them would
+  # only duplicate what support already sees.
+  #
+  # Only InvalidRequestError counts, matching the update path in UpdateUserComplianceInfo. That is
+  # the class Stripe uses when it actually objected to something the seller submitted, which is the
+  # only case where "Stripe rejected your payout setup" is a true statement. The other StripeError
+  # subclasses are our problem, not the seller's: APIConnectionError, RateLimitError and
+  # AuthenticationError mean the request never got a verdict, so recording a rejection note for
+  # them would tell support a transient outage was the seller's data being refused and send them
+  # looking for a bad field that does not exist.
+  private_class_method
+  def self.undiagnosed_stripe_rejection?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    !postal_code_invalid_error?(error) && !bank_account_invalid_error?(error)
   end
 
   def self.delete_account(merchant_account)
@@ -327,6 +359,14 @@ module StripeMerchantAccountManager
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
     entity_key = user_compliance_info.is_business? ? :company : :individual
+    switching_to_business = user_compliance_info.is_business? && last_user_compliance_info&.is_individual?
+
+    # Read the ownership Stripe already has on file BEFORE the account update below, because that
+    # update rewrites the metadata marker we use to detect the switch (see last_user_compliance_info
+    # above). If this read fails after the marker has moved, every later retry sees "already a
+    # business" and skips seeding the representative entirely, leaving the seller stuck with a
+    # company whose representative owns nothing — the state this whole code path exists to avoid.
+    unclaimed_percent_ownership = switching_to_business ? unclaimed_percent_ownership_on_stripe(stripe_account) : nil
 
     # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
     # diffed out and Stripe never re-validates it. Re-add the address from the current attributes so a
@@ -339,7 +379,7 @@ module StripeMerchantAccountManager
 
     person_address_submitted = false
     if user_compliance_info.is_business?
-      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
+      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, unclaimed_percent_ownership:)
     end
 
     if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
@@ -350,7 +390,7 @@ module StripeMerchantAccountManager
     raise
   end
 
-  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false)
+  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false, unclaimed_percent_ownership: nil)
     stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
@@ -360,11 +400,21 @@ module StripeMerchantAccountManager
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
     if last_user_compliance_info&.is_individual? && user_compliance_info.is_business?
-      current_attributes.deep_merge!(relationship: {
-                                       owner: true,
-                                       title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE,
-                                       percent_ownership: 100
-                                     })
+      # Switching a seller from individual to business normally means one person who owns the whole
+      # company, so the representative is seeded as a 100% owner. That is wrong whenever the Stripe
+      # account already has beneficial owners on it — someone the seller added under Settings →
+      # Payments, or people left over from an earlier business registration. Stripe rejects the
+      # entire account update with "The total combined ownership of the company would exceed 100
+      # percent" when the representative's share plus theirs goes over 100, so the switch fails
+      # outright and the seller is left mid-migration. Claim only the ownership nobody else holds,
+      # and claim none at all when the existing owners already account for the whole company.
+      relationship = { title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE }
+      unclaimed = unclaimed_percent_ownership || unclaimed_percent_ownership_on_stripe(stripe_account)
+      if unclaimed.positive?
+        relationship[:owner] = true
+        relationship[:percent_ownership] = unclaimed
+      end
+      current_attributes.deep_merge!(relationship:)
     end
     diff_attributes = current_attributes
     last_attributes = person_hash(last_user_compliance_info, passphrase)
@@ -385,8 +435,58 @@ module StripeMerchantAccountManager
     # actually re-validates a previously rejected representative postal code.
     force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
 
-    Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    begin
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    rescue Stripe::InvalidRequestError => e
+      # The unclaimed share was read before the account update above, so a beneficial owner added or
+      # enlarged in the window between that read and this call makes our number stale and too large,
+      # and Stripe rejects the whole person update. That is the same seller-visible breakage this
+      # method exists to prevent, so re-read the live ownership and try once more rather than letting
+      # a few seconds of bad luck strand the seller mid-migration. Only retry when we actually sent an
+      # ownership share and the retry would send a smaller one, so this can never loop.
+      raise unless combined_ownership_exceeded_error?(e) && diff_attributes.dig(:relationship, :percent_ownership).present?
+
+      fresh_unclaimed = unclaimed_percent_ownership_on_stripe(stripe_account)
+      raise if fresh_unclaimed >= diff_attributes[:relationship][:percent_ownership]
+
+      if fresh_unclaimed.positive?
+        diff_attributes[:relationship][:percent_ownership] = fresh_unclaimed
+      else
+        # The other owners now account for the entire company, so the representative claims nothing.
+        diff_attributes[:relationship].delete(:percent_ownership)
+        diff_attributes[:relationship].delete(:owner)
+      end
+      Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
+    end
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+  end
+
+  private_class_method
+  # Stripe rejects a person update whose ownership share would push the company's combined ownership
+  # over 100%. It surfaces as an InvalidRequestError on the percent_ownership param rather than a
+  # dedicated error code, so match on the param plus the message.
+  def self.combined_ownership_exceeded_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    error.message.to_s.match?(/combined ownership/i) ||
+      error.try(:param).to_s.include?("percent_ownership")
+  end
+
+  private_class_method
+  # How much of the company nobody has claimed yet, ignoring the representative's own recorded share
+  # so a partially-completed earlier attempt does not count against them on a retry. Rounds DOWN:
+  # under-claiming by a hundredth of a percent is harmless, whereas rounding up past what is actually
+  # free is how Stripe's "combined ownership would exceed 100 percent" rejection happens, and our own
+  # beneficial-owner form accepts shares with more than two decimals.
+  def self.unclaimed_percent_ownership_on_stripe(stripe_account)
+    persons = Stripe::Account.list_persons(stripe_account.id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
+    # Read through to_h: a person Stripe returns without a relationship object at all raises
+    # NoMethodError on a plain `person.relationship`, and this must never be the thing that breaks
+    # a payout-settings save.
+    relationships = persons.filter_map { |person| person.to_h[:relationship] }
+    claimed = relationships.reject { |relationship| relationship[:representative] }
+                           .sum { |relationship| relationship[:percent_ownership].to_f }
+    [(100 - claimed).floor(2), 0].max
   end
 
   private_class_method
@@ -709,6 +809,42 @@ module StripeMerchantAccountManager
     )
   rescue => e
     Rails.logger.error "Failed to record postal-code payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # Leave a private breadcrumb naming exactly which field Stripe rejected when payout setup
+  # fails for a reason we do not handle specifically.
+  #
+  # Why this exists: when Stripe refuses to create or update a connected account, the caller
+  # (UpdateUserComplianceInfo) shows the seller Stripe's message and rolls the half-built
+  # merchant account back. Nothing about the rejection was kept, so a seller stuck in this
+  # state was undiagnosable from support tooling — the only evidence was a row created and
+  # soft-deleted in the same second, with no error code and no indication of which field was
+  # at fault. Support then has to guess, and the seller's own description of the error is
+  # usually a paraphrase that points at the wrong field.
+  #
+  # Stripe puts the useful part in `code` and `param` rather than the message, so both are
+  # recorded. `param` is the field name Stripe objected to; that single value is normally
+  # enough to identify the problem without reproducing the failure.
+  #
+  # Not seller-visible: the seller already saw Stripe's message, and the raw parameter path
+  # is internal vocabulary that would confuse more than it helps.
+  def self.record_account_rejection_note(user, error)
+    return if user.blank?
+
+    code = error.respond_to?(:code) ? error.code : nil
+    param = error.respond_to?(:param) ? error.param : nil
+    details = ["code=#{code || 'unknown'}"]
+    details << "param=#{param}" if param.present?
+
+    user.add_payout_note(
+      content: "#{ACCOUNT_REJECTION_NOTE_PREFIX}: #{details.join(' ')} — #{error.message.to_s.truncate(300)}",
+      seller_visible: false
+    )
+  rescue => e
+    # A missing breadcrumb must never turn into a second failure on top of the original
+    # rejection: the seller's error message matters more than our diagnostics.
+    Rails.logger.error "Failed to record Stripe account-rejection payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
 

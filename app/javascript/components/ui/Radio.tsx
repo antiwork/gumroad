@@ -18,7 +18,7 @@ export const Radio = React.forwardRef<
         "text-base leading-snug",
         "shrink-0 cursor-pointer",
         "disabled:cursor-not-allowed disabled:opacity-30",
-        "checked:bg-accent",
+        "checked:bg-accent-with-text",
         "rounded-full",
         "peer",
         className,

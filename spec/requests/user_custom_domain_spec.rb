@@ -8,7 +8,7 @@ describe "UserCustomDomainScenario", type: :system, js: true do
   before do
     allow(Resolv::DNS).to receive_message_chain(:new, :getresources).and_return([double(name: "domains.gumroad.com")])
     Link.__elasticsearch__.create_index!(force: true)
-    @user = create(:user, username: "test")
+    @user = create(:user, username: "test", user_risk_state: "compliant")
     section = create(:seller_profile_products_section, seller: @user)
     create(:seller_profile, seller: @user, json_data: { tabs: [{ name: "", sections: [section.id] }] })
     @custom_domain = CustomDomain.new

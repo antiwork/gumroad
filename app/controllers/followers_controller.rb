@@ -5,6 +5,7 @@ class FollowersController < ApplicationController
   include CustomDomainConfig
   include Pagy::Backend
   include PageMeta::Post
+  include ValidateRecaptcha
 
   PUBLIC_ACTIONS = %i[new create from_embed_form confirm cancel].freeze
   before_action :authenticate_user!, except: PUBLIC_ACTIONS
@@ -45,6 +46,15 @@ class FollowersController < ApplicationController
   end
 
   def create
+    if follow_needs_captcha?(followed_user_from_params)
+      message = ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
+      respond_to do |format|
+        format.html { redirect_to custom_domain_subscribe_path, alert: message, status: :see_other }
+        format.json { render json: { success: false, message: }, status: :unprocessable_entity }
+      end
+      return
+    end
+
     follower = create_follower(params)
 
     respond_to do |format|
@@ -81,11 +91,36 @@ class FollowersController < ApplicationController
   # raising UnknownFormat). Both formats 404 on the same predicate: a seller
   # that doesn't resolve to a public profile.
   def from_embed_form
+    followed_user = followed_user_from_params
+    if FollowRecaptcha.required?(followed_user)
+      # The embed form is copy-pasted HTML living on someone else's website, so
+      # there is no CAPTCHA there for the visitor to solve — which is also why
+      # this endpoint is the one an abuser would script. For a seller we haven't
+      # reviewed, refuse the follow outright and point the visitor at the
+      # seller's own subscribe page, which does render a challenge, so a real
+      # person can still finish subscribing in one more click.
+      subscribe_url = custom_domain_subscribe_url(host: followed_user.subdomain_with_protocol) if followed_user.subdomain.present?
+      # name_or_username is never blank: User#username falls back to the account's
+      # external id when the column is empty, so a seller with no name and no
+      # claimed profile URL still names themselves by id here.
+      message = "Please subscribe from #{followed_user.name_or_username}'s subscribe page so we can confirm you're not a bot."
+      # The JSON callers render the message as plain text with no link element:
+      # the custom-HTML follow bridge relays it into a sandboxed page that can't
+      # be handed markup. Put the destination in the sentence for them, or the
+      # visitor is told to go somewhere without being told where.
+      if request.format.json?
+        message = "#{message} #{subscribe_url}" if subscribe_url.present?
+        return render json: { success: false, message: }, status: :unprocessable_entity
+      end
+
+      return render inertia: "Followers/FromEmbedForm", props: { success: false, message:, subscribe_url: }
+    end
+
     @follower = create_follower(params, source: Follower::From::EMBED_FORM)
 
     if @follower.nil? || @follower.errors.present?
       message = @follower&.errors&.full_messages&.to_sentence || "Something went wrong. Please try to follow the creator again."
-      user = User.find_by_external_id(params[:seller_id])
+      user = followed_user
       if request.format.json?
         return e404_json unless user.try(:username)
         return render json: { success: false, message: }, status: :unprocessable_entity
@@ -132,6 +167,28 @@ class FollowersController < ApplicationController
   end
 
   private
+    # True when this follow submission had to pass a CAPTCHA and didn't.
+    #
+    # Both public entry points check it, because a challenge on only one of them
+    # is no challenge at all: the two endpoints take the same parameters, so
+    # anyone scripting /follow would simply script /follow_from_embed_form
+    # instead.
+    def follow_needs_captcha?(followed_user)
+      return false unless FollowRecaptcha.required?(followed_user)
+
+      # Hostname-verifying variant, same as checkout. A site key is public, so
+      # without it a token minted on a page the attacker controls verifies fine
+      # here — which is the token-farming lane this gate exists to close. The
+      # allowlist (`hostname_allowed?`) already covers every host a follow form
+      # legitimately renders on: gumroad.com, seller subdomains, and registered
+      # custom domains.
+      !valid_recaptcha_response_and_hostname?(site_key: FollowRecaptcha.site_key, surface: FollowRecaptcha::SURFACE)
+    end
+
+    def followed_user_from_params
+      @followed_user_from_params ||= User.find_by_external_id(params[:seller_id])
+    end
+
     # One home for the visitor-facing outcome copy, shared by #create and
     # #from_embed_form so the subscribe page, the third-party embed form, and
     # the custom-page follow bridge can never drift apart.
@@ -141,10 +198,23 @@ class FollowersController < ApplicationController
         "Check your inbox to confirm your follow request."
     end
 
+    # Reuses the memoized lookup rather than re-querying: both actions have
+    # already resolved the seller to decide whether a CAPTCHA was needed.
     def create_follower(params, source: nil)
-      followed_user = User.find_by_external_id(params[:seller_id])
-
-      return if followed_user.nil?
+      # Treat a suspended or deleted seller exactly like an unknown one. Creating
+      # a follow makes Gumroad email a "Please confirm your follow request"
+      # message to whatever address was posted here — and this is a public,
+      # unauthenticated endpoint, so for a banned seller that turns our own
+      # sending domain into a relay for mail they can no longer legitimately
+      # trigger (a phishing ring abused exactly this after its accounts were
+      # suspended). Follower::CreateService applies the same `account_active?`
+      # check; it is duplicated here so the request is rejected at the first
+      # entry point and so callers can't reach the service for an inactive
+      # seller at all. Falling through to the nil path (rather than a dedicated
+      # error) keeps the response identical to an unknown seller_id, so the
+      # endpoint doesn't disclose whether an account is suspended.
+      followed_user = followed_user_from_params
+      return if followed_user.nil? || !followed_user.account_active?
 
       follower_email = params[:email]
       follower_user_id = User.find_by(email: follower_email)&.id
