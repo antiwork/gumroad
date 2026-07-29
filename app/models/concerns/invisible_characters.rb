@@ -85,4 +85,39 @@ module InvisibleCharacters
     return value if value.nil?
     remove_from_email(value).strip
   end
+
+  # Every character this module treats as invisible, as single-character strings. ALL is the
+  # ordered list behind email_variants below; ANY is the same set as a regexp.
+  ALL = ([
+    "\u00AD", "\u200B", "\u200E", "\u200F", "\u2060", "\uFEFF"
+  ] + ["\u00A0", "\u1680", "\u202F", "\u205F", "\u3000"] + (0x2000..0x200A).map { [_1].pack("U") }).uniq.freeze
+
+  # The longest cleaned address email_variants will expand. An address needs one literal per
+  # (position x invisible character), so the work grows with its length; past this length we stop
+  # expanding rather than build an unbounded query. Real addresses are far shorter than this —
+  # the longest cleaned address among the affected production rows is 33 characters.
+  MAX_VARIANT_LENGTH = 100
+
+  # Every address that differs from `cleaned` by exactly ONE invisible character, plus `cleaned`
+  # itself.
+  #
+  # This exists because MySQL cannot find those rows for us. A lookup can only name literals it
+  # can construct, and knowing the mailbox an address points at does not tell us where somebody
+  # else's invisible character sat inside it, so the variants have to be enumerated. Collation
+  # does not cover the difference either: only SOME of these characters are ignorable under
+  # utf8mb4_unicode_ci (measured — U+200B, U+200E, U+200F, U+2060 and U+FEFF are; U+00AD and
+  # every Unicode space are NOT), so a plain literal reaches some variants and misses others.
+  #
+  # Returns nil when the address is too long to expand or is blank, so a caller can tell "no
+  # variant owns this" apart from "I did not look".
+  def email_variants(cleaned)
+    cleaned = cleaned.to_s
+    return nil if cleaned.blank? || cleaned.length > MAX_VARIANT_LENGTH
+
+    variants = [cleaned]
+    (0..cleaned.length).each do |position|
+      ALL.each { variants << cleaned.dup.insert(position, _1) }
+    end
+    variants.uniq
+  end
 end

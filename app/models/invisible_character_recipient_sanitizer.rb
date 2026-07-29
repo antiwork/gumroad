@@ -55,32 +55,44 @@ class InvisibleCharacterRecipientSanitizer
   private_class_method :sanitized_recipient
 
   # True when one account stores the address exactly as it was addressed here and a DIFFERENT
-  # account stores the cleaned form.
+  # account stores the same mailbox — either the cleaned form, or the cleaned form with some other
+  # invisible character sitting inside it.
   def self.owned_by_a_different_account?(address, normalized)
-    # One query returns all rows the database considers equal to either form: the email column
-    # collates as utf8mb4_unicode_ci, which treats the format characters here as ignorable, so
-    # `WHERE email = '<RLM>buyer@example.com'` can also match `buyer@example.com`,
-    # `Buyer@example.com`, and another format-character variant. The database therefore cannot
-    # tell those variants apart, and the rows have to be compared here in Ruby, byte for byte.
+    # The addresses to ask the database about are the cleaned form plus every single-invisible-
+    # character variant of it, because the row we are protecting against may hold ANY of them.
     #
-    # Both variants are named in the query as literals, so each is found by matching itself
-    # exactly, whether or not the collation considers the two equal. A Unicode space is NOT
-    # collation-ignorable the way a format character is (`buyer\u00A0@example.com` does not compare
-    # equal to `buyer@example.com` in MySQL), but that does not matter here: the dirty form is the
-    # first literal and the cleaned form is the second, so a Unicode-space pair is detected just as
-    # a format-character pair is. Collation only widens what comes back; it is never what makes a
-    # variant visible.
+    # Naming only the addressed value and its cleaned form is not enough, and this is the part
+    # that is easy to get wrong: the email column collates as utf8mb4_unicode_ci, which treats
+    # SOME of these characters as ignorable but not others. Measured on MySQL 8.0:
+    # '<RLM>buyer@example.com' = 'buyer@example.com' is TRUE, while
+    # 'buyer<NBSP>@example.com' = 'buyer@example.com' is FALSE, and a soft hyphen behaves like the
+    # space rather than like the mark. So a two-literal lookup silently reaches an account holding
+    # one class of invisible character and silently misses an account holding the other — and
+    # missing it is what rewrites this message into that person's mailbox.
     #
-    # The remaining hole needs BOTH accounts to store a dirty address, from the two different
-    # classes: this account stored with a format character (`<RLM>buyer@example.com`, cleaning to
-    # `buyer@example.com`) while the other account stored the SAME mailbox with a Unicode space
-    # (`buyer\u00A0@example.com`). Neither literal in the query matches that row and the collation
-    # does not reach it either, so cleaning goes ahead and the message lands in the other person's
-    # mailbox. Closing it needs a stored normalized-email column to look up, because the other
-    # row's dirty form cannot be reconstructed from this one — we know the mailbox the cleaned
-    # address points at, not where somebody else's invisible character sat inside it.
-    rows = User.where(email: [address, normalized]).select(:id, :email).to_a
-    rows.any? { _1.email == address } && rows.any? { _1.email != address }
+    # Enumerating the variants removes the collation from the reasoning altogether: every form we
+    # care about is named as its own literal and found by matching itself. The query stays a range
+    # scan on index_users_on_email (measured against production: 902 literals for a 40-character
+    # address, ~3 ms warm), and it only runs for an address that actually carries an invisible
+    # character, which is rare.
+    candidates = InvisibleCharacters.email_variants(normalized)
+
+    # email_variants declines addresses longer than it will expand. Nothing has been ruled out in
+    # that case, so fail closed and leave the recipient as addressed: the message bounces, which
+    # is what happened before this interceptor existed, rather than possibly landing in somebody
+    # else's mailbox.
+    return true if candidates.nil?
+
+    # Deleted accounts count. Delivery goes to a real external mailbox, not to a Gumroad account,
+    # so a closed account that once owned this address is still evidence that somebody else may
+    # read that mailbox.
+    rows = User.where(email: candidates + [address]).select(:id, :email).to_a
+
+    # Compared in Ruby, byte for byte, because the collation cannot tell the variants apart and
+    # would otherwise let a row that merely compares equal stand in for the addressed account.
+    return false unless rows.any? { _1.email == address }
+
+    rows.any? { _1.email != address }
   end
   private_class_method :owned_by_a_different_account?
 end

@@ -30,12 +30,17 @@ class User::PasswordsController < Devise::PasswordsController
     # because mailing a reset link to the wrong one hands an account to someone else.
     #
     # The database cannot tell them apart on its own. The email column collates as
-    # utf8mb4_unicode_ci, which treats U+200F (and the other format characters here) as
+    # utf8mb4_unicode_ci, which treats U+200F and the other bidirectional/zero-width marks as
     # ignorable, so `WHERE email = '<RLM>buyer@example.com'` matches the plain
     # `buyer@example.com` row too. Ordering the candidates, or querying them one at a time, would
     # therefore still pick a row arbitrarily. So the rows are compared here in Ruby, byte for
     # byte: whoever stored the address exactly as it was submitted wins, then whoever stored the
     # cleaned form.
+    #
+    # Not every invisible character is ignorable, though — a Unicode space is not, and neither is
+    # a soft hyphen despite sitting in the same block as the marks (both measured on MySQL 8.0).
+    # Those variants only ever come back by matching themselves, which is why the exact-submitted
+    # preference below is tested for both classes rather than just the marks.
     normalized = InvisibleCharacters.normalize_email(email)
     candidates = [email, normalized].compact.uniq
                                     .select { EmailFormatValidator.deliverable?(_1) }

@@ -173,22 +173,58 @@ describe InvisibleCharacterRecipientSanitizer do
       expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
     end
 
-    # The one case this guard genuinely does NOT catch, pinned so it is a known, documented gap
-    # rather than something a later reader assumes is covered. It needs BOTH accounts to store a
-    # dirty address, from the two different classes: this one with a format character, the other
-    # with a Unicode space on the same mailbox. The query names this account's stored address and
-    # its cleaned form, and the other row is neither of those, so nothing sees it.
-    #
-    # It is left open rather than papered over because the other row's dirty form cannot be
-    # derived from this one — we know which mailbox the cleaned address points at, not where
-    # somebody else's invisible character sat inside it. Closing it needs a stored normalized-email
-    # column to look up. This example exists so that column's eventual arrival has a failing test
-    # to turn green, and so nobody reports it as a fresh finding.
-    it "is a known gap when both accounts store different classes of invisible character" do
+    # The shape that a two-literal lookup used to miss. It needs BOTH accounts to store a dirty
+    # address from the two different classes: this one with a format character, the other with a
+    # Unicode space on the same mailbox. Neither account's stored value is the other's, and the
+    # collation does not bridge them either (a format character is ignorable under
+    # utf8mb4_unicode_ci, a Unicode space is not), so the guard has to name every
+    # single-invisible-character variant of the cleaned address to see the other row at all.
+    it "leaves the recipient alone when the other account stores a different class of invisible character" do
       legacy = stored_as("\u200Fbuyer@example.com")
-      stored_as("buyer\u00A0@example.com")
+      other = stored_as("buyer\u00A0@example.com")
 
-      expect(deliver_to(legacy.email).to).to eq ["buyer@example.com"]
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "buyer\u00A0@example.com"
+    end
+
+    # And the same pair the other way round, because the two classes reach the lookup by different
+    # routes and only one direction was ever exercised.
+    it "leaves the recipient alone when this account stores the Unicode space and the other a format character" do
+      legacy = stored_as("buyer\u00A0@example.com")
+      other = stored_as("\u200Fbuyer@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["buyer\u00A0@example.com"]
+      expect(other.reload.email).to eq "\u200Fbuyer@example.com"
+    end
+
+    # Every cross-class combination, so nobody has to trust that two hand-picked characters stand
+    # in for the whole set. A soft hyphen is worth the attention: it sits in the same Unicode block
+    # as the marks and reads like a format character, but MySQL does NOT treat it as ignorable
+    # (measured), so it behaves like a Unicode space for lookup purposes.
+    it "leaves the recipient alone for every pair of invisible characters" do
+      InvisibleCharacters::ALL.each_with_index do |mine, index|
+        theirs = InvisibleCharacters::ALL[(index + 1) % InvisibleCharacters::ALL.length]
+        clean = "pair#{index}box@example.com"
+        dirty = "pair#{index}#{mine}box@example.com"
+        legacy = stored_as(dirty)
+        stored_as(clean.dup.insert(4, theirs))
+
+        expect(deliver_to(legacy.email).to).to(
+          eq([dirty]),
+          "expected an address holding U+#{mine.codepoints.first.to_s(16).upcase.rjust(4, '0')} to be left " \
+          "alone, because another account holds the same mailbox with U+#{theirs.codepoints.first.to_s(16).upcase.rjust(4, '0')}"
+        )
+      end
+    end
+
+    # An address too long to enumerate variants for is the one case the guard cannot answer. It
+    # fails closed: the message is left addressed as it was and bounces, rather than being rewritten
+    # to an address whose ownership was never checked.
+    it "leaves the recipient alone when the address is too long to check ownership for" do
+      long = "#{'a' * InvisibleCharacters::MAX_VARIANT_LENGTH}@example.com"
+      legacy = stored_as("\u200F#{long}")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200F#{long}"]
     end
   end
 
