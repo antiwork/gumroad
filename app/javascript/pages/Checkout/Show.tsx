@@ -795,11 +795,16 @@ const CheckoutIndexPage = () => {
   // than one closed over stale cart data.
   const saveCartRef = React.useRef(saveCart);
   saveCartRef.current = saveCart;
+  // The lane key of the cart as it stands right now, for saves to compare their answer against.
+  // A ref for the same reason as the save above: a debounce or a recovery reads it outside the
+  // render that scheduled it.
+  const currentPaymentLaneCartKeyRef = React.useRef("");
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     saveCartRef.current(
       buildCartSaveRefreshCallbacks({
         save: (callbacks) => saveCartRef.current(callbacks),
+        currentCartKey: () => currentPaymentLaneCartKeyRef.current,
         // The one path that lifts the hold on Pay. The save that asked is the only place that knows
         // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
         // Re-validated here because it is read straight off the response rather than out of the
@@ -838,6 +843,7 @@ const CheckoutIndexPage = () => {
   // choose the lane: which seller each item belongs to, the price, whether it recurs or pays in
   // installments, preorder/free-trial status, the native type, and the listed currency.
   const paymentLaneCartKey = paymentLaneCartKeyFor(cartForm.data.cart);
+  currentPaymentLaneCartKeyRef.current = paymentLaneCartKey;
   useOnChange(() => {
     // Skip the invalidation when acceptOffer already made it for this exact cart. Accepting an
     // offer changes the cart, so this passive effect fires for that change too — but acceptOffer

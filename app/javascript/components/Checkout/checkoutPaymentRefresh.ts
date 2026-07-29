@@ -27,6 +27,13 @@
 // and its `onFinish` reports `interrupted`, so it neither adopts a stale configuration nor starts a
 // recovery for a hold the newer save now owns.
 //
+// Supersession alone is not enough, though, because saves are debounced: an edit made while a save
+// is in flight places its hold immediately but does not send its save until the debounce expires.
+// A response arriving inside that window has nothing to have interrupted it, so `interrupted` is
+// false even though the answer is for the previous cart. That is why every save also carries the
+// lane key of the cart it sent and re-reads the current one before adopting: the key, not the
+// visit's flags, is what says whether this answer still describes what the buyer is looking at.
+//
 // Adoption is the other half, and it belongs here rather than in a watcher on the page's props. A
 // response arriving is not by itself evidence that the configuration it carries describes the cart
 // the buyer is looking at: the checkout controller answers a rejected edit with a redirect that
@@ -131,23 +138,31 @@ export const createLaneInvalidationSuppressor = () => {
  * got back may be adopted and, when it may not, whether to ask again.
  *
  * `onDelivered` receives a configuration only when this save established that it describes the cart
- * the save sent: the server did not reject the edit, and no newer edit has displaced this save. It
- * is the only path that lifts the hold on Pay. `save` re-issues the cart PATCH with a fresh set of
- * these callbacks, and `onUnrecoverable` reports that the hold could not be lifted — the buyer has
- * to reload the page. `recoveriesLeft` bounds the chain so an outage cannot retry forever; it is an
- * internal detail of the chain rather than something callers are expected to pass.
+ * the save sent: the server did not reject the edit, and the buyer has not edited the cart since —
+ * whether by a newer save displacing this one or by an edit still inside its debounce window. It
+ * is the only path that lifts the hold on Pay. `currentCartKey` is read once when the callbacks are
+ * built, to record which cart this save speaks for, and again when it finishes; a change between
+ * the two means the answer is for a cart the buyer has moved on from. `save` re-issues the cart
+ * PATCH with a fresh set of these callbacks, and `onUnrecoverable` reports that the hold could not
+ * be lifted — the buyer has to reload the page. `recoveriesLeft` bounds the chain so an outage
+ * cannot retry forever; it is an internal detail of the chain rather than something callers are
+ * expected to pass.
  */
 export const buildCartSaveRefreshCallbacks = ({
   save,
+  currentCartKey,
   onDelivered,
   onUnrecoverable,
   recoveriesLeft = 1,
 }: {
   save: (callbacks: CartSaveCallbacks) => void;
+  currentCartKey: () => string;
   onDelivered: (checkoutPayment: unknown) => void;
   onUnrecoverable: (message: string) => void;
   recoveriesLeft?: number;
 }): CartSaveCallbacks => {
+  // The cart this save speaks for. Captured at build time, which is when the request goes out.
+  const sentCartKey = currentCartKey();
   // Read off the response rather than inferred from which callback fired: Inertia calls onError
   // only for a valid Inertia response carrying a props.errors payload, so "onError did not run"
   // does not mean a configuration arrived.
@@ -172,6 +187,13 @@ export const buildCartSaveRefreshCallbacks = ({
       // race two saves and let this older one's answer be adopted for the newer one's cart.
       if (visit?.cancelled === true || visit?.interrupted === true) return;
 
+      // The buyer edited the cart while this save was in flight and the newer save has not gone out
+      // yet, so there was nothing to interrupt this one. The hold that edit placed belongs to the
+      // debounced save still to come; this answer describes the cart from before it. Recovering
+      // here would be wrong for the same reason as adopting: the pending save is already going to
+      // ask on the current cart's behalf, and a recovery would race it.
+      if (currentCartKey() !== sentCartKey) return;
+
       if (delivered) {
         onDelivered(delivered.checkoutPayment);
         return;
@@ -184,7 +206,15 @@ export const buildCartSaveRefreshCallbacks = ({
         return;
       }
 
-      save(buildCartSaveRefreshCallbacks({ save, onDelivered, onUnrecoverable, recoveriesLeft: recoveriesLeft - 1 }));
+      save(
+        buildCartSaveRefreshCallbacks({
+          save,
+          currentCartKey,
+          onDelivered,
+          onUnrecoverable,
+          recoveriesLeft: recoveriesLeft - 1,
+        }),
+      );
     },
   };
 };
