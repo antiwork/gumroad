@@ -1321,14 +1321,14 @@ describe UrlRedirectsController, inertia: true do
         end
 
         it "sets the correct source urls for all video attachments of an installment and returns the index of the file that should be played on load" do
-          pdf_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf")
-          video_file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true, display_name: "Chapter 2", position: 2)
-          video_file_2 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4", position: 1)
+          installment = create(:installment)
+          pdf_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf")
+          video_file_1 = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true, display_name: "Chapter 2", position: 2)
+          video_file_2 = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4", position: 1)
           subtitle_file_en = create(:subtitle_file, language: "English", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/english.srt", product_file: video_file_2)
           subtitle_file_fr = create(:subtitle_file, language: "Français", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/french.srt", product_file: video_file_2)
-          video_file_3 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter_2_no_spaces.mp4", display_name: "Chapter 2 No Spaces", position: 0)
-          mp3_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
-          installment = create(:installment)
+          video_file_3 = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter_2_no_spaces.mp4", display_name: "Chapter 2 No Spaces", position: 0)
+          mp3_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
           installment.product_files << video_file_1 << video_file_2 << pdf_file << video_file_3 << mp3_file
           url_redirect = create(:installment_url_redirect, installment:)
           get :stream, params: { id: url_redirect.token, product_file_id: video_file_3.external_id }
@@ -1655,7 +1655,7 @@ describe UrlRedirectsController, inertia: true do
 
       it "assigns @destination with nil value for an installment" do
         installment = create(:installment)
-        installment.product_files << create(:product_file)
+        installment.product_files << create(:product_file, link: nil, installment:)
         url_redirect = create(:installment_url_redirect, installment:)
 
         get :confirm_page, params: { id: url_redirect.token }

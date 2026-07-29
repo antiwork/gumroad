@@ -57,7 +57,7 @@ describe SendLastPostJob do
     context "when the post has files" do
       before do
         product_post.update!(published_at: 1.minute.ago)
-        product_post.product_files << create(:pdf_product_file)
+        product_post.product_files << create(:pdf_product_file, link: nil, installment: product_post)
       end
 
       it "creates and uses UrlRedirect" do
