@@ -65,7 +65,15 @@ describe UpdateSalesRelatedProductsInfosJob do
     end
 
     context "when the buyer buys more products between the sale and its reversal" do
-      it "decrements the same pairs the sale incremented" do
+      # Pins the drift the cap introduces, rather than claiming it away. A reversal recomputes
+      # "most recent N" at reversal time, so pairs the sale counted can fall out of the window
+      # and keep their +1, while pairs that moved in are decremented (floored at 0 for a row
+      # the reversal itself creates). Only reachable for buyers past the limit.
+      #
+      # Anchoring the window to the purchase id was tried and reverted: it made the reversal
+      # miss any related purchase refunded in the meantime, which is NOT limit-gated and so
+      # drifted far more pairs than it fixed.
+      it "can leave a displaced pair over-counted" do
         stub_const("#{described_class}::RELATED_PRODUCTS_PER_PURCHASE_LIMIT", 2)
 
         first = create(:product, user: seller)
@@ -76,6 +84,9 @@ describe UpdateSalesRelatedProductsInfosJob do
         sale = create(:purchase, link: product1, email: "shared@gumroad.com")
         described_class.new.perform(sale.id)
 
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, first.id).sales_count).to eq(1)
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, second.id).sales_count).to eq(1)
+
         # The buyer keeps shopping, pushing `first` and `second` out of the top 2.
         later_a = create(:product, user: seller)
         later_b = create(:product, user: seller)
@@ -84,8 +95,9 @@ describe UpdateSalesRelatedProductsInfosJob do
 
         described_class.new.perform(sale.id, false)
 
-        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, second.id).sales_count).to eq(0)
-        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, first.id).sales_count).to eq(0)
+        # Displaced pairs keep the sale's increment; the pairs now in the window floor at 0.
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, first.id).sales_count).to eq(1)
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, second.id).sales_count).to eq(1)
         expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, later_a.id).sales_count).to eq(0)
         expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, later_b.id).sales_count).to eq(0)
       end
