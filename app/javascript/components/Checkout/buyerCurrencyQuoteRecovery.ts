@@ -56,6 +56,13 @@ export const useLatestCartGetter = (cart: CartState): (() => CartState) => {
   // away would still leave its value behind. It is safe for this one: the value is a cart the
   // buyer's own form state already holds, the write is the same on every re-render of a given
   // cart, and nothing reads the ref during rendering.
+  //
+  // That safety depends on this page rendering synchronously, where a render that starts also
+  // commits. If a cart edit is ever moved into startTransition, or a Suspense boundary is added
+  // around the cart rows, React can abandon a render after this assignment and the ref would
+  // hold a cart the buyer never saw committed. The fix at that point is an external store read
+  // through useSyncExternalStore, not an effect — no commit follows an abandoned render, so no
+  // effect would run to correct it.
   latest.current = cart;
   return React.useCallback(() => latest.current, []);
 };
