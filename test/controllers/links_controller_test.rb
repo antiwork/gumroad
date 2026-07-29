@@ -6934,6 +6934,44 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert kept.reload.alive?
   end
 
+  # The mirror image of the test above, and the reason the version lookup is
+  # scoped to alive rows. A soft-deleted version can also collide with a
+  # grouping's id, and a dead version is never what the editor is naming — it is
+  # already gone. Reading the id as "a version" on the strength of that dead row
+  # would leave the grouping the seller did name alive, with everything in it,
+  # and report success.
+  test "flag on: a named grouping is still swept when a soft-deleted version shares its id" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    swept_version = create_variant(variant_category: other_category, name: "Goes with the grouping")
+
+    # A version that was deleted in some earlier save, sitting in a grouping that
+    # is still alive, whose primary key happens to equal the named grouping's.
+    stale = create_variant(variant_category: @category, name: "Deleted earlier")
+    stale.mark_deleted!
+    other_category.update_columns(id: stale.id)
+    swept_version.update_columns(variant_category_id: stale.id)
+    other_category = VariantCategory.find(stale.id)
+    assert_equal other_category.external_id, stale.external_id,
+                 "this test is only meaningful while the two ids collide"
+    assert_not stale.reload.alive?
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [other_category.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not other_category.reload.alive?
+    assert kept.reload.alive?
+    # Sweeping a grouping does not cascade to its versions (VariantCategory's
+    # `has_many :variants` has no `dependent:` option), so this only asserts the
+    # grouping was reached at all.
+    assert_equal other_category.id, swept_version.reload.variant_category_id
+  end
+
   test "flag on: a second grouping is left alone when the save names no deletions" do
     enable_contract!
     kept = create_variant(variant_category: @category, name: "Kept")

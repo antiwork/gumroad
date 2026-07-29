@@ -60,6 +60,12 @@ class Product::VariantsUpdaterService
     existing_categories = variant_categories_alive.to_a
     keep_categories = []
 
+    # Resolved BEFORE the loop below, because that loop soft-deletes the versions
+    # this save names. Read afterwards, every named version looks dead and the
+    # alive-only filter inside would no longer tell "the version this request is
+    # deleting" apart from "a version deleted in some earlier save".
+    named_version_ids = contract_named_alive_version_ids(existing_categories)
+
     variants_params.each do |category|
       variant_category_updater = Product::VariantCategoryUpdaterService.new(
         product:,
@@ -83,7 +89,7 @@ class Product::VariantsUpdaterService
     # updater: a grouping absent from the payload is not an instruction to
     # delete it. Under the contract, only groupings the client named — or a
     # clear-all — are swept.
-    categories_to_delete = contract_scoped_category_deletions(existing_categories - keep_categories, existing_categories)
+    categories_to_delete = contract_scoped_category_deletions(existing_categories - keep_categories, existing_categories, named_version_ids)
     categories_to_delete.each do |variant_category|
       # NOTE (gumroad-private#1379, ruling item 4): this `next` skips the whole
       # branch for a grouping whose versions have purchases — including the
@@ -143,9 +149,25 @@ class Product::VariantsUpdaterService
   end
 
   private
+    # Primary keys of the ALIVE versions of this product that the save contract
+    # names for deletion. Must be called before the payload loop runs, while
+    # those versions are still alive — see the call site.
+    def contract_named_alive_version_ids(existing_categories)
+      return Set.new unless contract&.enforced?
+
+      ids = contract.deleted_ids(:variants)
+      return Set.new if ids.empty?
+
+      BaseVariant.alive
+                 .where(variant_category_id: existing_categories.map(&:id))
+                 .where(id: ids.filter_map { BaseVariant.from_external_id(_1) })
+                 .pluck(:id)
+                 .to_set
+    end
+
     # Narrows the diff-derived sweep set to what the contract authorises.
     # Untouched when no contract is supplied or the flag is off.
-    def contract_scoped_category_deletions(diff_deletions, existing_categories)
+    def contract_scoped_category_deletions(diff_deletions, existing_categories, named_version_ids)
       return diff_deletions unless contract&.enforced?
       return existing_categories if contract.cleared?(:variants)
 
@@ -172,13 +194,15 @@ class Product::VariantsUpdaterService
       # version of this product, read it as a version: that is what the editor
       # meant, and it is the interpretation that cannot destroy data the seller
       # never mentioned.
-      version_ids = BaseVariant.where(variant_category_id: existing_categories.map(&:id))
-                               .where(id: ids.filter_map { BaseVariant.from_external_id(_1) })
-                               .pluck(:id)
-                               .to_set
-
+      #
+      # `named_version_ids` holds only versions that were ALIVE when the save
+      # started. A version deleted by some EARLIER save is not something this
+      # editor can be naming — it is already gone — so letting a dead row win the
+      # tie would silently cancel the deletion of the grouping the seller did
+      # name, leaving it and everything in it alive while the response says the
+      # save succeeded.
       existing_categories.select do |category|
-        ids.include?(category.external_id) && !version_ids.include?(category.id)
+        ids.include?(category.external_id) && !named_version_ids.include?(category.id)
       end
     end
 
