@@ -14,7 +14,7 @@
 // arrive: one retry, then a visible way out rather than a blank page.
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductEditBoundary } from "$app/components/ProductEdit/Boundary";
 import { ProductEditLoadingSkeleton } from "$app/components/ProductEdit/LoadingSkeleton";
@@ -133,5 +133,76 @@ describe("product editor loading", () => {
 
     expect(screen.getByText("editor")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  describe("recovering from a chunk the browser has already given up on", () => {
+    // The browser keeps one entry per module URL and a failed fetch leaves that entry holding the
+    // error, so a background prefetch that failed during a brief network problem keeps failing for
+    // the rest of the document's life — including the click that comes after the connection is fine
+    // again. Only a fresh document clears it, so the boundary reloads once before showing an error.
+    const reload = vi.fn();
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      reload.mockClear();
+      vi.stubGlobal("location", { reload, assign: vi.fn() });
+      vi.stubGlobal("navigator", { onLine: true });
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      // Put back the `Routes` stub the top-level tests rely on, which unstubbing just removed.
+      vi.stubGlobal("Routes", { products_path: () => "/products" });
+    });
+
+    const renderFailingEditor = () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const Exploding = () => {
+        throw new Error("Failed to fetch dynamically imported module");
+      };
+      render(
+        <ProductEditBoundary>
+          <Exploding />
+        </ProductEditBoundary>,
+      );
+      consoleError.mockRestore();
+    };
+
+    it("reloads once so the editor's code gets a real request again", () => {
+      renderFailingEditor();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not reload a second time, so a real outage shows the error instead of looping", () => {
+      renderFailingEditor();
+      cleanup();
+      renderFailingEditor();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("alert")).toBeTruthy();
+    });
+
+    it("does not reload while the browser knows it is offline", () => {
+      // Reloading offline would replace a screen offering a way back with the browser's own error
+      // page, which offers none.
+      vi.stubGlobal("navigator", { onLine: false });
+
+      renderFailingEditor();
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toBeTruthy();
+    });
+
+    it("forgets the reload once the editor's code arrives, so a later failure gets its own attempt", async () => {
+      const { attemptRecoveryReload, loadProductEditPage } = await import("$app/components/ProductEdit/load");
+
+      expect(attemptRecoveryReload()).toBe(true);
+      expect(attemptRecoveryReload()).toBe(false);
+
+      await loadProductEditPage();
+
+      expect(attemptRecoveryReload()).toBe(true);
+    });
   });
 });

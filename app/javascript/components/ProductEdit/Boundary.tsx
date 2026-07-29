@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { attemptRecoveryReload } from "$app/components/ProductEdit/load";
 
 // Catches the case where the product editor's code cannot be downloaded at all.
 //
@@ -46,6 +47,17 @@ export class ProductEditBoundary extends React.Component<{ children: React.React
 
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+
+  // Before showing the seller an error, try the one recovery that actually fixes the most common
+  // version of this failure. The browser remembers a dynamic import that failed and will not fetch
+  // it again in this document, so a background prefetch that failed during a brief network problem
+  // keeps failing afterwards even once the connection is fine. A reload starts a fresh document,
+  // which is the only way to get a real request for that chunk again. `attemptRecoveryReload` does
+  // it at most once per tab, so a real outage still ends up here showing the error rather than
+  // reloading in circles.
+  override componentDidCatch() {
+    attemptRecoveryReload();
   }
 
   override render() {

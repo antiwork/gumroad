@@ -43,7 +43,62 @@ export const fetchWithOneRetry = async <T>(fetch: () => Promise<T>, delayMs = RE
 
 // Fetch the editor's code without rendering it. Safe to call repeatedly: the browser and the module
 // registry both cache the result, so only the first call costs a request.
-export const loadProductEditPage = () => fetchWithOneRetry(importProductEditPage);
+export const loadProductEditPage = async () => {
+  const module = await fetchWithOneRetry(importProductEditPage);
+  // The chunk is here, so whatever went wrong before is over. Forget any recovery reload
+  // (see below), otherwise a failure much later in the same tab would be shown as an error straight
+  // away instead of getting the one reload that usually fixes it.
+  clearRecoveryReload();
+  return module;
+};
+
+// A dynamic import that has failed is remembered as failed. The browser keeps one entry per module
+// URL, and a fetch that failed leaves that entry holding the error, so every later import of the
+// same URL re-throws it immediately without going back to the network. Nothing inside the page can
+// clear that entry — only loading a fresh document can.
+//
+// That is a problem here because the Products list warms the editor's chunk in the background. If
+// that warm-up happens to run during a bad moment on the network, the seller's click a minute later
+// fails instantly even though their connection has recovered, and the retry above cannot help
+// either: both attempts read the same poisoned entry. Left alone, the seller sees the failure
+// screen and can only get out of it by pressing "Try again", which reloads.
+//
+// So do that reload for them, once. The first failure gets a silent reload — which starts a new
+// document with an empty module map and therefore a real network request — and only a failure that
+// survives the reload is shown as an error. The "once" is what stops a genuine outage from turning
+// into a reload loop; it is remembered in session storage because the counter has to outlive the
+// document it is protecting.
+const RECOVERY_RELOAD_KEY = "product-edit-recovery-reload";
+
+// Returns whether a reload was started, so the caller knows whether to expect the page to go away
+// or to show the seller an error instead.
+export const attemptRecoveryReload = (): boolean => {
+  // Reloading while the browser knows it is offline would replace a recoverable error screen with
+  // the browser's own "no internet" page, which is strictly worse: no way back to the products list
+  // and no way to try again.
+  if (!navigator.onLine) return false;
+
+  try {
+    if (sessionStorage.getItem(RECOVERY_RELOAD_KEY) !== null) return false;
+    sessionStorage.setItem(RECOVERY_RELOAD_KEY, "1");
+  } catch {
+    // Session storage can be unavailable (Safari in private browsing, storage disabled by policy).
+    // Without somewhere to remember the attempt there is no way to tell a first failure from a
+    // hundredth, so don't reload at all rather than risk looping.
+    return false;
+  }
+
+  location.reload();
+  return true;
+};
+
+const clearRecoveryReload = () => {
+  try {
+    sessionStorage.removeItem(RECOVERY_RELOAD_KEY);
+  } catch {
+    // Nothing to clean up if storage is unavailable — the attempt was never recorded.
+  }
+};
 
 // Start fetching the editor as soon as the Products list is done rendering. `requestIdleCallback`
 // keeps it off the critical path so the list itself is never slowed down by the prefetch; browsers
@@ -54,7 +109,15 @@ export const useWarmProductEditPage = () => {
     // A prefetch that fails is not a problem worth reporting — nobody has asked for the editor yet,
     // and the click that does ask will try again. Swallow the rejection so it does not surface as an
     // unhandled promise error in the console or in error reporting.
-    const warm = () => void loadProductEditPage().catch(() => {});
+    //
+    // Skip it entirely when the browser already knows it is offline. A prefetch is a convenience, so
+    // there is nothing to gain by attempting one that cannot succeed, and something to lose: the
+    // failed attempt leaves the browser holding a rejected entry for this chunk that no later import
+    // in this document can get past.
+    const warm = () => {
+      if (!navigator.onLine) return;
+      void loadProductEditPage().catch(() => {});
+    };
 
     if (typeof window.requestIdleCallback === "function") {
       const handle = window.requestIdleCallback(warm, { timeout: 2000 });
