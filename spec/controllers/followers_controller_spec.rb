@@ -167,6 +167,63 @@ describe FollowersController, inertia: true do
           expect(Follower.last.follower_user_id).to be new_user.id
         end
       end
+
+      describe "CAPTCHA gate" do
+        # Rails.env.test? short-circuits the verification helper, so every other
+        # spec in this file exercises the pass path. These stub it to prove the
+        # gate exists and that it only applies to sellers we haven't reviewed.
+        def fail_the_captcha
+          allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
+        end
+
+        it "refuses the follow and sends the visitor back to the subscribe page" do
+          fail_the_captcha
+
+          expect do
+            post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
+          end.to_not change { Follower.count }
+
+          expect(response).to redirect_to(custom_domain_subscribe_path)
+          expect(flash[:alert]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+        end
+
+        it "sends no confirmation email" do
+          fail_the_captcha
+
+          expect do
+            post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
+          end.to_not have_enqueued_mail(FollowerMailer, :confirm_follower)
+        end
+
+        it "returns 422 with the failure message as JSON" do
+          fail_the_captcha
+
+          post :create, params: { email: "follower@example.com", seller_id: seller.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+        end
+
+        it "asks for no CAPTCHA at all for a compliant seller" do
+          seller.update!(user_risk_state: "compliant")
+          expect_any_instance_of(described_class).to_not receive(:valid_recaptcha_response_and_hostname?)
+
+          expect do
+            post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
+          end.to change { Follower.count }.by(1)
+        end
+
+        it "verifies the CAPTCHA against the same key the follow form executes, and checks the hostname" do
+          expect_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?)
+            .with(site_key: FollowRecaptcha.site_key, surface: FollowRecaptcha::SURFACE)
+            .and_return(true)
+
+          post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
+
+          expect(response).to have_http_status(:see_other)
+        end
+      end
     end
 
     describe "GET confirm" do
@@ -191,6 +248,11 @@ describe FollowersController, inertia: true do
     end
 
     describe "POST from_embed_form" do
+      # The embed form carries no CAPTCHA (see the unreviewed-seller context
+      # below), so these specs describe the reviewed-and-compliant seller whose
+      # embed form takes follows directly.
+      before { seller.update!(user_risk_state: "compliant") }
+
       it "creates a follower object" do
         post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }
         follower = Follower.last
@@ -271,6 +333,57 @@ describe FollowersController, inertia: true do
 
         expect(response).to redirect_to(seller.profile_url)
         expect(flash[:warning]).to include("Email invalid")
+      end
+
+      context "when the seller has not been reviewed yet" do
+        # There is no CAPTCHA on the embed form for the visitor to solve — it is
+        # HTML on someone else's website — which is exactly why this endpoint is
+        # the one an abuser scripts. So it refuses the follow and offers the
+        # seller's own subscribe page, which does render a challenge, instead of
+        # accepting an unverified submission or dead-ending a real person.
+        let(:unreviewed_seller) { create(:named_seller, username: "unreviewedseller", email: "unreviewed@example.com") }
+
+        it "refuses the follow and offers the seller's subscribe page instead" do
+          expect(unreviewed_seller.user_risk_state).to eq("not_reviewed")
+
+          expect do
+            post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id }
+          end.to_not change { Follower.count }
+
+          expect(inertia.component).to eq("Followers/FromEmbedForm")
+          expect(inertia.props[:success]).to be(false)
+          expect(inertia.props[:message]).to include(unreviewed_seller.name_or_username)
+          expect(inertia.props[:subscribe_url]).to eq(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
+        end
+
+        it "sends no confirmation email" do
+          expect do
+            post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id }
+          end.to_not have_enqueued_mail(FollowerMailer, :confirm_follower)
+        end
+
+        it "returns 422 with the destination in the message for the custom-page follow bridge" do
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["success"]).to be(false)
+          expect(response.parsed_body["message"]).to include(unreviewed_seller.name_or_username)
+          # The bridge relays this as plain text into a sandboxed page, so the URL
+          # has to be in the sentence — there is no link element to render.
+          expect(response.parsed_body["message"]).to include(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
+        end
+
+        # The refusal copy is built from name_or_username, which is never blank:
+        # User#username falls back to the account's external id, so a seller with
+        # no name and no claimed profile URL still names themselves by id.
+        it "names the seller by id when they have no name and no claimed username" do
+          nameless_seller = create(:user, name: nil, username: nil)
+
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: nameless_seller.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["message"]).to start_with("Please subscribe from #{nameless_seller.external_id}'s subscribe page")
+        end
       end
     end
 

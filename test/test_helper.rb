@@ -40,7 +40,19 @@ fake_es_zero_aggs = lambda do |aggs|
     result[name.to_s] = node
   end
 end
-fake_es.define_singleton_method(:method_missing) do |name, *args, **kwargs|
+fake_es.define_singleton_method(:method_missing) do |name, *args, **kwargs, &blk|
+  # A few endpoints (product search, page-view analytics) genuinely need a real
+  # Elasticsearch cluster — they index records and query them back, which the
+  # canned responses below can't fake. A test opts in by setting
+  # Thread.current[:minitest_real_es] to a real client (see RealElasticsearchBridge
+  # in the search/analytics tests); this stub then transparently forwards every
+  # call to it for the duration, and restores the fake in teardown. The CI job now
+  # runs an Elasticsearch service, so this works on CI as well as locally. Cleared
+  # by default, so every other test keeps the fast canned responses and never
+  # touches the cluster.
+  real = Thread.current[:minitest_real_es]
+  return real.public_send(name, *args, **kwargs, &blk) if real
+
   case name
   when :count, :search, :msearch
     response = { "count" => 0, "hits" => { "hits" => [], "total" => { "value" => 0 } } }

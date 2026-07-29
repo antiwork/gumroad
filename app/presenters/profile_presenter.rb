@@ -19,6 +19,11 @@ class ProfilePresenter
       subdomain: seller.subdomain,
       is_verified: !!seller.verified,
       can_edit: can_edit_profile?,
+      # Non-nil only when this seller's subscribe form has to pass a CAPTCHA
+      # (see FollowRecaptcha). The follow form executes the challenge with this
+      # key and FollowersController verifies the resulting token against the
+      # same one, since Google ties a token to the key that produced it.
+      follow_recaptcha_site_key: FollowRecaptcha.required?(seller) ? FollowRecaptcha.site_key : nil,
     }
   end
 

@@ -48,6 +48,16 @@ describe Pages::DefaultProfileDocument do
       expect(html).to include("--accent: #abcdef")
     end
 
+    it "adjusts only the accent behind price text" do
+      seller.seller_profile.update!(highlight_color: "#ff0000")
+
+      html = described_class.render(seller)
+
+      expect(html).to include("--accent: #ff0000")
+      expect(html).to include("--accent-with-text: #ee0000")
+      expect(html).to include("--accent-text: #ffffff")
+    end
+
     it "escapes seller-controlled text so it cannot break out of the document" do
       seller.update!(name: %(<script>alert("x")</script>))
 

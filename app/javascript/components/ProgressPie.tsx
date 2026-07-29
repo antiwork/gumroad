@@ -25,7 +25,7 @@ export const ProgressPie = ({
       {...props}
     >
       {progress === 1 ? (
-        <div className="rounded-full bg-accent p-1 text-2xl/none text-accent-foreground">
+        <div className="rounded-full bg-accent-with-text p-1 text-2xl/none text-accent-foreground">
           <Check className="size-5" />
         </div>
       ) : (

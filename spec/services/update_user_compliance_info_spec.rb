@@ -851,5 +851,68 @@ describe UpdateUserComplianceInfo do
         expect(stored).to eq("3490731JH")
       end
     end
+
+    context "when Stripe rejects the account" do
+      let(:user) { create(:user) }
+      let(:params) { ActionController::Parameters.new(is_business: false, individual_tax_id: "123456") }
+
+      before do
+        create(:user_compliance_info, user:, country: "Colombia", individual_tax_id: "0000000000000")
+      end
+
+      it "records the Stripe error code and param as a private payout note" do
+        # A Colombian seller hit five consecutive rejections with nothing kept on our side, so
+        # support could not tell which field Stripe objected to (gumroad-private#1429).
+        error = Stripe::InvalidRequestError.new("Invalid value for individual[id_number]", "individual[id_number]", code: "invalid_request_error")
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(error)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+
+        note = user.reload.comments.with_type_payout_note.alive.last
+        expect(note).to be_present
+        expect(note.content).to include("Stripe rejected payout setup")
+        expect(note.content).to include("code=invalid_request_error")
+        expect(note.content).to include("param=individual[id_number]")
+        expect(note.content).to include("Invalid value for individual[id_number]")
+      end
+
+      it "still returns Stripe's message to the seller" do
+        error = Stripe::InvalidRequestError.new("Something is wrong. Please contact us if this continues.", "individual[id_number]")
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(error)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Something is wrong.")
+      end
+
+      it "does not leave a rejection note for a postal code failure, which has its own breadcrumb" do
+        error = Stripe::InvalidRequestError.new("Invalid postal code", "individual[address][postal_code]", code: "postal_code_invalid")
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(error)
+
+        described_class.new(compliance_params: params, user:).process
+
+        rejection_notes = user.reload.comments.with_type_payout_note.alive.select do |c|
+          c.content.include?("Stripe rejected payout setup")
+        end
+        expect(rejection_notes).to be_empty
+      end
+
+      it "surfaces Stripe's message even when the breadcrumb itself fails" do
+        # The seller's error must never be replaced by one of ours: a diagnostics failure is
+        # strictly less important than telling the seller what went wrong.
+        error = Stripe::InvalidRequestError.new("Invalid value for individual[id_number]", "individual[id_number]")
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).and_raise(error)
+        allow_any_instance_of(User).to receive(:add_payout_note).and_raise(StandardError, "note write failed")
+        expect(ErrorNotifier).to receive(:notify)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to include("Invalid value for individual[id_number]")
+      end
+    end
   end
 end

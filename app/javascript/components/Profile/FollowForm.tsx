@@ -11,6 +11,12 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import {
+  RECAPTCHA_UNAVAILABLE_MESSAGE,
+  RecaptchaCancelledError,
+  RecaptchaUnavailableError,
+  useRecaptcha,
+} from "$app/components/useRecaptcha";
 
 export const FollowForm = ({
   creatorProfile,
@@ -26,6 +32,9 @@ export const FollowForm = ({
   const [email, setEmail] = React.useState(isOwnProfile ? "" : (loggedInUser?.email ?? ""));
   const [formStatus, setFormStatus] = React.useState<"initial" | "submitting" | "success" | "invalid">("initial");
   const emailInputRef = React.useRef<HTMLInputElement>(null);
+  // Non-null only for sellers we haven't reviewed yet, whose subscribe form has
+  // to pass a CAPTCHA before we'll email the address (see FollowRecaptcha).
+  const recaptcha = useRecaptcha({ siteKey: creatorProfile.follow_recaptcha_site_key ?? null });
 
   React.useEffect(() => setFormStatus("initial"), [email]);
 
@@ -48,12 +57,28 @@ export const FollowForm = ({
     }
 
     setFormStatus("submitting");
-    const response = await followSeller(email, creatorProfile.external_id);
+
+    let recaptchaResponse: string | null = null;
+    if (creatorProfile.follow_recaptcha_site_key) {
+      try {
+        recaptchaResponse = await recaptcha.execute();
+      } catch (error) {
+        setFormStatus("initial");
+        // Dismissing the challenge is a deliberate choice, so it needs no error
+        // message; a CAPTCHA that never loaded is something the visitor can fix,
+        // so it gets actionable guidance.
+        if (error instanceof RecaptchaUnavailableError) showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
+        else if (!(error instanceof RecaptchaCancelledError)) throw error;
+        return;
+      }
+    }
+
+    const response = await followSeller(email, creatorProfile.external_id, recaptchaResponse);
     if (response.success) {
       setFormStatus("success");
       showAlert(response.message, "success");
     } else {
-      showAlert("Sorry, something went wrong. Please try again.", "error");
+      showAlert(response.message ?? "Sorry, something went wrong. Please try again.", "error");
       setFormStatus("initial");
     }
   };
@@ -80,6 +105,7 @@ export const FollowForm = ({
                   : "Subscribe"}
           </Button>
         </div>
+        {recaptcha.container}
       </Fieldset>
     </form>
   );
