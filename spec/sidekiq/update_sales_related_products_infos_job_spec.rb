@@ -64,6 +64,33 @@ describe UpdateSalesRelatedProductsInfosJob do
       end
     end
 
+    context "when the buyer buys more products between the sale and its reversal" do
+      it "decrements the same pairs the sale incremented" do
+        stub_const("#{described_class}::RELATED_PRODUCTS_PER_PURCHASE_LIMIT", 2)
+
+        first = create(:product, user: seller)
+        second = create(:product, user: seller)
+        create(:purchase, link: first, email: "shared@gumroad.com")
+        create(:purchase, link: second, email: "shared@gumroad.com")
+
+        sale = create(:purchase, link: product1, email: "shared@gumroad.com")
+        described_class.new.perform(sale.id)
+
+        # The buyer keeps shopping, pushing `first` and `second` out of the top 2.
+        later_a = create(:product, user: seller)
+        later_b = create(:product, user: seller)
+        create(:purchase, link: later_a, email: "shared@gumroad.com")
+        create(:purchase, link: later_b, email: "shared@gumroad.com")
+
+        described_class.new.perform(sale.id, false)
+
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, second.id).sales_count).to eq(0)
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, first.id).sales_count).to eq(0)
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, later_a.id).sales_count).to eq(0)
+        expect(SalesRelatedProductsInfo.find_or_create_info(product1.id, later_b.id).sales_count).to eq(0)
+      end
+    end
+
     context "when a SalesRelatedProductsInfo record doesn't exist" do
       it "creates a SalesRelatedProductsInfo record with sales_count set to 1" do
         expect do

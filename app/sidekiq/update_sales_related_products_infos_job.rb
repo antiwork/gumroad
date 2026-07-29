@@ -24,6 +24,12 @@ class UpdateSalesRelatedProductsInfosJob
       .successful_or_preorder_authorization_successful_and_not_refunded_or_chargedback
       .where(email: purchase.email)
       .where.not(link_id: product_id)
+      # Anchor the slice to this sale. Once the set is capped, "the buyer's most recent 100"
+      # is a moving target: a refund runs this job again with increment=false, and by then
+      # the buyer may have bought more, so an unanchored query would subtract from pairs the
+      # sale never added and leave the pairs it did add counted forever. Cutting the history
+      # off at this purchase makes both directions address the same pairs.
+      .where(id: ..purchase.id)
       .group(:link_id)
       .order(Purchase.arel_table[:id].maximum.desc)
       .limit(RELATED_PRODUCTS_PER_PURCHASE_LIMIT)
