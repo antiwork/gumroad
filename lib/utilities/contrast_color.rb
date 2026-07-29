@@ -34,12 +34,10 @@ module ContrastColor
   # render is ever allowed below it.
   WCAG_AA_NORMAL_TEXT = 4.5
 
-  # WCAG AA requires 3:1 for a UI component's own boundary or state indicator (1.4.11) — a focus
-  # ring or a selected-option marker carries no text, so it is held to this rather than 4.5:1.
+  # WCAG 2.2 SC 1.4.11 requires 3:1 for non-text state indicators.
   WCAG_AA_NON_TEXT = 3.0
 
-  # Relative luminance of #808080, the point either side of which a background counts as light or
-  # dark for the purpose of deciding which way to shift a colour away from it.
+  # Relative luminance of #808080, used to choose the direction of the brightness shift.
   BACKGROUND_LUMINANCE_MIDPOINT = 0.2159
 
   # If APCA rates black and white within 10 Lc of each other, neither has a strong perceptual lead.
@@ -118,20 +116,13 @@ module ContrastColor
     }
   end
 
-  # The seller's accent, nudged just far enough to stay visible as an indicator ON their background:
-  # a focus ring or a selected-option marker, which carries no text and so answers to WCAG 1.4.11's
-  # 3:1 rather than 4.5:1. Nothing stops a seller saving an accent equal to their background, and
-  # Gumroad's own default pink is only 2.02:1 on white — so the shift preserves the hue by moving
-  # toward black or white (whichever direction the background makes darker/lighter) instead of
-  # replacing the colour, which would drop the seller's brand from the ring entirely.
+  # Preserve the seller's hue while shifting brightness enough to meet the non-text contrast floor.
   def self.visible_indicator(hex_color, background_hex)
     rgb = parse(hex_color)
     background = parse(background_hex)
     return BLACK if rgb.nil? || background.nil?
 
-    # Move away from the background's own brightness: darken on a light background, lighten on a
-    # dark one. Contrast against a fixed background is monotonic in that one direction, so the
-    # binary search below is safe for the same reason brightness_shift_for's is.
+    # Moving away from the background keeps contrast monotonic for the binary search.
     white_text = relative_luminance(background) > BACKGROUND_LUMINANCE_MIDPOINT
     return to_hex(rgb) if indicator_contrast_ok?(rgb, background)
 

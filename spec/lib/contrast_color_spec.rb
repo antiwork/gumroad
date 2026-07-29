@@ -335,7 +335,6 @@ describe ContrastColor do
     end
 
     it "darkens on a light background and lightens on a dark one, keeping the hue" do
-      # Gumroad's own default pink is 2.02:1 on white, so this is the common case, not an edge one.
       expect(described_class.visible_indicator("#ff90e8", "#ffffff")).to eq("#d075bd")
       expect(described_class.visible_indicator("#111111", "#000000")).to eq("#5a5a5a")
     end

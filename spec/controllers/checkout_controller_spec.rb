@@ -121,8 +121,6 @@ describe CheckoutController, type: :controller, inertia: true do
         get :show
 
         theme = inertia.props.dig(:checkout_style, :theme)
-        # The saved accent still drives --accent; only the focus ring and selected-method marker,
-        # which carry no text, are moved off the background.
         expect(theme[:accent_color]).to eq("#ffffff")
         expect(ContrastColor.ratio_between(theme[:indicator_color], "#ffffff"))
           .to be >= ContrastColor::WCAG_AA_NON_TEXT
@@ -176,6 +174,16 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
+      it "ignores an arriving product when the existing cart already fills the product limit" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: create(:user))
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
       it "carries the seller's palette for products added from a wishlist" do
         wishlist = create(:wishlist)
         create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
@@ -187,8 +195,6 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "follows the wishlist, not the product parameter, when both are present" do
-        # checkout_props lets the wishlist spread replace add_products, so the theme has to overwrite
-        # in the same order — otherwise it brands the page for a seller it does not render.
         arriving = create(:product, user: create(:user))
         wishlist = create(:wishlist)
         create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
@@ -199,8 +205,6 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "ignores the product parameter's seller when a wishlist replaces it" do
-        # The wishlist spread replaces add_products, so the product parameter's seller is not on the
-        # page at all — branding for them would be branding a seller checkout does not render.
         arriving = create(:product, user: branded_seller)
         wishlist = create(:wishlist)
         create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
@@ -214,6 +218,17 @@ describe CheckoutController, type: :controller, inertia: true do
         cart_with(create(:product, user: branded_seller))
         wishlist = create(:wishlist)
         create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "sends no styles when an oversized wishlist leaves the checkout empty" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
 
         get :show, params: { wishlist: wishlist.external_id }
 

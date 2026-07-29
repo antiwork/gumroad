@@ -118,6 +118,14 @@ const elementsOptions: PaymentElementConfig = {
 
 const stripeFontsCssSource =
   "https://fonts.googleapis.com/css2?family=Domine:wght@400;600&family=Inter:wght@400;600&family=Merriweather:wght@400;600&family=Roboto%20Mono:wght@400;600&family=Roboto%20Slab:wght@400;600&display=swap";
+const sellerTheme: CheckoutTheme = {
+  accent_color: "#009a49",
+  indicator_color: "#009a49",
+  background_color: "#f8efe3",
+  text_color: "#000000",
+  danger_color: "#9b1c12",
+  font_family: '"Roboto Mono", "ABC Favorit", monospace',
+};
 let prefersDark = false;
 
 const props = {
@@ -169,17 +177,8 @@ describe("PaymentElementInput", () => {
   });
 
   it("uses the seller theme instead of CSS sampled before the Inertia head update", () => {
-    const theme: CheckoutTheme = {
-      accent_color: "#009a49",
-      indicator_color: "#009a49",
-      background_color: "#f8efe3",
-      text_color: "#000000",
-      danger_color: "#9b1c12",
-      font_family: '"Roboto Mono", "ABC Favorit", monospace',
-    };
-
     render(
-      <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
+      <CheckoutThemeProvider value={{ theme: sellerTheme, stripe_fonts_css_source: stripeFontsCssSource }}>
         <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
       </CheckoutThemeProvider>,
     );
@@ -194,22 +193,18 @@ describe("PaymentElementInput", () => {
       colorBackground: "rgb(248,239,227)",
       colorDanger: "rgb(155,28,18)",
       colorPrimary: "rgb(0,154,73)",
-      fontFamily: theme.font_family,
+      fontFamily: sellerTheme.font_family,
       focusOutline: "2px solid rgb(0,154,73)",
     });
     expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0)");
   });
 
   it("draws the focus ring and selected-method marker from the floored indicator, not the saved accent", () => {
-    // A seller can save an accent equal to their background; the ring carries no text, so it uses
-    // the server's 3:1-floored colour while --accent keeps the saved one.
     const theme: CheckoutTheme = {
+      ...sellerTheme,
       accent_color: "#ffffff",
       indicator_color: "#949494",
       background_color: "#ffffff",
-      text_color: "#000000",
-      danger_color: "#9b1c12",
-      font_family: '"Roboto Mono", "ABC Favorit", monospace',
     };
 
     render(
@@ -225,14 +220,6 @@ describe("PaymentElementInput", () => {
   });
 
   it("loads seller fonts before a cart-driven theme change without remounting", () => {
-    const theme: CheckoutTheme = {
-      accent_color: "#009a49",
-      indicator_color: "#009a49",
-      background_color: "#f8efe3",
-      text_color: "#000000",
-      danger_color: "#9b1c12",
-      font_family: '"Roboto Mono", "ABC Favorit", monospace',
-    };
     const { rerender } = render(
       <CheckoutThemeProvider value={{ theme: null, stripe_fonts_css_source: stripeFontsCssSource }}>
         <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
@@ -241,7 +228,7 @@ describe("PaymentElementInput", () => {
     const initialFonts = elementsRender.options?.fonts;
 
     rerender(
-      <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
+      <CheckoutThemeProvider value={{ theme: sellerTheme, stripe_fonts_css_source: stripeFontsCssSource }}>
         <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
       </CheckoutThemeProvider>,
     );
@@ -249,20 +236,12 @@ describe("PaymentElementInput", () => {
     expect(elementsMounts.currencies).toEqual(["usd"]);
     expect(elementsMounts.unmounts).toBe(0);
     expect(elementsRender.options?.fonts).toEqual(initialFonts);
-    expect(elementsRender.options?.appearance?.variables?.fontFamily).toBe(theme.font_family);
+    expect(elementsRender.options?.appearance?.variables?.fontFamily).toBe(sellerTheme.font_family);
   });
 
   it("restores the neutral palette when a cart becomes multi-seller", () => {
-    const theme: CheckoutTheme = {
-      accent_color: "#009a49",
-      indicator_color: "#009a49",
-      background_color: "#f8efe3",
-      text_color: "#000000",
-      danger_color: "#9b1c12",
-      font_family: '"Roboto Mono", "ABC Favorit", monospace',
-    };
     const { rerender } = render(
-      <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
+      <CheckoutThemeProvider value={{ theme: sellerTheme, stripe_fonts_css_source: stripeFontsCssSource }}>
         <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
       </CheckoutThemeProvider>,
     );
@@ -425,7 +404,9 @@ describe("PaymentElementInput", () => {
           mountCurrency="inr"
         />,
       );
-      act(() => vi.advanceTimersByTime(1_000)); // past the prefill debounce
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
       // The element's options must carry the just-typed name, not a frozen snapshot.
       act(() => paymentElementRender.onChange?.({ value: { type: "upi" }, complete: false, empty: false }));
       expect(paymentElementRender.options?.defaultValues).toEqual({

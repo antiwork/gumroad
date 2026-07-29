@@ -45,8 +45,6 @@ export const getCheckoutThemeColors = (theme: CheckoutTheme) => {
     background: `rgb(${rgb(theme.background_color)})`,
     border: `rgb(${text})`,
     accent: `rgb(${rgb(theme.accent_color)})`,
-    // Focus rings and the selected-method marker sit on the seller's background with no text on
-    // them, so they use the 3:1-floored colour rather than the saved accent, which can match it.
     indicator: `rgb(${rgb(theme.indicator_color)})`,
     danger: `rgb(${rgb(theme.danger_color)})`,
   };

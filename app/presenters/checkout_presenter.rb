@@ -18,7 +18,7 @@ class CheckoutPresenter
     @ip = ip
   end
 
-  def checkout_props(params:, browser_guid:, cart: nil)
+  def checkout_props(params:, browser_guid:, cart: nil, arrival_props: nil)
     geo = GeoIp.lookup(@ip)
     detected_country = geo.try(:country_name)
     country = logged_in_user&.country || detected_country
@@ -26,6 +26,7 @@ class CheckoutPresenter
     credit_card = logged_in_user&.credit_card
     saved_credit_card = CheckoutPresenter.saved_card(credit_card)
     user = checkout_user(params)
+    arrival_props ||= checkout_arrival_props(params:, user:)
 
     props = {
       **checkout_common,
@@ -40,10 +41,7 @@ class CheckoutPresenter
       } : nil,
       saved_credit_card:,
       gift: nil,
-      clear_cart: false,
-      **add_single_product_props(params:, user:),
-      **checkout_wishlist_props(params:),
-      **checkout_wishlist_gift_props(params:),
+      **arrival_props,
       max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
       cart_save_debounce_ms: CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
       tip_options: TipOptionsService.get_tip_options,
@@ -61,22 +59,29 @@ class CheckoutPresenter
     props
   end
 
-  # The products introduced by checkout URL parameters, after applying the same override order as
-  # checkout_props. Gift-wishlist arrivals replace the saved cart; all other arrivals extend it.
-  #
-  # This re-runs the same lookups checkout_props does, rather than sharing a memo with it. A memo
-  # would cache AR objects with their associations already loaded, and callers do reuse a presenter
-  # across a state change — so the second read would serve a stale product. One duplicated preload
-  # per render is the cheaper of the two.
-  def checkout_seller_context(params:)
-    wishlist_with_products = checkout_wishlist_with_products(params)
-    contexts = [
-      { clear_cart: false, seller_ids: [single_product(params)&.user_id].compact },
-      wishlist_with_products&.last&.then { { seller_ids: _1.map { |wishlist_product| wishlist_product.product.user_id } } },
-      gift_wishlist_product(params)&.then { { clear_cart: true, seller_ids: [_1.product.user_id] } },
-    ]
+  def checkout_arrival_props(params:, user: checkout_user(params))
+    {
+      clear_cart: false,
+      **add_single_product_props(params:, user:),
+      **checkout_wishlist_props(params:),
+      **checkout_wishlist_gift_props(params:),
+    }
+  end
 
-    contexts.compact.reduce({}, :merge)
+  # Gift-wishlist arrivals replace the saved cart; all other URL products extend it.
+  def checkout_seller_context(arrival_props:)
+    add_products = arrival_props[:add_products]
+    seller_ids = Link.where(unique_permalink: add_products.map { _1.dig(:product, :permalink) })
+      .pluck(:unique_permalink, :user_id).to_h
+
+    {
+      clear_cart: arrival_props[:clear_cart],
+      products: add_products.filter_map do |product|
+        permalink = product.dig(:product, :permalink)
+        seller_id = seller_ids[permalink]
+        { seller_id:, cart_key: [permalink, product[:option_id]] } if seller_id
+      end,
+    }
   end
 
   def checkout_product(product, cart_item, params, include_cross_sells: true)

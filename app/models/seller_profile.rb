@@ -94,10 +94,7 @@ class SellerProfile < ApplicationRecord
     end || text_color_on_background
   end
 
-  # The accent to use for an indicator that carries no text but must still be visible against the
-  # seller's background: the Stripe iframes' focus ring and selected-payment-method marker. The
-  # saved accent can equal the background (nothing stops it), and the default pink is only 2.02:1
-  # on white — see ContrastColor#visible_indicator for why the hue is kept and only brightness moves.
+  # Keep Stripe's state indicators visible without changing the seller's saved accent.
   def accent_color_for_indicators
     ContrastColor.visible_indicator(highlight_color, background_color)
   end

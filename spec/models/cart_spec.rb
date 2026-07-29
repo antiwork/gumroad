@@ -195,42 +195,4 @@ describe Cart do
       end
     end
   end
-
-  describe "#visible_seller_ids" do
-    let(:cart) { create(:cart) }
-    let(:seller) { create(:user) }
-
-    it "returns the one seller when every product belongs to them" do
-      create(:cart_product, cart:, product: create(:product, user: seller))
-      create(:cart_product, cart:, product: create(:product, user: seller))
-
-      expect(cart.visible_seller_ids).to eq([seller.id])
-    end
-
-    it "returns both sellers when the cart spans two" do
-      other_seller = create(:user)
-      create(:cart_product, cart:, product: create(:product, user: seller))
-      create(:cart_product, cart:, product: create(:product, user: other_seller))
-
-      expect(cart.visible_seller_ids).to match_array([seller.id, other_seller.id])
-    end
-
-    it "returns nothing for an empty cart" do
-      expect(cart.visible_seller_ids).to be_empty
-    end
-
-    it "ignores deleted cart products" do
-      create(:cart_product, cart:, product: create(:product, user: seller))
-      create(:cart_product, cart:, product: create(:product, user: create(:user)), deleted_at: 1.minute.ago)
-
-      expect(cart.visible_seller_ids).to eq([seller.id])
-    end
-
-    it "ignores archived products, matching what the checkout page actually renders" do
-      create(:cart_product, cart:, product: create(:product, user: seller))
-      create(:cart_product, cart:, product: create(:product, user: create(:user), archived: true))
-
-      expect(cart.visible_seller_ids).to eq([seller.id])
-    end
-  end
 end

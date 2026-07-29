@@ -49,11 +49,8 @@ class Cart < ApplicationRecord
     alive? && updated_at >= ABANDONED_IF_UPDATED_AFTER_AGO.ago.beginning_of_day && updated_at <= ABANDONED_IF_UPDATED_BEFORE_AGO.ago && sent_abandoned_cart_emails.none? && alive_cart_products.exists?
   end
 
-  # Keep this scope aligned with CartPresenter#cart_props; counting a hidden row would make the
-  # theme disagree with the products shown to the buyer. Only IDs are needed, so avoid loading
-  # products on every checkout render.
-  def visible_seller_ids
-    alive_cart_products.joins(:product).merge(Link.not_archived).distinct.pluck("links.user_id")
+  def visible_cart_products
+    alive_cart_products.joins(:product).merge(Link.not_archived).order(created_at: :desc)
   end
 
   def self.fetch_by(user:, browser_guid:)
