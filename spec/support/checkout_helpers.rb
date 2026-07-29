@@ -155,7 +155,8 @@ module CheckoutHelpers
     expect do
       click_on is_free ? "Get" : "Pay", exact: true
 
-      within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil?
+      within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil? || sca == :if_challenged
+      within_sca_frame_if_challenged { click_on "Complete" } if sca == :if_challenged
 
       if error.present?
         expect(page).to have_alert(text: error) if error != true
@@ -237,12 +238,24 @@ def fill_in_stripe_field(labels, with:)
   field.fill_in(with:)
 end
 
-def within_sca_frame(&block)
-  expect(page).to have_selector("iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']", wait: 240)
+SCA_CHALLENGE_IFRAME = "iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']"
 
-  within_frame(page.find("[src^='https://js.stripe.com/v3/three-ds-2-challenge']")) do
+def within_sca_frame(wait: 240, &block)
+  expect(page).to have_selector(SCA_CHALLENGE_IFRAME, wait:)
+
+  within_frame(page.find(SCA_CHALLENGE_IFRAME)) do
     within_frame("challengeFrame", &block)
   end
+end
+
+# Stripe's risk engine decides per card whether to challenge at all, and it has flipped on us
+# in both directions (the Mexico test card started challenging on 2026-07-07 and stopped on
+# 2026-07-29, breaking main each time). Use this only where 3DS is incidental to what the spec
+# asserts; specs whose subject IS authentication must keep the strict `within_sca_frame`.
+def within_sca_frame_if_challenged(wait: 30, &block)
+  return unless has_selector?(SCA_CHALLENGE_IFRAME, wait:)
+
+  within_sca_frame(wait: 0, &block)
 end
 
 def within_cart_item(name, &block)
