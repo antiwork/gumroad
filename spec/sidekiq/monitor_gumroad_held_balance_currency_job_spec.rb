@@ -204,6 +204,24 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     end
   end
 
+  # Production carries merchant accounts on processor ids that ChargeProcessor no longer
+  # recognises (app_store, google_play). holder_of_funds treats those as Gumroad-held on the
+  # documented assumption that we hold the funds for removed processors, so a mislabelled
+  # balance on one blocks payouts and the query must keep it.
+  it "alerts on a balance whose merchant account uses a processor Gumroad no longer recognises" do
+    account = create(:merchant_account_paypal, user: create(:user))
+    account.update_column(:charge_processor_id, "app_store")
+    balance = travel_to(after_baseline) do
+      create(:balance, merchant_account: account, holding_currency: Currency::EUR)
+    end
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(sample: [hash_including(balance_id: balance.id)])
+    )
+  end
+
   # merchant_account_id is nullable, so a row can exist with nothing to resolve. Such a row
   # cannot be judged either way and must not be silently dropped.
   it "reports a row with no merchant account rather than skipping it silently" do
