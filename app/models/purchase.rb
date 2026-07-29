@@ -1948,7 +1948,8 @@ class Purchase < ApplicationRecord
     seller_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_seller(
       flow_of_funds:,
       issued_net_cents: payment_cents - affiliate_credit_cents,
-      canonical_issued_amount: presentment_canonical_issued_amount
+      canonical_issued_amount: presentment_canonical_issued_amount,
+      merchant_account:
     )
 
     seller_balance_transaction = BalanceTransaction.create!(
@@ -2436,7 +2437,8 @@ class Purchase < ApplicationRecord
     seller_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_seller(
       flow_of_funds:,
       issued_net_cents: -1 * refund_cents,
-      canonical_issued_amount:
+      canonical_issued_amount:,
+      merchant_account:
     )
 
     seller_balance_transaction = BalanceTransaction.create!(
