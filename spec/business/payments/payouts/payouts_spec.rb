@@ -986,6 +986,59 @@ describe Payouts do
         expect(paused_note.content).to include("payouts on the account were paused by the system")
         expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
       end
+
+      # For a seller who paused their own payouts, the note naming that switch is the actionable
+      # message — and the explanation they would see instead may promise a payout date their own
+      # pause now prevents, because its wording was chosen when it was written.
+      it "still shows the paused-payout note to a seller who paused their own payouts" do
+        seller = create(:compliant_user, payment_address: "stuck@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.add_payout_note(
+          content: "Your payout on July 1st, 2026 could not be sent because " \
+                   "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
+                   "Add a bank account in your payout settings.",
+          seller_visible: true
+        )
+        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller.update!(payouts_paused_by_user: true)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(paused_note.content).to include("payouts on the account were paused by the user")
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
+      end
+
+      # Every run adds a row whether or not the seller sees it, and the note lookups only scan back
+      # 25 notes — so repeating the hidden note would push the explanation out of that window and
+      # silently disarm the suppression, besides flooding accounts that already carry hundreds of
+      # automated comments.
+      it "does not write a second hidden paused-payout note on the next run" do
+        seller = create(:compliant_user, payment_address: "stuck@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.add_payout_note(
+          content: "Your payout on July 1st, 2026 could not be sent because " \
+                   "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
+                   "Add a bank account in your payout settings.",
+          seller_visible: true
+        )
+        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to_not change { seller.comments.with_type_payout_note.count }
+
+        # And the explanation is still what the seller sees.
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+      end
     end
 
     describe "notification" do

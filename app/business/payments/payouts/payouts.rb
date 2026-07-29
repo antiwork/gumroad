@@ -19,6 +19,9 @@ class Payouts
   # Delay added per slice when fanning slices out to their own jobs, so the whole cohort's
   # payout jobs don't hit the payout processors at once. See .enqueue_user_slices.
   SLICE_ENQUEUE_STAGGER = 10.seconds
+  # Recognises the weekly "payouts were paused" note this class writes, whatever the payout date or
+  # pause source in it. Used to avoid writing another one when the newest note already is one.
+  PAUSED_PAYOUT_NOTE_REGEX = /\APayout on .+ was skipped because payouts on the account were paused by the .+\.\z/
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -57,15 +60,40 @@ class Payouts
         # exists to remove. Support still gets the note either way; only the seller's view of it
         # changes.
         #
-        # Only while that explanation is still true of the account. Hiding a pause note is taking
-        # information away from the seller, so it is tied to the live PayPal block rather than to
-        # the wording of an old note: a seller who has since fixed their PayPal account, or been
-        # paid, still carries the explanation as their newest visible note, and keying only on that
-        # text would hide every future pause note from them — including pauses placed for reasons
-        # that have nothing to do with PayPal.
+        # Only while that explanation is still true of the account, and only for a hold we placed.
+        # Hiding a pause note is taking information away from the seller, so it is tied to the live
+        # PayPal block rather than to the wording of an old note: a seller who has since fixed their
+        # PayPal account, or been paid, still carries the explanation as their newest visible note,
+        # and keying only on that text would hide every future pause note from them — including
+        # pauses placed for reasons that have nothing to do with PayPal.
+        #
+        # A seller who paused their own payouts in settings is excluded for the opposite reason:
+        # for them the weekly note naming that switch IS the actionable message, and the
+        # explanation they would see instead had its next-step wording chosen when it was written,
+        # so it can be promising a payout date that their own pause now prevents. Same distinction
+        # Payment#terminal_paypal_failure_seller_solution and the email already make.
+        newest_visible_note = user.latest_seller_visible_payout_note
         keep_explanation_visible =
+          user.payouts_paused_internally? &&
           PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user) &&
-          Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
+          Payment::FailureReason.terminal_paypal_explanation_note?(newest_visible_note&.content)
+
+        # Don't stack identical hidden notes. Suppressed or not, each run adds a payout_note row,
+        # and both this lookup and the Payouts banner only scan back
+        # PayoutNoteVisibility::MAX_NOTES_SCANNED notes — so a seller on daily payouts would push
+        # the explanation out of that window within a month, at which point the lookup returns nil
+        # and the suppression disarms itself. Skipping the repeat also spares these accounts, which
+        # already carry hundreds of automated comments, one row per payout run.
+        #
+        # Matched on shape rather than on the exact string, because the note embeds its own payout
+        # date and so is never byte-identical between runs.
+        if keep_explanation_visible
+          newest_note = user.comments.with_type_payout_note.last
+          if newest_note.present? && !PayoutNoteVisibility.seller_visible?(newest_note) &&
+             newest_note.content.to_s.match?(PAUSED_PAYOUT_NOTE_REGEX)
+            return false
+          end
+        end
 
         user.add_payout_note(content:, seller_visible: !keep_explanation_visible)
       end
