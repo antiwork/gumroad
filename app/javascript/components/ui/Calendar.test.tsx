@@ -61,7 +61,7 @@ describe("Calendar", () => {
 
     const selected = dayCell(12);
     expect(selected.getAttribute("data-selected")).toBe("true");
-    expect(selected.className).toContain("bg-accent");
+    expect(selected.className).toContain("bg-accent-with-text");
     expect(selected.className).toContain("text-accent-foreground");
     // The button must not carry a background of its own, or it would cover the accent above.
     expect(dayButton(12).className).toContain("bg-transparent");
@@ -80,7 +80,7 @@ describe("Calendar", () => {
 
   it("still selects a day when one is clicked", () => {
     const selectedDates: (Date | undefined)[] = [];
-    renderCalendar({ onSelect: (date) => selectedDates.push(date) });
+    renderCalendar({ onSelect: (date: Date | undefined) => selectedDates.push(date) });
 
     fireEvent.click(dayButton(19));
 
@@ -89,7 +89,7 @@ describe("Calendar", () => {
 
   it("does not select an unavailable day", () => {
     const selectedDates: (Date | undefined)[] = [];
-    renderCalendar({ onSelect: (date) => selectedDates.push(date) });
+    renderCalendar({ onSelect: (date: Date | undefined) => selectedDates.push(date) });
 
     fireEvent.click(dayButton(27));
 

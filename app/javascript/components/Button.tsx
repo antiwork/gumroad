@@ -42,9 +42,9 @@ export const buttonVariants = cva(
       },
       color: {
         default: "bg-transparent",
-        primary: "bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground",
+        primary: "bg-primary text-primary-foreground hover:bg-accent-with-text hover:text-accent-foreground",
         black: "bg-black text-white",
-        accent: "bg-accent text-accent-foreground",
+        accent: "bg-accent-with-text text-accent-foreground",
         filled: "bg-background text-foreground",
         success: "bg-success text-white",
         danger: "bg-danger text-white",
@@ -96,7 +96,7 @@ export const buttonVariants = cva(
       {
         variant: "outline",
         color: "accent",
-        className: "bg-transparent text-current hover:bg-accent hover:text-accent-foreground",
+        className: "bg-transparent text-current hover:bg-accent-with-text hover:text-accent-foreground",
       },
       {
         variant: "outline",
