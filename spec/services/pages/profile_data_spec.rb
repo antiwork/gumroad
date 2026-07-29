@@ -129,14 +129,39 @@ describe Pages::ProfileData do
         expect(payload_price).to eq("$0 a month")
       end
 
+      it "rebuilds when the editor's deletion sweep soft-deletes a variant" do
+        # The editor stamps deletions with `update_all`, which skips callbacks, so
+        # TouchesProductForPriceCache never fires for the deleted rows. Whether the key moves
+        # anyway depends on a *survivor* write happening in the same save (a shifted
+        # position_in_category, a renamed grouping) — incidental, and absent when the seller
+        # deletes the last-positioned option and changes nothing else. Asserted against the
+        # deletion primitive so the guarantee does not rest on that coincidence.
+        product = create(:product, user: seller, price_cents: 1000)
+        category = create(:variant_category, link: product, title: "Sizes")
+        create(:variant, variant_category: category, name: "Large", price_difference_cents: 900)
+        cheapest = create(:variant, variant_category: category, name: "Small", price_difference_cents: 0)
+        service = Product::VariantCategoryUpdaterService.new(product:, category_params: { id: category.external_id })
+        service.variant_category = category
+        key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
+
+        service.send(:batch_delete_variants, [cheapest])
+
+        expect(cheapest.reload.deleted_at).to be_present
+        expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
+      end
+
       it "touches the product from every association the displayed price resolves through" do
         # The guard that would have caught this class at gp#1398 time instead of one model at a
         # time: a new price-bearing association added without a touch fails here.
         product = create(:membership_product_with_preset_tiered_pricing, user: seller)
         tier = product.tiers.first
+        # Created up front: creating a product inside the loop moves the key by itself
+        # (cache_key_with_version embeds the relation's row count), so the Price arm would
+        # pass with the touch reverted.
+        simple_product = create(:product, user: seller)
 
         writes = {
-          "Price" => -> { create(:product, user: seller).prices.alive.first&.update!(price_cents: 111) },
+          "Price" => -> { simple_product.prices.alive.first.update!(price_cents: 111) },
           "VariantPrice" => -> { tier.prices.alive.is_buy.first.update!(price_cents: 222) },
           "BaseVariant" => -> { tier.update!(name: "Renamed tier") },
           "VariantCategory" => -> { product.variant_categories.first.update!(title: "Renamed grouping") },

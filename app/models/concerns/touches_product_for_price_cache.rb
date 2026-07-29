@@ -11,8 +11,10 @@
 # product (see `AssetPreview`, `Thumbnail`). Include this instead when the product is one or
 # more hops away, since Rails only touches the immediate association.
 #
-# Safe against write loops: `Link`'s own `after_update :invalidate_cache` subtracts
-# `PURCHASE_PROPERTIES` (`["updated_at"]`), so a timestamp-only save fires nothing further.
+# Loop-safe because `touch` fires only `after_touch`/`after_commit`, `Link` has neither
+# statically registered (its `Product::Searchable` commit hooks are per-instance and only
+# enqueue indexing), and `Link` has no outbound `belongs_to touch: true` to cascade into.
+# Keep it that way: a `Link` `after_touch` that writes price or variant rows would recurse.
 module TouchesProductForPriceCache
   extend ActiveSupport::Concern
 
@@ -27,8 +29,5 @@ module TouchesProductForPriceCache
       return if previous_changes.blank? || previous_changes.keys == ["updated_at"]
 
       link&.touch
-    rescue ActiveRecord::RecordNotFound
-      # The product can be hard-deleted out from under an in-flight variant/price write.
-      nil
     end
 end
