@@ -21,8 +21,9 @@ class Checkout::PaymentMethodResolver
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay].freeze
   # Dropped on a recurring lifecycle, for four different reasons:
   #   - afterpay_clearpay, affirm, upi: one-time, buyer-present only.
-  #   - ideal, bancontact, pix: one-shot bank approvals with no stored mandate — renewals would
-  #     have nothing to charge against (re-billing needs a SEPA mandate we don't collect).
+  #   - ideal, bancontact, pix: one-shot bank approvals with no stored mandate, so renewals would
+  #     have nothing to charge against. Re-billing iDEAL/Bancontact would need a SEPA Direct Debit
+  #     mandate we don't collect; Pix has no re-billing mechanism at all.
   #   - alipay: Stripe gates recurring Alipay behind approval and excludes it from subscription
   #     mode, so it stays out until that changes, not until we widen our launch scope.
   #   - klarna: a launch decision, not a capability limit — memberships and preorders are out of
