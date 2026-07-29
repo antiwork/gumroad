@@ -78,7 +78,7 @@ EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale k
 
 `prod_query.sh` self-heals: after picking a working host it routes `ssh-keygen -R` through that host (they share the bastion's `known_hosts`), in a single hop for all the addresses it needs to clear. Three things to know:
 
-- **Only genuinely outdated keys are removed.** A candidate is cleared only when SSH's own error names that address and says the identification changed. A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — throwing away a correct host key would give up real protection against someone impersonating that address.
+- **Only genuinely outdated keys are removed.** A candidate is cleared only when SSH's own error names that address and says the identification changed. A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — throwing away a correct host key would give up real protection against someone impersonating that address. That same test decides which candidates are worth a patient retry, so a candidate never falls out of both lists.
 
 - **You cannot run a command on the bastion itself.** It auto-jumps to whatever `LC_PAPER` names; omitting `LC_PAPER` fails with `ssh: Could not resolve hostname`. Always route through a working instance IP.
 - **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner.
@@ -89,7 +89,13 @@ EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale k
 
 The candidate probe is deliberately impatient (20s) so one hung host cannot eat the caller's budget, but that also rejects hosts which are merely slow under load. When *every* candidate fails, a fleet-wide outage is the less likely reading.
 
-`prod_query.sh` now retries the non-stale-key rejections with a 60s probe before giving up, and says so (`answered on the patient retry (slow, not unhealthy)`). Only the all-rejected path pays for this.
+`prod_query.sh` now retries the non-stale-key rejections with a patient probe before giving up, and says so (`answered on the patient retry (slow, not unhealthy)`). Only the all-rejected path pays for this.
+
+Both passes draw down one shared **90s selection budget** (`PROD_SELECT_BUDGET`), so picking a host can never consume the caller's whole ~120s Bash-tool window before the query starts — a large pool shortens each probe rather than adding to the total. Running out gives a distinct message that says the pool may just be slow, instead of the misleading "no instance passed the health probe". Raise the budget when you have more wall clock than the Bash tool allows:
+
+```bash
+PROD_SELECT_BUDGET=240 timeout 560 bash .agents/skills/gumroad-prod-console/scripts/prod_query.sh q.rb
+```
 
 If you still get the hard error, force a host rather than assuming production is down:
 
