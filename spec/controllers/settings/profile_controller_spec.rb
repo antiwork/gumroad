@@ -78,6 +78,18 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       )
     end
 
+    it "leaves the other design fields alone when only one is sent" do
+      seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
+
+      put :update, params: { seller_profile: { font: "Domine" } }
+
+      expect(seller.reload.seller_profile).to have_attributes(
+        font: "Domine",
+        background_color: "#ffffff",
+        highlight_color: "#ff90e8",
+      )
+    end
+
     it "rejects a font outside the allowed choices" do
       seller.seller_profile.update!(font: "ABC Favorit")
 
