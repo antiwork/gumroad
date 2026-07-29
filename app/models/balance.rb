@@ -41,6 +41,11 @@ class Balance < ApplicationRecord
   #
   # Note that balances are keyed on holding_currency (see find_or_create_balance), so a seller
   # would get parallel same-day balances if this ever varied within a day for one account.
+  #
+  # On a buyer-presentment charge the buyer's currency is converted at the rate they were quoted,
+  # which has Stripe's FX fee priced in rather than being the interbank rate. The buyer pays that
+  # spread inside the price they confirmed; this ledger stays exact on both sides, so quoting
+  # nearer interbank would be a pricing decision, not a correctness fix (gumroad-private#1318).
   validates :merchant_account, :currency, :holding_currency, presence: true
   validate :validate_amounts_are_only_changed_when_unpaid, on: :update
 

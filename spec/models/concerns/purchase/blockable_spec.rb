@@ -75,17 +75,30 @@ describe Purchase::Blockable do
     end
   end
 
-  describe "email blocking on fraud" do
-    context "for a fraudulent transaction" do
-      it "blocks the email" do
+  describe "blocking on a fraud-related decline" do
+    context "for a decline reporting card misuse" do
+      it "blocks the card but leaves the buyer's email usable" do
         purchase = build(:purchase_in_progress,
                          email: "foo@example.com",
-                         error_code: PurchaseErrorCode::FRAUD_RELATED_ERROR_CODES.sample)
+                         error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
 
         purchase.mark_failed!
 
-        expect(purchase.blocked_by_email?).to be true
-        expect(purchase.blocked_by_email_object&.object_value).to eq("foo@example.com")
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+        expect(purchase.blocked_by_email?).to be false
+        expect(purchase.blocked_by_browser_guid?).to be false
+        expect(purchase.blocked_by_ip_address?).to be false
+      end
+    end
+
+    context "for a lost or reissued card decline" do
+      it "does not block anything" do
+        [PurchaseErrorCode::CARD_DECLINED_LOST_CARD, PurchaseErrorCode::CARD_DECLINED_PICKUP_CARD].each do |error_code|
+          purchase = build(:purchase_in_progress, email: "foo@example.com", error_code:)
+
+          expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+          expect(purchase.buyer_blocked?).to be false
+        end
       end
     end
 
@@ -98,6 +111,316 @@ describe Purchase::Blockable do
         purchase.mark_failed!
 
         expect(purchase.blocked_by_email?).to be false
+      end
+    end
+
+    context "when the buyer already has a clean payment history" do
+      let(:settled_count) { Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY }
+      let(:long_ago) { 6.months.ago }
+      let(:known_card) { "fingerprint-of-a-card-that-has-paid-before" }
+      let(:different_card) { "fingerprint-of-some-other-card" }
+
+      # A renewal charge, which is where the exemption matters most: the email and the account on it
+      # were copied from the original purchase by Subscription#build_purchase, not typed into a form.
+      def renewal_of(subscription, **attributes)
+        build(:purchase_in_progress, link: subscription.link, subscription:, **attributes)
+      end
+
+      def a_subscription
+        create(:membership_purchase).subscription
+      end
+
+      it "does not block them, matching on the card the history was paid with" do
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: long_ago)
+        purchase = build(:purchase_in_progress,
+                         email: "someone-else@example.com",
+                         stripe_fingerprint: known_card,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        expect(purchase.buyer_blocked?).to be false
+      end
+
+      # The case the exemption exists for (gumroad-private#1480): a long-standing subscriber whose
+      # renewals have all settled on the card that just declined.
+      it "does not block a renewal paid on a card with its own settled history" do
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              email: "loyal@example.com",
+                              stripe_fingerprint: known_card,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        expect(purchase.buyer_blocked?).to be false
+      end
+
+      # A subscription's email and account look trustworthy because our own code copied them onto
+      # the renewal — but their source was an unauthenticated checkout, so whoever started the
+      # membership chose them. Somebody can open a membership under an established customer's
+      # address and then have a later renewal on a different, stolen card inherit that customer's
+      # record. Only the card counts, on a renewal too.
+      it "still blocks a renewal on a different card, even though its email came from our own records" do
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              email: "loyal@example.com",
+                              stripe_fingerprint: different_card,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+        expect(purchase.blocked_by_email?).to be false
+      end
+
+      it "still blocks a renewal on a different card whose subscriber account has the history" do
+        purchaser = create(:user)
+        create_list(:purchase, settled_count, purchaser:, email: "old-address@example.com",
+                                              purchase_state: "successful", stripe_fingerprint: known_card,
+                                              created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              purchaser:,
+                              email: "new-address@example.com",
+                              stripe_fingerprint: different_card,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      # The exemption is what protects an established customer, so it must not be claimable by
+      # typing their address into checkout. A guest supplies their own email and we resolve an
+      # account from it without proving ownership, so email alone can never grant the exemption.
+      it "still blocks the card when an unverified guest merely types an established buyer's email" do
+        established_buyer = create(:user, email: "loyal@example.com")
+        create_list(:purchase, settled_count, purchaser: established_buyer, email: "loyal@example.com",
+                                              purchase_state: "successful", stripe_fingerprint: known_card,
+                                              created_at: long_ago)
+        purchase = build(:purchase_in_progress,
+                         purchaser: established_buyer,
+                         email: "loyal@example.com",
+                         stripe_fingerprint: different_card,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+        expect(purchase.blocked_by_email?).to be false
+      end
+
+      it "still blocks the card when the past purchases were all refunded" do
+        create_list(:purchase, settled_count, email: "refunded@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, stripe_refunded: true,
+                                              created_at: long_ago)
+        purchase = build(:purchase_in_progress,
+                         email: "refunded@example.com",
+                         stripe_fingerprint: known_card,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      it "still blocks the card when the past purchases were free" do
+        create_list(:free_purchase, settled_count, email: "freebies@example.com", purchase_state: "successful",
+                                                   created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              email: "freebies@example.com",
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      it "still blocks the card when the past purchases are too recent to have been disputed" do
+        create_list(:purchase, settled_count, email: "brand-new@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: 1.day.ago)
+        purchase = build(:purchase_in_progress,
+                         email: "brand-new@example.com",
+                         stripe_fingerprint: known_card,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      # Note: a buyer with a standing chargeback can't reach the decline path at all — the
+      # chargeback check in Purchase::Risk fails the purchase first — so the exclusion is
+      # asserted directly on the history check.
+      it "does not count charged-back purchases as clean history" do
+        create_list(:purchase, settled_count, email: "disputed@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, chargeback_date: 1.month.ago,
+                                              created_at: long_ago)
+        purchase = build(:purchase_in_progress, email: "disputed@example.com", stripe_fingerprint: known_card)
+
+        expect(purchase.buyer_has_clean_payment_history?).to be false
+      end
+
+      it "counts a chargeback the buyer won as clean history" do
+        create_list(:purchase, settled_count, email: "won-dispute@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, chargeback_date: 1.month.ago,
+                                              chargeback_reversed: true, created_at: long_ago)
+        purchase = build(:purchase_in_progress, email: "won-dispute@example.com", stripe_fingerprint: known_card)
+
+        expect(purchase.buyer_has_clean_payment_history?).to be true
+      end
+
+      it "still blocks the card when the buyer is just short of the threshold" do
+        create_list(:purchase, settled_count - 1, email: "newish@example.com",
+                                                  purchase_state: "successful",
+                                                  stripe_fingerprint: known_card, created_at: long_ago)
+        purchase = build(:purchase_in_progress,
+                         email: "newish@example.com",
+                         stripe_fingerprint: known_card,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      # #recent_stripe_fingerprint looks up "the newest card on any purchase sharing this email",
+      # and a guest supplies that email themselves. When the failing purchase carries no card of its
+      # own there is nothing to hold the lookup down, so it lands on the card of whoever really owns
+      # the address — a bystander whose working card we would then block platform-wide. That is the
+      # same bug this PR fixes, one method along, so the second block is only taken on a renewal,
+      # where our own code copied the email across from the original purchase.
+      it "does not block a bystander's card when a guest types their email and the charge carries no card" do
+        bystander = create(:user, email: "bystander@example.com")
+        create(:purchase, purchaser: bystander, email: "bystander@example.com",
+                          purchase_state: "successful", stripe_fingerprint: known_card)
+        purchase = build(:purchase_in_progress,
+                         email: "bystander@example.com",
+                         stripe_fingerprint: nil,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
+      end
+
+      # Same bug one step further in: a renewal's email and account can also be an established
+      # buyer's, because whoever started the membership typed that address at an unauthenticated
+      # checkout. When the renewal itself carries no card, inferring one from that email or account
+      # blocks the established buyer's own working card platform-wide, which is the outcome this
+      # whole change exists to prevent.
+      it "does not block an established buyer's card when a fingerprint-less renewal fails" do
+        established_buyer = create(:user, email: "loyal@example.com")
+        create(:purchase, purchaser: established_buyer, email: "loyal@example.com",
+                          purchase_state: "successful", stripe_fingerprint: known_card)
+        subscription = create(:membership_purchase, purchaser: established_buyer,
+                                                    email: "loyal@example.com").subscription
+        purchase = renewal_of(subscription,
+                              purchaser: established_buyer,
+                              email: "loyal@example.com",
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
+      end
+
+      # Built directly rather than through the factory, which reaches out to Stripe to create a real
+      # payment method. Only the fingerprint matters in these examples.
+      def a_card(fingerprint)
+        CreditCard.create!(stripe_fingerprint: fingerprint, visual: "**** **** **** 4242",
+                           card_type: CardType::VISA, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                           stripe_customer_id: "cus_test_blockable", expiry_month: 1, expiry_year: 2040)
+      end
+
+      # The card that renewal was charged on is still blocked even when the failed charge recorded no
+      # fingerprint of its own — but only because the subscription's earlier renewals settled on that
+      # same card, which is what proves it belongs to this subscription rather than to whoever the
+      # membership was opened under.
+      it "blocks the card a renewal was charged on when earlier renewals settled on it too" do
+        credit_card = a_card(different_card)
+        subscription = a_subscription
+        subscription.update!(credit_card:)
+        create(:purchase, link: subscription.link, subscription:, credit_card:,
+                          price_cents: 5_00, purchase_state: "successful", created_at: long_ago)
+        purchase = renewal_of(subscription,
+                              credit_card:,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_present
+      end
+
+      # A renewal can come out at zero — a discount or store credit covering the whole price — and
+      # still be recorded as successful with whichever card was on file, without a penny moving to
+      # it. That is not the subscription proving the card paid for it, so it grants no provenance:
+      # otherwise a membership opened under an established customer's email address could pick up
+      # their saved card on one zero-priced renewal and get it blocked platform-wide by a later
+      # decline.
+      it "does not block a card whose only earlier renewal cost nothing" do
+        credit_card = a_card(different_card)
+        subscription = a_subscription
+        subscription.update!(credit_card:)
+        create(:free_purchase, link: subscription.link, subscription:, credit_card:,
+                               purchase_state: "successful", created_at: long_ago)
+        purchase = renewal_of(subscription,
+                              credit_card:,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_empty
+      end
+
+      # A charge held for Strong Customer Authentication fails up to a quarter of an hour after it
+      # was attempted, and the buyer can replace their card in the meantime. Reading the subscription
+      # row at failure time would then block the replacement card, which this charge never touched,
+      # and leave the card that actually declined alone. The renewal's own credit_card_id is a
+      # snapshot of what was charged, so it is read instead.
+      it "blocks the card the renewal was charged on, not one attached after the attempt" do
+        charged_card = a_card(different_card)
+        replacement_card = a_card("fingerprint-of-a-replacement-card")
+        subscription = a_subscription
+        subscription.update!(credit_card: charged_card)
+        create(:purchase, link: subscription.link, subscription:, credit_card: charged_card,
+                          price_cents: 5_00, purchase_state: "successful", created_at: long_ago)
+        purchase = renewal_of(subscription,
+                              credit_card: charged_card,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        purchase.save!
+        subscription.update!(credit_card: replacement_card)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_present
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: "fingerprint-of-a-replacement-card")).to be_empty
+      end
+
+      # When the subscription holds no card of its own, both Subscription#build_purchase and
+      # Purchase#load_chargeable_for_charging fall back to the card saved on the purchaser's account
+      # — and that account can be an established customer's, because the membership could have been
+      # opened under their email address at an unauthenticated checkout. So a card that has never
+      # settled a charge for this subscription grants no fallback block.
+      it "does not block a card that never paid for this subscription" do
+        established_buyer = create(:user)
+        their_card = a_card(known_card)
+        subscription = a_subscription
+        subscription.update!(credit_card: their_card)
+        purchase = renewal_of(subscription,
+                              purchaser: established_buyer,
+                              credit_card: their_card,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
       end
     end
   end
@@ -279,20 +602,23 @@ describe Purchase::Blockable do
   describe "#mark_failed" do
     context "when the purchase fails due to a fraud related reason" do
       let(:purchaser) { create(:user, email: "purchaser@example.com") }
-      let(:purchase) { create(:purchase, purchaser:, email: "another-email@example.com", purchase_state: "in_progress", stripe_error_code: "card_declined_lost_card", charge_processor_id: StripeChargeProcessor.charge_processor_id) }
-      let(:expected_blocked_objects) do [
-        ["email", "purchaser@example.com"],
-        ["browser_guid", purchase.browser_guid],
-        ["email", "another-email@example.com"],
-        ["ip_address", purchase.ip_address],
-        ["charge_processor_fingerprint", purchase.stripe_fingerprint]
-      ] end
+      let(:purchase) { create(:purchase, purchaser:, email: "another-email@example.com", purchase_state: "in_progress", stripe_error_code: "card_declined_stolen_card", charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-      it "blocks buyer's email, browser_guid, ip_address and stripe_fingerprint" do
+      it "blocks the card only, leaving the buyer able to pay with another one" do
         expect do
           purchase.mark_failed
-        end.to change { PlatformBlock.count }.from(0).to(5)
-        expect(PlatformBlock.pluck(:object_type, :object_value)).to match_array(expected_blocked_objects)
+        end.to change { PlatformBlock.count }.from(0).to(1)
+        expect(PlatformBlock.pluck(:object_type, :object_value)).to eq([["charge_processor_fingerprint", purchase.stripe_fingerprint]])
+      end
+    end
+
+    context "when the purchase fails because the card was reported lost" do
+      let(:purchase) { create(:purchase, purchase_state: "in_progress", stripe_error_code: "card_declined_lost_card", charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+      it "doesn't block anything, because this is usually a reissued card" do
+        expect do
+          purchase.mark_failed
+        end.to_not change { PlatformBlock.count }
       end
     end
 

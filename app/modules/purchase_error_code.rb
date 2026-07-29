@@ -221,7 +221,24 @@ module PurchaseErrorCode
     "withdrawal_count_limit_exceeded" => "The customer has exceeded the balance or credit limit available on their card."
   }.freeze
 
-  FRAUD_RELATED_ERROR_CODES = [CARD_DECLINED_FRAUDULENT, "card_declined_lost_card", "card_declined_pickup_card", "card_declined_stolen_card"].freeze
+  CARD_DECLINED_LOST_CARD = "card_declined_lost_card"
+  CARD_DECLINED_PICKUP_CARD = "card_declined_pickup_card"
+  CARD_DECLINED_STOLEN_CARD = "card_declined_stolen_card"
+
+  FRAUD_RELATED_ERROR_CODES = [CARD_DECLINED_FRAUDULENT, CARD_DECLINED_LOST_CARD, CARD_DECLINED_PICKUP_CARD, CARD_DECLINED_STOLEN_CARD].freeze
+
+  # The decline codes that, on their own, are strong enough for us to platform-block the person
+  # who attempted the payment (see Purchase::Blockable#ban_buyer_on_fraud_related_error_code!).
+  #
+  # "fraudulent" and "stolen card" are the issuer telling us the cardholder disputes the card is
+  # being used by them, which is the card-testing signal we want to act on.
+  #
+  # "lost card" and "pickup card" are deliberately NOT here, even though they are still counted as
+  # fraud-related elsewhere. Issuers use both overwhelmingly for ordinary card replacement: the
+  # bank reissued the card and marked the old number lost, so every stored card-on-file charge
+  # against the old number declines with that code. Treating it as fraud blocked long-standing,
+  # never-disputed customers out of paying us at all (gumroad-private#1480).
+  AUTO_BLOCK_ERROR_CODES = [CARD_DECLINED_FRAUDULENT, CARD_DECLINED_STOLEN_CARD].freeze
 
   PAYMENT_ERROR_CODES = PAYPAL_ERROR_CODES.keys
                                           .concat(STRIPE_ERROR_CODES.keys)
