@@ -304,6 +304,47 @@ describe Purchase::Blockable do
 
         expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
       end
+
+      # Same bug one step further in: a renewal's email and account can also be an established
+      # buyer's, because whoever started the membership typed that address at an unauthenticated
+      # checkout. When the renewal itself carries no card, inferring one from that email or account
+      # blocks the established buyer's own working card platform-wide, which is the outcome this
+      # whole change exists to prevent.
+      it "does not block an established buyer's card when a fingerprint-less renewal fails" do
+        established_buyer = create(:user, email: "loyal@example.com")
+        create(:purchase, purchaser: established_buyer, email: "loyal@example.com",
+                          purchase_state: "successful", stripe_fingerprint: known_card)
+        subscription = create(:membership_purchase, purchaser: established_buyer,
+                                                    email: "loyal@example.com").subscription
+        purchase = renewal_of(subscription,
+                              purchaser: established_buyer,
+                              email: "loyal@example.com",
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
+      end
+
+      # The card the subscription itself holds is the instrument the renewal was charged on, so it
+      # is still blocked even when the failed charge recorded no fingerprint of its own.
+      it "blocks the card the subscription holds when a renewal on it fails" do
+        # Built directly rather than through the factory, which reaches out to Stripe to create a
+        # real payment method. Only the fingerprint matters here.
+        credit_card = CreditCard.create!(stripe_fingerprint: different_card, visual: "**** **** **** 4242",
+                                         card_type: CardType::VISA, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                         stripe_customer_id: "cus_test_blockable", expiry_month: 1, expiry_year: 2040)
+        subscription = create(:membership_purchase).subscription
+        subscription.update!(credit_card:)
+        purchase = renewal_of(subscription,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_present
+      end
     end
   end
 

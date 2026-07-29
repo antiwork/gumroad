@@ -323,18 +323,36 @@ module Purchase::Blockable
     # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
     # distinct cards have failed.
     #
-    # #recent_stripe_fingerprint finds "the newest card on any purchase sharing this email or
-    # account", and on an unauthenticated checkout the email is whatever was typed into the form
-    # (see #buyer_has_clean_payment_history?). Usually the failing purchase carries the declined
-    # card itself and that lookup lands back on the same fingerprint, which is why the second block
-    # normally only repeats the first — but when the failing purchase has no fingerprint of its own,
-    # it lands on the newest card of whoever really owns that address, and we would block a
-    # bystander's working card platform-wide. So it only runs for a recurring charge, where our own
-    # code copied the email and account across from the original purchase and the card on file is
-    # the one that just declined.
+    # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
+    # record one — so for a recurring charge we also block the card the subscription holds. That
+    # card is read straight off the subscription record, which is the payment instrument this
+    # renewal was actually charged on.
+    #
+    # It is deliberately NOT looked up from the email or the account on the purchase. Both of those
+    # can belong to somebody else: a membership can be started under an established customer's
+    # address at an unauthenticated checkout (see #buyer_has_clean_payment_history?), so "the newest
+    # card on any purchase sharing this email or account" — what #recent_stripe_fingerprint returns
+    # — can be a bystander's working card, and a fingerprint-less renewal would get that card
+    # blocked platform-wide. Subscription#credit_card_to_charge is avoided for the same reason: it
+    # falls back to the account owner's card when the subscription has none of its own, and the
+    # account is exactly the identity we cannot trust here. When the subscription holds no card, we
+    # block nothing beyond the failed charge's own fingerprint.
     def block_buyer_payment_method!
       block_by_charge_processor_fingerprint!
-      block_by_recent_stripe_fingerprint! if is_recurring_subscription_charge
+      block_by_subscription_card_fingerprint! if is_recurring_subscription_charge
+    end
+
+    # The fingerprint of the card attached to this purchase's subscription, or nil when there is no
+    # subscription or it has no card of its own.
+    def subscription_card_fingerprint
+      subscription&.credit_card&.stripe_fingerprint
+    end
+
+    def block_by_subscription_card_fingerprint!
+      fingerprint = subscription_card_fingerprint
+      return if fingerprint.blank?
+
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: fingerprint)
     end
 
     def suspend_buyer_on_fraudulent_card_decline!
