@@ -72,7 +72,8 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # A ceiling on rows loaded into memory, so a regression that mislabels balances at
   # scale produces an alert rather than a job that dies trying to describe it. The
   # alert reports whether it hit this ceiling, since the loaded rows are then only
-  # part of the picture.
+  # part of the picture. Ordered oldest-first when it does: an old stuck balance has
+  # been blocking that seller's payouts for longer and is the more urgent one to see.
   MAX_ROWS_LOADED = 500
 
   def perform
@@ -81,13 +82,19 @@ class MonitorGumroadHeldBalanceCurrencyJob
       .where("balances.created_at >= ?", BASELINE_CUTOFF)
       .where("balances.holding_currency IS NULL OR CAST(balances.holding_currency AS BINARY) <> ?", Currency::USD)
       .left_joins(:merchant_account)
-      .where(
-        "merchant_accounts.id IS NULL OR merchant_accounts.user_id IS NULL " \
-        "OR merchant_accounts.charge_processor_id <> ?",
+      # Everything except a Stripe account that belongs to a seller. Written as a NOT
+      # around the one excluded shape rather than as a list of included ones, so that
+      # an unfamiliar row shape is kept and answered for in Ruby rather than dropped.
+      # COALESCE is load-bearing: a bare comparison against a NULL charge_processor_id
+      # yields NULL, NOT NULL is NULL, and the row would be silently excluded -- yet a
+      # NULL processor id resolves to GUMROAD through MerchantAccount#holder_of_funds's
+      # fallback, so that row is exactly one this monitor must report.
+      .where.not(
+        "merchant_accounts.user_id IS NOT NULL AND COALESCE(merchant_accounts.charge_processor_id, '') = ?",
         StripeChargeProcessor.charge_processor_id
       )
       .includes(:merchant_account)
-      .order(id: :desc)
+      .order(id: :asc)
       .limit(MAX_ROWS_LOADED)
       .to_a
 
@@ -104,7 +111,7 @@ class MonitorGumroadHeldBalanceCurrencyJob
       created_since: BASELINE_CUTOFF.iso8601,
       # True when the query hit MAX_ROWS_LOADED, in which case the counts above describe
       # the rows that were read rather than everything that matches.
-      hit_row_limit: candidates.size == MAX_ROWS_LOADED,
+      hit_row_limit: candidates.size >= MAX_ROWS_LOADED,
       sample: offending.first(SAMPLE_LIMIT).map { describe(_1) },
       # Rows whose holder_of_funds could not be answered at all. Reported separately so a
       # resolution failure never masquerades as a mislabelled balance, and kept out of the

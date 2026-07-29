@@ -166,6 +166,24 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     )
   end
 
+  # MerchantAccount#holder_of_funds falls back to GUMROAD for any charge processor it does
+  # not recognise, including a missing one -- so these balances break payouts. The SQL has
+  # to be phrased so a NULL processor id is KEPT: any comparison against NULL yields NULL,
+  # which would silently drop the row.
+  it "alerts on a mislabelled balance whose merchant account has no charge processor id" do
+    account = create(:merchant_account_paypal, user: create(:user))
+    account.update_column(:charge_processor_id, nil)
+    balance = travel_to(after_baseline) do
+      create(:balance, merchant_account: account, holding_currency: Currency::EUR)
+    end
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(sample: [hash_including(balance_id: balance.id)])
+    )
+  end
+
   # merchant_account_id is nullable, so a row can exist with nothing to resolve. Such a row
   # cannot be judged either way and must not be silently dropped.
   it "reports a row with no merchant account rather than skipping it silently" do
