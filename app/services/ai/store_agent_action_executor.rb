@@ -17,7 +17,8 @@
 #
 # Returns { success:, message: } plus fixed internal failure metadata, and never raises for expected
 # API failures. Controllers remove that metadata before responding to clients; it exists only so
-# structured logs can group failures without copying arbitrary API text.
+# structured logs can group failures without copying arbitrary API text and release a claimed
+# proposal only when the executor proves it rejected the action before dispatch.
 class Ai::StoreAgentActionExecutor
   # The agent now stages every change as a single generic catalog write. We keep the constant name
   # (the controller checks it) but it contains just the one supported proposed-action type.
@@ -31,22 +32,33 @@ class Ai::StoreAgentActionExecutor
   # @param type [String] must be "api_write"
   # @param params [Hash] { "endpoint" => id, "path_params" => {...}, "params" => {...} }
   # @return [Hash] { success: Boolean, message: String, failure_reason: String?,
-  #   failure_status: Integer? }
+  #   failure_status: Integer?, retry_safe: Boolean? }
   def execute(type:, params:)
-    return failure("That action isn't supported.", reason: "unsupported_action") unless type.to_s == "api_write"
+    unless type.to_s == "api_write"
+      return failure("That action isn't supported.", reason: "unsupported_action", retry_safe: true)
+    end
 
     params = (params || {}).with_indifferent_access
     endpoint = Ai::StoreAgentApiCatalog.find(params[:endpoint])
-    return failure("That action isn't supported.", reason: "unsupported_action") if endpoint.nil? || endpoint.read?
+    if endpoint.nil? || endpoint.read?
+      return failure("That action isn't supported.", reason: "unsupported_action", retry_safe: true)
+    end
 
     # Defense in depth: the minted token's scopes are already narrowed to the acting user's role
     # (so a denied endpoint would 403 at the v2 layer), but refuse here too so a tampered/stale
     # proposal for an endpoint outside the user's role never even dispatches a mutation.
     unless endpoint_permitted?(endpoint)
-      return failure("You don't have permission to do that.", reason: "permission_denied")
+      return failure("You don't have permission to do that.", reason: "permission_denied", retry_safe: true)
     end
 
-    path = endpoint.expand_path(params[:path_params])
+    begin
+      path = endpoint.expand_path(params[:path_params])
+    rescue ArgumentError => e
+      # Missing path params are rejected before the nested request. Do not catch ArgumentError
+      # around the dispatch itself: an exception after a processor-side mutation is ambiguous and
+      # must keep the proposal claimed.
+      return failure(e.message, reason: "invalid_path_parameters", retry_safe: true)
+    end
 
     # Defense in depth against a stale or tampered proposal: refuse a body carrying keys the
     # endpoint doesn't declare BEFORE dispatching. The v2 API silently ignores unknown body keys,
@@ -55,14 +67,13 @@ class Ai::StoreAgentActionExecutor
     # already rejects these, so a well-formed proposal never hits this.
     body = normalize_body(params[:params])
     unknown_keys_error = endpoint.unknown_param_keys_error(body)
-    return failure(unknown_keys_error, reason: "unknown_parameters") if unknown_keys_error
+    if unknown_keys_error
+      return failure(unknown_keys_error, reason: "unknown_parameters", retry_safe: true)
+    end
 
     response = api_client.write(endpoint.method, path, body)
 
     interpret(endpoint, response)
-  rescue ArgumentError => e
-    # Missing path param on a tampered/stale action.
-    failure(e.message, reason: "invalid_path_parameters")
   end
 
   private
@@ -80,6 +91,10 @@ class Ai::StoreAgentActionExecutor
         object = Ai::StoreAgentObjectFormatter.from_response(endpoint, response).first
         success(response["message"].presence || "Done: #{endpoint.summary}", object:)
       elsif status == 401 || status == 403
+        # Every response interpreted here arrived after `api_client.write` dispatched the nested
+        # endpoint. Even an authorization status cannot prove that endpoint work did not happen
+        # before the response was rendered, so it must not make the one-shot claim retry-safe. Only
+        # the executor's permission check above, which runs before dispatch, can make that guarantee.
         failure("You don't have permission to do that.", reason: "permission_denied", status:)
       else
         failure(
@@ -112,7 +127,13 @@ class Ai::StoreAgentActionExecutor
 
     def success(message, object: nil) = { success: true, message:, object: }.compact
 
-    def failure(message, reason:, status: nil)
-      { success: false, message:, failure_reason: reason, failure_status: status }.compact
+    def failure(message, reason:, status: nil, retry_safe: false)
+      {
+        success: false,
+        message:,
+        failure_reason: reason,
+        failure_status: status,
+        retry_safe: retry_safe || nil,
+      }.compact
     end
 end
