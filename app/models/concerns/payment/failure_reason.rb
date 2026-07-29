@@ -33,6 +33,17 @@ module Payment::FailureReason
     "PAYPAL 14159" => "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
   }.freeze
 
+  # Whether a payout note is one of the terminal-PayPal explanations above.
+  #
+  # Recognising these by their wording is deliberate. They are the only payout notes that name
+  # PayPal and the restriction to the seller, so the reason sentence identifies them without
+  # needing a marker on the comment row — which matters because the notes we most need to
+  # recognise are the ones already written to sellers before any marker existed.
+  def self.terminal_paypal_explanation_note?(content)
+    text = content.to_s
+    TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.any? { |reason| text.include?(reason) }
+  end
+
   # What the seller can actually do about it, and what happens next. Both halves have to be true
   # for the individual seller, so each is chosen separately.
   #

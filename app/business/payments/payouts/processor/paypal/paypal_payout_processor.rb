@@ -78,11 +78,17 @@ class PaypalPayoutProcessor
     # and nothing but a generic "payouts were paused" note to go on (gumroad-private#1478).
     #
     # Deliberately no note is written here. The failure that ended the retries already recorded a
-    # seller-facing note naming PayPal and the fix, and it stays the newest payout note precisely
-    # because this path is silent — a weekly internal note would bury it and add another row to
-    # the hundreds of automated comments these accounts already carry. Sellers who were already
-    # stuck before this check existed have no such failure to have written one, so
-    # Onetime::ExplainTerminalPaypalPayoutFailures backfilled the note for them.
+    # seller-facing note naming PayPal and the fix, and a weekly internal note would add another
+    # row to the hundreds of automated comments these accounts already carry without telling the
+    # seller anything new. Sellers who were already stuck before this check existed have no such
+    # failure to have written one, so Onetime::ExplainTerminalPaypalPayoutFailures backfilled the
+    # note for them.
+    #
+    # Staying silent is not on its own enough to keep that explanation in front of the seller: the
+    # Payouts banner shows the newest note the seller may see, and a held account also gets a
+    # weekly "payouts were paused" note from Payouts.is_user_payable. That note is suppressed from
+    # the seller's view while the explanation is the newest one they can see, which is what keeps
+    # the explanation from being buried.
     #
     # Three things lift the block on their own, so this is not a dead end: adding a bank account
     # (handled at the top of this method, and the fix we point sellers at), switching to a
@@ -410,9 +416,14 @@ class PaypalPayoutProcessor
   #
   # Every part of a split payout goes to the same PayPal address, so when they all fail they nearly
   # always fail for the same reason. Taking one code is enough to classify the payout, and it is
-  # what lets a permanently-refused split payout stop retrying like any other. If the parts somehow
-  # disagree, or PayPal sent no code at all, fall back to the generic reason rather than picking a
-  # code that only describes part of the payout.
+  # what lets a permanently-refused split payout stop retrying like any other.
+  #
+  # Only codes PayPal actually sent are considered: a part with no code contributes nothing rather
+  # than forcing the generic reason, so one part reporting 3148 classifies the payout even if a
+  # sibling part reported nothing. That is deliberate — the parts share one destination, so a
+  # restriction on that account explains all of them. If two parts report *different* codes, or no
+  # part reports any, fall back to the generic reason instead of picking a code that only
+  # describes part of the payout.
   def self.split_payment_failure_reason(payment)
     reason_codes = payment.split_payments_info.map { |split_payment_info| split_payment_info["reason_code"] }.compact.uniq
     return Payment::FailureReason::PAYPAL_PAYOUT_FAILED unless reason_codes.one?

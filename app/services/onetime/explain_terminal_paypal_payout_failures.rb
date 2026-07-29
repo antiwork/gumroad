@@ -85,6 +85,20 @@ module Onetime
       end
 
       def still_blocked?(user)
+        # A closed or suspended account is not going to be paid whatever they do, and an account
+        # with a bank account on file is already being paid on a different rail — so telling either
+        # one "your payouts stopped, fix your PayPal account and you'll be paid on the next payout
+        # date" would be false. Suspension and closure are both checked before the payout method
+        # is even considered (Payouts.is_user_payable), and a live bank account takes precedence
+        # over PayPal (PaypalPayoutProcessor.is_user_payable), so none of these sellers is stuck
+        # for the reason this note describes.
+        #
+        # The bank-account check matters on its own: switching to a bank usually clears
+        # payment_address, but a seller who connected PayPal through OAuth keeps a payout email
+        # via paypal_connect_account even after adding a bank, so the address-keyed check below
+        # would still consider them blocked.
+        return false if user.deleted? || user.suspended? || user.active_bank_account.present?
+
         payout_email = user.paypal_payout_email
         return false if payout_email.blank?
 

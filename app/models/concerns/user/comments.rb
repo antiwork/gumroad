@@ -17,4 +17,19 @@ module User::Comments
       json_data: { PayoutNoteVisibility::SELLER_VISIBLE_FLAG => seller_visible }
     )
   end
+
+  # The newest payout note this seller may actually be shown, or nil.
+  #
+  # Visibility lives in the comment's json_data, which MySQL cannot filter on usefully, so the
+  # newest notes are walked in memory. The scan is capped for the same reason the Payouts banner
+  # caps it: an account can carry a long tail of internal breadcrumbs, and a seller-facing note
+  # buried under that many newer ones is too stale to matter.
+  def latest_seller_visible_payout_note
+    comments.with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .order(created_at: :desc, id: :desc)
+            .limit(PayoutNoteVisibility::MAX_NOTES_SCANNED)
+            .find { |note| PayoutNoteVisibility.seller_visible?(note) }
+  end
 end

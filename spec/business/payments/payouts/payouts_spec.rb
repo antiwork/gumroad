@@ -916,6 +916,47 @@ describe Payouts do
         content = "Payout on #{date} was skipped because payouts on the account were paused by the user."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
       end
+
+      # A seller whose PayPal account can never receive the money is told so once, and that note is
+      # the only thing on their Payouts page telling them what to do about it. The banner shows the
+      # newest note they are allowed to see, so writing this weekly note seller-visible would put
+      # them back to reading "payouts were paused by the system" within one payout cycle.
+      it "does not let the paused-payout note bury a terminal PayPal explanation" do
+        seller = create(:compliant_user, payment_address: "stuck@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.add_payout_note(
+          content: "Your payout on July 1st, 2026 could not be sent because " \
+                   "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
+                   "Add a bank account in your payout settings.",
+          seller_visible: true
+        )
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        # Support still gets the note; the seller keeps seeing the explanation.
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(paused_note.content).to include("payouts on the account were paused by the system")
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(false)
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+      end
+
+      it "still shows the paused-payout note to a seller with no terminal PayPal explanation" do
+        seller = create(:compliant_user)
+        create(:ach_account, user: seller)
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
+
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
+      end
     end
 
     describe "notification" do

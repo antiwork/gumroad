@@ -42,8 +42,25 @@ class Payouts
     end
 
     if user.payouts_paused?
-      payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}.") if add_comment
+      if add_comment
+        payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
+        content = "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}."
+
+        # Don't let this weekly note bury the terminal-PayPal explanation.
+        #
+        # The Payouts banner shows only the newest note the seller is allowed to see. A seller
+        # whose PayPal account can never receive the money is told so once — by the payout that
+        # failed, or by the one-time backfill for sellers who were already stuck — and that note
+        # is the only thing telling them what to actually do. Written seller-visible every week,
+        # this note would replace it within one payout cycle and put them back to reading
+        # "payouts were paused by the system", which is exactly the dead end gumroad-private#1478
+        # exists to remove. Support still gets the note either way; only the seller's view of it
+        # changes.
+        keep_explanation_visible =
+          Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
+
+        user.add_payout_note(content:, seller_visible: !keep_explanation_visible)
+      end
       return false
     end
 

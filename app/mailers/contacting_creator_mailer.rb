@@ -179,13 +179,18 @@ class ContactingCreatorMailer < ApplicationMailer
     @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
     @reason = Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(
       @payment.failure_reason,
-      # Only reachable from the mailer preview, which has to render against whatever payout rows
-      # the local database happens to have.
+      # Reached by the mailer preview, which renders against whatever payout rows the local
+      # database happens to have. It is also the safety net if this mailer is ever enqueued for a
+      # payment whose failure_reason is not one of the terminal codes — the copy would then name
+      # the wrong restriction, so keep the caller gated on Payment#terminal_paypal_failure?.
       Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
     )
-    # A hold on the account outlives the payout method fix and only support can lift it, so the
-    # email has to ask a seller in that position to reply instead of promising the next payout date.
-    # Only holds WE placed count: a seller who paused their own payouts can just un-pause them.
+    # Ask the seller to reply rather than promising the next payout date, because an admin or
+    # system hold outlives the payout-method fix this email prescribes and only support can lift
+    # it. Two narrower cases are deliberately swept in with it: a hold Stripe placed is lifted
+    # automatically when the seller changes their payout details (UpdatePayoutMethod), so for them
+    # the ask is merely over-cautious rather than wrong. A seller who paused their own payouts is
+    # excluded entirely — that is their own toggle to flip, so they get the plain wording.
     @payouts_on_hold = @seller.payouts_paused_internally?
     # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
     # PayPal-only countries, where "add a bank account" is advice they cannot act on.

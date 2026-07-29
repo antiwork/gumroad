@@ -94,6 +94,45 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
+    # Adding a bank account usually clears the payment address, but a seller who connected PayPal
+    # through OAuth still has a payout email afterwards — so the address-keyed block check alone
+    # would keep treating them as stuck and tell them their payouts had stopped.
+    it "skips a seller who added a bank account while keeping a connected PayPal account" do
+      terminal_failure_for(seller)
+      create(:ach_account, user: seller)
+
+      expect(seller.reload.paypal_payout_email).to be_present
+
+      expect do
+        described_class.process
+      end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
+    # Suspension is checked before the payout method is even looked at, so promising this seller a
+    # payout once they fix their PayPal account would be false.
+    it "skips a suspended seller" do
+      terminal_failure_for(seller)
+      seller.flag_for_fraud!(author_id: seller.id)
+      seller.suspend_for_fraud!(author_id: seller.id)
+
+      expect(seller.reload).to be_suspended
+
+      expect do
+        described_class.process
+      end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
+    # A closed account is paused internally and will not be paid whatever the seller does, so the
+    # "reply and we'll review the hold" copy would send them to support for nothing.
+    it "skips a closed account" do
+      terminal_failure_for(seller)
+      seller.update!(deleted_at: Time.current)
+
+      expect do
+        described_class.process
+      end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
     it "skips a seller who has since changed their PayPal address" do
       terminal_failure_for(seller)
       seller.update!(payment_address: "working@example.com")
