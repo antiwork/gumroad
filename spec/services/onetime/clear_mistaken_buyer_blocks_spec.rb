@@ -140,15 +140,19 @@ describe Onetime::ClearMistakenBuyerBlocks do
   # go unnoticed and the buyer would stay unable to pay with the older card.
   it "clears the card that was current when the block was written, not the buyer's latest card" do
     subscriber_email = "subscriber@example.com"
+    declined_card = "fingerprint-of-the-card-that-declined"
     old_card = "fingerprint-of-the-card-that-was-blocked"
     create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
                 email: subscriber_email, purchase_state: "successful",
-                stripe_fingerprint: old_card, created_at: 6.months.ago)
-    # A renewal with no card fingerprint of its own, so the block came from the buyer's recent card.
+                stripe_fingerprint: declined_card, created_at: 6.months.ago)
+    # The card on record when the renewal failed, which is the one the old rule blocked.
+    create(:purchase, email: subscriber_email, purchase_state: "successful",
+                      stripe_fingerprint: old_card, created_at: 2.months.ago)
     original = create(:membership_purchase, email: subscriber_email)
     renewal = create(:purchase, link: original.link, subscription: original.subscription,
                                 email: subscriber_email, purchase_state: "failed",
-                                stripe_error_code: "card_declined_lost_card", stripe_fingerprint: nil,
+                                stripe_error_code: "card_declined_lost_card",
+                                stripe_fingerprint: declined_card,
                                 stripe_transaction_id: nil, charge_processor_id: nil, price_cents: 0)
     travel_to(renewal.created_at) do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: old_card)
@@ -168,13 +172,16 @@ describe Onetime::ClearMistakenBuyerBlocks do
   # would miss that row and report the buyer cleared while their card stayed blocked.
   it "clears the card the buyer started using while the charge waited for authentication" do
     subscriber_email = "sca-subscriber@example.com"
+    declined_card = "fingerprint-of-the-card-that-declined"
     later_card = "fingerprint-of-the-card-used-during-authentication"
     create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
-                email: subscriber_email, purchase_state: "successful", created_at: 6.months.ago)
+                email: subscriber_email, purchase_state: "successful",
+                stripe_fingerprint: declined_card, created_at: 6.months.ago)
     original = create(:membership_purchase, email: subscriber_email)
     renewal = create(:purchase, link: original.link, subscription: original.subscription,
                                 email: subscriber_email, purchase_state: "failed",
-                                stripe_error_code: "card_declined_lost_card", stripe_fingerprint: nil,
+                                stripe_error_code: "card_declined_lost_card",
+                                stripe_fingerprint: declined_card,
                                 stripe_transaction_id: nil, charge_processor_id: nil, price_cents: 0)
     create(:purchase, email: subscriber_email, purchase_state: "successful",
                       stripe_fingerprint: later_card, created_at: renewal.created_at + 5.minutes)

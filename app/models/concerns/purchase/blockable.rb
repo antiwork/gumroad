@@ -220,60 +220,38 @@ module Purchase::Blockable
   # mint the history that exempts them from the block below by downloading three free products.
   #
   # Whose history counts is the delicate part, and it is deliberately NOT "whoever this purchase
-  # says it belongs to". See #clean_payment_history_conditions.
+  # says it belongs to".
+  #
+  # The only identity we accept here is the card itself. A Stripe fingerprint is derived from the
+  # card number, so a run of settled, undisputed purchases on this fingerprint is proof that THIS
+  # CARD has paid us before and nobody complained. Nothing the person filling in a checkout form
+  # can type gets them somebody else's fingerprint.
+  #
+  # Email addresses and accounts are not accepted, on a renewal either. An unauthenticated
+  # checkout supplies its own email address and purchase creation resolves an account from it
+  # (Purchase::CreateService#set_purchaser_for) without ever proving the person owns it — and that
+  # unproven identity is what a subscription then persists as its own (`subscription.user`) and
+  # copies onto every later charge (Subscription#build_purchase). So "this came from our records,
+  # not from this request" is true of a renewal and still says nothing about who the buyer is:
+  # somebody can start a membership under an established customer's address today and have a
+  # later renewal on a stolen card inherit that customer's clean record. Until we persist identity
+  # that was actually authenticated, the card is the only provenance we have.
+  #
+  # The subscriber this exemption exists for — a long-standing member whose bank reissued their
+  # card (gumroad-private#1480) — is still covered: the card on file that just declined is the
+  # same card their previous renewals settled on, so its own history clears them.
   def buyer_has_clean_payment_history?
-    conditions, values = clean_payment_history_conditions
-    return false if conditions.empty?
+    return false if stripe_fingerprint.blank?
 
     Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
             .where(created_at: ..MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
             .where.not(id:)
-            .where(conditions.join(" OR "), values)
+            .where(stripe_fingerprint:)
             .limit(MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
             .count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
   end
 
   private
-    # Which past purchases are allowed to speak for this one.
-    #
-    # An unauthenticated checkout supplies its own email address, and purchase creation resolves an
-    # account from that address without ever proving the person owns it. So "purchases with this
-    # email" is attacker-controlled input: somebody testing a stolen card could type an established
-    # customer's address and inherit their clean record, which is exactly the exemption that is
-    # supposed to protect that customer and nobody else. Identity therefore only counts when we did
-    # not take the buyer's word for it:
-    #
-    #   * a recurring subscription charge — our own code copies the email and the account across
-    #     from the original purchase (Subscription#build_purchase), so no part of it came from this
-    #     request. This is the case the exemption exists for: a long-standing subscriber whose bank
-    #     reissued their card (gumroad-private#1480).
-    #   * the same card — a Stripe fingerprint is derived from the card itself, so a history of
-    #     settled purchases on this fingerprint is proof that this card, not merely this typed
-    #     address, has paid us before and was not disputed. Nothing the person filling in the form
-    #     can choose gets them somebody else's fingerprint.
-    #
-    # A guest typing any email they like matches neither, so they are judged on the card alone.
-    def clean_payment_history_conditions
-      conditions = []
-      values = {}
-
-      if stripe_fingerprint.present?
-        conditions << "purchases.stripe_fingerprint = :stripe_fingerprint"
-        values[:stripe_fingerprint] = stripe_fingerprint
-      end
-
-      if is_recurring_subscription_charge
-        conditions << "purchases.email = :email"
-        values[:email] = email
-        if purchaser_id.present?
-          conditions << "purchases.purchaser_id = :purchaser_id"
-          values[:purchaser_id] = purchaser_id
-        end
-      end
-
-      [conditions, values]
-    end
-
     def recent_stripe_fingerprint
       Purchase.with_stripe_fingerprint
               .where("purchaser_id = ? or email = ?", purchaser_id, email)
@@ -322,8 +300,8 @@ module Purchase::Blockable
     #   2. A buyer with real successful payment history behind them is not blocked at all. Somebody
     #      who has paid us repeatedly, with nothing refunded and nothing charged back, is not a card
     #      tester; whatever the issuer is reporting, the right outcome is that they can put a new
-    #      card in and carry on. Only history we can tie to this payment without trusting the
-    #      checkout form counts — see #clean_payment_history_conditions.
+    #      card in and carry on. Only history that the card itself proves counts — see
+    #      #buyer_has_clean_payment_history?.
     #
     # And when we do block, we block the payment method only — see #block_buyer_payment_method!.
     def ban_buyer_on_fraud_related_error_code!
@@ -347,7 +325,7 @@ module Purchase::Blockable
     #
     # #recent_stripe_fingerprint finds "the newest card on any purchase sharing this email or
     # account", and on an unauthenticated checkout the email is whatever was typed into the form
-    # (see #clean_payment_history_conditions). Usually the failing purchase carries the declined
+    # (see #buyer_has_clean_payment_history?). Usually the failing purchase carries the declined
     # card itself and that lookup lands back on the same fingerprint, which is why the second block
     # normally only repeats the first — but when the failing purchase has no fingerprint of its own,
     # it lands on the newest card of whoever really owns that address, and we would block a

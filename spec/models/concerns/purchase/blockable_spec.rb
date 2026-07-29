@@ -142,7 +142,26 @@ describe Purchase::Blockable do
         expect(purchase.buyer_blocked?).to be false
       end
 
-      it "does not block a renewal, matching on the subscription's own email" do
+      # The case the exemption exists for (gumroad-private#1480): a long-standing subscriber whose
+      # renewals have all settled on the card that just declined.
+      it "does not block a renewal paid on a card with its own settled history" do
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              email: "loyal@example.com",
+                              stripe_fingerprint: known_card,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        expect(purchase.buyer_blocked?).to be false
+      end
+
+      # A subscription's email and account look trustworthy because our own code copied them onto
+      # the renewal — but their source was an unauthenticated checkout, so whoever started the
+      # membership chose them. Somebody can open a membership under an established customer's
+      # address and then have a later renewal on a different, stolen card inherit that customer's
+      # record. Only the card counts, on a renewal too.
+      it "still blocks a renewal on a different card, even though its email came from our own records" do
         create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
                                               stripe_fingerprint: known_card, created_at: long_ago)
         purchase = renewal_of(a_subscription,
@@ -150,11 +169,13 @@ describe Purchase::Blockable do
                               stripe_fingerprint: different_card,
                               error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
-        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
-        expect(purchase.buyer_blocked?).to be false
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+        expect(purchase.blocked_by_email?).to be false
       end
 
-      it "does not block a renewal, matching on the subscriber's account" do
+      it "still blocks a renewal on a different card whose subscriber account has the history" do
         purchaser = create(:user)
         create_list(:purchase, settled_count, purchaser:, email: "old-address@example.com",
                                               purchase_state: "successful", stripe_fingerprint: known_card,
@@ -165,7 +186,9 @@ describe Purchase::Blockable do
                               stripe_fingerprint: different_card,
                               error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
-        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
       end
 
       # The exemption is what protects an established customer, so it must not be claimable by
