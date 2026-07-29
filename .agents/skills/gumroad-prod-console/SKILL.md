@@ -83,6 +83,22 @@ EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale k
 - **You cannot run a command on the bastion itself.** It auto-jumps to whatever `LC_PAPER` names; omitting `LC_PAPER` fails with `ssh: Could not resolve hostname`. Always route through a working instance IP.
 - **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner.
 
+- **The self-heal needs one working hop, so it cannot rescue a fully-rejected pool.** `ssh-keygen -R` is routed through the instance that answered. If every candidate is rejected there is no hop to route through, the keys stay stale, and the next run is rejected identically — the pool stops decaying only while something still answers.
+
+### "No instance passed the health probe" usually means slow, not down
+
+The candidate probe is deliberately impatient (20s) so one hung host cannot eat the caller's budget, but that also rejects hosts which are merely slow under load. When *every* candidate fails, a fleet-wide outage is the less likely reading.
+
+`prod_query.sh` now retries the non-stale-key rejections with a 60s probe before giving up, and says so (`answered on the patient retry (slow, not unhealthy)`). Only the all-rejected path pays for this.
+
+If you still get the hard error, force a host rather than assuming production is down:
+
+```bash
+PROD_INSTANCE_IP=10.1.34.180 bash .agents/skills/gumroad-prod-console/scripts/prod_query.sh q.rb
+```
+
+This matters for **watchers**, not just interactive use: a cron that treats an unreadable console as "nothing to report" goes silent indefinitely and looks healthy. On 2026-07-29 all 8 candidates were rejected while a forced host answered the same query in 13s.
+
 ### Grepping only for `^MARK` can hide a total failure
 
 `... | grep "^MARK"` on a run that never reached Rails returns empty with **exit 0**, which reads as "query worked, no rows". Capture to files and echo the exit code:

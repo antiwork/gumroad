@@ -100,6 +100,7 @@ else
   # outer timeout; now it costs <=20s and we fail over to the next-oldest.
   instance_ip=""
   stale_key_ips=""
+  slow_ips=""
   probe_err=$(mktemp)
   for ip in $candidate_ips; do
     if LC_PAPER="$ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
@@ -108,6 +109,13 @@ else
         >/dev/null 2>"$probe_err"; then
       instance_ip="$ip"
       break
+    fi
+    # Remember the ones that failed for a reason OTHER than a stale key. A 20s probe is
+    # tuned to skip past a hung host quickly, which means it also rejects a host that is
+    # merely slow — and a slow-but-working host is still a usable hop. Keep them for a
+    # second, more patient pass rather than discarding them (see below).
+    if ! grep -qE "REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed" "$probe_err"; then
+      slow_ips="$slow_ips $ip"
     fi
     # A probe can fail for many reasons — the container is still starting, the host is
     # hung, the network blipped, we timed out. In all of those the bastion's recorded host
@@ -125,6 +133,30 @@ else
     fi
   done
   rm -f "$probe_err"
+
+  # Before giving up entirely, retry the non-stale-key failures with a patient probe.
+  # The 20s pass above is deliberately impatient so one hung host cannot eat the caller's
+  # whole budget, but that same impatience rejects hosts that are only slow to answer.
+  # When the fast pass finds NOTHING, "every instance is unhealthy" is the less likely
+  # explanation — a fleet-wide outage is rare, a fleet under load is not. On 2026-07-29
+  # this aborted with all 8 candidates rejected while 10.1.34.180 answered a real query
+  # fine on the very next attempt, which silently blocked every prod-console verification
+  # (and every watcher built on one) until it was forced by hand with PROD_INSTANCE_IP.
+  #
+  # This runs only on the all-rejected path, so the common case pays nothing for it.
+  if [ -z "$instance_ip" ] && [ -n "${slow_ips// /}" ]; then
+    >&2 echo "No candidate answered within 20s; retrying${slow_ips} with a 60s probe..."
+    for ip in $slow_ips; do
+      if LC_PAPER="$ip" probe_timeout 60 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+          -o ConnectTimeout=20 "admin@$PROD_BASTION" \
+          'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
+          >/dev/null 2>&1; then
+        instance_ip="$ip"
+        >&2 echo "Instance $ip answered on the patient retry (slow, not unhealthy)."
+        break
+      fi
+    done
+  fi
 
   # EC2 recycles private IPs, so the BASTION's known_hosts accumulates stale keys and refuses
   # the onward hop with "REMOTE HOST IDENTIFICATION HAS CHANGED" / "Offending ECDSA key". From
