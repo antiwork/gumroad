@@ -10,7 +10,13 @@ class QatarBankAccount < BankAccount
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
-  validate :validate_account_number
+  # Only on create. Every path that accepts an account number from a seller builds a NEW record
+  # (UpdatePayoutMethod#process_full_bank_account_replacement), so this still checks all real
+  # input. Validating on update instead would fail closed on the 115 live accounts stored while
+  # this check was inverted and accepted any non-blank value: `mark_deleted!` and the
+  # account-holder-name update both `save!` the existing row, so those sellers could no longer
+  # delete, rename, or replace their bank account at all.
+  validate :validate_account_number, on: :create
 
   def routing_number
     "#{bank_code}"

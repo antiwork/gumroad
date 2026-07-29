@@ -51,5 +51,20 @@ describe QatarBankAccount do
       expect(build(:qatar_bank_account, account_number: "1234567890")).not_to be_valid
       expect(build(:qatar_bank_account, account_number: "")).not_to be_valid
     end
+
+    # Until this format check was fixed it only fired on a blank account number, so any
+    # wrong-length value saved. Production holds 115 live Qatar accounts stored that way. They
+    # must stay saveable: `mark_deleted!` and the account-holder-name update both call `save!` on
+    # the existing row, so validating the number on update would make those sellers impossible to
+    # delete, rename, or replace — locking them out of payouts entirely.
+    it "does not block saves of an already-stored account number that predates this format check" do
+      bank_account = build(:qatar_bank_account, account_number: "1234567890")
+      bank_account.save!(validate: false)
+
+      bank_account.account_holder_full_name = "Renamed Seller"
+      expect(bank_account.save).to be(true)
+      expect { bank_account.mark_deleted! }.not_to raise_error
+      expect(bank_account.reload.deleted_at).to be_present
+    end
   end
 end
