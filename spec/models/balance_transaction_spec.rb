@@ -352,8 +352,11 @@ describe BalanceTransaction, :vcr do
             )
           end
 
-          # Gumroad holds this money in its own USD platform account whatever the buyer paid in.
-          # Labelling it EUR made payouts reject the balance and fail the seller's entire
+          # What Gumroad owes this seller is a USD figure whatever the buyer paid in, which is
+          # what these fields record. Stripe may well still be holding the charge in EUR, but
+          # that is an account-level treasury position and not a per-seller fact.
+          #
+          # Labelling the balance EUR made payouts reject it and fail the seller's entire
           # payment with currency_mismatch, correctly-labelled USD balances included.
           it "labels the balance in USD, not the buyer's presentment currency" do
             expect(merchant_account.holder_of_funds).to eq(HolderOfFunds::GUMROAD)
