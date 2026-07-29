@@ -244,7 +244,7 @@ describe Purchase::Risk do
       bad_purchase = build(:purchase, link: @product, browser_guid:)
       bad_purchase.send(:check_for_fraud)
       expect(bad_purchase.errors.empty?).to be(false)
-      expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. Please try again on a different browser and/or internet connection."]
+      expect(bad_purchase.errors.full_messages).to eq ["Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."]
     end
 
     it "returns errors if the seller ip_address has been blocked" do
