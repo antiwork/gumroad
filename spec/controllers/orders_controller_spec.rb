@@ -2646,5 +2646,140 @@ describe OrdersController, :vcr do
         expect(response.parsed_body["success"]).to be(true)
       end
     end
+
+    context "when the failure is already visible server-side" do
+      # These declines already land in purchases.stripe_error_code via
+      # payment_intent.payment_failed, and every report here shares one fixed message — so
+      # reporting them buries the redirect-method signal in the same Sentry issue.
+      %w[card link].each do |payment_method_type|
+        it "logs but does not notify for #{payment_method_type}" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).not_to receive(:notify)
+          expect(Rails.logger).to receive(:error).with(/Client-confirm browser error for order #{order.id}/)
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            stage: "confirm",
+            payment_method_type:,
+            stripe_error_type: "card_error",
+            stripe_error_code: "card_declined",
+            stripe_error_message: "Your card was declined.",
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      it "does not consume the per-order notify budget, so a later redirect-leg failure still reports" do
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        token = order.secure_external_id(scope: "confirm")
+
+        expect(ErrorNotifier).to receive(:notify).once.with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "ideal")
+        )
+
+        (described_class::CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER + 3).times do
+          post :confirm_error, params: { id: token, payment_method_type: "card", stripe_error_type: "card_error", stripe_error_code: "card_declined" }
+        end
+        # card_error here for the same reason as the sibling context below: any other type returns
+        # early at the attempt check, so this post would pass even if ideal were suppressed.
+        post :confirm_error, params: { id: token, payment_method_type: "ideal", stripe_error_type: "card_error", stripe_error_code: "payment_intent_unexpected_state" }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+    end
+
+    context "when the failure leaves no server-side trace" do
+      # A rejected confirm here creates no charge and no webhook — the browser is the only witness.
+      #
+      # stripe_error_type is card_error in these so the denylist is actually consulted: any other
+      # type returns early at the attempt check, and the examples would pass even if the method
+      # were suppressed.
+      StripeIntentStatus::CLIENT_REDIRECT_PAYMENT_METHOD_TYPES.each do |payment_method_type|
+        it "notifies for #{payment_method_type}" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "Client-confirm browser error",
+            hash_including(payment_method_type:)
+          )
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            payment_method_type:,
+            stripe_error_type: "card_error",
+            stripe_error_code: "payment_intent_unexpected_state",
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      it "notifies for an unrecognised payment method so a newly-added one stays visible" do
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "some_new_method")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          payment_method_type: "some_new_method",
+          stripe_error_type: "card_error",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies when payment_method_type is blank" do
+        # Blank arrives whenever Stripe raises before attaching a payment method, and reporting it
+        # is the denylist's deliberate fail-open direction.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          stripe_error_type: "card_error",
+          stripe_error_code: "card_declined",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies for a card error that never reached an attempt, so no webhook recorded it" do
+        # A card-typed invalid_request_error (consumed ConfirmationToken, intent in an unexpected
+        # state) leaves the intent untransitioned, so no webhook records it and this endpoint is
+        # again the only witness.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "card", stripe_error_type: "invalid_request_error")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          payment_method_type: "card",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+    end
   end
 end
