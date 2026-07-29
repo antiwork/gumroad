@@ -251,6 +251,33 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    # The charge path exempts a card-saving checkout from the buyer-currency fallback only when
+    # every purchase on it is a plain membership. Minting a token for a mixed cart here would
+    # not degrade to dollars at the till: the charge refuses a token it cannot honour and raises
+    # BuyerCurrencyQuoteInvalid, so the buyer could not complete that checkout at all.
+    context "for a cart mixing a membership with a one-off, with the seller in the subscription ramp" do
+      before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller) }
+
+      let(:membership) { create(:subscription_product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
+
+      it "withholds the quote, so the whole cart is displayed and charged in canonical dollars" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        result = described_class.create(line_items: line_items_for(membership, product),
+                                        canonical_total_cents: 20_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "still quotes a membership bought on its own, which the charge path does honour" do
+        result = described_class.create(line_items: line_items_for(membership),
+                                        canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result).to be_present
+        expect(result.currency).to eq(Currency::CAD)
+      end
+    end
+
     it "returns nil instead of reporting an error when a line item carries no product" do
       orphan_line = described_class::LineItem.new(
         permalink: "gone", product: nil,

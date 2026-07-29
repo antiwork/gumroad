@@ -268,6 +268,19 @@ class Checkout::BuyerCurrencyQuote
     # the quote locked) means the whole cart falls back to canonical USD. The buyer's
     # currency is known by this point because one of the product gates depends on it.
     return unless products.all? { |product| quotable_product?(product, buyer_currency:) }
+    # A cart mixing a membership with a non-membership falls back, matching what the charge path
+    # does with it: BuyerCurrencyEligibility#subscription_setup_in_ramp? exempts a card-saving
+    # checkout only when EVERY purchase on the charge is a plain membership. The shapes that rule
+    # also excludes (free trials, installment plans, preorders, commissions) are already gone by
+    # this line, so mirroring it here is just "either all recurring or none".
+    #
+    # Without this the two disagreed, and the disagreement was not a quiet fallback: the token
+    # would be minted here, then the charge would refuse it and raise BuyerCurrencyQuoteInvalid,
+    # because a token that exists must be honoured or the buyer is charged something other than
+    # the total they confirmed. A guest buying a membership alongside a one-off could not
+    # complete that checkout at all, and reloading reproduced it.
+    recurring, one_time = products.partition(&:is_recurring_billing?)
+    return if recurring.any? && one_time.any?
     # On a non-USD listing, a tip or a shipping charge is not yet safe to quote.
     #
     # Both are computed twice on the way to a purchase: once by the surcharge request that
