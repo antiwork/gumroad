@@ -1432,6 +1432,49 @@ describe User, :vcr do
         @user.email = "a" * 250 + "@b.com"
         expect(@user).to be_invalid
       end
+
+      # An address that picked up a character the person cannot see (a bidirectional mark
+      # travels along with text copied out of a right-to-left document) is refused rather than
+      # quietly repaired. Repairing it would store an address the person never typed; accepting
+      # it as-is means the mail provider rejects everything we send, so the account never gets
+      # its confirmation email or its receipts and nobody can work out why.
+      context "when the email carries an invisible character" do
+        it "is invalid" do
+          @user.email = "\u200Fbuyer@example.com"
+          expect(@user).to be_invalid
+        end
+
+        it "says the address contains a hidden character rather than just calling it invalid" do
+          @user.email = "\u200Fbuyer@example.com"
+          @user.valid?
+
+          expect(@user.errors[:email]).to include(EmailFormatValidator::INVISIBLE_CHARACTER_MESSAGE)
+        end
+
+        it "is invalid for the other invisible characters too" do
+          ["buyer\u200Bx@example.com", "\uFEFFbuyer@example.com", "buyer\u00A0@example.com",
+           "buyer\u00ADx@example.com", "bu\u3000yer@example.com"].each do |email|
+            @user.email = email
+            expect(@user).to be_invalid, "expected #{email.inspect} to be rejected"
+          end
+        end
+
+        # This is what makes the rejection real. stripped_fields runs before validation, so if
+        # the email were stripped like the other fields the invisible character would be gone by
+        # the time the validation looked at it and the address would save silently.
+        it "does not strip the character before validating, so the value is refused and not repaired" do
+          @user.email = "\u200Fbuyer@example.com"
+          @user.valid?
+
+          expect(@user.email).to eq "\u200Fbuyer@example.com"
+        end
+
+        it "still strips ordinary surrounding whitespace" do
+          @user.email = "  buyer@example.com  "
+          expect(@user).to be_valid
+          expect(@user.email).to eq "buyer@example.com"
+        end
+      end
     end
 
     describe "kindle_email" do

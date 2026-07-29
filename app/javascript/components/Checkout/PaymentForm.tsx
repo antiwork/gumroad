@@ -33,7 +33,7 @@ import { createBillingAgreement, createBillingAgreementToken } from "$app/data/p
 import { PurchasePaymentMethod } from "$app/data/purchase";
 import { assert, assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
-import { checkEmailForTypos as checkEmailForTyposUtil } from "$app/utils/email";
+import { checkEmailForTypos as checkEmailForTyposUtil, removeInvisibleCharacters } from "$app/utils/email";
 import { asyncVoid } from "$app/utils/promise";
 
 import { Button } from "$app/components/Button";
@@ -376,7 +376,19 @@ const SharedInputs = () => {
                 type="email"
                 aria-invalid={errors.has("email")}
                 value={state.email}
-                onChange={(evt) => dispatch({ type: "set-value", email: evt.target.value.toLowerCase() })}
+                onChange={(evt) =>
+                  dispatch({
+                    type: "set-value",
+                    // Invisible characters are removed as the address lands in the field rather
+                    // than on submit, so an address pasted with one (a bidirectional mark
+                    // travels along with text copied out of a right-to-left document) becomes
+                    // the address the buyer believes they pasted, and they can still see and
+                    // correct it. Left unhandled, the purchase succeeds against an address the
+                    // mail provider rejects, so the receipt carrying the download links bounces
+                    // while the address on screen looks perfectly correct.
+                    email: removeInvisibleCharacters(evt.target.value).toLowerCase(),
+                  })
+                }
                 disabled={(loggedInUser && loggedInUser.email !== null) || isProcessing(state)}
                 onBlur={checkForEmailTypos}
               />

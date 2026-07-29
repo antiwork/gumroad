@@ -1,7 +1,32 @@
+// Characters that are invisible to the person typing but are still real characters in the value.
+// They ride along with a copy/paste out of a right-to-left document, come from right-to-left
+// keyboard layouts, or come from a PDF that uses a soft hyphen as a line-break hint. An address
+// carrying one is a well-formed address as far as the regex below is concerned, so without this
+// check we accept it, store it, and then every message we send to it bounces at the mail
+// provider — while the person sees an address that looks perfectly spelled and never learns why
+// they hear nothing from us.
+//
+// U+200C (zero width non-joiner) and U+200D (zero width joiner) are deliberately absent even
+// though they sit in the same Unicode block: both carry meaning (U+200C keeps "می‌روم" two words
+// in Persian, U+200D is the glue inside multi-codepoint emoji), so they are content rather than
+// formatting. This list must stay in step with InvisibleCharacters in the Ruby code, which is
+// what enforces the same rule server-side.
+const INVISIBLE_CHARACTERS = /[\u00AD\u200B\u200E\u200F\u2060\uFEFF\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/u;
+const INVISIBLE_CHARACTERS_GLOBAL = new RegExp(INVISIBLE_CHARACTERS.source, "gu");
+
+export const containsInvisibleCharacters = (value: string): boolean => INVISIBLE_CHARACTERS.test(value);
+
+// Removes the invisible characters from an address. Used on the email inputs so a pasted address
+// is cleaned as it lands in the field: the person sees exactly the address that will be
+// submitted, and can still correct it, which is why cleaning here is not the same as the server
+// quietly rewriting what they typed. An address never legitimately contains a space, so the
+// Unicode spaces are deleted rather than folded to a plain one.
+export const removeInvisibleCharacters = (value: string): string => value.replace(INVISIBLE_CHARACTERS_GLOBAL, "");
+
 const REGEX =
   /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/u;
 export const isValidEmail = (possiblyEmail: string): boolean =>
-  REGEX.test(possiblyEmail) && possiblyEmail.length <= 255;
+  REGEX.test(possiblyEmail) && possiblyEmail.length <= 255 && !containsInvisibleCharacters(possiblyEmail);
 
 const sift3Distance = (s1: string, s2: string): number => {
   if (s1.length === 0) return s2.length;

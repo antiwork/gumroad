@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { checkEmailForTypos, isValidEmail } from "$app/utils/email";
+import {
+  checkEmailForTypos,
+  containsInvisibleCharacters,
+  isValidEmail,
+  removeInvisibleCharacters,
+} from "$app/utils/email";
 
 // checkEmailForTypos only invokes the callback when there is a suggestion, so capture it
 // (or null) to assert on both "suggests X" and "stays quiet" cases.
@@ -19,6 +24,48 @@ describe("isValidEmail", () => {
 
   it("rejects an address without a domain", () => {
     expect(isValidEmail("buyer@")).toBe(false);
+  });
+
+  // The characters below render as nothing, so they are written as escapes: an address carrying
+  // one looks perfectly spelled on screen but is rejected by the mail provider, which is why the
+  // form has to catch it before the account or the purchase is created.
+  it("rejects an address carrying an invisible character", () => {
+    expect(isValidEmail("\u200Fbuyer@example.com")).toBe(false);
+    expect(isValidEmail("buyer\u200Bx@example.com")).toBe(false);
+    expect(isValidEmail("\uFEFFbuyer@example.com")).toBe(false);
+    expect(isValidEmail("buyer\u00A0@example.com")).toBe(false);
+  });
+});
+
+describe("containsInvisibleCharacters", () => {
+  it("finds a bidirectional mark", () => {
+    expect(containsInvisibleCharacters("\u200Fbuyer@example.com")).toBe(true);
+  });
+
+  it("is false for an ordinary address", () => {
+    expect(containsInvisibleCharacters("buyer@example.com")).toBe(false);
+  });
+
+  // The joiners carry meaning rather than formatting, so they must not be treated as invisible:
+  // U+200C keeps "می‌روم" two words in Persian and U+200D is the glue inside multi-codepoint
+  // emoji. This fails if someone later widens the set to the whole U+200B-U+200F range.
+  it("does not treat the zero-width joiner or non-joiner as invisible", () => {
+    expect(containsInvisibleCharacters("mi\u200Cravam")).toBe(false);
+    expect(containsInvisibleCharacters("\u{1F468}\u200D\u{1F469}")).toBe(false);
+  });
+});
+
+describe("removeInvisibleCharacters", () => {
+  it("removes every occurrence, not just the first", () => {
+    expect(removeInvisibleCharacters("\u200Fbu\u200Byer@example.com")).toBe("buyer@example.com");
+  });
+
+  it("leaves an ordinary address untouched", () => {
+    expect(removeInvisibleCharacters("buyer@example.com")).toBe("buyer@example.com");
+  });
+
+  it("leaves the meaningful joiners in place", () => {
+    expect(removeInvisibleCharacters("mi\u200Cravam")).toBe("mi\u200Cravam");
   });
 });
 

@@ -1,6 +1,7 @@
 import { Link, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
+import { removeInvisibleCharacters } from "$app/utils/email";
 import { formatPrice } from "$app/utils/price";
 
 import { AuthAlert } from "$app/components/AuthAlert";
@@ -77,11 +78,20 @@ function SignupPage() {
             <FieldsetTitle>
               <Label htmlFor={`${uid}-email`}>Email</Label>
             </FieldsetTitle>
+            {/*
+              The email is cleaned of invisible characters as it lands in the field rather than
+              on submit, so an address pasted with one (a bidirectional mark travels along with
+              text copied out of a right-to-left document) becomes the address the person
+              believes they pasted, and they can still see and correct it. Left unhandled, the
+              account is created against an address the mail provider rejects, so the
+              confirmation email — and every email after it — bounces, while the address on
+              screen looks perfectly correct and nobody can work out why.
+            */}
             <Input
               id={`${uid}-email`}
               type="email"
               value={form.data.user.email}
-              onChange={(e) => form.setData("user.email", e.target.value)}
+              onChange={(e) => form.setData("user.email", removeInvisibleCharacters(e.target.value))}
               required
             />
           </Fieldset>

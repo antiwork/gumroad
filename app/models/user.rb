@@ -16,7 +16,14 @@ class User < ApplicationRecord
 
   has_many :user_external_authentications, dependent: :destroy
 
-  stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
+  stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :support_email
+
+  # The email address is deliberately NOT invisible-character-stripped. An address is an
+  # identity, so if it arrives carrying a character the person cannot see we want the email
+  # validation below to reject it and show them an error, rather than silently save something
+  # other than what they typed. A silently repaired address is worse than a refused one: the
+  # account looks fine, and only the mail provider knows the address is wrong.
+  stripped_fields :email, strip_invisible_characters: false
 
   # Minimum tags count to show tags section on user profile page
   MIN_TAGS_TO_SHOW_TAGS = 2
