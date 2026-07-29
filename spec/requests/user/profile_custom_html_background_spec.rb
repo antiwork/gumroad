@@ -36,6 +36,19 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     JS
   end
 
+  # For refusal cases the expected outcome is "nothing was ever applied", and a
+  # single read would pass simply by running before the message landed. Poll for
+  # the whole window instead: a guard that accepts the value applies it within
+  # a frame, so any non-empty reading inside this window is a failure.
+  def expect_wrapper_never_set(window: 3.0)
+    deadline = Time.current + window
+    while Time.current < deadline
+      expect(wrapper_background).to eq("")
+      expect(theme_color).to be_nil
+      sleep 0.1
+    end
+  end
+
   before { Feature.activate_user(:custom_html_pages, seller) }
 
   context "when the page sets its background on <body>" do
@@ -95,26 +108,72 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # The reported color is seller-influenced, so the wrapper never writes it
-  # into HTML: it round-trips through the CSS parser and only a value the
-  # browser normalizes back out is applied. Anything unparseable is dropped.
-  context "when the page reports a hostile value" do
+  # The reported value is untrusted, and a value that merely PARSES is not
+  # enough: `var()` and the CSS-wide keywords parse for any property regardless
+  # of what they contain, so the wrapper resolves to a computed color and
+  # rejects anything landing on transparent.
+  #
+  # The page declares NO background of its own, so the hostile message is the
+  # only candidate the wrapper ever sees. That is what makes these load-bearing:
+  # with a parse-only check the value is accepted and shows up in the canvas and
+  # the meta tag, and the polling refusal assertion fails.
+  context "when the page reports values that parse but resolve to nothing" do
+    ["var(--x)", "var(--x, url(https://evil.example/pixel))", "inherit", "revert"].each do |hostile|
+      context "reporting #{hostile}" do
+        before do
+          seller.update!(custom_html: <<~HTML)
+            <main><h1>BG Studio</h1></main>
+            <script>
+              parent.postMessage({ type: "gumroad:background", color: #{hostile.to_json} }, "*");
+            </script>
+          HTML
+        end
+
+        it "refuses it and applies nothing" do
+          visit seller.subdomain_with_protocol
+          expect(page).to have_css("iframe#gumroad-landing-frame")
+
+          expect_wrapper_never_set
+        end
+      end
+    end
+  end
+
+  # An over-long value is refused before it is ever parsed. Same construction:
+  # a syntactically VALID color, so only the length cap can reject it.
+  context "when the page reports an absurdly long value" do
     before do
       seller.update!(custom_html: <<~HTML)
-        <style>html,body{margin:0}body{background:#EBEBEB}</style>
         <main><h1>BG Studio</h1></main>
         <script>
-          parent.postMessage({ type: "gumroad:background", color: 'red;"><img src=x onerror=alert(1)>' }, "*");
+          parent.postMessage({ type: "gumroad:background", color: "rgb(1,2,3)" + " ".repeat(5000) }, "*");
         </script>
       HTML
     end
 
-    it "ignores it and keeps the legitimately computed color" do
+    it "refuses it and applies nothing" do
+      visit seller.subdomain_with_protocol
+      expect(page).to have_css("iframe#gumroad-landing-frame")
+
+      expect_wrapper_never_set
+    end
+  end
+
+  # A zero-alpha canvas is the same as no canvas, so html must fall through to
+  # body instead of reporting a color that paints nothing. Modern color
+  # functions carry alpha after a slash, which an rgb()-only check misses.
+  context "when <html> is fully transparent in a modern color function" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html{background:oklch(0.5 0.1 200 / 0)}body{margin:0;background:#EBEBEB}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "falls through to the color that actually paints" do
       visit seller.subdomain_with_protocol
 
       expect_wrapper_background("rgb(235, 235, 235)")
-      expect(theme_color).to eq("rgb(235, 235, 235)")
-      expect(page).to have_no_css("img[src='x']")
     end
   end
 

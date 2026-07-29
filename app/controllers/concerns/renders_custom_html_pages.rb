@@ -218,6 +218,11 @@ module RendersCustomHtmlPages
   #
   # Reported again on class/style mutations and on a color-scheme change so a
   # theme toggle re-colors the bands instead of stranding the first value.
+  #
+  # Solid html/body colors only. A gradient or image-only background leaves
+  # background-color transparent, and a color on a full-page wrapper div is not
+  # the canvas — both report nothing and keep the status-quo white bands, which
+  # is the safe direction (never a wrong color).
   BACKGROUND_BRIDGE_SCRIPT = <<~HTML
     <script data-cfasync="false" data-gumroad-background-bridge>
       (function () {
@@ -225,11 +230,10 @@ module RendersCustomHtmlPages
         if (window.parent === window) return;
         function opaque(color) {
           if (!color || color === "transparent") return false;
-          // rgba()/rgb() with a zero alpha is the computed value for "unset".
-          var parts = color.match(/^rgba?\\(([^)]+)\\)$/i);
-          if (!parts) return true;
-          var values = parts[1].split(/[,\\/]/);
-          return values.length < 4 || parseFloat(values[3]) > 0;
+          // Any color function can carry a zero alpha after a slash; rgba()
+          // also uses a comma. A fully transparent canvas is the same as none,
+          // so fall through to the next candidate rather than reporting it.
+          return !/[,\\/]\\s*0(\\.0*)?%?\\s*\\)\\s*$/.test(color);
         }
         // CSS propagates body's background to the canvas only when html has
         // none of its own, so html has to be consulted first or a page that
@@ -544,28 +548,52 @@ module RendersCustomHtmlPages
     # status/toolbar strips to match instead of leaving white bands, and the
     # overscroll gutter matches on every browser.
     #
-    # The color is untrusted seller-influenced input, so it is never written
-    # into HTML or parsed here: it round-trips through the browser's own CSS
-    # parser via style.backgroundColor, and only the value the browser
-    # normalizes back out is used. A rejected value leaves the property empty
-    # and the whole update is skipped, so nothing can be injected through it.
+    # The reported value is untrusted, so it is resolved to an absolute color
+    # before use: a detached probe would only prove the string PARSES, which
+    # `var()`/`attr()`/`inherit` all do for any property regardless of content.
+    # Setting it on a probe in this document and reading the COMPUTED value
+    # collapses those to a real color or to transparent, which is rejected.
+    # Neither sink parses HTML or URLs, so this is defense in depth rather than
+    # the only thing standing between the page and an injection.
     def custom_html_background_wrapper_script(nonce:)
       <<~HTML
         <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-background-wrapper>
           (function () {
             var frame = document.getElementById("gumroad-landing-frame");
             var meta = null;
+            // Must be IN the document: computed values resolve against the
+            // element's context, and a detached node has none.
             var probe = document.createElement("div");
+            probe.setAttribute("aria-hidden", "true");
+            probe.style.display = "none";
+            var probeAttached = false;
+            // A computed color is well under this; the cap just stops a hostile
+            // child from making us parse megabyte strings in a loop.
+            var MAX_COLOR_LENGTH = 128;
+            function resolve(value) {
+              if (!probeAttached) {
+                document.body.appendChild(probe);
+                probeAttached = true;
+              }
+              probe.style.backgroundColor = "";
+              probe.style.backgroundColor = value;
+              var computed = window.getComputedStyle(probe).backgroundColor;
+              if (!computed || computed === "transparent") return null;
+              // Zero alpha is what an unresolvable var()/keyword collapses to,
+              // and painting it would leave the bands white anyway.
+              var parts = computed.match(/^rgba?\\(([^)]+)\\)$/i);
+              if (parts) {
+                var channels = parts[1].split(/[,\\/]/);
+                if (channels.length > 3 && parseFloat(channels[3]) === 0) return null;
+              }
+              return computed;
+            }
             window.addEventListener("message", function (e) {
               if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
-              if (typeof d.color !== "string") return;
-              // Let the CSS parser vet it: an unparseable value leaves the
-              // property untouched, so a non-empty read-back is the check.
-              probe.style.backgroundColor = "";
-              probe.style.backgroundColor = d.color;
-              var color = probe.style.backgroundColor;
+              if (typeof d.color !== "string" || d.color.length > MAX_COLOR_LENGTH) return;
+              var color = resolve(d.color);
               if (!color) return;
               document.documentElement.style.backgroundColor = color;
               if (!meta) {
