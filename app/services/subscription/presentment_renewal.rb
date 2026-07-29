@@ -83,7 +83,12 @@ class Subscription::PresentmentRenewal
     # Falling back to canonical dollars is the safe answer: the member is billed exactly what the
     # current plan says, which is what they would have been billed before this feature existed.
     # Re-fixing the amount at the new price belongs to the plan-change paths and is not built yet.
-    return fallback(:stale_fixing) unless presentment.canonical_price_cents == purchase.price_cents
+    #
+    # Compared on the plan's own price with tax, tip and shipping taken back out
+    # (LaterChargePresentment.canonical_price_cents_for), which is the same figure the signup
+    # stored. Comparing raw price_cents instead would trip on a member moving house or a VAT
+    # change, neither of which moves the plan price the fixing is about.
+    return fallback(:stale_fixing) unless presentment.canonical_price_cents == LaterChargePresentment.canonical_price_cents_for(purchase)
 
     variable_canonical_cents = variable_component_canonical_cents(purchase)
     variable_presentment_cents = presentment_cents_for(variable_canonical_cents, quote.fx_rate, currency)

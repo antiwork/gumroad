@@ -70,6 +70,24 @@ class LaterChargePresentment < ApplicationRecord
       .first
   end
 
+  # The canonical US-dollar figure a fixing is anchored to: the plan's own price for one period,
+  # with tax, tip and shipping taken back out.
+  #
+  # Defined once here because the write path and the charge path must anchor on exactly the same
+  # figure. `purchase.price_cents` cannot be that figure: Purchase#prepare_for_charge! folds
+  # excluded seller tax and shipping into it before the charge, so anchoring on it made a member
+  # moving house or a VAT rate change look identical to a plan change, and every renewal after
+  # that quietly reverted to US dollars. The components removed here are the same ones a renewal
+  # re-converts at today's rate (Subscription::PresentmentRenewal), so what is left is precisely
+  # the part that is supposed to stay fixed.
+  def self.canonical_price_cents_for(purchase)
+    purchase.total_transaction_cents.to_i -
+      purchase.tip&.value_usd_cents.to_i -
+      purchase.tax_cents.to_i -
+      purchase.gumroad_tax_cents.to_i -
+      purchase.shipping_cents.to_i
+  end
+
   # What the buyer's fixed amount was worth in USD cents when it was fixed.
   def usd_cents_when_fixed
     usd_cents_for(signup_currency_units_per_usd)

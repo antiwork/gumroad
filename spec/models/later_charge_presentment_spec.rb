@@ -249,4 +249,42 @@ describe LaterChargePresentment do
       expect(jpy.usd_drift_cents(BigDecimal("157.0"))).to eq(-45)
     end
   end
+
+  # The figure both the signup write and every later charge anchor on. They call this one method
+  # so they cannot end up comparing different bases: Purchase#prepare_for_charge! folds excluded
+  # tax and shipping into price_cents, so anchoring on that made a member moving house look
+  # exactly like a plan change and dropped the renewal back to US dollars.
+  describe ".canonical_price_cents_for" do
+    it "is the plan's own price, with tax and shipping taken back out" do
+      purchase = build(:purchase, total_transaction_cents: 1_370, price_cents: 1_270,
+                                  tax_cents: 250, gumroad_tax_cents: 0, shipping_cents: 120)
+
+      expect(described_class.canonical_price_cents_for(purchase)).to eq(1_000)
+    end
+
+    it "does not move when only tax and shipping change" do
+      before_move = build(:purchase, total_transaction_cents: 1_000, price_cents: 1_000,
+                                     tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0)
+      after_move = build(:purchase, total_transaction_cents: 1_370, price_cents: 1_270,
+                                    tax_cents: 250, gumroad_tax_cents: 0, shipping_cents: 120)
+
+      expect(described_class.canonical_price_cents_for(after_move))
+        .to eq(described_class.canonical_price_cents_for(before_move))
+    end
+
+    it "moves when the plan price itself changes, which is what must unfix the amount" do
+      cheaper = build(:purchase, total_transaction_cents: 1_000, price_cents: 1_000)
+      dearer = build(:purchase, total_transaction_cents: 1_500, price_cents: 1_500)
+
+      expect(described_class.canonical_price_cents_for(dearer))
+        .not_to eq(described_class.canonical_price_cents_for(cheaper))
+    end
+
+    it "excludes a tip, which is agreed once at checkout rather than on every renewal" do
+      purchase = build(:purchase, total_transaction_cents: 1_200, price_cents: 1_200)
+      allow(purchase).to receive(:tip).and_return(Tip.new(value_usd_cents: 200))
+
+      expect(described_class.canonical_price_cents_for(purchase)).to eq(1_000)
+    end
+  end
 end

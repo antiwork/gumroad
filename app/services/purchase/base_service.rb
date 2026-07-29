@@ -70,8 +70,10 @@ class Purchase::BaseService
         presentment_currency: presentment.presentment_currency,
         presentment_price_cents: presentment.presentment_price_cents,
         # The canonical price this fixing is anchored to. A later charge compares the price it is
-        # about to bill against this and falls back to dollars if the plan has moved since.
-        canonical_price_cents: purchase.price_cents,
+        # about to bill against this and falls back to dollars if the plan has moved since. Both
+        # sides go through LaterChargePresentment.canonical_price_cents_for so they can never
+        # anchor on different figures.
+        canonical_price_cents: LaterChargePresentment.canonical_price_cents_for(purchase),
         signup_currency_units_per_usd: 1 / fx_rate.to_d,
         effective_from: Time.current
       )

@@ -120,6 +120,33 @@ describe Subscription::PresentmentRenewal do
     end
   end
 
+  # The fixing is anchored to the plan's own price for one period. Tax and shipping are
+  # deliberately outside it, because a renewal re-converts those at today's rate anyway.
+  describe "the staleness anchor" do
+    it "still bills the fixed amount when only the member's tax and shipping have moved" do
+      # A member who moves house, or a VAT rate that changes, does not change the plan price
+      # they agreed to, so the fixed amount still applies.
+      renewal_purchase.update!(tax_cents: 250, shipping_cents: 120,
+                               total_transaction_cents: 1000 + 250 + 120)
+
+      result = service(amount_cents: 1370).perform
+
+      expect(result).to be_present
+      expect(result.processor_currency).to eq("eur")
+    end
+
+    it "falls back to canonical dollars once the plan price itself has moved" do
+      # An upgrade, downgrade, quantity change or an expired limited-duration discount moves
+      # the plan price. The stored amount cannot follow on its own, so billing it would charge
+      # something other than what the current plan says.
+      renewal_purchase.update!(price_cents: 1500, total_transaction_cents: 1500)
+      renewal = service(amount_cents: 1500)
+
+      expect(renewal.perform).to be_nil
+      expect(renewal.fallback_reason).to eq(:stale_fixing)
+    end
+  end
+
   it "falls back rather than failing the renewal when the quote cannot be minted" do
     allow(StripeFxQuote).to receive(:create).and_return(nil)
     renewal = service
