@@ -344,7 +344,7 @@ describe Purchase::Blockable do
         subscription = a_subscription
         subscription.update!(credit_card:)
         create(:purchase, link: subscription.link, subscription:, credit_card:,
-                          purchase_state: "successful", created_at: long_ago)
+                          price_cents: 5_00, purchase_state: "successful", created_at: long_ago)
         purchase = renewal_of(subscription,
                               credit_card:,
                               stripe_fingerprint: nil,
@@ -353,6 +353,28 @@ describe Purchase::Blockable do
         purchase.mark_failed!
 
         expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_present
+      end
+
+      # A renewal can come out at zero — a discount or store credit covering the whole price — and
+      # still be recorded as successful with whichever card was on file, without a penny moving to
+      # it. That is not the subscription proving the card paid for it, so it grants no provenance:
+      # otherwise a membership opened under an established customer's email address could pick up
+      # their saved card on one zero-priced renewal and get it blocked platform-wide by a later
+      # decline.
+      it "does not block a card whose only earlier renewal cost nothing" do
+        credit_card = a_card(different_card)
+        subscription = a_subscription
+        subscription.update!(credit_card:)
+        create(:free_purchase, link: subscription.link, subscription:, credit_card:,
+                               purchase_state: "successful", created_at: long_ago)
+        purchase = renewal_of(subscription,
+                              credit_card:,
+                              stripe_fingerprint: nil,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: different_card)).to be_empty
       end
 
       # A charge held for Strong Customer Authentication fails up to a quarter of an hour after it
@@ -366,7 +388,7 @@ describe Purchase::Blockable do
         subscription = a_subscription
         subscription.update!(credit_card: charged_card)
         create(:purchase, link: subscription.link, subscription:, credit_card: charged_card,
-                          purchase_state: "successful", created_at: long_ago)
+                          price_cents: 5_00, purchase_state: "successful", created_at: long_ago)
         purchase = renewal_of(subscription,
                               credit_card: charged_card,
                               stripe_fingerprint: nil,

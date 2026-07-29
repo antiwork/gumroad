@@ -367,10 +367,18 @@ module Purchase::Blockable
     # later. A card appearing for the first time on the failed attempt gets no fallback block: on a
     # genuine card-testing attempt the charge normally records its own fingerprint anyway, and being
     # wrong in the other direction blocks a bystander's working card platform-wide.
+    #
+    # That earlier purchase also has to be one money actually moved for. A renewal whose price came
+    # out at zero — fully covered by a discount or by credit — is still recorded as `successful` and
+    # still carries whichever card was on file at the time, even though nothing was charged to it.
+    # Counting such a row would hand provenance to a card that never paid us: open a membership under
+    # an established customer's email address at an unauthenticated checkout, let one zero-priced
+    # renewal record their saved card, and a later fingerprint-less decline would block that
+    # bystander's working card platform-wide. `non_free` keeps the proof to charges that settled.
     def subscription_card_fingerprint
       return if credit_card_id.blank?
       return if subscription.blank?
-      return unless subscription.purchases.successful.where.not(id:).exists?(credit_card_id:)
+      return unless subscription.purchases.successful.non_free.where.not(id:).exists?(credit_card_id:)
 
       credit_card&.stripe_fingerprint
     end
