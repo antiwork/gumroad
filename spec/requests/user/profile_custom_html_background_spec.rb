@@ -206,4 +206,36 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
   end
+
+  # Going the other way — a page that drops its background — has to clear the
+  # tint too. Reporting only non-empty colors would strand the wrapper on the
+  # last opaque theme while the page itself renders transparent.
+  context "when the page drops its background after load" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}body.plain{background:transparent}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="drop" type="button">Drop background</button>
+        </main>
+        <script>
+          document.getElementById("drop").addEventListener("click", function () {
+            document.body.classList.add("plain");
+          });
+        </script>
+      HTML
+    end
+
+    it "clears the wrapper canvas and removes the theme-color tag" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+      expect(theme_color).to eq("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Drop background" }
+
+      expect_wrapper_background("")
+      expect(theme_color).to be_nil
+    end
+  end
 end

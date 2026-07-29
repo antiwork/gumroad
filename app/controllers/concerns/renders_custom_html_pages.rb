@@ -250,8 +250,12 @@ module RendersCustomHtmlPages
         var reported = null;
         function report() {
           var color = canvasColor();
-          if (!color || color === reported) return;
+          if (color === reported) return;
           reported = color;
+          // A page that drops its background after having one has to say so
+          // (null), or the wrapper keeps painting the old tint under a page
+          // that is now transparent. A page that never had one starts at null
+          // and so still reports nothing.
           parent.postMessage({ type: "gumroad:background", color: color }, "*");
         }
         var queued = false;
@@ -588,12 +592,24 @@ module RendersCustomHtmlPages
               }
               return computed;
             }
+            function clear() {
+              document.documentElement.style.backgroundColor = "";
+              if (meta) {
+                meta.parentNode.removeChild(meta);
+                meta = null;
+              }
+            }
             window.addEventListener("message", function (e) {
               if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
+              // The page went transparent after having a color: drop the tint
+              // rather than leaving the previous theme painted under it.
+              if (d.color === null) return clear();
               if (typeof d.color !== "string" || d.color.length > MAX_COLOR_LENGTH) return;
               var color = resolve(d.color);
+              // An unresolvable value is refused outright — it is not evidence
+              // that the page has no background, so whatever is applied stays.
               if (!color) return;
               document.documentElement.style.backgroundColor = color;
               if (!meta) {
