@@ -154,6 +154,10 @@ class Product::VariantsUpdaterService
     # those versions are still alive — see the call site.
     def contract_named_alive_version_ids(existing_categories)
       return Set.new unless contract&.enforced?
+      # A clear-all is not an id interpretation, so the consumer below never
+      # consults this set on that path — skip the query rather than run it for
+      # a caller that will short-circuit before reading it.
+      return Set.new if contract.cleared?(:variants)
 
       ids = contract.deleted_ids(:variants)
       return Set.new if ids.empty?

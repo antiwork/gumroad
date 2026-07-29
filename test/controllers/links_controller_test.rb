@@ -6948,14 +6948,21 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     # A version that was deleted in some earlier save, sitting in a grouping that
     # is still alive, whose primary key happens to equal the named grouping's.
+    # Move both rows to an id past the high-water mark of BOTH tables rather than
+    # reusing either one's existing id — the two auto-increment counters are
+    # independent, so any id one table has issued may already be taken in the
+    # other, and the collision this test needs must be the only one.
     stale = create_variant(variant_category: @category, name: "Deleted earlier")
     stale.mark_deleted!
-    other_category.update_columns(id: stale.id)
-    swept_version.update_columns(variant_category_id: stale.id)
-    other_category = VariantCategory.find(stale.id)
+    collided_id = VariantCategory.maximum(:id).to_i + BaseVariant.maximum(:id).to_i + 1
+    stale.update_columns(id: collided_id)
+    other_category.update_columns(id: collided_id)
+    swept_version.update_columns(variant_category_id: collided_id)
+    other_category = VariantCategory.find(collided_id)
+    stale = Variant.find(collided_id)
     assert_equal other_category.external_id, stale.external_id,
                  "this test is only meaningful while the two ids collide"
-    assert_not stale.reload.alive?
+    assert_not stale.alive?
 
     post :update, params: @params.merge(
       variants: [{ id: kept.external_id, name: "Kept" }],
@@ -6967,9 +6974,11 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_not other_category.reload.alive?
     assert kept.reload.alive?
     # Sweeping a grouping does not cascade to its versions (VariantCategory's
-    # `has_many :variants` has no `dependent:` option), so this only asserts the
-    # grouping was reached at all.
-    assert_equal other_category.id, swept_version.reload.variant_category_id
+    # `has_many :variants` has no `dependent:` option), so aliveness alone cannot
+    # say WHICH route deleted the grouping. The audit row names it.
+    audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
+    assert_not_nil audit, "the grouping should have been deleted by the named-grouping sweep"
+    assert_includes audit.deleted_variant_category_external_ids, other_category.external_id
   end
 
   test "flag on: a second grouping is left alone when the save names no deletions" do
