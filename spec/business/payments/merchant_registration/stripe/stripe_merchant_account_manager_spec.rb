@@ -9415,7 +9415,7 @@ describe StripeMerchantAccountManager, :vcr do
           stripe_account
         end
         expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(expected_account_params)).and_call_original
-        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, unclaimed_percent_ownership: nil).and_call_original
+        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, seed_representative_ownership: anything, unclaimed_percent_ownership: anything).and_call_original
         expect(Stripe::Account).to receive(:update_person).with(kind_of(String), kind_of(String), a_hash_including(expected_person_params).and(excluding(:first_name))).and_call_original
         subject.update_account(user, passphrase: "1234")
       end
@@ -13138,6 +13138,131 @@ describe StripeMerchantAccountManager, :vcr do
           expect(call_count).to eq(1)
         end
       end
+    end
+
+    context "when an earlier switch left the account a company that nobody owns" do
+      # The individual→business switch writes the compliance-info marker into Stripe's account
+      # metadata before seeding the representative, so a failure in between leaves an account whose
+      # business_type is already "company" while no person holds any ownership. Our marker then says
+      # "already a business" forever, and without a live ownership check nothing ever seeds the
+      # representative again.
+      let(:unowned_representative) do
+        Stripe::Person.construct_from(
+          id: "person_representative",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: true, owner: false }
+        )
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [unowned_representative])
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { owner: true }, limit: 100)
+          .and_return("data" => [])
+      end
+
+      it "seeds the representative's ownership when the caller says to, even with no prior individual compliance record" do
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: true)
+
+        expect(captured_attributes[:relationship]).to include(representative: true, owner: true, percent_ownership: 100)
+      end
+
+      it "leaves ownership alone when the caller says not to seed it" do
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: false)
+
+        expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+    end
+  end
+
+  describe "company.owners_provided attestation" do
+    let(:account_id) { "acct_owners_provided_123" }
+
+    def stripe_account_object(owners_provided:, outstanding:)
+      Stripe::Account.construct_from(
+        id: account_id,
+        object: "account",
+        business_type: "company",
+        company: { owners_provided: },
+        requirements: { currently_due: outstanding, past_due: [], eventually_due: [] }
+      )
+    end
+
+    def owner_list(persons)
+      allow(Stripe::Account).to receive(:list_persons)
+        .with(account_id, relationship: { owner: true }, limit: 100)
+        .and_return("data" => persons)
+    end
+
+    def owning_representative
+      Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: account_id,
+        relationship: { representative: true, owner: true, percent_ownership: 100 }
+      )
+    end
+
+    # Nothing in the codebase used to set company.owners_provided, so an account whose representative
+    # WAS seeded correctly still sat with the requirement outstanding and payouts blocked forever.
+    it "tells Stripe the owner list is complete once someone actually holds ownership" do
+      owner_list([owning_representative])
+
+      expect(Stripe::Account).to receive(:update).with(account_id, { company: { owners_provided: true } })
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    it "does not attest to an owner list nobody is on, which would be a false statement to Stripe" do
+      owner_list([])
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    it "does not attest when the account is not asking for it, because the caller gates on that" do
+      account = stripe_account_object(owners_provided: true, outstanding: [])
+
+      expect(described_class.send(:owners_provided_outstanding?, account)).to be(false)
+    end
+
+    it "treats an account Stripe is still asking about as outstanding" do
+      account = stripe_account_object(owners_provided: false, outstanding: ["company.owners_provided"])
+
+      expect(described_class.send(:owners_provided_outstanding?, account)).to be(true)
+    end
+
+    it "does not treat an unrelated outstanding requirement as this one" do
+      account = stripe_account_object(owners_provided: false, outstanding: ["company.tax_id"])
+
+      expect(described_class.send(:owners_provided_outstanding?, account)).to be(false)
+    end
+
+    # The seller's own compliance details are already saved on Stripe by the time this runs, so a
+    # failure here must not turn a successful save into an error on the payments settings page.
+    it "reports a Stripe failure without raising, so the seller's save still succeeds" do
+      owner_list([owning_representative])
+      allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIError.new("Stripe is down"))
+
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIError))
+
+      expect { described_class.send(:attest_owners_provided, account_id) }.not_to raise_error
     end
   end
 
