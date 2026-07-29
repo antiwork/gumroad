@@ -357,6 +357,38 @@ describe Checkout::BuyerCurrencyQuote do
         expect(result.stripe_fx_quote_expires_at).to be_within(1.second).of(soonest)
       end
 
+      it "reports a rate that returns a typed tip to the buyer unchanged when one seller carries tax" do
+        # The browser converts a typed tip through this rate into canonical cents, splits those
+        # across the cart by each line's PRICE, then converts each seller's share back at that
+        # seller's own rate. Blending the rate over the charge totals would weight it by tax the
+        # split never sees, so a buyer typing CA$5.00 would watch the box settle on a different
+        # figure. This walks that exact round trip.
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(id: "fxq_a", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8")),
+          StripeFxQuote::Quote.new(id: "fxq_b", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.5"))
+        )
+        # Equal prices, and $10 of tax on the second seller's line only.
+        taxed_line_items = [
+          described_class::LineItem.new(permalink: product.unique_permalink, product:, price_cents: 10_00,
+                                        tip_cents: 0, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0),
+          described_class::LineItem.new(permalink: other_seller_product.unique_permalink, product: other_seller_product,
+                                        price_cents: 10_00, tip_cents: 0, seller_tax_cents: 10_00,
+                                        gumroad_tax_cents: 0, shipping_cents: 0),
+        ]
+
+        result = described_class.create(line_items: taxed_line_items, canonical_total_cents: 30_00, ip: "24.48.0.1")
+
+        typed_tip_cents = 5_00
+        canonical_tip_cents = (BigDecimal(typed_tip_cents) / result.display_rate).round
+        # allocateFixedTipCents splits by price and floors each share, so the equal price bases
+        # here take half each.
+        first_share = canonical_tip_cents / 2
+        returned_tip_cents = [[first_share, BigDecimal("0.8")], [canonical_tip_cents - first_share, BigDecimal("0.5")]]
+                             .sum { |share, fx_rate| (BigDecimal(share) / fx_rate).round }
+
+        expect(returned_tip_cents).to be_within(1).of(typed_tip_cents)
+      end
+
       it "falls back to canonical USD when one seller's charge cannot be quoted" do
         # One unquotable charge takes the whole cart back to dollars: a cart cannot honestly
         # show a total made of local currency for one seller and dollars for another.

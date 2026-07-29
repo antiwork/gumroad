@@ -339,7 +339,7 @@ class Checkout::BuyerCurrencyQuote
       # conversions the browser still does itself (the discount row, and the tip amount the
       # buyer types). Every amount that is actually charged comes from the per-charge
       # allocations below, never from this rate.
-      display_rate: display_rate_for(charge_quotes, presentment_total_cents, buyer_currency),
+      display_rate: display_rate_for(charge_quotes, buyer_currency),
       # The earliest expiry across the cart's quotes, because the cart is only good for as long
       # as its soonest-lapsing locked amount: a later one would overstate it. Nothing in the
       # checkout reads this today (the charge path enforces expiry itself, in `verify!`, per
@@ -396,19 +396,49 @@ class Checkout::BuyerCurrencyQuote
     # of 1.25, and a typed CA$10.00 tip would store 799 canonical cents rather than 800.
     #
     # With several charges there is no single rate to use: Stripe mints one quote per connected
-    # account and their rates need not agree, so the only figure that describes the cart as a
-    # whole is what its locked totals imply. The price-ending rounding is taken back out first
-    # (a delta is the rounded amount minus the converted one, so subtracting it recovers the
-    # exact conversion). Otherwise a cart rounded from CA$12.50 down to CA$11.99 would yield a
-    # rate of 1.199 instead of 1.25, and the browser would convert the buyer's typed tip at a
-    # rate bent by a cosmetic rounding of a different amount.
-    def display_rate_for(charge_quotes, presentment_total_cents, buyer_currency)
+    # account and their rates need not agree, so the rate has to be a blend. WHICH amounts it is
+    # blended over decides whether a typed tip survives the round trip, because the browser uses
+    # this rate in both directions: it converts the typed buyer-currency figure into the canonical
+    # cents it stores, and `computeTipsForLines` then splits those canonical cents across the cart
+    # by each line's PRICE, after which each seller's share is converted back at that seller's own
+    # rate. Blending over the charge totals instead would weight the rate by amounts the split
+    # never sees (a seller's tax and shipping ride in their total but not in their price basis),
+    # so on a cart where one seller carries tax and the two rates differ, a buyer typing CA$5.00
+    # would watch the box settle on CA$2.97. Blending over the price bases keeps the two ends
+    # agreeing, and the only gap left is the rounding cent the largest-remainder split already
+    # owns.
+    #
+    # Each price basis is converted at its own charge's rate and the blend is the ratio of those
+    # sums, rather than the locked presentment totals, so the seller's cosmetic price-ending
+    # rounding stays out of it: a cart rounded from CA$12.50 down to CA$11.99 must not bend the
+    # rate a tip is converted at.
+    def display_rate_for(charge_quotes, buyer_currency)
       if charge_quotes.one?
         return BigDecimal(subunit_to_unit(buyer_currency)) /
                (subunit_to_unit(Currency::USD) * charge_quotes.sole.fx_rate)
       end
 
-      BigDecimal(presentment_total_cents - charge_quotes.sum(&:rounding_delta_cents)) / canonical_total_cents
+      canonical_price_basis_cents = charge_quotes.sum { tip_price_basis_cents(_1) }
+      # No priced lines anywhere means nothing for a tip or a discount to be a share of, so there
+      # is no meaningful blend. Fall back to what the locked totals imply; such a cart cannot be
+      # tipped (checkout only offers a tip when the cart's price total is positive).
+      if canonical_price_basis_cents.zero?
+        return BigDecimal(charge_quotes.sum(&:presentment_total_cents) - charge_quotes.sum(&:rounding_delta_cents)) /
+               canonical_total_cents
+      end
+
+      presentment_price_basis_cents = charge_quotes.sum do |charge_quote|
+        presentment_cents_for(tip_price_basis_cents(charge_quote), charge_quote.fx_rate, buyer_currency)
+      end
+      BigDecimal(presentment_price_basis_cents) / canonical_price_basis_cents
+    end
+
+    # The canonical cents of one charge that a typed tip is actually apportioned over: the line
+    # prices, matching the basis `computeTipsForLines` splits on in the browser. Tip cents are
+    # excluded because the tip is what is being apportioned, and tax and shipping because the
+    # split does not see them.
+    def tip_price_basis_cents(charge_quote)
+      line_items_by_seller.fetch(charge_quote.seller.id).sum(&:price_cents)
     end
 
     # Persists the learned mismatch (issue #6011). A persistence failure here must never
