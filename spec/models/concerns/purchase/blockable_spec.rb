@@ -117,34 +117,84 @@ describe Purchase::Blockable do
     context "when the buyer already has a clean payment history" do
       let(:settled_count) { Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY }
       let(:long_ago) { 6.months.ago }
+      let(:known_card) { "fingerprint-of-a-card-that-has-paid-before" }
+      let(:different_card) { "fingerprint-of-some-other-card" }
 
-      it "does not block them, matching on email" do
-        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful", created_at: long_ago)
+      # A renewal charge, which is where the exemption matters most: the email and the account on it
+      # were copied from the original purchase by Subscription#build_purchase, not typed into a form.
+      def renewal_of(subscription, **attributes)
+        build(:purchase_in_progress, link: subscription.link, subscription:, **attributes)
+      end
+
+      def a_subscription
+        create(:membership_purchase).subscription
+      end
+
+      it "does not block them, matching on the card the history was paid with" do
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: long_ago)
         purchase = build(:purchase_in_progress,
-                         email: "loyal@example.com",
+                         email: "someone-else@example.com",
+                         stripe_fingerprint: known_card,
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
         expect(purchase.buyer_blocked?).to be false
       end
 
-      it "does not block them, matching on the buyer's account" do
+      it "does not block a renewal, matching on the subscription's own email" do
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful",
+                                              stripe_fingerprint: known_card, created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              email: "loyal@example.com",
+                              stripe_fingerprint: different_card,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        expect(purchase.buyer_blocked?).to be false
+      end
+
+      it "does not block a renewal, matching on the subscriber's account" do
         purchaser = create(:user)
         create_list(:purchase, settled_count, purchaser:, email: "old-address@example.com",
-                                              purchase_state: "successful", created_at: long_ago)
-        purchase = build(:purchase_in_progress,
-                         purchaser:,
-                         email: "new-address@example.com",
-                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+                                              purchase_state: "successful", stripe_fingerprint: known_card,
+                                              created_at: long_ago)
+        purchase = renewal_of(a_subscription,
+                              purchaser:,
+                              email: "new-address@example.com",
+                              stripe_fingerprint: different_card,
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
       end
 
+      # The exemption is what protects an established customer, so it must not be claimable by
+      # typing their address into checkout. A guest supplies their own email and we resolve an
+      # account from it without proving ownership, so email alone can never grant the exemption.
+      it "still blocks the card when an unverified guest merely types an established buyer's email" do
+        established_buyer = create(:user, email: "loyal@example.com")
+        create_list(:purchase, settled_count, purchaser: established_buyer, email: "loyal@example.com",
+                                              purchase_state: "successful", stripe_fingerprint: known_card,
+                                              created_at: long_ago)
+        purchase = build(:purchase_in_progress,
+                         purchaser: established_buyer,
+                         email: "loyal@example.com",
+                         stripe_fingerprint: different_card,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+        expect(purchase.blocked_by_email?).to be false
+      end
+
       it "still blocks the card when the past purchases were all refunded" do
         create_list(:purchase, settled_count, email: "refunded@example.com", purchase_state: "successful",
-                                              stripe_refunded: true, created_at: long_ago)
+                                              stripe_fingerprint: known_card, stripe_refunded: true,
+                                              created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          email: "refunded@example.com",
+                         stripe_fingerprint: known_card,
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         purchase.mark_failed!
@@ -155,9 +205,9 @@ describe Purchase::Blockable do
       it "still blocks the card when the past purchases were free" do
         create_list(:free_purchase, settled_count, email: "freebies@example.com", purchase_state: "successful",
                                                    created_at: long_ago)
-        purchase = build(:purchase_in_progress,
-                         email: "freebies@example.com",
-                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+        purchase = renewal_of(a_subscription,
+                              email: "freebies@example.com",
+                              error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         purchase.mark_failed!
 
@@ -166,9 +216,10 @@ describe Purchase::Blockable do
 
       it "still blocks the card when the past purchases are too recent to have been disputed" do
         create_list(:purchase, settled_count, email: "brand-new@example.com", purchase_state: "successful",
-                                              created_at: 1.day.ago)
+                                              stripe_fingerprint: known_card, created_at: 1.day.ago)
         purchase = build(:purchase_in_progress,
                          email: "brand-new@example.com",
+                         stripe_fingerprint: known_card,
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         purchase.mark_failed!
@@ -181,26 +232,28 @@ describe Purchase::Blockable do
       # asserted directly on the history check.
       it "does not count charged-back purchases as clean history" do
         create_list(:purchase, settled_count, email: "disputed@example.com", purchase_state: "successful",
-                                              chargeback_date: 1.month.ago, created_at: long_ago)
-        purchase = build(:purchase_in_progress, email: "disputed@example.com")
+                                              stripe_fingerprint: known_card, chargeback_date: 1.month.ago,
+                                              created_at: long_ago)
+        purchase = build(:purchase_in_progress, email: "disputed@example.com", stripe_fingerprint: known_card)
 
         expect(purchase.buyer_has_clean_payment_history?).to be false
       end
 
       it "counts a chargeback the buyer won as clean history" do
         create_list(:purchase, settled_count, email: "won-dispute@example.com", purchase_state: "successful",
-                                              chargeback_date: 1.month.ago, chargeback_reversed: true,
-                                              created_at: long_ago)
-        purchase = build(:purchase_in_progress, email: "won-dispute@example.com")
+                                              stripe_fingerprint: known_card, chargeback_date: 1.month.ago,
+                                              chargeback_reversed: true, created_at: long_ago)
+        purchase = build(:purchase_in_progress, email: "won-dispute@example.com", stripe_fingerprint: known_card)
 
         expect(purchase.buyer_has_clean_payment_history?).to be true
       end
 
       it "still blocks the card when the buyer is just short of the threshold" do
         create_list(:purchase, settled_count - 1, email: "newish@example.com", purchase_state: "successful",
-                                                  created_at: long_ago)
+                                                  stripe_fingerprint: known_card, created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          email: "newish@example.com",
+                         stripe_fingerprint: known_card,
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         purchase.mark_failed!

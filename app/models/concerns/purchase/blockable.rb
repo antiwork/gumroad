@@ -212,25 +212,66 @@ module Purchase::Blockable
 
   # True when the person behind this purchase has a payment record that speaks for itself: several
   # settled purchases they actually paid for, none refunded, none under a standing dispute, and old
-  # enough that a defrauded cardholder would have complained by now. Matched on the account when the
-  # buyer is logged in and on the email either way, because most membership renewals belong to a
-  # buyer who never created a Gumroad account.
+  # enough that a defrauded cardholder would have complained by now.
   #
   # Free purchases are excluded on purpose. They always succeed, so counting them would let anybody
   # mint the history that exempts them from the block below by downloading three free products.
+  #
+  # Whose history counts is the delicate part, and it is deliberately NOT "whoever this purchase
+  # says it belongs to". See #clean_payment_history_conditions.
   def buyer_has_clean_payment_history?
-    history = Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
-                      .where(created_at: ..MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
-    history = if purchaser_id.present?
-      history.where("purchaser_id = :purchaser_id OR email = :email", purchaser_id:, email:)
-    else
-      history.where(email:)
-    end
+    conditions, values = clean_payment_history_conditions
+    return false if conditions.empty?
 
-    history.where.not(id:).limit(MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY).count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
+    Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+            .where(created_at: ..MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
+            .where.not(id:)
+            .where(conditions.join(" OR "), values)
+            .limit(MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
+            .count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
   end
 
   private
+    # Which past purchases are allowed to speak for this one.
+    #
+    # An unauthenticated checkout supplies its own email address, and purchase creation resolves an
+    # account from that address without ever proving the person owns it. So "purchases with this
+    # email" is attacker-controlled input: somebody testing a stolen card could type an established
+    # customer's address and inherit their clean record, which is exactly the exemption that is
+    # supposed to protect that customer and nobody else. Identity therefore only counts when we did
+    # not take the buyer's word for it:
+    #
+    #   * a recurring subscription charge — our own code copies the email and the account across
+    #     from the original purchase (Subscription#build_purchase), so no part of it came from this
+    #     request. This is the case the exemption exists for: a long-standing subscriber whose bank
+    #     reissued their card (gumroad-private#1480).
+    #   * the same card — a Stripe fingerprint is derived from the card itself, so a history of
+    #     settled purchases on this fingerprint is proof that this card, not merely this typed
+    #     address, has paid us before and was not disputed. Nothing the person filling in the form
+    #     can choose gets them somebody else's fingerprint.
+    #
+    # A guest typing any email they like matches neither, so they are judged on the card alone.
+    def clean_payment_history_conditions
+      conditions = []
+      values = {}
+
+      if stripe_fingerprint.present?
+        conditions << "purchases.stripe_fingerprint = :stripe_fingerprint"
+        values[:stripe_fingerprint] = stripe_fingerprint
+      end
+
+      if is_recurring_subscription_charge
+        conditions << "purchases.email = :email"
+        values[:email] = email
+        if purchaser_id.present?
+          conditions << "purchases.purchaser_id = :purchaser_id"
+          values[:purchaser_id] = purchaser_id
+        end
+      end
+
+      [conditions, values]
+    end
+
     def recent_stripe_fingerprint
       Purchase.with_stripe_fingerprint
               .where("purchaser_id = ? or email = ?", purchaser_id, email)
@@ -279,7 +320,8 @@ module Purchase::Blockable
     #   2. A buyer with real successful payment history behind them is not blocked at all. Somebody
     #      who has paid us repeatedly, with nothing refunded and nothing charged back, is not a card
     #      tester; whatever the issuer is reporting, the right outcome is that they can put a new
-    #      card in and carry on.
+    #      card in and carry on. Only history we can tie to this payment without trusting the
+    #      checkout form counts — see #clean_payment_history_conditions.
     #
     # And when we do block, we block the payment method only — see #block_buyer_payment_method!.
     def ban_buyer_on_fraud_related_error_code!

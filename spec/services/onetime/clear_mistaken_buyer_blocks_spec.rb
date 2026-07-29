@@ -79,4 +79,53 @@ describe Onetime::ClearMistakenBuyerBlocks do
 
     expect { described_class.new(dry_run: false).process }.not_to change { PlatformBlock.active.count }
   end
+
+  # A charge needing Strong Customer Authentication stays in progress until the buyer finishes it or
+  # FailAbandonedPurchaseWorker gives up, so the blocks carry a timestamp minutes after the purchase
+  # was created. A sweep anchored on created_at alone would report this buyer cleared and leave every
+  # one of their blocks in place.
+  it "clears blocks written minutes later, when the charge failed after an authentication step" do
+    delayed = failed_purchase.created_at + ChargeProcessor::TIME_TO_COMPLETE_SCA
+    PlatformBlock.active.find_each { |block| block.update!(created_at: delayed) }
+
+    expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
+  end
+
+  # Within that wider search window, a row from another code path still has to be left alone: the old
+  # rule wrote all of its rows in one transition, so anything minutes away from the rest is not ours.
+  it "leaves a lone block written minutes apart from the rest inside the same window" do
+    velocity_block = PlatformBlock.active.find_by(object_type: PlatformBlock::TYPES[:ip_address])
+    velocity_block.update!(created_at: failed_purchase.created_at + 10.minutes)
+
+    described_class.new(dry_run: false).process
+
+    expect(PlatformBlock.active.pluck(:id)).to eq([velocity_block.id])
+  end
+
+  # The old rule blocked "the buyer's most recent card" as of the moment it ran. Asking today's code
+  # for that value returns whichever card the buyer has used since, so the row actually written would
+  # go unnoticed and the buyer would stay unable to pay with the older card.
+  it "clears the card that was current when the block was written, not the buyer's latest card" do
+    subscriber_email = "subscriber@example.com"
+    old_card = "fingerprint-of-the-card-that-was-blocked"
+    create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                email: subscriber_email, purchase_state: "successful",
+                stripe_fingerprint: old_card, created_at: 6.months.ago)
+    # A renewal with no card fingerprint of its own, so the block came from the buyer's recent card.
+    original = create(:membership_purchase, email: subscriber_email)
+    renewal = create(:purchase, link: original.link, subscription: original.subscription,
+                                email: subscriber_email, purchase_state: "failed",
+                                stripe_error_code: "card_declined_lost_card", stripe_fingerprint: nil,
+                                stripe_transaction_id: nil, charge_processor_id: nil, price_cents: 0)
+    travel_to(renewal.created_at) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: old_card)
+    end
+    # The buyer moved on to another card afterwards, so "their most recent card" today is this one.
+    create(:purchase, email: subscriber_email, purchase_state: "successful",
+                      stripe_fingerprint: "fingerprint-of-a-newer-card", created_at: 1.day.ago)
+
+    described_class.new(dry_run: false).process
+
+    expect(PlatformBlock.active.where(object_value: old_card)).to be_empty
+  end
 end
