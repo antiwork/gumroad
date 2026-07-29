@@ -70,9 +70,10 @@ describe UpdateSalesRelatedProductsInfosJob do
       # and keep their +1, while pairs that moved in are decremented (floored at 0 for a row
       # the reversal itself creates). Only reachable for buyers past the limit.
       #
-      # Anchoring the window to the purchase id was tried and reverted: it made the reversal
-      # miss any related purchase refunded in the meantime, which is NOT limit-gated and so
-      # drifted far more pairs than it fixed.
+      # Anchoring the window to the purchase id was tried and reverted: it did not recover a
+      # related purchase refunded in the meantime either (that exclusion comes from the
+      # eligibility scope, not the limit, and reproduces identically on main), so it added a
+      # second window to reason about while fixing nothing.
       it "can leave a displaced pair over-counted" do
         stub_const("#{described_class}::RELATED_PRODUCTS_PER_PURCHASE_LIMIT", 2)
 
