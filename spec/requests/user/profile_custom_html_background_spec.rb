@@ -177,6 +177,27 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
+  # Every existing example uses a color with a non-zero last channel, so the
+  # alpha check could read a trailing channel as alpha and the file stayed
+  # green. Black is the case that matters most in practice — it is what a dark
+  # theme sets, and it is exactly the value a positional check mistakes for
+  # transparent.
+  context "when the page's background is a color whose last channel is zero" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#000}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "reports it instead of treating the trailing zero as transparency" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(0, 0, 0)")
+      expect(theme_color).to eq("rgb(0, 0, 0)")
+    end
+  end
+
   # Theme toggles re-color the page after load. Reporting only once would
   # strand the bands on the first theme the visitor saw.
   context "when the page changes its background after load" do

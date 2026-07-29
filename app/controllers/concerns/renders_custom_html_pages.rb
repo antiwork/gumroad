@@ -233,10 +233,24 @@ module RendersCustomHtmlPages
         if (window.parent === window) return;
         function opaque(color) {
           if (!color || color === "transparent") return false;
-          // Any color function can carry a zero alpha after a slash; rgba()
-          // also uses a comma. A fully transparent canvas is the same as none,
-          // so fall through to the next candidate rather than reporting it.
-          return !/[,\\/]\\s*0(\\.0*)?%?\\s*\\)\\s*$/.test(color);
+          // A fully transparent canvas is the same as none, so fall through to
+          // the next candidate rather than reporting it. Alpha is the token
+          // after the slash in every modern color function, or the fourth
+          // comma-separated value in legacy rgba()/hsla(). It has to be located
+          // that way and not matched positionally: a trailing zero in ANY
+          // channel looks identical at the end of the string, so `rgb(0, 0, 0)`
+          // — plain black, the most common dark-theme canvas there is — reads
+          // as transparent to a pattern that only checks what precedes the
+          // closing paren.
+          var body = color.match(/\\(([^)]*)\\)\\s*$/);
+          if (!body) return true;
+          var parts = body[1].split("/");
+          var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
+          if (alpha === null) {
+            var channels = body[1].split(",");
+            if (channels.length > 3) alpha = channels[3];
+          }
+          return alpha === null || parseFloat(alpha) > 0;
         }
         // CSS propagates body's background to the canvas only when html has
         // none of its own, so html has to be consulted first or a page that
