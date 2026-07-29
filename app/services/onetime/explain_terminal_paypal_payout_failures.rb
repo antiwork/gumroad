@@ -72,8 +72,11 @@ module Onetime
       def terminal_failures_by_user(batch_size:)
         latest = {}
 
+        # The wider EXPLAINED set, not the retry-blocking one: the backfill exists to end the
+        # silence, and a seller whose rejection we still retry is just as unexplained as one we
+        # have stopped retrying.
         Payment.where(processor: PayoutProcessorType::PAYPAL, state: Payment::FAILED,
-                      failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+                      failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
                .in_batches(of: batch_size) do |batch|
           ReplicaLagWatcher.watch
           batch.each do |payment|
@@ -95,7 +98,7 @@ module Onetime
             .where(processor: PayoutProcessorType::PAYPAL,
                    payment_address: user.paypal_payout_email,
                    state: Payment::FAILED,
-                   failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+                   failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
             .order(created_at: :desc, id: :desc)
             .first
       end
@@ -112,7 +115,9 @@ module Onetime
         # re-implemented here, so this note can only reach sellers the code really is refusing to
         # pay. A second copy of that logic would drift, and the drift would be us telling sellers
         # something the payout pipeline no longer does.
-        PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
+        PaypalPayoutProcessor.terminal_failure_blocking_payouts?(
+          user, reasons: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS
+        )
       end
 
       # Re-running the task must not stack duplicate notes on the same account. Matched against the

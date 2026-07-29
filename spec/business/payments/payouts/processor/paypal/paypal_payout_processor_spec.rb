@@ -118,9 +118,17 @@ describe PaypalPayoutProcessor do
         # restrictions. Treating it as "already explained" would leave them acting on the wrong
         # information with no way to find the right one.
         it "explains the current rejection even when the seller is reading one about an older address" do
+          # The note the seller is already reading is about a currency rejection (14159) on the
+          # address they have since left. Deliberately the other code from the current one, so this
+          # covers the half of the predicate where the restriction sentence itself differs — the
+          # sibling example below covers the same-code case where only the date separates them.
+          older = create(:payment_failed, user:, payment_address: user.payment_address,
+                                          failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+          user.add_payout_note(content: older.terminal_paypal_failure_seller_note, seller_visible: true)
+
           user.update!(payment_address: "second@gr.co")
           current = create(:payment_failed, user:, payment_address: "second@gr.co",
-                                            failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+                                            failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
 
           expect do
             described_class.is_user_payable(user, 10_01, add_comment: true)
@@ -128,8 +136,23 @@ describe PaypalPayoutProcessor do
 
           note = user.comments.with_type_payout_note.last
           expect(note.content).to eq(current.terminal_paypal_failure_seller_note)
-          expect(note.content).to include("your PayPal account cannot receive US dollars")
+          expect(note.content).to include("payments cannot be received in the country on that account's address")
           expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+        end
+
+        # A currency rejection is explained to the seller but must NOT stop the retries, because
+        # PayPal lets a recipient add receive currencies on the same account and the block is keyed
+        # on the payout address — which does not change when they do that. Blocking would freeze the
+        # whole balance of a seller who had already fixed the problem, clearable only by an
+        # admin-issued payout. Reviewer finding on #6526; see
+        # Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS.
+        it "keeps retrying a currency rejection the seller can repair in place" do
+          currency_refused_user = create(:user, payment_address: "currency@gr.co", user_risk_state: "compliant")
+          create(:user_compliance_info, user: currency_refused_user)
+          create(:payment_failed, user: currency_refused_user, payment_address: "currency@gr.co",
+                                  failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+
+          expect(described_class.is_user_payable(currency_refused_user, 10_01)).to eq(true)
         end
 
         # Same shape, but both rejections carry the SAME PayPal code, so the restriction sentence is

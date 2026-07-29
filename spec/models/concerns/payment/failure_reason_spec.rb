@@ -7,12 +7,26 @@ describe Payment::FailureReason do
 
   # The payout walk looks the seller-facing wording up by rejection code while deciding whether to
   # explain the block, so a code treated as terminal without wording would raise inside the weekly
-  # payout run. The constant is derived rather than listed twice; this holds that invariant.
+  # payout run. These hold that invariant, and the narrower one that matters more: refusing to
+  # retry is a strictly stronger claim than explaining, so it must apply to strictly fewer codes.
   describe "TERMINAL_PAYPAL_FAILURE_REASONS" do
-    it "has seller-facing wording for every rejection it treats as terminal" do
-      expect(described_class::TERMINAL_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159"])
-      expect(described_class::TERMINAL_PAYPAL_FAILURE_REASONS)
-        .to match_array(described_class::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.keys)
+    it "explains both account-level rejections but only blocks retries on the unrepairable one" do
+      expect(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148", "PAYPAL 14159"])
+
+      # 14159 — "your PayPal account cannot receive US dollars" — is explained but still retried,
+      # because PayPal lets a recipient add receive currencies on the same account. The block is
+      # keyed on the payout address, which does not change when they do that, so blocking would
+      # freeze the balance of a seller who had already fixed it. See
+      # RETRY_BLOCKING_PAYPAL_FAILURE_REASONS for what it would take to promote it.
+      expect(described_class::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 3148"])
+      expect(described_class::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).not_to include("PAYPAL 14159")
+    end
+
+    it "never blocks retries on a rejection it cannot explain to the seller" do
+      expect(described_class::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS - described_class::EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS.keys)
+        .to be_empty
+      expect(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS)
+        .to match_array(described_class::EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS.keys)
     end
 
     # Recognising an already-written note by its wording is how the pipeline knows whether the
@@ -29,9 +43,9 @@ describe Payment::FailureReason do
     # Every code treated as terminal needs its own historical-wording entry, because the
     # per-rejection match below looks its restriction sentences up by code — a code missing from
     # the map would silently match nothing and the seller would get a duplicate note every run.
-    it "records historical wording for every rejection it treats as terminal" do
+    it "records historical wording for every rejection it explains" do
       expect(described_class::HISTORICAL_SELLER_REASONS.keys)
-        .to match_array(described_class::TERMINAL_PAYPAL_FAILURE_REASONS)
+        .to match_array(described_class::EXPLAINED_PAYPAL_FAILURE_REASONS)
     end
 
     it "does not recognise an unrelated payout note" do

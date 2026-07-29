@@ -181,8 +181,8 @@ class ContactingCreatorMailer < ApplicationMailer
       @payment.failure_reason,
       # Reached by the mailer preview, which renders against whatever payout rows the local
       # database happens to have. It is also the safety net if this mailer is ever enqueued for a
-      # payment whose failure_reason is not one of the terminal codes — the copy would then name
-      # the wrong restriction, so keep the caller gated on Payment#terminal_paypal_failure?.
+      # payment whose failure_reason is not one we explain — the copy would then name the wrong
+      # restriction, so keep the caller gated on Payment#explained_paypal_failure?.
       Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
     )
     # Ask the seller to reply rather than promising the next payout date, because an admin or

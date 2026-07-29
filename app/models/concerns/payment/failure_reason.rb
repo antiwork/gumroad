@@ -13,32 +13,62 @@ module Payment::FailureReason
   STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
-  # PayPal rejections that describe the destination PayPal account itself rather than something
-  # about this one attempt, so re-sending the same payout to the same address can never succeed.
-  # Both are properties of the receiving account: 3148 means the country on that account's address
-  # cannot receive PayPal payments at all, and 14159 means the account cannot receive US dollars
-  # (Gumroad always pays PayPal out in USD).
+  # PayPal rejections we explain to the seller in their own words, because the seller has to change
+  # something about the receiving PayPal account before the money can move. 3148 means the country
+  # on that account's address cannot receive PayPal payments at all; 14159 means the account cannot
+  # receive US dollars, and Gumroad always pays PayPal out in USD.
   #
-  # Everything else in PAYPAL_MASS_PAY stays retryable. In particular a locked or inactive
-  # receiving account (3015) and a declined transaction (9302) are deliberately NOT here: the
-  # seller can clear those with PayPal without touching the address we hold, and the block below
-  # is keyed on the address, so it would have no way to notice they had been resolved.
+  # Everything else in PAYPAL_MASS_PAY stays a support-only note. In particular a locked or inactive
+  # receiving account (3015) and a declined transaction (9302) are deliberately NOT here: those are
+  # about one attempt, not about what the seller holds.
   #
   # The keys are the rejections; the values are what the seller is told about each. Written in the
   # second person because, unlike every other PayPal failure note, these are shown to the seller:
-  # the money stops moving until they act, so they have to know PayPal is the blocker and what to do.
-  TERMINAL_PAYPAL_FAILURE_SELLER_REASONS = {
+  # they have to know PayPal is the blocker and what to do about it.
+  EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS = {
     "PAYPAL 3148" => "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
     "PAYPAL 14159" => "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
   }.freeze
 
-  # Which rejections stop the retries, derived from the copy above rather than listed separately.
+  # Which of those rejections additionally STOP the weekly retry.
   #
-  # Every code treated as terminal has to have seller-facing wording, because the payout walk looks
-  # that wording up by code (Payment#terminal_paypal_failure_seller_note) while deciding whether to
-  # explain the block. Two hand-maintained lists would let a third code be added to one and not the
-  # other, and the failure mode is a KeyError raised inside the weekly payout run.
-  TERMINAL_PAYPAL_FAILURE_REASONS = TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.keys.freeze
+  # Explaining a rejection and refusing to retry it are two different claims, and only the second
+  # one needs proof that the seller cannot repair the account in place. 3148 is a property of the
+  # address's country: PayPal does not receive payments there at all, and nothing the seller does
+  # inside that account changes it, so re-sending is pure noise.
+  #
+  # 14159 is deliberately NOT here even though it is equally a property of the account, because
+  # PayPal lets a recipient add and manage receive currencies on the same account
+  # (https://www.paypal.com/c2/cshelp/article/how-do-i-manage-my-currencies-with-paypal-help116).
+  # A seller who does that leaves the account and address unchanged, so an address-keyed block has
+  # no way to notice the repair — one 14159 would freeze every future automatic payout to that email
+  # indefinitely, clearable only by an admin-issued payout. Retrying a 14159 costs us a rejected
+  # PayPal item a week; blocking it costs a seller who fixed their account their entire balance. The
+  # seller still gets the explanation and the email; they are just not locked out while acting on it.
+  #
+  # Raising 14159 to retry-blocking needs evidence from production that these accounts do not
+  # recover — a 14159 rejection with no later successful payout to the same address, across the
+  # affected population — plus a recovery path (an expiry, or a support-triggered retry) so a seller
+  # who does fix it is not stuck behind a permanent block.
+  RETRY_BLOCKING_PAYPAL_FAILURE_REASONS = ["PAYPAL 3148"].freeze
+
+  # Every code that stops the retries must also have seller-facing wording, because the payout walk
+  # looks that wording up by code (Payment#terminal_paypal_failure_seller_note) while deciding
+  # whether to re-explain the block. Without this, adding a code to one list and not the other
+  # raises a KeyError inside the weekly payout run.
+  raise "every retry-blocking PayPal rejection needs seller-facing wording" unless
+    (RETRY_BLOCKING_PAYPAL_FAILURE_REASONS - EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS.keys).empty?
+
+  # Kept as the name the rest of the payout code has always used for "do not retry this".
+  TERMINAL_PAYPAL_FAILURE_REASONS = RETRY_BLOCKING_PAYPAL_FAILURE_REASONS
+
+  # Retained name for the explanation copy, so callers that only render text are unaffected.
+  TERMINAL_PAYPAL_FAILURE_SELLER_REASONS = EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS
+
+  # The codes worth explaining to the seller, which is a SUPERSET of the retry-blocking ones. Used
+  # by everything that writes or recognises the seller-facing note, so a seller whose rejection we
+  # still retry is told about it just the same.
+  EXPLAINED_PAYPAL_FAILURE_REASONS = EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS.keys.freeze
 
   # Whether a payout note is one of the terminal-PayPal explanations above.
   #
@@ -295,10 +325,11 @@ module Payment::FailureReason
     def add_payment_failure_reason_comment
       return unless failure_reason.present?
 
-      # A terminal PayPal rejection stops the weekly retry, so this note is the seller's only
-      # explanation of why their money stopped moving — it names PayPal and the fix, and it is
-      # shown to them on their Payouts page.
-      if terminal_paypal_failure?
+      # A rejection about the seller's own PayPal account gets a seller-visible note naming PayPal
+      # and the fix, since nothing else on their Payouts page tells them why the money stopped.
+      # Deliberately the wider EXPLAINED set rather than the retry-blocking one: a seller whose
+      # payout we will retry next week still needs to know why this one failed and what to change.
+      if explained_paypal_failure?
         user.add_payout_note(content: terminal_paypal_failure_seller_note, seller_visible: true)
         return
       end

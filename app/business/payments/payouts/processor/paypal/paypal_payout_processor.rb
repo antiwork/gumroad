@@ -71,10 +71,12 @@ class PaypalPayoutProcessor
 
     # Stop re-sending a payout PayPal has permanently refused for this address.
     #
-    # A terminal rejection (see Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS) is a fact
-    # about the destination PayPal account — its country cannot receive PayPal payments, or it
-    # cannot receive US dollars — so every weekly batch that re-attempted it got the same
-    # rejection back. Sellers sat through dozens of identical failures with their balance frozen
+    # A retry-blocking rejection (see Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS)
+    # is a fact about the destination PayPal account that the seller cannot change from inside it:
+    # the country on that account's address cannot receive PayPal payments at all. Every weekly
+    # batch that re-attempted it got the same rejection back. Rejections the seller CAN repair in
+    # place are deliberately still retried — they get the same explanation, just not the block.
+    # Sellers sat through dozens of identical failures with their balance frozen
     # and nothing but a generic "payouts were paused" note to go on (gumroad-private#1478).
     #
     # Deliberately no note is written here. The failure that ended the retries already recorded a
@@ -118,14 +120,21 @@ class PaypalPayoutProcessor
     true
   end
 
-  # Whether PayPal has already permanently refused a payout to this address for this seller.
-  # Scoped to failures since the seller's last completed payout to the same address, so an
-  # account that was paid successfully after the rejection is not held back by the old row.
-  def self.terminal_failure_for_payout_email?(user, payout_email)
+  # Whether PayPal has already refused a payout to this address for this seller with one of
+  # `reasons`. Scoped to failures since the seller's last completed payout to the same address, so
+  # an account that was paid successfully after the rejection is not held back by the old row.
+  #
+  # The caller chooses the code set because the two questions differ. Refusing to retry is asked
+  # about RETRY_BLOCKING_PAYPAL_FAILURE_REASONS only, since that is the claim needing proof the
+  # seller cannot repair the account. Everything to do with EXPLAINING the block — the note, the
+  # email, and not also pausing the account on top of it — is asked about the wider
+  # EXPLAINED_PAYPAL_FAILURE_REASONS, because a seller we still retry deserves the explanation just
+  # as much as one we have given up on.
+  def self.terminal_failure_for_payout_email?(user, payout_email, reasons: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
     payouts_to_address = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email)
     terminal_failures = payouts_to_address.where(
       state: Payment::FAILED,
-      failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
+      failure_reason: reasons
     )
     # Check for a rejection before looking up the last completed payout. Almost every seller in the
     # weekly payout walk has never had one, and this method runs for each of them — the walk has
@@ -154,14 +163,19 @@ class PaypalPayoutProcessor
   # StripePayoutProcessor, which pays a connected non-Brazilian account with no bank account at
   # all. Stripe payouts carry no payment_address, so they never clear the address-keyed rejection
   # below; without this check a seller paid weekly through Stripe Connect would still look stuck.
-  def self.terminal_failure_blocking_payouts?(user)
+  #
+  # `reasons` is which rejections count, and the default is the retry-blocking set because the
+  # primary caller asks "are this seller's payouts stopped". Callers deciding what to TELL the
+  # seller pass the wider explained set — see terminal_failure_for_payout_email? for why the two
+  # questions differ.
+  def self.terminal_failure_blocking_payouts?(user, reasons: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
     return false if user.active_bank_account.present?
     return false if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
 
     payout_email = user.paypal_payout_email
     return false if payout_email.blank?
 
-    terminal_failure_for_payout_email?(user, payout_email)
+    terminal_failure_for_payout_email?(user, payout_email, reasons:)
   end
 
   # Put the terminal-PayPal explanation back in front of the seller if they can no longer see it.
@@ -186,7 +200,7 @@ class PaypalPayoutProcessor
     last_failure = user.payments
                        .where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email,
                               state: Payment::FAILED,
-                              failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+                              failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
                        .order(created_at: :desc, id: :desc)
                        .first
     return false if last_failure.nil?

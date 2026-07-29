@@ -82,8 +82,16 @@ class Payouts
         # unpaid balance are held internally, so 1.7% of the walk pays for it, and the queries are
         # cheap existence checks. That is not the shape that caused the walk's past latency
         # incidents (#1021, #1284), which were per-seller work across the whole cohort.
+        # The WIDER explained set, not the retry-blocking one. This variable only ever decides what
+        # the seller gets to read, and a seller rejected for a currency PayPal still lets them add
+        # (14159, which we deliberately keep retrying) is just as much in the dark as one we have
+        # given up retrying — arguably more so, since their payouts keep failing weekly. Using the
+        # narrow set here would leave exactly those sellers reading "payouts were paused by the
+        # system" with nothing naming PayPal, which is the gumroad-private#1478 dead end.
         terminal_paypal_block = user.payouts_paused_internally? &&
-                                PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
+                                PaypalPayoutProcessor.terminal_failure_blocking_payouts?(
+                                  user, reasons: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS
+                                )
 
         # Make sure the seller can read an explanation of the block they are under NOW, before
         # deciding anything about this week's pause note.

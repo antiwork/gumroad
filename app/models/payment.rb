@@ -84,7 +84,7 @@ class Payment < ApplicationRecord
     after_transition %i[creating processing] => %i[cancelled failed], do: :mark_balances_as_unpaid
     after_transition processing: :failed, do: :send_cannot_pay_email, if: ->(payment) { payment.failure_reason == FailureReason::CANNOT_PAY }
     after_transition processing: :failed, do: :send_debit_card_limit_email, if: ->(payment) { payment.failure_reason == FailureReason::DEBIT_CARD_LIMIT }
-    after_transition processing: :failed, do: :send_paypal_terminal_failure_email, if: ->(payment) { payment.terminal_paypal_failure? }
+    after_transition processing: :failed, do: :send_paypal_terminal_failure_email, if: ->(payment) { payment.explained_paypal_failure? }
     after_transition processing: :failed, do: :add_payment_failure_reason_comment
 
     after_transition %i[processing unclaimed] => :completed, do: :mark_balances_as_paid
@@ -215,8 +215,18 @@ class Payment < ApplicationRecord
   end
 
   # True when PayPal rejected this payout for a reason that describes the destination PayPal
-  # account rather than this attempt, so sending the same payout to the same address again can
-  # never succeed. See Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.
+  # account rather than this attempt, so the seller has to change something before the money can
+  # move. This is what drives the seller-facing explanation and email.
+  # See Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS.
+  def explained_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
+  # True when we additionally stop re-sending this payout to the same address, because no action
+  # inside the seller's PayPal account can make it succeed. A strict subset of the above — see
+  # Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS for why 14159 is explained but
+  # still retried.
   def terminal_paypal_failure?
     processor == PayoutProcessorType::PAYPAL &&
       FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.include?(failure_reason)
@@ -363,6 +373,14 @@ class Payment < ApplicationRecord
       # it is keyed on the PayPal address rather than the whole account, it engages on the first
       # rejection instead of the third, and it lifts on its own when the seller fixes their payout
       # details rather than needing a human to resume them.
+      #
+      # Only the retry-blocking codes are skipped, because only those have something narrower doing
+      # the job instead. A rejection we still retry (14159) has no such replacement, so its
+      # failures do count here and a seller who never acts is eventually paused — which is what this
+      # check is for, since otherwise we would re-send a rejected item every week forever. They are
+      # not left in the dark by that pause: Payouts.is_user_payable suppresses the weekly
+      # "payouts were paused" note while the PayPal explanation is the newest one they can see, and
+      # it asks that question about the wider EXPLAINED set precisely so this case is covered.
       return if terminal_paypal_failure?
 
       if bank_account_id.present?
