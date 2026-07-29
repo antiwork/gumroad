@@ -21,13 +21,8 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
   const uid = React.useId();
   const [country, setCountry] = React.useState(initialCountry ?? "US");
   const [saving, setSaving] = React.useState(false);
-  // Save stays disabled until every box is checked, so each line has to be something every
-  // supported seller can truthfully check. That includes a non-resident owner of a company
-  // registered in the chosen country (say, someone living in China who owns a US LLC): residence
-  // and business registration are two ways of establishing the same connection to the country, so
-  // they belong in one either/or line rather than in two lines that contradict each other. Nothing
-  // here is persisted or sent to our payments processor; the list only sets expectations for the
-  // verification Stripe runs later.
+  // Every seller must be able to truthfully check every item; residence and business registration
+  // are alternate ties to the selected country.
   const checkboxes = [
     "I have a valid, government-issued photo ID",
     "I can provide proof of residence in the country above, or my business is registered there",
@@ -91,7 +86,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
           <Fieldset>
             <FieldsetTitle>To ensure prompt payouts, please check off each item:</FieldsetTitle>
             {checkboxes.map((item, i) => (
-              <Label key={item}>
+              <Label key={item} className="items-start">
                 <Checkbox
                   checked={checked.includes(i)}
                   onChange={(e) =>
