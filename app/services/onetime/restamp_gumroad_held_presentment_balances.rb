@@ -181,6 +181,10 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         transactions = balance.balance_transactions.to_a
         assert_amounts_unchanged!(balance, transactions)
 
+        # Snapshot the pre-repair state now, while the wrong label is still on the row: this hash is
+        # the audit record for a write with no undo, so it has to describe what was there before.
+        summary = correction_summary(balance, transactions)
+
         transactions.each do |bt|
           # Log the wrong values before overwriting them. `balance_transactions` has no `deleted_at`
           # column, so the usual correction flow (soft-delete the row, write a corrected copy) is
@@ -208,7 +212,7 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         balance.save!
 
         @stats[:corrected] += 1
-        @corrected << correction_summary(balance)
+        @corrected << summary
       end
     rescue => e
       @stats[:error] += 1
@@ -310,9 +314,12 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       @skipped << { balance_id:, reason: }
     end
 
-    def correction_summary(balance)
-      transactions = balance.balance_transactions.to_a
-
+    # The audit record for one balance. `transactions` is passed in by the live path so the summary
+    # can be built BEFORE the row is rewritten: this hash is the only description of what was there
+    # beforehand, and reading `holding_currency` back off a balance that has already been relabelled
+    # would report "usd" as the value we corrected away from, i.e. an audit record claiming nothing
+    # had been wrong.
+    def correction_summary(balance, transactions = balance.balance_transactions.to_a)
       {
         balance_id: balance.id,
         user_id: balance.user_id,

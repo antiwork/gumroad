@@ -142,6 +142,14 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       result = service(balance_ids: [balance.id], dry_run: false).process
       expect(result[:stats][:corrected]).to eq(1)
 
+      # The audit record has to describe the row as it was BEFORE the repair. This write has no
+      # undo, so a summary built after the save — reporting "usd" as the currency it corrected away
+      # from — would be a record claiming nothing had been wrong.
+      summary = result[:corrected].first
+      expect(summary[:from_holding_currency]).to eq(Currency::EUR)
+      expect(summary[:to_holding_currency]).to eq(Currency::USD)
+      expect(summary[:balance_transaction_ids]).to eq([bt.id])
+
       balance.reload
       expect(balance.holding_currency).to eq(Currency::USD)
       # No value moves. Only the label and the informational gross_cents were ever wrong, because
