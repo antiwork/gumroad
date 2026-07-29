@@ -74,21 +74,18 @@ export class StaleContentConflictError extends Error {
 
 // The save contract's refusal of a deletion authorised by a token that no
 // longer describes the stored state (see Product::SaveContract). Raised before
-// any mutation, so the removals are still pending in the database and still
-// pending in this editor session — this is emphatically not a failed save to
-// recover from by reloading, which would discard them.
+// any mutation, so nothing was written and the removals are still pending in
+// this editor session.
 //
-// Carries the fresh token the server issued alongside the 409 precisely so the
-// editor can adopt it and resubmit the same removals. Without that, the seller
-// has no path back to the deletion they already confirmed.
-export class StaleDeletionConflictError extends Error {
-  constructor(
-    message: string,
-    public editorRevision: string | null,
-  ) {
-    super(message);
-  }
-}
+// The 409 carries a fresh `editor_revision`, and this error deliberately does
+// NOT expose it. Adopting that token would authorise the session's next save —
+// which is still the full stale snapshot — to delete, so the deletion would go
+// through while every field another session changed in the meantime got
+// reverted to this session's values. The seller confirmed a deletion, not an
+// overwrite. Retrying safely means reconciling against current stored state, or
+// a payload that can only delete; neither exists client-side yet
+// (gumroad-private#1532), so the recovery here is a reload.
+export class StaleDeletionConflictError extends Error {}
 
 // The server's error payload for a rejected save. Every conflict the editor can
 // act on is discriminated by `error_code`, never by HTTP status: stale-content
@@ -97,6 +94,8 @@ export class StaleDeletionConflictError extends Error {
 export type SaveProductErrorPayload = {
   error_message: string;
   error_code?: string;
+  // Sent with a stale_deletion_conflict. Read by nothing here on purpose — see
+  // StaleDeletionConflictError for why the editor must not adopt it.
   editor_revision?: string | null;
   hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
   stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
@@ -109,7 +108,7 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
     case "stale_content_conflict":
       return new StaleContentConflictError(error.error_message, error.stale_records ?? []);
     case "stale_deletion_conflict":
-      return new StaleDeletionConflictError(error.error_message, error.editor_revision ?? null);
+      return new StaleDeletionConflictError(error.error_message);
     default:
       return new ResponseError(error.error_message);
   }

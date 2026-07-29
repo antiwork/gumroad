@@ -413,12 +413,11 @@ describe("removeFileEmbedsFromRichContent", () => {
 
 describe("save contract conflict responses", () => {
   // The seller-visible bug (gumroad-private#1508): the server answers a
-  // stale-token deletion with 409 + error_code + a fresh editor_revision so the
-  // editor can retry, but the mapping only recognised the two content-conflict
-  // codes. This one fell through to a bare ResponseError, which the page turns
-  // into a generic red toast — and the fresh token, the only thing that makes
-  // the retry possible, was discarded.
-  it("maps stale_deletion_conflict to a typed error carrying the fresh revision", () => {
+  // stale-token deletion with 409 + error_code, but the mapping only recognised
+  // the two content-conflict codes, so this one fell through to a bare
+  // ResponseError and the page turned it into a generic red toast that never
+  // said the deletion had not happened.
+  it("maps stale_deletion_conflict to its own typed error", () => {
     const error = saveProductError({
       error_message: "This product changed since you opened it.",
       error_code: "stale_deletion_conflict",
@@ -428,19 +427,24 @@ describe("save contract conflict responses", () => {
     expect(error).toBeInstanceOf(StaleDeletionConflictError);
     expect(error).not.toBeInstanceOf(StaleContentConflictError);
     expect(error.message).toBe("This product changed since you opened it.");
-    if (error instanceof StaleDeletionConflictError) expect(error.editorRevision).toBe("revision-issued-with-the-409");
   });
 
-  // A server that omits the token must not produce `undefined` riding back out
-  // as a revision — the retry has to be able to tell "no token" apart.
-  it("normalises a missing revision to null rather than undefined", () => {
-    const error = saveProductError({ error_message: "Stale.", error_code: "stale_deletion_conflict" });
-    if (error instanceof StaleDeletionConflictError) expect(error.editorRevision).toBeNull();
-    else expect.unreachable("expected a StaleDeletionConflictError");
+  // The 409's fresh token must not reach the editor. Adopting it would let the
+  // session's next save — still the full stale snapshot — delete AND revert
+  // every field another session changed in between (gumroad-private#1532).
+  it("does not carry the fresh revision onto the error", () => {
+    const error = saveProductError({
+      error_message: "Stale.",
+      error_code: "stale_deletion_conflict",
+      editor_revision: "revision-issued-with-the-409",
+    });
+
+    expect(Object.values({ ...error })).not.toContain("revision-issued-with-the-409");
   });
 
   // Pins the discrimination to error_code, not to HTTP status. stale-content and
-  // stale-deletion are both 409 and want opposite handling: reload vs. retry.
+  // stale-deletion are both 409 and describe different things: a write that
+  // would clobber newer content vs. a deletion that did not happen.
   it("keeps the two 409 conflicts distinct", () => {
     const contentConflict = saveProductError({
       error_message: "Someone else saved.",
