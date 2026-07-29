@@ -49,10 +49,16 @@
 #      same call the payout processors make, so the monitor cannot drift from them
 #      if that logic changes. Without the SQL narrowing this would load every
 #      seller's foreign-currency balance: measured against production, 418 rows a
-#      day and rising, against 0 that are actually Gumroad-held.
+#      day and rising, against 0 that are actually Gumroad-held. The join is a LEFT
+#      join because a balance with no merchant account at all breaks payouts too --
+#      is_balance_payable dereferences it -- and an inner join would have hidden
+#      exactly that row.
 class MonitorGumroadHeldBalanceCurrencyJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low, lock: :until_executed, on_conflict: :replace
+  # lock alone, without on_conflict: :replace -- CONTRIBUTING.md warns that :replace has to
+  # scroll the Scheduled Set to find the job it is replacing. This job takes no arguments, so
+  # until_executed already makes a duplicate enqueue a no-op, which is all that is wanted.
+  sidekiq_options retry: 5, queue: :low, lock: :until_executed
 
   # Rows created before this are the known historical cohort, already enumerated and
   # handled by the one-off backfill. Alerting on them every run would be pure noise;
@@ -60,37 +66,33 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # so the boundary does not move with the application time zone.
   BASELINE_CUTOFF = Time.zone.parse("2026-07-29T00:00:00Z")
 
-  # Enough seller ids to act on without turning the alert into a wall of text. If a
-  # run ever exceeds this, the count in the alert still reports the true total.
+  # Enough balances to act on without turning the alert into a wall of text.
   SAMPLE_LIMIT = 25
 
   # A ceiling on rows loaded into memory, so a regression that mislabels balances at
   # scale produces an alert rather than a job that dies trying to describe it. The
-  # count is queried separately, so the alert still reports the true total.
+  # alert reports whether it hit this ceiling, since the loaded rows are then only
+  # part of the picture.
   MAX_ROWS_LOADED = 500
 
   def perform
-    scope = Balance
+    candidates = Balance
       .where(state: "unpaid")
       .where("balances.created_at >= ?", BASELINE_CUTOFF)
       .where("balances.holding_currency IS NULL OR CAST(balances.holding_currency AS BINARY) <> ?", Currency::USD)
-      .joins(:merchant_account)
+      .left_joins(:merchant_account)
       .where(
-        "merchant_accounts.user_id IS NULL OR merchant_accounts.charge_processor_id <> ?",
+        "merchant_accounts.id IS NULL OR merchant_accounts.user_id IS NULL " \
+        "OR merchant_accounts.charge_processor_id <> ?",
         StripeChargeProcessor.charge_processor_id
       )
+      .includes(:merchant_account)
+      .order(id: :desc)
+      .limit(MAX_ROWS_LOADED)
+      .to_a
 
-    candidates = scope.includes(:merchant_account).order(id: :desc).limit(MAX_ROWS_LOADED).to_a
-
-    # holder_of_funds routes through the charge processor and can raise for a row whose
-    # processor no longer resolves. A monitor that raises stops monitoring, so treat an
-    # unanswerable row as worth reporting rather than letting it abort the run.
-    offending = candidates.select do |balance|
-      balance.merchant_account&.holder_of_funds == HolderOfFunds::GUMROAD
-    rescue StandardError
-      true
-    end
-    return if offending.empty?
+    offending, unresolved = partition_by_holder_of_funds(candidates)
+    return if offending.empty? && unresolved.empty?
 
     # A stable message keeps every run of this alert in one Sentry issue instead of
     # opening a new one each day; everything that varies goes in the context.
@@ -100,16 +102,60 @@ class MonitorGumroadHeldBalanceCurrencyJob
       seller_count: offending.map(&:user_id).uniq.size,
       currencies: offending.map(&:holding_currency).uniq,
       created_since: BASELINE_CUTOFF.iso8601,
-      truncated: candidates.size == MAX_ROWS_LOADED,
-      sample: offending.first(SAMPLE_LIMIT).map do |balance|
-        {
-          balance_id: balance.id,
-          seller_id: balance.user_id,
-          holding_currency: balance.holding_currency,
-          amount_cents: balance.amount_cents,
-          date: balance.date.to_s,
-        }
-      end
+      # True when the query hit MAX_ROWS_LOADED, in which case the counts above describe
+      # the rows that were read rather than everything that matches.
+      hit_row_limit: candidates.size == MAX_ROWS_LOADED,
+      sample: offending.first(SAMPLE_LIMIT).map { describe(_1) },
+      # Rows whose holder_of_funds could not be answered at all. Reported separately so a
+      # resolution failure never masquerades as a mislabelled balance, and kept out of the
+      # counts above so it cannot inflate them.
+      unresolved_sample: unresolved.first(SAMPLE_LIMIT).map { describe(_1) }
     )
   end
+
+  private
+    # holder_of_funds resolves through the charge processor. It falls back to GUMROAD for a
+    # processor it no longer recognises, so today it does not raise -- but a monitor that
+    # dies on one row stops watching every other row, so a row it cannot answer for is
+    # reported in its own bucket rather than allowed to abort the run or to be counted as a
+    # mislabelled balance.
+    def partition_by_holder_of_funds(candidates)
+      offending = []
+      unresolved = []
+
+      candidates.each do |balance|
+        merchant_account = balance.merchant_account
+
+        # No merchant account at all: nothing to resolve, and not something to judge as
+        # correctly labelled either. is_balance_payable dereferences it, so the row is a
+        # payout problem regardless of its currency.
+        if merchant_account.nil?
+          unresolved << balance
+          next
+        end
+
+        holder = begin
+          merchant_account.holder_of_funds
+        rescue StandardError
+          :unresolved
+        end
+
+        case holder
+        when HolderOfFunds::GUMROAD then offending << balance
+        when :unresolved then unresolved << balance
+        end
+      end
+
+      [offending, unresolved]
+    end
+
+    def describe(balance)
+      {
+        balance_id: balance.id,
+        seller_id: balance.user_id,
+        holding_currency: balance.holding_currency,
+        amount_cents: balance.amount_cents,
+        date: balance.date.to_s,
+      }
+    end
 end

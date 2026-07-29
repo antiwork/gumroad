@@ -146,18 +146,55 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     )
   end
 
-  # holder_of_funds resolves through the charge processor and can raise for a row whose
-  # processor no longer resolves. A monitor that dies on one row stops monitoring every
-  # other row, so an unanswerable row is reported rather than allowed to abort the run.
-  it "reports a row whose holder_of_funds cannot be resolved instead of dying on it" do
+  # holder_of_funds resolves through the charge processor. A monitor that dies on one row
+  # stops watching every other row, so a row it cannot answer for is reported in its own
+  # bucket -- not counted as a mislabelled balance, which would let an infrastructure
+  # failure masquerade as a payout-breaking one.
+  it "reports a row whose holder_of_funds cannot be resolved separately, without dying on it" do
     balance = create_balance_at(after_baseline, holding_currency: Currency::EUR)
     allow_any_instance_of(MerchantAccount).to receive(:holder_of_funds).and_raise(StandardError, "unknown processor")
 
     expect { described_class.new.perform }.not_to raise_error
 
     expect(ErrorNotifier).to have_received(:notify).with(
-      anything, hash_including(sample: [hash_including(balance_id: balance.id)])
+      anything,
+      hash_including(
+        balance_count: 0,
+        sample: [],
+        unresolved_sample: [hash_including(balance_id: balance.id)]
+      )
     )
+  end
+
+  # merchant_account_id is nullable, so a row can exist with nothing to resolve. Such a row
+  # cannot be judged either way and must not be silently dropped.
+  it "reports a row with no merchant account rather than skipping it silently" do
+    balance = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    balance.update_column(:merchant_account_id, nil)
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(unresolved_sample: [hash_including(balance_id: balance.id)])
+    )
+  end
+
+  # The sample is capped so the alert stays readable, but a capped sample must not be
+  # mistaken for a small problem: the counts describe everything that was read.
+  it "caps the sample without understating how many balances are affected" do
+    balances = Array.new(described_class::SAMPLE_LIMIT + 3) do
+      create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    end
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything,
+      hash_including(balance_count: balances.size, hit_row_limit: false)
+    )
+    expect(ErrorNotifier).to have_received(:notify) do |_message, context|
+      expect(context[:sample].size).to eq(described_class::SAMPLE_LIMIT)
+    end
   end
 
   it "reports the seller count and the currencies so the cause is legible from the alert" do
