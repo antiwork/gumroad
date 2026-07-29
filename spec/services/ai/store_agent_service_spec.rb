@@ -862,13 +862,23 @@ describe Ai::StoreAgentService do
           "I've staged a change again because the card on my earlier message was hidden. Tap the card.",
           "I've staged them again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the product update again because the card on my earlier message was hidden. Tap the card.",
-          # Every noun in the shared list needs a row here, because a word dropped from it is
-          # invisible: the reply stops matching and the creator is sent to hunt a card again.
-          # These four are the ones creators and the model use most for a staged offer.
+          # A noun quietly dropped from the shared list is invisible: the reply stops matching and
+          # the creator is sent back to hunt a card that was never created. That already happened
+          # once, to "offer" and "code". So every noun in the list gets a row, and removing any one
+          # of them fails exactly one row here.
           "I've staged the offer again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the code again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the discount code again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the offer code again because the card on my earlier message was hidden. Tap the card.",
           "I've staged those products again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the edits again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the fix again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the creation again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the addition again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the renaming again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the archival again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the publishing again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the unpublishing again because the card on my earlier message was hidden. Tap the card.",
           # A count or a plural demonstrative in front of the object reads as a determiner, and the
           # model writes one whenever it staged more than one thing at once.
           "I've staged both changes again because the card on my earlier message was hidden. Tap the card.",
