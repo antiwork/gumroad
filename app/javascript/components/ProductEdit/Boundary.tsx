@@ -6,8 +6,9 @@ import { Button, NavigationButton } from "$app/components/Button";
 //
 // The editor is loaded as a separate chunk (see ProductEdit/load), which means opening a product
 // depends on a network request that can fail — an offline moment, a proxy that drops the connection,
-// a CDN edge briefly serving an error. `load` already retries once for the momentary blips, so
-// anything reaching this boundary is a genuine failure.
+// or a CDN edge briefly serving an error. `load` retries a transient fetch failure, and a failed
+// warm-up switches the product link to a fresh document before the seller gets here. Anything
+// reaching this boundary failed after those recovery steps while they were opening the editor.
 //
 // Without a boundary, React treats that failed import as a render error and unmounts everything
 // above it, which leaves the seller on a blank page — the same "clicking a product does nothing"

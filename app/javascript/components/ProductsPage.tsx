@@ -35,7 +35,7 @@ const ProductsPage = ({
   // page in the dashboard, and waiting until the click means waiting on the network with nothing
   // on screen — which is what made sellers think their click hadn't registered
   // (gumroad-private#1469).
-  useWarmProductEditPage();
+  const forceFullPageProductEditNavigation = useWarmProductEditPage();
 
   return (
     <div className="grid gap-12">
@@ -54,6 +54,7 @@ const ProductsPage = ({
         <ProductsPageProductsTable
           query={query}
           entries={products}
+          forceFullPageProductEditNavigation={forceFullPageProductEditNavigation}
           pagination={productsPagination}
           sort={productsSort}
           selectedTab={type}

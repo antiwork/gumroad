@@ -1,3 +1,4 @@
+import { shouldIntercept } from "@inertiajs/core";
 import { Link, router } from "@inertiajs/react";
 import * as React from "react";
 
@@ -23,8 +24,31 @@ import {
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { Sort, useSortingTableDriver } from "$app/components/useSortingTableDriver";
 
+export const ProductEditLink = ({
+  children,
+  forceFullPageNavigation,
+  href,
+}: {
+  children: React.ReactNode;
+  forceFullPageNavigation: boolean;
+  href: string;
+}) => (
+  <StretchedLink
+    href={href}
+    onClick={(event) => {
+      if (!forceFullPageNavigation && shouldIntercept(event)) {
+        event.preventDefault();
+        router.visit(href);
+      }
+    }}
+  >
+    {children}
+  </StretchedLink>
+);
+
 export const ProductsPageProductsTable = (props: {
   entries: Product[];
+  forceFullPageProductEditNavigation: boolean;
   pagination: PaginationProps;
   selectedTab: Tab;
   query: string | null;
@@ -118,15 +142,16 @@ export const ProductsPageProductsTable = (props: {
               <TableCell hideLabel className="relative">
                 <div>
                   {product.can_edit ? (
-                    <StretchedLink asChild>
-                      <Link href={product.edit_url}>
-                        {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
-                            (gumroad-private#1259; same fix as the product page in #6190). */}
-                        <h4 className="relative font-bold" dir="auto">
-                          {product.name}
-                        </h4>
-                      </Link>
-                    </StretchedLink>
+                    <ProductEditLink
+                      forceFullPageNavigation={props.forceFullPageProductEditNavigation}
+                      href={product.edit_url}
+                    >
+                      {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
+                          (gumroad-private#1259; same fix as the product page in #6190). */}
+                      <h4 className="relative font-bold" dir="auto">
+                        {product.name}
+                      </h4>
+                    </ProductEditLink>
                   ) : (
                     <StretchedLink href={product.url} title={product.url} target="_blank" rel="noreferrer">
                       <h4 className="relative font-bold" dir="auto">

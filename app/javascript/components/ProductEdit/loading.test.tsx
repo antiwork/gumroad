@@ -11,13 +11,25 @@
 // The editor itself is a large separate chunk, so both are load-order behaviour rather than
 // rendering behaviour, and neither is visible in a spec that only asserts the finished page. That
 // chunk arrives over the network, so the tests below also cover what happens when it does not
-// arrive: one retry, then a visible way out rather than a blank page.
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+// arrive: one retry for a fetch failure, a fresh navigation after a failed warm-up, then a visible
+// way out rather than a blank page if the requested editor still cannot load.
+import { router } from "@inertiajs/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProductEditBoundary } from "$app/components/ProductEdit/Boundary";
 import { ProductEditLoadingSkeleton } from "$app/components/ProductEdit/LoadingSkeleton";
+import { ProductEditLink } from "$app/components/ProductsPage/ProductsTable";
+
+vi.mock("@inertiajs/react", () => ({
+  Link: ({ children, href }: { children: React.ReactNode; href: string }) => (
+    <a href={href} data-inertia-link>
+      {children}
+    </a>
+  ),
+  router: { reload: vi.fn(), visit: vi.fn() },
+}));
 
 // Rails routes reach the app as a `Routes` global that vitest does not have. Only the products
 // path is needed here, and asserting against the real value is the point of one of the tests below.
@@ -33,6 +45,8 @@ vi.mock("$app/components/server-components/ProductEditPage", () => {
 afterEach(() => {
   cleanup();
   editorChunkLoads.mockClear();
+  vi.restoreAllMocks();
+  vi.resetModules();
 });
 
 describe("product editor loading", () => {
@@ -64,6 +78,79 @@ describe("product editor loading", () => {
 
     expect(screen.getByText("Loading product…")).toBeTruthy();
     expect(screen.queryByRole("heading")).toBeNull();
+  });
+
+  it("uses a fresh page after a failed warm-up instead of reusing the poisoned module map", async () => {
+    const { useWarmProductEditPage } = await import("$app/components/ProductEdit/load");
+    const load = vi.fn().mockRejectedValue(new Error("Failed to fetch dynamically imported module"));
+    const ProductsList = () => {
+      const forceFullPageNavigation = useWarmProductEditPage(load);
+      return (
+        <ProductEditLink forceFullPageNavigation={forceFullPageNavigation} href="/products/course/edit">
+          Course in a Box
+        </ProductEditLink>
+      );
+    };
+
+    render(<ProductsList />);
+
+    await waitFor(() => expect(load).toHaveBeenCalledOnce());
+    const link = screen.getByRole("link");
+    expect(fireEvent.click(link)).toBe(true);
+    expect(router.visit).not.toHaveBeenCalled();
+    expect(link.getAttribute("href")).toBe("/products/course/edit");
+  });
+
+  it("keeps full-page navigation while warm-up is pending, then uses Inertia once it succeeds", async () => {
+    const { useWarmProductEditPage } = await import("$app/components/ProductEdit/load");
+    let finishWarmUp: (() => void) | undefined;
+    const load = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishWarmUp = resolve;
+        }),
+    );
+    const ProductsList = () => {
+      const forceFullPageNavigation = useWarmProductEditPage(load);
+      return (
+        <ProductEditLink forceFullPageNavigation={forceFullPageNavigation} href="/products/course/edit">
+          Course in a Box
+        </ProductEditLink>
+      );
+    };
+
+    render(<ProductsList />);
+
+    await waitFor(() => expect(load).toHaveBeenCalledOnce());
+    const link = screen.getByRole("link");
+    expect(fireEvent.click(link)).toBe(true);
+    expect(router.visit).not.toHaveBeenCalled();
+
+    finishWarmUp?.();
+
+    await waitFor(() => {
+      expect(fireEvent.click(link)).toBe(false);
+      expect(router.visit).toHaveBeenCalledWith("/products/course/edit");
+    });
+    expect(screen.getByRole("link")).toBe(link);
+
+    vi.mocked(router.visit).mockClear();
+    expect(fireEvent.click(link, { metaKey: true })).toBe(true);
+    expect(router.visit).not.toHaveBeenCalled();
+  });
+
+  it("does not poison the module map by warming while offline", async () => {
+    const { useWarmProductEditPage } = await import("$app/components/ProductEdit/load");
+    const load = vi.fn();
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    const ProductsList = () => {
+      useWarmProductEditPage(load);
+      return <div>products</div>;
+    };
+
+    render(<ProductsList />);
+
+    expect(load).not.toHaveBeenCalled();
   });
 
   it("retries once when the editor's code fails to download, so a blip doesn't cost the seller the page", async () => {
