@@ -161,7 +161,7 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
       hash_including(
         balance_count: 0,
         sample: [],
-        unresolved_sample: [hash_including(balance_id: balance.id)]
+        unresolved_sample: [hash_including(balance_id: balance.id, reason: "StandardError: unknown processor")]
       )
     )
   end
@@ -231,8 +231,36 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     described_class.new.perform
 
     expect(ErrorNotifier).to have_received(:notify).with(
-      anything, hash_including(unresolved_sample: [hash_including(balance_id: balance.id)])
+      anything, hash_including(unresolved_sample: [hash_including(balance_id: balance.id, reason: "no merchant account")])
     )
+  end
+
+  # The baseline is compared against updated_at, not created_at. A bad holding_currency does not
+  # only arrive at row creation: a repair or backfill can rewrite the column on a row that
+  # already existed (the model's immutability check covers only the amount columns), and that is
+  # the same payout-breaking incident on a row whose created_at is long past. Keying off
+  # created_at would never see it. updated_at is written explicitly here because update_columns
+  # bypasses the automatic timestamp, which a real save would have bumped.
+  it "alerts on an old balance that was mislabelled after the baseline" do
+    balance = create_balance_at(before_baseline, holding_currency: Currency::USD)
+    balance.update_columns(holding_currency: Currency::EUR, updated_at: after_baseline)
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(sample: [hash_including(balance_id: balance.id)])
+    )
+  end
+
+  # An old row that was touched since the baseline but carries a correct currency must not
+  # become noise -- the widened timestamp only matters together with the currency test.
+  it "still ignores an old balance that was touched after the baseline but is labelled in USD" do
+    balance = create_balance_at(before_baseline, holding_currency: Currency::USD)
+    balance.update_columns(amount_cents: 500, updated_at: after_baseline)
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).not_to have_received(:notify)
   end
 
   # The sample is capped so the alert stays readable, but a capped sample must not be
@@ -262,5 +290,27 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     expect(ErrorNotifier).to have_received(:notify).with(
       anything, hash_including(balance_count: 2, currencies: match_array([Currency::EUR, "usdd"]))
     )
+  end
+
+  # Once the ceiling is hit the counts describe only the rows that were read, so the alert has
+  # to say so -- otherwise a mislabelling at scale reads as exactly MAX_ROWS_LOADED balances.
+  it "says the row ceiling was hit, so the counts are not mistaken for the whole picture" do
+    stub_const("#{described_class}::MAX_ROWS_LOADED", 2)
+    3.times { create_balance_at(after_baseline, holding_currency: Currency::EUR) }
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(balance_count: 2, hit_row_limit: true)
+    )
+  end
+
+  # The job only ever runs from the schedule, so a missing or renamed entry means the monitor
+  # silently never runs -- the exact failure mode it was written to prevent.
+  it "is scheduled daily ahead of the payouts run" do
+    entry = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml")).values.find { _1["class"] == described_class.name }
+
+    expect(entry).to be_present
+    expect(entry["cron"].sub(/#.*/, "").strip).to eq("30 7 * * *")
   end
 end

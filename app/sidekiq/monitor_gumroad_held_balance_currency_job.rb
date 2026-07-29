@@ -63,12 +63,25 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # lock alone, without on_conflict: :replace -- CONTRIBUTING.md warns that :replace has to
   # scroll the Scheduled Set to find the job it is replacing. This job takes no arguments, so
   # until_executed already makes a duplicate enqueue a no-op, which is all that is wanted.
-  sidekiq_options retry: 5, queue: :low, lock: :until_executed
+  # queue :default rather than :low because the schedule places this run half an hour ahead of
+  # the daily payouts, which only means anything if the job is not sitting in a backed-up
+  # queue when the payouts start; CONTRIBUTING.md says to use :default for a time-sensitive job.
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
-  # Rows created before this are the known historical cohort, already enumerated and
-  # handled by the one-off backfill. Alerting on them every run would be pure noise;
-  # what matters is whether anything NEW appears. Parsed with an explicit UTC offset
-  # so the boundary does not move with the application time zone.
+  # The historical cohort that prompted this monitor was enumerated and corrected by hand,
+  # so alerting on it every run would be pure noise; what matters is whether anything NEW
+  # appears. Parsed with an explicit UTC offset so the boundary does not move with the
+  # application time zone.
+  #
+  # Compared against updated_at rather than created_at, because a bad holding_currency does
+  # not only arrive when a row is created. Nothing stops the column being rewritten later --
+  # the model's immutability check covers only the amount columns, and
+  # Onetime::CorrectSelfAffiliateBackfillHoldingCurrency exists precisely because a backfill
+  # wrote wrong holding currencies onto rows that already existed. A repair like that going
+  # wrong on an older row is the same incident this monitor watches for, and keying off
+  # created_at would never see it. updated_at is a strict superset of created_at (it starts
+  # equal and only moves forward) and costs no extra noise: an old row that was touched but
+  # is correctly labelled still reads "usd" and does not match the currency test below.
   BASELINE_CUTOFF = Time.zone.parse("2026-07-29T00:00:00Z")
 
   # Enough balances to act on without turning the alert into a wall of text.
@@ -84,26 +97,24 @@ class MonitorGumroadHeldBalanceCurrencyJob
   def perform
     candidates = Balance
       .where(state: "unpaid")
-      .where("balances.created_at >= ?", BASELINE_CUTOFF)
+      .where("balances.updated_at >= ?", BASELINE_CUTOFF)
       .where("balances.holding_currency IS NULL OR CAST(balances.holding_currency AS BINARY) <> ?", Currency::USD)
       .left_joins(:merchant_account)
       # Everything except a Stripe account that belongs to a seller. Written as a NOT
       # around the one excluded shape rather than as a list of included ones, so that
       # an unfamiliar row shape is kept and answered for in Ruby rather than dropped.
-      # Two details are load-bearing, both for the same reason as the currency arm
-      # above: merchant_accounts carries the same case-insensitive PAD SPACE
-      # collation, and holder_of_funds falls back to GUMROAD for any processor id it
-      # does not recognise. So "Stripe" and "stripe " are Gumroad-held in Ruby while
-      # a collated comparison would call them Stripe and drop them, hence the CAST;
-      # and a NULL processor id is Gumroad-held too while any comparison against
-      # NULL yields NULL -- which NOT also yields NULL, excluding the row -- hence
-      # the COALESCE.
+      # The CAST and the COALESCE are load-bearing for the same collation and NULL
+      # reasons as the currency test above -- see header notes 1 and 2.
       .where.not(
         "merchant_accounts.user_id IS NOT NULL AND " \
         "CAST(COALESCE(merchant_accounts.charge_processor_id, '') AS BINARY) = ?",
         StripeChargeProcessor.charge_processor_id
       )
-      .includes(:merchant_account)
+      # preload rather than includes: after a left_joins on the same association, includes
+      # resolves to a preload only via Rails' eager-loading heuristics, and an accidental
+      # switch to eager loading would turn the LEFT join into an INNER one and drop exactly
+      # the balance-with-no-merchant-account row this job has to report.
+      .preload(:merchant_account)
       .order(id: :asc)
       .limit(MAX_ROWS_LOADED)
       .to_a
@@ -123,10 +134,10 @@ class MonitorGumroadHeldBalanceCurrencyJob
       # the rows that were read rather than everything that matches.
       hit_row_limit: candidates.size >= MAX_ROWS_LOADED,
       sample: offending.first(SAMPLE_LIMIT).map { describe(_1) },
-      # Rows whose holder_of_funds could not be answered at all. Reported separately so a
-      # resolution failure never masquerades as a mislabelled balance, and kept out of the
-      # counts above so it cannot inflate them.
-      unresolved_sample: unresolved.first(SAMPLE_LIMIT).map { describe(_1) }
+      # Rows whose holder_of_funds could not be answered at all, each with the reason. Reported
+      # separately so a resolution failure never masquerades as a mislabelled balance, and kept
+      # out of the counts above so it cannot inflate them.
+      unresolved_sample: unresolved.first(SAMPLE_LIMIT).map { |balance, reason| describe(balance).merge(reason:) }
     )
   end
 
@@ -135,7 +146,9 @@ class MonitorGumroadHeldBalanceCurrencyJob
     # processor it no longer recognises, so today it does not raise -- but a monitor that
     # dies on one row stops watching every other row, so a row it cannot answer for is
     # reported in its own bucket rather than allowed to abort the run or to be counted as a
-    # mislabelled balance.
+    # mislabelled balance. The error text travels with the row: if a deploy breaks
+    # holder_of_funds, a list of balance ids alone would not say why, and nothing else
+    # reaches Sentry because the exception is swallowed here.
     def partition_by_holder_of_funds(candidates)
       offending = []
       unresolved = []
@@ -147,19 +160,15 @@ class MonitorGumroadHeldBalanceCurrencyJob
         # correctly labelled either. is_balance_payable dereferences it, so the row is a
         # payout problem regardless of its currency.
         if merchant_account.nil?
-          unresolved << balance
+          unresolved << [balance, "no merchant account"]
           next
         end
 
-        holder = begin
-          merchant_account.holder_of_funds
-        rescue StandardError
-          :unresolved
-        end
-
-        case holder
-        when HolderOfFunds::GUMROAD then offending << balance
-        when :unresolved then unresolved << balance
+        begin
+          holder = merchant_account.holder_of_funds
+          offending << balance if holder == HolderOfFunds::GUMROAD
+        rescue StandardError => e
+          unresolved << [balance, "#{e.class}: #{e.message}"]
         end
       end
 
