@@ -3,7 +3,9 @@
 require "spec_helper"
 
 describe Payouts do
-  # The one wording the "can this seller see an explanation of the block" check recognises.
+  # A wording the "can this seller see an explanation of the block" check recognises. It matches any
+  # note containing one of the seller-facing rejection reasons, current or historical, so this is one
+  # example of that shape rather than the only string that works.
   def terminal_paypal_explanation_note_content
     "Your payout on July 1st, 2026 could not be sent because " \
       "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
@@ -1000,17 +1002,7 @@ describe Payouts do
       # newest note they are allowed to see, so writing this weekly note seller-visible would put
       # them back to reading "payouts were paused by the system" within one payout cycle.
       it "does not let the paused-payout note bury a terminal PayPal explanation" do
-        seller = create(:compliant_user, payment_address: "stuck@example.com")
-        create(:user_compliance_info, user: seller)
-        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
-        seller.add_payout_note(
-          content: "Your payout on July 1st, 2026 could not be sent because " \
-                   "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
-                   "Add a bank account in your payout settings.",
-          seller_visible: true
-        )
-        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
-                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller = seller_blocked_by_paypal_reading_the_explanation
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
 
         expect do
@@ -1043,17 +1035,7 @@ describe Payouts do
       # keying on its wording alone would hide every future pause note — including pauses placed for
       # reasons that have nothing to do with PayPal.
       it "shows the paused-payout note again once the seller is no longer blocked by PayPal" do
-        seller = create(:compliant_user, payment_address: "stuck@example.com")
-        create(:user_compliance_info, user: seller)
-        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
-        seller.add_payout_note(
-          content: "Your payout on July 1st, 2026 could not be sent because " \
-                   "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
-                   "Add a bank account in your payout settings.",
-          seller_visible: true
-        )
-        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
-                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller = seller_blocked_by_paypal_reading_the_explanation
         # The seller fixed it the way we asked them to.
         create(:ach_account, user: seller)
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)

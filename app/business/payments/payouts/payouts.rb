@@ -95,15 +95,8 @@ class Payouts
         # the explanation out of that window within a month, at which point the lookup returns nil
         # and the suppression disarms itself. Skipping the repeat also spares these accounts, which
         # already carry hundreds of automated comments, one row per payout run.
-        #
-        # Matched on shape rather than on the exact string, because the note embeds its own payout
-        # date and so is never byte-identical between runs.
         if keep_explanation_visible
-          newest_note = user.latest_payout_note
-          if newest_note.present? && !PayoutNoteVisibility.seller_visible?(newest_note) &&
-             newest_note.content.to_s.match?(PAUSED_PAYOUT_NOTE_REGEX)
-            return false
-          end
+          return false if newest_note_is_hidden_repeat?(user, PAUSED_PAYOUT_NOTE_REGEX)
         elsif terminal_paypal_block
           # The PayPal block is live but the seller cannot see the explanation of it, so restore
           # the explanation instead of writing them another generic pause note.
@@ -170,13 +163,8 @@ class Payouts
           # this note would go back to being written seller-visible, re-burying the explanation the
           # suppression exists to protect. Skipping the repeat keeps that from happening at all,
           # and spares accounts that already carry hundreds of automated comments one row a day.
-          # Matched on shape rather than exact text because the note embeds its own payout date.
           if explanation_visible
-            newest_note = user.latest_payout_note
-            if newest_note.present? && !PayoutNoteVisibility.seller_visible?(newest_note) &&
-               newest_note.content.to_s.match?(INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX)
-              return false
-            end
+            return false if newest_note_is_hidden_repeat?(user, INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX)
           end
 
           user.add_payout_note(content:, seller_visible: !explanation_visible)
@@ -197,6 +185,24 @@ class Payouts
       ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:, payout_type:)
     end
   end
+
+  # True when the newest payout note on the account is already a hidden note of the given shape,
+  # i.e. one this class wrote and suppressed on an earlier run of the same repeating note.
+  #
+  # Both places that suppress a repeating note use this. It has to read the same rows the
+  # "can the seller see an explanation" lookup reads, or the two can disagree about which note is
+  # newest and the suppression will keep writing rows it meant to skip — so both go through
+  # User#latest_payout_note / #latest_seller_visible_payout_note rather than an inline scope.
+  #
+  # Shape rather than exact text, because these notes embed their own payout date and so are never
+  # byte-identical between runs.
+  def self.newest_note_is_hidden_repeat?(user, note_regex)
+    newest_note = user.latest_payout_note
+    newest_note.present? &&
+      !PayoutNoteVisibility.seller_visible?(newest_note) &&
+      newest_note.content.to_s.match?(note_regex)
+  end
+  private_class_method :newest_note_is_hidden_repeat?
 
   def self.add_below_minimum_payout_note(user, payout_date, account_balance)
     current_balance = user.formatted_dollar_amount(account_balance)
