@@ -135,7 +135,7 @@ export const Nav = ({ title, children, footer }: Props) => {
       <nav
         aria-label="Main"
         className={classNames(
-          "flex flex-col overflow-x-hidden overflow-y-auto bg-black text-white lg:static lg:w-52 dark:text-foreground",
+          "flex max-h-full flex-col overflow-x-hidden bg-black text-white lg:static lg:w-52 dark:text-foreground",
           { "fixed z-10 size-full": open },
         )}
       >
@@ -153,8 +153,17 @@ export const Nav = ({ title, children, footer }: Props) => {
             <Logo className="w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
-        {children}
-        <footer className={classNames("mt-auto hidden lg:grid", { grid: open })}>{footer}</footer>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          {/* Fades the last visible row when the list overflows, so it's clear there is more below.
+              macOS/iOS hide their overlay scrollbars until you scroll, so on first paint the list
+              would otherwise just look like it ends. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black"
+          />
+        </div>
+        <footer className={classNames("hidden lg:grid", { grid: open })}>{footer}</footer>
       </nav>
     </NavContext.Provider>
   );
@@ -163,7 +172,7 @@ export const Nav = ({ title, children, footer }: Props) => {
 export const NavSection = ({ children }: { children: React.ReactNode }) => {
   const nav = useNav();
   const isOpen = !!nav?.open;
-  return <section className={classNames("mb-12 hidden lg:grid", { grid: isOpen })}>{children}</section>;
+  return <section className={classNames("mb-4 hidden lg:grid", { grid: isOpen })}>{children}</section>;
 };
 
 export const UnbecomeDropdownItem = () => {
