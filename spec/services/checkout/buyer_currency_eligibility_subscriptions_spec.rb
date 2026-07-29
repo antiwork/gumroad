@@ -60,26 +60,41 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
     end
   end
 
-  describe "the quote-time mirror" do
-    it "stays in lockstep with the charge-time gate for memberships" do
-      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+  # Three separate places decide whether a membership may be priced in the buyer's currency:
+  # the product page's display gate, the surcharge endpoint that mints the quote, and the
+  # charge path that honours the resulting token. They must all give the same answer. When only
+  # two of them were lifted, the product page showed US dollars while the same checkout quoted
+  # the buyer's currency, so the price changed between the page and the till.
+  describe "the three product-shape gates" do
+    # The display gate lives in a helper, so exercise it through an object that includes the
+    # helper rather than reaching into the view layer.
+    let(:display_gate) { Class.new { include CurrencyHelper }.new }
 
-      quote_side = Checkout::BuyerCurrencyQuote.send(:new, line_items: [], canonical_total_cents: 1000, ip: "1.2.3.4")
-                                            .send(:quotable_product?, membership, buyer_currency: "eur")
-      charge_side = !described_class.send(:new, order: nil, seller:, merchant_account: nil, chargeable: nil, purchases: [], params: {}, setup_future_charges: false, off_session: false)
-                                    .send(:unquotable_product?, membership)
+    def gate_answers
+      quotable_at_quote_time = Checkout::BuyerCurrencyQuote.send(:new, line_items: [], canonical_total_cents: 1000, ip: "1.2.3.4")
+                                                          .send(:quotable_product?, membership, buyer_currency: "eur")
+      quotable_at_charge_time = !described_class.send(:new, order: nil, seller:, merchant_account: nil, chargeable: nil, purchases: [], params: {}, setup_future_charges: false, off_session: false)
+                                                .send(:unquotable_product?, membership)
+      quotable_on_product_page = !display_gate.buyer_currency_unquotable_product?(membership)
 
-      expect(quote_side).to eq(charge_side)
+      [quotable_on_product_page, quotable_at_quote_time, quotable_at_charge_time]
     end
 
-    it "stays in lockstep when the ramp is off too" do
-      quote_side = Checkout::BuyerCurrencyQuote.send(:new, line_items: [], canonical_total_cents: 1000, ip: "1.2.3.4")
-                                            .send(:quotable_product?, membership, buyer_currency: "eur")
-      charge_side = !described_class.send(:new, order: nil, seller:, merchant_account: nil, chargeable: nil, purchases: [], params: {}, setup_future_charges: false, off_session: false)
-                                    .send(:unquotable_product?, membership)
+    it "all say a membership is quotable once the ramp is on" do
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
 
-      expect(quote_side).to eq(charge_side)
-      expect(quote_side).to be(false)
+      expect(gate_answers).to eq([true, true, true])
+    end
+
+    it "all say a membership is not quotable while the ramp is off" do
+      expect(gate_answers).to eq([false, false, false])
+    end
+
+    it "all keep a free-trial membership out, ramp or no ramp, because its first charge is $0" do
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+      membership.update!(free_trial_enabled: true, free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+
+      expect(gate_answers).to eq([false, false, false])
     end
   end
 

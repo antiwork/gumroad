@@ -222,11 +222,18 @@ module CurrencyHelper
   # services, so this repeats the list rather than calling into them; if a shape is added
   # there, add it here too or the product page will start promising a price checkout refuses.
   def buyer_currency_unquotable_product?(product)
-    product.is_in_preorder_state? ||
-      product.is_recurring_billing? ||
-      product.free_trial_enabled? ||
-      product.native_type == Link::NATIVE_TYPE_COMMISSION ||
-      product.installment_plan.present?
+    return true if product.is_in_preorder_state?
+    return true if product.free_trial_enabled?
+    return true if product.native_type == Link::NATIVE_TYPE_COMMISSION
+    return true if product.installment_plan.present?
+    return false unless product.is_recurring_billing?
+
+    # A plain membership is quotable once its seller is in the subscription ramp, because its
+    # first charge is the full period price and its later charges reuse the amount fixed at
+    # signup. Excluding it here regardless of the flag is what made the product page show US
+    # dollars while the very same checkout quoted the buyer's own currency: the price changed
+    # between the page and the till, which is the surprise this whole gate exists to prevent.
+    !Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(product.user)
   end
 
   # Mirrors how Checkout::BuyerCurrencyQuote resolves the account that would charge this
