@@ -89,14 +89,15 @@ class Ai::StoreAgentService
       # your previous message" describes the creator's request, and the staging claim wrapped
       # around it is about this turn.
       #
-      # A sentence that also says the old card is gone, or that a fresh one exists, is not a
-      # point-back either — re-staging because the creator can't see the card is the single most
-      # common way this bug is reported, so those must still reach the guard. The exclusion looks
-      # at the whole clause rather than only what follows, because the reason often comes first
-      # ("you said you can't see the card on my earlier message, so I staged it again").
-      (?![^.!?\n]*\b(?:again|new\s+card|another\s+card|gone|missing|empty|expired|
-        disappeared|vanished|didn['’]t\s+render|no\s+longer|isn['’]t\s+there|
-        not\s+there|can['’]t\s+see)\b)
+      # A sentence that also says the old card is gone is not a point-back either — re-staging
+      # because the creator can't see the card is the single most common way this bug is reported,
+      # so those must still reach the guard. "again" has to sit on the staging verb itself
+      # ("I staged it again"), because "tap that card again" is an instruction about a card that
+      # IS there, and treating it as re-staging would swallow the truthful point-back.
+      (?!\s+(?:(?:it|that|this)\s+)?again\b)
+      (?![^.!?\n]*\b(?:new\s+card|another\s+card|gone|expired|disappeared|vanished|
+        didn['’]t\s+render|no\s+longer|isn['’]t\s+there|not\s+there|can['’]t\s+see|
+        couldn['’]t\s+(?:see|find))\b)
       [^.!?\n]*\b(?:my|the)\s+(?:earlier|previous)\s+message\b
       |
       [^.!?\n]*\b(?:before|many\s+times|in\s+the\s+past)\b
@@ -256,14 +257,12 @@ class Ai::StoreAgentService
         #{STAGED_CLAIM_ACTION_NOUN}\s+of\s+(?:the|that|this|your|my)\b
         |
         #{STAGED_CLAIM_ACTION_NOUN}
-          (?=\s*(?:[.!—–]|\s-\s|and\s+#{STAGED_CLAIM_ACTION_NOUN}\b))
+          (?=\s*(?:[.!—–]|\s-\s|
+            and\s+#{STAGED_CLAIM_ACTION_NOUN}\b(?=\s*(?:[.!—–]|\s-\s))))
       )
       (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
       (?!#{STAGED_CLAIM_COMPLETED_TAIL})
       (?![^.!?\n]*#{STAGED_CLAIM_CONDITIONAL_TAIL})
-      # An explanation of what staging would do under some condition is not a claim that this turn
-      # staged anything, the same exclusion arms 8 and 9 use.
-      (?![^.!?\n]*\b(?:if|when|whenever|once|after|unless)\b)
       (?![^.!?\n]*\?)
       (?:
         (?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})

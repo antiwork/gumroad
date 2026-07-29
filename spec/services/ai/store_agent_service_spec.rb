@@ -742,6 +742,14 @@ describe Ai::StoreAgentService do
           "I staged the price change in my previous message — tap the card above to apply it.",
           "The change is staged from my earlier message — tap the card there to apply it.",
           "Staged deletion of the draft is on my previous message — tap the card there.",
+          # an instruction to tap a card "again" is about a card that IS there
+          "I staged the discount in my previous message — tap that card again.",
+          "I staged the update in my previous message; tap it again if the page didn't refresh.",
+          "It's staged on my earlier message — scroll up and confirm it again.",
+          # a compound subject is still a subject, however many nouns it has
+          "Staged changes and updates wait for your approval.",
+          "Staged changes and updates appear below — tap the card to apply them.",
+          "Staged updates. These need your approval.",
           # hypothetical and conditional descriptions of what staging WOULD do
           "Staged deletion of the draft would appear as a card below my reply — tap it and the product is gone.",
           "If you want, I can stage deletion of the draft — then tap the card.",
@@ -824,6 +832,14 @@ describe Ai::StoreAgentService do
           # that the cheap pre-check in the guard doesn't skip these replies.
           "I've set up the discount for your approval.",
           "That's set up for your approval.",
+          # Instruction timing is not a conditional about whether anything was staged, and
+          # "whenever you're ready" is what production actually writes.
+          "Staged the discount — tap the card whenever you're ready.",
+          "Staged deletion of the draft — approve it when you're ready.",
+          "Staged the price change. Approve it once you've checked the numbers.",
+          "Staged the update — confirm it and it applies after the next refresh.",
+          # re-staging for a reason no marker list will ever fully enumerate
+          "I've staged it again because you couldn't find the card on my earlier message. Tap the card.",
         ]
 
         phantoms.each do |reply|
