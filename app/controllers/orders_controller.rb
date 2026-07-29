@@ -160,8 +160,7 @@ class OrdersController < ApplicationController
     # `payment_method` to any error involving one, not just to declines, so a card-typed
     # `invalid_request_error` (a consumed ConfirmationToken, an intent in an unexpected state)
     # never transitions the intent and fires no webhook. Suppressing on the method alone would
-    # make those failures log-only — 8 of a 44-event live sample, 18%, all of them
-    # card + invalid_request_error.
+    # make those failures log-only — 38 of a 597-event live sample, 6.4%.
     #
     # Deliberately a denylist, not an allowlist: anything unrecognised — a blank type, or a
     # payment method added after this code was written — keeps reporting, so a new method cannot
