@@ -527,6 +527,220 @@ class AssetPreviewTest < ActiveSupport::TestCase
     end
   end
 
+  # --- #display_height / #display_width --------------------------------------
+
+  test "display_height computes the height scaled to the display width" do
+    # Factory oembed info: 356x200. Display width caps at 356 (< 670).
+    assert_equal 200, build_asset_preview_youtube.display_height
+  end
+
+  test "display_height returns nil when the width is zero instead of raising FloatDomainError" do
+    # Some oEmbed providers report non-numeric widths (e.g. "auto"), which
+    # to_i to 0. Dividing by 0.0 produces NaN and NaN.to_i raises
+    # FloatDomainError, which crashed API product serialization (Sentry
+    # GUMROAD-ZV). A zero width must degrade to nil dimensions instead.
+    preview = build_asset_preview_youtube
+    preview.oembed["info"]["width"] = "auto"
+
+    assert_nil preview.display_height
+  end
+
+  test "display_width returns nil when the width is zero, matching display_height's contract" do
+    preview = build_asset_preview_youtube
+    preview.oembed["info"]["width"] = "auto"
+
+    assert_nil preview.display_width
+  end
+
+  # --- #as_json --------------------------------------------------------------
+
+  test "as_json serializes without raising when the oembed width is unusable" do
+    preview = create_asset_preview_youtube
+    preview.oembed["info"]["width"] = "auto"
+
+    assert_nil preview.as_json[:height]
+    assert_nil preview.as_json[:width]
+  end
+
+  test "as_json serializes without raising for an existing file cover analyzed as 0x0" do
+    # The production trigger for Sentry GUMROAD-ZV: a video file that ffprobe
+    # identifies but can't decode gets analyzed as width/height 0.0. New uploads
+    # like this are now rejected by validation, but records created before that
+    # validation still exist and must serialize.
+    preview = create_asset_preview_mov
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => 0.0, "height" => 0.0))
+
+    assert_nil preview.as_json[:width]
+    assert_nil preview.as_json[:height]
+  end
+
+  # --- dimension validation --------------------------------------------------
+
+  test "a file whose analyzed dimensions are zero is rejected" do
+    # A 0x0 "video" (e.g. a truncated or mislabeled file that ffprobe identifies
+    # but can't decode) must be rejected at upload time, the same as a file that
+    # couldn't be analyzed at all. The record is deliberately unsaved: these are
+    # upload-time validations, and a persisted cover has already passed them.
+    preview = build_unsaved_asset_preview
+    preview.file.attach(uploaded_fixture("thing.mov", "video/quicktime"))
+    preview.file.blob.update!(metadata: { "identified" => true, "width" => 0.0, "height" => 0.0, "duration" => 0.04, "video" => true, "analyzed" => true })
+
+    assert_not preview.valid?
+    assert_includes preview.errors[:base], "Could not analyze cover. Please check the uploaded file."
+  end
+
+  # --- image file size validation --------------------------------------------
+
+  test "an image cover larger than the size limit is rejected" do
+    preview = build_unsaved_asset_preview
+    preview.file.attach(uploaded_fixture("kFDzu.png", "image/png"))
+    preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE + 1)
+
+    assert_not preview.valid?
+    assert_includes preview.errors[:base],
+                    "Cover images must be smaller than 50 MB. Please resize or compress the image and try again."
+  end
+
+  test "an image cover at the size limit is accepted" do
+    preview = build_unsaved_asset_preview
+    preview.file.attach(uploaded_fixture("kFDzu.png", "image/png"))
+    preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE)
+    AssetPreviewAnalysisStub.analyze(preview.file)
+
+    assert preview.valid?
+  end
+
+  test "the image size limit does not apply to video covers" do
+    preview = build_unsaved_asset_preview
+    preview.file.attach(uploaded_fixture("thing.mov", "video/quicktime"))
+    preview.file.blob.update!(byte_size: AssetPreview::MAX_IMAGE_FILE_SIZE + 1)
+    AssetPreviewAnalysisStub.analyze(preview.file)
+
+    assert preview.valid?
+  end
+
+  # --- #oversized_image? -----------------------------------------------------
+
+  test "oversized_image? is true when either dimension exceeds the maximum" do
+    preview = create_asset_preview
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1, "height" => 500))
+
+    assert preview.oversized_image?
+  end
+
+  test "oversized_image? is false for an image within the limit" do
+    assert_not create_asset_preview.oversized_image?
+  end
+
+  test "oversized_image? is false for GIFs, which skip post-processing to preserve animation" do
+    preview = create_asset_preview_gif
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+
+    assert_not preview.oversized_image?
+  end
+
+  test "oversized_image? is false for video covers" do
+    preview = create_asset_preview_mov
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+
+    assert_not preview.oversized_image?
+  end
+
+  # --- oversized image resize enqueueing -------------------------------------
+
+  test "creating an oversized image cover enqueues a resize" do
+    preview = build_unsaved_asset_preview
+    preview.file.attach(uploaded_fixture("kFDzu.png", "image/png"))
+    preview.file.blob.update!(metadata: { "identified" => true, "width" => AssetPreview::MAX_IMAGE_DIMENSION + 1, "height" => 500, "analyzed" => true })
+    ResizeOversizedAssetPreviewWorker.jobs.clear
+    preview.save!
+
+    assert_includes ResizeOversizedAssetPreviewWorker.jobs.map { _1["args"] }, [preview.id]
+  end
+
+  test "creating a normal-size cover does not enqueue a resize" do
+    ResizeOversizedAssetPreviewWorker.jobs.clear
+    create_asset_preview
+
+    assert_equal 0, ResizeOversizedAssetPreviewWorker.jobs.size
+  end
+
+  # --- #resize_oversized_image! ----------------------------------------------
+
+  test "resize_oversized_image! replaces the file with a copy resized within the dimension limit" do
+    preview = create_asset_preview
+    # The fixture is 1633x512; pretend analysis found it oversized so the resize
+    # path runs, then let the real variant processing + re-analysis restore
+    # truthful metadata for the replacement file.
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+    original_blob_id = preview.file.blob.id
+
+    preview.resize_oversized_image!
+    preview.reload
+
+    assert_not_equal original_blob_id, preview.file.blob.id
+    assert_operator preview.width, :<=, AssetPreview::MAX_IMAGE_DIMENSION
+    assert_operator preview.height, :<=, AssetPreview::MAX_IMAGE_DIMENSION
+  end
+
+  test "resize_oversized_image! does nothing when the image is not oversized" do
+    preview = create_asset_preview
+    original_blob_id = preview.file.blob.id
+
+    preview.resize_oversized_image!
+
+    assert_equal original_blob_id, preview.reload.file.blob.id
+  end
+
+  test "resize_oversized_image! does not overwrite a cover that was replaced while it ran" do
+    preview = create_asset_preview
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+
+    replacement_blob_id = nil
+    # Simulate the seller replacing the cover in the window between the slow
+    # variant processing and the attach of the resized copy.
+    around_variant(preview) do
+      AssetPreview.find(preview.id).file.attach(uploaded_fixture("kFDzu.png", "image/png"))
+      replacement_blob_id = AssetPreview.find(preview.id).file.blob.id
+    end
+
+    preview.resize_oversized_image!
+
+    assert_equal replacement_blob_id, preview.reload.file.blob.id
+  end
+
+  test "resize_oversized_image! does not attach the resized copy when the preview was deleted while it ran" do
+    preview = create_asset_preview
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+    original_blob_id = preview.file.blob.id
+
+    around_variant(preview) { AssetPreview.find(preview.id).mark_deleted! }
+
+    preview.resize_oversized_image!
+
+    assert_equal original_blob_id, preview.reload.file.blob.id
+  end
+
+  test "resize_oversized_image! cleans up the uploaded resized copy when the attach raises" do
+    preview = create_asset_preview
+    preview.file.blob.update!(metadata: preview.file.blob.metadata.merge("width" => AssetPreview::MAX_IMAGE_DIMENSION + 1))
+    original_blob_id = preview.file.blob.id
+
+    preview.file.stubs(:attach).raises(ActiveRecord::ConnectionTimeoutError)
+
+    uploaded_blob = capturing_uploaded_blob do
+      assert_raises(ActiveRecord::ConnectionTimeoutError) { preview.resize_oversized_image! }
+    end
+
+    # The worker retry will re-upload, so the copy from this failed attempt must
+    # not be left orphaned in storage.
+    purged_gids = ActiveJob::Base.queue_adapter.enqueued_jobs.filter_map do |job|
+      job["arguments"].first["_aj_globalid"] if job["job_class"] == "ActiveStorage::PurgeJob"
+    end
+    assert_includes purged_gids, uploaded_blob.to_global_id.to_s
+    assert_equal original_blob_id, preview.reload.file.blob.id
+  end
+
   private
     DANGEROUS_URLS = [
       "javascript:alert('xss')",
@@ -613,5 +827,42 @@ class AssetPreviewTest < ActiveSupport::TestCase
       assert_equal 200, response.code, "fixture object should be publicly readable at #{url}"
       SsrfFilter.stubs(:get).returns(response)
       yield
+    end
+
+    # Records the blob ActiveStorage uploads inside the block and returns it, while
+    # still performing the real upload — mocha has no `and_call_original`.
+    #
+    # `create_and_upload!` is defined on ActiveStorage::Blob's own singleton class,
+    # so the usual override-then-remove_method trick would delete the real method
+    # for the rest of the process (every later test that attaches a file then
+    # fails). Rebind the original instead.
+    def capturing_uploaded_blob
+      uploaded = nil
+      original = ActiveStorage::Blob.method(:create_and_upload!)
+      ActiveStorage::Blob.singleton_class.send(:define_method, :create_and_upload!) do |**kwargs|
+        uploaded = original.call(**kwargs)
+      end
+      yield
+      uploaded
+    ensure
+      ActiveStorage::Blob.singleton_class.send(:define_method, :create_and_upload!, original)
+    end
+
+    def uploaded_fixture(filename, content_type)
+      Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures", filename), content_type)
+    end
+
+    # Runs `block` the next time the preview's variant is requested, then lets the
+    # real variant call proceed — the RSpec original used `and_wrap_original`,
+    # which mocha has no equivalent for. Used to simulate a seller replacing or
+    # deleting the cover during the slow variant processing inside
+    # resize_oversized_image!.
+    def around_variant(preview, &block)
+      attachment = preview.file
+      original = attachment.method(:variant)
+      attachment.define_singleton_method(:variant) do |*args, **kwargs|
+        block.call
+        original.call(*args, **kwargs)
+      end
     end
 end

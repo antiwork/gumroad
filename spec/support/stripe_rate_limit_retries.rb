@@ -24,7 +24,11 @@
 # trade-off is the opposite: no user is waiting, the contention is our own
 # shards, and a short sleep is strictly better than a red build. So here — and
 # only here, this file is only loaded by the spec suite — we opt every
-# rate-limit-shaped failure into the gem's existing retry path.
+# rate-limit-shaped failure into the gem's existing retry path, on a wider
+# budget than the gem's own retries get.
+#
+# That wider budget is scoped to throttled requests rather than set on Stripe's
+# global configuration — see MAX_RETRIES below for why.
 #
 # This replaces the old StripeRetryHelper, which wrapped Stripe::Account.create
 # and Stripe::Account.create_person only, and re-raised anything whose message
@@ -43,10 +47,66 @@ module StripeTestRateLimitRetries
   # fallback, after checking the structured fields.
   RATE_LIMIT_MESSAGE = /rate limit|too many requests|creating accounts too quickly/i
 
-  def should_retry?(error, num_retries:, config: Stripe.config)
-    return true if num_retries < config.max_network_retries && rate_limited?(error) && !replaying_a_cassette?
+  # Retry budget for THROTTLED requests only: eight retries, so nine HTTP
+  # attempts. Delays before each retry follow the gem's own schedule (0.5s
+  # doubling, capped at MAX_RETRY_DELAY), so the worst case is
+  # 0.5 + 1 + 2 + 4 + 8 + 16 + 16 + 16 = 63.5 seconds of waiting.
+  #
+  # That is deliberately generous rather than minimal. The helper this file
+  # replaces allowed roughly 134 seconds, and it did so specifically for
+  # account-creation throttling, whose window is longer than the per-second
+  # request-rate bucket. A budget short enough to expire inside that window
+  # would fail the build for the reason this file exists to prevent.
+  #
+  # It is kept OFF Stripe's global configuration on purpose. Raising
+  # Stripe.max_network_retries would also widen the gem's own retries for
+  # timeouts, 409 conflicts and 500s, so a spec hitting one of those could sit
+  # in backoff for a minute for a reason that has nothing to do with
+  # throttling. Instead the wider budget is applied only on the code path that
+  # has already identified the failure as a rate limit, and the global values
+  # stay as config/initializers/003_stripe.rb sets them.
+  MAX_RETRIES = 8
+  MAX_RETRY_DELAY = 16
 
+  # should_retry? decides, and the gem then immediately asks sleep_time how long
+  # to wait, in the same thread. Recording the decision here is what lets
+  # sleep_time know whether the wider delay cap applies to this particular
+  # attempt. sleep_time consumes the flag, so it only ever covers the one sleep
+  # it was set for — a later failure of some other kind cannot inherit the wider
+  # cap just because a rate limit happened earlier in the process.
+  BACKING_OFF_FOR_RATE_LIMIT = :stripe_test_backing_off_for_rate_limit
+
+  def should_retry?(error, num_retries:, config: Stripe.config)
+    if rate_limited?(error) && !replaying_a_cassette?
+      if num_retries < MAX_RETRIES
+        # The gem retries silently. Without a line here, a CI shard spending a
+        # minute waiting out the shared Stripe test account looks like a slow
+        # spec to whoever is reading the log. Warn before claiming the wider
+        # budget, so a failure to write the log cannot strand the flag set.
+        warn "[Stripe] rate limited — the shared Stripe test account is throttling us. " \
+             "Waiting and retrying (retry #{num_retries + 1} of #{MAX_RETRIES}): #{error.message}"
+        Thread.current[BACKING_OFF_FOR_RATE_LIMIT] = true
+        return true
+      end
+
+      warn "[Stripe] still rate limited after #{num_retries} retries, giving up: #{error.message}"
+    end
+
+    # Anything else — timeouts, conflicts, server errors — is the gem's own
+    # decision to make, on the gem's own (unwidened) budget.
+    Thread.current[BACKING_OFF_FOR_RATE_LIMIT] = nil
     super
+  end
+
+  def sleep_time(num_retries, config: Stripe.config)
+    backing_off_for_rate_limit = Thread.current[BACKING_OFF_FOR_RATE_LIMIT]
+    Thread.current[BACKING_OFF_FOR_RATE_LIMIT] = nil
+    return super unless backing_off_for_rate_limit
+
+    # Same backoff schedule the gem always uses, just allowed to grow past the
+    # global cap. reverse_duplicate_merge copies the config rather than mutating
+    # it, so nothing outside this one sleep sees the wider cap.
+    super(num_retries, config: config.reverse_duplicate_merge(max_network_retry_delay: MAX_RETRY_DELAY))
   end
 
   private
@@ -76,32 +136,3 @@ module StripeTestRateLimitRetries
 end
 
 Stripe::StripeClient.singleton_class.prepend(StripeTestRateLimitRetries)
-
-# Retry budget for the test environment. Attempt delays follow the gem's own
-# schedule (0.5s doubling, capped), so the worst case is
-# 0.5 + 1 + 2 + 4 + 8 + 16 + 16 + 16 = 63.5 seconds across eight attempts.
-#
-# That is deliberately generous rather than minimal. The helper this replaces
-# allowed roughly 134 seconds, and it did so specifically for account-creation
-# throttling, whose window is longer than the per-second request-rate bucket. A
-# budget short enough to expire inside that window would fail the build for the
-# reason this file exists to prevent. In exchange the budget is now a hard
-# ceiling on the whole suite rather than per-call, applies only when a request
-# is actually being throttled, and costs nothing on a healthy run.
-#
-# Production keeps the value set in config/initializers/003_stripe.rb.
-#
-# The delay cap has no module-level writer on Stripe (the gem only delegates the
-# reader), so it is set on the configuration object directly.
-Stripe.max_network_retries = 8
-Stripe.config.max_network_retry_delay = 16
-
-# The gem retries silently. The helper this replaces printed a line per retry,
-# and losing that would make a CI shard quietly spending a minute on rate limits
-# invisible to whoever is reading the log. Report any request that needed a
-# retry, once, when it finishes.
-Stripe::Instrumentation.subscribe(:request_end, :stripe_rate_limit_retry_logging) do |event|
-  next unless event.num_retries.to_i.positive?
-
-  warn "[Stripe] #{event.method.to_s.upcase} #{event.path} succeeded after #{event.num_retries} retry/retries — the shared Stripe test account is rate limiting."
-end

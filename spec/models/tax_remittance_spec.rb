@@ -253,6 +253,123 @@ describe TaxRemittance do
     end
   end
 
+  describe "#submit_for_approval!" do
+    it "moves a draft to pending_approval when both amounts are still the reviewed ones" do
+      draft = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+
+      draft.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: 8_00)
+
+      expect(draft.reload.status).to eq("pending_approval")
+    end
+
+    # An approver signing off on a USD estimate alone would be approving half
+    # a payment: the amount that actually leaves the account is the
+    # target-currency one, and leaving it for whoever funds the row to pick
+    # means the payment sent was never reviewed.
+    it "refuses to enter approval with no target amount recorded" do
+      draft = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: nil)
+
+      expect { draft.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: nil) }
+        .to raise_error(described_class::TargetAmountMissing)
+
+      expect(draft.reload.status).to eq("draft")
+    end
+
+    it "refuses to submit a target amount that changed since the reviewer saw it" do
+      draft = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+      reviewed_target_amount_cents = draft.target_amount_cents
+
+      described_class.where(id: draft.id).update_all(target_amount_cents: 9_00)
+
+      expect { draft.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents:) }
+        .to raise_error(described_class::AmountChangedSinceReview, /target amount is now/)
+
+      expect(draft.reload.status).to eq("draft")
+    end
+
+    # The race this guards: the staging service refreshes an untouched draft
+    # while a reviewer has it open, then the reviewer submits. Without the
+    # check they would push an amount into the approval flow that they never
+    # saw.
+    it "refuses to submit an amount that changed since the reviewer saw it" do
+      draft = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+      reviewed_amount_cents = draft.usd_amount_cents
+
+      # The staging refresh commits in between.
+      described_class.where(id: draft.id).update_all(usd_amount_cents: 15_00)
+
+      expect { draft.submit_for_approval!(reviewed_amount_cents:, reviewed_target_amount_cents: 8_00) }
+        .to raise_error(described_class::AmountChangedSinceReview, /15\d{2} cents, not the 10\d{2}/)
+
+      # Still a draft, so the reviewer can re-read and submit the real number.
+      expect(draft.reload.status).to eq("draft")
+      expect(draft.usd_amount_cents).to eq(15_00)
+
+      # And submitting the refreshed amount works.
+      draft.submit_for_approval!(reviewed_amount_cents: 15_00, reviewed_target_amount_cents: 8_00)
+      expect(draft.reload.status).to eq("pending_approval")
+    end
+
+    it "refuses to submit a row that is no longer a draft" do
+      remittance = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+      remittance.update!(status: "pending_approval")
+
+      expect { remittance.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: 8_00) }
+        .to raise_error(ArgumentError, /can only submit a draft/)
+    end
+  end
+
+  describe "amounts bound by an approval" do
+    # The gap this closes: only sent/terminal rows used to be protected, so the
+    # target-currency amount — the figure that actually leaves the account —
+    # could be rewritten after a human approved the row, and the payment sent
+    # would not be the payment approved.
+    it "refuses to change either approved amount on a pending_approval or funded row" do
+      remittance = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+      remittance.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: 8_00)
+
+      expect(remittance.update(target_amount_cents: 9_00)).to be(false)
+      expect(remittance.errors[:target_amount_cents].first).to include("without revoking the approval")
+
+      expect(remittance.reload.update(usd_amount_cents: 12_00)).to be(false)
+      expect(remittance.errors[:usd_amount_cents].first).to include("without revoking the approval")
+
+      remittance.reload.update!(status: "funded")
+      expect(remittance.update(target_amount_cents: 9_00)).to be(false)
+
+      # Annotations are still writable — they describe the payment, not what
+      # was approved.
+      expect(remittance.reload.update(notes: "chased with the tax agent")).to be(true)
+    end
+
+    # Correcting an approved amount is possible; it just costs the approval, so
+    # the corrected numbers get reviewed a second time before anything is
+    # funded.
+    it "allows the amounts to change again once the approval is revoked" do
+      remittance = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+      remittance.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: 8_00)
+
+      remittance.revoke_approval!
+      expect(remittance.reload.status).to eq("draft")
+
+      remittance.record_target_amount!(9_00)
+      expect(remittance.reload.target_amount_cents).to eq(9_00)
+
+      remittance.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: 9_00)
+      expect(remittance.reload.status).to eq("pending_approval")
+    end
+
+    it "refuses to set a target amount on anything but a draft, and refuses to revoke a sent payment" do
+      remittance = create(:tax_remittance, usd_amount_cents: 10_00, target_amount_cents: 8_00)
+      remittance.submit_for_approval!(reviewed_amount_cents: 10_00, reviewed_target_amount_cents: 8_00)
+
+      expect { remittance.record_target_amount!(9_00) }.to raise_error(ArgumentError, /only set a target amount on a draft/)
+
+      sent = create(:tax_remittance, :sent, authority: "IRAS Singapore", jurisdiction: "SG", currency: "SGD")
+      expect { sent.revoke_approval! }.to raise_error(ArgumentError, /can only revoke approval/)
+    end
+  end
+
   describe "scopes" do
     it "separates in-progress from terminal remittances" do
       draft = create(:tax_remittance)

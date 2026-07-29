@@ -57,6 +57,8 @@ module Ai::StoreAgentObjectFormatter
       Array(response["media"]).filter_map { |m| media(m) }
     when "upload_media"
       [media(response["media"] || response)].compact
+    when "get_help_article"
+      [help_article(response["help_article"] || response)].compact
     else
       []
     end
@@ -178,6 +180,20 @@ module Ai::StoreAgentObjectFormatter
                              ]),
       url: json["url"].presence,
       copy: json["url"].presence || json["id"], # the hosted url is what gets embedded in a page
+    }
+  end
+
+  # A help center article the agent looked up, so the creator gets a real link to the documentation
+  # the answer came from instead of just the agent's paraphrase of it.
+  def help_article(json)
+    return nil unless json.is_a?(Hash) && json["title"].present?
+    {
+      type: "help_article",
+      title: json["title"].to_s,
+      subtitle: json["category"].presence,
+      fields: compact_fields([["About", json["description"]]]),
+      url: json["url"].presence,
+      copy: json["url"].presence || json["slug"],
     }
   end
 

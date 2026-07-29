@@ -1,6 +1,8 @@
 import { ChevronDown, ChevronUp, Clock, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
+import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
+
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
@@ -37,10 +39,12 @@ export const DurationsEditor = ({
   // Records that the seller explicitly confirmed removing this duration, so the
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (duration: Duration) => {
-    if (!duration.newlyAdded)
-      updateProduct((product) => {
+    updateProduct((product) => {
+      if (!duration.newlyAdded) {
         product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), duration.id];
-      });
+      }
+      confirmRichContentMoveSourceDeletions(product, duration.rich_content);
+    });
     onChange(durations.filter(({ id }) => id !== duration.id));
   };
 
