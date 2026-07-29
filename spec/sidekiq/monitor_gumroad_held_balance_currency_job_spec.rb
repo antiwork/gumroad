@@ -184,6 +184,26 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     )
   end
 
+  # merchant_accounts carries the same case-insensitive PAD SPACE collation as balances, so a
+  # collated comparison calls these "stripe" and would exclude them -- while holder_of_funds,
+  # comparing in Ruby against the recognised processor ids, does not recognise them and falls
+  # back to GUMROAD. They break payouts and the query has to keep them.
+  ["Stripe", "stripe "].each do |raw_processor_id|
+    it "alerts on a balance whose merchant account processor id reads #{raw_processor_id.inspect}" do
+      account = create(:merchant_account_paypal, user: create(:user))
+      account.update_column(:charge_processor_id, raw_processor_id)
+      balance = travel_to(after_baseline) do
+        create(:balance, merchant_account: account, holding_currency: Currency::EUR)
+      end
+
+      described_class.new.perform
+
+      expect(ErrorNotifier).to have_received(:notify).with(
+        anything, hash_including(sample: [hash_including(balance_id: balance.id)])
+      )
+    end
+  end
+
   # merchant_account_id is nullable, so a row can exist with nothing to resolve. Such a row
   # cannot be judged either way and must not be silently dropped.
   it "reports a row with no merchant account rather than skipping it silently" do

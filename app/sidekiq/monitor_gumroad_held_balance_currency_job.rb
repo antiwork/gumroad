@@ -45,14 +45,18 @@
 #      user_id is exactly what makes an account Gumroad-held (a Stripe Connect
 #      account always has a user and reports CREATOR). So the SQL below excludes
 #      only one shape -- a Stripe account belonging to a seller -- which leaves a
-#      superset of Gumroad-held, and holder_of_funds is then confirmed per row in
-#      Ruby, the same call the payout processors make, so the monitor cannot drift
-#      from them if that logic changes. Without that exclusion this would load
-#      every seller's foreign-currency balance: measured against production, 418
-#      rows a day and rising, against 0 that are actually Gumroad-held. The join is
-#      a LEFT join because a balance with no merchant account at all breaks payouts
-#      too -- is_balance_payable dereferences it -- and an inner join would have
-#      hidden exactly that row.
+#      superset of Gumroad-held in every case except one that does not arise in
+#      normal operation: this codebase has no database foreign keys and soft-deletes
+#      users, but a Stripe account whose user row was HARD-deleted would resolve to
+#      GUMROAD in Ruby (holder_of_funds tests the association, not the column) while
+#      the SQL sees a non-nil user_id and excludes it. Everything the SQL does admit
+#      has holder_of_funds confirmed per row in Ruby, the same call the payout
+#      processors make, so the monitor cannot drift from them if that logic changes.
+#      Without that exclusion this would load every seller's foreign-currency
+#      balance: measured against production, 418 rows and rising, against 0 that are
+#      actually Gumroad-held. The join is a LEFT join because a balance with no
+#      merchant account at all breaks payouts too -- is_balance_payable dereferences
+#      it -- and an inner join would have hidden exactly that row.
 class MonitorGumroadHeldBalanceCurrencyJob
   include Sidekiq::Job
   # lock alone, without on_conflict: :replace -- CONTRIBUTING.md warns that :replace has to
@@ -85,12 +89,17 @@ class MonitorGumroadHeldBalanceCurrencyJob
       # Everything except a Stripe account that belongs to a seller. Written as a NOT
       # around the one excluded shape rather than as a list of included ones, so that
       # an unfamiliar row shape is kept and answered for in Ruby rather than dropped.
-      # COALESCE is load-bearing: a bare comparison against a NULL charge_processor_id
-      # yields NULL, NOT NULL is NULL, and the row would be silently excluded -- yet a
-      # NULL processor id resolves to GUMROAD through MerchantAccount#holder_of_funds's
-      # fallback, so that row is exactly one this monitor must report.
+      # Two details are load-bearing, both for the same reason as the currency arm
+      # above: merchant_accounts carries the same case-insensitive PAD SPACE
+      # collation, and holder_of_funds falls back to GUMROAD for any processor id it
+      # does not recognise. So "Stripe" and "stripe " are Gumroad-held in Ruby while
+      # a collated comparison would call them Stripe and drop them, hence the CAST;
+      # and a NULL processor id is Gumroad-held too while any comparison against
+      # NULL yields NULL -- which NOT also yields NULL, excluding the row -- hence
+      # the COALESCE.
       .where.not(
-        "merchant_accounts.user_id IS NOT NULL AND COALESCE(merchant_accounts.charge_processor_id, '') = ?",
+        "merchant_accounts.user_id IS NOT NULL AND " \
+        "CAST(COALESCE(merchant_accounts.charge_processor_id, '') AS BINARY) = ?",
         StripeChargeProcessor.charge_processor_id
       )
       .includes(:merchant_account)
