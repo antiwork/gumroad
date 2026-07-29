@@ -42,9 +42,14 @@ module Onetime
         end
 
         changes = {}
-        changes[:object_value] = clean_object_value if clean_object_value && clean_object_value != blocked_object.object_value
-        changes[:buyer_email] = clean_buyer_email if clean_buyer_email && clean_buyer_email != blocked_object.buyer_email
+        changes[:object_value] = clean_object_value if clean_object_value.present? && clean_object_value != blocked_object.object_value
+        changes[:buyer_email] = clean_buyer_email if clean_buyer_email.present? && clean_buyer_email != blocked_object.buyer_email
         return false if changes.empty?
+
+        if changes[:object_value]
+          duplicate = duplicate_for(blocked_object, changes[:object_value])
+          return merge_duplicate(blocked_object, duplicate, changes) if duplicate
+        end
 
         # update_columns skips validation and callbacks deliberately: some of these rows hold a
         # fingerprint rather than an email, and a row whose OTHER column is invalid for an unrelated
@@ -52,6 +57,29 @@ module Onetime
         # bytes changing.
         blocked_object.update_columns(changes)
         puts "BlockedCustomerObject #{blocked_object.id}: #{changes.keys.join(', ')} normalized"
+        true
+      end
+
+      def duplicate_for(blocked_object, clean_object_value)
+        BlockedCustomerObject.where(
+          seller_id: blocked_object.seller_id,
+          object_type: blocked_object.object_type,
+          object_value: clean_object_value
+        ).where.not(id: blocked_object.id).first
+      end
+
+      def merge_duplicate(blocked_object, duplicate, changes)
+        duplicate_changes = {}
+        if duplicate.blocked_at.blank? && blocked_object.blocked_at.present?
+          duplicate_changes[:blocked_at] = blocked_object.blocked_at
+        end
+        if changes[:buyer_email].present? && duplicate.buyer_email.blank?
+          duplicate_changes[:buyer_email] = changes[:buyer_email]
+        end
+
+        duplicate.update_columns(duplicate_changes) if duplicate_changes.present?
+        blocked_object.destroy!
+        puts "BlockedCustomerObject #{blocked_object.id}: merged into #{duplicate.id} after normalization"
         true
       end
 

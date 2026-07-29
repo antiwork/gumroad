@@ -32,7 +32,11 @@ module Affiliate::AudienceMember
   end
 
   def should_be_audience_member?
-    type == "DirectAffiliate" && alive? && send_posts && seller.present? && EmailFormatValidator.valid?(affiliate_user&.email)
+    # deliverable? rather than valid?: a direct affiliate whose account email was stored before
+    # we started refusing invisible characters can still receive mail once the delivery-time
+    # sanitizer cleans the recipient. Dropping them from the seller's audience over a byte nobody
+    # can see would make the stricter input rule fail closed on existing accounts.
+    type == "DirectAffiliate" && alive? && send_posts && seller.present? && EmailFormatValidator.deliverable?(affiliate_user&.email)
   end
 
   def audience_member_details(product_id:)

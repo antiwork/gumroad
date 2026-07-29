@@ -430,6 +430,13 @@ describe DirectAffiliate do
         affiliate.affiliate_user.update_column(:email, "some-invalid-email")
         expect(affiliate.should_be_audience_member?).to eq(false)
       end
+
+      it "keeps an affiliate with a historically dirty email in the seller audience" do
+        affiliate = create(:direct_affiliate)
+        affiliate.affiliate_user.update_column(:email, "\u200Faffiliate@example.com")
+
+        expect(affiliate.should_be_audience_member?).to eq(true)
+      end
     end
 
     it "adds member when product is added" do
