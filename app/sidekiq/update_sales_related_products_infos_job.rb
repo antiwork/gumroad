@@ -17,11 +17,8 @@ class UpdateSalesRelatedProductsInfosJob
   # the pairs it subtracts may not be the ones the sale added, leaving some counters drifted.
   # These counters only rank recommendations and already drift on main (a pair is decremented
   # once per side when both purchases are reversed), so bounded drift is worth an unbounded
-  # write burst. Anchoring the window to the purchase id looks like the fix and is not: it
-  # cannot recover a related purchase refunded in the meantime either, because that exclusion
-  # comes from the eligibility scope above rather than from this limit — measured identical on
-  # unmodified main. Fixing that case needs the eligibility state as of the sale, which we do
-  # not store.
+  # write burst. Anchoring the window to the purchase id looks like the fix and is not — it
+  # makes the reversal miss related purchases refunded in the meantime, for every buyer.
   RELATED_PRODUCTS_PER_PURCHASE_LIMIT = 100
 
   def perform(purchase_id, increment = true)
