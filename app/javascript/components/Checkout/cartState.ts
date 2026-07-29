@@ -136,6 +136,35 @@ export type CartState = {
 };
 
 export const convertToUSD = (item: CartItem, price: number) => price / item.product.exchange_rate;
+
+// Copies the server's current exchange rates onto the cart the buyer is already holding,
+// matching items by product permalink (the rate is a property of the product's listed
+// currency, not of the selected option or quantity).
+//
+// The rate the checkout converts listed prices with is baked into the page props when the
+// page renders, but the server refreshes stored rates every hour. A checkout left open
+// across that refresh keeps converting at the old rate, which is how a buyer ends up
+// confirming a local-currency total the charge then refuses to honour. The caller supplies
+// the server's current rates, read out of the charge-refusal response itself; this merges
+// only those rates back in, leaving everything
+// the buyer chose (quantity, pay-what-you-want price, option, accepted offers, discounts)
+// untouched. Returns the original cart object when no rate actually moved, so an unchanged
+// cart doesn't trigger a needless save round-trip.
+export const withRefreshedExchangeRates = (cart: CartState, refreshedRates: ReadonlyMap<string, number>): CartState => {
+  let changed = false;
+  const items = cart.items.map((item) => {
+    const rate = refreshedRates.get(item.product.permalink);
+    // Keep the rate the cart already has rather than adopting an unusable one: a rate of 0 would
+    // make convertToUSD produce Infinity. This is defence for the exported helper rather than a
+    // case the checkout reaches — refreshedRatesFromLineItems already drops non-positive rates
+    // before building the map, and that is where the server's 0.0 for an unknown currency is
+    // actually filtered out.
+    if (rate === undefined || !(rate > 0) || rate === item.product.exchange_rate) return item;
+    changed = true;
+    return { ...item, product: { ...item.product, exchange_rate: rate } };
+  });
+  return changed ? { ...cart, items } : cart;
+};
 export const hasFreeTrial = (item: CartItem, isGift: boolean) => item.product.free_trial && !isGift;
 
 export const findCartItem = (cart: CartState, permalink: string, optionId: string | null) =>
