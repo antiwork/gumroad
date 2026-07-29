@@ -24,6 +24,16 @@ describe "Custom HTML background bridge wiring", type: :request do
       expect(response.body).to include(RendersCustomHtmlPages::CANVAS_OPAQUE_FN.strip)
     end
 
+    # A retheme through the CSSOM leaves no mutation and no load event, so the
+    # periodic re-read is the only thing covering it. Dropping it is silent —
+    # every DOM-driven example stays green — so pin that it ships.
+    it "injects the periodic re-read into the sandboxed embed" do
+      get "#{host}#{embed_path}"
+
+      expect(response.body).to include("}, #{RendersCustomHtmlPages::BACKGROUND_POLL_INTERVAL_MS});")
+      expect(response.body).to include("visibilitychange")
+    end
+
     it "injects the listener into the trusted wrapper" do
       get "#{host}#{wrapper_path}"
 

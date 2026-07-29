@@ -230,6 +230,12 @@ module RendersCustomHtmlPages
     }
   JS
 
+  # How often the sandboxed page re-reads its own canvas color as a backstop for
+  # rethemes that leave no DOM mutation to observe (see the bridge script). A
+  # second is short enough that a wrong tint is not something a visitor sits
+  # with, and long enough that the cost stays immeasurable on a quiet page.
+  BACKGROUND_POLL_INTERVAL_MS = 1000
+
   # Injected into the sandboxed landing document at serve time (never authored
   # by the seller). The seller's CSS can only style the document *inside* the
   # iframe, so the wrapper around it stays transparent — which paints white in
@@ -248,7 +254,9 @@ module RendersCustomHtmlPages
   # an attribute, a stylesheet arriving, loading or being edited, a color-scheme
   # switch — so a theme toggle re-colors the bands instead of stranding the first
   # value, including a toggle that lands on no color at all, which reports null
-  # so the wrapper drops the tint rather than holding the previous theme.
+  # so the wrapper drops the tint rather than holding the previous theme. A
+  # retheme can also happen with the DOM untouched (a CSSOM write), which nothing
+  # can observe, so a low-frequency re-read backs the observer up.
   #
   # Solid html/body colors only. A gradient or image-only background leaves
   # background-color transparent, and a color on a full-page wrapper div is not
@@ -367,6 +375,28 @@ module RendersCustomHtmlPages
         } catch (_err) {}
         try {
           window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", queueReport);
+        } catch (_err) {}
+        // A retheme done through the CSSOM rather than the DOM — insertRule, an
+        // edit to a cssRules declaration, replaceSync on an adopted sheet,
+        // flipping sheet.disabled — repaints the canvas while the document tree
+        // is byte-for-byte unchanged. Nothing observes the CSSOM, so the only
+        // way to notice is to look, which is what this does.
+        //
+        // It does not weaken the recalc argument behind affectsCanvas. That
+        // filter is there to avoid sampling on the seller's own DOM churn, where
+        // style is already dirty and the read forces the recalc. A tick on a
+        // quiet page reads a clean tree and is a cached lookup instead
+        // (measured: 0.0005 ms, three thousandths of one frame). The observer
+        // stays the fast path; this bounds how long a tint can be wrong when
+        // there is no mutation to see.
+        try {
+          setInterval(function () {
+            if (!document.hidden) queueReport();
+          }, #{BACKGROUND_POLL_INTERVAL_MS});
+          // Ticks are skipped while hidden and rAF does not run there either, so
+          // a page that rethemed in a background tab has produced no reading at
+          // all. Take one the moment it comes back.
+          document.addEventListener("visibilitychange", queueReport);
         } catch (_err) {}
       })();
     </script>

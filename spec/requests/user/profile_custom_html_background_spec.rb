@@ -504,4 +504,134 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
   end
+
+  # A retheme can bypass the DOM entirely: editing a rule through
+  # `sheet.cssRules`, `insertRule`, `replaceSync` on an adopted sheet, or
+  # flipping `sheet.disabled` all repaint the canvas while the document tree
+  # stays byte-for-byte identical. There is no mutation to observe and no load
+  # event to catch, so the observer cannot cover any of these — a periodic
+  # re-read is the only thing that can. Each shape below is its own example
+  # because they fail independently: a fix that only handled `insertRule` would
+  # leave the adopted-sheet case stale.
+  #
+  # The re-read is also what makes these load-bearing rather than incidental —
+  # removing the interval leaves every one of them stranded on the first color.
+  {
+    "editing a rule through cssRules" => <<~JS,
+      var sheet = document.getElementById("theme").sheet;
+      sheet.cssRules[sheet.cssRules.length - 1].style.backgroundColor = "#101010";
+    JS
+    "inserting a rule through insertRule" => <<~JS,
+      var sheet = document.getElementById("theme").sheet;
+      sheet.insertRule("body{background:#101010}", sheet.cssRules.length);
+    JS
+    "adopting a constructed stylesheet" => <<~JS,
+      var sheet = new CSSStyleSheet();
+      sheet.replaceSync("body{background:#101010}");
+      document.adoptedStyleSheets = [sheet];
+    JS
+  }.each do |description, mutation|
+    context "when the page changes its background by #{description}" do
+      before do
+        seller.update!(custom_html: <<~HTML)
+          <style id="theme">html,body{margin:0}body{background:#EBEBEB}</style>
+          <main>
+            <h1>BG Studio</h1>
+            <button id="retheme" type="button">Retheme</button>
+          </main>
+          <script>
+            document.getElementById("retheme").addEventListener("click", function () {
+              #{mutation}
+            });
+          </script>
+        HTML
+      end
+
+      it "re-reports the new color to the wrapper" do
+        visit seller.subdomain_with_protocol
+
+        expect_wrapper_background("rgb(235, 235, 235)")
+
+        within_frame(find("iframe#gumroad-landing-frame")) { click_on "Retheme" }
+
+        expect_wrapper_background("rgb(16, 16, 16)")
+        expect(theme_color).to eq("rgb(16, 16, 16)")
+      end
+    end
+  end
+
+  # Disabling a sheet is the shape with no DOM write at all — not even an
+  # attribute, since `sheet.disabled` lives on the CSSOM object and leaves the
+  # <style> element's attributes untouched. The element is inserted up front so
+  # its insertion is not the mutation under test.
+  context "when the page changes its background by disabling a stylesheet" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <style id="dark">body{background:#101010}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="light" type="button">Light</button>
+          <button id="dark-on" type="button">Dark</button>
+        </main>
+        <script>
+          var sheet = document.getElementById("dark").sheet;
+          sheet.disabled = true;
+          document.getElementById("light").addEventListener("click", function () {
+            sheet.disabled = true;
+          });
+          document.getElementById("dark-on").addEventListener("click", function () {
+            sheet.disabled = false;
+          });
+        </script>
+      HTML
+    end
+
+    it "re-reports in both directions" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Dark" }
+      expect_wrapper_background("rgb(16, 16, 16)")
+      expect(theme_color).to eq("rgb(16, 16, 16)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Light" }
+      expect_wrapper_background("rgb(235, 235, 235)")
+      expect(theme_color).to eq("rgb(235, 235, 235)")
+    end
+  end
+
+  # The re-read fires on a timer, so it could report the same unchanged color
+  # over and over — a postMessage per second per open page, forever. `report`
+  # returns early on an unchanged value, and this is what holds it to that: the
+  # wrapper is instrumented to count what actually arrives across several
+  # intervals of a page that never changes.
+  context "when nothing about the page changes" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "does not re-post the color it already reported" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      page.execute_script(<<~JS)
+        window.__bgMessages = 0;
+        window.addEventListener("message", function (e) {
+          var d = e.data;
+          if (d && typeof d === "object" && d.type === "gumroad:background") window.__bgMessages++;
+        });
+      JS
+
+      sleep(RendersCustomHtmlPages::BACKGROUND_POLL_INTERVAL_MS / 1000.0 * 4)
+
+      expect(page.evaluate_script("window.__bgMessages")).to eq(0)
+      expect(wrapper_background).to eq("rgb(235, 235, 235)")
+    end
+  end
 end
