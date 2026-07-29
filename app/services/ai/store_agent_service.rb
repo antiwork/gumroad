@@ -1145,6 +1145,7 @@ class Ai::StoreAgentService
       if (error = unknown_body_keys_error(endpoint, body))
         return [{ error: }, nil]
       end
+      normalize_product_currency_param!(endpoint, body)
 
       summary = write_summary(endpoint, path_params, body)
       action = ProposedAction.new(
@@ -1280,6 +1281,12 @@ class Ai::StoreAgentService
     def requested_currency(body)
       requested = body["price_currency_type"].to_s.downcase.presence
       requested if CURRENCY_CHOICES.key?(requested)
+    end
+
+    def normalize_product_currency_param!(endpoint, body)
+      return unless endpoint.id.in?(%w[create_product update_product]) && body.key?("price_currency_type")
+
+      body["price_currency_type"] = body["price_currency_type"].to_s.strip.downcase
     end
 
     def preview_field(label, value)
