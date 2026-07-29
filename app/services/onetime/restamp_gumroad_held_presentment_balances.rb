@@ -291,19 +291,10 @@ class Onetime::RestampGumroadHeldPresentmentBalances
     # the signature of the branch this service repairs.
     #
     # Refund and dispute legs carry no `purchase_id` of their own — they hang off the refund or
-    # dispute — so the purchases are resolved through whichever association is present. Anything with
-    # no reachable purchase at all (a credit leg, say) cannot be shown to come from this regression
-    # and is refused.
-    #
-    # A dispute needs one more step than a refund: a dispute raised against a combined-cart charge
-    # is recorded on the Charge itself (`disputes.charge_id` set, `disputes.purchase_id` empty), so
-    # reading only `dispute.purchase` refuses those legs as having no related purchase — and the
-    # affected set contains exactly that shape, a chargeback leg against a charge-level dispute.
-    # `Dispute#purchases` resolves both shapes: the charge's purchases when the dispute is
-    # charge-level, the directly-attached purchase otherwise. Every reachable purchase must carry
-    # presentment records; a charge whose purchases disagree on that was not written by this
-    # regression (presentment rows are created for all of a presentment charge's purchases or none),
-    # so it is refused for hand review rather than relabelled.
+    # dispute — so the purchases are resolved through whichever association is present. A dispute
+    # on a combined-cart charge carries only `charge_id` (no `purchase_id`), so disputes resolve
+    # via Dispute#purchases, which handles both shapes. Anything with no reachable purchase at all
+    # (a credit leg, say) cannot be shown to come from this regression and is refused.
     def presentment_backed?(balance_transaction)
       purchases =
         if balance_transaction.purchase

@@ -237,15 +237,9 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     end
 
     it "restamps a negative dispute leg, the one non-purchase shape in the affected set" do
-      # Production balance 16800893 is a chargeback leg, not a sale: holding gbp/-4551/-4275 against
-      # issued usd/-6000/-4275. It matters because the amounts are negative, because it was booked
-      # after the lane was ramped down — a chargeback can arrive long after the charge it disputes —
-      # and because the dispute is recorded against the whole Charge rather than the purchase
-      # (`disputes.charge_id` set, `disputes.purchase_id` empty, which is how combined-cart
-      # chargebacks are stored). That last part is the trap: the presentment check has to walk
-      # dispute → charge → purchases, and a check that reads only `dispute.purchase` refuses this
-      # balance as having no related purchase — a silent skip that leaves the seller's row
-      # mislabelled after an otherwise clean-looking run.
+      # Production balance 16800893: a chargeback leg with negative amounts, booked after the
+      # ramp-down, whose dispute is recorded against the whole Charge (charge_id set, purchase_id
+      # empty). Reading only dispute.purchase silently skips this balance as having no purchase.
       dispute_time = Time.utc(2026, 7, 28, 15, 18, 5)
       disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 45_51, presentment_currency: Currency::GBP)
       charge = disputed_purchase.purchase_presentment.charge_presentment.charge
@@ -279,9 +273,7 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
     end
 
     it "restamps a dispute leg whose dispute carries the purchase directly" do
-      # The other dispute shape: a dispute raised against a single purchase stores the purchase on
-      # the dispute row itself, no charge involved. Covered separately from the charge-level example
-      # above so that resolving one shape can never silently stop resolving the other.
+      # The other dispute shape: purchase_id on the dispute row itself, no charge involved.
       disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 54_00)
       dispute = create(:dispute_formalized, purchase: disputed_purchase)
 
