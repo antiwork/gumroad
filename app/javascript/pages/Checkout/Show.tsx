@@ -674,7 +674,12 @@ const CheckoutIndexPage = () => {
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
-      only: ["cart", "flash"],
+      // `accent_styles` is derived from the cart's contents (see CheckoutController#show), so it has
+      // to be refreshed by the same request that saves them. Without it, removing or adding an item
+      // that changes the cart between one seller and several would save the new cart while the
+      // injected <head> style kept the old seller's accent — branding that no longer matches what
+      // the buyer is paying for.
+      only: ["cart", "flash", "accent_styles"],
       preserveUrl: true,
       preserveScroll: true,
     });

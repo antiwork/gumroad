@@ -113,6 +113,25 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.props[:accent_styles]).not_to include("--body-bg")
         expect(inertia.props[:accent_styles]).not_to include("--font-family")
       end
+
+      it "recomputes the accent on the partial request the frontend makes when the cart changes" do
+        # Saving the cart is a partial Inertia visit (see the `only:` list in Checkout/Show.tsx),
+        # and the accent depends on which sellers are in the cart. If this prop stopped being
+        # served on a partial request, a buyer emptying a mixed cart down to one seller would keep
+        # whatever accent the page loaded with. Asserting the server half of that contract here.
+        #
+        # Reads the response body rather than the `inertia` matcher helper, which only captures
+        # props for a full page render.
+        cart_with(create(:product, user: branded_seller))
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,accent_styles"
+
+        get :show
+
+        expect(response.parsed_body["props"]).to include("accent_styles")
+        expect(response.parsed_body["props"]["accent_styles"]).to include("--accent:0 154 73")
+      end
     end
 
     describe "process_cart_id_param check" do
