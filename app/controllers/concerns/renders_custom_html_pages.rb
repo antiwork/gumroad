@@ -217,10 +217,10 @@ module RendersCustomHtmlPages
   # load.
   #
   # Reported again whenever something that could repaint the canvas changes —
-  # an attribute, a stylesheet arriving or being edited, a color-scheme switch —
-  # so a theme toggle re-colors the bands instead of stranding the first value,
-  # including a toggle that lands on no color at all, which reports null so the
-  # wrapper drops the tint rather than holding the previous theme.
+  # an attribute, a stylesheet arriving, loading or being edited, a color-scheme
+  # switch — so a theme toggle re-colors the bands instead of stranding the first
+  # value, including a toggle that lands on no color at all, which reports null
+  # so the wrapper drops the tint rather than holding the previous theme.
   #
   # Solid html/body colors only. A gradient or image-only background leaves
   # background-color transparent, and a color on a full-page wrapper div is not
@@ -293,33 +293,48 @@ module RendersCustomHtmlPages
           var name = node && node.nodeName;
           return name === "STYLE" || name === "LINK";
         }
+        // A <link> only repaints the canvas once the stylesheet it points at has
+        // loaded, which is after the mutation that inserted it — so the report
+        // that mutation queues reads the pre-stylesheet color. The load event
+        // has to be caught on the element: a resource's load event never
+        // reaches the window, in either phase, so a listener there sees nothing.
+        // Re-adding the same function is a no-op per spec, so a <link> touched
+        // twice needs no bookkeeping.
+        function watchStylesheetLoad(node) {
+          if (node && node.nodeName === "LINK") node.addEventListener("load", queueReport);
+        }
         function affectsCanvas(records) {
+          var affects = false;
           for (var i = 0; i < records.length; i++) {
             var record = records[i];
-            if (record.type === "attributes") return true;
+            if (record.type === "attributes") {
+              affects = true;
+              // href swapped on a <link> that is already in the document — the
+              // new sheet lands late too.
+              watchStylesheetLoad(record.target);
+            }
             // A rewrite arrives as characterData when the text node is edited
             // in place, but as childList on the <style> itself when the text is
             // swapped wholesale — which is what `textContent = ...` does, the
             // common way to retheme. Both look at the target, not the node.
-            if (stylesheetNode(record.target)) return true;
-            if (stylesheetNode(record.target.parentNode)) return true;
+            if (stylesheetNode(record.target)) affects = true;
+            if (stylesheetNode(record.target.parentNode)) affects = true;
             for (var j = 0; j < record.addedNodes.length; j++) {
-              if (stylesheetNode(record.addedNodes[j])) return true;
+              if (stylesheetNode(record.addedNodes[j])) {
+                affects = true;
+                watchStylesheetLoad(record.addedNodes[j]);
+              }
             }
             for (var k = 0; k < record.removedNodes.length; k++) {
-              if (stylesheetNode(record.removedNodes[k])) return true;
+              if (stylesheetNode(record.removedNodes[k])) affects = true;
             }
           }
-          return false;
+          return affects;
         }
         report();
         // After load the stylesheet and any seller scripts have applied, so
         // this is the first reading that reflects the finished page.
         window.addEventListener("load", queueReport);
-        // A stylesheet <link> inserted later applies when it finishes loading,
-        // which is after the mutation that added it. Resource load events don't
-        // bubble, so this has to capture from the window down to reach them.
-        window.addEventListener("load", queueReport, true);
         try {
           new MutationObserver(function (records) {
             if (affectsCanvas(records)) queueReport();

@@ -362,4 +362,49 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
   end
+
+  # An inserted <link> repaints the canvas only once its stylesheet has loaded,
+  # which is strictly after the mutation that inserted it — so the report that
+  # mutation queues still reads the OLD color. Nothing observes the DOM again,
+  # so without a load listener on the element itself this is the one retheme
+  # route that reports a color the page no longer has. A window-level listener
+  # does not cover it: a resource's load event never reaches the window, in
+  # either phase.
+  context "when the page changes its background by loading an external stylesheet" do
+    let(:stylesheet_path) { Rails.root.join("public", "spec-late-theme.css") }
+
+    before do
+      File.write(stylesheet_path, "body{background:#101010}")
+      # Same-origin would be simplest, but this document's CSP has no 'self' in
+      # style-src, so the sheet has to come from the allowed asset host.
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="load" type="button">Load theme</button>
+        </main>
+        <script>
+          document.getElementById("load").addEventListener("click", function () {
+            var link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = "#{PROTOCOL}://#{ASSET_DOMAIN}/spec-late-theme.css";
+            document.body.appendChild(link);
+          });
+        </script>
+      HTML
+    end
+
+    after { FileUtils.rm_f(stylesheet_path) }
+
+    it "re-reports the new color once the stylesheet has loaded" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Load theme" }
+
+      expect_wrapper_background("rgb(16, 16, 16)")
+      expect(theme_color).to eq("rgb(16, 16, 16)")
+    end
+  end
 end
