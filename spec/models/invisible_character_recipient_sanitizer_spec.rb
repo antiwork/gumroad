@@ -91,6 +91,22 @@ describe InvisibleCharacterRecipientSanitizer do
       expect(other.reload.email).to eq "buyer@example.com"
     end
 
+    it "leaves the recipient alone when the other account stores a case variant of the cleaned address" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      other = stored_as("Buyer@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "Buyer@example.com"
+    end
+
+    it "leaves the recipient alone when the other account stores another invisible-character variant" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      other = stored_as("\uFEFFbuyer@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "\uFEFFbuyer@example.com"
+    end
+
     it "still cleans the other recipients in the same message" do
       legacy = stored_as("\u200Fbuyer@example.com")
       stored_as("buyer@example.com")

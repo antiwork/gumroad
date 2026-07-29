@@ -57,15 +57,18 @@ class InvisibleCharacterRecipientSanitizer
   # True when one account stores the address exactly as it was addressed here and a DIFFERENT
   # account stores the cleaned form.
   def self.owned_by_a_different_account?(address, normalized)
-    # One query returns both rows: the email column collates as utf8mb4_unicode_ci, which treats
-    # these characters as ignorable, so `WHERE email = '<RLM>buyer@example.com'` matches the plain
-    # `buyer@example.com` row as well. The database therefore cannot tell the two variants apart
-    # at all, and the rows have to be compared here in Ruby, byte for byte.
+    # One query returns all rows the database considers equal to either form: the email column
+    # collates as utf8mb4_unicode_ci, which treats the format characters here as ignorable, so
+    # `WHERE email = '<RLM>buyer@example.com'` can also match `buyer@example.com`,
+    # `Buyer@example.com`, and another format-character variant. The database therefore cannot
+    # tell those variants apart, and the rows have to be compared here in Ruby, byte for byte.
+    #
+    # Unicode-space variants are the one known limit: a row stored as `buyer\u00A0@example.com` does
+    # not compare equal to the clean form in MySQL, so this lookup cannot see it. Closing that
+    # needs a normalized-email lookup column; until then, this still closes the format-character
+    # takeover class without slowing the ordinary delivery path.
     rows = User.where(email: [address, normalized]).select(:id, :email).to_a
-    exact_owner = rows.find { _1.email == address }
-    cleaned_owner = rows.find { _1.email == normalized }
-
-    exact_owner.present? && cleaned_owner.present? && exact_owner.id != cleaned_owner.id
+    rows.any? { _1.email == address } && rows.any? { _1.email != address }
   end
   private_class_method :owned_by_a_different_account?
 end
