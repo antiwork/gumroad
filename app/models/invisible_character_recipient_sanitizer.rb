@@ -56,32 +56,34 @@ class InvisibleCharacterRecipientSanitizer
 
   # True when one account stores the address exactly as it was addressed here and a DIFFERENT
   # account stores the same mailbox — either the cleaned form, or the cleaned form with some other
-  # invisible character sitting inside it.
+  # invisible characters sitting inside it.
   def self.owned_by_a_different_account?(address, normalized)
-    # The addresses to ask the database about are the cleaned form plus every single-invisible-
-    # character variant of it, because the row we are protecting against may hold ANY of them.
+    # The addresses to ask the database about are the cleaned form plus every variant of it that
+    # another account could be holding, because the row we are protecting against may hold ANY of
+    # them.
     #
-    # Naming only the addressed value and its cleaned form is not enough, and this is the part
-    # that is easy to get wrong: the email column collates as utf8mb4_unicode_ci, which treats
-    # SOME of these characters as ignorable but not others. Measured on MySQL 8.0:
+    # Naming only the addressed value and its cleaned form is not enough, and this is the part that
+    # is easy to get wrong: the email column collates as utf8mb4_unicode_ci, which treats SOME of
+    # these characters as ignorable but not others. Measured on MySQL 8.0:
     # '<RLM>buyer@example.com' = 'buyer@example.com' is TRUE, while
     # 'buyer<NBSP>@example.com' = 'buyer@example.com' is FALSE, and a soft hyphen behaves like the
     # space rather than like the mark. So a two-literal lookup silently reaches an account holding
     # one class of invisible character and silently misses an account holding the other — and
     # missing it is what rewrites this message into that person's mailbox.
     #
-    # Enumerating the variants removes the collation from the reasoning altogether: every form we
-    # care about is named as its own literal and found by matching itself. The query stays a range
-    # scan on index_users_on_email (measured against production: 902 literals for a 40-character
-    # address, ~3 ms warm), and it only runs for an address that actually carries an invisible
-    # character, which is rare.
+    # InvisibleCharacters#email_variants enumerates by collation equivalence class rather than by
+    # character, which is what makes covering more than one inserted character affordable. The
+    # query stays a range scan on index_users_on_email (measured against production: 5,152 literals
+    # for the longest affected address, 6 ms warm), and it only runs for an address that actually
+    # carries an invisible character, which is rare.
     candidates = InvisibleCharacters.email_variants(normalized)
 
-    # email_variants declines addresses longer than it will expand. Nothing has been ruled out in
-    # that case, so fail closed and leave the recipient as addressed: the message bounces, which
-    # is what happened before this interceptor existed, rather than possibly landing in somebody
-    # else's mailbox.
-    return true if candidates.nil?
+    # Fail closed in both cases where we did not manage to look properly: an address too long to
+    # expand at all, and one long enough that expansion had to be cut short of the character count
+    # we otherwise cover. Nothing has been ruled out, so leave the recipient as addressed and let
+    # the message bounce — which is what happened before this interceptor existed — rather than
+    # rewrite it to an address whose ownership was never really checked.
+    return true if candidates.nil? || !InvisibleCharacters.email_variants_complete?(normalized)
 
     # Deleted accounts count. Delivery goes to a real external mailbox, not to a Gumroad account,
     # so a closed account that once owned this address is still evidence that somebody else may

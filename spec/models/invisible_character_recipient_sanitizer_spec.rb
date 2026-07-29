@@ -217,6 +217,50 @@ describe InvisibleCharacterRecipientSanitizer do
       end
     end
 
+    # The other account can hold MORE THAN ONE invisible character, and for the characters that
+    # carry collation weight that is a genuinely different lookup: one no-break space in the other
+    # row is reached by naming a single-space variant, two are not reached by it at all. Each of
+    # these examples is its own `it` block on purpose — sharing one block lets a row created for an
+    # earlier shape satisfy the guard for the wrong reason, which is exactly how an earlier probe of
+    # mine reported all of them as covered when two were not.
+    it "leaves the recipient alone when the other account stores two of the same invisible character" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      other = stored_as("bu\u00A0yer\u00A0@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "bu\u00A0yer\u00A0@example.com"
+    end
+
+    it "leaves the recipient alone when the other account stores two different invisible characters" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      other = stored_as("bu\u00A0yer\u3000@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "bu\u00A0yer\u3000@example.com"
+    end
+
+    # U+1680 is the one Unicode space that does NOT collate equal to an ASCII space (measured), so
+    # it gets its own equivalence-class representative and its own example. Pair it with a
+    # different class to prove the representatives compose rather than merely working alone.
+    it "leaves the recipient alone when the other account stores an ogham space beside another class" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      other = stored_as("bu\u1680yer\u00AD@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "bu\u1680yer\u00AD@example.com"
+    end
+
+    # Any number of ignorable marks is covered by the cleaned literal alone, because those
+    # characters have no collation weight at all. Pinning it stops somebody "fixing" a cost concern
+    # by adding marks to the enumerated representatives, which would be pure waste.
+    it "leaves the recipient alone when the other account stores several ignorable marks" do
+      legacy = stored_as("buyer\u00A0@example.com")
+      other = stored_as("\uFEFFb\u200Buy\u200Eer\u2060@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["buyer\u00A0@example.com"]
+      expect(other.reload.email).to eq "\uFEFFb\u200Buy\u200Eer\u2060@example.com"
+    end
+
     # An address too long to enumerate variants for is the one case the guard cannot answer. It
     # fails closed: the message is left addressed as it was and bounces, rather than being rewritten
     # to an address whose ownership was never checked.
@@ -224,6 +268,17 @@ describe InvisibleCharacterRecipientSanitizer do
       long = "#{'a' * InvisibleCharacters::MAX_VARIANT_LENGTH}@example.com"
       legacy = stored_as("\u200F#{long}")
 
+      expect(deliver_to(legacy.email).to).to eq ["\u200F#{long}"]
+    end
+
+    # The same fail-closed rule for the intermediate band: short enough to expand single characters,
+    # too long to expand pairs. The guard must not treat that partial answer as an all-clear.
+    it "leaves the recipient alone when the address is too long to check pairs for" do
+      long = "#{'a' * InvisibleCharacters::MAX_PAIR_VARIANT_LENGTH}@example.com"
+      legacy = stored_as("\u200F#{long}")
+
+      expect(long.length).to be > InvisibleCharacters::MAX_PAIR_VARIANT_LENGTH
+      expect(long.length).to be < InvisibleCharacters::MAX_VARIANT_LENGTH
       expect(deliver_to(legacy.email).to).to eq ["\u200F#{long}"]
     end
   end

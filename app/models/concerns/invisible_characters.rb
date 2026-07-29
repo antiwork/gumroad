@@ -92,32 +92,90 @@ module InvisibleCharacters
     "\u00AD", "\u200B", "\u200E", "\u200F", "\u2060", "\uFEFF"
   ] + ["\u00A0", "\u1680", "\u202F", "\u205F", "\u3000"] + (0x2000..0x200A).map { [_1].pack("U") }).uniq.freeze
 
-  # The longest cleaned address email_variants will expand. An address needs one literal per
-  # (position x invisible character), so the work grows with its length; past this length we stop
-  # expanding rather than build an unbounded query. Real addresses are far shorter than this —
-  # the longest cleaned address among the affected production rows is 33 characters.
-  MAX_VARIANT_LENGTH = 100
+  # One representative per COLLATION EQUIVALENCE CLASS of the characters above, for building
+  # lookup literals. Under the email column's utf8mb4_unicode_ci collation these characters are
+  # not all distinct, which means a lookup does not need one literal per character — it needs one
+  # per class. Measured on production MySQL 8.0.42 against `users.email`:
+  #
+  #   * The five marks — U+200B, U+200E, U+200F, U+2060, U+FEFF — have NO collation weight at all.
+  #     `'<ZWSP>buyer@example.com' = 'buyer@example.com'` is TRUE, and it stays true for any
+  #     number of them in any position, so the cleaned address by itself already matches every row
+  #     that differs only by marks. They need no representative.
+  #   * Every Unicode space EXCEPT U+1680 collates equal to an ASCII space, so a single
+  #     space literal reaches all fifteen of them.
+  #   * U+1680 OGHAM SPACE MARK and U+00AD SOFT HYPHEN each collate as themselves. The soft hyphen
+  #     is the trap here: it sits in the same Unicode block as the marks and reads like one, but it
+  #     is NOT ignorable, so it has to be named.
+  #
+  # Three representatives instead of twenty-two, and wider rather than narrower: unlike a
+  # per-character list this reaches an address holding any number of marks.
+  VARIANT_CLASS_REPRESENTATIVES = [" ", "\u1680", "\u00AD"].freeze
 
-  # Every address that differs from `cleaned` by exactly ONE invisible character, plus `cleaned`
-  # itself.
+  # The longest cleaned address email_variants will expand, per number of inserted characters.
+  # Expanding costs one literal per (combination of positions x combination of classes), so the
+  # work grows with the address length and steeply with the count; past these lengths we stop
+  # expanding and let the caller fail closed rather than build an unbounded query.
   #
-  # This exists because MySQL cannot find those rows for us. A lookup can only name literals it
-  # can construct, and knowing the mailbox an address points at does not tell us where somebody
-  # else's invisible character sat inside it, so the variants have to be enumerated. Collation
-  # does not cover the difference either: only SOME of these characters are ignorable under
-  # utf8mb4_unicode_ci (measured — U+200B, U+200E, U+200F, U+2060 and U+FEFF are; U+00AD and
-  # every Unicode space are NOT), so a plain literal reaches some variants and misses others.
+  # Real addresses are far shorter: the longest cleaned address among the affected production rows
+  # is 33 characters, and 33 characters costs 103 literals at one inserted character and 5,152 at
+  # two (measured against production: index range scan on index_users_on_email, 6 ms warm).
+  MAX_VARIANT_LENGTH = 100
+  MAX_PAIR_VARIANT_LENGTH = 40
+
+  # The most invisible characters email_variants will assume the OTHER row might hold. Two, because
+  # the worst case in production today is two (a single address holding two no-break spaces) and
+  # because this PR's entry-point validation refuses a dirty address, so a row holding three would
+  # have to be written straight to the column by a data migration or an admin correction.
+  # `email_variants_complete?` reports whether this bound actually covered a given address, so a
+  # caller can fail closed instead of assuming.
+  MAX_VARIANT_CHARACTERS = 2
+
+  # Every address that collates equal to a value differing from `cleaned` by up to
+  # MAX_VARIANT_CHARACTERS invisible characters, plus `cleaned` itself.
   #
-  # Returns nil when the address is too long to expand or is blank, so a caller can tell "no
-  # variant owns this" apart from "I did not look".
+  # This exists because MySQL cannot find those rows for us. A lookup can only name literals it can
+  # construct, and knowing which mailbox an address points at does not tell us where somebody
+  # else's invisible characters sat inside it, so the variants have to be enumerated. Collation
+  # covers part of the gap but not all of it — see VARIANT_CLASS_REPRESENTATIVES for what is
+  # measured to be equal to what.
+  #
+  # Returns nil when the address is blank or too long to expand, so a caller can tell "no variant
+  # owns this" apart from "I did not look".
   def email_variants(cleaned)
     cleaned = cleaned.to_s
     return nil if cleaned.blank? || cleaned.length > MAX_VARIANT_LENGTH
 
+    # The cleaned address alone already covers every row that differs only by ignorable marks.
     variants = [cleaned]
-    (0..cleaned.length).each do |position|
-      ALL.each { variants << cleaned.dup.insert(position, _1) }
+    positions = (0..cleaned.length).to_a
+
+    (1..variant_characters_for(cleaned)).each do |count|
+      positions.combination(count) do |combination|
+        VARIANT_CLASS_REPRESENTATIVES.repeated_permutation(count) do |characters|
+          variant = cleaned.dup
+          # Insert from the rightmost position first so earlier insertions do not shift the
+          # positions still to be used.
+          combination.each_with_index.reverse_each { |position, index| variant.insert(position, characters[index]) }
+          variants << variant
+        end
+      end
     end
+
     variants.uniq
   end
+
+  # True when email_variants covered the full MAX_VARIANT_CHARACTERS for this address. False when
+  # the address was long enough that expansion had to be cut short, which is a caller's signal to
+  # fail closed rather than treat "no variant found" as "nobody else owns this mailbox".
+  def email_variants_complete?(cleaned)
+    cleaned = cleaned.to_s
+    return false if cleaned.blank? || cleaned.length > MAX_VARIANT_LENGTH
+
+    variant_characters_for(cleaned) >= MAX_VARIANT_CHARACTERS
+  end
+
+  private
+    def variant_characters_for(cleaned)
+      cleaned.length > MAX_PAIR_VARIANT_LENGTH ? 1 : MAX_VARIANT_CHARACTERS
+    end
 end
