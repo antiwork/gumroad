@@ -32,6 +32,12 @@ class Checkout::BuyerCurrencyEligibility
   # buyer-currency charging away from the sellers who already have it.
   DESTINATION_CHARGE_FEATURE_NAME = :buyer_currency_destination_charges
 
+  # This lane's own ramp for carts spanning several sellers, on top of the buyer-currency
+  # flags every seller in the cart already needs. Its own flag because a multi-seller cart is
+  # several PaymentIntents rather than one, so it can be turned off — and rolled back —
+  # without disturbing the single-seller checkouts that have been live since 2026-07-23.
+  MULTI_SELLER_FEATURE_NAME = :buyer_currency_multi_seller
+
   # Some local payment methods only work in a single currency: iDEAL and Bancontact
   # charges must be made in euros; UPI charges must be made in rupees. When a checkout wants one of these
   # methods, the payment method itself decides the presentment currency — there is
@@ -120,6 +126,17 @@ class Checkout::BuyerCurrencyEligibility
     seller.present? &&
       Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller) &&
       Feature.active?(WALLETS_FEATURE_NAME, seller)
+  end
+
+  # Whether a cart spanning several sellers may be quoted and charged in the buyer's
+  # currency. Every seller in the cart must be in this lane's own ramp on top of the
+  # buyer-currency flags they already need: a cart is one decision for the buyer, and one
+  # seller being ramped must never change how another seller's items are priced. Pulling the
+  # flag drops multi-seller carts back to canonical US dollars and leaves every single-seller
+  # buyer-currency checkout untouched.
+  def self.multi_seller_enabled?(sellers)
+    sellers = Array(sellers)
+    sellers.present? && sellers.all? { _1.present? && Feature.active?(MULTI_SELLER_FEATURE_NAME, _1) }
   end
 
   def self.buyer_presentment_display?(buyer_currency_display)
@@ -297,15 +314,22 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:unsupported_charge_model) unless supported_charge_model?
     return fallback(:wallet_payment_request) if wallet_type.present? && !wallet_lane_allowed?
     return fallback(:future_charge_setup) if setup_future_charges
-    return fallback(:off_session) if off_session
     return fallback(:no_purchases) if purchases.empty?
-    # This service sees the purchases of ONE charge (the order pipeline groups purchases
-    # into one charge per seller before charging), so an order spanning several sellers
-    # spans several charges — but the quote the buyer confirmed locked the whole cart
-    # total for a single PaymentIntent. Splitting one locked quote across several intents
-    # is Open Question 9 on issue #5419, so those orders fall back (and fail closed in
-    # Charge::CreateService when a quote token is present).
-    return fallback(:multi_seller_checkout) if multi_seller_order?
+    # A cart spanning several sellers becomes several charges (the order pipeline groups
+    # purchases into one charge per seller), and this service sees ONE of them. That is fine
+    # for presentment: the quote token carries a separately locked amount per charge, minted
+    # before the buyer saw any total, so this charge is priced from its own locked entry and
+    # never from a share of some cart-wide figure. It is gated on its own ramp flag so the
+    # lane can be rolled back without touching single-seller checkouts.
+    return fallback(:multi_seller_checkout) if multi_seller_order? && !multi_seller_lane_allowed?
+    # Off-session means no buyer is available to answer an authentication challenge. The one
+    # place a checkout charge is off-session is the multi-seller cart: the browser collects a
+    # reusable payment method once, then each seller's charge is confirmed server-side against
+    # it. The buyer IS at the keyboard for that — they just pressed pay — and they pressed it
+    # against the sum of the locked per-charge amounts, so presentment is safe there. Any
+    # other off-session charge (a subscription renewal, a preorder release) has a buyer who
+    # last saw a total months ago, so those keep falling back.
+    return fallback(:off_session) if off_session && !multi_seller_order?
     return fallback(:missing_stripe_chargeable) if chargeable&.get_chargeable_for(StripeChargeProcessor.charge_processor_id).blank?
 
     # All purchases in an order come from the same checkout request, so any purchase's IP
@@ -524,6 +548,29 @@ class Checkout::BuyerCurrencyEligibility
     # charge's purchases (which are single-seller by construction).
     def multi_seller_order?
       order.present? && order.purchases.map(&:seller_id).uniq.many?
+    end
+
+    # Every seller the order will charge, for the multi-seller ramp check. Read from the
+    # whole order for the same reason multi_seller_order? is: the ramp is a decision about
+    # the cart the buyer saw, so one seller in the cart being unramped must withhold the
+    # lane from all of it, not only from their own charge.
+    #
+    # The seller rows are loaded in one query rather than one per purchase, because this runs
+    # on the synchronous charge path once for every charge the order produces. Mapping the
+    # distinct ids back through the lookup (instead of returning only the rows that came back)
+    # keeps a purchase whose seller row is missing as a nil, which
+    # multi_seller_enabled? rejects — a missing seller must withhold the lane, not silently
+    # shrink the set being checked.
+    def order_sellers
+      return [] if order.blank?
+
+      seller_ids = order.purchases.map(&:seller_id).uniq
+      sellers_by_id = User.where(id: seller_ids.compact).index_by(&:id)
+      seller_ids.map { sellers_by_id[_1] }
+    end
+
+    def multi_seller_lane_allowed?
+      self.class.multi_seller_enabled?(order_sellers)
     end
 
     # Commission deposits and installment payments charge less than the locked cart total

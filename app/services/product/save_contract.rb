@@ -65,6 +65,17 @@ class Product::SaveContract
     end
   end
 
+  # One response mapping cannot represent the same submitted page id creating
+  # or updating more than one stored row. Accepting that payload would make the
+  # editor point both references at whichever row won the mapping, then create
+  # more duplicate pages on later saves.
+  class AmbiguousRichContentIdConflict < StandardError
+    def message
+      "This save references the same content page more than once, so it cannot be applied safely. " \
+        "Reload the editor and try again."
+    end
+  end
+
   # The five collections the editor save can destroy. Named here rather than
   # inferred so that adding a sixth is a deliberate act with a test attached.
   COLLECTIONS = %i[rich_content variants files public_files integrations].freeze

@@ -82,6 +82,80 @@ describe PdfStampingService::Stamp do
       end
     end
 
+    context "with a PDF that has heading bookmarks (a document outline)" do
+      # Regression coverage for a creator report: stamping was rebuilding the PDF by splitting it and
+      # concatenating the pieces back together, which silently discarded the document outline (the
+      # heading bookmarks readers use to navigate) and the Title/Author metadata. Long technical books
+      # lost their whole navigation tree, so the only workaround was turning stamping off.
+      let(:fixture_path) { Rails.root.join("spec", "support", "fixtures", "pdf-with-bookmarks.pdf") }
+
+      before do
+        # Yield the local fixture instead of hitting S3, so the assertions below are about stamping.
+        allow(product_file).to receive(:download_original) do |&block|
+          File.open(fixture_path, "rb") { |file| block.call(file) }
+        end
+        allow(product_file).to receive(:s3_url).and_return("#{S3_BASE_URL}specs/pdf-with-bookmarks.pdf")
+      end
+
+      def outline_entry_count(path)
+        reader = PDF::Reader.new(path)
+        catalog = reader.objects.deref(reader.objects.trailer[:Root])
+        return 0 if catalog[:Outlines].nil?
+
+        outlines = reader.objects.deref(catalog[:Outlines])
+        outlines[:Count].to_i
+      end
+
+      # A bookmark is only useful if it still points at a page, so check the first entry's title and
+      # that its destination resolves to a real page object, not just that the outline tree exists.
+      def first_outline_entry(path)
+        reader = PDF::Reader.new(path)
+        catalog = reader.objects.deref(reader.objects.trailer[:Root])
+        outlines = reader.objects.deref(catalog[:Outlines])
+        first = reader.objects.deref(outlines[:First])
+        destination = reader.objects.deref(first[:Dest])
+        target = destination.is_a?(Array) ? reader.objects.deref(destination.first) : nil
+        [decode_pdf_text(first[:Title]), target && target[:Type]]
+      end
+
+      # PDF text strings are either PDFDocEncoded or UTF-16BE with a byte-order mark; Prawn writes
+      # the latter, so decode it rather than comparing raw bytes.
+      def decode_pdf_text(value)
+        bytes = value.to_s.dup.force_encoding(Encoding::BINARY)
+        return bytes.byteslice(2..).force_encoding(Encoding::UTF_16BE).encode(Encoding::UTF_8) if bytes.start_with?("\xFE\xFF".b)
+
+        bytes.force_encoding(Encoding::UTF_8)
+      end
+
+      it "preserves the bookmarks and the document metadata" do
+        expect(outline_entry_count(fixture_path.to_s)).to eq(5)
+
+        stamped_path = described_class.perform!(product_file:, watermark_text:)
+
+        expect(outline_entry_count(stamped_path)).to eq(5)
+
+        title, destination_type = first_outline_entry(stamped_path)
+        expect(title).to eq("Chapter 1")
+        expect(destination_type).to eq(:Page)
+
+        info = PDF::Reader.new(stamped_path).info
+        expect(info[:Title]).to eq("Book With Bookmarks")
+        expect(info[:Author]).to eq("Test Author")
+      end
+
+      it "still stamps the first page only" do
+        stamped_path = described_class.perform!(product_file:, watermark_text:)
+        reader = PDF::Reader.new(stamped_path)
+
+        expect(reader.page_count).to eq(5)
+        expect(reader.page(1).text).to include("Sold to")
+        expect(reader.page(1).text).to include(watermark_text)
+        (2..reader.page_count).each do |page_number|
+          expect(reader.page(page_number).text).not_to include("Sold to")
+        end
+      end
+    end
+
     context "with an encrypted PDF that opens without a password" do
       let(:pdf_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf" }
 
@@ -111,17 +185,19 @@ describe PdfStampingService::Stamp do
         end
       end
 
-      context "when pdftk command fails" do
+      context "when the stamping command fails" do
         before do
+          # `exitstatus` drives the success check now, because qpdf uses exit 3 for "recovered from
+          # problems but wrote valid output". 2 is a genuine failure.
           allow(Open3).to receive(:capture3).and_return(
-            ["stdout message", "stderr line1\nstderr line2", OpenStruct.new(success?: false)]
+            ["stdout message", "stderr line1\nstderr line2", OpenStruct.new(success?: false, exitstatus: 2)]
           )
           allow(Rails.logger).to receive(:error)
         end
 
         it "logs and raises PdfStampingService::Stamp::Error" do
           expect(Rails.logger).to receive(:error).with(
-            /\[PdfStampingService::Stamp.apply_watermark!\] Failed to execute command: pdftk/
+            /\[PdfStampingService::Stamp.apply_watermark!\] Failed to execute command: qpdf/
           )
           expect(Rails.logger).to receive(:error).with(
             "[PdfStampingService::Stamp.apply_watermark!] STDOUT: stdout message"

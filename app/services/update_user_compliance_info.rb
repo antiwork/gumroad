@@ -134,6 +134,15 @@ class UpdateUserComplianceInfo
           weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
           return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it." }
         end
+
+        # Every other Stripe rejection used to end here with the message handed to the seller
+        # and nothing kept on our side, while the half-built merchant account was rolled back.
+        # That left sellers who cannot complete payout setup undiagnosable from support tooling:
+        # the only trace was a merchant-account row created and soft-deleted in the same second,
+        # with no error code and no indication of which field Stripe objected to. Record the
+        # code and param first so the next person looking at the account can see the actual
+        # cause instead of reproducing the failure to find it.
+        StripeMerchantAccountManager.record_account_rejection_note(new_compliance_info.user, e)
         return { success: false, error_message: e.message.split("Please contact us").first.strip }
       end
     end

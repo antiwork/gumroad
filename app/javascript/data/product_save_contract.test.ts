@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { DeletionSources, buildDeletionOperations, hasDeletions } from "$app/data/product_save_contract";
+import {
+  DeletionSources,
+  buildDeletionOperations,
+  confirmRichContentMoveSourceDeletions,
+  hasDeletions,
+} from "$app/data/product_save_contract";
 
 // The editor's save used to delete whatever the payload didn't mention. Under
 // the save contract (gumroad-private#1379) it can only delete what it names, so
@@ -63,6 +68,19 @@ describe("buildDeletionOperations", () => {
     );
 
     expect(operations.deleted_ids.variants).toEqual(["variant-a", "variant-b"]);
+  });
+
+  it("preserves a moved page's source deletion when its destination variant is removed", () => {
+    const product = productWith({ confirmed_removed_rich_content_ids: ["already-confirmed"] });
+
+    confirmRichContentMoveSourceDeletions(product, [
+      { move_source_id: "shared-source" },
+      { move_source_id: "shared-source" },
+      {},
+    ]);
+
+    expect(product.confirmed_removed_rich_content_ids).toEqual(["already-confirmed", "shared-source"]);
+    expect(buildDeletionOperations(product).deleted_ids.rich_content).toEqual(["already-confirmed", "shared-source"]);
   });
 
   // Clearing a whole collection is never inferred: the caller has to pass it,

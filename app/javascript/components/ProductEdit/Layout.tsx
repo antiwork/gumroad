@@ -4,7 +4,7 @@ import { Link, useMatches, useNavigate } from "react-router-dom";
 
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
-import { getContrastColor, hexToRgb } from "$app/utils/color";
+import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -150,11 +150,16 @@ export const Layout = ({
 
   const navigate = useRefToLatest(useNavigate());
 
+  // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the saved
+  // colour so its text clears 4.5:1. Every other accent use keeps the saved colour.
+  const accentColors = getAccessibleAccent(currentSeller?.profileHighlightColor ?? "#000000");
+
   const profileColors =
     currentSeller && showBorder
       ? {
           "--accent": hexToRgb(currentSeller.profileHighlightColor),
-          "--contrast-accent": hexToRgb(getContrastColor(currentSeller.profileHighlightColor)),
+          "--accent-with-text": hexToRgb(accentColors.accent),
+          "--contrast-accent": hexToRgb(accentColors.text),
           "--filled": hexToRgb(currentSeller.profileBackgroundColor),
           "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
         }
@@ -407,6 +412,7 @@ export const Layout = ({
                         "--color-border": "rgb(var(--color) / var(--border-alpha))",
                         "--color-accent": "rgb(var(--accent))",
                         "--color-accent-foreground": "rgb(var(--contrast-accent))",
+                        "--color-accent-with-text": "rgb(var(--accent-with-text))",
                         "--color-primary": "rgb(var(--primary))",
                         "--color-primary-foreground": "rgb(var(--contrast-primary))",
                         "--color-active-bg": "rgb(var(--color) / var(--gray-1))",

@@ -293,9 +293,7 @@ RSpec.configure do |config|
   end
 
   config.before(:suite) do
-    examples = RSpec.world.filtered_examples.values.flatten
-
-    if examples.any? { |ex| ex.metadata[:type] == :system }
+    if StripeBalanceEnforcer.needed_for?(RSpec.world.filtered_examples.values.flatten)
       begin
         StripeBalanceEnforcer.ensure_sufficient_balance
       rescue StandardError => e

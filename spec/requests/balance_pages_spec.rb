@@ -1031,7 +1031,14 @@ describe "Balance Pages Scenario", js: true, type: :system do
       end
     end
 
-    describe "past payouts" do
+    # Tagged `spend_stripe_balance` because the `before` below really does move
+    # money: it creates a verified Stripe connected account and then calls
+    # `Payouts.create_payment`, which reaches
+    # `StripeTransferInternallyToCreator.transfer_funds_to_account` and performs a
+    # live `Stripe::Transfer` out of the shared platform balance. This is a `:js`
+    # spec, so VCR is off and nothing replays it. The tag is what tells
+    # `StripeBalanceEnforcer` to top the test account up before this file runs.
+    describe "past payouts", spend_stripe_balance: true do
       let!(:now) { Time.current }
       let!(:payout_date) { 1.week.ago }
       let(:payout_processor_type) { PayoutProcessorType::STRIPE }

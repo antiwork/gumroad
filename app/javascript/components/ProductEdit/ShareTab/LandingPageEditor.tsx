@@ -53,6 +53,8 @@ For a pay-what-you-want product where the buyer should name their OWN price on t
     });
   </script>
 
+Links to your own Gumroad pages (your storefront, your other products) work as ordinary links — write them plainly and they open in the same tab, no target="_blank" needed. Links to any other site still need target="_blank".
+
 Then preview, publish, and verify it with the Gumroad CLI:
 - Run the real server-side sanitizer WITHOUT publishing and read what it changed: gumroad products page preview ${uniquePermalink} ./landing.html --json --no-input --non-interactive — inspect .sanitization_report. If it stripped tags or attributes your page needs (a buy element, an <input>, a <script>), fix the HTML and preview again. Do this until the report is clean so you never publish a broken page.
 - Also inspect the top-level .warning from preview/publish. If it says the page has no buy element, add data-gumroad-action="buy" or a gumroad:checkout postMessage before publishing.

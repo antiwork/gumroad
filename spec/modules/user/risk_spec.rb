@@ -48,7 +48,75 @@ describe User::Risk do
 
           expect(user.reload.user_risk_state).to eq(suspended_state)
         end
+
+        # Compliant is not the only way out of a suspension. Probation re-enables the
+        # seller's links just like compliant does, and not_reviewed drops the account back
+        # to its initial state, so both need the same authorization.
+        it "refuses to put the account on probation without clear_suspension" do
+          expect do
+            user.put_on_probation!(author_id: admin.id)
+          end.to raise_error(User::Risk::SuspensionClearNotAuthorizedError, /refusing to clear #{suspended_state}/)
+
+          expect(user.reload.user_risk_state).to eq(suspended_state)
+        end
+
+        it "puts the account on probation when clear_suspension is passed" do
+          user.put_on_probation!(author_id: admin.id, clear_suspension: true)
+
+          expect(user.reload).to be_on_probation
+        end
+
+        it "refuses probation from a stale copy that predates the suspension" do
+          # The reachable version of this: LowBalanceFraudCheck decides whether to probate
+          # by reading `suspended?` off a copy it loaded earlier, so a suspension landing in
+          # between would otherwise be probated away by a lane that never saw it.
+          stale_copy = User.find(user.id)
+          stale_copy.update_column(:user_risk_state, "not_reviewed")
+          User.where(id: user.id).update_all(user_risk_state: suspended_state)
+
+          expect do
+            stale_copy.put_on_probation!(author_name: "low_balance_fraud_check")
+          end.to raise_error(User::Risk::SuspensionClearNotAuthorizedError)
+
+          expect(user.reload.user_risk_state).to eq(suspended_state)
+        end
+
+        it "refuses not_reviewed from a stale copy that predates the suspension" do
+          # Unlike probation, `mark_not_reviewed` only transitions from on_probation, so a
+          # caller whose copy already reads as suspended is refused by the state machine
+          # itself. The gap is the stale copy: the machine validates against the in-memory
+          # state (on_probation), so it writes not_reviewed over a row that has since been
+          # suspended. That is the case this guard has to catch.
+          stale_copy = User.find(user.id)
+          stale_copy.update_column(:user_risk_state, "on_probation")
+          User.where(id: user.id).update_all(user_risk_state: suspended_state)
+
+          expect do
+            stale_copy.mark_not_reviewed!(author_name: "low_balance_fraud_check")
+          end.to raise_error(User::Risk::SuspensionClearNotAuthorizedError, /refusing to clear #{suspended_state}/)
+
+          expect(user.reload.user_risk_state).to eq(suspended_state)
+        end
       end
+    end
+
+    it "still allows a non-suspended account to be put on probation without clear_suspension" do
+      # The low-balance probation lane is the main caller and passes no flag, so an
+      # unsuspended account must still be probatable exactly as before.
+      user = create(:user, user_risk_state: "not_reviewed")
+
+      user.put_on_probation!(author_name: "low_balance_fraud_check")
+
+      expect(user.reload).to be_on_probation
+    end
+
+    it "still allows a probated account to be returned to not_reviewed without clear_suspension" do
+      # This is the balance-recovery path in LowBalanceFraudCheck.
+      user = create(:user, user_risk_state: "on_probation")
+
+      user.mark_not_reviewed!(author_name: "low_balance_fraud_check")
+
+      expect(user.reload).to be_not_reviewed
     end
 
     it "still allows a non-suspended account to be marked compliant without clear_suspension" do

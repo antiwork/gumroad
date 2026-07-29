@@ -51,6 +51,14 @@ module StripeIntentChargeRouting
   # Stripe permits a direct charge to collect an application fee equal to the full payment, but
   # a destination charge must transfer at least one subunit. Keeping the route-specific lower
   # bounds here prevents client-confirm and server-confirm checkout from drifting apart again.
+  #
+  # `amount_cents` and `amount_for_gumroad_cents` arrive in the PaymentIntent's own currency,
+  # which for a buyer-currency (presentment) charge is the buyer's currency, not US dollars.
+  # That is fine here only because the floors this compares against are counts of subunits
+  # rather than money: "at least one subunit" means one yen or one euro cent depending on the
+  # intent, and either reading is the correct one. If a future floor is ever expressed as a
+  # real amount — say a minimum of fifty US cents — it will have to be converted into the
+  # intent's currency first, because these arguments are not dollars.
   def validate_seller_proceeds!(merchant_account:, amount_cents:, amount_for_gumroad_cents:, currency:, reference:)
     minimum_seller_proceeds_cents = if direct_charge_account?(merchant_account)
       MINIMUM_DIRECT_CHARGE_SELLER_PROCEEDS_CENTS

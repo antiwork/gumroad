@@ -9,7 +9,7 @@ describe "Profile custom HTML rendering", type: :request do
   include Devise::Test::IntegrationHelpers
 
   let(:seller) { create(:user, username: "customprofile", name: "Jane Doe") }
-  let!(:custom_domain) { create(:custom_domain, user: seller, domain: "seller.example.com") }
+  let!(:custom_domain) { create(:custom_domain, :verified_with_certificate, user: seller, domain: "seller.example.com") }
 
   before do
     seller.update!(custom_html: "<section><h1>Profile landing</h1></section>")
@@ -123,32 +123,46 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include(%(name="csrf-token"))
     end
 
-    # The wrapper fetches the follow endpoint relative to its own host — the
-    # seller's custom domain or subdomain — which routes through
-    # UserCustomDomainConstraint, not the apex-host block where the canonical
-    # route lives. Without the custom-domain route the bridge would 404. The
-    # body is form-encoded like the bridge sends it: the Rack::Attack
-    # per-(IP, seller) throttle reads req.params, which never parses JSON.
-    it "accepts the follow POST on the custom domain the wrapper is served from" do
-      post "http://seller.example.com/follow_from_embed_form",
-           params: { seller_id: seller.external_id, email: "fan@example.com" },
-           headers: { "Accept" => "application/json" }
+    # These two examples are about ROUTING: that the follow endpoint is
+    # reachable on the hosts the sandboxed wrapper actually fetches it from. The
+    # seller therefore has to be one whose follows are accepted at all, so a
+    # refusal can't be mistaken for a missing route. A seller we have not
+    # reviewed is refused outright on this endpoint — the copy-pasted embed form
+    # lives on someone else's website and has no CAPTCHA for the visitor to
+    # solve, so there is nothing to challenge (see FollowRecaptcha and
+    # FollowersController#from_embed_form). Coverage of that refusal, including
+    # the subscribe-page fallback it offers instead, lives in
+    # spec/controllers/followers_controller_spec.rb.
+    context "for a seller we have reviewed and marked compliant" do
+      before { seller.update!(user_risk_state: "compliant") }
 
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to be(true)
-      follower = Follower.last
-      expect(follower.user).to eq(seller)
-      expect(follower.email).to eq("fan@example.com")
-      expect(follower.source).to eq(Follower::From::EMBED_FORM)
-    end
+      # The wrapper fetches the follow endpoint relative to its own host — the
+      # seller's custom domain or subdomain — which routes through
+      # UserCustomDomainConstraint, not the apex-host block where the canonical
+      # route lives. Without the custom-domain route the bridge would 404. The
+      # body is form-encoded like the bridge sends it: the Rack::Attack
+      # per-(IP, seller) throttle reads req.params, which never parses JSON.
+      it "accepts the follow POST on the custom domain the wrapper is served from" do
+        post "http://seller.example.com/follow_from_embed_form",
+             params: { seller_id: seller.external_id, email: "fan@example.com" },
+             headers: { "Accept" => "application/json" }
 
-    it "accepts the follow POST on the seller's subdomain" do
-      post "http://#{URI(seller.subdomain_with_protocol).host}/follow_from_embed_form",
-           params: { seller_id: seller.external_id, email: "fan@example.com" },
-           headers: { "Accept" => "application/json" }
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+        follower = Follower.last
+        expect(follower.user).to eq(seller)
+        expect(follower.email).to eq("fan@example.com")
+        expect(follower.source).to eq(Follower::From::EMBED_FORM)
+      end
 
-      expect(response).to be_successful
-      expect(response.parsed_body["success"]).to be(true)
+      it "accepts the follow POST on the seller's subdomain" do
+        post "http://#{URI(seller.subdomain_with_protocol).host}/follow_from_embed_form",
+             params: { seller_id: seller.external_id, email: "fan@example.com" },
+             headers: { "Accept" => "application/json" }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to be(true)
+      end
     end
 
     it "does not route a .json-suffixed path — that path variant would bypass the path-matched Rack::Attack throttles" do
