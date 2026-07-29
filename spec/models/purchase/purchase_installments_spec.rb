@@ -622,7 +622,7 @@ describe "PurchaseInstallments", :vcr do
 
         5.times do |i|
           post = create(:installment, link: product, published_at: (i + 1).days.ago)
-          create(:product_file, installment: post, link: product)
+          create(:product_file, installment: post, link: nil)
           create(:url_redirect, installment: post, purchase:)
           create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
         end
@@ -648,7 +648,7 @@ describe "PurchaseInstallments", :vcr do
 
         5.times do |i|
           post = create(:installment, link: product, published_at: (i + 1).days.ago)
-          create(:product_file, installment: post, link: product)
+          create(:product_file, installment: post, link: nil)
           create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
         end
 
@@ -671,7 +671,7 @@ describe "PurchaseInstallments", :vcr do
 
         5.times do |i|
           post = create(:installment, link: product, published_at: (i + 1).days.ago)
-          create(:product_file, installment: post, link: product)
+          create(:product_file, installment: post, link: nil)
           create(:url_redirect, installment: post, purchase:)
           create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
         end
@@ -705,7 +705,7 @@ describe "PurchaseInstallments", :vcr do
         subscription.reload
 
         post = create(:installment, link: product, published_at: 1.day.ago)
-        create(:product_file, installment: post, link: product)
+        create(:product_file, installment: post, link: nil)
         # EmailInfo is keyed on the original purchase, not the renewal — the batch path must
         # find it via original_purchase.id. A regression that keys on the renewal's own id
         # would return no email_info for the renewal and diverge from the single-purchase path.
@@ -733,7 +733,7 @@ describe "PurchaseInstallments", :vcr do
         subscription.reload
 
         post = create(:installment, link: product, published_at: 1.day.ago)
-        create(:product_file, installment: post, link: product)
+        create(:product_file, installment: post, link: nil)
         # email_info qualifies the post in product_installments lookup
         create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: 1.hour.ago)
 

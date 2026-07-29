@@ -532,22 +532,8 @@ class ProductFile < ApplicationRecord
 
     def belongs_to_product_or_installment
       return if (link.present? && installment.nil?) || (link.nil? && installment.present?)
-      return if grandfathered_parentage?
 
       errors.add(:base, "A file needs to either belong to a product or an installment")
-    end
-
-    # Eight rows created between 2015 and 2020 already violate the parent rule
-    # (two have no parent, six have both) because the check above was declared
-    # with `on: :save` — not a real Rails context — and so never ran until it was
-    # fixed. Enforcing it unconditionally would make any later write to those
-    # rows fail, including the cleanup that would fix them: `mark_deleted` is an
-    # update, so a row with a bad parent could never be soft-deleted. So a saved
-    # row that was already broken stays writable, as long as the write is not
-    # what makes the parentage wrong. Every new record, and every write that
-    # touches either parent column, is still rejected.
-    def grandfathered_parentage?
-      persisted? && !link_id_changed? && !installment_id_changed?
     end
 
     def set_filegroup

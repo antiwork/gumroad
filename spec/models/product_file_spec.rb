@@ -39,38 +39,19 @@ describe ProductFile do
       expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
     end
 
-    # The validation was inert for years, so a handful of rows in production
-    # already have no parent or both parents. Those rows still have to be
-    # writable — soft-deleting one is an update, so a hard rejection would make
-    # the bad rows impossible to clean up.
-    context "with a row that was already saved without a valid parent" do
-      let(:file) do
-        create(:product_file, link: create(:product)).tap do |record|
-          record.update_columns(link_id: nil, installment_id: nil)
-          record.reload
-        end
-      end
+    it "rejects a saved file that a direct column write left without a parent" do
+      file = create(:product_file, link: create(:product))
+      file.update_columns(link_id: nil, installment_id: nil)
 
-      it "allows an unrelated update" do
-        expect(file.update(display_name: "Renamed")).to eq(true)
-      end
+      expect(file.reload).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
 
-      it "allows soft deletion" do
-        expect { file.mark_deleted! }.not_to raise_error
-        expect(file.reload).to be_deleted
-      end
+    it "accepts a write that gives a parentless file a single parent" do
+      file = create(:product_file, link: create(:product))
+      file.update_columns(link_id: nil, installment_id: nil)
 
-      it "still rejects a write that sets both parents" do
-        file.link = create(:product)
-        file.installment = create(:installment)
-
-        expect(file).to be_invalid
-        expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
-      end
-
-      it "accepts a write that gives it a single parent" do
-        expect(file.update(link: create(:product))).to eq(true)
-      end
+      expect(file.reload.update(link: create(:product))).to eq(true)
     end
   end
 
@@ -1157,7 +1138,7 @@ describe ProductFile do
 
     it "returns nil if product file belongs to an installment" do
       installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: create(:user))
-      installment_product_file = create(:product_file, installment:, link: installment.link)
+      installment_product_file = create(:product_file, installment:, link: nil)
       installment_purchase = create(:purchase, link: installment.link)
       installment_url_redirect = installment.generate_url_redirect_for_purchase(installment_purchase)
       create(:media_location, url_redirect_id: installment_url_redirect.id, purchase_id: installment_purchase.id, platform: Platform::WEB,
