@@ -6402,8 +6402,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(find(:select, "Country")).to have_selector(:option, "Cuba (not supported)", disabled: true)
           select "United States", from: "Country"
           check "I have a valid, government-issued photo ID"
-          check "I have proof of residence within this country"
-          check "I am signing up as an individual, or my business is registered in the country above"
+          check "I live in the country above, or my business is registered there"
           click_on "Save"
           wait_for_ajax
         end
@@ -6413,6 +6412,23 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         @user.reload
         compliance_info = @user.alive_user_compliance_info
         expect(compliance_info.country).to eq("United States")
+      end
+
+      # A non-resident owner of a company registered in the chosen country (say, a China-resident
+      # owner of a US LLC) has no residence in that country to attest to. The residence and business
+      # registration statements are one either/or line so that seller can truthfully check every box
+      # and reach the Business account type on the payments page, instead of being stuck behind a
+      # permanently disabled Save button.
+      it "does not ask separately for proof of residence in the country" do
+        visit settings_payments_path
+        within_modal do
+          expect(page).to have_content "Where are you located?"
+          expect(page).to_not have_content "I have proof of residence within this country"
+          select "United States", from: "Country"
+          check "I have a valid, government-issued photo ID"
+          check "I live in the country above, or my business is registered there"
+          expect(page).to have_button "Save", disabled: false
+        end
       end
     end
 

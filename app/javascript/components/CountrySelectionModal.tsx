@@ -21,10 +21,18 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
   const uid = React.useId();
   const [country, setCountry] = React.useState(initialCountry ?? "US");
   const [saving, setSaving] = React.useState(false);
+  // Save is only enabled once every box is checked, so each line has to be something the seller can
+  // truthfully check. The old list asked separately for "proof of residence within this country" and
+  // "individual, or my business is registered in the country above", which contradicted itself for a
+  // legitimate and supported case: the non-resident owner of a company registered in the chosen
+  // country (for example, someone living in China who owns a US LLC with an EIN and a US business
+  // bank account). Their business genuinely is registered in the US, but they have no US residence
+  // to prove, so they could never check all three and could never get past this modal to reach the
+  // Business account type on the payments page. Residence and business registration are two ways of
+  // establishing the same connection to the country, so they belong in one either/or line.
   const checkboxes = [
     "I have a valid, government-issued photo ID",
-    "I have proof of residence within this country",
-    "I am signing up as an individual, or my business is registered in the country above",
+    "I live in the country above, or my business is registered there",
   ];
   const [checked, setChecked] = React.useState<number[]>([]);
   const [error, setError] = React.useState("");
