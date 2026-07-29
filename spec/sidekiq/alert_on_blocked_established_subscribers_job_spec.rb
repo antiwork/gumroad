@@ -148,6 +148,69 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  # A count taken after a truncated scan is a floor, and reading it as the total understates the
+  # incident exactly when the incident is large.
+  it "says so when the scan hit its cap, instead of reporting the partial count as the total" do
+    stub_const("#{described_class}::MAX_FAILURES_SCANNED", 1)
+    2.times do |i|
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:, guid: "guid-#{i}", buyer_email: "buyer#{i}@example.com",
+                     created_at: (i + 1).hours.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-#{i}")
+    end
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("At least 1 subscription with")
+      expect(message).to include("The scan stopped at the newest 1 blocked renewals")
+    end
+  end
+
+  it "does not claim truncation when the whole window fit in the scan" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to start_with("1 subscription with")
+      expect(message).not_to include("The scan stopped")
+    end
+  end
+
+  # The date has to belong to the block that declined this renewal. An older unrelated block on the
+  # same subscriber would make a fresh block look stale and point cleanup at the wrong row.
+  it "dates the block that declined the renewal, not an older unrelated one" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+    travel_to(3.years.ago) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+    end
+    guid_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("blocked since #{guid_block.blocked_at.to_date}")
+    end
+  end
+
+  it "dates a domain-blocked renewal from the domain block, not an older guid block" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    travel_to(3.years.ago) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+    end
+    domain_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("blocked since #{domain_block.blocked_at.to_date}")
+    end
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
     expect(schedule.values.map { |entry| entry["class"] }).to include(described_class.name)

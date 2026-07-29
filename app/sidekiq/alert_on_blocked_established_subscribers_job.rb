@@ -33,74 +33,84 @@ class AlertOnBlockedEstablishedSubscribersJob
   # Report at most this many, newest first. The alert exists to be read.
   MAX_REPORTED = 25
 
-  def perform
-    affected = affected_subscriptions
-    return if affected.empty?
+  # A day's blocked renewals, with headroom for a rule regression writing blocks in bulk — which
+  # is the case this alert most needs to survive rather than time out on. Hitting it makes the
+  # report say so, because a silently truncated count reads as the whole incident.
+  MAX_FAILURES_SCANNED = 2_000
 
-    InternalNotificationWorker.perform_async("risk", "Blocked established subscribers", message_for(affected))
+  def perform
+    scan = scan_for_affected_subscriptions
+    return if scan[:affected].empty?
+
+    InternalNotificationWorker.perform_async("risk", "Blocked established subscribers", message_for(scan))
   end
 
   private
     # One entry per subscription whose renewal failed on a platform block in the window and whose
-    # holder has real payment history behind them, newest failure first.
-    def affected_subscriptions
-      failures = Purchase.failed
-                         .where(error_code: BLOCK_ERROR_CODES, created_at: LOOKBACK.ago..)
-                         .where.not(subscription_id: nil)
-                         .order(created_at: :desc)
-                         .limit(MAX_FAILURES_SCANNED)
-                         .pluck(:subscription_id, :email, :browser_guid)
-                         .uniq { |subscription_id, _, _| subscription_id }
+    # holder has real payment history behind them, newest failure first. `truncated` says the scan
+    # hit its cap, so the counts below are floors rather than the whole window.
+    def scan_for_affected_subscriptions
+      scanned = Purchase.failed
+                        .where(error_code: BLOCK_ERROR_CODES, created_at: LOOKBACK.ago..)
+                        .where.not(subscription_id: nil)
+                        .order(created_at: :desc)
+                        .limit(MAX_FAILURES_SCANNED)
+                        .pluck(:subscription_id, :error_code, :email, :browser_guid)
+
+      failures = scanned.uniq { |subscription_id, _, _, _| subscription_id }
 
       charge_counts = Purchase.successful
                               .where(subscription_id: failures.map(&:first))
                               .group(:subscription_id)
                               .count
 
-      failures.filter_map do |subscription_id, email, browser_guid|
+      affected = failures.filter_map do |subscription_id, error_code, email, browser_guid|
         successful_charges = charge_counts[subscription_id].to_i
         next if successful_charges < MIN_SUCCESSFUL_CHARGES
 
-        { subscription_id:, successful_charges:, email:, browser_guid: }
+        { subscription_id:, successful_charges:, error_code:, email:, browser_guid: }
       end
-    end
 
-    # A day's blocked renewals, with headroom for a rule regression writing blocks in bulk — which
-    # is the case this alert most needs to survive rather than time out on.
-    MAX_FAILURES_SCANNED = 2_000
-    private_constant :MAX_FAILURES_SCANNED
+      { affected:, truncated: scanned.size == MAX_FAILURES_SCANNED }
+    end
 
     # When the block was written is the useful part: it is routinely years before the renewal it is
     # now failing, which is what tells a reader this is staleness rather than a buyer who just did
     # something wrong.
     #
-    # Matched as (type, value) pairs, where the enforcement path (Purchase::Risk#past_blocked_object)
-    # matches on value alone, so a block of an unexpected type reads as "unknown" here rather than
-    # being reported with a date that belongs to a different row.
-    def blocked_since(email, browser_guid)
-      pairs = [
-        [PlatformBlock::TYPES[:browser_guid], browser_guid],
-        [PlatformBlock::TYPES[:email], email],
-        [PlatformBlock::TYPES[:email_domain], email.presence && Mail::Address.new(email).domain],
-      ].reject { |_, value| value.blank? }
-      return if pairs.empty?
+    # Scoped to the block that actually declined this renewal, mirroring Purchase::Risk: the domain
+    # check runs first and short-circuits, so BLOCKED_EMAIL_DOMAIN means an email_domain row and
+    # BLOCKED_BROWSER_GUID means a row carrying the guid as its value (that check matches on value
+    # alone). Widening this to every block the subscriber has would date a recent block from an
+    # unrelated older one and send cleanup at the wrong row.
+    def blocked_since(error_code, email, browser_guid)
+      blocks =
+        case error_code
+        when PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN
+          domain = email.presence && Mail::Address.new(email).domain
+          return if domain.blank?
+          PlatformBlock.active.where(object_type: PlatformBlock::TYPES[:email_domain], object_value: domain)
+        when PurchaseErrorCode::BLOCKED_BROWSER_GUID
+          return if browser_guid.blank?
+          PlatformBlock.active.where(object_value: browser_guid)
+        end
 
-      PlatformBlock.active
-                   .where(pairs.map { "(object_type = ? AND object_value = ?)" }.join(" OR "), *pairs.flatten)
-                   .minimum(:blocked_at)
+      blocks&.minimum(:blocked_at)
     rescue Mail::Field::IncompleteParseError
       nil
     end
 
-    def message_for(affected)
+    def message_for(scan)
+      affected = scan[:affected]
       lines = affected.first(MAX_REPORTED).map do |entry|
-        since = blocked_since(entry[:email], entry[:browser_guid])
+        since = blocked_since(entry[:error_code], entry[:email], entry[:browser_guid])
         "• subscription #{entry[:subscription_id]} — #{entry[:successful_charges]} successful charges, blocked since #{since ? since.to_date : "unknown"}"
       end
       omitted = affected.size - lines.size
 
       [
-        "#{affected.size} subscription#{"s" if affected.size != 1} with #{MIN_SUCCESSFUL_CHARGES}+ successful charges failed to renew in the last #{LOOKBACK.inspect} because the subscriber is platform-blocked.",
+        "#{scan[:truncated] ? "At least " : ""}#{affected.size} subscription#{"s" if affected.size != 1} with #{MIN_SUCCESSFUL_CHARGES}+ successful charges failed to renew in the last #{LOOKBACK.inspect} because the subscriber is platform-blocked.",
+        (scan[:truncated] ? "The scan stopped at the newest #{MAX_FAILURES_SCANNED} blocked renewals, so older failures in this window are not counted here." : nil),
         "",
         *lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),
