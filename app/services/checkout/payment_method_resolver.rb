@@ -33,9 +33,9 @@ class Checkout::PaymentMethodResolver
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi pix klarna alipay ideal bancontact].freeze
   # Always-on for the client-confirmed path. Link is inline (rides card's confirm machinery, no
   # return page); cashapp is US-locked and region-gated below.
-  # Not here because they are flag-gated instead: iDEAL/Bancontact (LOCAL_METHOD_LAUNCH_FEATURES on
-  # Checkout::BuyerCurrencyEligibility), Klarna and Alipay (KLARNA_/ALIPAY_LAUNCH_FEATURE). SEPA is
-  # unwired until its own launch.
+  # Not here because they are flag-gated instead: the forced-currency methods iDEAL, Bancontact,
+  # UPI and Pix (LOCAL_METHOD_LAUNCH_FEATURES on Checkout::BuyerCurrencyEligibility), plus Klarna
+  # and Alipay (KLARNA_/ALIPAY_LAUNCH_FEATURE). SEPA is unwired until its own launch.
   # ACH (us_bank_account) was launched then withdrawn platform-wide — ~4 business days to settle and
   # content only delivers on settlement (gumroad-private#1143). Its webhook lifecycle stays wired so
   # in-flight purchases complete, and sellers can opt back in via SELLER_OPT_IN_PAYMENT_METHOD_TYPES.
