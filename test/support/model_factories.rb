@@ -148,6 +148,25 @@ module ModelFactories
     product
   end
 
+  # A pay-what-you-want tiered membership (mirrors
+  # :membership_product_with_preset_tiered_pwyw_pricing): both tiers priced at
+  # $500 with a $600 suggested price across every recurrence, and the first tier
+  # accepting a custom price.
+  def create_membership_product_with_preset_tiered_pwyw_pricing(user: nil, **attrs)
+    product = create_membership_product(user:, **attrs)
+    tier_category = product.tier_category
+    first_tier = tier_category.variants.first
+    first_tier.update!(name: "First Tier", customizable_price: true)
+    second_tier = create_variant(variant_category: tier_category, name: "Second Tier")
+    recurrence_values = BasePrice::Recurrence.all.index_with do |_recurrence_key|
+      { enabled: true, price: "500", suggested_price: "600" }
+    end
+    first_tier.save_recurring_prices!(recurrence_values)
+    second_tier.save_recurring_prices!(recurrence_values)
+    product.tiers.reload
+    product
+  end
+
   # A physical product (mirrors the :is_physical trait): shipping + a default SKU.
   def create_physical_product(user: nil, **attrs)
     product = create_product(user:, **attrs)
@@ -995,6 +1014,22 @@ module ModelFactories
     build_asset_preview(link:, fixture: "sample.gif", content_type: "image/gif", **attrs)
   end
 
+  YOUTUBE_OEMBED = {
+    "html" => "<iframe width=\"356\" height=\"200\" src=\"https://www.youtube.com/embed/qKebcV1jv3A?feature=oembed&showinfo=0&controls=0&rel=0\" frameborder=\"0\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture\" allowfullscreen></iframe>",
+    "info" => { "height" => 200, "width" => 356, "thumbnail_url" => "https://i.ytimg.com/vi/qKebcV1jv3A/hqdefault.jpg" },
+  }.freeze
+
+  # An embedded YouTube player rather than an uploaded file (mirrors
+  # :asset_preview_youtube): no attachment, dimensions come from the oembed hash.
+  # Deep-duped so a test mutating the hash can't affect the next one.
+  def build_asset_preview_youtube(link: nil, **attrs)
+    AssetPreview.new({ link: link || create_product, oembed: YOUTUBE_OEMBED.deep_dup }.merge(attrs))
+  end
+
+  def create_asset_preview_youtube(link: nil, **attrs)
+    build_asset_preview_youtube(link:, **attrs).tap(&:save!)
+  end
+
   # A recommendable product: a compliant seller with a payout address, the films
   # taxonomy, and a completed sale — the DB-only conditions Product#recommendable?
   # checks (mirrors the :recommendable trait, minus the ES reindex).
@@ -1044,6 +1079,62 @@ module ModelFactories
       dba: "Chuckster",
       phone: "0000000000",
     }.merge(attrs))
+  end
+
+  # A Singaporean compliance record (mirrors :user_compliance_info_singapore).
+  def create_user_compliance_info_singapore(user: nil, **attrs)
+    create_user_compliance_info(
+      user:, city: "Singapore", state: "Singapore", zip_code: "12345", country: "Singapore", **attrs
+    )
+  end
+
+  # A compliant seller with a compliance record attached (mirrors
+  # :user_with_compliance_info). `country:` picks which record; anything other
+  # than the US default gets the matching regional builder.
+  def create_user_with_compliance_info(country: "United States", **attrs)
+    user = create_user(user_risk_state: "compliant", **attrs)
+    case country
+    when "Singapore" then create_user_compliance_info_singapore(user:)
+    else create_user_compliance_info(user:)
+    end
+    user
+  end
+
+  # The seller's downloadable annual payout report for one year (mirrors the
+  # :with_annual_report trait). The year lives in the blob's metadata, which is
+  # how User#financial_annual_report_url_for finds the right report.
+  def attach_annual_report(user, year: Time.current.year)
+    blob = ActiveStorage::Blob.create_and_upload!(
+      io: Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures/followers_import.csv"), "text/csv"),
+      filename: "Financial Annual Report #{year}.csv",
+      metadata: { year: }
+    )
+    blob.analyze
+    user.annual_reports.attach(blob)
+    user
+  end
+
+  # One completed payout plus the sale that funded it, both dated to the payout
+  # period (mirrors spec/support/payments_helper.rb). Returns both records so
+  # callers can read the amount back off the payment.
+  def create_payment_with_purchase(seller, created_at_date, product: nil, amount_cents: nil, ip_country: nil)
+    amount_cents ||= [1000, 2000, 1500].sample
+    product ||= create_product(user: seller)
+    payment = create_payment_completed(
+      user: seller, amount_cents:, payout_period_end_date: created_at_date, created_at: created_at_date
+    )
+    purchase = create_purchase(
+      link: product,
+      seller:,
+      price_cents: amount_cents,
+      total_transaction_cents: amount_cents,
+      purchase_success_balance: create_balance(user: seller, payments: [payment]),
+      created_at: created_at_date,
+      succeeded_at: created_at_date,
+      ip_country:
+    )
+    payment.update!(amount_cents: purchase.total_transaction_cents)
+    { payment:, purchase: }
   end
 
   # A US bank account (mirrors :ach_account).
@@ -1287,6 +1378,37 @@ module ModelFactories
   # A discover/search tag (mirrors :tag).
   def create_tag(**attrs)
     Tag.create!({ name: "tag name #{unique_suffix}" }.merge(attrs))
+  end
+
+  # A Discover category (mirrors :taxonomy). Slugs are unique.
+  def create_taxonomy(**attrs)
+    Taxonomy.create!({ slug: "taxonomy-#{unique_suffix}" }.merge(attrs))
+  end
+
+  # A subtitle track (mirrors :subtitle_file, whose default parent is a plain
+  # product file). That parent is attached to a product, because a ProductFile
+  # is only meaningful once it hangs off a product or an installment, and a
+  # caller that reaches through to `subtitle_file.product_file.link` should find
+  # one there rather than nil.
+  def create_subtitle_file(product_file: nil, **attrs)
+    SubtitleFile.create!({
+      product_file: product_file || create_product_file(link: create_product),
+      url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}.srt",
+      language: "English",
+    }.merge(attrs))
+  end
+
+  # An HLS rendition of a video file (mirrors :transcoded_video). The default
+  # source video is attached to a product for the same reason as above.
+  def create_transcoded_video(streamable: nil, **attrs)
+    key_base_path = "/attachments/#{SecureRandom.hex}"
+    TranscodedVideo.create!({
+      streamable: streamable || create_streamable_video(link: create_product, is_transcoded_for_hls: true),
+      original_video_key: "#{key_base_path}/movie.mp4",
+      transcoded_video_key: "#{key_base_path}/movie/hls/index.m3u8",
+      job_id: "somejobid",
+      state: "completed",
+    }.merge(attrs))
   end
 
   # A shopping cart (mirrors :cart). `user: nil` builds a guest cart.

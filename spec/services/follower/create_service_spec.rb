@@ -192,4 +192,64 @@ describe Follower::CreateService do
       end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
     end
   end
+
+  # A Follower row is what triggers the "Please confirm your follow request" email,
+  # so an inactive seller must not be able to create one. /follow is a bare POST
+  # that never loads the storefront, which means a suspended seller whose pages
+  # already 404 would otherwise keep making us send mail to arbitrary addresses.
+  context "when the followed user is not active" do
+    shared_examples "refuses the follow" do
+      it "creates no follower and sends no confirmation email" do
+        expect do
+          expect(
+            Follower::CreateService.perform(
+              followed_user: user,
+              follower_email: "stranger@example.com"
+            )
+          ).to be_nil
+        end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+
+        expect(Follower.find_by(email: "stranger@example.com")).to be_nil
+      end
+
+      it "does not revive an existing cancelled follower" do
+        deleted_follower
+
+        expect do
+          Follower::CreateService.perform(
+            followed_user: user,
+            follower_email: deleted_follower.email
+          )
+        end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+
+        expect(deleted_follower.reload.deleted?).to be(true)
+      end
+    end
+
+    context "when suspended for a TOS violation" do
+      before do
+        admin = create(:admin_user)
+        user.flag_for_tos_violation!(author_id: admin.id, product_id: create(:product, user:).id)
+        user.suspend_for_tos_violation!(author_id: admin.id)
+      end
+
+      it_behaves_like "refuses the follow"
+    end
+
+    context "when suspended for fraud" do
+      before do
+        admin = create(:admin_user)
+        user.flag_for_fraud!(author_id: admin.id)
+        user.suspend_for_fraud!(author_id: admin.id)
+      end
+
+      it_behaves_like "refuses the follow"
+    end
+
+    context "when the account is deleted" do
+      before { user.update!(deleted_at: Time.current) }
+
+      it_behaves_like "refuses the follow"
+    end
+  end
 end

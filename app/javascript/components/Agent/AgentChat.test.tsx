@@ -167,9 +167,16 @@ describe("AgentChat streamed reply reconciliation", () => {
       fireEvent.change(screen.getByLabelText("Message"), { target: { value: "what does my bio say" } });
       fireEvent.click(screen.getByLabelText("Send"));
 
-      // Three in-progress polls (well past the old fixed ~13s deadline), then the persisted turn.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
+      });
+      // The missing frame may have been the reset that removes a false staging claim. Hide partial
+      // text immediately rather than leaving it visible through a long status-polling wait.
+      expect(screen.queryByText("Your bio currently has thr")).toBeNull();
+      expect(screen.getByRole("status", { name: "Working on it" })).toBeTruthy();
+
+      // Three in-progress polls (well past the old fixed ~13s deadline), then the persisted turn.
+      await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
         await vi.advanceTimersByTimeAsync(3000);
         await vi.advanceTimersByTimeAsync(3000);
@@ -191,8 +198,10 @@ describe("AgentChat streamed reply reconciliation", () => {
     await waitFor(() => expect(showAlert).toHaveBeenCalled());
     // One look was enough — no retry delays for a turn the server says will never persist.
     expect(fetchAgentTurnStatus).toHaveBeenCalledTimes(1);
-    // The partial text that did stream is kept, exactly as before.
-    expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+    // A terminal failure means the partial reply can never become complete, so do not leave a
+    // confident but truncated claim in the chat.
+    expect(screen.queryByText("Your bio currently has thr")).toBeNull();
+    expect(screen.getByText("Sorry, I ran into a problem. Please try again.")).toBeTruthy();
     // "failed" is a server verdict, so any connection the stall timeout abandoned is released.
     expect(sentAbortSignal()?.aborted).toBe(true);
   });
@@ -214,7 +223,8 @@ describe("AgentChat streamed reply reconciliation", () => {
 
       expect(showAlert).toHaveBeenCalled();
       expect(fetchAgentTurnStatus).toHaveBeenCalledTimes(2);
-      expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+      expect(screen.queryByText("Your bio currently has thr")).toBeNull();
+      expect(screen.getByText("Sorry, I ran into a problem. Please try again.")).toBeTruthy();
       // "unknown" is a give-up, not a server verdict — the turn may still be generating, so the
       // abandoned connection must NOT be aborted yet (that could kill a turn that would yet
       // persist).
@@ -239,7 +249,8 @@ describe("AgentChat streamed reply reconciliation", () => {
       });
       expect(sentAbortSignal()?.aborted).toBe(true);
       expect(screen.queryByText(PERSISTED_REPLY)).toBeNull();
-      expect(screen.getByText("Your bio currently has thr")).toBeTruthy();
+      expect(screen.queryByText("Your bio currently has thr")).toBeNull();
+      expect(screen.getByText("Sorry, I ran into a problem. Please try again.")).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
@@ -282,6 +293,69 @@ describe("AgentChat streamed reply reconciliation", () => {
 
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith("Too many requests.", "error"));
     expect(fetchAgentTurnStatus).not.toHaveBeenCalled();
+  });
+
+  it("restores the working state while a reset reply is retried", async () => {
+    let continueRetry: (() => void) | undefined;
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onToken?.("Staged. Confirm that card.");
+      handlers.onReset?.();
+      await new Promise<void>((resolve) => {
+        continueRetry = resolve;
+      });
+      handlers.onToken?.("That change wasn't prepared.");
+      return {
+        reply: "That change wasn't prepared.",
+        proposedAction: null,
+        objects: [],
+        suggestions: [],
+        conversationId: "conv1",
+      };
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("update my bio");
+
+    await waitFor(() => expect(screen.getByRole("status", { name: "Working on it" })).toBeTruthy());
+    expect(screen.queryByText("Staged. Confirm that card.")).toBeNull();
+
+    act(() => continueRetry?.());
+    await waitFor(() => expect(screen.getByText("That change wasn't prepared.")).toBeTruthy());
+    expect(screen.queryByRole("status", { name: "Working on it" })).toBeNull();
+  });
+
+  it("shows the fallback when a reset retry fails before sending more text", async () => {
+    streamAgentMessage.mockImplementation((_messages, handlers = {}) => {
+      handlers.onToken?.("Staged. Confirm that card.");
+      handlers.onReset?.();
+      return Promise.reject(new Error("Retry failed."));
+    });
+    fetchAgentTurnStatus.mockResolvedValue({ status: "failed" });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("update my bio");
+
+    await waitFor(() => expect(screen.getByText("Sorry, I ran into a problem. Please try again.")).toBeTruthy());
+    expect(screen.queryByText("Staged. Confirm that card.")).toBeNull();
+    expect(showAlert).toHaveBeenCalledWith("Retry failed.", "error");
+    expect(fetchAgentTurnStatus).toHaveBeenCalledWith(sentClientTurnId());
+  });
+
+  it("discards replacement text when a reset retry fails after streaming", async () => {
+    streamAgentMessage.mockImplementation((_messages, handlers = {}) => {
+      handlers.onToken?.("Staged. Confirm that card.");
+      handlers.onReset?.();
+      handlers.onToken?.("Staged again. Confirm below.");
+      return Promise.reject(new Error("Retry failed."));
+    });
+    fetchAgentTurnStatus.mockResolvedValue({ status: "failed" });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("update my bio");
+
+    await waitFor(() => expect(screen.getByText("Sorry, I ran into a problem. Please try again.")).toBeTruthy());
+    expect(screen.queryByText("Staged. Confirm that card.")).toBeNull();
+    expect(screen.queryByText("Staged again. Confirm below.")).toBeNull();
   });
 
   it("shows the server's rate-limit explanation in the chat instead of the generic failure", async () => {

@@ -183,7 +183,10 @@ describe "Widget Page scenario", js: true, type: :system do
   end
 
   describe "Subscribe form" do
-    let(:seller) { create(:named_seller) }
+    # Reviewed and compliant: the embed form only accepts follows for sellers we
+    # have reviewed, because it is pasted HTML with no CAPTCHA the visitor could
+    # solve (see FollowRecaptcha and FollowersController#from_embed_form).
+    let(:seller) { create(:named_seller, user_risk_state: "compliant") }
     let!(:product) { create(:product, user: seller) }
 
     context "with seller as logged_in_user" do
