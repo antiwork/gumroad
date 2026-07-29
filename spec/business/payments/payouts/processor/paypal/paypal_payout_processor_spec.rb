@@ -69,8 +69,11 @@ describe PaypalPayoutProcessor do
 
       describe "when PayPal permanently refused a payout to this address" do
         before do
-          create(:payment_failed, user:, payment_address: user.payment_address,
-                                  failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+          @refused = create(:payment_failed, user:, payment_address: user.payment_address,
+                                             failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+          # The failing payout wrote the seller their explanation, which is the ordinary state of an
+          # account that has hit one of these rejections.
+          user.add_payout_note(content: @refused.terminal_paypal_failure_seller_note, seller_visible: true)
         end
 
         it "returns false instead of re-attempting the same doomed payout" do
@@ -80,6 +83,32 @@ describe PaypalPayoutProcessor do
         it "does not record another payout note, so the seller-facing one stays the newest" do
           expect do
             described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.not_to change { user.comments.with_type_payout_note.count }
+        end
+
+        # The seller-facing explanation is the only thing telling this seller what to do, and other
+        # blockers legitimately write over it: a flagged account gets a seller-visible "the account
+        # was under review" note every week. Once that clears, staying silent would leave them
+        # reading about a finished review with no idea PayPal is what is holding the money now.
+        it "writes the explanation again when the seller can no longer see one" do
+          user.add_payout_note(content: "Payout on July 1st, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(@refused.terminal_paypal_failure_seller_note)
+          expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+        end
+
+        it "does not write the explanation again when notes are not being recorded" do
+          user.add_payout_note(content: "Payout on July 1st, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+
+          expect do
+            described_class.is_user_payable(user, 10_01)
           end.not_to change { user.comments.with_type_payout_note.count }
         end
 
@@ -103,6 +132,28 @@ describe PaypalPayoutProcessor do
           user.payments.failed.each { |payment| payment.update!(failure_reason: "PAYPAL 3015") }
 
           expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+
+        # Stripe payouts carry no payment_address, so they never clear this address-keyed rejection.
+        # A seller since moved to Stripe Connect is being paid every week, and must not be counted
+        # as stopped by PayPal — the note would tell an actively-paid seller their money had stopped.
+        describe "and the seller has since moved to Stripe Connect" do
+          it "is not considered blocked by the rejection" do
+            create(:merchant_account_stripe_connect, user:)
+            user.update!(check_merchant_account_is_linked: true)
+
+            expect(described_class.terminal_failure_blocking_payouts?(user.reload)).to eq(false)
+          end
+        end
+
+        it "is considered blocked while PayPal is still the only payout method on file" do
+          expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(true)
+        end
+
+        it "is not considered blocked once a bank account is on file" do
+          create(:ach_account, user:)
+
+          expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(false)
         end
       end
 

@@ -39,9 +39,21 @@ module Payment::FailureReason
   # PayPal and the restriction to the seller, so the reason sentence identifies them without
   # needing a marker on the comment row — which matters because the notes we most need to
   # recognise are the ones already written to sellers before any marker existed.
+  #
+  # ⚠️ Rewording TERMINAL_PAYPAL_FAILURE_SELLER_REASONS therefore does not just change future
+  # copy: it stops recognising every note already written, which would let the weekly pause note
+  # bury explanations that are on real sellers' Payouts pages today, and would let the one-time
+  # backfill write a second note to sellers who already have one. HISTORICAL_SELLER_REASONS
+  # records every wording ever shipped so a reword stays backwards-compatible — add the old
+  # sentence here in the same commit that changes the constant.
+  HISTORICAL_SELLER_REASONS = [
+    "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address",
+    "PayPal will not send your payout, because your PayPal account cannot receive US dollars",
+  ].freeze
+
   def self.terminal_paypal_explanation_note?(content)
     text = content.to_s
-    TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.any? { |reason| text.include?(reason) }
+    (TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values | HISTORICAL_SELLER_REASONS).any? { |reason| text.include?(reason) }
   end
 
   # What the seller can actually do about it, and what happens next. Both halves have to be true
@@ -244,12 +256,7 @@ module Payment::FailureReason
       # explanation of why their money stopped moving — it names PayPal and the fix, and it is
       # shown to them on their Payouts page.
       if terminal_paypal_failure?
-        user.add_payout_note(
-          content: "Your payout on #{created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
-                   "#{TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(failure_reason)}. " \
-                   "#{terminal_paypal_failure_seller_solution}",
-          seller_visible: true
-        )
+        user.add_payout_note(content: terminal_paypal_failure_seller_note, seller_visible: true)
         return
       end
 

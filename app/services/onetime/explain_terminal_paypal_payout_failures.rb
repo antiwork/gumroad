@@ -53,7 +53,7 @@ module Onetime
         if dry_run
           puts "[dry run] would explain #{payment.failure_reason} to User #{user.id}"
         else
-          user.add_payout_note(content: note_content(payment), seller_visible: true)
+          user.add_payout_note(content: payment.terminal_paypal_failure_seller_note, seller_visible: true)
           puts "Explained #{payment.failure_reason} to User #{user.id}"
         end
         noted += 1
@@ -119,16 +119,9 @@ module Onetime
       # PayPal and the restriction, which no other payout note does, so matching on the reason
       # sentence is enough to recognise one we already wrote.
       def already_explained?(user)
-        reasons = Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values
         user.comments.with_type_payout_note.any? do |comment|
-          reasons.any? { |reason| comment.content.to_s.include?(reason) }
+          Payment::FailureReason.terminal_paypal_explanation_note?(comment.content)
         end
-      end
-
-      def note_content(payment)
-        "Your payout on #{payment.created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
-          "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(payment.failure_reason)}. " \
-          "#{payment.terminal_paypal_failure_seller_solution}"
       end
   end
 end

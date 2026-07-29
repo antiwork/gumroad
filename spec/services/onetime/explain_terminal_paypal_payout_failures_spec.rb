@@ -162,6 +162,20 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
+    # Stripe payouts carry no payment_address, so they never clear the address-keyed block. A seller
+    # who moved to Stripe Connect is being paid every week, and would otherwise be told the opposite.
+    it "skips a seller who has since moved to Stripe Connect" do
+      terminal_failure_for(seller)
+      create(:merchant_account_stripe_connect, user: seller)
+      seller.update!(check_merchant_account_is_linked: true)
+
+      expect(seller.reload.has_stripe_account_connected?).to eq(true)
+
+      expect do
+        described_class.process
+      end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
     # Suspension is checked before the payout method is even looked at, so promising this seller a
     # payout once they fix their PayPal account would be false.
     it "skips a suspended seller" do

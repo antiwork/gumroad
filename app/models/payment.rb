@@ -256,6 +256,18 @@ class Payment < ApplicationRecord
     "#{fix} #{next_step}"
   end
 
+  # The whole seller-facing explanation for a terminal PayPal rejection, as one sentence pair.
+  #
+  # Three places write this note — the payout that fails, the payout run that finds the seller can
+  # no longer see it, and the one-time backfill for sellers who were stuck before any of this
+  # existed. They have to write identical text, because the code that decides whether an
+  # explanation is already in front of the seller recognises it by its wording.
+  def terminal_paypal_failure_seller_note
+    "Your payout on #{created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
+      "#{FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(failure_reason)}. " \
+      "#{terminal_paypal_failure_seller_solution}"
+  end
+
   def reversed_by?(reversing_payout_id)
     processor_reversing_payout_id.present? && processor_reversing_payout_id == reversing_payout_id
   end

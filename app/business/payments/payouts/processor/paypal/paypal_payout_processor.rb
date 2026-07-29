@@ -95,7 +95,33 @@ class PaypalPayoutProcessor
     # different PayPal address (the check is keyed on the address, so a new one has no terminal
     # failure against it), and a support-issued payout from admin, which is how we pay someone
     # whose PayPal account has genuinely been fixed in place.
-    return false if !from_admin && terminal_failure_for_payout_email?(user, payout_email)
+    if !from_admin && terminal_failure_for_payout_email?(user, payout_email)
+      # Re-explain if the seller can no longer see the explanation.
+      #
+      # Silence assumes the note written by the failing payout is still on their Payouts page, and
+      # for most sellers it is. But a note written for a different, true blocker can legitimately
+      # take its place — "the account is under review", say, which Payouts.is_user_payable writes
+      # seller-visible every week for a flagged account — and once that blocker clears, this path
+      # is reached and says nothing, leaving the seller looking at a note about a review that is
+      # over with no idea their PayPal account is what is holding the money now. Same for a seller
+      # who was suspended when the one-time backfill ran and has since been reinstated: they never
+      # had an explanation at all.
+      #
+      # So the explanation is restored, not repeated: nothing is written while one is already the
+      # newest note they can see, which is the ordinary case and keeps this off the weekly-note
+      # treadmill these accounts are already buried under.
+      if add_comment && !Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content)
+        last_failure = user.payments
+                           .where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email,
+                                  state: Payment::FAILED,
+                                  failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+                           .order(created_at: :desc, id: :desc)
+                           .first
+        user.add_payout_note(content: last_failure.terminal_paypal_failure_seller_note, seller_visible: true) if last_failure
+      end
+
+      return false
+    end
 
     true
   end
@@ -131,9 +157,14 @@ class PaypalPayoutProcessor
   # does.
   #
   # A seller with a bank account on file is not stopped by this, even with a PayPal address still
-  # on record: the top of is_user_payable pays them by bank instead.
+  # on record: the top of is_user_payable pays them by bank instead. Nor is a seller on Stripe
+  # Connect, for the same reason one step further down — is_user_payable hands them to
+  # StripePayoutProcessor, which pays a connected non-Brazilian account with no bank account at
+  # all. Stripe payouts carry no payment_address, so they never clear the address-keyed rejection
+  # below; without this check a seller paid weekly through Stripe Connect would still look stuck.
   def self.terminal_failure_blocking_payouts?(user)
     return false if user.active_bank_account.present?
+    return false if user.has_stripe_account_connected? && !user.stripe_connect_account.is_a_brazilian_stripe_connect_account?
 
     payout_email = user.paypal_payout_email
     return false if payout_email.blank?
