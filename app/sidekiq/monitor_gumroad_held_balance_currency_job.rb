@@ -103,6 +103,14 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # payouts longest are the ones that survive into the alert.
   MAX_ROWS_LOADED = 500
 
+  # A stable message keeps every run of an alert in one Sentry issue instead of opening a new
+  # one each day; everything that varies goes in the context.
+  OFFENDING_MESSAGE = "Gumroad-held balances have a holding_currency other than USD, which blocks payouts"
+
+  # Deliberately does not claim the balances are mislabelled -- whether they are is exactly what
+  # could not be determined.
+  UNRESOLVED_MESSAGE = "Could not determine whether a non-USD balance is Gumroad-held, so the payout currency check did not run on it"
+
   def perform
     scope = candidate_scope
     candidates = scope.order(id: :asc).limit(MAX_ROWS_LOADED).to_a
@@ -111,32 +119,49 @@ class MonitorGumroadHeldBalanceCurrencyJob
     return if offending.empty? && unresolved.empty?
 
     hit_row_limit = candidates.size >= MAX_ROWS_LOADED
+    # How many rows match the query in total, asked for only when the ceiling truncated the
+    # run: without it "500 balances" reads the same whether the real number is 501 or 50,000,
+    # which is the difference between a stray row and an incident. The count runs over the
+    # same indexed range as the scan, so it is cheap on the rare day it is asked.
+    matching_row_count = hit_row_limit ? scope.count : candidates.size
 
-    # A stable message keeps every run of this alert in one Sentry issue instead of
-    # opening a new one each day; everything that varies goes in the context.
-    ErrorNotifier.notify(
-      "Gumroad-held balances have a holding_currency other than USD, which blocks payouts",
-      balance_count: offending.size,
-      seller_count: offending.map(&:user_id).uniq.size,
-      currencies: offending.map(&:holding_currency).uniq,
-      created_since: BASELINE_CUTOFF.iso8601,
-      # True when the query hit MAX_ROWS_LOADED, in which case the counts above describe
-      # the rows that were read rather than everything that matches.
-      hit_row_limit:,
-      # How many rows match the query in total, asked for only when the ceiling truncated
-      # the run: without it "500 balances" reads the same whether the real number is 501 or
-      # 50,000, which is the difference between a stray row and an incident. The count runs
-      # over the same indexed range as the scan, so it is cheap on the rare day it is asked.
-      matching_row_count: hit_row_limit ? scope.count : candidates.size,
-      sample: offending.first(SAMPLE_LIMIT).map { describe(_1) },
-      # Rows whose holder_of_funds could not be answered at all, each with the reason. Reported
-      # separately so a resolution failure never masquerades as a mislabelled balance, and kept
-      # out of the counts above so it cannot inflate them.
-      unresolved_sample: unresolved.first(SAMPLE_LIMIT).map { |balance, reason| describe(balance).merge(reason:) }
-    )
+    # The two buckets get their own alerts with their own wording, because they call for
+    # different responses: a confirmed mislabelled balance is a payout that will break, while
+    # an unresolvable row means the monitor itself could not answer the question. Sending both
+    # under the currency-violation message would report a monitor failure as a payout incident.
+    notify_offending(offending, hit_row_limit:, matching_row_count:) if offending.any?
+    notify_unresolved(unresolved, hit_row_limit:, matching_row_count:) if unresolved.any?
   end
 
   private
+    def notify_offending(offending, hit_row_limit:, matching_row_count:)
+      ErrorNotifier.notify(
+        OFFENDING_MESSAGE,
+        balance_count: offending.size,
+        seller_count: offending.map(&:user_id).uniq.size,
+        currencies: offending.map(&:holding_currency).uniq,
+        created_since: BASELINE_CUTOFF.iso8601,
+        # True when the query hit MAX_ROWS_LOADED, in which case the counts above describe
+        # the rows that were read rather than everything that matches.
+        hit_row_limit:,
+        matching_row_count:,
+        sample: offending.first(SAMPLE_LIMIT).map { describe(_1) }
+      )
+    end
+
+    def notify_unresolved(unresolved, hit_row_limit:, matching_row_count:)
+      ErrorNotifier.notify(
+        UNRESOLVED_MESSAGE,
+        unresolved_count: unresolved.size,
+        seller_count: unresolved.map { |balance, _reason| balance.user_id }.uniq.size,
+        reasons: unresolved.map { |_balance, reason| reason }.uniq,
+        created_since: BASELINE_CUTOFF.iso8601,
+        hit_row_limit:,
+        matching_row_count:,
+        unresolved_sample: unresolved.first(SAMPLE_LIMIT).map { |balance, reason| describe(balance).merge(reason:) }
+      )
+    end
+
     def candidate_scope
       Balance
         .where(state: "unpaid")
@@ -163,7 +188,7 @@ class MonitorGumroadHeldBalanceCurrencyJob
     # holder_of_funds resolves through the charge processor. It falls back to GUMROAD for a
     # processor it no longer recognises, so today it does not raise -- but a monitor that
     # dies on one row stops watching every other row, so a row it cannot answer for is
-    # reported in its own bucket rather than allowed to abort the run or to be counted as a
+    # reported in its own alert rather than allowed to abort the run or to be counted as a
     # mislabelled balance. The error text travels with the row: if a deploy breaks
     # holder_of_funds, a list of balance ids alone would not say why, and nothing else
     # reaches Sentry because the exception is swallowed here.

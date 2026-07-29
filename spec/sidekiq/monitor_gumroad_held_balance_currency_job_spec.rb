@@ -148,8 +148,8 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
 
   # holder_of_funds resolves through the charge processor. A monitor that dies on one row
   # stops watching every other row, so a row it cannot answer for is reported in its own
-  # bucket -- not counted as a mislabelled balance, which would let an infrastructure
-  # failure masquerade as a payout-breaking one.
+  # alert -- with its own wording, so an infrastructure failure is never read as a confirmed
+  # payout-breaking balance.
   it "reports a row whose holder_of_funds cannot be resolved separately, without dying on it" do
     balance = create_balance_at(after_baseline, holding_currency: Currency::EUR)
     allow_any_instance_of(MerchantAccount).to receive(:holder_of_funds).and_raise(StandardError, "unknown processor")
@@ -157,13 +157,16 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     expect { described_class.new.perform }.not_to raise_error
 
     expect(ErrorNotifier).to have_received(:notify).with(
-      anything,
+      described_class::UNRESOLVED_MESSAGE,
       hash_including(
-        balance_count: 0,
-        sample: [],
+        unresolved_count: 1,
+        reasons: ["StandardError: unknown processor"],
         unresolved_sample: [hash_including(balance_id: balance.id, reason: "StandardError: unknown processor")]
       )
     )
+    # The currency-violation alert would state as fact that a Gumroad-held balance is
+    # mislabelled, which is the question that could not be answered for this row.
+    expect(ErrorNotifier).not_to have_received(:notify).with(described_class::OFFENDING_MESSAGE, any_args)
   end
 
   # MerchantAccount#holder_of_funds falls back to GUMROAD for any charge processor it does
@@ -231,7 +234,8 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     described_class.new.perform
 
     expect(ErrorNotifier).to have_received(:notify).with(
-      anything, hash_including(unresolved_sample: [hash_including(balance_id: balance.id, reason: "no merchant account")])
+      described_class::UNRESOLVED_MESSAGE,
+      hash_including(unresolved_sample: [hash_including(balance_id: balance.id, reason: "no merchant account")])
     )
   end
 
@@ -325,6 +329,26 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
 
     expect(ErrorNotifier).to have_received(:notify).with(
       anything, hash_including(sample: [hash_including(balance_id: gumroad_held.id)])
+    )
+  end
+
+  # The two buckets call for different responses -- fix the balance versus fix the monitor or
+  # the merchant account -- so when a run finds both they are reported as two alerts and the
+  # counts in each describe only its own bucket.
+  it "reports a mislabelled balance and an unresolvable row as separate alerts" do
+    offending = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    unresolvable = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    unresolvable.update_column(:merchant_account_id, nil)
+
+    described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      described_class::OFFENDING_MESSAGE,
+      hash_including(balance_count: 1, sample: [hash_including(balance_id: offending.id)])
+    )
+    expect(ErrorNotifier).to have_received(:notify).with(
+      described_class::UNRESOLVED_MESSAGE,
+      hash_including(unresolved_count: 1, unresolved_sample: [hash_including(balance_id: unresolvable.id)])
     )
   end
 
