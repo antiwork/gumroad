@@ -1160,6 +1160,26 @@ describe Charge::Disputable, :vcr do
               expect(@subscription.cancelled_at).to be_nil
             end
           end
+
+          context "when the subscription has already ended" do
+            before do
+              @subscription.update!(ended_at: 1.day.ago)
+            end
+
+            # resubscribe! never clears ended_at, so restarting an ended subscription would tell
+            # the buyer and seller it is back while alive? still returns false.
+            it "leaves it ended and sends no restart notification" do
+              mail_double = double
+              allow(mail_double).to receive(:deliver_later)
+              allow(CustomerMailer).to receive(:subscription_restarted).and_return(mail_double)
+
+              Purchase.handle_charge_event(@event)
+
+              expect(@subscription.reload.ended_at).to be_present
+              expect(@subscription).not_to be_alive
+              expect(CustomerMailer).not_to have_received(:subscription_restarted)
+            end
+          end
         end
 
         context "for a gift purchase" do

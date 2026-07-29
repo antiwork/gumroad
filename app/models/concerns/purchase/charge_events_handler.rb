@@ -101,8 +101,7 @@ module Purchase::ChargeEventsHandler
       purchase.refund_purchase!(flow_of_funds, nil)
 
       # Same gate as the chargeback paths in Charge::Disputable: read the purchase's own
-      # subscription rather than the product's current type, and skip installment plans, whose
-      # by_buyer cancel the model rejects (gumroad-private#1456).
+      # subscription, and keep installment plans out of a by_buyer cancel the model rejects.
       subscription = Subscription.find_by(id: purchase.subscription_id)
       if subscription.present? && !subscription.is_installment_plan? && subscription.deactivated_at.nil?
         subscription.cancel_effective_immediately!(by_buyer: true)

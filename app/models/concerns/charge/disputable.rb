@@ -203,16 +203,13 @@ module Charge::Disputable
 
       purchase.mark_product_purchases_as_chargeback_reversed!
 
-      # Read the purchase's own subscription, not the product's current type: converting a
-      # membership to a one-off flips link.is_recurring_billing for every past sale, including
-      # subscriptions still live and still billing (gumroad-private#1456).
+      # Read the purchase's own subscription: a seller converting a membership to a one-off flips
+      # link.is_recurring_billing for every past sale, live ones included.
       #
-      # Installment plans also carry a Subscription on a non-recurring link, and they are not
-      # memberships: Subscription::UpdaterService refuses to restart a completed one, and
-      # resubscribe! leaves ended_at set, so restarting one would email the buyer about a
-      # "restarted" plan that cannot bill again.
+      # Skip installment plans, and skip anything already ended: resubscribe! does not clear
+      # ended_at, so it would announce a restart that leaves the subscription non-alive.
       subscription = Subscription.find_by(id: purchase.subscription_id)
-      if subscription.present? && !subscription.is_installment_plan?
+      if subscription.present? && !subscription.is_installment_plan? && !subscription.ended?
         logger.info("Chargeback event won; re-activating subscription: #{subscription.id}")
         terminated_or_scheduled_for_termination = subscription.termination_date.present?
         subscription.resubscribe!
@@ -302,14 +299,12 @@ module Charge::Disputable
         # has a purchase_chargeback_balance, so a replay never debits the seller twice.
         purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
 
-        # Read the purchase's own subscription, not the product's current type: converting a
-        # membership to a one-off flips link.is_recurring_billing for every past sale, so live
-        # subscriptions stopped being cancelled on chargeback (gumroad-private#1456).
+        # Read the purchase's own subscription: a seller converting a membership to a one-off flips
+        # link.is_recurring_billing for every past sale, live ones included.
         #
-        # Installment plans are excluded: they also carry a Subscription on a non-recurring link,
-        # and Subscription#installment_plans_cannot_be_cancelled_by_buyer rejects the by_buyer
-        # cancel below, so including them would raise here and leave every later side effect
-        # (payout pause, dispute evidence, FightDisputeJob) unrun on every webhook redelivery.
+        # Installment plans must stay out: installment_plans_cannot_be_cancelled_by_buyer rejects
+        # the by_buyer cancel below, and raising here would strand every later side effect
+        # (payout pause, dispute evidence, FightDisputeJob) on every webhook redelivery.
         subscription = Subscription.find_by(id: purchase.subscription_id)
         subscription = nil if subscription&.is_installment_plan?
         # Only cancel a live subscription: re-cancelling one that a previous attempt already
