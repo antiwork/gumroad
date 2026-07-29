@@ -37,9 +37,40 @@ describe CreateMissingDisputeEvidenceJob do
       end
 
       it "reports that the dispute was left without evidence at formalization time" do
-        expect(ErrorNotifier).to receive(:notify).with(/dispute #{dispute.id} had no evidence record/)
+        expect(ErrorNotifier).to receive(:notify).with(/dispute #{dispute.id} was never asked for evidence/)
 
         described_class.new.perform
+      end
+
+      context "when enqueueing the notice fails" do
+        before do
+          allow(ContactingCreatorMailer).to receive(:chargeback_notice).and_raise(Redis::CannotConnectError)
+        end
+
+        it "leaves the window unstarted so the next sweep tries again" do
+          allow(ErrorNotifier).to receive(:notify)
+
+          described_class.new.perform
+
+          # The evidence row survives, but without a seller-contacted stamp the dispute still
+          # matches the sweep — a started 72-hour window the seller was never told about would
+          # expire in silence.
+          expect(dispute.reload.dispute_evidence).to be_present
+          expect(dispute.dispute_evidence.seller_contacted_at).to be_nil
+        end
+
+        it "recovers on the following sweep once the notice can be enqueued again" do
+          allow(ErrorNotifier).to receive(:notify)
+          described_class.new.perform
+
+          allow(ContactingCreatorMailer).to receive(:chargeback_notice).and_call_original
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice).with(dispute.id)
+
+          expect(dispute.reload.dispute_evidence.seller_contacted_at).to be_present
+        end
       end
 
       it "is idempotent — a second run does not create a second record or re-stamp the window" do
@@ -52,6 +83,21 @@ describe CreateMissingDisputeEvidenceJob do
         end.not_to change { DisputeEvidence.count }
 
         expect(dispute_evidence.reload.seller_contacted_at).to eq(contacted_at)
+      end
+    end
+
+    context "when the evidence record exists but the seller was never told about it" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { create(:dispute_formalized, purchase:) }
+      let!(:dispute_evidence) { create(:dispute_evidence, dispute:, seller_contacted_at: nil) }
+
+      it "stamps the window and sends the notice without creating a second record" do
+        expect do
+          described_class.new.perform
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice).with(dispute.id)
+          .and not_change { DisputeEvidence.count }
+
+        expect(dispute_evidence.reload.seller_contacted_at).to be_present
       end
     end
 
@@ -134,7 +180,7 @@ describe CreateMissingDisputeEvidenceJob do
 
       it "reports it and still handles the rest of the sweep" do
         expect(ErrorNotifier).to receive(:notify).with(/failed to create evidence for dispute #{broken_dispute.id}/)
-        allow(ErrorNotifier).to receive(:notify).with(/had no evidence record/)
+        allow(ErrorNotifier).to receive(:notify).with(/was never asked for evidence/)
 
         described_class.new.perform
 
