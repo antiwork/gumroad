@@ -64,6 +64,31 @@ describe User::PasswordsController, type: :controller, inertia: true do
       end
     end
 
+    # Two live accounts can hold the two variants of the same-looking address: one signed up
+    # before we started refusing hidden characters, the other after. Looking both up in one query
+    # would send the reset link to whichever row the database returned first, which can be the
+    # other person's account, so the address exactly as submitted has to win.
+    context "when separate accounts own the typed and the cleaned address" do
+      let!(:clean_owner) { create(:user, email: "buyer@example.com") }
+      let!(:hidden_owner) { create(:user).tap { _1.update_column(:email, "\u200Fbuyer@example.com") } }
+
+      it "resets the account holding the hidden character when that form is pasted" do
+        post(:create, params: { user: { email: "\u200Fbuyer@example.com" } })
+
+        expect(flash[:notice]).to eq("Password reset sent! Please make sure to check your spam folder.")
+        expect(hidden_owner.reload.reset_password_token).to be_present
+        expect(clean_owner.reload.reset_password_token).to be_nil
+      end
+
+      it "resets the account holding the clean address when the clean form is typed" do
+        post(:create, params: { user: { email: "buyer@example.com" } })
+
+        expect(flash[:notice]).to eq("Password reset sent! Please make sure to check your spam folder.")
+        expect(clean_owner.reload.reset_password_token).to be_present
+        expect(hidden_owner.reload.reset_password_token).to be_nil
+      end
+    end
+
     it "redirects with warning if email is not valid" do
       post(:create, params: { user: { email: "this is no sort of valid email address" } })
       expect(response).to redirect_to(login_url)

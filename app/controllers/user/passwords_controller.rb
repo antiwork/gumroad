@@ -24,9 +24,27 @@ class User::PasswordsController < Devise::PasswordsController
     # clean version. Matching only one form tells them no account exists with the address they are
     # looking straight at — and these are the people most likely to need a reset, since they never
     # received a confirmation email in the first place.
-    candidates = [email, InvisibleCharacters.normalize_email(email)].compact.uniq
-                                                                    .select { EmailFormatValidator.deliverable?(_1) }
-    user = User.alive.where(email: candidates).first if candidates.any?
+    #
+    # Two live accounts can hold the two variants of the same-looking address: one signed up
+    # before we started refusing hidden characters, the other after. They must not be mixed up,
+    # because mailing a reset link to the wrong one hands an account to someone else.
+    #
+    # The database cannot tell them apart on its own. The email column collates as
+    # utf8mb4_unicode_ci, which treats U+200F (and the other format characters here) as
+    # ignorable, so `WHERE email = '<RLM>buyer@example.com'` matches the plain
+    # `buyer@example.com` row too. Ordering the candidates, or querying them one at a time, would
+    # therefore still pick a row arbitrarily. So the rows are compared here in Ruby, byte for
+    # byte: whoever stored the address exactly as it was submitted wins, then whoever stored the
+    # cleaned form.
+    normalized = InvisibleCharacters.normalize_email(email)
+    candidates = [email, normalized].compact.uniq
+                                    .select { EmailFormatValidator.deliverable?(_1) }
+    matches = candidates.flat_map { User.alive.where(email: _1).order(:id).to_a }.uniq
+    user = matches.find { _1.email == email } ||
+           matches.find { _1.email == normalized } ||
+           # Every match carries some other invisible variant, so there is nothing to match on.
+           # Pick the oldest so the outcome is at least the same every time it is retried.
+           matches.first
 
     if user&.send_reset_password_instructions
       redirect_to login_url, notice: "Password reset sent! Please make sure to check your spam folder.", status: :see_other
