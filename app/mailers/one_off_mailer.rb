@@ -22,7 +22,7 @@ class OneOffMailer < ApplicationMailer
       to: email,
       from: from,
       subject: @subject,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: sender_domain.to_sym)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: sender_domain.to_sym, to: email)
     }
     options[:reply_to] = reply_to if reply_to.present?
 

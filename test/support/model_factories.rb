@@ -148,6 +148,25 @@ module ModelFactories
     product
   end
 
+  # A pay-what-you-want tiered membership (mirrors
+  # :membership_product_with_preset_tiered_pwyw_pricing): both tiers priced at
+  # $500 with a $600 suggested price across every recurrence, and the first tier
+  # accepting a custom price.
+  def create_membership_product_with_preset_tiered_pwyw_pricing(user: nil, **attrs)
+    product = create_membership_product(user:, **attrs)
+    tier_category = product.tier_category
+    first_tier = tier_category.variants.first
+    first_tier.update!(name: "First Tier", customizable_price: true)
+    second_tier = create_variant(variant_category: tier_category, name: "Second Tier")
+    recurrence_values = BasePrice::Recurrence.all.index_with do |_recurrence_key|
+      { enabled: true, price: "500", suggested_price: "600" }
+    end
+    first_tier.save_recurring_prices!(recurrence_values)
+    second_tier.save_recurring_prices!(recurrence_values)
+    product.tiers.reload
+    product
+  end
+
   # A physical product (mirrors the :is_physical trait): shipping + a default SKU.
   def create_physical_product(user: nil, **attrs)
     product = create_product(user:, **attrs)
@@ -1359,6 +1378,33 @@ module ModelFactories
   # A discover/search tag (mirrors :tag).
   def create_tag(**attrs)
     Tag.create!({ name: "tag name #{unique_suffix}" }.merge(attrs))
+  end
+
+  # A Discover category (mirrors :taxonomy). Slugs are unique.
+  def create_taxonomy(**attrs)
+    Taxonomy.create!({ slug: "taxonomy-#{unique_suffix}" }.merge(attrs))
+  end
+
+  # A subtitle track (mirrors :subtitle_file, whose default parent is a plain
+  # product file).
+  def create_subtitle_file(product_file: nil, **attrs)
+    SubtitleFile.create!({
+      product_file: product_file || create_product_file,
+      url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}.srt",
+      language: "English",
+    }.merge(attrs))
+  end
+
+  # An HLS rendition of a video file (mirrors :transcoded_video).
+  def create_transcoded_video(streamable: nil, **attrs)
+    key_base_path = "/attachments/#{SecureRandom.hex}"
+    TranscodedVideo.create!({
+      streamable: streamable || create_streamable_video(is_transcoded_for_hls: true),
+      original_video_key: "#{key_base_path}/movie.mp4",
+      transcoded_video_key: "#{key_base_path}/movie/hls/index.m3u8",
+      job_id: "somejobid",
+      state: "completed",
+    }.merge(attrs))
   end
 
   # A shopping cart (mirrors :cart). `user: nil` builds a guest cart.
