@@ -75,6 +75,39 @@ describe AssetPreview do
     it "returns nil for image covers, which need no poster" do
       expect(create(:asset_preview_jpg).video_poster_url).to be_nil
     end
+
+    # The poster is stored full size and we serve a resized copy of it. Asking
+    # ActiveStorage for the resized copy's URL before it exists makes it on the
+    # spot — download, image-process, upload — so on a web request we must report
+    # "no poster yet" and let the worker do that work instead. Otherwise a
+    # product page with several video covers would run one image job per cover
+    # while the buyer waits.
+    context "when the poster is persisted but its resized copy has not been made yet" do
+      let(:asset_preview) { create(:asset_preview_mov) }
+
+      before { attach_poster_image(asset_preview) }
+
+      it "does not process the resized copy on the request path" do
+        expect_any_instance_of(ActiveStorage::VariantWithRecord).not_to receive(:process)
+
+        asset_preview.video_poster_url
+      end
+
+      it "reports no poster and enqueues generation so a worker makes the resized copy" do
+        expect do
+          expect(asset_preview.video_poster_url).to be_nil
+        end.to change { GenerateVideoPosterWorker.jobs.size }.by(1)
+      end
+
+      it "returns the poster on the request path once the resized copy exists" do
+        # This is what the worker does.
+        expect(asset_preview.generate_video_poster!).to be_present
+
+        expect do
+          expect(asset_preview.video_poster_url).to be_present
+        end.not_to change { GenerateVideoPosterWorker.jobs.size }
+      end
+    end
   end
 
   describe "#generate_video_poster!" do
@@ -96,5 +129,16 @@ describe AssetPreview do
       expect(asset_preview.generate_video_poster!).to be_nil
       expect(Rails.cache.read(asset_preview.send(:video_poster_cache_key))).to eq(described_class::FAILED_POSTER_SENTINEL)
     end
+  end
+
+  # Stands in for what ffmpeg would have produced: a poster frame persisted on
+  # the blob as its preview_image, without any resized copy of it yet.
+  def attach_poster_image(asset_preview)
+    asset_preview.file.blob.preview_image.attach(
+      io: File.open(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")),
+      filename: "poster.jpg",
+      content_type: "image/jpeg"
+    )
+    asset_preview.file.blob.reload
   end
 end

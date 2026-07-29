@@ -28,10 +28,16 @@ module Onetime
       enqueued = 0
       skipped = 0
 
+      # Match every video cover, the same way ActiveStorage itself decides a blob
+      # is a video: any content type beginning with "video". Listing specific
+      # types here would silently skip a cover in some less common video format
+      # and leave it exposed to the very bug this backfill exists to fix. The
+      # filter is on the blob's stored content_type rather than a per-row
+      # file.video? call, which would mean loading every cover in the table.
       scope = AssetPreview.alive
                           .where("asset_previews.id >= ?", start_id)
                           .joins(file_attachment: :blob)
-                          .where(active_storage_blobs: { content_type: video_content_types })
+                          .where(ActiveStorage::Blob.arel_table[:content_type].matches("video%"))
       scope = scope.where("asset_previews.id <= ?", end_id) if end_id
 
       scope.includes(file_attachment: { blob: { preview_image_attachment: :blob } })
@@ -57,13 +63,5 @@ module Onetime
 
       { enqueued:, skipped: }
     end
-
-    private
-      # Matches what AssetPreview treats as a video cover. Kept as an explicit
-      # list because the query filters on the blob's stored content_type rather
-      # than calling file.video? per row, which would mean loading every cover.
-      def video_content_types
-        %w[video/mp4 video/quicktime video/webm video/ogg video/x-m4v video/mpeg video/3gpp video/x-msvideo]
-      end
   end
 end
