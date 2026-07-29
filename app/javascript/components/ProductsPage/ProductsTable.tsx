@@ -140,9 +140,17 @@ export const ProductsPageProductsTable = (props: {
                     </a>
                   )}
 
-                  <Link href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative">
+                  {/* A plain <a>, deliberately not an Inertia <Link>, because this one opens a new
+                      tab. Inertia's Link always calls preventDefault() and does a client-side visit
+                      when the click has no modifier key held: its shouldIntercept() helper looks only
+                      at the tag name and at alt/ctrl/meta/shift, and never at target="_blank". So an
+                      Inertia Link with target="_blank" silently navigates the current tab to the
+                      storefront instead of opening a new one. The other three product tables
+                      (memberships, and both collab tables) already use a plain <a> here for the same
+                      reason; this one was the odd surface out. */}
+                  <a href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative">
                     <small className="block">{product.url_without_protocol}</small>
-                  </Link>
+                  </a>
                 </div>
               </TableCell>
 
