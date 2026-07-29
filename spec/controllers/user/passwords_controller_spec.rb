@@ -89,6 +89,34 @@ describe User::PasswordsController, type: :controller, inertia: true do
       end
     end
 
+    # Same rule where a Unicode space is the invisible character rather than a format character.
+    # It is worth covering separately because the two behave differently in the database: a format
+    # character is ignorable under utf8mb4_unicode_ci, so `WHERE email = '<RLM>buyer@example.com'`
+    # also returns the plain row and the byte-for-byte comparison is what tells them apart. A
+    # Unicode space is not ignorable, so each row is only returned by matching itself. Both routes
+    # have to send the link to the account that owns the address as submitted, and without this
+    # context only the first of the two shapes is actually exercised.
+    context "when separate accounts own a no-break-space address and the cleaned address" do
+      let!(:clean_owner) { create(:user, email: "buyer@example.com") }
+      let!(:hidden_owner) { create(:user).tap { _1.update_column(:email, "buyer\u00A0@example.com") } }
+
+      it "resets the account holding the no-break space when that form is pasted" do
+        post(:create, params: { user: { email: "buyer\u00A0@example.com" } })
+
+        expect(flash[:notice]).to eq("Password reset sent! Please make sure to check your spam folder.")
+        expect(hidden_owner.reload.reset_password_token).to be_present
+        expect(clean_owner.reload.reset_password_token).to be_nil
+      end
+
+      it "resets the account holding the clean address when the clean form is typed" do
+        post(:create, params: { user: { email: "buyer@example.com" } })
+
+        expect(flash[:notice]).to eq("Password reset sent! Please make sure to check your spam folder.")
+        expect(clean_owner.reload.reset_password_token).to be_present
+        expect(hidden_owner.reload.reset_password_token).to be_nil
+      end
+    end
+
     it "redirects with warning if email is not valid" do
       post(:create, params: { user: { email: "this is no sort of valid email address" } })
       expect(response).to redirect_to(login_url)
