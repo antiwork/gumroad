@@ -63,12 +63,45 @@ module MailerInfo
     decrypt(header_value)
   end
 
+  # These domains reject Resend's sending IPs outright ("550 Reject due to policy
+  # restrictions", their code r1102), so a buyer there pays and never gets their
+  # receipt. They accept our SendGrid mail, so pin them rather than letting the
+  # random provider split pick Resend.
+  #
+  # Exact match, not suffix: these are consumer mailboxes that only exist at the
+  # apex, so suffix matching would catch unrelated third-party subdomains.
+  # mail.com's vanity domains (email.com, usa.com, …) are deliberately absent —
+  # add one when a bounce is observed, not on a guess.
+  # https://github.com/antiwork/gumroad-private/issues/1462
+  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[
+    web.de
+    gmx.de gmx.net gmx.com gmx.at gmx.ch gmx.us gmx.fr gmx.es gmx.co.uk
+    mail.com
+  ].freeze
+
+  # `to` accepts whatever a mailer passes as the `to:` header: a single email
+  # string (possibly in "Name <email>" form) or an array of them.
+  def force_sendgrid_for_recipients?(to)
+    Array(to).compact.any? do |recipient|
+      # strip BEFORE removing the bracket: " Name <user@web.de> " ends in a
+      # space, so delete_suffix(">") would be a no-op and the domain would keep
+      # its bracket and never match.
+      domain = recipient.to_s.strip.split("@").last.to_s.delete_suffix(">").strip.downcase
+      UNITED_INTERNET_RECIPIENT_DOMAINS.include?(domain)
+    end
+  end
+
   def random_email_provider(domain)
     MailerInfo::Router.determine_email_provider(domain)
   end
 
-  def random_delivery_method_options(domain:, seller: nil)
-    MailerInfo::DeliveryMethod.options(domain:, email_provider: random_email_provider(domain), seller:)
+  # `to` is the recipient(s) of the email being built. When any recipient is
+  # at a domain that rejects Resend's sending IPs (see
+  # UNITED_INTERNET_RECIPIENT_DOMAINS above), we bypass the random
+  # SendGrid/Resend split and force SendGrid so the email actually arrives.
+  def random_delivery_method_options(domain:, seller: nil, to: nil)
+    email_provider = force_sendgrid_for_recipients?(to) ? EMAIL_PROVIDER_SENDGRID : random_email_provider(domain)
+    MailerInfo::DeliveryMethod.options(domain:, email_provider:, seller:)
   end
 
   def default_delivery_method_options(domain:)
