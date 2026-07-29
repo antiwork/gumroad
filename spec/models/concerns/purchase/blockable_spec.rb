@@ -249,7 +249,8 @@ describe Purchase::Blockable do
       end
 
       it "still blocks the card when the buyer is just short of the threshold" do
-        create_list(:purchase, settled_count - 1, email: "newish@example.com", purchase_state: "successful",
+        create_list(:purchase, settled_count - 1, email: "newish@example.com",
+                                                  purchase_state: "successful",
                                                   stripe_fingerprint: known_card, created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          email: "newish@example.com",
@@ -259,6 +260,26 @@ describe Purchase::Blockable do
         purchase.mark_failed!
 
         expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      # #recent_stripe_fingerprint looks up "the newest card on any purchase sharing this email",
+      # and a guest supplies that email themselves. When the failing purchase carries no card of its
+      # own there is nothing to hold the lookup down, so it lands on the card of whoever really owns
+      # the address — a bystander whose working card we would then block platform-wide. That is the
+      # same bug this PR fixes, one method along, so the second block is only taken on a renewal,
+      # where our own code copied the email across from the original purchase.
+      it "does not block a bystander's card when a guest types their email and the charge carries no card" do
+        bystander = create(:user, email: "bystander@example.com")
+        create(:purchase, purchaser: bystander, email: "bystander@example.com",
+                          purchase_state: "successful", stripe_fingerprint: known_card)
+        purchase = build(:purchase_in_progress,
+                         email: "bystander@example.com",
+                         stripe_fingerprint: nil,
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(PlatformBlock.active.charge_processor_fingerprint.where(object_value: known_card)).to be_empty
       end
     end
   end

@@ -64,7 +64,6 @@ describe Onetime::ClearMistakenBuyerBlocks do
   end
 
   it "leaves a block of a different type that happens to share a value" do
-    PlatformBlock.active.find_by(object_type: PlatformBlock::TYPES[:email]).unblock!
     travel_to(failed_purchase.created_at) do
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: buyer_email)
     end
@@ -74,19 +73,19 @@ describe Onetime::ClearMistakenBuyerBlocks do
     expect(PlatformBlock.active.pluck(:object_type, :object_value)).to eq([[PlatformBlock::TYPES[:charge_processor_fingerprint], buyer_email]])
   end
 
-  it "leaves a block that was created long after the decline, which a different rule wrote" do
-    PlatformBlock.active.find_each { |block| block.update!(created_at: failed_purchase.created_at + 1.day) }
+  it "leaves a block that was written long after the decline, which a different rule wrote" do
+    PlatformBlock.active.find_each { |block| block.update!(blocked_at: failed_purchase.created_at + 1.day) }
 
     expect { described_class.new(dry_run: false).process }.not_to change { PlatformBlock.active.count }
   end
 
   # A charge needing Strong Customer Authentication stays in progress until the buyer finishes it or
   # FailAbandonedPurchaseWorker gives up, so the blocks carry a timestamp minutes after the purchase
-  # was created. A sweep anchored on created_at alone would report this buyer cleared and leave every
+  # was created. A sweep anchored on the purchase's own creation would report this buyer cleared and leave every
   # one of their blocks in place.
   it "clears blocks written minutes later, when the charge failed after an authentication step" do
     delayed = failed_purchase.created_at + ChargeProcessor::TIME_TO_COMPLETE_SCA
-    PlatformBlock.active.find_each { |block| block.update!(created_at: delayed) }
+    PlatformBlock.active.find_each { |block| block.update!(blocked_at: delayed) }
 
     expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
   end
@@ -95,11 +94,45 @@ describe Onetime::ClearMistakenBuyerBlocks do
   # rule wrote all of its rows in one transition, so anything minutes away from the rest is not ours.
   it "leaves a lone block written minutes apart from the rest inside the same window" do
     velocity_block = PlatformBlock.active.find_by(object_type: PlatformBlock::TYPES[:ip_address])
-    velocity_block.update!(created_at: failed_purchase.created_at + 10.minutes)
+    velocity_block.update!(blocked_at: failed_purchase.created_at + 10.minutes)
 
     described_class.new(dry_run: false).process
 
     expect(PlatformBlock.active.pluck(:id)).to eq([velocity_block.id])
+  end
+
+  # PlatformBlock.add! reuses the row for a (type, value) pair rather than inserting a second one, so
+  # created_at is when we first ever heard of an identifier and blocked_at is when this block was
+  # written. Every identifier that was blocked once before — a six-month IP block that expired, an
+  # email block support lifted — carries an ancient created_at, and a sweep reading created_at skips
+  # the row while reporting the buyer cleared.
+  it "clears a re-used block row whose first insert long predates the decline" do
+    PlatformBlock.active.find_each { |block| block.update!(created_at: 3.years.ago) }
+
+    expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
+  end
+
+  # The same confusion in the other direction, which is the dangerous one: the bug wrote a row long
+  # ago, a card-testing rule re-blocked that same row last month, and the row still carries its
+  # original created_at. Reading created_at makes last month's live enforcement look like part of the
+  # old burst and clears it.
+  it "leaves a row the bug wrote and something else re-blocked long afterwards" do
+    PlatformBlock.active.find_each do |block|
+      block.update!(created_at: failed_purchase.created_at, blocked_at: 1.month.from_now)
+    end
+
+    expect { described_class.new(dry_run: false).process }.not_to change { PlatformBlock.active.count }
+  end
+
+  # BlockSuspendedAccountIpWorker blocks the sign-in IP of every suspended account, unattended and so
+  # with no blocked_by, for six months. A buyer sharing that address — carrier NAT, an office, a VPN
+  # exit — must not have that block cleared just because their own decline happened at the same
+  # moment. Unlike the velocity rules, this one cannot be reconstructed from the purchase, so the
+  # burst has to prove it came from block_buyer! by containing an email or a card.
+  it "leaves an IP-only block written by another automation at the same moment" do
+    PlatformBlock.active.where.not(object_type: PlatformBlock::TYPES[:ip_address]).find_each(&:unblock!)
+
+    expect { described_class.new(dry_run: false).process }.not_to change { PlatformBlock.active.count }
   end
 
   # The old rule blocked "the buyer's most recent card" as of the moment it ran. Asking today's code

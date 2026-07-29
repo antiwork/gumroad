@@ -334,7 +334,8 @@ module Purchase::Blockable
       block_buyer_payment_method!
     end
 
-    # Blocks the card this decline came in on, and nothing else.
+    # Blocks the card this decline came in on, and — on a renewal, where the card is ours to look
+    # up rather than the buyer's to claim — the card on file for the subscriber.
     #
     # Deliberately narrower than #block_buyer!: blocking the buyer's email, browser and IP takes
     # away the only route they have to fix the problem themselves (add a different card, pay
@@ -343,9 +344,19 @@ module Purchase::Blockable
     # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
     # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
     # distinct cards have failed.
+    #
+    # #recent_stripe_fingerprint finds "the newest card on any purchase sharing this email or
+    # account", and on an unauthenticated checkout the email is whatever was typed into the form
+    # (see #clean_payment_history_conditions). Usually the failing purchase carries the declined
+    # card itself and that lookup lands back on the same fingerprint, which is why the second block
+    # normally only repeats the first — but when the failing purchase has no fingerprint of its own,
+    # it lands on the newest card of whoever really owns that address, and we would block a
+    # bystander's working card platform-wide. So it only runs for a recurring charge, where our own
+    # code copied the email and account across from the original purchase and the card on file is
+    # the one that just declined.
     def block_buyer_payment_method!
       block_by_charge_processor_fingerprint!
-      block_by_recent_stripe_fingerprint!
+      block_by_recent_stripe_fingerprint! if is_recurring_subscription_charge
     end
 
     def suspend_buyer_on_fraudulent_card_decline!
