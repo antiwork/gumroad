@@ -138,18 +138,16 @@ class OrdersController < ApplicationController
     # writes the code to `purchases.stripe_error_code`.
     CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link].freeze
 
-    # The error type that proves a charge was actually attempted, and therefore that the webhook
-    # above fired at all.
+    # The error type that proves a charge was actually attempted, and therefore that
+    # `payment_intent.payment_failed` fired at all.
     CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE = "card_error"
 
-    # Report only failures nothing else records. A redirect method's rejected confirm creates no
-    # charge and no webhook, so the browser is the only witness; an in-page decline is already a
-    # row in the database.
+    # Report only failures nothing else records.
     #
     # Both conditions are required. Stripe attaches `payment_method` to any error involving one,
     # not just to declines, so a card-typed `invalid_request_error` (consumed ConfirmationToken,
-    # intent in an unexpected state) never transitions the intent and never webhooks — 6.4% of
-    # live events. Suppressing on the method alone would make those log-only.
+    # intent in an unexpected state) never transitions the intent and never webhooks. Suppressing
+    # on the method alone would make those log-only.
     #
     # Denylist rather than allowlist so an unrecognised or blank type keeps reporting: a method
     # added later must not go unmonitored because nobody updated this list.

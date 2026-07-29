@@ -2693,6 +2693,10 @@ describe OrdersController, :vcr do
 
     context "when the failure leaves no server-side trace" do
       # A rejected confirm here creates no charge and no webhook — the browser is the only witness.
+      #
+      # stripe_error_type is card_error in these so the denylist is actually consulted: any other
+      # type returns early at the attempt check, and the examples would pass even if the method
+      # were suppressed.
       StripeIntentStatus::CLIENT_REDIRECT_PAYMENT_METHOD_TYPES.each do |payment_method_type|
         it "notifies for #{payment_method_type}" do
           params = { line_items: line_items.map(&:dup) }.merge(common_params)
@@ -2706,6 +2710,7 @@ describe OrdersController, :vcr do
           post :confirm_error, params: {
             id: order.secure_external_id(scope: "confirm"),
             payment_method_type:,
+            stripe_error_type: "card_error",
             stripe_error_code: "payment_intent_unexpected_state",
           }
 
@@ -2725,6 +2730,7 @@ describe OrdersController, :vcr do
         post :confirm_error, params: {
           id: order.secure_external_id(scope: "confirm"),
           payment_method_type: "some_new_method",
+          stripe_error_type: "card_error",
           stripe_error_code: "payment_intent_unexpected_state",
         }
 
@@ -2732,11 +2738,8 @@ describe OrdersController, :vcr do
       end
 
       it "notifies when payment_method_type is blank" do
-        # 31% of live events arrive with no payment_method_type at all, and reporting them is the
-        # denylist's deliberate fail-open direction.
-        #
-        # stripe_error_type MUST be card_error: any other type returns early at the attempt check
-        # and the example would pass even with blank suppressed.
+        # Blank arrives whenever Stripe raises before attaching a payment method, and reporting it
+        # is the denylist's deliberate fail-open direction.
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
 
