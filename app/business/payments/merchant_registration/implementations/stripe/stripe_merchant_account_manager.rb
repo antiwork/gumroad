@@ -131,6 +131,11 @@ module StripeMerchantAccountManager
   # StripeBeneficialOwnersManager::PERSON_LIST_LIMIT and Stripe's own page maximum.
   OWNER_LIST_LIMIT = 100
 
+  # Recorded ownership at or above this counts as accounting for the whole company. Just under 100 to
+  # absorb the rounding in shares Stripe and our own form accept with more than two decimals
+  # (33.33 x 3 = 99.99); it is a rounding allowance, not slack for a list that is genuinely short.
+  FULLY_ACCOUNTED_OWNERSHIP_PERCENT = 99.5
+
   def self.create_account(user, passphrase:, from_admin: false, notify: true)
     tos_agreement = nil
     user_compliance_info = nil
@@ -370,22 +375,34 @@ module StripeMerchantAccountManager
     # An empty owner list on its own is a legitimate resting state for an account created as a
     # business — the seller never filled the beneficial-owners form, or no individual holds a
     # reportable share — and seeding a 100% owner there would invent an ownership claim the seller
-    # never made. Requiring an earlier individual compliance record is what separates an interrupted
-    # migration from an ordinary business account.
+    # never made. Requiring the record IMMEDIATELY BEFORE the live one to be an individual is what
+    # separates an interrupted migration from an ordinary business account. A seller who switched
+    # years ago and has since saved payout settings again has a business record in that slot, so a
+    # legitimate company that later cleared its ownership is not mistaken for a stuck switch.
     owners_provided_blocking = user_compliance_info.is_business? && !switching_to_business &&
                                owners_provided_blocking_payouts?(stripe_account) &&
-                               user.user_compliance_infos.where(is_business: false).exists?
+                               switched_from_individual_immediately_before?(user, user_compliance_info)
 
-    # nil means the read failed, which is not the same as "nobody owns anything" — both the seeding
-    # and the attestation below stay off in that case rather than guessing.
+    # nil means the read failed, which is not the same as "nobody owns anything" — the seeding stays
+    # off in that case rather than guessing.
     recorded_ownership_percent = owners_provided_blocking ? recorded_ownership_percent_on(stripe_account.id) : nil
-    stuck_mid_migration = recorded_ownership_percent&.zero? || false
+    # An owner list holding nobody but the representative, who owns nothing, is the fingerprint of a
+    # switch that died before it seeded. Once the seller has added anyone under Settings → Payments,
+    # a zero-ownership list is a shape they configured — that form can clear the representative's own
+    # ownership too — and re-seeding 100% would overwrite a claim they deliberately gave up.
+    stuck_mid_migration = (recorded_ownership_percent&.zero? && sole_person_is_representative?(stripe_account.id)) || false
     seed_representative_ownership = switching_to_business || stuck_mid_migration
 
     # The other half of the stuck population: a representative who already holds a share, on an
     # account still blocked because nothing ever attested the list. Seeding would be wrong there and
     # the attestation is the whole fix, so the two conditions cannot share one flag.
-    owner_list_complete = seed_representative_ownership || recorded_ownership_percent.to_f.positive?
+    #
+    # A positive share is not the same as a COMPLETE list: a company whose representative holds 25%
+    # still has 75% sitting with beneficial owners nobody has entered, and attesting there tells
+    # Stripe a list is finished when three quarters of the company is missing from it. Only a list
+    # that accounts for the whole company can be called complete, and no UI asks the seller to
+    # affirm completeness, so the accounting is the only evidence available.
+    owner_list_complete = seed_representative_ownership || fully_accounted_ownership?(recorded_ownership_percent)
 
     # Read the ownership Stripe already has on file BEFORE the account update below, because that
     # update rewrites the metadata marker we use to detect the switch (see last_user_compliance_info
@@ -550,6 +567,64 @@ module StripeMerchantAccountManager
     nil
   end
 
+  # Whether the recorded shares account for the whole company, which is the only thing that makes the
+  # owner list provably complete. nil (a failed read) and a partial total both fail closed: a company
+  # whose entered owners hold 25% has 75% belonging to people nobody has listed.
+  #
+  # Stripe accepts shares with more than two decimals and our own form does too, so sums like
+  # 33.33 x 3 land just under 100. The tolerance is there for that rounding, not to wave through a
+  # genuinely short list.
+  def self.fully_accounted_ownership?(recorded_ownership_percent)
+    return false if recorded_ownership_percent.nil?
+
+    recorded_ownership_percent >= FULLY_ACCOUNTED_OWNERSHIP_PERCENT
+  end
+  private_class_method :fully_accounted_ownership?
+
+  # Whether the representative is the only person on the account. A switch that died before seeding
+  # leaves exactly that shape; a seller who has entered anyone under Settings → Payments has not, so
+  # their zero-ownership list is a configuration to leave alone rather than a gap to fill.
+  #
+  # Lists ALL persons, not just owners: a director or executive entered with owner=false is invisible
+  # to an owner-scoped read, and overwriting the representative's share on that account would still
+  # be inventing a claim. Returns false when Stripe cannot be read, so an unreadable account is never
+  # seeded.
+  #
+  # Indexed rather than dug: Stripe's to_h is shallow, so the relationship is still a StripeObject,
+  # which supports [] but raises NoMethodError on dig.
+  def self.sole_person_is_representative?(stripe_account_id)
+    persons = Stripe::Account.list_persons(stripe_account_id, limit: OWNER_LIST_LIMIT)["data"]
+    return false unless persons.one?
+
+    relationship = persons.first.to_h[:relationship]
+    !!(relationship && relationship[:representative])
+  rescue Stripe::StripeError => e
+    ErrorNotifier.notify(e)
+    false
+  end
+  private_class_method :sole_person_is_representative?
+
+  # Whether the compliance record immediately preceding the live one was an individual — the shape an
+  # interrupted individual-to-business switch leaves behind.
+  #
+  # Ordered by id rather than filtered by is_business, because a seller who switched long ago and has
+  # saved payout settings since has later business records; "an individual record exists somewhere in
+  # history" would treat that settled company as mid-migration forever. Soft-deleted records are
+  # intentionally included: these are immutable compliance records, so every superseded one is
+  # deleted and the previous record is only ever visible through them.
+  #
+  # Takes the previous record whatever its is_business value and asks it, so a legacy row with the
+  # column unset reads as individual exactly as it does everywhere else (is_individual? is
+  # !is_business?) instead of being skipped in favour of an older record.
+  def self.switched_from_individual_immediately_before?(user, live_user_compliance_info)
+    previous = user.user_compliance_infos
+                   .where.not(id: live_user_compliance_info.id)
+                   .order(id: :desc)
+                   .first
+    previous&.is_individual? || false
+  end
+  private_class_method :switched_from_individual_immediately_before?
+
   private_class_method
   # Stripe holds a company account's payouts on company.owners_provided until the platform states
   # that the owner list is complete, and nothing else in the codebase states it — so seeding the
@@ -558,11 +633,11 @@ module StripeMerchantAccountManager
   # The ownership is re-read here rather than trusted from the caller's earlier read: the caller
   # decides to attest from its INTENT to seed, and update_person returns silently without seeding
   # when the account has no representative person. Reading after that call is what makes this a
-  # statement about what Stripe actually holds. Never attest an empty or unreadable list — that
-  # would be a false statement to Stripe, and it would hide a switch that seeded nobody behind a
-  # cleared requirement.
+  # statement about what Stripe actually holds. Never attest a list that does not account for the
+  # whole company — a partial or unreadable list would be a false statement to Stripe, and it would
+  # hide a switch that seeded nobody behind a cleared requirement.
   def self.attest_owners_provided(stripe_account_id)
-    return unless recorded_ownership_percent_on(stripe_account_id).to_f.positive?
+    return unless fully_accounted_ownership?(recorded_ownership_percent_on(stripe_account_id))
 
     Stripe::Account.update(stripe_account_id, { company: { owners_provided: true } })
   rescue Stripe::StripeError => e

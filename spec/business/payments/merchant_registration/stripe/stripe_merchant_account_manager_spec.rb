@@ -13233,6 +13233,9 @@ describe StripeMerchantAccountManager, :vcr do
       allow(Stripe::Account).to receive(:list_persons)
         .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
         .and_return("data" => [])
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", limit: 100)
+        .and_return("data" => [representative])
       allow(Stripe::Account).to receive(:update_person).and_return(true)
     end
 
@@ -13360,6 +13363,129 @@ describe StripeMerchantAccountManager, :vcr do
         .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
         .and_raise(Stripe::APIError.new("Stripe is down"))
       allow(ErrorNotifier).to receive(:notify)
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # The false-attestation case: a company whose representative holds 25% has 75% belonging to
+    # beneficial owners nobody has entered. Telling Stripe that list is complete is a false statement
+    # that can clear the payout restriction while three quarters of the company is unaccounted for.
+    it "does not attest a list that accounts for only part of the company" do
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => [
+                      Stripe::Person.construct_from(
+                        id: "person_representative",
+                        object: "person",
+                        account: "acct_stuck_migration",
+                        relationship: { representative: true, owner: true, percent_ownership: 25 }
+                      )
+                    ])
+      account = stuck_account(owners_provided_in: :currently_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # Shares Stripe and our own form accept with more than two decimals do not sum to exactly 100, so
+    # a list that really does cover the company must still read as complete.
+    it "attests a list whose shares cover the company after rounding" do
+      thirds = [33.33, 33.33, 33.33].each_with_index.map do |percent, index|
+        Stripe::Person.construct_from(
+          id: "person_owner_#{index}",
+          object: "person",
+          account: "acct_stuck_migration",
+          relationship: { representative: false, owner: true, percent_ownership: percent }
+        )
+      end
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => thirds)
+      account = stuck_account(owners_provided_in: :currently_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(attested).to be(true)
+    end
+
+    # A seller who switched long ago, has saved payout settings since, and later cleared their
+    # representative's ownership has a legitimate company state. The record immediately before the
+    # live one is a business, so the soft-deleted individual record further back must not read as an
+    # interrupted switch and re-seed a 100% claim.
+    it "leaves a settled company alone when the individual record is not the one before the live record" do
+      business_info.mark_deleted!
+      later_business_info = create(:user_compliance_info_business, user:)
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(account.metadata).to receive(:[]).with("user_compliance_info_id").and_return(later_business_info.external_id)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # A zero-ownership list on an account the seller has entered people into is a shape they
+    # configured — the beneficial-owners form can clear the representative's own share — so seeding
+    # 100% there would overwrite a claim they deliberately gave up.
+    it "leaves ownership alone when the seller has entered someone besides the representative" do
+      director = Stripe::Person.construct_from(
+        id: "person_director",
+        object: "person",
+        account: "acct_stuck_migration",
+        relationship: { representative: false, owner: false, director: true }
+      )
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", limit: 100)
+        .and_return("data" => [representative, director])
       account = stuck_account(owners_provided_in: :past_due)
       allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
 
