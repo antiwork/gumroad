@@ -30,18 +30,18 @@ describe "Agent tab", type: :system, js: true do
   # Stub one turn of the agent: the next user message yields `reply` (+ optional proposed_action /
   # objects rendered inline as cards, and follow-up `suggestions`). The Agent tab streams its reply
   # over Server-Sent Events, so we stub the streaming entrypoint (respond_streaming): it emits the
-  # reply as a single token, then the objects / proposed action / suggestions, mirroring what the
-  # real service streams, and returns the same hash shape the controller's `done` event uses.
+  # reply as a single token, persists the completed turn, then emits objects / proposed action /
+  # suggestions and returns the same hash shape the controller's `done` event uses.
   def stub_agent_turn(reply:, proposed_action: nil, objects: [], suggestions: [])
     allow_any_instance_of(Ai::StoreAgentService).to receive(:respond_streaming) do |_service, **kwargs, &emit|
       emit.call(:token, { text: reply })
+      turn = { reply:, proposed_action:, objects:, suggestions: }
+      # Production finish_stream persists before every trailing event. That ordering lets the
+      # controller bind a proposal event to its stored assistant message and suppress it when
+      # persistence fails.
+      kwargs[:on_reply_complete]&.call(turn)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: }) if proposed_action
-      turn = { reply:, proposed_action:, objects:, suggestions: }
-      # The real service persists the turn via on_reply_complete the moment the reply is final,
-      # before emitting suggestions — mirror that here so the controller has a conversation id
-      # to put in the terminal `done` frame, exactly like production.
-      kwargs[:on_reply_complete]&.call(turn)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
       turn
     end
