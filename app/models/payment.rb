@@ -222,18 +222,31 @@ class Payment < ApplicationRecord
       FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.include?(failure_reason)
   end
 
-  # What to tell the seller to do about a terminal PayPal rejection.
+  # What to tell the seller to do about a terminal PayPal rejection, and what to expect after.
   #
-  # Fixing their payout method is only enough when payouts for the account are otherwise free to
-  # run. If the account is also under a payout hold, fixing the method alone changes nothing —
-  # Payouts.is_user_payable rejects on the hold before it ever reaches the PayPal processor — so
-  # the seller has to be told to come to us rather than to expect money on the next payout date.
+  # Both halves are per-seller. Bank transfer is only a real option where Gumroad supports it —
+  # most sellers hitting these rejections are in PayPal-only countries. And fixing the payout
+  # method is only enough when payouts for the account are otherwise free to run: under a hold,
+  # Payouts.is_user_payable rejects before it ever reaches the PayPal processor, so the seller has
+  # to be told to come to us rather than to expect money on the next payout date.
+  #
+  # A terminal rejection no longer causes a hold itself (see pause_payouts_after_repeated_failures),
+  # but the hundreds of sellers who were already stuck before that stopped are still holding one,
+  # as is anyone paused for an unrelated reason, so the paused wording still has to exist.
   def terminal_paypal_failure_seller_solution
-    if user.payouts_paused?
-      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_WHILE_PAUSED
+    fix = if user.can_setup_bank_payouts?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK
     else
-      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY
     end
+
+    next_step = if user.payouts_paused?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED
+    else
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP
+    end
+
+    "#{fix} #{next_step}"
   end
 
   def reversed_by?(reversing_payout_id)

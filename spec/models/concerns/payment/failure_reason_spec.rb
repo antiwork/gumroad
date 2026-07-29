@@ -38,6 +38,12 @@ describe Payment::FailureReason do
         end
 
         context "when the rejection is terminal" do
+          before do
+            # Gumroad supports bank payouts here, so the note may suggest one. Most sellers who hit
+            # these rejections are in PayPal-only countries, covered separately below.
+            create(:user_compliance_info, user: payment.user, country: "United States")
+          end
+
           it "tells the seller PayPal will not send the payout and what to change" do
             expect do
               payment.mark_failed!("PAYPAL 3148")
@@ -71,6 +77,18 @@ describe Payment::FailureReason do
             expect(payment.user.comments.last.content).to include(
               "your PayPal account cannot receive US dollars"
             )
+          end
+
+          it "does not tell a seller in a PayPal-only country to add a bank account" do
+            payment.user.alive_user_compliance_info.mark_deleted!
+            create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+            payment.mark_failed!("PAYPAL 3148")
+
+            note = payment.user.comments.last
+            expect(note.content).to include("PayPal is the only payout method we can offer in your country")
+            expect(note.content).to_not include("Add a bank account")
+            expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
           end
         end
       end

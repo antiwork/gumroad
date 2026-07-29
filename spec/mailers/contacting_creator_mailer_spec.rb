@@ -27,6 +27,12 @@ describe ContactingCreatorMailer do
   describe "paypal payout permanently failed" do
     let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
 
+    before do
+      # Gumroad supports bank payouts here, so the email may suggest one. Sellers in PayPal-only
+      # countries — the majority of those hitting these rejections — are covered separately below.
+      create(:user_compliance_info, user: payment.user, country: "United States")
+    end
+
     it "names PayPal, the restriction, and the fix" do
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
@@ -61,6 +67,16 @@ describe ContactingCreatorMailer do
 
       expect(mail.body.encoded).to include("next payout date")
       expect(mail.body.encoded).to_not include("placed a hold on payouts")
+    end
+
+    it "does not tell a seller in a PayPal-only country to add a bank account" do
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("PayPal is the only payout method we can offer in your country")
+      expect(mail.body.encoded).to_not include("add a bank account")
     end
   end
 
