@@ -424,7 +424,7 @@ const StripePaymentElementProvider = ({
           colorTextPlaceholder: colors.placeholder,
           colorBackground: colors.background,
           colorDanger: colors.danger,
-          colorPrimary: colors.indicator,
+          colorPrimary: colors.text,
           borderRadius: "4px",
           focusOutline: `2px solid ${colors.indicator}`,
           focusBoxShadow: "none",
@@ -462,6 +462,15 @@ const StripePaymentElementProvider = ({
           },
           ".Input:focus": {
             boxShadow: "none",
+          },
+          ".AccordionItem--selected": {
+            borderColor: colors.indicator,
+          },
+          ".RadioIconOuter--checked": {
+            stroke: colors.indicator,
+          },
+          ".RadioIconInner--checked": {
+            fill: colors.indicator,
           },
           ".Label": {
             color: colors.text,

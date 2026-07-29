@@ -192,7 +192,7 @@ describe("PaymentElementInput", () => {
       colorTextPlaceholder: "rgb(0,0,0, 0.5)",
       colorBackground: "rgb(248,239,227)",
       colorDanger: "rgb(155,28,18)",
-      colorPrimary: "rgb(0,154,73)",
+      colorPrimary: "rgb(0,0,0)",
       fontFamily: sellerTheme.font_family,
       focusOutline: "2px solid rgb(0,154,73)",
     });
@@ -214,8 +214,13 @@ describe("PaymentElementInput", () => {
     );
 
     expect(elementsRender.options?.appearance?.variables).toMatchObject({
-      colorPrimary: "rgb(148,148,148)",
+      colorPrimary: "rgb(0,0,0)",
       focusOutline: "2px solid rgb(148,148,148)",
+    });
+    expect(elementsRender.options?.appearance?.rules).toMatchObject({
+      ".AccordionItem--selected": { borderColor: "rgb(148,148,148)" },
+      ".RadioIconOuter--checked": { stroke: "rgb(148,148,148)" },
+      ".RadioIconInner--checked": { fill: "rgb(148,148,148)" },
     });
   });
 
@@ -259,6 +264,7 @@ describe("PaymentElementInput", () => {
       colorTextPlaceholder: "rgb(0,0,0, 0.5)",
       colorBackground: "rgb(255,255,255)",
       colorDanger: "rgb(220,52,30)",
+      colorPrimary: "rgb(0,0,0)",
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       focusOutline: "2px solid rgb(255,144,232)",
     });
