@@ -634,4 +634,61 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       expect(wrapper_background).to eq("rgb(235, 235, 235)")
     end
   end
+
+  # Every color a browser actually computes is reachable by the specs above, so
+  # opaque()'s behavior on the shapes it REFUSES has no other coverage — and
+  # this function is where a positional alpha match once read plain black as
+  # transparent, stranding the white bands on the darkest pages. Drive the
+  # shipped source directly so a rewrite that gets any row wrong fails here
+  # rather than on whichever seller's page happens to use that syntax.
+  describe "the canvas opacity check" do
+    # rgb(0, 0, 0) is the row that matters most: black is the common dark-theme
+    # canvas AND the value a positional match misreads, because its blue
+    # channel sits exactly where the alpha would be.
+    let(:opaque_colors) do
+      [
+        "rgb(0, 0, 0)",
+        "rgb(235, 235, 235)",
+        "rgba(18, 52, 86, 0.5)",
+        "color(srgb 0 0 0)",
+        "oklch(0.5 0.1 200)",
+        "black",
+      ]
+    end
+
+    let(:transparent_colors) do
+      [
+        "transparent",
+        "",
+        "rgba(0, 0, 0, 0)",
+        "oklch(0.5 0.1 200 / 0)",
+        "color(srgb 0 0 0 / 0)",
+        # Parens present but unreadable: guessing "opaque" here is what would
+        # paint a zero-alpha color, so it has to default the other way.
+        "light-dark(rgb(0,0,0), rgb(255,255,255))",
+      ]
+    end
+
+    def opaque?(color)
+      page.evaluate_script(<<~JS)
+        (function () {
+          #{RendersCustomHtmlPages::CANVAS_OPAQUE_FN}
+          return opaque(#{color.to_json});
+        })();
+      JS
+    end
+
+    before do
+      seller.update!(custom_html: "<main><h1>BG Studio</h1></main>")
+      visit seller.subdomain_with_protocol
+    end
+
+    it "treats a solid color as paintable" do
+      expect(opaque_colors.reject { opaque?(_1) }).to eq([])
+    end
+
+    it "refuses a color it cannot read as fully opaque" do
+      expect(transparent_colors.select { opaque?(_1) }).to eq([])
+    end
+  end
 end
