@@ -85,11 +85,19 @@ class Ai::StoreAgentService
       |
       # A reply pointing back at a card the creator can still click is truthful, and the model
       # phrases the point-back many ways ("...the price change in my previous message", "...is on
-      # my previous message"). Anything naming an earlier message counts, UNLESS it says that
-      # card is gone — that is a fresh claim about this turn, not a point-back.
-      [^.!?\n]*\b(?:earlier|previous)\s+message\b
-        (?![^.!?\n]*\b(?:gone|missing|disappeared|vanished|no\s+longer|
-          isn['’]t\s+there|not\s+there)\b)
+      # my previous message"). It has to be MY earlier message: "the discount you asked for in
+      # your previous message" describes the creator's request, and the staging claim wrapped
+      # around it is about this turn.
+      #
+      # A sentence that also says the old card is gone, or that a fresh one exists, is not a
+      # point-back either — re-staging because the creator can't see the card is the single most
+      # common way this bug is reported, so those must still reach the guard. The exclusion looks
+      # at the whole clause rather than only what follows, because the reason often comes first
+      # ("you said you can't see the card on my earlier message, so I staged it again").
+      (?![^.!?\n]*\b(?:again|new\s+card|another\s+card|gone|missing|empty|expired|
+        disappeared|vanished|didn['’]t\s+render|no\s+longer|isn['’]t\s+there|
+        not\s+there|can['’]t\s+see)\b)
+      [^.!?\n]*\b(?:my|the)\s+(?:earlier|previous)\s+message\b
       |
       [^.!?\n]*\b(?:before|many\s+times|in\s+the\s+past)\b
     )
@@ -144,9 +152,9 @@ class Ai::StoreAgentService
   # these to follow, so prose about the staging feature in general cannot be mistaken for a claim
   # that this turn staged something.
   STAGED_CLAIM_ACTION_NOUN = /
-    (?:deletion|removal|creation|addition|rename|renaming|archival|
-       update|updates|change|changes|edit|edits|
-       discount|discounts|offer\s+code|offer\s+codes|price\s+change|
+    (?:deletions?|removals?|creations?|additions?|renames?|renaming|archival|
+       updates?|changes?|edits?|fixe?s?|
+       discounts?|offer\s+codes?|price\s+changes?|
        publish(?:ing)?|unpublish(?:ing)?)
   /ix
   STAGED_CLAIM_CONDITIONAL_TAIL = /
@@ -232,21 +240,30 @@ class Ai::StoreAgentService
         ,\s*(?:please\s+)?(?:confirm|approve)\b))
     /ix,
     # The subjectless participle opener, which production produces and the arms above miss because
-    # they all need a subject: "Staged deletion of the last draft. Approve it, then...". The noun
-    # has to read as the OBJECT of the staging — either introduced by a determiner or followed by
-    # "of" — because as a bare sentence subject it is prose about the feature rather than a claim
-    # about this turn ("Staged updates wait for your approval").
+    # they all need a subject: "Staged deletion of the last draft. Approve it, then...". What the
+    # agent staged has to read as the OBJECT of the staging, so a generic sentence subject stays
+    # out: "Staged updates wait for your approval" and "Staged deletion of a product is permanent"
+    # are prose about the feature, not claims about this turn. Three object shapes qualify — a
+    # determiner ("Staged the price change"), a specific "of" complement ("Staged deletion of the
+    # draft"), and a bare noun that ends the clause, which no sentence subject can do because a
+    # subject is always followed by its verb ("Staged deletion. Approve it").
     /
       #{STAGED_CLAIM_BOUNDARY}
       staged\s+
       (?:
         (?:the|a|an|your|that|this|two|both)\s+#{STAGED_CLAIM_ACTION_NOUN}\b
         |
-        #{STAGED_CLAIM_ACTION_NOUN}\s+of\b
+        #{STAGED_CLAIM_ACTION_NOUN}\s+of\s+(?:the|that|this|your|my)\b
+        |
+        #{STAGED_CLAIM_ACTION_NOUN}
+          (?=\s*(?:[.!—–]|\s-\s|and\s+#{STAGED_CLAIM_ACTION_NOUN}\b))
       )
       (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
       (?!#{STAGED_CLAIM_COMPLETED_TAIL})
       (?![^.!?\n]*#{STAGED_CLAIM_CONDITIONAL_TAIL})
+      # An explanation of what staging would do under some condition is not a claim that this turn
+      # staged anything, the same exclusion arms 8 and 9 use.
+      (?![^.!?\n]*\b(?:if|when|whenever|once|after|unless)\b)
       (?![^.!?\n]*\?)
       (?:
         (?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})
@@ -752,9 +769,10 @@ class Ai::StoreAgentService
       return false if proposed_action.present?
       return false if reply.blank?
       # The patterns are alternation-heavy and scan the whole reply, so cost grows with length.
-      # No claim can match without one of these words, and the check is a single linear pass, so
-      # it keeps a long reply from paying for every pattern.
-      return false unless reply.match?(/\b(?:staged|prepared|queued|confirm|approve|ready)/i)
+      # No claim can match without one of these stems, and the check is a single linear pass, so
+      # it keeps a long reply from paying for every pattern. "approv" rather than "approve"
+      # because the phrasing that carries no other stem is "for your approval".
+      return false unless reply.match?(/\b(?:staged|prepared|queued|confirm|approv|ready)/i)
 
       # A reply can quote an earlier assistant message before giving its current answer. Remove only
       # that attributed clause; a later current claim in the same reply still goes through the guard.

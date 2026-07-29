@@ -734,6 +734,9 @@ describe Ai::StoreAgentService do
           "Staged deletion is permanent; click the card only when you're sure.",
           "Staged deletion removes the product permanently. Tap the card whenever a change is pending.",
           "Staged deletion is how I remove a product; you always get to review it first.",
+          "Staged deletion of a product is permanent; click the card only when you're sure.",
+          "Staged deletion of a product removes it permanently. Tap the card whenever a change is pending.",
+          "Staged deletion of any product needs your approval — click the card when a change is pending.",
           # pointing back at a card on an earlier message is truthful — that card is still there
           # to click, so replacing the reply would deny a change that really is pending
           "I staged the price change in my previous message — tap the card above to apply it.",
@@ -805,6 +808,22 @@ describe Ai::StoreAgentService do
           "I staged the update — hit the confirm button when you're ready.",
           "I staged the discount — click the card to apply it.",
           "The change is staged. Tap the card to apply it.",
+          # A bare noun ending the clause is still an object, not a sentence subject.
+          "Staged deletion. Approve it and it goes live.",
+          "Staged removal — tap the card to apply it.",
+          "Staged deletion and rename. Tap the card.",
+          # Re-staging because the creator says they can't see the card is how this bug is usually
+          # reported, so naming the earlier message must not read as a point-back at a live card.
+          "I've staged it again because the card on my earlier message expired — tap the new card below.",
+          "I've staged it again since the card on my earlier message didn't render. Tap the card.",
+          "I've staged it again — you said you can't see the card on my earlier message. Tap the new one.",
+          # YOUR previous message is the creator's request, so the staging claim is about this turn.
+          "I've just staged the price change you asked for in your previous message — tap the card below.",
+          "I've staged the discount you requested in your earlier message. Approve it and it goes live.",
+          # "for your approval" is the one phrasing that carries no other keyword, so it also pins
+          # that the cheap pre-check in the guard doesn't skip these replies.
+          "I've set up the discount for your approval.",
+          "That's set up for your approval.",
         ]
 
         phantoms.each do |reply|
