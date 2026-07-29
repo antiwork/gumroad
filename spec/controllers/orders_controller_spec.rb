@@ -2646,5 +2646,93 @@ describe OrdersController, :vcr do
         expect(response.parsed_body["success"]).to be(true)
       end
     end
+
+    context "when the failure is already visible server-side" do
+      # Card, Link and the wallets confirm in-page, so Stripe sends
+      # payment_intent.payment_failed and we persist its error to purchases.stripe_error_code.
+      # Those declines must NOT also be reported to Sentry: they share this endpoint's single
+      # fixed message, so they land in the same Sentry issue and bury the redirect-method
+      # signal the endpoint was built to capture.
+      %w[card link].each do |payment_method_type|
+        it "logs but does not notify for #{payment_method_type}" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).not_to receive(:notify)
+          expect(Rails.logger).to receive(:error).with(/Client-confirm browser error for order #{order.id}/)
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            stage: "confirm",
+            payment_method_type:,
+            stripe_error_type: "card_error",
+            stripe_error_code: "card_declined",
+            stripe_error_message: "Your card was declined.",
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      it "does not consume the per-order notify budget, so a later redirect-leg failure still reports" do
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        token = order.secure_external_id(scope: "confirm")
+
+        expect(ErrorNotifier).to receive(:notify).once.with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "ideal")
+        )
+
+        (described_class::CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER + 3).times do
+          post :confirm_error, params: { id: token, payment_method_type: "card", stripe_error_code: "card_declined" }
+        end
+        post :confirm_error, params: { id: token, payment_method_type: "ideal", stripe_error_code: "payment_intent_unexpected_state" }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+    end
+
+    context "when the failure leaves no server-side trace" do
+      # These hand the buyer off to an external provider page, so a rejected confirm creates no
+      # charge and no payment_intent.payment_failed webhook — the browser is the only witness.
+      StripeIntentStatus::CLIENT_REDIRECT_PAYMENT_METHOD_TYPES.each do |payment_method_type|
+        it "notifies for #{payment_method_type}" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "Client-confirm browser error",
+            hash_including(payment_method_type:)
+          )
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            payment_method_type:,
+            stripe_error_code: "payment_intent_unexpected_state",
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      it "notifies for an unrecognised payment method so a newly-added one stays visible" do
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "some_new_method")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          payment_method_type: "some_new_method",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+    end
   end
 end
