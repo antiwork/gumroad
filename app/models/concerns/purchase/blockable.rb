@@ -45,11 +45,17 @@ module Purchase::Blockable
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
-  # How many settled, never-refunded, never-disputed purchases a buyer needs behind them before a
-  # fraud-flavoured decline from their card issuer stops being treated as a fraud signal about the
-  # person. Three is well above what a card tester accumulates (their charges fail) and well below
-  # what an ordinary repeat customer or a membership subscriber has.
+  # How many settled purchases a buyer needs behind them before a fraud-flavoured decline from
+  # their card issuer stops being treated as a fraud signal about the person. Three is well above
+  # what a card tester accumulates and well below what an ordinary repeat customer or a membership
+  # subscriber has.
   MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY = 3
+
+  # Purchases only start counting towards clean history once they are this old. A card tester whose
+  # stolen card went through today has a "successful" purchase; what they do not have is a purchase
+  # old enough for the cardholder to have noticed and disputed it. Comfortably longer than the usual
+  # dispute-notification lag, and no obstacle to a real customer, who by definition bought before.
+  MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY = 60.days
 
   MAX_PURCHASER_AGE_FOR_SUSPENSION = 6.hours
   private_constant :MAX_PURCHASER_AGE_FOR_SUSPENSION
@@ -204,12 +210,17 @@ module Purchase::Blockable
     ContactingCreatorMailer.refund_policy_enforced_notification(seller.id).deliver_later
   end
 
-  # True when the person behind this purchase has a payment record that speaks for itself:
-  # several settled purchases, none refunded, none charged back. Matched on the account when the
+  # True when the person behind this purchase has a payment record that speaks for itself: several
+  # settled purchases they actually paid for, none refunded, none under a standing dispute, and old
+  # enough that a defrauded cardholder would have complained by now. Matched on the account when the
   # buyer is logged in and on the email either way, because most membership renewals belong to a
   # buyer who never created a Gumroad account.
+  #
+  # Free purchases are excluded on purpose. They always succeed, so counting them would let anybody
+  # mint the history that exempts them from the block below by downloading three free products.
   def buyer_has_clean_payment_history?
-    history = Purchase.successful.not_fully_refunded.not_chargedback
+    history = Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+                      .where(created_at: ..MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
     history = if purchaser_id.present?
       history.where("purchaser_id = :purchaser_id OR email = :email", purchaser_id:, email:)
     else

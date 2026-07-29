@@ -115,9 +115,11 @@ describe Purchase::Blockable do
     end
 
     context "when the buyer already has a clean payment history" do
+      let(:settled_count) { Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY }
+      let(:long_ago) { 6.months.ago }
+
       it "does not block them, matching on email" do
-        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
-                    email: "loyal@example.com", purchase_state: "successful")
+        create_list(:purchase, settled_count, email: "loyal@example.com", purchase_state: "successful", created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          email: "loyal@example.com",
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
@@ -128,8 +130,8 @@ describe Purchase::Blockable do
 
       it "does not block them, matching on the buyer's account" do
         purchaser = create(:user)
-        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
-                    purchaser:, email: "old-address@example.com", purchase_state: "successful")
+        create_list(:purchase, settled_count, purchaser:, email: "old-address@example.com",
+                                              purchase_state: "successful", created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          purchaser:,
                          email: "new-address@example.com",
@@ -139,10 +141,34 @@ describe Purchase::Blockable do
       end
 
       it "still blocks the card when the past purchases were all refunded" do
-        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
-                    email: "refunded@example.com", purchase_state: "successful", stripe_refunded: true)
+        create_list(:purchase, settled_count, email: "refunded@example.com", purchase_state: "successful",
+                                              stripe_refunded: true, created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          email: "refunded@example.com",
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      it "still blocks the card when the past purchases were free" do
+        create_list(:free_purchase, settled_count, email: "freebies@example.com", purchase_state: "successful",
+                                                   created_at: long_ago)
+        purchase = build(:purchase_in_progress,
+                         email: "freebies@example.com",
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      it "still blocks the card when the past purchases are too recent to have been disputed" do
+        create_list(:purchase, settled_count, email: "brand-new@example.com", purchase_state: "successful",
+                                              created_at: 1.day.ago)
+        purchase = build(:purchase_in_progress,
+                         email: "brand-new@example.com",
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
 
         purchase.mark_failed!
@@ -154,16 +180,25 @@ describe Purchase::Blockable do
       # chargeback check in Purchase::Risk fails the purchase first — so the exclusion is
       # asserted directly on the history check.
       it "does not count charged-back purchases as clean history" do
-        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
-                    email: "disputed@example.com", purchase_state: "successful", chargeback_date: 1.month.ago)
+        create_list(:purchase, settled_count, email: "disputed@example.com", purchase_state: "successful",
+                                              chargeback_date: 1.month.ago, created_at: long_ago)
         purchase = build(:purchase_in_progress, email: "disputed@example.com")
 
         expect(purchase.buyer_has_clean_payment_history?).to be false
       end
 
+      it "counts a chargeback the buyer won as clean history" do
+        create_list(:purchase, settled_count, email: "won-dispute@example.com", purchase_state: "successful",
+                                              chargeback_date: 1.month.ago, chargeback_reversed: true,
+                                              created_at: long_ago)
+        purchase = build(:purchase_in_progress, email: "won-dispute@example.com")
+
+        expect(purchase.buyer_has_clean_payment_history?).to be true
+      end
+
       it "still blocks the card when the buyer is just short of the threshold" do
-        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY - 1,
-                    email: "newish@example.com", purchase_state: "successful")
+        create_list(:purchase, settled_count - 1, email: "newish@example.com", purchase_state: "successful",
+                                                  created_at: long_ago)
         purchase = build(:purchase_in_progress,
                          email: "newish@example.com",
                          error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
