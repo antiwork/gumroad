@@ -19,6 +19,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductEditBoundary } from "$app/components/ProductEdit/Boundary";
 import { ProductEditLoadingSkeleton } from "$app/components/ProductEdit/LoadingSkeleton";
 
+// Rails routes reach the app as a `Routes` global that vitest does not have. Only the products
+// path is needed here, and asserting against the real value is the point of one of the tests below.
+vi.stubGlobal("Routes", { products_path: () => "/products" });
+
 // Count fetches of the editor's chunk without loading the real thing.
 const editorChunkLoads = vi.fn();
 vi.mock("$app/components/server-components/ProductEditPage", () => {
@@ -113,7 +117,9 @@ describe("product editor loading", () => {
       screen.getByRole("heading", { name: /couldn’t open this product|couldn't open this product/u }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Back to products" })).toBeTruthy();
+    // A link, not a history action: someone who opened the editor in a new tab or from a bookmark
+    // has no history to go back to, so "Back to products" has to name where it goes.
+    expect(screen.getByRole("link", { name: "Back to products" }).getAttribute("href")).toBe("/products");
 
     consoleError.mockRestore();
   });
