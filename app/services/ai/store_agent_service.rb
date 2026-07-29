@@ -190,12 +190,14 @@ class Ai::StoreAgentService
        appears?|applies|apply|waits?|wants?|shows?|goes|does|do|doesn['’]t|
        has|have|had|can|can['’]t|cannot|will|won['’]t|would|could|should|might|must)\b
   /ix
-  # The rest of a noun phrase between the noun and its verb ("of the last draft is..."). It stops
-  # at any punctuation, because the words after a sentence break belong to the instruction rather
-  # than the subject, and it refuses conjunctions and pronouns so that a real claim continuing
-  # into a second clause ("Staged the change and it is ready to confirm") keeps matching.
+  # The rest of a noun phrase between the noun and its verb ("of the very last remaining draft
+  # is..."). Length is not capped: a subject can be arbitrarily long, and a cap just moves the
+  # false positive one adjective further out. What bounds it instead is the clause — it stops at
+  # any punctuation, because words after a sentence break belong to the instruction rather than
+  # the subject, and it refuses conjunctions and pronouns so that a real claim continuing into a
+  # second clause ("Staged the change and it is ready to confirm") keeps matching.
   STAGED_CLAIM_SUBJECT_FILLER = /
-    (?:\s+(?!(?:and|but|so|then|it|that|this|which)\b)[a-z][-'’a-z]*){0,3}
+    (?:\s+(?!(?:and|but|so|then|it|that|this|which)\b)[a-z][-'’a-z]*)*
   /ix
   # Noun-phrase-then-verb, i.e. the noun was the subject. The verb is only disqualifying when its
   # predicate is a general property of the feature; "Staged deletion of the draft is ready for your

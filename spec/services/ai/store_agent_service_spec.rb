@@ -745,6 +745,10 @@ describe Ai::StoreAgentService do
           "Staged the price change is not something I can undo. Confirm the card only when sure.",
           "Staged updates of the product need your approval — tap the card when one is pending.",
           "Staged deletion of a product removes it permanently. Tap the card whenever a change is pending.",
+          # A subject can carry any number of modifiers, so the distance to its verb is bounded by
+          # the clause rather than by a word count.
+          "Staged deletion of the very last remaining draft is permanent. Tap the card when you're sure.",
+          "Staged renaming of the second product in your unpublished archive is instant. Click the card when you're sure.",
           "Staged deletion of any product needs your approval — click the card when a change is pending.",
           # pointing back at a card on an earlier message is truthful — that card is still there
           # to click, so replacing the reply would deny a change that really is pending
@@ -832,6 +836,7 @@ describe Ai::StoreAgentService do
           # feature. "is ready for your confirmation" is a claim about this turn, so the
           # subject-verb escape must not swallow it.
           "Staged deletion of the draft is ready for your confirmation.",
+          "Staged deletion of the very last remaining draft is ready for your confirmation.",
           "Staged the change and it is ready to confirm.",
           # The model's instruction vocabulary is not limited to "confirm". Each of these needs
           # the new vocabulary to be caught at all: the simple past and the change-noun openers
