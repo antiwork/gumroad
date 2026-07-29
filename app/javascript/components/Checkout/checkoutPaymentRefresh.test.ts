@@ -4,6 +4,7 @@ import {
   buildCartSaveRefreshCallbacks,
   type CartSaveCallbacks,
   CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE,
+  createLaneInvalidationSuppressor,
 } from "$app/components/Checkout/checkoutPaymentRefresh";
 
 const CONFIG = { type: "payment-element" };
@@ -40,15 +41,54 @@ describe("buildCartSaveRefreshCallbacks", () => {
   });
 
   it("re-issues the save when the response came back without a configuration", () => {
-    // A validation error is a valid Inertia response, but it carries no recomputed configuration,
-    // which leaves the same question open: which cart does the server hold now?
+    // A transport-level truncation or a response that simply omitted the prop leaves the same
+    // question open: which cart does the server hold now?
     const save = vi.fn(neverAnswers);
     const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
 
-    callbacks.onSuccess({ props: { errors: { cart: "is invalid" } } });
+    callbacks.onSuccess({ props: {} });
     callbacks.onFinish({});
 
     expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-issues the save when the server reported the edit failed, even though a configuration came back", () => {
+    // The shape CheckoutController#update actually produces on a handled failure. Every one of its
+    // outcomes is a redirect to checkout_path, so the reloaded page always carries a well-formed
+    // checkout_payment — but on a failure the edit did not persist, so that configuration
+    // describes the PRE-edit cart while the buyer is still looking at the edited one. Adopting it
+    // would clear the hold and re-enable Pay against an element mounted for a different cart.
+    const save = vi.fn(neverAnswers);
+    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable: vi.fn() });
+
+    callbacks.onSuccess({
+      props: {
+        checkout_payment: { integration: "payment_element" },
+        flash: { message: "Sorry, something went wrong. Please try again.", status: "danger" },
+      },
+    });
+    callbacks.onFinish({});
+
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a configuration delivered alongside a non-error flash", () => {
+    // Only an error flash means the edit was rejected. A notice or warning riding along with a
+    // successful save must not send the hold into a pointless recovery round trip.
+    const save = vi.fn(neverAnswers);
+    const onUnrecoverable = vi.fn();
+    const callbacks = buildCartSaveRefreshCallbacks({ save, onUnrecoverable });
+
+    callbacks.onSuccess({
+      props: {
+        checkout_payment: { integration: "payment_element" },
+        flash: { message: "Discount applied.", status: "success" },
+      },
+    });
+    callbacks.onFinish({});
+
+    expect(save).not.toHaveBeenCalled();
+    expect(onUnrecoverable).not.toHaveBeenCalled();
   });
 
   it("does not recover when a newer save interrupted this one", () => {
@@ -139,5 +179,64 @@ describe("buildCartSaveRefreshCallbacks", () => {
     lost.onFinish({});
 
     expect(save).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createLaneInvalidationSuppressor", () => {
+  // The keys are opaque strings to this module; these stand in for two carts whose payment lanes
+  // differ, e.g. the same item at quantity 1 and quantity 2 (quantity moves the cart total, which
+  // is what puts Klarna in or out of the served payment_method_types).
+  const ACCEPTED = "seller1|prod|opt|1|500";
+  const DETOUR = "seller1|prod|opt|2|1000";
+
+  it("suppresses the claimed key once", () => {
+    const { claim, shouldSuppressLaneInvalidation } = createLaneInvalidationSuppressor();
+
+    claim(ACCEPTED);
+
+    expect(shouldSuppressLaneInvalidation(ACCEPTED)).toBe(true);
+  });
+
+  it("stops suppressing the claimed key after the echo it was claimed for", () => {
+    // The bug this pins: while the claim persisted, returning the cart to the accepted key skipped
+    // the invalidation for the rest of the session, so no hold was placed on Pay even though the
+    // configuration on screen had been computed for the cart the buyer detoured through.
+    const { claim, shouldSuppressLaneInvalidation } = createLaneInvalidationSuppressor();
+
+    claim(ACCEPTED);
+    expect(shouldSuppressLaneInvalidation(ACCEPTED)).toBe(true);
+
+    // The buyer edits away from the accepted cart, then back to exactly it.
+    expect(shouldSuppressLaneInvalidation(DETOUR)).toBe(false);
+    expect(shouldSuppressLaneInvalidation(ACCEPTED)).toBe(false);
+  });
+
+  it("does not suppress a key that was never claimed", () => {
+    const { claim, shouldSuppressLaneInvalidation } = createLaneInvalidationSuppressor();
+
+    claim(ACCEPTED);
+
+    expect(shouldSuppressLaneInvalidation(DETOUR)).toBe(false);
+    // A miss must not consume the claim, or the echo it was made for goes unsuppressed and the
+    // accepted offer's resume is dropped.
+    expect(shouldSuppressLaneInvalidation(ACCEPTED)).toBe(true);
+  });
+
+  it("suppresses nothing before anything is claimed", () => {
+    const { shouldSuppressLaneInvalidation } = createLaneInvalidationSuppressor();
+
+    expect(shouldSuppressLaneInvalidation(ACCEPTED)).toBe(false);
+  });
+
+  it("replaces an unconsumed claim rather than queueing it", () => {
+    // Two offers accepted in a row: only the newest cart's echo is still pending, and the older
+    // claim must not survive to exempt that cart later.
+    const { claim, shouldSuppressLaneInvalidation } = createLaneInvalidationSuppressor();
+
+    claim(ACCEPTED);
+    claim(DETOUR);
+
+    expect(shouldSuppressLaneInvalidation(DETOUR)).toBe(true);
+    expect(shouldSuppressLaneInvalidation(ACCEPTED)).toBe(false);
   });
 });

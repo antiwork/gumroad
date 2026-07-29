@@ -34,7 +34,11 @@ import {
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
-import { buildCartSaveRefreshCallbacks, type CartSaveCallbacks } from "$app/components/Checkout/checkoutPaymentRefresh";
+import {
+  buildCartSaveRefreshCallbacks,
+  createLaneInvalidationSuppressor,
+  type CartSaveCallbacks,
+} from "$app/components/Checkout/checkoutPaymentRefresh";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -303,10 +307,10 @@ const CheckoutIndexPage = () => {
     [currentOffer],
   );
 
-  // The cart key whose payment-configuration invalidation has already been dispatched eagerly by
-  // acceptOffer, so the passive effect that watches the same key can tell "I already did this one"
-  // from "the buyer edited the cart again".
-  const invalidatedLaneKeyRef = React.useRef<string | null>(null);
+  // Lets acceptOffer tell the passive lane-key effect "I already invalidated for this exact cart",
+  // for that one echo only. See createLaneInvalidationSuppressor for why the claim is consumed
+  // rather than kept.
+  const laneInvalidation = React.useRef(createLaneInvalidationSuppressor()).current;
   const completeOffer = () => {
     if (!currentOffer) return;
     completedOfferIds.add(currentOffer.id);
@@ -326,14 +330,25 @@ const CheckoutIndexPage = () => {
     // Record which cart this invalidation covers so the passive effect, which fires for this same
     // cart change, does not repeat it. A repeat would look like a fresh buyer edit and cancel the
     // resume that the "validate" below arms.
-    invalidatedLaneKeyRef.current = paymentLaneCartKeyFor(newCart);
+    laneInvalidation.claim(paymentLaneCartKeyFor(newCart));
     dispatch({ type: "invalidate-checkout-payment" });
-    if (surchargesIfAccepted)
-      dispatch({
-        type: "update-products",
-        products: getProducts(newCart),
-        surcharges: surchargesIfAccepted,
-      });
+    // Unconditionally, including when the accepted cart's quote has not arrived yet. The products
+    // have to be in state before completeOffer's "validate" runs, because that "validate" is the
+    // dispatch responsible for pointing out required fields belonging to the product the buyer just
+    // added — and it can only see fields for products it has. Making this conditional on the quote
+    // meant that whether the cross-sold product's required fields were flagged depended on whether
+    // a background surcharge request happened to have landed, which is a race the buyer can lose:
+    // upsell_spec.rb:489 loses it, and the fields sit un-flagged with no explanation.
+    //
+    // Passing no surcharges leaves the quote pending, which cancels the pipeline back to "input".
+    // That is the same thing the passive [cartForm.data.cart] effect does one tick later, so this is
+    // the existing behaviour brought forward rather than a new one, and it is the fail-closed
+    // direction: the totals really are not yet ones a charge would honour.
+    dispatch({
+      type: "update-products",
+      products: getProducts(newCart),
+      ...(surchargesIfAccepted ? { surcharges: surchargesIfAccepted } : {}),
+    });
     completeOffer();
   };
 
@@ -778,7 +793,10 @@ const CheckoutIndexPage = () => {
     // and armed for resume. A second invalidation here would read as "the buyer edited the cart
     // again" and drop the resume, stranding the checkout with no purchase and no feedback — the
     // deadlock this echo caused before.
-    if (invalidatedLaneKeyRef.current === paymentLaneCartKey) return;
+    //
+    // The claim covers only that one echo: it is consumed here, so a later edit that returns the
+    // cart to the accepted key is invalidated normally. See createLaneInvalidationSuppressor.
+    if (laneInvalidation.shouldSuppressLaneInvalidation(paymentLaneCartKey)) return;
     dispatch({ type: "invalidate-checkout-payment" });
   }, [paymentLaneCartKey]);
   // The recomputed configuration, from the save's partial reload. Inertia builds a fresh props

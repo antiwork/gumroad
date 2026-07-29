@@ -33,6 +33,10 @@
 // The name of the prop carrying the payment configuration. A response counts as having delivered
 // one only if this key is actually present in it.
 const CHECKOUT_PAYMENT_PROP = "checkout_payment";
+const FLASH_PROP = "flash";
+// What InertiaRendering#inertia_flash_props emits for flash[:alert] — the status the checkout
+// controller sets on every handled failure of a cart save.
+const FLASH_ERROR_STATUS = "danger";
 
 export const CHECKOUT_PAYMENT_REFRESH_FAILED_MESSAGE =
   "We couldn't refresh your payment details. Please reload the page to continue.";
@@ -50,6 +54,68 @@ export type CartSaveCallbacks = {
 };
 
 export const deliveredCheckoutPayment = (page: ResponseProps) => CHECKOUT_PAYMENT_PROP in page.props;
+
+/**
+ * True when the save came back reporting a failure to the buyer.
+ *
+ * `CheckoutController#update` answers every outcome with a redirect to `checkout_path` — the
+ * successful write and each handled failure alike (invalid cart params, too many items, a
+ * `RecordInvalid` from an out-of-range quantity, a `Deadlocked` under load). The redirected GET
+ * re-renders `checkout_payment` from the *persisted* cart, so on a failure the response carries a
+ * perfectly well-formed configuration that describes the cart as it was BEFORE the edit.
+ *
+ * That is the one case where a configuration arriving is not good news. The client never resets
+ * its own cart from the response, so the buyer is still looking at the edited cart; adopting the
+ * delivered configuration would lift the staleness hold and re-enable Pay with an element mounted
+ * for a different cart than the one on screen — exactly the mismatch this whole mechanism exists
+ * to prevent. A lane-changing edit makes it concrete: remove one of two sellers' items so the cart
+ * becomes quotable, have that save hit the deadlock rescue, and the buyer would be shown a
+ * local-currency total while the element still charges canonical USD.
+ *
+ * The flash is the server's own signal that it did not persist the edit, and it is requested in
+ * the same partial reload, so it is available on exactly the responses this needs to judge.
+ */
+export const reportedSaveFailure = (page: ResponseProps) => {
+  const flash: unknown = page.props[FLASH_PROP];
+  if (typeof flash !== "object" || flash === null || !("status" in flash)) return false;
+  return flash.status === FLASH_ERROR_STATUS;
+};
+
+/**
+ * Tracks the one payment-lane invalidation that accepting a cross-sell offer performs itself, so
+ * the passive effect watching the lane key can skip its echo of that same change without ever
+ * skipping a real one.
+ *
+ * Accepting an offer changes the cart and dispatches the invalidation synchronously, because the
+ * "validate" it dispatches in the same tick has to see the hold. The effect that normally notices
+ * lane-key changes then fires for that change too, and a second invalidation reads as "the buyer
+ * edited again" and drops the resume the refused validate armed — leaving the checkout with no
+ * purchase and no feedback.
+ *
+ * Suppressing that echo means remembering the key, but only until the echo arrives. Remembering it
+ * for longer exempts that cart permanently: a buyer who edits away from the accepted cart and back
+ * to it returns to a key the effect refuses to invalidate, so no hold is placed even though the
+ * configuration on screen was computed for the cart they detoured through. Quantity and price are
+ * part of the key and feed the served configuration, so such a detour really can change the lane.
+ *
+ * Hence claim-once semantics: `shouldSuppressLaneInvalidation` consumes the claim as it honours it.
+ */
+export const createLaneInvalidationSuppressor = () => {
+  let claimedKey: string | null = null;
+
+  return {
+    /** Records that the caller has already invalidated for `key` itself. */
+    claim: (key: string) => {
+      claimedKey = key;
+    },
+    /** True when `key` is the claimed one — and consumes the claim, so only the echo is skipped. */
+    shouldSuppressLaneInvalidation: (key: string) => {
+      if (claimedKey !== key) return false;
+      claimedKey = null;
+      return true;
+    },
+  };
+};
 
 /**
  * Builds the callbacks for a cart save so that a save which does not deliver a payment
@@ -76,7 +142,10 @@ export const buildCartSaveRefreshCallbacks = ({
 
   return {
     onSuccess: (page) => {
-      delivered = deliveredCheckoutPayment(page);
+      // A configuration that came back alongside an error flash describes the cart the server
+      // still holds, not the edited one on screen, so it is treated as non-delivery: the recovery
+      // below re-saves and asks again rather than lifting the hold against the wrong cart.
+      delivered = deliveredCheckoutPayment(page) && !reportedSaveFailure(page);
     },
     onFinish: (visit) => {
       if (delivered) return;

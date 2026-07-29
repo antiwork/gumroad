@@ -950,6 +950,13 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // would pay through an element configured for the cart as it was before the edit. Accepting
         // an offer invalidates synchronously (see acceptOffer) precisely so this refusal sees it.
         if (state.surcharges.type === "error") state.surcharges = { type: "pending" };
+        // Flag the buyer's own missing fields right now, rather than waiting for the refreshed
+        // configuration to land and the resume to re-validate. Accepting a cross-sell adds that
+        // product's required fields to the form, and the "validate" this refusal is handling is the
+        // very dispatch that is supposed to point them out; deferring it means the buyer clicks
+        // through the offer and gets a silent, unexplained pause on a checkout that looks complete.
+        // The refusal itself is unchanged — the submit still does not proceed.
+        const refusedErrors = validatePaymentMethodIndependentFields(state);
         // Remember to finish this submit once everything it is waiting for lands. The offer pipeline
         // dispatches "validate" as the last step of accepting an offer, so if the refusal were the
         // end of it the buyer's confirmed purchase would silently never be placed.
@@ -960,8 +967,19 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // meant the resume was never armed for the offer flow it exists to serve. The quote's own
         // refetch path is not bypassed: resumeRefusedSubmitIfReady waits for the quote to load and
         // re-runs full validation before the submit proceeds.
-        if (state.checkoutPaymentStale) state.resumeSubmitAfterCheckoutPayment = true;
-        state.status = { type: "input", errors: state.status.type === "input" ? state.status.errors : new Set() };
+        //
+        // Not armed when the form is incomplete: the buyer has to fix the flagged fields and press
+        // Pay again anyway, and an armed resume would fire a submit they did not ask for the moment
+        // the configuration lands — re-running validation, failing again, and clearing nothing.
+        if (state.checkoutPaymentStale && refusedErrors.size === 0) state.resumeSubmitAfterCheckoutPayment = true;
+        state.status = {
+          type: "input",
+          errors: refusedErrors.size
+            ? refusedErrors
+            : state.status.type === "input"
+              ? state.status.errors
+              : new Set<string>(),
+        };
         return;
       }
       const errors = validatePaymentMethodIndependentFields(state);
