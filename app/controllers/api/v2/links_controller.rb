@@ -83,11 +83,14 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     end
 
-    currency = normalize_price_currency_type(params[:price_currency_type]) || current_resource_owner.currency_type
+    # Only an absent key falls back to the seller's default: a supplied-but-blank currency is an
+    # invalid explicit value and has to reach validation, same as the update path.
+    supplied_currency = params.key?(:price_currency_type)
+    currency = supplied_currency ? normalize_price_currency_type(params[:price_currency_type]) : current_resource_owner.currency_type
     if !CURRENCY_CHOICES.key?(currency)
       # Echo what the caller sent, not the normalized form — telling someone who typed "ZZZ"
       # that 'zzz' is unsupported reads like a different error than the one they caused.
-      return render_response(false, message: "'#{params[:price_currency_type].presence || currency}' is not a supported currency.")
+      return render_response(false, message: "'#{supplied_currency ? params[:price_currency_type] : currency}' is not a supported currency.")
     end
 
     if params.key?(:tags)

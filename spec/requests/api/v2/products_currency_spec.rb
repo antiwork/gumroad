@@ -43,6 +43,31 @@ describe "Products API currency normalization", type: :request do
     expect(seller.links.last.price_currency_type).to eq("zar")
   end
 
+  it "rejects an explicitly blank price_currency_type instead of using the seller's default" do
+    seller.update!(currency_type: "eur")
+
+    post "/api/v2/products",
+         params: { access_token: token.token, name: "Blank currency", price: 21_999, price_currency_type: "   " }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include(
+      "success" => false,
+      "message" => "'   ' is not a supported currency."
+    )
+    expect(seller.links.count).to eq(0)
+  end
+
+  it "uses the seller's default currency when price_currency_type is omitted" do
+    seller.update!(currency_type: "eur")
+
+    post "/api/v2/products",
+         params: { access_token: token.token, name: "Default currency", price: 21_999 }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("success" => true)
+    expect(seller.links.last.price_currency_type).to eq("eur")
+  end
+
   it "names the currency the caller actually sent when rejecting it" do
     post "/api/v2/products",
          params: { access_token: token.token, name: "Bad currency", price: 21_999, price_currency_type: "ZZZ" }
