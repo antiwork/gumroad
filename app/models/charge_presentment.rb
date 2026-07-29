@@ -5,6 +5,11 @@ class ChargePresentment < ApplicationRecord
   has_many :purchase_presentments, dependent: :destroy
 
   validates :processor, :presentment_currency, presence: true
+
+  # fx_rate is the rate the buyer was quoted — Stripe's spread already priced in; the fee-free
+  # base_rate is deliberately not persisted, so the spread is not reconstructible from these
+  # rows (see StripeFxQuote#parsed_rate and the note on Balance#holding_currency).
+
   # Stripe rows come in two shapes. Card-path buyer presentment locks a Stripe FX quote,
   # so those rows carry all three quote columns. Method-forced local payment methods
   # (iDEAL/Bancontact) charging a product already priced in the forced currency have no
