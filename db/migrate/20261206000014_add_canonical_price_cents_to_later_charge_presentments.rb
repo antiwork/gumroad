@@ -18,8 +18,8 @@
 # number is the only thing db:migrate will actually run.
 class AddCanonicalPriceCentsToLaterChargePresentments < ActiveRecord::Migration[7.1]
   def up
-    # No rows exist yet in any environment: nothing writes a fixing until the membership
-    # buyer-currency lane opens, which this branch holds shut. A NOT NULL column with no default
+    # No rows exist yet in any environment: nothing writes a fixing until a seller is put in the
+    # :buyer_currency_subscriptions ramp, and no seller is in it. A NOT NULL column with no default
     # is therefore safe to add outright — there is nothing to backfill. Guarded because the column
     # is present already on any database created from db/schema.rb after this branch added it there.
     return if column_exists?(:later_charge_presentments, :canonical_price_cents)
