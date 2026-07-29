@@ -28,6 +28,21 @@ export const getApplicableCheckoutStyle = (checkoutStyle: CheckoutStyle | null |
 export const getCheckoutIndicatorCss = (theme: CheckoutTheme) =>
   `:root { --indicator: ${hexToRgb(theme.indicator_color)}; }`;
 
+// The receipt must keep the theme the buyer actually checked out under. Re-deriving it live cannot
+// work: the purchase empties the cart and the follow-up save refreshes `checkoutStyle` to null, so
+// the receipt would un-theme itself a debounce later. `capturePurchased` snapshots the theme from
+// the purchased line items instead — call it once the purchase is committed, past every early
+// return, or a retried payment serves the snapshot to a cart the buyer has since changed.
+// `undefined` means "no purchase yet", distinct from a purchase that resolved to no theme.
+export const useCheckoutStyle = (checkoutStyle: CheckoutStyle | null | undefined, cartSellerIds: string[]) => {
+  const [purchasedStyle, setPurchasedStyle] = React.useState<CheckoutStyle | null | undefined>(undefined);
+
+  return [
+    purchasedStyle === undefined ? getApplicableCheckoutStyle(checkoutStyle, cartSellerIds) : purchasedStyle,
+    (purchasedSellerIds: string[]) => setPurchasedStyle(getApplicableCheckoutStyle(checkoutStyle, purchasedSellerIds)),
+  ] as const;
+};
+
 type CheckoutThemeContext = {
   theme: CheckoutTheme | null;
   stripe_fonts_css_source: string;

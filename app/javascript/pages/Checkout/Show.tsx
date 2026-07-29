@@ -43,8 +43,8 @@ import {
 import {
   type CheckoutStyle,
   CheckoutThemeProvider,
-  getApplicableCheckoutStyle,
   getCheckoutIndicatorCss,
+  useCheckoutStyle,
 } from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
@@ -249,13 +249,10 @@ const CheckoutIndexPage = () => {
   const listedProductTotalCents = listedTipLines.reduce((sum, line) => sum + line.price, 0);
   const listedTipCents = listedCurrency ? computeTipForListedLines(state, listedTipLines) : 0;
   const [results, setResults] = React.useState<Result[] | null>(null);
-  const [receiptCheckoutStyle, setReceiptCheckoutStyle] = React.useState<CheckoutStyle | null>(null);
-  const checkoutStyle = results
-    ? receiptCheckoutStyle
-    : getApplicableCheckoutStyle(
-        props.checkout_style,
-        cartForm.data.cart.items.map(({ product }) => product.creator.id),
-      );
+  const [checkoutStyle, capturePurchasedCheckoutStyle] = useCheckoutStyle(
+    props.checkout_style,
+    cartForm.data.cart.items.map(({ product }) => product.creator.id),
+  );
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
@@ -582,12 +579,6 @@ const CheckoutIndexPage = () => {
         return item ? { item, result } : [];
       });
       assert(isOpenTuple(results, 1), "startCartPayment returned empty results");
-      setReceiptCheckoutStyle(
-        getApplicableCheckoutStyle(
-          props.checkout_style,
-          results.map(({ item }) => item.product.creator.id),
-        ),
-      );
 
       if (
         results.some(
@@ -686,6 +677,7 @@ const CheckoutIndexPage = () => {
         window.location.href = libraryUrl.toString();
       }
 
+      capturePurchasedCheckoutStyle(results.map(({ item }) => item.product.creator.id));
       setResults(results);
       setCanBuyerSignUp(result.canBuyerSignUp);
     } catch (e) {
