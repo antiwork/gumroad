@@ -2491,6 +2491,26 @@ describe OrdersController, :vcr do
       expect(response.parsed_body["success"]).to be(true)
     end
 
+    # The list reaching the service is what lets it narrow the intent to what the page mounted
+    # (gumroad-private#1528); dropped here, the narrowing silently degrades to the legacy path.
+    it "passes the Payment Element's mounted method list to the prepare service" do
+      expect(Order::PreparePaymentIntentService).to receive(:new).with(
+        hash_including(params: hash_including(payment_element_mounted_payment_method_types: %w[card link]))
+      ).and_call_original
+
+      post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_element_mounted_payment_method_types: %w[card link] }.merge(common_params)
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    # #create must never carry it: it is absent from permitted_order_params and merged only in
+    # #prepare, so a create request cannot reach purchase building with an unknown attribute.
+    it "ignores a mounted method list sent to create" do
+      post :create, params: { line_items:, payment_element_mounted_payment_method_types: %w[card link] }.merge(common_params)
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
       allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
       allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)

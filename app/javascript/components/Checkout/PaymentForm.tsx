@@ -736,13 +736,10 @@ const CreditCardContent = ({
   // USD otherwise, or null while an in-flight surcharge refresh makes it unknowable so the
   // input keeps its current mount instead of remounting and wiping entered card details.
   const stripePaymentElementMountCurrency = getStripePaymentElementMountCurrency(state);
-  // The payment-method list the mounted Payment Element was created with, reported back by the
-  // input each time Elements is created. Sent with #prepare on the client-confirm lane so the
-  // deferred intent can only ever narrow to what this page actually offered: the element's list is
-  // fixed at mount while the server re-resolves at pay time, and an intent listing a method the
-  // element never mounted makes Stripe reject the confirm with no retry available on the same page
-  // (gumroad-private#1528). A ref because it is only read when the token is minted — it must not
-  // re-render the form or feed back into the element's own options.
+  // The method list the mounted Payment Element was created with, sent with #prepare so the
+  // deferred intent can only narrow to what this page offered (gumroad-private#1528). A ref because
+  // it is only read when the token is minted — it must not re-render the form or feed back into the
+  // element's own options.
   const mountedPaymentMethodTypesRef = React.useRef<readonly string[] | null>(null);
   const handleMountedPaymentMethodTypes = React.useCallback((paymentMethodTypes: readonly string[]) => {
     mountedPaymentMethodTypesRef.current = paymentMethodTypes;

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+  STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
   type PaymentElementClientConfirmConfig,
   type PaymentElementConfig,
 } from "$app/components/Checkout/payment";
@@ -197,6 +198,37 @@ describe("PaymentElementInput", () => {
       ["card", "ideal"],
     ]);
     expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(["card", "ideal"]);
+  });
+
+  // The mode is the other half of the remount key, so it needs the same re-capture as the currency:
+  // a mode flip that reused the previous mount's list would report a list the new element does not
+  // have. Unreachable while the config is fixed at page load, reachable once it is reloaded after a
+  // cart change (antiwork/gumroad#6486).
+  it("re-reports the method list when a mode change remounts the element", () => {
+    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[]) => void>();
+    const { rerender } = render(
+      <PaymentElementInput
+        {...props}
+        amount={1_000}
+        mountCurrency="usd"
+        elementsOptions={clientConfirmOptions(["card", "link", "klarna"])}
+        onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
+      />,
+    );
+
+    rerender(
+      <PaymentElementInput
+        {...props}
+        amount={1_000}
+        mountCurrency="usd"
+        elementsOptions={{ ...elementsOptions, stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT }}
+        onMountedPaymentMethodTypes={onMountedPaymentMethodTypes}
+      />,
+    );
+
+    expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link", "klarna"], ["card"]]);
+    expect(elementsMounts.unmounts).toBe(1);
+    expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(["card"]);
   });
 
   it("keeps the mounted currency while a surcharge refresh is in flight", () => {

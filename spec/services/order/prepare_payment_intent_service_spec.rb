@@ -561,9 +561,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
       # Klarna joins the intent only when its launch flag is on AND the final charged total sits
       # inside Stripe's Klarna USD window — the same resolver both the presenter and this service
-      # read, so the Element's list and the intent's list stay equal. The page reports the list it
-      # mounted with, which the intent is then narrowed against (see the narrowing context below);
-      # here the two agree, so Klarna rides.
+      # read, so the Element's list and the intent's list stay equal.
       it "adds Klarna to the deferred intent for a flagged seller and eligible US cart" do
         Feature.activate_user(:checkout_local_method_klarna, seller)
         order, params = build_order

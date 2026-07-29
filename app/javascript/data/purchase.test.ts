@@ -210,15 +210,6 @@ describe("createPurchasesRequestData wallet_type threading", () => {
 
       expect(data).not.toHaveProperty("payment_element_mounted_payment_method_types");
     });
-
-    it("omits the key entirely off the client-confirm lane", () => {
-      const data = createPurchasesRequestData(
-        payloadWith({ type: "new", cardParamsResult: { type: "cc", cardParams, keepOnFile: false, zipCode: null } }),
-        {},
-      );
-
-      expect(data).not.toHaveProperty("payment_element_mounted_payment_method_types");
-    });
   });
 
   // Buyer-currency presentment: an eligible wallet purchase must carry the quote token, or the

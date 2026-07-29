@@ -173,6 +173,19 @@ describe Order::CreateService, :vcr do
         expect(order.reload.purchases.size).to eq(5)
       end
 
+      # Same shape as the mount currency above: a client-confirm hint the prepare service reads
+      # straight from the controller's params. Reaching build_purchase would raise
+      # ActiveModel::UnknownAttributeError, so the exclusion is what keeps a reporting checkout alive.
+      it "builds purchases when the client reports the element's mounted method list (not a Purchase attribute)" do
+        params[:payment_details_source] = "payment_element"
+        params[:confirmation_token] = "ctoken_123"
+        params[:payment_element_mounted_payment_method_types] = %w[card link]
+
+        order, _ = Order::CreateService.new(params:).perform
+
+        expect(order.reload.purchases.size).to eq(5)
+      end
+
       it "records a wallet payment through the Payment Element as a payment_element purchase" do
         # A wallet PaymentMethod submitted by the Payment Element carries both the wallet marker
         # and the element's source hint; it must be attributed to the element surface, not the

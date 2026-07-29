@@ -54,11 +54,6 @@ class OrdersController < ApplicationController
     order_params = build_order_params.merge(
       confirmation_token: params[:confirmation_token].presence,
       payment_element_mount_currency: params[:payment_element_mount_currency].presence,
-      # The method list the Payment Element mounted with. Like the mount currency it is a report
-      # about the element the ConfirmationToken was minted on, not a request — the prepare service
-      # only ever narrows the intent's list against it (see
-      # Order::PreparePaymentIntentService#narrow_to_mounted_payment_method_types), so it cannot
-      # widen the offered set. Read as a scalar array of strings; anything else is ignored there.
       payment_element_mounted_payment_method_types: params[:payment_element_mounted_payment_method_types].presence,
     )
 
