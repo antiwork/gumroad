@@ -286,11 +286,9 @@ class Payment < ApplicationRecord
       last_completed_at = payouts_to_destination.completed.maximum(:created_at)
       failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
       failed_payouts = failed_payouts.where("created_at > ?", last_completed_at) if last_completed_at
-      # A payout we failed ourselves (processor rate limit) says nothing about the seller's bank
-      # account, so it must not push them toward the pause threshold. Jul 28 2026: one Stripe 429
-      # failed 32 compliant sellers' payouts at once, each counting as a strike against an account
-      # with nothing wrong with it. The IS NULL arm is load-bearing — `NOT IN` alone drops NULL
-      # rows, which is most failures, silently disabling this check.
+      # A payout we failed ourselves says nothing about the seller's bank account, so it must not
+      # push them toward the pause threshold. The IS NULL arm is load-bearing — `NOT IN` alone
+      # drops NULL rows, which is most failures, silently disabling this check.
       failed_payouts = failed_payouts.where(
         "failure_reason IS NULL OR failure_reason NOT IN (?)", TRANSIENT_REASONS
       )

@@ -873,6 +873,25 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     end
   end
 
+  test "perform_payment when Stripe rate limits the payout records the rate-limit failure reason and still reverses the internal transfer" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_fails/returns_the_errors") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::RateLimitError.new("Request rate limit exceeded."))
+      ErrorNotifier.stubs(:notify)
+      StripePayoutProcessor.expects(:reverse_internal_transfer!).with(@payment)
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+
+      errors = StripePayoutProcessor.perform_payment(@payment)
+
+      assert_includes errors.first, "rate limit exceeded"
+      assert_equal "failed", @payment.reload.state
+      assert_equal Payment::FailureReason::PROCESSOR_RATE_LIMITED, @payment.failure_reason
+      # A rate limit is not a dead bank reference, so the account must survive for the next run.
+      assert_not @payment.bank_account.reload.deleted?
+    end
+  end
+
   test "perform_payment the payment includes funds not held by stripe, which don't sum to a positive amount the external transfer fails marks the payment as failed" do
     with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_fails/marks_the_payment_as_failed") do
       setup_perform_payment_us
