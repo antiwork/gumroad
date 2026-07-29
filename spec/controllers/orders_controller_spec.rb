@@ -2685,7 +2685,9 @@ describe OrdersController, :vcr do
         (described_class::CONFIRM_ERROR_NOTIFY_LIMIT_PER_ORDER + 3).times do
           post :confirm_error, params: { id: token, payment_method_type: "card", stripe_error_type: "card_error", stripe_error_code: "card_declined" }
         end
-        post :confirm_error, params: { id: token, payment_method_type: "ideal", stripe_error_code: "payment_intent_unexpected_state" }
+        # card_error here for the same reason as the sibling context below: any other type returns
+        # early at the attempt check, so this post would pass even if ideal were suppressed.
+        post :confirm_error, params: { id: token, payment_method_type: "ideal", stripe_error_type: "card_error", stripe_error_code: "payment_intent_unexpected_state" }
 
         expect(response.parsed_body["success"]).to be(true)
       end
