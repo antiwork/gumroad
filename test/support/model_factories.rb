@@ -1380,6 +1380,33 @@ module ModelFactories
     Tag.create!({ name: "tag name #{unique_suffix}" }.merge(attrs))
   end
 
+  # A Discover category (mirrors :taxonomy). Slugs are unique.
+  def create_taxonomy(**attrs)
+    Taxonomy.create!({ slug: "taxonomy-#{unique_suffix}" }.merge(attrs))
+  end
+
+  # A subtitle track (mirrors :subtitle_file, whose default parent is a plain
+  # product file).
+  def create_subtitle_file(product_file: nil, **attrs)
+    SubtitleFile.create!({
+      product_file: product_file || create_product_file,
+      url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}.srt",
+      language: "English",
+    }.merge(attrs))
+  end
+
+  # An HLS rendition of a video file (mirrors :transcoded_video).
+  def create_transcoded_video(streamable: nil, **attrs)
+    key_base_path = "/attachments/#{SecureRandom.hex}"
+    TranscodedVideo.create!({
+      streamable: streamable || create_streamable_video(is_transcoded_for_hls: true),
+      original_video_key: "#{key_base_path}/movie.mp4",
+      transcoded_video_key: "#{key_base_path}/movie/hls/index.m3u8",
+      job_id: "somejobid",
+      state: "completed",
+    }.merge(attrs))
+  end
+
   # A shopping cart (mirrors :cart). `user: nil` builds a guest cart.
   def create_cart(user: :default, **attrs)
     user = create_user if user == :default
