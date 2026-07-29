@@ -29,10 +29,10 @@ class Pages::DefaultProfileDocument
     profile = SellerProfile.find_by(seller_id: seller.id)
     # The colors land inside a <style> block, where HTML-escaping isn't the
     # right defense (it leaves CSS metacharacters like ; { } intact). The model
-    # validates these as hex colors, but its regex uses line anchors (^ $),
-    # which a multiline value can slip past — so re-check the whole string here
-    # (\A \z) and fall back to the defaults for anything that isn't exactly a
-    # hex color. Nothing seller-controlled can then reach the <style> block.
+    # validates these as hex colors, but a raw write (update_column, SQL) never
+    # runs that validation — so re-check the whole string here and fall back to
+    # the defaults for anything that isn't exactly a hex color. Nothing
+    # seller-controlled can then reach the <style> block.
     background = css_hex_color(profile&.background_color, default: "#ffffff")
     highlight = css_hex_color(profile&.highlight_color, default: "#ff90e8")
     # The price chip is filled with the accent and carries text, so it needs the display-adjusted

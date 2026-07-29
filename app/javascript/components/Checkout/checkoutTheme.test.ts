@@ -4,6 +4,7 @@ import { type CheckoutTheme, shouldInvertNativePayPalButton } from "$app/compone
 
 const theme = (background_color: string): CheckoutTheme => ({
   accent_color: "#009a49",
+  indicator_color: "#009a49",
   background_color,
   text_color: "#000000",
   danger_color: "#9b1c12",

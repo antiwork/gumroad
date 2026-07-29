@@ -159,6 +159,29 @@ describe SellerProfile do
     end
   end
 
+  describe "#accent_color_for_indicators" do
+    it "keeps the saved accent when it is already visible on the background" do
+      subject = build(:seller_profile, highlight_color: "#009a49", background_color: "#f8efe3")
+
+      expect(subject.accent_color_for_indicators).to eq("#009a49")
+    end
+
+    it "moves an accent that matches the background far enough to be seen" do
+      subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
+
+      indicator = subject.accent_color_for_indicators
+      expect(indicator).not_to eq("#ffffff")
+      expect(ContrastColor.ratio_between(indicator, "#ffffff")).to be >= ContrastColor::WCAG_AA_NON_TEXT
+    end
+
+    it "leaves the saved accent itself untouched" do
+      subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
+      subject.accent_color_for_indicators
+
+      expect(subject.highlight_color).to eq("#ffffff")
+    end
+  end
+
   describe "font CSS sources" do
     it "builds one Stripe-compatible stylesheet containing every seller font" do
       source = described_class.seller_fonts_css_source

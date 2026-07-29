@@ -171,6 +171,7 @@ describe("PaymentElementInput", () => {
   it("uses the seller theme instead of CSS sampled before the Inertia head update", () => {
     const theme: CheckoutTheme = {
       accent_color: "#009a49",
+      indicator_color: "#009a49",
       background_color: "#f8efe3",
       text_color: "#000000",
       danger_color: "#9b1c12",
@@ -199,9 +200,34 @@ describe("PaymentElementInput", () => {
     expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0)");
   });
 
+  it("draws the focus ring and selected-method marker from the floored indicator, not the saved accent", () => {
+    // A seller can save an accent equal to their background; the ring carries no text, so it uses
+    // the server's 3:1-floored colour while --accent keeps the saved one.
+    const theme: CheckoutTheme = {
+      accent_color: "#ffffff",
+      indicator_color: "#949494",
+      background_color: "#ffffff",
+      text_color: "#000000",
+      danger_color: "#9b1c12",
+      font_family: '"Roboto Mono", "ABC Favorit", monospace',
+    };
+
+    render(
+      <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsRender.options?.appearance?.variables).toMatchObject({
+      colorPrimary: "rgb(148,148,148)",
+      focusOutline: "2px solid rgb(148,148,148)",
+    });
+  });
+
   it("loads seller fonts before a cart-driven theme change without remounting", () => {
     const theme: CheckoutTheme = {
       accent_color: "#009a49",
+      indicator_color: "#009a49",
       background_color: "#f8efe3",
       text_color: "#000000",
       danger_color: "#9b1c12",
@@ -229,6 +255,7 @@ describe("PaymentElementInput", () => {
   it("restores the neutral palette when a cart becomes multi-seller", () => {
     const theme: CheckoutTheme = {
       accent_color: "#009a49",
+      indicator_color: "#009a49",
       background_color: "#f8efe3",
       text_color: "#000000",
       danger_color: "#9b1c12",

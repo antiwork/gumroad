@@ -424,9 +424,9 @@ const StripePaymentElementProvider = ({
           colorTextPlaceholder: colors.placeholder,
           colorBackground: colors.background,
           colorDanger: colors.danger,
-          colorPrimary: colors.accent,
+          colorPrimary: colors.indicator,
           borderRadius: "4px",
-          focusOutline: `2px solid ${colors.accent}`,
+          focusOutline: `2px solid ${colors.indicator}`,
           focusBoxShadow: "none",
         },
         rules: {

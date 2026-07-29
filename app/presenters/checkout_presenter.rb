@@ -63,6 +63,11 @@ class CheckoutPresenter
 
   # The products introduced by checkout URL parameters, after applying the same override order as
   # checkout_props. Gift-wishlist arrivals replace the saved cart; all other arrivals extend it.
+  #
+  # This re-runs the same lookups checkout_props does, rather than sharing a memo with it. A memo
+  # would cache AR objects with their associations already loaded, and callers do reuse a presenter
+  # across a state change — so the second read would serve a stale product. One duplicated preload
+  # per render is the cheaper of the two.
   def checkout_seller_context(params:)
     wishlist_with_products = checkout_wishlist_with_products(params)
     contexts = [

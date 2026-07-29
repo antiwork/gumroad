@@ -7,6 +7,7 @@ import { getCssVariable } from "$app/utils/styles";
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 export type CheckoutTheme = {
   accent_color: string;
+  indicator_color: string;
   background_color: string;
   text_color: string;
   danger_color: string;
@@ -44,6 +45,9 @@ export const getCheckoutThemeColors = (theme: CheckoutTheme) => {
     background: `rgb(${rgb(theme.background_color)})`,
     border: `rgb(${text})`,
     accent: `rgb(${rgb(theme.accent_color)})`,
+    // Focus rings and the selected-method marker sit on the seller's background with no text on
+    // them, so they use the 3:1-floored colour rather than the saved accent, which can match it.
+    indicator: `rgb(${rgb(theme.indicator_color)})`,
     danger: `rgb(${rgb(theme.danger_color)})`,
   };
 };
@@ -64,6 +68,7 @@ export const useNeutralCheckoutThemeColors = () => {
       background: `rgb(${background})`,
       border: `rgb(${text}, ${borderAlpha})`,
       accent: `rgb(${accent})`,
+      indicator: `rgb(${accent})`,
       danger: `rgb(${danger})`,
     }),
     [accent, background, borderAlpha, colorScheme, danger, placeholderAlpha, text],

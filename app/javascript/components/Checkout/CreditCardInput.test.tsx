@@ -73,6 +73,7 @@ describe("CreditCardInput", () => {
   it("uses the seller theme instead of CSS sampled before the Inertia head update", () => {
     const theme: CheckoutTheme = {
       accent_color: "#009a49",
+      indicator_color: "#009a49",
       background_color: "#f8efe3",
       text_color: "#000000",
       danger_color: "#9b1c12",
