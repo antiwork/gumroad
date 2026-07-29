@@ -194,18 +194,33 @@ class Ai::StoreAgentService
   # is..."). Length is not capped: a subject can be arbitrarily long, and a cap just moves the
   # false positive one adjective further out. What bounds it instead is the clause — it stops at
   # any punctuation, because words after a sentence break belong to the instruction rather than
-  # the subject, and it refuses conjunctions and pronouns so that a real claim continuing into a
-  # second clause ("Staged the change and it is ready to confirm") keeps matching.
+  # the subject.
+  #
+  # Two token shapes look like a clause break but stay inside the subject, and each is admitted
+  # only on the evidence of what follows it: a conjunction leading another noun phrase ("and the
+  # archived copy"), and a relative pronoun with its own subject ("that I reviewed"). A pronoun
+  # after the conjunction, or a verb straight after the relative pronoun, really does start a new
+  # clause, which is what keeps "Staged the change and it is ready to confirm" and "Staged the
+  # update that will apply to all products" matching as claims.
   STAGED_CLAIM_SUBJECT_FILLER = /
-    (?:\s+(?!(?:and|but|so|then|it|that|this|which)\b)[a-z][-'’a-z]*)*
+    (?:
+      \s+(?:and|but)(?=\s+(?:the|a|an|your|its|their|my|two|both)\b)
+      |
+      \s+(?:that|which|who)(?=\s+(?!#{STAGED_CLAIM_PREDICATE_VERB})[a-z])
+      |
+      \s+(?!(?:and|but|so|then|it|that|this|which|who)\b)[a-z][-'’a-z]*
+    )*
   /ix
   # Noun-phrase-then-verb, i.e. the noun was the subject. The verb is only disqualifying when its
   # predicate is a general property of the feature; "Staged deletion of the draft is ready for your
   # confirmation" puts the same verb in front of a claim about this turn, so those predicates are
-  # excluded from the exclusion.
+  # excluded from the exclusion. A verb that ends the clause is likewise not one: the words after it
+  # are what make it a general property, and without them ("the change that you want.") the verb
+  # belongs to a relative clause the filler just walked through.
   STAGED_CLAIM_SUBJECT_PREDICATE = /
     #{STAGED_CLAIM_SUBJECT_FILLER}\s+#{STAGED_CLAIM_PREDICATE_VERB}
     (?!\s+(?:just\s+|now\s+|been\s+)*(?:ready|staged|prepared|queued|waiting|set\s+up)\b)
+    (?=\s+[a-z])
   /ix
 
   STAGED_CLAIM_PATTERNS = [

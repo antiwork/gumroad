@@ -750,6 +750,11 @@ describe Ai::StoreAgentService do
           "Staged deletion of the very last remaining draft is permanent. Tap the card when you're sure.",
           "Staged renaming of the second product in your unpublished archive is instant. Click the card when you're sure.",
           "Staged deletion of any product needs your approval — click the card when a change is pending.",
+          # A relative clause or a second noun phrase sits inside the subject, so neither ends it.
+          "Staged deletion of the draft that I carefully reviewed is permanent. Tap the card when you're sure.",
+          "Staged renaming of the product that you flagged last week is instant. Click the card when you're sure.",
+          "Staged deletion of the draft and the archived copy is permanent. Tap the card when you're sure.",
+          "Staged the price change that you asked about and the discount rule is permanent. Confirm the card.",
           # pointing back at a card on an earlier message is truthful — that card is still there
           # to click, so replacing the reply would deny a change that really is pending
           "I staged the price change in my previous message — tap the card above to apply it.",
@@ -838,6 +843,11 @@ describe Ai::StoreAgentService do
           "Staged deletion of the draft is ready for your confirmation.",
           "Staged deletion of the very last remaining draft is ready for your confirmation.",
           "Staged the change and it is ready to confirm.",
+          # A relative clause qualifying the staged object leaves it an object, so walking through
+          # one must not cost the catch.
+          "Staged deletion of the draft that I carefully reviewed is ready for your confirmation.",
+          "Staged the change that you requested. Approve it, then I'll apply it.",
+          "Staged the update that will apply to all products. Confirm the card.",
           # The model's instruction vocabulary is not limited to "confirm". Each of these needs
           # the new vocabulary to be caught at all: the simple past and the change-noun openers
           # only read as current claims when the same sentence tells the creator to act.
