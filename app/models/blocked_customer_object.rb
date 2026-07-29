@@ -16,6 +16,14 @@ class BlockedCustomerObject < ApplicationRecord
   validates :object_value, email_format: true, if: -> { object_type == SUPPORTED_OBJECT_TYPES[:email] }
   validates :buyer_email, email_format: true, allow_blank: true
 
+  # The addresses here are copied off existing buyers rather than typed by anyone, and some of
+  # those rows were stored before we started refusing addresses that carry an invisible
+  # character. This is a blocking control, so it has to fail open on the address and still record
+  # the block: refusing to save would mean a seller asks us to block a buyer, we raise, and the
+  # buyer stays unblocked. Normalizing also keeps the stored value comparable to the normalized
+  # address that email_blocked? looks up.
+  before_validation :normalize_email_values
+
   scope :email, -> { where(object_type: SUPPORTED_OBJECT_TYPES[:email]) }
   scope :active, -> { where.not(blocked_at: nil) }
   scope :inactive, -> { where(blocked_at: nil) }
@@ -49,4 +57,12 @@ class BlockedCustomerObject < ApplicationRecord
 
     update!(blocked_at: nil)
   end
+
+  private
+    def normalize_email_values
+      if object_type == SUPPORTED_OBJECT_TYPES[:email] && object_value.present?
+        self.object_value = InvisibleCharacters.normalize_email(object_value)
+      end
+      self.buyer_email = InvisibleCharacters.normalize_email(buyer_email) if buyer_email.present?
+    end
 end

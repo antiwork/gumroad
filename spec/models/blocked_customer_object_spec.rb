@@ -42,6 +42,35 @@ describe BlockedCustomerObject do
         expect(blocked_customer_object).to be_invalid
         expect(blocked_customer_object.errors.full_messages).to include("Object value is invalid")
       end
+
+      # The addresses here are copied off existing buyers, some stored before we started
+      # refusing addresses that carry an invisible character. Blocking has to still happen:
+      # refusing the save would mean a seller asks us to block a buyer, we raise, and the buyer
+      # stays unblocked — a weaker control than before.
+      it "normalizes an invisible character rather than refusing to record the block" do
+        blocked_customer_object.object_type = "email"
+        blocked_customer_object.object_value = "\u200Fbuyer@example.com"
+
+        expect(blocked_customer_object).to be_valid
+        expect(blocked_customer_object.object_value).to eq "buyer@example.com"
+      end
+
+      it "normalizes an invisible character in buyer_email too" do
+        blocked_customer_object.object_type = "charge_processor_fingerprint"
+        blocked_customer_object.object_value = "fingerprint"
+        blocked_customer_object.buyer_email = "buyer\u00A0@example.com"
+
+        expect(blocked_customer_object).to be_valid
+        expect(blocked_customer_object.buyer_email).to eq "buyer@example.com"
+      end
+
+      it "records the block even when the stored address carries an invisible character" do
+        seller = create(:user)
+
+        expect { described_class.block_email!(email: "\u200Fbuyer@example.com", seller_id: seller.id) }
+          .not_to raise_error
+        expect(described_class.email_blocked?(email: "buyer@example.com", seller_id: seller.id)).to be true
+      end
     end
   end
 
