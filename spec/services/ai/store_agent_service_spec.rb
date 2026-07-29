@@ -862,9 +862,9 @@ describe Ai::StoreAgentService do
           "I've staged a change again because the card on my earlier message was hidden. Tap the card.",
           "I've staged them again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the product update again because the card on my earlier message was hidden. Tap the card.",
-          # One row per alternative in the shared noun list: dropping any one of them fails exactly
-          # one row here. Without that, a noun can leave the list and the only symptom is a
-          # re-staging claim silently reaching the creator again.
+          # Every alternative in the shared noun list is pinned by at least one row in this array.
+          # Without that, a noun can leave the list and the only symptom is a re-staging claim
+          # silently reaching the creator again.
           "I've staged the offer again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the code again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the discount code again because the card on my earlier message was hidden. Tap the card.",
