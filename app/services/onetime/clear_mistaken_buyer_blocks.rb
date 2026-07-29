@@ -29,9 +29,12 @@
 #     Customer Authentication can fail up to fifteen minutes later — so the search covers that
 #     whole span and then keeps only the rows written within a couple of minutes of the earliest
 #     one, which is how the old rule's single burst of inserts looks. This is what keeps the sweep
-#     away from the card-testing velocity blocks, which write identical rows from a different code
-#     path at a different time, and away from an IP address that was blocked because of somebody
-#     else entirely;
+#     away from a velocity block written minutes later by a different code path, and away from an
+#     IP address that was blocked because of somebody else entirely;
+#   * no card-testing velocity rule would have written the same row in that same transition. A
+#     block row is unique per type and value, so one row can be both the mistaken block and a
+#     deliberate velocity block; clearing it would quietly switch velocity enforcement off for
+#     that identifier. See #velocity_protected_pairs;
 #   * the failed purchase's decline code is one of the fraud-related ones;
 #   * and the buyer's payment history is clean by the same standard the live code now uses.
 class Onetime::ClearMistakenBuyerBlocks
@@ -102,7 +105,7 @@ class Onetime::ClearMistakenBuyerBlocks
     # synchronous transition, so genuine rows sit within seconds of each other; a velocity block
     # from a separate event minutes away falls outside that inner window and is left alone.
     def mistaken_blocks_for(purchase)
-      pairs = blocked_pairs_for(purchase)
+      pairs = blocked_pairs_for(purchase) - velocity_protected_pairs(purchase)
       return [] if pairs.empty?
 
       candidates = PlatformBlock.active
@@ -115,6 +118,61 @@ class Onetime::ClearMistakenBuyerBlocks
       candidates.select { |block| block.created_at <= earliest + BLOCK_CREATION_WINDOW }
     end
 
+    # Pairs we must not clear because a card-testing velocity rule wanted the very same row.
+    #
+    # PlatformBlock.add! keeps one row per (type, value) pair and re-activates it rather than
+    # inserting a second one, so a single row can be simultaneously the mistaken block from the
+    # decline and the deliberate block from a velocity rule that fired in the same transition. The
+    # time clustering above cannot tell those apart — the two writes are the same write. Clearing
+    # such a row would silently switch velocity enforcement off for that browser, email, address or
+    # card, which is the one outcome this cleanup must never produce.
+    #
+    # So the velocity rules are re-run against the same history they saw, and everything they would
+    # have blocked is left alone. Deliberately fail-closed in two ways: the counts cover the whole
+    # span in which the failure could have happened rather than a single instant, and the feature
+    # flags that gate the live rules are ignored. Both err towards protecting a row, at the cost of
+    # occasionally leaving a genuinely mistaken block for a human to clear by hand.
+    def velocity_protected_pairs(purchase)
+      as_of = possible_failure_window(purchase).end
+      protected_pairs = []
+
+      # Purchase::Blockable#block_buyer_based_on_recent_failures! calls block_buyer!, which blocks
+      # every identifier on the purchase, so nothing about this buyer can be cleared.
+      recent_email_or_browser_failures =
+        distinct_failed_fingerprints(as_of, Purchase::Blockable::CARD_TESTING_WATCH_PERIOD)
+          .where("email = ? or browser_guid = ?", purchase.email, purchase.browser_guid)
+      return blocked_pairs_for(purchase) if velocity_threshold_met?(recent_email_or_browser_failures)
+
+      # Purchase::Blockable#ban_fraudulent_buyer_browser_guid! blocks the browser only, and counts
+      # over all time rather than a window.
+      if purchase.browser_guid.present?
+        browser_failures = distinct_failed_fingerprints(as_of).where(browser_guid: purchase.browser_guid)
+        protected_pairs << [PlatformBlock::TYPES[:browser_guid], purchase.browser_guid] if velocity_threshold_met?(browser_failures)
+      end
+
+      # Purchase::Blockable#block_ip_address_based_on_recent_failures! blocks the address only.
+      if purchase.ip_address.present?
+        ip_failures = distinct_failed_fingerprints(as_of, Purchase::Blockable::CARD_TESTING_IP_ADDRESS_WATCH_PERIOD)
+                        .where(ip_address: purchase.ip_address)
+        protected_pairs << [PlatformBlock::TYPES[:ip_address], purchase.ip_address] if velocity_threshold_met?(ip_failures)
+      end
+
+      protected_pairs
+    end
+
+    # The failed card fingerprints a velocity rule would have counted at the moment of the failure:
+    # only rows that already existed then, and only within the rule's own watch period.
+    def distinct_failed_fingerprints(as_of, watch_period = nil)
+      scope = Purchase.failed.stripe.with_stripe_fingerprint
+                      .select("distinct stripe_fingerprint")
+                      .where(created_at: ..as_of)
+      watch_period ? scope.where(created_at: (as_of - watch_period)..) : scope
+    end
+
+    def velocity_threshold_met?(scope)
+      scope.count >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+    end
+
     # When the failure that wrote the blocks could have happened: at creation at the earliest, and
     # at the SCA deadline at the latest, plus the window for clock skew on either side.
     def possible_failure_window(purchase)
@@ -124,7 +182,7 @@ class Onetime::ClearMistakenBuyerBlocks
 
     def blocked_pairs_for(purchase)
       emails = [purchase.email, purchase.paypal_email, purchase.gifter_email, purchase.purchaser_email]
-      fingerprints = [purchase.charge_processor_fingerprint, historical_recent_stripe_fingerprint(purchase)]
+      fingerprints = [purchase.charge_processor_fingerprint, *possible_recent_stripe_fingerprints(purchase)]
 
       pairs = emails.compact_blank.uniq.map { [PlatformBlock::TYPES[:email], _1] }
       pairs += fingerprints.compact_blank.uniq.map { [PlatformBlock::TYPES[:charge_processor_fingerprint], _1] }
@@ -133,19 +191,30 @@ class Onetime::ClearMistakenBuyerBlocks
       pairs
     end
 
-    # The card that Purchase::Blockable#recent_stripe_fingerprint would have returned back when the
+    # The cards that Purchase::Blockable#recent_stripe_fingerprint could have returned back when the
     # block was created — "the buyer's most recent card" as of that moment, not as of today.
     #
     # Calling the live method here would return whatever card the buyer has used since, so a buyer
     # who moved on to a new card after being blocked would have that new card's fingerprint checked
     # (it was never blocked) while the row the old rule actually wrote went unnoticed. The buyer
-    # stays unable to pay with the older card while the run reports them cleared. Reconstructing it
-    # by bounding on the purchase's own id reproduces the original ordering exactly, since the
-    # original called .last on the same set and no row with a higher id existed yet.
-    def historical_recent_stripe_fingerprint(purchase)
+    # stays unable to pay with the older card while the run reports them cleared.
+    #
+    # Which single card it was cannot be pinned down, because the moment of failure cannot be:
+    # purchases carry no failed_at, and a charge held for Strong Customer Authentication fails
+    # minutes after it was created, by which time the buyer may have started another purchase that
+    # the original call would have picked instead. Bounding on this purchase's own id assumes the
+    # earliest possibility and misses exactly that case. So collect every card that was on record by
+    # the end of the window in which the failure could have happened, and let the rest of the checks
+    # decide: a fingerprint only gets cleared if a matching row was actually written in the same
+    # burst of inserts as the rest of this purchase's blocks, by automation, and no velocity rule
+    # wanted it. Every card in the set belongs to this buyer's own history, which is the same set the
+    # old rule drew from.
+    def possible_recent_stripe_fingerprints(purchase)
       Purchase.with_stripe_fingerprint
               .where("purchaser_id = ? or email = ?", purchase.purchaser_id, purchase.email)
-              .where(id: ..purchase.id)
-              .last&.stripe_fingerprint
+              .where("purchases.id <= :id OR purchases.created_at <= :as_of",
+                     id: purchase.id, as_of: possible_failure_window(purchase).end)
+              .distinct
+              .pluck(:stripe_fingerprint)
     end
 end

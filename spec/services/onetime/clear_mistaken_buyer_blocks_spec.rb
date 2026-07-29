@@ -128,4 +128,78 @@ describe Onetime::ClearMistakenBuyerBlocks do
 
     expect(PlatformBlock.active.where(object_value: old_card)).to be_empty
   end
+
+  # A charge held for authentication fails minutes after it was created, so by the time the old rule
+  # asked for "the buyer's most recent card" the buyer may have started another purchase — and that
+  # is the card it blocked. Reconstructing only the card that existed when this purchase started
+  # would miss that row and report the buyer cleared while their card stayed blocked.
+  it "clears the card the buyer started using while the charge waited for authentication" do
+    subscriber_email = "sca-subscriber@example.com"
+    later_card = "fingerprint-of-the-card-used-during-authentication"
+    create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                email: subscriber_email, purchase_state: "successful", created_at: 6.months.ago)
+    original = create(:membership_purchase, email: subscriber_email)
+    renewal = create(:purchase, link: original.link, subscription: original.subscription,
+                                email: subscriber_email, purchase_state: "failed",
+                                stripe_error_code: "card_declined_lost_card", stripe_fingerprint: nil,
+                                stripe_transaction_id: nil, charge_processor_id: nil, price_cents: 0)
+    create(:purchase, email: subscriber_email, purchase_state: "successful",
+                      stripe_fingerprint: later_card, created_at: renewal.created_at + 5.minutes)
+    travel_to(renewal.created_at + 10.minutes) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: later_card)
+    end
+
+    described_class.new(dry_run: false).process
+
+    expect(PlatformBlock.active.where(object_value: later_card)).to be_empty
+  end
+
+  # A block row is unique per type and value, so when a card-testing velocity rule fires in the same
+  # transition as the mistaken block, both rules mean the same row. Clearing it would switch velocity
+  # enforcement off for that identifier, so anything a velocity rule would have blocked is left alone
+  # even when the buyer's own payment history is clean.
+  describe "blocks a card-testing rule also wanted" do
+    # Distinct failed cards, enough of them to trip a velocity rule, that are not themselves
+    # candidates for this cleanup (their decline code is not one of the fraud-related ones).
+    def create_failed_card_attempts(count:, created_at:, **attributes)
+      count.times do |index|
+        create(:purchase, purchase_state: "failed", stripe_error_code: "card_declined_insufficient_funds",
+                          stripe_fingerprint: "card-tester-fingerprint-#{index}", created_at:, **attributes)
+      end
+    end
+
+    it "leaves every block in place when the buyer's email tripped the velocity rule" do
+      create_failed_card_attempts(count: Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS - 1,
+                                  created_at: 1.hour.ago, email: buyer_email)
+
+      expect { described_class.new(dry_run: false).process }.not_to change { PlatformBlock.active.count }
+    end
+
+    it "keeps the browser block when enough cards failed on that browser, and clears the rest" do
+      create_failed_card_attempts(count: Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS - 1,
+                                  created_at: 30.days.ago, browser_guid: failed_purchase.browser_guid)
+
+      described_class.new(dry_run: false).process
+
+      expect(PlatformBlock.active.pluck(:object_type, :object_value))
+        .to eq([[PlatformBlock::TYPES[:browser_guid], failed_purchase.browser_guid]])
+    end
+
+    it "keeps the IP address block when enough cards failed from that address, and clears the rest" do
+      create_failed_card_attempts(count: Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS - 1,
+                                  created_at: 12.hours.ago, ip_address: failed_purchase.ip_address)
+
+      described_class.new(dry_run: false).process
+
+      expect(PlatformBlock.active.pluck(:object_type, :object_value))
+        .to eq([[PlatformBlock::TYPES[:ip_address], failed_purchase.ip_address]])
+    end
+
+    it "clears normally when the failed cards are too old for any velocity window" do
+      create_failed_card_attempts(count: Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS - 1,
+                                  created_at: 30.days.ago, ip_address: failed_purchase.ip_address)
+
+      expect { described_class.new(dry_run: false).process }.to change { PlatformBlock.active.count }.from(3).to(0)
+    end
+  end
 end

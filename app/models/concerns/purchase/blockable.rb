@@ -25,11 +25,13 @@ module Purchase::Blockable
   # Max number of failed purchase card fingerprints before a buyer's browser guid gets banned
   MAX_NUMBER_OF_FAILED_FINGERPRINTS = 4
 
+  # Not private, unlike the other card-testing settings below: Onetime::ClearMistakenBuyerBlocks
+  # has to reproduce these two velocity checks exactly, so that a one-off cleanup never clears a
+  # block row that a velocity rule also wanted. Reading the same constant is what keeps the two
+  # from drifting apart.
   CARD_TESTING_WATCH_PERIOD = 7.days
-  private_constant :CARD_TESTING_WATCH_PERIOD
 
   CARD_TESTING_IP_ADDRESS_WATCH_PERIOD = 1.day
-  private_constant :CARD_TESTING_IP_ADDRESS_WATCH_PERIOD
 
   CARD_TESTING_IP_ADDRESS_BLOCK_DURATION = 7.days
   private_constant :CARD_TESTING_IP_ADDRESS_BLOCK_DURATION
