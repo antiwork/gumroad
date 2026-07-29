@@ -5,13 +5,10 @@ class ChargePresentment < ApplicationRecord
   has_many :purchase_presentments, dependent: :destroy
 
   validates :processor, :presentment_currency, presence: true
-  # fx_rate is the rate the buyer was quoted, including Stripe's FX fee and lock premium.
-  # Stripe's fee-free base_rate is discarded in StripeFxQuote, so the spread is not
-  # reconstructible from these rows — by design: the buyer pays it inside the price they
-  # confirmed, and both legs of our ledger settle canonical (measured on gumroad-private#1318).
-  # A settled-vs-canonical gap here is rounding_delta_cents, not FX drift. Persisting base_rate
-  # to make the spread reportable was declined on that issue (antiwork/gumroad#6542).
-  #
+  # fx_rate is the rate the buyer was quoted — Stripe's spread already priced in; the fee-free
+  # base_rate is deliberately not persisted, so the spread is not reconstructible from these
+  # rows (see StripeFxQuote#parsed_rate and the note on Balance#holding_currency).
+
   # Stripe rows come in two shapes. Card-path buyer presentment locks a Stripe FX quote,
   # so those rows carry all three quote columns. Method-forced local payment methods
   # (iDEAL/Bancontact) charging a product already priced in the forced currency have no
