@@ -135,6 +135,8 @@ export const ProductsPageProductsTable = (props: {
                     </StretchedLink>
                   )}
 
+                  {/* Inertia's Link intercepts plain clicks even with target="_blank", so this must
+                      remain a native anchor to open the storefront in a new tab. */}
                   <a href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative z-1">
                     <small className="block">{product.url_without_protocol}</small>
                   </a>
