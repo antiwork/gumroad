@@ -12904,15 +12904,13 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     context "individual→company transition" do
-      it "seeds owner: true, title, percent_ownership: 100 when transitioning from individual to business" do
-        last_individual_info = create(:user_compliance_info, user:)
-        last_individual_info.mark_deleted!
-        create(:user_compliance_info_business, user:)
+      def stub_owner_list(persons)
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { owner: true }, limit: 100)
+          .and_return("data" => persons)
+      end
 
-        expect(Stripe::Account).to receive(:list_persons)
-          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
-          .and_return("data" => [representative_person])
-
+      def capture_person_update(last_individual_info)
         captured_attributes = nil
         expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
           captured_attributes = attributes
@@ -12920,6 +12918,26 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234")
+        captured_attributes
+      end
+
+      let(:last_individual_info) do
+        info = create(:user_compliance_info, user:)
+        info.mark_deleted!
+        create(:user_compliance_info_business, user:)
+        info
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+      end
+
+      it "seeds owner: true, title, percent_ownership: 100 when nobody else owns any of the company" do
+        stub_owner_list([representative_person])
+
+        captured_attributes = capture_person_update(last_individual_info)
 
         expect(captured_attributes[:relationship]).to include(
           representative: true,
@@ -12927,6 +12945,43 @@ describe StripeMerchantAccountManager, :vcr do
           percent_ownership: 100,
         )
         expect(captured_attributes[:relationship][:title]).to be_present
+      end
+
+      it "claims only the ownership the existing beneficial owners have not, so Stripe does not reject the switch for exceeding 100 percent" do
+        stub_owner_list([co_director_owner, third_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship]).to include(
+          representative: true,
+          owner: true,
+          percent_ownership: 33.33,
+        )
+      end
+
+      it "claims no ownership at all when the existing beneficial owners already account for the whole company" do
+        full_owner = Stripe::Person.construct_from(
+          id: "person_full_owner",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: false, owner: true, percent_ownership: 100 }
+        )
+        stub_owner_list([full_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship]).to include(representative: true)
+        expect(captured_attributes[:relationship]).not_to have_key(:owner)
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
+        expect(captured_attributes[:relationship][:title]).to be_present
+      end
+
+      it "ignores the representative's own existing ownership share when working out what is unclaimed" do
+        stub_owner_list([representative_person, co_director_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship][:percent_ownership]).to eq(66.67)
       end
     end
   end

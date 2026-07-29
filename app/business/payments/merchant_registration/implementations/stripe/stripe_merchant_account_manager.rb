@@ -127,6 +127,10 @@ module StripeMerchantAccountManager
   # Use "CEO" as the default title for all Stripe custom connect account owners for now.
   DEFAULT_RELATIONSHIP_TITLE = "CEO"
 
+  # Upper bound when listing an account's beneficial owners. Matches
+  # StripeBeneficialOwnersManager::PERSON_LIST_LIMIT and Stripe's own page maximum.
+  OWNER_LIST_LIMIT = 100
+
   def self.create_account(user, passphrase:, from_admin: false, notify: true)
     tos_agreement = nil
     user_compliance_info = nil
@@ -388,11 +392,21 @@ module StripeMerchantAccountManager
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
     if last_user_compliance_info&.is_individual? && user_compliance_info.is_business?
-      current_attributes.deep_merge!(relationship: {
-                                       owner: true,
-                                       title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE,
-                                       percent_ownership: 100
-                                     })
+      # Switching a seller from individual to business normally means one person who owns the whole
+      # company, so the representative is seeded as a 100% owner. That is wrong whenever the Stripe
+      # account already has beneficial owners on it — someone the seller added under Settings →
+      # Payments, or people left over from an earlier business registration. Stripe rejects the
+      # entire account update with "The total combined ownership of the company would exceed 100
+      # percent" when the representative's share plus theirs goes over 100, so the switch fails
+      # outright and the seller is left mid-migration. Claim only the ownership nobody else holds,
+      # and claim none at all when the existing owners already account for the whole company.
+      relationship = { title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE }
+      unclaimed_percent_ownership = unclaimed_percent_ownership(stripe_account, stripe_person)
+      if unclaimed_percent_ownership.positive?
+        relationship[:owner] = true
+        relationship[:percent_ownership] = unclaimed_percent_ownership
+      end
+      current_attributes.deep_merge!(relationship:)
     end
     diff_attributes = current_attributes
     last_attributes = person_hash(last_user_compliance_info, passphrase)
@@ -415,6 +429,14 @@ module StripeMerchantAccountManager
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+  end
+
+  private_class_method
+  def self.unclaimed_percent_ownership(stripe_account, representative_person)
+    persons = Stripe::Account.list_persons(stripe_account.id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
+    claimed = persons.reject { |person| person.id == representative_person.id }
+                     .sum { |person| person.relationship&.percent_ownership.to_f }
+    [(100 - claimed).round(2), 0].max
   end
 
   private_class_method
