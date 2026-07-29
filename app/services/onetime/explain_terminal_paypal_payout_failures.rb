@@ -88,19 +88,12 @@ module Onetime
         latest
       end
 
-      # A seller can have terminal rejections against more than one PayPal address: one against an
-      # address they have since replaced, and one against the address they are stuck on now. The
-      # note quotes a date and a restriction, so both have to come from a rejection against the
-      # address the block is keyed on — otherwise the seller is told about a payout to an address
-      # they no longer use, and possibly the wrong restriction of the two.
+      # A seller can have terminal rejections against more than one PayPal address, and more than
+      # one against the address they are stuck on now. Which of them the note should quote is the
+      # live payout path's question, not this task's — asked there so the backfill cannot describe a
+      # different blocker than the weekly run does.
       def latest_terminal_failure_for_current_address(user)
-        user.payments
-            .where(processor: PayoutProcessorType::PAYPAL,
-                   payment_address: user.paypal_payout_email,
-                   state: Payment::FAILED,
-                   failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
-            .order(created_at: :desc, id: :desc)
-            .first
+        PaypalPayoutProcessor.rejection_to_explain(user)
       end
 
       def still_blocked?(user)

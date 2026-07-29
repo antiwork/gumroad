@@ -90,14 +90,17 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(note.content).to_not include("contact support")
     end
 
-    it "describes the most recent rejection when the seller has several" do
+    # Newest wins among rejections that agree with each other — the seller should read the date of
+    # the payout that actually stopped, not one from months ago. When the codes DISAGREE about
+    # whether retries continue, the still-blocking one wins instead; see the example further down.
+    it "describes the most recent rejection when the seller has several of the same kind" do
       terminal_failure_for(seller, created_at: 10.weeks.ago)
-      latest = terminal_failure_for(seller, reason: "PAYPAL 14159", created_at: 1.week.ago)
+      latest = terminal_failure_for(seller, created_at: 1.week.ago)
 
       described_class.process
 
       expect(seller.comments.with_type_payout_note.last.content)
-        .to include("your PayPal account cannot receive US dollars")
+        .to include("payments cannot be received in the country on that account's address")
         .and include(latest.created_at.to_fs(:formatted_date_full_month))
     end
 
@@ -155,6 +158,21 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(seller.comments.with_type_payout_note.last.content)
         .to include("your PayPal account cannot receive US dollars")
         .and include(current.created_at.to_fs(:formatted_date_full_month))
+    end
+
+    # The backfill has to name the same blocker the weekly payout run does. On an address carrying
+    # both codes the 3148 keeps stopping the money whichever came last, so a newer 14159 must not
+    # be what the seller is sent to fix. Reviewer finding on #6526.
+    it "explains the rejection still blocking payouts rather than the newest one" do
+      allow_bank_payouts_for(seller)
+      blocking = terminal_failure_for(seller, reason: "PAYPAL 3148", created_at: 6.weeks.ago)
+      terminal_failure_for(seller, reason: "PAYPAL 14159", created_at: 1.week.ago)
+
+      described_class.process
+
+      expect(seller.comments.with_type_payout_note.last.content)
+        .to eq(blocking.terminal_paypal_failure_seller_note)
+        .and include("payments cannot be received in the country on that account's address")
     end
 
     it "skips a seller who has since switched to a bank account" do

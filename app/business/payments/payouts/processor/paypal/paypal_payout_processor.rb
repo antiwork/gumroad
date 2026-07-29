@@ -178,6 +178,33 @@ class PaypalPayoutProcessor
     terminal_failure_for_payout_email?(user, payout_email, reasons:)
   end
 
+  # The rejection the seller has to act on, out of the ones standing against the address on file.
+  #
+  # Newest is the wrong pick when the rejections disagree with each other. 3148 stops the retries
+  # and 14159 does not, so an address carrying both is held by the 3148 whichever of the two came
+  # last. Quoting the newer 14159 would send the seller to add US dollars to an account whose
+  # country cannot receive PayPal payments at all, and this processor would go on refusing the
+  # payout after they had done it — the same dead end this change exists to remove, just better
+  # worded. So a retry-blocking rejection outranks a newer one that is not.
+  #
+  # Rejections from before a payout that later succeeded are dropped: they are history rather than
+  # the seller's situation. If that leaves nothing, the whole set is used instead, so a caller that
+  # has already decided the seller is blocked cannot end up writing no explanation at all.
+  def self.rejection_to_explain(user, payout_email = user.paypal_payout_email)
+    return nil if payout_email.blank?
+
+    payouts_to_address = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email)
+    failures = payouts_to_address
+                 .where(state: Payment::FAILED, failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
+                 .order(created_at: :desc, id: :desc)
+
+    last_completed_at = payouts_to_address.completed.maximum(:created_at)
+    standing = last_completed_at.nil? ? failures : failures.where("created_at > ?", last_completed_at)
+    candidates = standing.to_a.presence || failures.to_a
+
+    candidates.find(&:terminal_paypal_failure?) || candidates.first
+  end
+
   # Put the terminal-PayPal explanation back in front of the seller if they can no longer see it.
   #
   # Called from two places that both leave a blocked seller with nothing to read otherwise: this
@@ -194,22 +221,14 @@ class PaypalPayoutProcessor
   # abandoned, and leaving that as the only thing they can read means a stale date and possibly the
   # wrong restriction of the two. Returns true when a note was written.
   def self.ensure_terminal_failure_explanation_visible(user)
-    payout_email = user.paypal_payout_email
-    return false if payout_email.blank?
-
-    last_failure = user.payments
-                       .where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email,
-                              state: Payment::FAILED,
-                              failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
-                       .order(created_at: :desc, id: :desc)
-                       .first
-    return false if last_failure.nil?
+    rejection = rejection_to_explain(user)
+    return false if rejection.nil?
 
     return false if Payment::FailureReason.terminal_paypal_explanation_note_for?(
-      user.latest_seller_visible_payout_note&.content, last_failure
+      user.latest_seller_visible_payout_note&.content, rejection
     )
 
-    user.add_payout_note(content: last_failure.terminal_paypal_failure_seller_note, seller_visible: true)
+    user.add_payout_note(content: rejection.terminal_paypal_failure_seller_note, seller_visible: true)
     true
   end
 

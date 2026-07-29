@@ -178,6 +178,53 @@ describe PaypalPayoutProcessor do
           expect(note.content).not_to eq(older.content)
         end
 
+        # The two rejections disagree about whether retries continue, so on an address carrying both
+        # the 3148 is what still stops the money even when the 14159 came later. Quoting the newer
+        # one would send the seller to add US dollars to an account in a country PayPal will not pay
+        # into at all, and the payout would keep being refused after they had done it. Reviewer
+        # finding on #6526.
+        it "explains the rejection that is still blocking, not merely the newest one" do
+          currency = create(:payment_failed, user:, payment_address: user.payment_address,
+                                             failure_reason: "PAYPAL 14159", txn_id: nil,
+                                             processor_fee_cents: nil, created_at: 1.day.from_now)
+          user.add_payout_note(content: "Payout on July 1st, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(@refused.terminal_paypal_failure_seller_note)
+          expect(note.content).not_to eq(currency.terminal_paypal_failure_seller_note)
+          expect(note.content).to include("payments cannot be received in the country on that account's address")
+        end
+
+        # Nothing outranks a rejection that does not block retries when that is all there is, so the
+        # seller still gets told about a currency rejection rather than nothing.
+        it "explains a currency rejection when no retry-blocking one stands against the address" do
+          currency_user = create(:user, payment_address: "solo-currency@gr.co", user_risk_state: "compliant")
+          create(:user_compliance_info, user: currency_user)
+          currency = create(:payment_failed, user: currency_user, payment_address: "solo-currency@gr.co",
+                                             failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+
+          expect(described_class.rejection_to_explain(currency_user)).to eq(currency)
+          expect(described_class.ensure_terminal_failure_explanation_visible(currency_user)).to eq(true)
+          expect(currency_user.comments.with_type_payout_note.last.content)
+            .to eq(currency.terminal_paypal_failure_seller_note)
+        end
+
+        # A rejection from before a payout that later succeeded is history, not the seller's
+        # situation, so it must not be what the note quotes.
+        it "ignores rejections from before a payout that later completed" do
+          create(:payment_completed, user:, payment_address: user.payment_address, created_at: 1.hour.from_now)
+          current = create(:payment_failed, user:, payment_address: user.payment_address,
+                                            failure_reason: "PAYPAL 3148", txn_id: nil,
+                                            processor_fee_cents: nil, created_at: 2.hours.from_now)
+
+          expect(described_class.rejection_to_explain(user.reload)).to eq(current)
+        end
+
         it "returns true again once the seller switches to a different PayPal address" do
           user.update!(payment_address: "another@gr.co")
 
