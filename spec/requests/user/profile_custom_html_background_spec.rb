@@ -238,4 +238,43 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       expect(theme_color).to be_nil
     end
   end
+
+  # A clear and a REFUSAL are different messages, and only the comment in
+  # custom_html_background_wrapper_script said so — flipping `if (!color)
+  # return` to also clear left every other example green. That would hand a
+  # child the power to strip its own theme by posting junk.
+  context "when a hostile value arrives after a legitimate color" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="attack" type="button">Send junk</button>
+        </main>
+        <script>
+          document.getElementById("attack").addEventListener("click", function () {
+            parent.postMessage({ type: "gumroad:background", color: "var(--nope)" }, "*");
+            parent.postMessage({ type: "gumroad:background", color: 12345 }, "*");
+          });
+        </script>
+      HTML
+    end
+
+    it "keeps the color already applied" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Send junk" }
+
+      # Poll the whole window: a wrongly-clearing guard blanks the canvas within
+      # a frame of the message, so a single read could pass before it lands.
+      deadline = Time.current + 2.0
+      while Time.current < deadline
+        expect(wrapper_background).to eq("rgb(235, 235, 235)")
+        expect(theme_color).to eq("rgb(235, 235, 235)")
+        sleep 0.1
+      end
+    end
+  end
 end

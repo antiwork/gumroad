@@ -217,7 +217,9 @@ module RendersCustomHtmlPages
   # load.
   #
   # Reported again on class/style mutations and on a color-scheme change so a
-  # theme toggle re-colors the bands instead of stranding the first value.
+  # theme toggle re-colors the bands instead of stranding the first value —
+  # including a toggle that lands on no color at all, which reports null so the
+  # wrapper drops the tint rather than holding the previous theme.
   #
   # Solid html/body colors only. A gradient or image-only background leaves
   # background-color transparent, and a color on a full-page wrapper div is not
