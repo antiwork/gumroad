@@ -261,6 +261,15 @@ class StripePayoutProcessor
     failed = true
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
+  rescue Stripe::RateLimitError => e
+    # Stripe's own retries deliberately exclude 429s, so this reaches us on the first response. The
+    # reason exists so monitoring can see a rate-limited batch; without it the cause is only in
+    # error_message and every `failure_reason` monitor reads the failure as unexplained.
+    failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_RATE_LIMITED
+    payment.error_message = e.message.to_s.truncate(1000)
+    ErrorNotifier.notify(e)
+    [e.message]
   rescue Stripe::StripeError => e
     failed = true
     payment.error_message = e.message.to_s.truncate(1000)
@@ -427,6 +436,13 @@ class StripePayoutProcessor
     failed = true
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
+  rescue Stripe::RateLimitError => e
+    failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_RATE_LIMITED
+    payment.error_message = e.message.to_s.truncate(1000)
+    ErrorNotifier.notify(e)
+    Rails.logger.info("Payouts: Payout errors for user with id: #{payment.user_id} #{e.message}")
+    [e.message]
   rescue Stripe::StripeError => e
     failed = true
     payment.error_message = e.message.to_s.truncate(1000)
