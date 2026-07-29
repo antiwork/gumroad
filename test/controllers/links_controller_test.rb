@@ -7423,6 +7423,53 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert variant.reload.alive?
   end
 
+  # Why the editor may not adopt the 409's fresh token and resend the same
+  # payload (gumroad-private#1532). Deletions are gated on the token; ordinary
+  # writes are NOT, and the editor save is a full snapshot. So the "retry" is a
+  # save that both applies the deletion and reverts every field the other
+  # session changed in between — the seller confirmed removing Y, not
+  # overwriting X. Product::StaleContentWriteGuard would be the thing to catch
+  # the overwrite half, and it is observe-only by default.
+  #
+  # Driven end to end here rather than asserted in the client, because it is the
+  # SERVER's acceptance of the retry that makes the overwrite happen; a client
+  # test can only show which request was sent.
+  test "flag on: resending a stale snapshot with the 409's fresh token deletes as asked AND reverts the other session's edit" do
+    enable_contract!
+    doomed = create_variant(variant_category: @category, name: "Version Y, to delete")
+    edited = create_variant(variant_category: @category, name: "Version X, as this session loaded it")
+    stale_token = current_revision
+    session_snapshot = @params.merge(
+      variants: [
+        { id: doomed.external_id, name: doomed.name },
+        { id: edited.external_id, name: edited.name },
+      ],
+    )
+
+    # The other session renames X. That moves the fingerprint, so this session's
+    # deletion of Y is refused.
+    edited.update!(name: "Version X, renamed by the other session")
+    post :update, params: session_snapshot.merge(
+      editor_revision: stale_token,
+      deletion_operations: { deleted_ids: { variants: [doomed.external_id] } },
+    ), format: :json
+    assert_response :conflict
+    fresh_token = response.parsed_body["editor_revision"]
+    assert_equal "Version X, renamed by the other session", edited.reload.name
+
+    # The retry the removed "Save again" button used to send: same in-memory
+    # snapshot, only the token swapped.
+    post :update, params: session_snapshot.merge(
+      editor_revision: fresh_token,
+      deletion_operations: { deleted_ids: { variants: [doomed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not doomed.reload.alive?, "the deletion the token now authorises goes through"
+    assert_equal "Version X, as this session loaded it", edited.reload.name,
+                 "and the same payload silently reverts the other session's rename — which is why there is no client-side retry"
+  end
+
   test "flag on: a write-only save from a stale tab still succeeds" do
     enable_contract!
     variant = create_variant(variant_category: @category, name: "Plain version")
