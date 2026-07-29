@@ -40,11 +40,13 @@ class ApplicationMailer < ActionMailer::Base
     def redirect_united_internet_recipients_to_sendgrid!
       return if message.class == ActionMailer::Base::NullMail
       # `destinations` is every envelope recipient — to, cc and bcc together.
-      # SMTP delivers one message to all of them over a single connection, so a
-      # blocked address anywhere in that list is enough to lose the whole send:
-      # AffiliateMailer, for instance, addresses the affiliate and copies the
-      # seller, and a seller at web.de would never learn their collaborator
-      # status changed.
+      # The provider is chosen once for the whole message, so a blocked address
+      # in cc or bcc has to count too: send via Resend and that recipient's copy
+      # bounces while everyone else's delivers, which is the quiet case — nobody
+      # is told the copied party heard nothing. AffiliateMailer, for instance,
+      # addresses the affiliate and copies the seller, and a seller at web.de
+      # would never learn their collaborator status changed. Moving the whole
+      # message to SendGrid costs the other recipients nothing.
       return unless MailerInfo.force_sendgrid_for_recipients?(message.destinations)
 
       sendgrid_settings = MailerInfo::DeliveryMethod.sendgrid_equivalent_options(message.delivery_method.settings)

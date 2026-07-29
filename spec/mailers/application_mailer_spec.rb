@@ -138,11 +138,11 @@ describe ApplicationMailer do
         expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
       end
 
-      # One SMTP send carries the message to every envelope recipient at once, so
-      # a blocked address in cc is enough to lose the whole thing — the copied
-      # party and the addressed party both. AffiliateMailer is the live example:
-      # it addresses the affiliate and copies the seller, passing no recipient of
-      # its own to random_delivery_method_options.
+      # One provider is chosen per message, so a blocked address in cc has to
+      # count too — otherwise the cc'd party's copy bounces while the addressed
+      # party's delivers, and nothing surfaces the half-failure. AffiliateMailer
+      # is the live example: it addresses the affiliate and copies the seller,
+      # passing no recipient of its own to random_delivery_method_options.
       it "redirects when the blocked recipient is in cc rather than to" do
         mail = described_class.test_email_to_with_cc("seller@gmail.com", "boss@web.de").message
 

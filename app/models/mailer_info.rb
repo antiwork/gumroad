@@ -81,9 +81,11 @@ module MailerInfo
 
   # `recipients` accepts a single email string (possibly in "Name <email>" form)
   # or an array of them, taken from any header — callers pass a `to:` value, a
-  # single address, or the whole envelope recipient list (to + cc + bcc), since
-  # one blocked address anywhere on an SMTP send loses the message for everyone
-  # on it. See ApplicationMailer#redirect_united_internet_recipients_to_sendgrid!
+  # single address, or the whole envelope recipient list (to + cc + bcc). The
+  # provider is chosen once for the whole message, so a blocked address in cc or
+  # bcc has to be considered too: otherwise that recipient's copy bounces while
+  # the others deliver, and nobody notices the copied party heard nothing.
+  # See ApplicationMailer#redirect_united_internet_recipients_to_sendgrid!
   def force_sendgrid_for_recipients?(recipients)
     Array(recipients).compact.any? do |recipient|
       # strip BEFORE removing the bracket: " Name <user@web.de> " ends in a
