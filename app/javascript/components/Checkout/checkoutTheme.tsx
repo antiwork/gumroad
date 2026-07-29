@@ -25,8 +25,8 @@ export const getApplicableCheckoutStyle = (checkoutStyle: CheckoutStyle | null |
     ? checkoutStyle
     : null;
 
-export const getCheckoutIndicatorStyle = (theme: CheckoutTheme | null): React.CSSProperties | undefined =>
-  theme ? { "--indicator": hexToRgb(theme.indicator_color) } : undefined;
+export const getCheckoutIndicatorCss = (theme: CheckoutTheme) =>
+  `:root { --indicator: ${hexToRgb(theme.indicator_color)}; }`;
 
 type CheckoutThemeContext = {
   theme: CheckoutTheme | null;

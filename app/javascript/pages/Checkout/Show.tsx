@@ -44,6 +44,7 @@ import {
   type CheckoutStyle,
   CheckoutThemeProvider,
   getApplicableCheckoutStyle,
+  getCheckoutIndicatorCss,
 } from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
@@ -816,7 +817,7 @@ const CheckoutIndexPage = () => {
       {/* Unlayered seller styles override the stock values declared in `@layer base`. */}
       {checkoutStyle ? (
         <Head>
-          <style>{checkoutStyle.css}</style>
+          <style>{`${checkoutStyle.css}\n${getCheckoutIndicatorCss(checkoutStyle.theme)}`}</style>
         </Head>
       ) : null}
       {redirecting ? null : results ? (

@@ -70,7 +70,6 @@ import {
   type CartItem as CartItemProps,
   findCartItem,
 } from "./cartState";
-import { getCheckoutIndicatorStyle, useCheckoutTheme } from "./checkoutTheme";
 import {
   canUseStripePaymentElementClientConfirm,
   computeTip,
@@ -123,7 +122,6 @@ export const Checkout = ({
   recommendedProducts?: CardProduct[] | null;
 }) => {
   const [state] = useState();
-  const checkoutTheme = useCheckoutTheme();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
 
@@ -307,7 +305,7 @@ export const Checkout = ({
   } | null = presentmentAmounts ?? listedAmounts;
 
   return (
-    <div className="@container mx-auto w-full max-w-400" style={getCheckoutIndicatorStyle(checkoutTheme)}>
+    <div className="@container mx-auto w-full max-w-400">
       <PageHeader
         className="border-none pb-0 md:px-16 md:pb-0 @[64rem]:mb-2"
         title="Checkout"
