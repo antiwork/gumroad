@@ -27,10 +27,35 @@ class ApplicationMailer < ActionMailer::Base
 
   ruby2_keywords def process(name, *args)
     super
+    redirect_united_internet_recipients_to_sendgrid!
     set_custom_headers(name, args)
   end
 
   private
+    # Safety net for the web.de / GMX policy block described in
+    # MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS: those providers reject
+    # everything Resend sends us from, so a buyer there pays and never receives
+    # their receipt.
+    #
+    # Individual mailer methods pass `to:` to MailerInfo.random_delivery_method_options
+    # so the right provider is chosen up front. This runs afterwards and catches
+    # any mailer that did not — there are dozens of mailer methods and a new one
+    # is easy to write without knowing this constraint exists. By the time
+    # #process has returned, the message exists and its recipients are known, so
+    # the check needs no cooperation from the mailer method at all.
+    #
+    # It must run before set_custom_headers, because the X-GUM-Email-Provider
+    # header is derived from the SMTP address the message ends up with.
+    def redirect_united_internet_recipients_to_sendgrid!
+      return if message.class == ActionMailer::Base::NullMail
+      return unless MailerInfo.force_sendgrid_for_recipients?(message.to)
+
+      sendgrid_settings = MailerInfo::DeliveryMethod.sendgrid_equivalent_options(message.delivery_method.settings)
+      return if sendgrid_settings.nil?
+
+      message.delivery_method.settings = message.delivery_method.settings.merge(sendgrid_settings)
+    end
+
     def from_email_address_with_name(name = "", email = NOREPLY_EMAIL)
       name = from_email_address_name(name)
       email_address_with_name(email, name)

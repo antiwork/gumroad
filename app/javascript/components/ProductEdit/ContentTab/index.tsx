@@ -32,6 +32,13 @@ import { ReactSortable } from "react-sortablejs";
 import typia from "typia";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
+import {
+  copyRichContentPages,
+  prepareRichContentPagesForMove,
+  reconcileMountedEditorFileEmbeds,
+  removedFileEmbedIdsForPage,
+  resolveServerIdMapping,
+} from "$app/data/product_edit";
 import { type Post } from "$app/types/workflow";
 import { escapeRegExp } from "$app/utils";
 import { assertDefined } from "$app/utils/assert";
@@ -176,7 +183,8 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     setExistingFiles,
     uniquePermalink,
     filesById,
-    serverIdMappings,
+    richContentIdMappings,
+    richContentRemovedFileEmbedIds,
   } = useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -210,6 +218,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const addPage = (description?: object) => {
     const page = {
       id: GuidGenerator.generate(),
+      newlyAdded: true,
       description: description ?? { type: "doc", content: [{ type: "paragraph" }] },
       title: null,
       updated_at: new Date().toISOString(),
@@ -224,7 +233,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   // selection keeps pointing at the same page instead of falling back to the
   // first one.
   const selectedPageId =
-    rawSelectedPageId == null ? rawSelectedPageId : (serverIdMappings[rawSelectedPageId] ?? rawSelectedPageId);
+    rawSelectedPageId == null ? rawSelectedPageId : resolveServerIdMapping(rawSelectedPageId, richContentIdMappings);
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   if ((selectedPageId || pages.length) && !selectedPage) setSelectedPageId(pages[0]?.id);
   const [renamingPageId, setRenamingPageId] = React.useState<string | null>(null);
@@ -333,6 +342,16 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
     extensions: contentEditorExtensions,
     onInputNonImageFiles: (files) => uploadFilesRef.current(files),
   });
+  const removedFileEmbedIds = removedFileEmbedIdsForPage(selectedPage, richContentRemovedFileEmbedIds);
+  React.useEffect(() => {
+    if (editor && removedFileEmbedIds?.length) {
+      // A save can remove a legacy file node from product state while this
+      // TipTap instance still holds the submitted document. Reconcile that
+      // mounted document from the explicit save response; a broad prop-sync
+      // effect could overwrite text the seller typed while the request ran.
+      reconcileMountedEditorFileEmbeds(editor, removedFileEmbedIds);
+    }
+  }, [editor, removedFileEmbedIds]);
   const updateContentRef = useRefToLatest(() => {
     if (!editor) return;
 
@@ -527,28 +546,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
   const copyContentFromVariant = (sourceVariantId: string) => {
     const source = product.variants.find((v) => v.id === sourceVariantId);
     if (!source) return;
-    const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-      value !== null && typeof value === "object" && !Array.isArray(value);
-    const stripUpsellIds = (node: unknown): unknown => {
-      if (Array.isArray(node)) return node.map(stripUpsellIds);
-      if (!isPlainObject(node)) return node;
-      const cloned: Record<string, unknown> = { ...node };
-      if (cloned.type === "upsellCard" && isPlainObject(cloned.attrs)) {
-        cloned.attrs = { ...cloned.attrs, id: null };
-      }
-      if ("content" in cloned) cloned.content = stripUpsellIds(cloned.content);
-      return cloned;
-    };
-    const cloned = source.rich_content.map((page) => {
-      const stripped = stripUpsellIds(page.description);
-      const description = stripped !== null && typeof stripped === "object" ? stripped : page.description;
-      return {
-        id: GuidGenerator.generate(),
-        title: page.title,
-        description,
-        updated_at: new Date().toISOString(),
-      };
-    });
+    const cloned = copyRichContentPages(source.rich_content, () => GuidGenerator.generate());
     // Replacing this variant's pages deletes the current ones — record that the
     // seller confirmed it (the copy-from-version dialog) for the server-side guard.
     confirmPageRemovals(pages);
@@ -1164,7 +1162,7 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
 
 //TODO inline this once all the crazy providers are gone
 export const ContentTab = () => {
-  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink, serverIdMappings } =
+  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink, variantIdMappings } =
     useProductEditContext();
   const [rawSelectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
   // A successful save swaps the client-generated ids of variants created this
@@ -1172,7 +1170,7 @@ export const ContentTab = () => {
   // selection keeps pointing at the same variant instead of silently falling
   // back to the product-level pages.
   const selectedVariantId =
-    rawSelectedVariantId == null ? null : (serverIdMappings[rawSelectedVariantId] ?? rawSelectedVariantId);
+    rawSelectedVariantId == null ? null : resolveServerIdMapping(rawSelectedVariantId, variantIdMappings);
   const [confirmingDiscardVariantContent, setConfirmingDiscardVariantContent] = React.useState(false);
   const selectedVariant = product.variants.find((variant) => variant.id === selectedVariantId);
 
@@ -1180,20 +1178,22 @@ export const ContentTab = () => {
     if (value) {
       updateProduct((product) => {
         product.has_same_rich_content_for_all_variants = true;
-        if (!product.rich_content.length) product.rich_content = selectedVariant?.rich_content ?? [];
-        // Emptying the variants' page lists deletes any page that didn't move to
-        // the product level. The seller confirmed this (the "Discard content from
-        // other versions?" dialog) — record the removals so the server-side wipe
-        // guard allows the save.
-        const keptPageIds = new Set(product.rich_content.map(({ id }) => id));
-        const removedPageIds = product.variants
-          .flatMap((variant) => variant.rich_content)
-          .filter(({ id }) => !keptPageIds.has(id))
-          .map(({ id }) => id);
-        if (removedPageIds.length > 0)
+        const sourceVariant = product.variants.find((variant) => variant.id === selectedVariantId);
+        const movedPages = !product.rich_content.length && sourceVariant ? sourceVariant.rich_content : [];
+        const movedPageIds = new Set(movedPages.map(({ id }) => id));
+        const discardedPageIds = product.variants.flatMap((variant) =>
+          variant.rich_content.filter(({ id }) => !movedPageIds.has(id)).map(({ id }) => id),
+        );
+        if (!product.rich_content.length && sourceVariant) {
+          product.rich_content = prepareRichContentPagesForMove(sourceVariant.rich_content, sourceVariant.id, null);
+        }
+        // Pages from versions other than the chosen source are a confirmed
+        // discard. The chosen pages are a move: their provenance below becomes
+        // a deletion only at save time, and an inverse toggle cancels it.
+        if (discardedPageIds.length > 0)
           product.confirmed_removed_rich_content_ids = [
             ...(product.confirmed_removed_rich_content_ids ?? []),
-            ...removedPageIds,
+            ...discardedPageIds,
           ];
         for (const variant of product.variants) variant.rich_content = [];
       });
@@ -1201,7 +1201,9 @@ export const ContentTab = () => {
       updateProduct((product) => {
         product.has_same_rich_content_for_all_variants = false;
         const [firstVariant, ...restVariants] = product.variants;
-        if (firstVariant) firstVariant.rich_content = product.rich_content;
+        if (firstVariant) {
+          firstVariant.rich_content = prepareRichContentPagesForMove(product.rich_content, null, firstVariant.id);
+        }
         for (const variant of restVariants) variant.rich_content = [];
         product.rich_content = [];
       });

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import * as React from "react";
 
 import { sendSamplePriceChangeEmail } from "$app/data/membership_tiers";
+import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
 import { getIsSingleUnitCurrency } from "$app/utils/currency";
 import { priceCentsToUnit } from "$app/utils/price";
 import {
@@ -58,10 +59,12 @@ export const TiersEditor = ({ tiers, onChange }: { tiers: Tier[]; onChange: (tie
   // Records that the seller explicitly confirmed removing this tier, so the
   // server-side wipe guard allows deleting it even if it still has content.
   const confirmRemoval = (tier: Tier) => {
-    if (!tier.newlyAdded)
-      updateProduct((product) => {
+    updateProduct((product) => {
+      if (!tier.newlyAdded) {
         product.confirmed_removed_variant_ids = [...(product.confirmed_removed_variant_ids ?? []), tier.id];
-      });
+      }
+      confirmRichContentMoveSourceDeletions(product, tier.rich_content);
+    });
     onChange(tiers.filter(({ id }) => id !== tier.id));
   };
 

@@ -84,7 +84,11 @@ module MailerInfo
   # has not been verified against United Internet's own documentation; add them
   # if a bounce is actually observed rather than guessing at the list.
   # See https://github.com/antiwork/gumroad-private/issues/1462
-  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[web.de gmx.de gmx.net gmx.com gmx.at gmx.ch mail.com].freeze
+  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[
+    web.de
+    gmx.de gmx.net gmx.com gmx.at gmx.ch gmx.us gmx.fr gmx.es gmx.co.uk
+    mail.com
+  ].freeze
 
   # `to` accepts whatever a mailer passes as the `to:` header: a single email
   # string (possibly in "Name <email>" form) or an array of them.
