@@ -5395,6 +5395,39 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("001234567890123456789")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAAMZMXXXX")
       end
+
+      # The account-number inputs carry a per-country `pattern`, but this page saves through Inertia
+      # rather than submitting the form, so the browser never enforces it — Show.tsx runs the same
+      # check itself. This is the only test that covers that wiring: delete the call and the field
+      # goes back to hinting a format nothing checks, which is the bug this all exists to fix.
+      it "refuses to save an account number its bank-account model would reject" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Mozambique")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "mz")
+        fill_in("Phone number", with: "811234567")
+        fill_in("Postal code", with: "43200")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Mozambique Taxpayer Single ID Number (NUIT)", with: "000000000")
+
+        fill_in("Pay to the order of", with: "Mozambique Creator")
+        fill_in("SWIFT / BIC Code", with: "AAAAMZMXXXX")
+        # The generic example the form used to show every non-IBAN country. MozambiqueBankAccount
+        # requires exactly 21 characters, so this can never save.
+        fill_in("Account #", with: "1234567890")
+        fill_in("Confirm account #", with: "1234567890")
+
+        click_on("Update settings")
+
+        expect(page).to have_status(text: "Enter your 21-character NIB, without the MZ IBAN prefix")
+        expect(@user.reload.active_bank_account).to be_nil
+      end
     end
 
     describe "El Salvadoran creator" do

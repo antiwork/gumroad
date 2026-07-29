@@ -53,10 +53,10 @@ describe QatarBankAccount do
     end
 
     # Until this format check was fixed it only fired on a blank account number, so any
-    # wrong-length value saved. Production holds 115 live Qatar accounts stored that way. They
-    # must stay saveable: `mark_deleted!` and the account-holder-name update both call `save!` on
-    # the existing row, so validating the number on update would make those sellers impossible to
-    # delete, rename, or replace — locking them out of payouts entirely.
+    # wrong-length value saved. Production holds 115 live Qatar accounts stored that way. They must
+    # stay saveable: renaming the account holder and every `mark_deleted!` path (payout-method
+    # switch, GDPR erasure, account closure) save the existing row, so validating the number on
+    # update would make those sellers impossible to rename or delete.
     it "does not block saves of an already-stored account number that predates this format check" do
       bank_account = build(:qatar_bank_account, account_number: "1234567890")
       bank_account.save!(validate: false)

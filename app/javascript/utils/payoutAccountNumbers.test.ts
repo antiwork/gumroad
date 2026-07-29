@@ -13,6 +13,9 @@ describe("normalizeAccountNumber", () => {
     // Copied text often carries invisible formatting characters along with it (here a zero-width
     // space and a left-to-right mark), which the server strips too.
     expect(normalizeAccountNumber("0321\u200B8000\u200E0118359719")).toBe("032180000118359719");
+    // U+0085 is whitespace to Ruby's [[:space:]] but not to JavaScript's \s, so the server strips
+    // it and this has to as well, or we reject a number the server would have saved.
+    expect(normalizeAccountNumber("0321\u00858000\u20090118359719")).toBe("032180000118359719");
   });
 
   it("leaves a bare account number alone", () => {
@@ -27,10 +30,21 @@ describe("accountNumberFormatError", () => {
     }
   });
 
-  it("rejects the generic example for every country that has a format on record", () => {
-    for (const [countryCode, hint] of Object.entries(COUNTRY_ACCOUNT_NUMBER_HINTS)) {
+  // Oman's model takes 6 to 16 digits, so the generic example is genuinely valid there — its entry
+  // exists to reject a non-numeric value, not to replace a wrong example.
+  const COUNTRIES_THE_GENERIC_EXAMPLE_IS_WRONG_FOR = Object.entries(COUNTRY_ACCOUNT_NUMBER_HINTS).filter(
+    ([countryCode]) => countryCode !== "OM",
+  );
+
+  it("rejects the generic example for every country whose model would reject it", () => {
+    for (const [countryCode, hint] of COUNTRIES_THE_GENERIC_EXAMPLE_IS_WRONG_FOR) {
       expect(accountNumberFormatError(countryCode, "1234567890")).toBe(hint.title);
     }
+  });
+
+  it("accepts the generic example for Oman, whose model does allow it", () => {
+    expect(accountNumberFormatError("OM", "1234567890")).toBeNull();
+    expect(accountNumberFormatError("OM", "OM810180000001299123456")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.OM?.title);
   });
 
   // These numbers are valid today: UpdatePayoutMethod strips the separators before it validates,

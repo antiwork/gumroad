@@ -702,7 +702,7 @@ export default function PaymentsPage() {
     } else {
       // The account-number inputs advertise a per-country `pattern`, but the browser never enforces
       // it here (this page posts through Inertia instead of submitting the form), so run the same
-      // check ourselves. Countries with no format on record fall through to the server.
+      // check ourselves. Countries with no entry in the hints table fall through to the server.
       const formatError = accountNumberFormatError(props.user.country_code, form.data.bank_account.account_number);
       if (formatError) {
         markFieldInvalid("account_number");

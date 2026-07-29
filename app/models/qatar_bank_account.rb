@@ -13,9 +13,11 @@ class QatarBankAccount < BankAccount
   # Only on create. Every path that accepts an account number from a seller builds a NEW record
   # (UpdatePayoutMethod#process_full_bank_account_replacement), so this still checks all real
   # input. Validating on update instead would fail closed on the 115 live accounts stored while
-  # this check was inverted and accepted any non-blank value: `mark_deleted!` and the
-  # account-holder-name update both `save!` the existing row, so those sellers could no longer
-  # delete, rename, or replace their bank account at all.
+  # this check was inverted and accepted any non-blank value: renaming the account holder
+  # (UpdatePayoutMethod#process_holder_name_update) and every `mark_deleted!` path — switching to
+  # PayPal or card payouts, GDPR erasure, account closure — save the existing row, so those
+  # sellers could no longer rename or delete their bank account at all. Replacing it kept working,
+  # because that path deletes the old row with `save!(validate: false)`.
   validate :validate_account_number, on: :create
 
   def routing_number

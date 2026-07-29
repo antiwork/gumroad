@@ -14,7 +14,7 @@
 // Each `pattern` mirrors the country's bank-account model regex, and each placeholder is the value
 // that model accepts (the same fixtures spec/requests/settings/payments_spec.rb posts).
 //
-// Deliberately no `maxLength`: the server strips separators before it validates (see
+// Deliberately no `maxLength` anywhere: the server strips separators before it validates (see
 // normalizeAccountNumber below), so "12-3456-7890123-00" is a valid New Zealand entry even though
 // it is longer than the 16 digits the model wants. A length cap sized to the bare number would
 // silently swallow the last characters of a number pasted in that printed form.
@@ -132,6 +132,20 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
     inputMode: "numeric",
     title: "Enter your 4 to 8 digit account number, without the bank or branch code",
   },
+  GI: {
+    placeholder: "01234567",
+    pattern: "[0-9]{8}",
+    inputMode: "numeric",
+    title: "Enter your 8-digit account number",
+  },
+  // OmanBankAccount only runs its format check in production, so this is the one entry whose
+  // pattern a local or CI run cannot cross-check against the model.
+  OM: {
+    placeholder: "000123456789",
+    pattern: "[0-9]{6,16}",
+    inputMode: "numeric",
+    title: "Enter your 6 to 16 digit account number, not your IBAN",
+  },
 };
 
 // UpdatePayoutMethod strips these from the account number (and its confirmation) before it hands
@@ -139,8 +153,9 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
 // "12-3456-7890123-00", or an IBAN in four-character blocks — saves fine today. Mirror that here
 // so this check accepts everything the server accepts. Keep it in step with
 // UpdatePayoutMethod::ACCOUNT_NUMBER_SEPARATOR_CHARACTERS (app/services/update_payout_method.rb):
-// \p{Cf} covers invisible formatting characters that ride along in copied text.
-const ACCOUNT_NUMBER_SEPARATORS = /[\s\p{Cf}-]/gu;
+// \p{Cf} covers invisible formatting characters that ride along in copied text, and \u0085 is in
+// Ruby's [[:space:]] but not in JavaScript's \s, so it needs naming to match the server.
+const ACCOUNT_NUMBER_SEPARATORS = /[\s\p{Cf}\u0085-]/gu;
 
 export const normalizeAccountNumber = (value: string) => value.replace(ACCOUNT_NUMBER_SEPARATORS, "");
 

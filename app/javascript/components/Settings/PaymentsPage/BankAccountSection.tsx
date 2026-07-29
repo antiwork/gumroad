@@ -798,8 +798,8 @@ const BankAccountSection = ({
     "ZA",
   ];
 
-  // No `maxLength` here on purpose — see COUNTRY_ACCOUNT_NUMBER_HINTS for why a length cap on an
-  // account number silently truncates numbers entered in the form banks print them.
+  // No `maxLength` on the account-number inputs, here or in the hints table — see
+  // COUNTRY_ACCOUNT_NUMBER_HINTS for why a length cap silently truncates a pasted number.
   type AccountNumberInputProps = Partial<
     Pick<React.ComponentPropsWithoutRef<"input">, "placeholder" | "pattern" | "inputMode" | "title">
   >;
@@ -812,23 +812,10 @@ const BankAccountSection = ({
   // bare local number for them with "must be an IBAN of the form ...".
   const IBAN_SHAPED_COUNTRY_CODES = ["MA", "SN", "RS", "MD", "QA", "MK"];
 
-  const isGibraltar = user.country_code === "GI";
-  const isOman = user.country_code === "OM";
-  const countrySpecificProps = user.country_code ? COUNTRY_ACCOUNT_NUMBER_HINTS[user.country_code] : undefined;
   const usesIbanShapedAccountNumber = !!user.country_code && IBAN_SHAPED_COUNTRY_CODES.includes(user.country_code);
-  // No `maxLength` on any of these, for the reason spelled out in COUNTRY_ACCOUNT_NUMBER_HINTS:
-  // the server strips separators before validating, so a number entered in the grouped form banks
-  // print is valid, and a cap sized to the bare number would silently drop its last characters.
-  const nonIbanAccountNumberInputProps: AccountNumberInputProps = isGibraltar
-    ? { placeholder: "01234567", pattern: "[0-9]{8}", inputMode: "numeric" }
-    : isOman
-      ? {
-          placeholder: "000123456789",
-          pattern: "[0-9]{6,16}",
-          inputMode: "numeric",
-          title: "Enter your 6 to 16 digit account number, not your IBAN",
-        }
-      : (countrySpecificProps ?? { placeholder: "1234567890" });
+  const nonIbanAccountNumberInputProps: AccountNumberInputProps = (user.country_code
+    ? COUNTRY_ACCOUNT_NUMBER_HINTS[user.country_code]
+    : undefined) ?? { placeholder: "1234567890" };
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {

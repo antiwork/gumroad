@@ -100,6 +100,7 @@ const COUNTRY_EXAMPLES: {
   { code: "KR", label: "Account #", example: "00012345678901", pattern: "[0-9]{11,16}" },
   { code: "NZ", label: "Account #", example: "1100000000000010", pattern: "[0-9]{15,16}" },
   { code: "JP", label: "Account #", example: "1234567", pattern: "[0-9]{4,8}" },
+  { code: "GI", label: "Account #", example: "01234567", pattern: "[0-9]{8}" },
 ];
 
 const confirmationLabelFor = (label: string) => {
@@ -179,18 +180,30 @@ describe("BankAccountSection account-number hints", () => {
     expect(field.pattern).toBe("");
   });
 
-  // Madagascar renders through the IBAN branch (its country supports IBAN), and Gibraltar and Oman
-  // through their own branches, so they need checking separately from the table above. Same
-  // reasoning as the cap test there: a separator-formatted number is valid, so a cap sized to the
-  // bare number truncates it.
-  it.each([
-    ["MG", "IBAN", "Confirm IBAN", true],
-    ["GI", "Account #", "Confirm account #", false],
-    ["OM", "Account #", "Confirm account #", false],
-  ])("puts no length cap on %s either", (code, label, confirmLabel, supportsIban) => {
-    renderForCountry(code, supportsIban);
+  // Oman is the one country in the table whose model does accept the generic "1234567890" (it takes
+  // 6 to 16 digits), so it is not in COUNTRY_EXAMPLES above — its hint is there for enforcement,
+  // not to replace a wrong example.
+  it("gives Oman a pattern that rejects a non-numeric account number", () => {
+    renderForCountry("OM");
+    const field = accountNumberField("Account #");
 
-    expect(accountNumberField(label).getAttribute("maxlength")).toBeNull();
-    expect(accountNumberField(confirmLabel).getAttribute("maxlength")).toBeNull();
+    expect(field.placeholder).toBe("000123456789");
+    expect(field.pattern).toBe("[0-9]{6,16}");
+    const pattern = new RegExp(`^(?:${field.pattern})$`, "u");
+    expect(pattern.test("000123456789")).toBe(true);
+    expect(pattern.test("OM810180000001299123456")).toBe(false);
   });
+
+  // Madagascar renders through the IBAN branch (its country supports IBAN), so it needs checking
+  // separately from the table above. Same reasoning as the cap test there: a separator-formatted
+  // number is valid, so a cap sized to the bare number truncates it.
+  it.each([["MG", "IBAN", "Confirm IBAN", true]])(
+    "puts no length cap on %s either",
+    (code, label, confirmLabel, supportsIban) => {
+      renderForCountry(code, supportsIban);
+
+      expect(accountNumberField(label).getAttribute("maxlength")).toBeNull();
+      expect(accountNumberField(confirmLabel).getAttribute("maxlength")).toBeNull();
+    },
+  );
 });
