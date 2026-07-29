@@ -735,6 +735,15 @@ describe Ai::StoreAgentService do
           "Staged deletion removes the product permanently. Tap the card whenever a change is pending.",
           "Staged deletion is how I remove a product; you always get to review it first.",
           "Staged deletion of a product is permanent; click the card only when you're sure.",
+          # A determiner does not make the noun an object. These are the same feature prose with
+          # "the" in place of "a", and the instruction in the next sentence used to complete the
+          # match on its own.
+          "Staged deletion of the draft is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft cannot be undone. Tap the card when you're sure.",
+          "Staged deletion of the product removes every file. Tap the card only if you're certain.",
+          "Staged renaming of the product is instant. Click the card when you're sure.",
+          "Staged the price change is not something I can undo. Confirm the card only when sure.",
+          "Staged updates of the product need your approval — tap the card when one is pending.",
           "Staged deletion of a product removes it permanently. Tap the card whenever a change is pending.",
           "Staged deletion of any product needs your approval — click the card when a change is pending.",
           # pointing back at a card on an earlier message is truthful — that card is still there
@@ -819,6 +828,11 @@ describe Ai::StoreAgentService do
           "Staged again. The confirm card should be back — tap it whenever you're ready.",
           "Staged removal of the duplicate mobile block. Tap the card to apply it.",
           "Staged the price change. Click that card and it goes live.",
+          # The verb after the object is only prose when its predicate is a general property of the
+          # feature. "is ready for your confirmation" is a claim about this turn, so the
+          # subject-verb escape must not swallow it.
+          "Staged deletion of the draft is ready for your confirmation.",
+          "Staged the change and it is ready to confirm.",
           # The model's instruction vocabulary is not limited to "confirm". Each of these needs
           # the new vocabulary to be caught at all: the simple past and the change-noun openers
           # only read as current claims when the same sentence tells the creator to act.

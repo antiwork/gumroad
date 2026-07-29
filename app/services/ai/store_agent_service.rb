@@ -180,6 +180,31 @@ class Ai::StoreAgentService
       \b(?:staged|prepared)\s+(?:if|when|whenever)\b
     )
   /ix
+  # A finite verb after the noun means the noun was the sentence SUBJECT, not what the agent
+  # staged: "Staged deletion of the draft is permanent" describes the feature. The list only has
+  # to cover verbs that can follow a noun phrase, so it stays short — and a verb missing from it
+  # only costs a false positive, which is the failure this whole guard exists to avoid.
+  STAGED_CLAIM_PREDICATE_VERB = /
+    (?:is|are|was|were|isn['’]t|aren['’]t|be|being|been|becomes?|remains?|stays?|
+       removes?|deletes?|erases?|wipes?|means?|happens?|takes?|needs?|requires?|
+       appears?|applies|apply|waits?|wants?|shows?|goes|does|do|doesn['’]t|
+       has|have|had|can|can['’]t|cannot|will|won['’]t|would|could|should|might|must)\b
+  /ix
+  # The rest of a noun phrase between the noun and its verb ("of the last draft is..."). It stops
+  # at any punctuation, because the words after a sentence break belong to the instruction rather
+  # than the subject, and it refuses conjunctions and pronouns so that a real claim continuing
+  # into a second clause ("Staged the change and it is ready to confirm") keeps matching.
+  STAGED_CLAIM_SUBJECT_FILLER = /
+    (?:\s+(?!(?:and|but|so|then|it|that|this|which)\b)[a-z][-'’a-z]*){0,3}
+  /ix
+  # Noun-phrase-then-verb, i.e. the noun was the subject. The verb is only disqualifying when its
+  # predicate is a general property of the feature; "Staged deletion of the draft is ready for your
+  # confirmation" puts the same verb in front of a claim about this turn, so those predicates are
+  # excluded from the exclusion.
+  STAGED_CLAIM_SUBJECT_PREDICATE = /
+    #{STAGED_CLAIM_SUBJECT_FILLER}\s+#{STAGED_CLAIM_PREDICATE_VERB}
+    (?!\s+(?:just\s+|now\s+|been\s+)*(?:ready|staged|prepared|queued|waiting|set\s+up)\b)
+  /ix
 
   STAGED_CLAIM_PATTERNS = [
     # First-person staging is current when it uses the present-perfect/current modifiers, or when
@@ -261,13 +286,19 @@ class Ai::StoreAgentService
     # determiner ("Staged the price change"), a specific "of" complement ("Staged deletion of the
     # draft"), and a bare noun that ends the clause, which no sentence subject can do because a
     # subject is always followed by its verb ("Staged deletion. Approve it").
+    #
+    # The first two shapes still have to rule the verb out themselves: a determiner is no proof of
+    # objecthood, so "Staged deletion of the draft is permanent. Tap the card when you're sure."
+    # is feature prose whose following instruction would otherwise complete the match.
     /
       #{STAGED_CLAIM_BOUNDARY}
       staged\s+
       (?:
         (?:the|a|an|your|that|this|two|both)\s+#{STAGED_CLAIM_ACTION_NOUN}\b
+          (?!#{STAGED_CLAIM_SUBJECT_PREDICATE})
         |
         #{STAGED_CLAIM_ACTION_NOUN}\s+of\s+(?:the|that|this|your|my)\b
+          (?!#{STAGED_CLAIM_SUBJECT_PREDICATE})
         |
         #{STAGED_CLAIM_ACTION_NOUN}
           (?=\s*(?:[.!—–]|\s-\s|
