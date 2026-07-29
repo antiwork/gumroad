@@ -73,18 +73,6 @@ class Ai::StoreAgentService
     \s+(?:nothing|none|no\s+(?:product\s+)?(?:change|changes?|update|updates?|discount|discounts?|
       action|actions?|offer|offers?|code|codes?|edit|edits?))\b
   /ix
-  # Things the agent stages. The subjectless opener ("Staged deletion of the draft.") needs one of
-  # these to follow, so prose about the staging feature in general cannot be mistaken for a claim
-  # that this turn staged something. The re-staging anchor below reuses the same list: it used to
-  # carry its own copy, the two drifted, and re-staging claims with an object the copy had missed
-  # reached creators as phantom confirmation prompts.
-  STAGED_CLAIM_ACTION_NOUN = /
-    (?:deletions?|removals?|creations?|additions?|renames?|renaming|archival|
-       updates?|changes?|edits?|fixe?s?|
-       discounts?|discount\s+codes?|offer\s+codes?|offers?|codes?|
-       price\s+changes?|products?(?:\s+updates?)?|
-       publish(?:ing)?|unpublish(?:ing)?)
-  /ix
   STAGED_CLAIM_HISTORICAL_TAIL = /
     (?:
       \s+(?:(?:it|that|this)|(?:the|that|this|your)\s+
@@ -92,35 +80,8 @@ class Ai::StoreAgentService
       (?:yesterday|previously|earlier|before|many\s+times|
         last\s+(?:night|week|month|year)|in\s+the\s+past)\b
       |
-      \s+(?:(?:it|that|this)\s+)?(?:from|on|in)\s+(?:my|the)\s+
+      \s+(?:(?:it|that|this)\s+)?(?:on|in)\s+(?:my|the)\s+
         (?:earlier|previous)\s+message\b
-      |
-      # A reply pointing back at a card the creator can still click is truthful, and the model
-      # phrases the point-back many ways ("...the price change in my previous message", "...is on
-      # my previous message"). It has to be MY earlier message: "the discount you asked for in
-      # your previous message" describes the creator's request, and the staging claim wrapped
-      # around it is about this turn.
-      #
-      # A sentence that also says the old card is gone is not a point-back either — re-staging
-      # because the creator can't see the card is the single most common way this bug is reported,
-      # so those must still reach the guard. "again" has to sit on the staging verb itself
-      # ("I staged it again"), because "tap that card again" is an instruction about a card that
-      # IS there, and treating it as re-staging would swallow the truthful point-back.
-      # The re-staging verb takes a named object as readily as a pronoun ("I've staged the discount
-      # again"), so the anchor allows both. The object list is STAGED_CLAIM_ACTION_NOUN rather than
-      # a copy of it, so widening what the agent can stage widens this anchor with it.
-      (?!\s+(?:(?:it|that|this|them|those|both)\s+|
-        (?:a|an|the|that|this|these|those|your|my|two|both)\s+#{STAGED_CLAIM_ACTION_NOUN}\s+)?again\b)
-      # The dead-card markers scan to the end of the sentence, not just the clause holding the
-      # staging verb: "I've staged the update in my previous message; that card is gone now" is a
-      # re-staging claim, and stopping the scan at `;` or a dash loses it. The cost is that a
-      # marker word used innocently in a later clause ("...tap that card again; your product photo
-      # is missing") also cancels the escape. That trade is deliberate: the narrow scan was tried
-      # and reverted because it let four real dead-card shapes slip past the guard.
-      (?![^.!?\n]*\b(?:new\s+card|another\s+card|gone|expired|disappeared|vanished|missing|empty|
-        didn['’]t\s+render|no\s+longer|isn['’]t\s+there|not\s+there|can['’]t\s+see|
-        couldn['’]t\s+(?:see|find))\b)
-      [^.!?\n]*\b(?:my|the)\s+(?:earlier|previous)\s+message\b
       |
       [^.!?\n]*\b(?:before|many\s+times|in\s+the\s+past)\b
     )
@@ -145,17 +106,6 @@ class Ai::StoreAgentService
         (?:confirmed|approved|applied|live|done)\b
     )
   /ix
-  # Telling the creator to act on the card. The model does not stick to the word "confirm": in
-  # production it also writes "Approve it", "tap it whenever you're ready" and "click the card".
-  # Each verb needs an object that refers to the card or the change, so ordinary product advice
-  # such as "click Publish when you're happy with it" cannot match.
-  STAGED_CLAIM_CARD_INSTRUCTION = /
-    \b(?:please\s+)?(?:confirm|approve|tap|click|hit|press)\s+
-      (?:(?:on|it)\s+)?
-      (?:it|that|this|
-         (?:the|that|this|your)\s+(?:confirm(?:ation)?\s+)?(?:card|button))
-    \b
-  /ix
   STAGED_CLAIM_CURRENT_CUE = /
     (?:
       \b(?:again|now)\b
@@ -167,8 +117,6 @@ class Ai::StoreAgentService
            for\s+(?:your\s+)?(?:confirmation|approval))\b
       |
       (?:[:,;—–-]\s*|[.!]\s*|\band\s+)(?:please\s+)?(?:confirm|approve)\b
-      |
-      (?:[:,;—–-]\s*|[.!]\s*|\b(?:and|then)\s+)#{STAGED_CLAIM_CARD_INSTRUCTION}
     )
   /ix
   STAGED_CLAIM_CONDITIONAL_TAIL = /
@@ -180,85 +128,74 @@ class Ai::StoreAgentService
       \b(?:staged|prepared)\s+(?:if|when|whenever)\b
     )
   /ix
-  # A finite verb after the noun means the noun was the sentence SUBJECT, not what the agent
-  # staged: "Staged deletion of the draft is permanent" describes the feature. The list only has
-  # to cover verbs that can follow a noun phrase, so it stays short — and a verb missing from it
-  # only costs a false positive, which is the failure this whole guard exists to avoid.
-  STAGED_CLAIM_PREDICATE_VERB = /
-    (?:is|are|was|were|isn['’]t|aren['’]t|be|being|been|becomes?|remains?|stays?|
-       removes?|deletes?|erases?|wipes?|means?|happens?|takes?|needs?|requires?|
-       appears?|applies|apply|waits?|wants?|shows?|goes|does|do|doesn['’]t|
-       has|have|had|can|can['’]t|cannot|will|won['’]t|would|could|should|might|must)\b
-  /ix
-  # The rest of a noun phrase between the noun and its verb ("of the very last remaining draft
-  # is..."). Length is not capped: a subject can be arbitrarily long, and a cap just moves the
-  # false positive one adjective further out. What bounds it instead is the clause — it stops at
-  # any punctuation, because words after a sentence break belong to the instruction rather than
-  # the subject.
-  #
-  # Two token shapes look like a clause break but stay inside the subject, and each is admitted
-  # only on the evidence of what follows it: a conjunction leading another noun phrase ("and the
-  # archived copy"), and a relative pronoun with its own subject ("that I reviewed"). A pronoun
-  # after the conjunction, or a verb straight after the relative pronoun, really does start a new
-  # clause, which is what keeps "Staged the change and it is ready to confirm" and "Staged the
-  # update that will apply to all products" matching as claims.
-  #
-  # An aside is punctuation that opens and CLOSES inside the clause, so it modifies the subject
-  # rather than ending it ("of the draft (the one from March) is permanent"). Requiring the closing
-  # mark is what separates it from a sentence break: one unpaired comma or dash still ends the
-  # subject, and the words after it belong to the instruction.
-  #
-  # Brackets nest, so their bodies recurse (\g<-1> re-enters the group it sits in) rather than
-  # excluding the opening mark — a depth limit here would only move the false positive one bracket
-  # deeper. Groups are relative for that reason too: a NAMED group raises "multiplex definition
-  # name" once this constant is interpolated more than once into the same pattern.
-  #
-  # Recursion is confined to the bracket bodies. A quote or dash aside cannot contain its own
-  # opening mark, and a comma aside that swallowed brackets would make the whole span quadratic —
-  # the nesting shapes that matter are already reachable the other way round, as a bracket
-  # containing commas.
-  STAGED_CLAIM_SUBJECT_ASIDE = /
-    (?:
-      \s*(\((?:[^()\n]|\g<-1>)*\))
-      |
-      \s*(\[(?:[^\[\]\n]|\g<-1>)*\])
-      |
-      \s*(\{(?:[^{}\n]|\g<-1>)*\})
-      |
-      \s*"[^"\n]*"
-      |
-      \s*[“][^”\n]*[”]
-      |
-      \s+'[^'’.!?\n]+'(?=[\s,;:]|\z)
-      |
-      \s+[‘][^‘’.!?\n]+[’](?=[\s,;:]|\z)
-      |
-      \s*,[^,.!?\n]*,
-      |
-      \s*[—–][^—–.!?\n]*[—–]
-    )
+  # Two subjectless forms survived the original guard in production: a bounded action followed by
+  # a card instruction, and "Staged again" followed by a replacement-card instruction. Keep this
+  # grammar anchored to the whole reply and to the measured action shapes. Widening it into a noun
+  # phrase parser would make explanatory or quoted prose eligible for destructive replacement.
+  STAGED_CLAIM_SUBJECTLESS_DETAIL = /
+    (?>[[:blank:]]*)
+    \((?>[-[:alnum:]&+'’]+),(?>[[:blank:]]*)
+    \$[[:digit:]][[:digit:],]*(?:\.[[:digit:]]{1,2})?\)
   /x
-  STAGED_CLAIM_SUBJECT_FILLER = /
+  STAGED_CLAIM_SUBJECTLESS_ACTION = /
     (?:
-      #{STAGED_CLAIM_SUBJECT_ASIDE}
+      deletion(?>[[:blank:]]+)of(?>[[:blank:]]+)
+      (?:the|a|an|your)(?>[[:blank:]]+)
+      (?:last(?>[[:blank:]]+))?
+      (?:(?>[-[:alnum:]#$%&+'’]+)(?>[[:blank:]]+))?
+      draft\b
+      (?:#{STAGED_CLAIM_SUBJECTLESS_DETAIL})?
       |
-      \s+(?:and|but)(?=\s+(?:the|a|an|your|its|their|my|two|both)\b)
+      removal(?>[[:blank:]]+)of(?>[[:blank:]]+)
+      (?:the|a|an|your)(?>[[:blank:]]+)
+      (?:duplicate(?>[[:blank:]]+))?
+      (?:mobile(?>[[:blank:]]+))?
+      block\b
+      (?:#{STAGED_CLAIM_SUBJECTLESS_DETAIL})?
       |
-      \s+(?:that|which|who)(?=\s+(?!#{STAGED_CLAIM_PREDICATE_VERB})[a-z])
-      |
-      \s+(?!(?:and|but|so|then|it|that|this|which|who)\b)\#?[a-z0-9][-'’a-z0-9]*
-    )*
+      the(?>[[:blank:]]+)price(?>[[:blank:]]+)change\b
+    )
   /ix
-  # Noun-phrase-then-verb, i.e. the noun was the subject. The verb is only disqualifying when its
-  # predicate is a general property of the feature; "Staged deletion of the draft is ready for your
-  # confirmation" puts the same verb in front of a claim about this turn, so those predicates are
-  # excluded from the exclusion. A verb that ends the clause is likewise not one: the words after it
-  # are what make it a general property, and without them ("the change that you want.") the verb
-  # belongs to a relative clause the filler just walked through.
-  STAGED_CLAIM_SUBJECT_PREDICATE = /
-    #{STAGED_CLAIM_SUBJECT_FILLER}\s+#{STAGED_CLAIM_PREDICATE_VERB}
-    (?!\s+(?:just\s+|now\s+|been\s+)*(?:ready|staged|prepared|queued|waiting|set\s+up)\b)
-    (?=\s+[a-z])
+  STAGED_CLAIM_SUBJECTLESS_LIVE_TAIL = /
+    (?>[[:blank:]]+)and(?>[[:blank:]]+)
+    (?:it|that|this|the(?>[[:blank:]]+)archive)
+    (?>[[:blank:]]+)(?:goes|becomes)(?>[[:blank:]]+)live
+  /ix
+  STAGED_CLAIM_SUBJECTLESS_CARD_INSTRUCTION = /
+    (?:please(?>[[:blank:]]+))?
+    (?:approve|confirm|tap|click|hit|press)(?>[[:blank:]]+)
+    (?:on(?>[[:blank:]]+))?
+    (?:
+      it|that|this
+      |
+      (?:the|that|this|your)(?>[[:blank:]]+)
+      (?:confirm(?:ation)?(?>[[:blank:]]+))?(?:card|button)
+    )\b
+    (?:
+      (?>[[:blank:]]+)to(?>[[:blank:]]+)(?:apply|approve|confirm|finalize)
+        (?:(?>[[:blank:]]+)(?:it|that|this))?
+      |
+      (?>[[:blank:]]+)(?:when|whenever)(?>[[:blank:]]+)
+        (?:you(?:['’]re|(?>[[:blank:]]+)are)(?>[[:blank:]]+))?(?:ready|happy|sure)
+        (?:#{STAGED_CLAIM_SUBJECTLESS_LIVE_TAIL})?
+      |
+      #{STAGED_CLAIM_SUBJECTLESS_LIVE_TAIL}
+      |
+      ,(?>[[:blank:]]*)(?:then(?>[[:blank:]]+))?tell(?>[[:blank:]]+)me
+        (?>[[:blank:]]+)if(?>[[:blank:]]+)you(?>[[:blank:]]+)want
+        (?>[[:blank:]]+)to(?>[[:blank:]]+)move(?>[[:blank:]]+)on
+        (?:
+          (?>[[:blank:]]+)to(?>[[:blank:]]+)creating(?>[[:blank:]]+)
+          (?:(?>[-[:alnum:]&+'’]+)(?>[[:blank:]]+)){1,5}
+          at(?>[[:blank:]]+)\$[[:digit:]][[:digit:],]*(?:\.[[:digit:]]{1,2})?
+        )?
+    )?
+    (?>[[:blank:]]*)[.!]?(?>[[:blank:]]*)\z
+  /ix
+  STAGED_CLAIM_REPLACEMENT_CARD_STATUS = /
+    (?:the|a)(?>[[:blank:]]+)confirm(?:ation)?(?>[[:blank:]]+)(?:card|button)
+    (?>[[:blank:]]+)(?:should(?>[[:blank:]]+)be|will(?>[[:blank:]]+)be|is)
+    (?>[[:blank:]]+)(?:back|below|here)(?>[[:blank:]]*)[—–-](?>[[:blank:]]*)
   /ix
 
   STAGED_CLAIM_PATTERNS = [
@@ -320,11 +257,10 @@ class Ai::StoreAgentService
       )
       (?![^.!?\n]*\?)
     /ix,
-    # "Staged.", "Staged again", "Staged successfully — confirm below", and the terse production
-    # opener.
+    # "Staged.", "Staged successfully — confirm below", and the terse production opener.
     /
       #{STAGED_CLAIM_BOUNDARY}
-      (?:(?:all|successfully)\s+)?staged(?:\s+(?:now|again|successfully))?\b
+      (?:(?:all|successfully)\s+)?staged(?:\s+(?:now|successfully))?\b
       (?!#{STAGED_CLAIM_NEGATED_OBJECT})
       (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
       (?!#{STAGED_CLAIM_COMPLETED_TAIL})
@@ -333,44 +269,26 @@ class Ai::StoreAgentService
         :\s*(?:please\s+)?(?:confirm|approve)\b|
         ,\s*(?:please\s+)?(?:confirm|approve)\b))
     /ix,
-    # The subjectless participle opener, which production produces and the arms above miss because
-    # they all need a subject: "Staged deletion of the last draft. Approve it, then...". What the
-    # agent staged has to read as the OBJECT of the staging, so a generic sentence subject stays
-    # out: "Staged updates wait for your approval" and "Staged deletion of a product is permanent"
-    # are prose about the feature, not claims about this turn. Three object shapes qualify — a
-    # determiner ("Staged the price change"), a specific "of" complement ("Staged deletion of the
-    # draft"), and a bare noun that ends the clause, which no sentence subject can do because a
-    # subject is always followed by its verb ("Staged deletion. Approve it").
-    #
-    # The first two shapes still have to rule the verb out themselves: a determiner is no proof of
-    # objecthood, so "Staged deletion of the draft is permanent. Tap the card when you're sure."
-    # is feature prose whose following instruction would otherwise complete the match.
+    # Production emits a subjectless participle when it skips api_write. Only the measured frame
+    # and two bounded sibling shapes qualify, and the action must end its clause before an exact
+    # card instruction. Feature prose such as "Staged deletion of the draft is permanent" cannot
+    # enter this arm.
     /
-      #{STAGED_CLAIM_BOUNDARY}
-      staged\s+
+      \Astaged(?>[[:blank:]]+)#{STAGED_CLAIM_SUBJECTLESS_ACTION}
+      (?>[[:blank:]]*)[.!:](?>[[:space:]]*)
+      #{STAGED_CLAIM_SUBJECTLESS_CARD_INSTRUCTION}
+    /ix,
+    # A bare re-staging claim is unambiguous at the start of the reply. Any continuation must be
+    # either the measured replacement-card status or an exact card instruction; references to an
+    # earlier card and already-applied changes therefore remain untouched.
+    /
+      \Astaged(?>[[:blank:]]+)again(?>[[:blank:]]*)[.!:]?
+      (?>[[:space:]]*)
       (?:
-        (?:the|a|an|your|that|this|two|both)\s+#{STAGED_CLAIM_ACTION_NOUN}\b
-          (?!#{STAGED_CLAIM_SUBJECT_PREDICATE})
+        \z
         |
-        #{STAGED_CLAIM_ACTION_NOUN}\s+of\s+(?:the|that|this|your|my)\b
-          (?!#{STAGED_CLAIM_SUBJECT_PREDICATE})
-        |
-        #{STAGED_CLAIM_ACTION_NOUN}
-          (?=\s*(?:[.!—–]|\s-\s|
-            # A conjoined noun has to end the clause too, or a compound SUBJECT ("Staged changes
-            # and updates wait for your approval") reads as an object. That deliberately gives up
-            # "Staged deletion and rename of the draft", which the agent has no way to produce
-            # while it stages one action per turn.
-            and\s+#{STAGED_CLAIM_ACTION_NOUN}\b(?=\s*(?:[.!—–]|\s-\s))))
-      )
-      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
-      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
-      (?![^.!?\n]*#{STAGED_CLAIM_CONDITIONAL_TAIL})
-      (?![^.!?\n]*\?)
-      (?:
-        (?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})
-        |
-        (?=[^.!?\n]*[.!]\s*#{STAGED_CLAIM_CARD_INSTRUCTION})
+        (?:#{STAGED_CLAIM_REPLACEMENT_CARD_STATUS})?
+        #{STAGED_CLAIM_SUBJECTLESS_CARD_INSTRUCTION}
       )
     /ix,
     # Prepared/queued phrasing only counts with an instruction or explicit confirmation purpose in
@@ -870,19 +788,19 @@ class Ai::StoreAgentService
     def phantom_staged_claim?(reply:, proposed_action:)
       return false if proposed_action.present?
       return false if reply.blank?
-      # The patterns are alternation-heavy and scan the whole reply, so cost grows with length.
-      # No claim can match without one of these stems, and the check is a single linear pass, so
-      # it keeps a long reply from paying for every pattern. "approv" rather than "approve"
-      # because the phrasing that carries no other stem is "for your approval".
-      return false unless reply.match?(/\b(?:staged|prepared|queued|confirm|approv|ready)/i)
 
       # A reply can quote an earlier assistant message before giving its current answer. Remove only
       # that attributed clause; a later current claim in the same reply still goes through the guard.
       candidate = reply.gsub(
         /\b(?:the\s+)?(?:earlier|previous)\s+(?:reply|message)\s+
-          (?:said|claimed|read)\s*:\s*[^.!?;\n]*/ix,
-        "",
-      )
+          (?:said|claimed|read)\s*:\s*[^.!?;\n]*
+          (?:[.!?;]+|\n+|\z)[[:space:]]*/ix,
+      ) do
+        # A leading quote can disappear entirely so a current subjectless claim becomes the new
+        # start. A quote after introductory prose still needs a sentence boundary so the existing
+        # subjectful patterns can recognize the current assertion that follows it.
+        Regexp.last_match.pre_match.blank? ? "" : ". "
+      end
       STAGED_CLAIM_PATTERNS.any? { |pattern| candidate.match?(pattern) }
     end
 

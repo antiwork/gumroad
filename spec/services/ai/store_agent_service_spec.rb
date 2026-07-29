@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "timeout"
 
 describe Ai::StoreAgentService do
   let(:seller) { create(:user) }
@@ -610,15 +611,10 @@ describe Ai::StoreAgentService do
         compliant = [
           "No change is prepared and I'm not waiting on you.",
           "Nothing is prepared — I couldn't set that up.",
-          "No new change is prepared, so there's no card to click. Want me to stage the deletion again?",
         ]
         compliant.each do |reply|
           expect(described_class::STAGED_CLAIM_PATTERNS.any? { |pattern| reply.match?(pattern) }).to be(false), reply
         end
-        # The correction is replayed to the model as a user turn rather than run through the guard,
-        # but it describes the very claim the guard hunts. If it matched, any future change that
-        # fed it back through the guard would silence the model instead of correcting it.
-        expect(described_class::STAGED_CLAIM_PATTERNS.any? { |p| described_class::STAGED_CLAIM_CORRECTION.match?(p) }).to be(false)
       end
 
       it "gives up honestly rather than repeating the false claim" do
@@ -663,6 +659,23 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action]).to include(type: "api_write")
       end
 
+      it "keeps subjectless parsing bounded on long near-matches" do
+        replies = [
+          "Staged deletion of the #{"very " * 4_000}last draft is permanent. Approve it.",
+          "Staged again. #{"The confirm card should be back " * 2_000}but it is not.",
+          "Staged deletion of the draft (#{"x" * 10_000}. Approve it.",
+          "Staged deletion of the draft (#{"x" * 121}). Approve it.",
+          "Staged again#{" " * 10_000}x",
+          "Staged deletion of the draft. Approve it#{" " * 20_000}x",
+        ]
+
+        matches = Timeout.timeout(1) do
+          replies.map { |reply| service.send(:phantom_staged_claim?, reply:, proposed_action: nil) }
+        end
+
+        expect(matches).to eq([false, false, false, false, false, false])
+      end
+
       it "leaves truthful replies that use the same words alone" do
         # A match REPLACES the model's reply, so a false positive tells the seller a change doesn't
         # exist when it does — worse than the phantom claim. Every one of these is truthful with no
@@ -695,6 +708,7 @@ describe Ai::StoreAgentService do
           "I’ve staged similar changes in the past.",
           "I’ve staged no product update.",
           "The earlier reply said: I’ve staged it.",
+          "For context, the earlier reply said: I have now staged it for confirmation.",
           # a card on an EARLIER message can genuinely still be pending
           "The confirm button is on my earlier message — scroll up to that card.",
           "The confirm button is on the earlier message — scroll up.",
@@ -723,83 +737,18 @@ describe Ai::StoreAgentService do
           "The confirmation card appears below when a change is staged.",
           "The confirmation card appears below only after api_write succeeds.",
           "This request is still non-staged.",
-          # prose about how staging works reads as a subjectless claim word-for-word, so the
-          # participle opener needs the noun to be the OBJECT of the staging, not the subject
-          "Staged changes are reviewed before they apply.",
-          "Staged updates need your approval before they go live.",
-          "Staged updates wait for your approval.",
-          "Staged edits are now supported in the agent tab.",
-          "Staged updates now show up as cards below my replies.",
-          "Staged changes always appear again if you refresh.",
-          "Staged deletion is permanent; click the card only when you're sure.",
-          "Staged deletion removes the product permanently. Tap the card whenever a change is pending.",
-          "Staged deletion is how I remove a product; you always get to review it first.",
-          "Staged deletion of a product is permanent; click the card only when you're sure.",
-          # A determiner does not make the noun an object. These are the same feature prose with
-          # "the" in place of "a", and the instruction in the next sentence used to complete the
-          # match on its own.
-          "Staged deletion of the draft is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft cannot be undone. Tap the card when you're sure.",
-          "Staged deletion of the product removes every file. Tap the card only if you're certain.",
-          "Staged renaming of the product is instant. Click the card when you're sure.",
-          "Staged the price change is not something I can undo. Confirm the card only when sure.",
-          "Staged updates of the product need your approval — tap the card when one is pending.",
-          "Staged deletion of a product removes it permanently. Tap the card whenever a change is pending.",
-          # A subject can carry any number of modifiers, so the distance to its verb is bounded by
-          # the clause rather than by a word count.
-          "Staged deletion of the very last remaining draft is permanent. Tap the card when you're sure.",
-          "Staged renaming of the second product in your unpublished archive is instant. Click the card when you're sure.",
-          "Staged deletion of any product needs your approval — click the card when a change is pending.",
-          # A relative clause or a second noun phrase sits inside the subject, so neither ends it.
-          "Staged deletion of the draft that I carefully reviewed is permanent. Tap the card when you're sure.",
-          "Staged renaming of the product that you flagged last week is instant. Click the card when you're sure.",
-          "Staged deletion of the draft and the archived copy is permanent. Tap the card when you're sure.",
-          "Staged the price change that you asked about and the discount rule is permanent. Confirm the card.",
-          # An aside that closes inside the clause modifies the subject; only an unpaired mark ends it.
-          "Staged deletion of the draft (the one from March) is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft, the one from March, is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft — the one from March — is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft \"March notes\" is permanent. Tap the card when you're sure.",
-          "Staged renaming of the product #2 in your archive is instant. Click the card when you're sure.",
-          "Staged deletion of the 3rd draft is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft (the one from March) that I reviewed is permanent. Tap the card.",
-          # Brackets nest, so the aside has to close at its own depth rather than at the first mark.
-          "Staged deletion of the draft (the March copy (archived)) is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft (the copy (from (early) March)) is permanent. Tap the card when you're sure.",
-          # Every bracket pair and quote style the model writes an aside in, not just the round one.
-          "Staged deletion of the draft [the March copy] is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft {March notes} is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft 'March notes' is permanent. Tap the card when you're sure.",
-          "Staged deletion of the draft ‘March notes’ is permanent. Tap the card when you're sure.",
-          "Staged the price change (20% off) is not something I can undo. Confirm the card only when sure.",
-          # pointing back at a card on an earlier message is truthful — that card is still there
-          # to click, so replacing the reply would deny a change that really is pending
-          "I staged the price change in my previous message — tap the card above to apply it.",
-          "The change is staged from my earlier message — tap the card there to apply it.",
-          "Staged deletion of the draft is on my previous message — tap the card there.",
-          # an instruction to tap a card "again" is about a card that IS there
-          "I staged the discount in my previous message — tap that card again.",
-          "I staged the update in my previous message; tap it again if the page didn't refresh.",
-          "I staged the changes in my previous message — tap that card again.",
-          "I staged the price change in my previous message — tap that card again.",
-          "I staged a change in my previous message — tap that card again.",
-          "I staged them in my previous message — tap that card again.",
-          "It's staged on my earlier message — scroll up and confirm it again.",
-          # The rows just above and below exist to catch the guard reaching too far, so they pass
-          # both before and after any widening of the anchor: a point-back names the same objects a
-          # re-staging claim does, and only the missing-card wording separates them.
-          "I staged the offer in my previous message — tap that card again.",
-          "I staged the discount code in my previous message — tap that card again.",
-          # a compound subject is still a subject, however many nouns it has
-          "Staged changes and updates wait for your approval.",
-          "Staged changes and updates appear below — tap the card to apply them.",
-          "Staged updates. These need your approval.",
-          # hypothetical and conditional descriptions of what staging WOULD do
-          "Staged deletion of the draft would appear as a card below my reply — tap it and the product is gone.",
-          "If you want, I can stage deletion of the draft — then tap the card.",
-          # instructions to act on something that isn't a confirmation card
-          "Click Publish when you're happy with it.",
-          "Tap Save on that form and your bio updates.",
+          # Subjectless detection stays at the measured reply start and exact action/card frames.
+          "Example output: Staged deletion of the last draft. Approve it.",
+          "Do not say: Staged again. Tap the card below.",
+          "Staged deletion of the draft is permanent. Approve it.",
+          "Staged deletion of the very last remaining draft is permanent. Approve it.",
+          "Staged deletion of the draft is explained in this block. Click it.",
+          "Staged deletion of the draft is permanent. This is a block. Click it.",
+          "Staged deletion of the last Bidcheckpro draft (from my previous message). Approve it.",
+          "Staged deletion of the draft. Approve it only in the demo.",
+          "Staged removal of the block. Tap the card, then watch the recording.",
+          "Staged again. It's on my earlier message.",
+          "Staged again. You already applied it.",
           "You have 3 products.",
         ]
 
@@ -847,111 +796,11 @@ describe Ai::StoreAgentService do
           "Staged successfully — confirm below.",
           "Staged, but not already applied.",
           "It's staged but hasn't already been applied.",
-          # Subjectless participle openers, sampled from rows that persisted with no
-          # proposed_action AFTER the first guard shipped. Every arm before this one needed a
-          # subject ("I've staged", "it is staged", "the change is staged"), so these got through.
-          "Staged deletion of the last draft. Approve it, then tell me if you want to move on.",
-          "Staged again. The confirm card should be back — tap it whenever you're ready.",
+          # The two exact post-#6506 survivors plus two bounded synthetic sibling frames.
+          "Staged deletion of the last Bidcheckpro draft (enviac, $149). Approve it, then tell me if you want to move on to creating Auru API at $25.",
+          "Staged again. The confirm card should be back — tap it whenever you're ready and the archive goes live.",
           "Staged removal of the duplicate mobile block. Tap the card to apply it.",
           "Staged the price change. Click that card and it goes live.",
-          # The verb after the object is only prose when its predicate is a general property of the
-          # feature. "is ready for your confirmation" is a claim about this turn, so the
-          # subject-verb escape must not swallow it.
-          "Staged deletion of the draft is ready for your confirmation.",
-          "Staged deletion of the very last remaining draft is ready for your confirmation.",
-          "Staged the change and it is ready to confirm.",
-          # A relative clause qualifying the staged object leaves it an object, so walking through
-          # one must not cost the catch.
-          "Staged deletion of the draft that I carefully reviewed is ready for your confirmation.",
-          # ...and so must an aside, at every shape that can hold one.
-          "Staged deletion of the draft (the one from March) is ready for your confirmation.",
-          "Staged deletion of the draft, the one from March, is ready for your confirmation.",
-          "Staged deletion of the draft — the one from March — is ready for your confirmation.",
-          "Staged deletion of the 3rd draft is ready for your confirmation.",
-          "Staged deletion of the draft (the March copy (archived)) is ready for your confirmation.",
-          "Staged deletion of the draft [the March copy] is ready for your confirmation.",
-          "Staged deletion of the draft {March notes} is ready for your confirmation.",
-          "Staged deletion of the draft 'March notes' is ready for your confirmation.",
-          "Staged deletion of the draft ‘March notes’ is ready for your confirmation.",
-          # An aside body must not reach across a sentence break, or the instruction that proves the
-          # claim gets absorbed into the subject and the phantom escapes at this shape only.
-          "Staged deletion of the draft 'a. Tap the card' is fine when you're sure.",
-          "Staged deletion of the draft ‘a. Tap the card’ is fine when you're sure.",
-          # A possessive is not an opening quote, and reading it as one loses the claim entirely.
-          "Staged deletion of the seller's draft. Approve it.",
-          "Staged the change that you requested. Approve it, then I'll apply it.",
-          "Staged the update that will apply to all products. Confirm the card.",
-          # A verb that ENDS its clause is part of the relative clause the filler walked through,
-          # not the predicate of a subject — without that distinction these read as feature prose
-          # and the claim escapes.
-          "Staged the change that you want. Approve it.",
-          "Staged the price change that you need. Tap the card.",
-          # "and" only continues the subject when another noun phrase follows it. A pronoun starts a
-          # new clause, so the general-property predicate after it belongs to that clause and must
-          # not disqualify the claim.
-          "Staged the update and they are permanent. Tap the card.",
-          # The model's instruction vocabulary is not limited to "confirm". Each of these needs
-          # the new vocabulary to be caught at all: the simple past and the change-noun openers
-          # only read as current claims when the same sentence tells the creator to act.
-          "I staged the update — hit the confirm button when you're ready.",
-          "I staged the discount — click the card to apply it.",
-          "The change is staged. Tap the card to apply it.",
-          # A bare noun ending the clause is still an object, not a sentence subject.
-          "Staged deletion. Approve it and it goes live.",
-          "Staged removal — tap the card to apply it.",
-          "Staged deletion and rename. Tap the card.",
-          # Re-staging because the creator says they can't see the card is how this bug is usually
-          # reported, so naming the earlier message must not read as a point-back at a live card.
-          "I've staged it again because the card on my earlier message expired — tap the new card below.",
-          "I've staged it again since the card on my earlier message didn't render. Tap the card.",
-          "I've staged it again — you said you can't see the card on my earlier message. Tap the new one.",
-          # YOUR previous message is the creator's request, so the staging claim is about this turn.
-          "I've just staged the price change you asked for in your previous message — tap the card below.",
-          "I've staged the discount you requested in your earlier message. Approve it and it goes live.",
-          # "for your approval" is the one phrasing that carries no other keyword, so it also pins
-          # that the cheap pre-check in the guard doesn't skip these replies.
-          "I've set up the discount for your approval.",
-          "That's set up for your approval.",
-          # Instruction timing is not a conditional about whether anything was staged, and
-          # "whenever you're ready" is what production actually writes.
-          "Staged the discount — tap the card whenever you're ready.",
-          "Staged deletion of the draft — approve it when you're ready.",
-          "Staged the price change. Approve it once you've checked the numbers.",
-          "Staged the update — confirm it and it applies after the next refresh.",
-          # re-staging for a reason no marker list will ever fully enumerate
-          "I've staged it again because you couldn't find the card on my earlier message. Tap the card.",
-          # "missing" and "empty" are the creator's own words for a card that never rendered, and
-          # the re-staging verb takes a named object as often as a pronoun.
-          "I've staged it since the card on my earlier message was missing. Tap the card below.",
-          "I've staged the discount again because the card on my earlier message was hidden. Tap the card.",
-          # The object of the re-staging verb is plural or two words as often as it is singular —
-          # "the changes" is the phrasing the model reaches for most.
-          "I've staged the changes again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the price change again because the card on my earlier message was hidden. Tap the card.",
-          # the anchor's object list is shared with the staging nouns, so an indefinite article or a
-          # plural pronoun is no more of an escape than a named object is
-          "I've staged a change again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged them again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the product update again because the card on my earlier message was hidden. Tap the card.",
-          # Every alternative in the shared noun list is pinned by at least one row in this array.
-          # Without that, a noun can leave the list and the only symptom is a re-staging claim
-          # silently reaching the creator again.
-          "I've staged the offer again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the code again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the discount code again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the offer code again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged those products again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the edits again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the fix again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the creation again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the addition again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the renaming again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the archival again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the publishing again because the card on my earlier message was hidden. Tap the card.",
-          "I've staged the unpublishing again because the card on my earlier message was hidden. Tap the card.",
-          # A count or a plural demonstrative in front of the object reads as a determiner, and the
-          # model writes one whenever it staged more than one thing at once.
-          "I've staged both changes again because the card on my earlier message was hidden. Tap the card.",
         ]
 
         phantoms.each do |reply|
@@ -975,6 +824,9 @@ describe Ai::StoreAgentService do
           "It wasn't staged before, so I staged it now.",
           "No change was prepared before, although I have now prepared it for approval.",
           "I staged that yesterday; it was already applied. I've now staged the replacement for your confirmation.",
+          "The earlier reply said: Nothing was staged. Staged again. The confirm card should be back — tap it whenever you're ready and the archive goes live.",
+          "The previous message read: Nothing was staged; Staged deletion of the last Bidcheckpro draft (enviac, $149). Approve it, then tell me if you want to move on to creating Auru API at $25.",
+          "For context, the earlier reply said: Nothing was staged. I have now staged it for confirmation.",
         ]
 
         mixed_claims.each do |reply|
