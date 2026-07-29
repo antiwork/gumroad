@@ -21,10 +21,11 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
   const uid = React.useId();
   const [country, setCountry] = React.useState(initialCountry ?? "US");
   const [saving, setSaving] = React.useState(false);
+  // Every seller must be able to truthfully check every item; residence and business registration
+  // are alternate ties to the selected country.
   const checkboxes = [
     "I have a valid, government-issued photo ID",
-    "I have proof of residence within this country",
-    "I am signing up as an individual, or my business is registered in the country above",
+    "I can provide proof of residence in the country above, or my business is registered there",
   ];
   const [checked, setChecked] = React.useState<number[]>([]);
   const [error, setError] = React.useState("");
@@ -85,7 +86,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
           <Fieldset>
             <FieldsetTitle>To ensure prompt payouts, please check off each item:</FieldsetTitle>
             {checkboxes.map((item, i) => (
-              <Label key={item}>
+              <Label key={item} className="items-start">
                 <Checkbox
                   checked={checked.includes(i)}
                   onChange={(e) =>

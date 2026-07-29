@@ -155,5 +155,56 @@ describe Pages::ProfileData do
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(old_key)
       end
     end
+
+    it "does not serve a v4 payload without the totals" do
+      seller_profile = SellerProfile.find_by(seller_id: seller.id)
+      current_key = Pages::ProfileData.cache_key(seller, seller_profile)
+      v4_key = current_key.sub("profile_data/v5/", "profile_data/v4/")
+      Rails.cache.write(v4_key, { products: [], posts: [], pages: [] })
+
+      data = Pages::ProfileData.build(seller)
+
+      expect(current_key).to start_with("profile_data/v5/")
+      expect(data).to include(products_total: 0, posts_total: 0)
+    end
+
+    context "when the catalogue exceeds MAX_ITEMS" do
+      before { stub_const("Pages::ProfileData::MAX_ITEMS", 2) }
+
+      it "reports the true total alongside the capped array" do
+        3.times { create(:product, user: seller) }
+
+        data = Pages::ProfileData.build(seller.reload)
+
+        expect(data[:products].length).to eq(2)
+        expect(data[:products_total]).to eq(3)
+      end
+
+      it "reports the true post total alongside the capped array" do
+        3.times { create(:audience_installment, :published, seller:, shown_on_profile: true) }
+
+        data = Pages::ProfileData.build(seller.reload)
+
+        expect(data[:posts].length).to eq(2)
+        expect(data[:posts_total]).to eq(3)
+      end
+    end
+
+    context "when the catalogue is within MAX_ITEMS" do
+      it "reports a total equal to the array length" do
+        2.times { create(:product, user: seller) }
+
+        data = Pages::ProfileData.build(seller.reload)
+
+        expect(data[:products_total]).to eq(data[:products].length)
+      end
+
+      it "counts only payload-eligible products" do
+        create(:product, user: seller)
+        create(:product, user: seller, purchase_disabled_at: Time.current, deleted_at: Time.current)
+
+        expect(Pages::ProfileData.build(seller.reload)[:products_total]).to eq(1)
+      end
+    end
   end
 end

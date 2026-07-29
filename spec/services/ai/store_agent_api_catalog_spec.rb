@@ -224,6 +224,16 @@ describe Ai::StoreAgentApiCatalog do
       expect(summary).to match(/dynamically from the gumroad-data JSON/i)
     end
 
+    # The endpoint summary is the only page-authoring guidance the model gets when it proposes
+    # this write, so it has to name both capped lists — not just products.
+    it "requires the page to disclose a capped product list and a capped post list" do
+      summary = described_class.find("update_user_custom_html").summary
+
+      expect(summary).to include("products_total")
+      expect(summary).to include("posts_total")
+      expect(summary).to match(/show the count for that section/)
+    end
+
     # The creator's name and bio are filled server-side into data-gumroad-field elements — they
     # are not in the injected JSON, and a page that looks for them there renders a blank header.
     it "points page authoring at data-gumroad-field for the creator's name and bio" do
