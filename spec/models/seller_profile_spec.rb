@@ -65,10 +65,7 @@ describe SellerProfile do
     end
 
     it "expands a legacy three-digit accent colour rather than breaking on it" do
-      # HexColorValidator only runs on normal saves, so update_column and raw SQL have written
-      # three-digit values historically. Checkout now serves this same CSS (see
-      # CheckoutController#sole_seller_checkout_style), so those legacy rows have to keep producing
-      # a usable accent — SassC's split-color() understands short hex natively.
+      # Normal saves reject short hex, but legacy raw writes bypassed the validator.
       subject.update_column(:highlight_color, "#0f0")
       subject.reload
 

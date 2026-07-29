@@ -93,22 +93,16 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "sends the whole palette, not just the accent" do
-        # The point of this change over the accent-only version: the payment screen picks up the
-        # seller's background, body text colour and font as well, so it matches the product page
-        # the buyer just came from and the content page they land on.
         cart_with(create(:product, user: branded_seller))
 
         get :show
 
         checkout_style = inertia.props[:checkout_style]
         styles = checkout_style[:css]
-        # Note the space after each colon: SassC's :compressed output keeps it inside a custom
-        # property's value, so these are the literals the browser actually receives.
+        # SassC keeps a space inside compressed custom-property values.
         expect(styles).to include("--accent: 0 154 73")
         expect(styles).to include("--body-bg: #f8efe3")
         expect(styles).to include(%(--font-family: "Roboto Mono"))
-        # checkout_style.css also carries a body { } rule, which is what actually repaints the page
-        # background rather than only exposing the custom property for components to opt into.
         expect(styles).to include("body{background-color:#f8efe3")
         expect(checkout_style[:theme]).to eq({
                                                accent_color: "#009a49",
@@ -120,8 +114,6 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "sends no styles for a cart spanning two sellers" do
-        # A mixed cart has no seller whose branding could fairly represent it — see
-        # Cart#visible_seller_ids and CheckoutController#sole_seller_checkout_style.
         cart_with(create(:product, user: branded_seller), create(:product, user: create(:user)))
 
         get :show
@@ -144,9 +136,6 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "carries the seller's palette for a direct product arrival with no saved cart" do
-        # The main journey: clicking "I want this!" links to /checkout?product=<permalink> and the
-        # product is not persisted until the frontend saves the cart afterwards, in a partial visit.
-        # Reading only the saved cart would make the feature a no-op for every first-time buyer.
         product = create(:product, user: branded_seller)
 
         get :show, params: { product: product.unique_permalink }
@@ -155,8 +144,6 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "sends no styles when the arriving product's seller differs from the saved cart's" do
-        # The page renders the saved cart plus the arriving product, so this checkout shows two
-        # sellers' products. Branding it with either one misrepresents the other.
         cart_with(create(:product, user: branded_seller))
         arriving = create(:product, user: create(:user))
 
@@ -209,8 +196,7 @@ describe CheckoutController, type: :controller, inertia: true do
 
       it "sends no styles when the stored colour contains injected SCSS" do
         seller = create(:user)
-        # tap(&:save!) first: seller_profile is built-but-unsaved until something persists it, and
-        # update_column on a new record raises.
+        # seller_profile is built but unsaved until its first write.
         seller.seller_profile.tap(&:save!).update_column(
           :highlight_color,
           "#ffffff\n)}; } body { display:none !important; } :root { --x: \#{split-color(#ffffff"
@@ -224,13 +210,7 @@ describe CheckoutController, type: :controller, inertia: true do
       end
 
       it "recomputes the palette on the partial request the frontend makes when the cart changes" do
-        # Saving the cart is a partial Inertia visit (see the `only:` list in Checkout/Show.tsx),
-        # and the palette depends on which sellers are in the cart. If this prop stopped being
-        # served on a partial request, a buyer emptying a mixed cart down to one seller would keep
-        # whatever branding the page loaded with. Asserting the server half of that contract here.
-        #
-        # Reads the response body rather than the `inertia` matcher helper, which only captures
-        # props for a full page render.
+        # The inertia matcher captures only full renders, so inspect the partial response body.
         cart_with(create(:product, user: branded_seller))
         request.headers["X-Inertia"] = "true"
         request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"

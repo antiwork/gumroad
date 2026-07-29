@@ -208,8 +208,6 @@ describe Cart do
     end
 
     it "returns both sellers when the cart spans two" do
-      # A cart can be paid for in one transaction across sellers, so there is no seller whose
-      # branding could represent it. Checkout keeps Gumroad's palette in this case.
       other_seller = create(:user)
       create(:cart_product, cart:, product: create(:product, user: seller))
       create(:cart_product, cart:, product: create(:product, user: other_seller))
@@ -222,8 +220,6 @@ describe Cart do
     end
 
     it "ignores deleted cart products" do
-      # Removing the second seller's product from the cart must make it single-seller again, or a
-      # buyer who deletes an item keeps seeing the neutral palette.
       create(:cart_product, cart:, product: create(:product, user: seller))
       create(:cart_product, cart:, product: create(:product, user: create(:user)), deleted_at: 1.minute.ago)
 
@@ -231,9 +227,6 @@ describe Cart do
     end
 
     it "ignores archived products, matching what the checkout page actually renders" do
-      # CartPresenter#cart_props renders `alive.joins(:product).merge(Link.not_archived)`, so an
-      # archived product is not on the page. Counting it here would treat a cart the buyer sees as
-      # belonging to one seller as mixed, suppressing that seller's branding with no visible cause.
       create(:cart_product, cart:, product: create(:product, user: seller))
       create(:cart_product, cart:, product: create(:product, user: create(:user), archived: true))
 
