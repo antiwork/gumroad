@@ -21,13 +21,15 @@ class AddCanonicalPriceCentsToLaterChargePresentments < ActiveRecord::Migration[
     # No rows exist yet in any environment: nothing writes a fixing until the membership
     # buyer-currency lane opens, which this branch holds shut. A NOT NULL column with no default
     # is therefore safe to add outright — there is nothing to backfill. Guarded because the column
-    # is present already on any database created from db.schema after this branch added it there.
+    # is present already on any database created from db/schema.rb after this branch added it there.
     return if column_exists?(:later_charge_presentments, :canonical_price_cents)
 
     add_column :later_charge_presentments, :canonical_price_cents, :bigint, null: false
   end
 
   def down
+    return unless column_exists?(:later_charge_presentments, :canonical_price_cents)
+
     remove_column :later_charge_presentments, :canonical_price_cents
   end
 end
