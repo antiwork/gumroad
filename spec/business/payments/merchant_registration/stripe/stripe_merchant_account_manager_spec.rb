@@ -13246,8 +13246,21 @@ describe StripeMerchantAccountManager, :vcr do
         attested = true if params.dig(:company, :owners_provided)
         account
       end
+      # Stripe really does hold the seeded owner from this point on, and the attestation re-reads the
+      # list before stating it is complete — a stub frozen at empty would make that read a no-op and
+      # hide whether the attestation ever fires.
       allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
         seeded = attributes[:relationship]
+        allow(Stripe::Account).to receive(:list_persons)
+          .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+          .and_return("data" => [
+                        Stripe::Person.construct_from(
+                          id: "person_representative",
+                          object: "person",
+                          account: "acct_stuck_migration",
+                          relationship: attributes[:relationship]
+                        )
+                      ])
         true
       end
 
@@ -13411,6 +13424,26 @@ describe StripeMerchantAccountManager, :vcr do
       allow(ErrorNotifier).to receive(:notify)
 
       expect(described_class.send(:recorded_ownership_percent_on, account_id)).to be_nil
+    end
+
+    # The caller decides to attest from its intent to seed, and update_person returns without seeding
+    # when the account has no representative person. Attesting then would tell Stripe an empty list
+    # is complete.
+    it "does not attest an owner list nobody is on" do
+      owner_list([])
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    it "does not attest when the ownership read fails" do
+      allow(Stripe::Account).to receive(:list_persons).and_raise(Stripe::APIError.new("Stripe is down"))
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
     end
 
     it "reads an account Stripe has already accepted the attestation for as not blocking" do

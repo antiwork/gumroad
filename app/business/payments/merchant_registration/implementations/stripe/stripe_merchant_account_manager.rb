@@ -389,9 +389,9 @@ module StripeMerchantAccountManager
 
     # Read the ownership Stripe already has on file BEFORE the account update below, because that
     # update rewrites the metadata marker we use to detect the switch (see last_user_compliance_info
-    # above). If this read fails after the marker has moved, every later retry sees "already a
-    # business" and skips seeding the representative entirely, leaving the seller stuck with a
-    # company whose representative owns nothing — the state this whole code path exists to avoid.
+    # above). This read has no rescue on purpose: failing here aborts the save before the marker
+    # moves, so the seller retries from the same state instead of falling through to the healing
+    # path on a later save.
     unclaimed_percent_ownership = seed_representative_ownership ? unclaimed_percent_ownership_on_stripe(stripe_account) : nil
 
     # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
@@ -407,8 +407,8 @@ module StripeMerchantAccountManager
     if user_compliance_info.is_business?
       person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, seed_representative_ownership:, unclaimed_percent_ownership:)
       # Stripe keeps a company's payouts blocked on company.owners_provided until the platform
-      # states the owner list is complete. Scoped to accounts where we have actually confirmed the
-      # ownership on file, so it can never become a blanket attestation across the seller base.
+      # states the owner list is complete. Scoped to accounts we found blocked on it; the callee
+      # re-reads the ownership before making the statement.
       attest_owners_provided(stripe_account.id) if owner_list_complete && owners_provided_blocking_payouts?(updated_stripe_account)
     end
 
@@ -553,10 +553,17 @@ module StripeMerchantAccountManager
   private_class_method
   # Stripe holds a company account's payouts on company.owners_provided until the platform states
   # that the owner list is complete, and nothing else in the codebase states it — so seeding the
-  # representative correctly is not by itself enough to unblock a seller. Callers must have
-  # established that someone actually owns something; attesting an empty list is a false statement
-  # to Stripe (see owner_list_complete).
+  # representative correctly is not by itself enough to unblock a seller.
+  #
+  # The ownership is re-read here rather than trusted from the caller's earlier read: the caller
+  # decides to attest from its INTENT to seed, and update_person returns silently without seeding
+  # when the account has no representative person. Reading after that call is what makes this a
+  # statement about what Stripe actually holds. Never attest an empty or unreadable list — that
+  # would be a false statement to Stripe, and it would hide a switch that seeded nobody behind a
+  # cleared requirement.
   def self.attest_owners_provided(stripe_account_id)
+    return unless recorded_ownership_percent_on(stripe_account_id).to_f.positive?
+
     Stripe::Account.update(stripe_account_id, { company: { owners_provided: true } })
   rescue Stripe::StripeError => e
     # The seller's compliance details are already saved on Stripe at this point; only the
