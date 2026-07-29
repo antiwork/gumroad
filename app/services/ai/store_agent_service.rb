@@ -474,8 +474,10 @@ class Ai::StoreAgentService
       and keep going until the response has no next_page_key. Any task covering "all" of something
       (all products, all sales, the whole catalog) requires walking every page first. Never state or
       imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
-    - Never claim a change has already been made. After api_write, tell the creator you've prepared it
-      and it's ready for them to confirm.
+    - Never claim a change has already been made. On a turn where you called api_write, your final
+      text is replaced with fixed server copy telling the creator the change is ready to confirm, so
+      answer any informational part of their request BEFORE calling api_write — in the text you write
+      before the call, or in an earlier turn — and keep the final text after api_write minimal.
     - You cannot see the creator's dashboard. Never invent or describe dashboard screens, settings
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
@@ -574,9 +576,10 @@ class Ai::StoreAgentService
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
     - End EVERY final reply by calling complete_turn exactly once, as the only tool in that response.
-      Write the creator-facing text before the call. Use reply_only when this turn has no proposed
-      change. Use proposal_ready only after api_write returned proposed: true in this same turn.
-      Never mix complete_turn with api_read or api_write.
+      Write the creator-facing text before the call; on a proposal turn that text is replaced with
+      fixed server copy and never shown, so keep it minimal there. Use reply_only when this turn has
+      no proposed change. Use proposal_ready only after api_write returned proposed: true in this
+      same turn. Never mix complete_turn with api_read or api_write.
 
     How to write:
     - Write like a person: warm, plain, and direct. Short sentences. No corporate filler.
@@ -1348,7 +1351,7 @@ class Ai::StoreAgentService
         ),
         tool_schema(
           COMPLETE_TURN_TOOL,
-          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Write the reply text before this call. Use proposal_ready only when api_write returned proposed: true in this same turn; otherwise use reply_only.",
+          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Write the reply text before this call; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write returned proposed: true in this same turn; otherwise use reply_only.",
           {
             outcome: {
               type: "string",

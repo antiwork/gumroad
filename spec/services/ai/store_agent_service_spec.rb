@@ -331,6 +331,24 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/two copies of an action that is\s+unsafe to run twice/)
       end
 
+      # The server replaces the model's final prose with PROPOSAL_READY_REPLY on every proposal
+      # turn, so the prompt must say so — otherwise the model authors answer text there that is
+      # always discarded, losing the informational half of a combined ask.
+      it "teaches the model that proposal-turn text is replaced by server copy, so answers go before api_write" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to match(/your final\s+text is replaced with fixed server copy/)
+        expect(captured[:system]).to match(/answer any informational part of their request BEFORE calling api_write/)
+        expect(captured[:system]).to match(/on a proposal turn that text is replaced with\s+fixed server copy and never shown/)
+        expect(captured[:system]).not_to match(/After api_write, tell the creator you've prepared it/)
+      end
+
       # Regression for gumroad-private#1463: asked whether product pages could be styled like the
       # storefront, the agent said no — product pages "aren't customizable", there is "no endpoint
       # and no dashboard setting" for their colours — while the seller's product pages were already
