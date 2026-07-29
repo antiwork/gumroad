@@ -23,6 +23,28 @@ class Api::Internal::AgentConversationsController < Api::Internal::BaseControlle
     render json: { success: true, conversation: conversation && agent_conversation_props(conversation) }
   end
 
+  # GET /internal/agent/actions/status?proposal_message_id=...
+  # Reconciles a concurrent confirmation against the exact persisted proposal. `executing` is
+  # transient while another request owns the claim; every settled path becomes pending, applied,
+  # or unknown (non-retryable because dispatch may have mutated).
+  def action_status
+    message = AiMessage.role_assistant
+      .joins(:ai_conversation)
+      .merge(current_seller.ai_conversations.alive)
+      .find_by(id: AiMessage.from_external_id(params[:proposal_message_id]))
+    if message.nil? || message.metadata&.dig("proposed_action").blank?
+      head :not_found
+      return
+    end
+
+    action_status = reconcile_stale_agent_action!(message)
+    render json: {
+      success: true,
+      action_status: action_status.presence || "pending",
+      objects: message.metadata["objects"] || [],
+    }
+  end
+
   # GET /internal/agent/turns/:client_turn_id
   # Recovery read for a streamed turn whose SSE connection broke: the client generated the turn id
   # before sending, so this answers "did MY exact turn persist?" without guessing from the seller's

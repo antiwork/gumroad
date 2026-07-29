@@ -6402,8 +6402,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(find(:select, "Country")).to have_selector(:option, "Cuba (not supported)", disabled: true)
           select "United States", from: "Country"
           check "I have a valid, government-issued photo ID"
-          check "I have proof of residence within this country"
-          check "I am signing up as an individual, or my business is registered in the country above"
+          expect(page).to have_button "Save", disabled: true
+          check "I can provide proof of residence in the country above, or my business is registered there"
+          expect(page).to have_button "Save", disabled: false
           click_on "Save"
           wait_for_ajax
         end
