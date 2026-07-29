@@ -525,9 +525,9 @@ describe Ai::StoreAgentService do
         expect(captured["error"]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
       end
 
-      it "normalizes proposed product currency codes before storing the action" do
+      it "normalizes proposed product currency code case and whitespace before storing the action" do
         allow(client).to receive(:messages).and_return(
-          tool_result("api_write", { "endpoint" => "create_product", "params" => { "name" => "Workbook", "price" => 21_999, "price_currency_type" => "ZAR" } }),
+          tool_result("api_write", { "endpoint" => "create_product", "params" => { "name" => "Workbook", "price" => 21_999, "price_currency_type" => " ZAR " } }),
           text_result("Prepared."),
         )
 
