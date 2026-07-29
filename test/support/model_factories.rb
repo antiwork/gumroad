@@ -947,9 +947,9 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  # A file must belong to exactly one parent, so callers name the product or the
+  # post it is delivered with — the factory does not invent one.
   def create_product_file(installment: nil, link: nil, **attrs)
-    link = create_product if link.nil? && installment.nil?
-
     ProductFile.create!({
       url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf",
       filetype: "pdf",
