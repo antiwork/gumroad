@@ -14,16 +14,6 @@ class CheckoutController < ApplicationController
       checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
       stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
-      # Carry the seller's branding through checkout so the buyer's journey does not go
-      # seller-branded product page → Gumroad-pink payment screen → seller-branded content page
-      # (gumroad-private#1493).
-      #
-      # The CSS matches the storefront and post-purchase content page, while the structured theme
-      # lets Stripe's cross-origin fields use the same values without waiting for the CSS to reach
-      # the DOM.
-      #
-      # nil for empty and multi-seller checkouts, in which case the page keeps the stock palette —
-      # see the method for why a mixed checkout deliberately gets no branding.
       checkout_style: -> { sole_seller_checkout_style(cart_presenter.cart, checkout_presenter.checkout_seller_context(params: checkout_params)) },
     }
   end
@@ -115,27 +105,9 @@ class CheckoutController < ApplicationController
   end
 
   private
-    # The seller's palette CSS for this checkout, or nil when there is no single seller to take it
-    # from.
-    #
-    # The seller has to be resolved from the saved cart and the products introduced by checkout URL
-    # parameters together, because the page renders the union of both. A buyer clicking "I want
-    # this!" on a product page lands on /checkout?product=<permalink> with the product not yet
-    # persisted — the frontend merges it in from `checkout.add_products` and only saves it to the
-    # cart afterwards, in a partial visit. Wishlists introduce products the same way, while a
-    # gift-wishlist arrival clears the saved cart before adding its product.
-    #
-    # Reading the saved cart alone would therefore mean:
-    #
-    #   - a first-time buyer, who has no saved cart at all, never sees the seller's palette. That is
-    #     exactly the product-page-to-payment-screen journey this is meant to fix, so the feature
-    #     would be a no-op on its main path.
-    #   - a buyer who already had seller X's product saved and clicks buy on seller Y's product page
-    #     would get X's palette over a checkout showing both sellers' products, which is the
-    #     misbranding the single-seller rule exists to prevent.
-    #
-    # So both sources are combined with the same clear-cart rule as CheckoutPresenter, and the
-    # palette is used only when the final product set has exactly one seller.
+    # Match CheckoutPresenter's product sources and precedence so the theme cannot identify a seller
+    # whose products the checkout does not render. Gift-wishlist arrivals replace the saved cart;
+    # every other arrival extends it.
     def sole_seller_checkout_style(cart, checkout_seller_context)
       seller_ids = checkout_seller_context[:clear_cart] ? [] : (cart ? cart.visible_seller_ids : [])
       seller_ids = (seller_ids + checkout_seller_context[:seller_ids]).uniq

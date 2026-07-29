@@ -49,16 +49,9 @@ class Cart < ApplicationRecord
     alive? && updated_at >= ABANDONED_IF_UPDATED_AFTER_AGO.ago.beginning_of_day && updated_at <= ABANDONED_IF_UPDATED_BEFORE_AGO.ago && sent_abandoned_cart_emails.none? && alive_cart_products.exists?
   end
 
-  # The distinct sellers whose products are in this cart, as the buyer sees the cart.
-  #
-  # Scoped to match CartPresenter#cart_props exactly — alive cart rows joined to products that are
-  # not archived. The two must agree: if this counted a row the page hides, a cart the buyer sees as
-  # one seller's would be treated as mixed (and vice versa), so branding would appear or vanish with
-  # no visible cause.
-  #
-  # `distinct.pluck` rather than loading the products: this runs on every checkout page render and
-  # only the seller ids are needed, so it stays a single narrow query no matter how many products
-  # are in the cart (the cap is MAX_ALLOWED_CART_PRODUCTS).
+  # Keep this scope aligned with CartPresenter#cart_props; counting a hidden row would make the
+  # theme disagree with the products shown to the buyer. Only IDs are needed, so avoid loading
+  # products on every checkout render.
   def visible_seller_ids
     alive_cart_products.joins(:product).merge(Link.not_archived).distinct.pluck("links.user_id")
   end

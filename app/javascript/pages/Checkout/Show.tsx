@@ -70,11 +70,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
-  // The seller's custom CSS and the matching values for Stripe's cross-origin fields, when a
-  // single seller owns everything on this checkout.
-  // The controller always evaluates it, so on a full page load the key is present and merely null
-  // for empty and multi-seller checkouts; declared optional so a partial reload omitting it still
-  // satisfies validation.
+  // Optional because partial reloads can omit a prop that full renders always include.
   checkout_style?: { css: string; theme: CheckoutTheme } | null;
   stripe_fonts_css_source: string;
   checkout: {
@@ -678,11 +674,7 @@ const CheckoutIndexPage = () => {
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
-      // `checkout_style` is derived from the cart's contents (see CheckoutController#show), so it has
-      // to be refreshed by the same request that saves them. Without it, removing or adding an item
-      // that changes the cart between one seller and several would save the new cart while the
-      // injected <head> style kept the old seller's palette — branding that no longer matches what
-      // the buyer is paying for.
+      // Refresh the theme with the cart so branding cannot outlive a one-to-mixed-seller transition.
       only: ["cart", "flash", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
@@ -775,12 +767,7 @@ const CheckoutIndexPage = () => {
 
   return (
     <StateContext.Provider value={reducer}>
-      {/* Applies the seller's palette — accent, background, body text colour and font — to the
-          checkout page. The defaults it overrides are declared inside `@layer base`
-          (stylesheets/_global.scss), and an unlayered style beats a layered one wherever it sits
-          in the document — so this wins the cascade by layer precedence, not by insertion order.
-          The CSS also carries a `body { }` rule, which is why the background follows too.
-          Absent for empty and multi-seller checkouts. */}
+      {/* Unlayered seller styles override the stock values declared in `@layer base`. */}
       {props.checkout_style ? (
         <Head>
           <style>{props.checkout_style.css}</style>
