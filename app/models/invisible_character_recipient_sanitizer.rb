@@ -63,10 +63,22 @@ class InvisibleCharacterRecipientSanitizer
     # `Buyer@example.com`, and another format-character variant. The database therefore cannot
     # tell those variants apart, and the rows have to be compared here in Ruby, byte for byte.
     #
-    # Unicode-space variants are the one known limit: a row stored as `buyer\u00A0@example.com` does
-    # not compare equal to the clean form in MySQL, so this lookup cannot see it. Closing that
-    # needs a normalized-email lookup column; until then, this still closes the format-character
-    # takeover class without slowing the ordinary delivery path.
+    # Both variants are named in the query as literals, so each is found by matching itself
+    # exactly, whether or not the collation considers the two equal. A Unicode space is NOT
+    # collation-ignorable the way a format character is (`buyer\u00A0@example.com` does not compare
+    # equal to `buyer@example.com` in MySQL), but that does not matter here: the dirty form is the
+    # first literal and the cleaned form is the second, so a Unicode-space pair is detected just as
+    # a format-character pair is. Collation only widens what comes back; it is never what makes a
+    # variant visible.
+    #
+    # The remaining hole needs BOTH accounts to store a dirty address, from the two different
+    # classes: this account stored with a format character (`<RLM>buyer@example.com`, cleaning to
+    # `buyer@example.com`) while the other account stored the SAME mailbox with a Unicode space
+    # (`buyer\u00A0@example.com`). Neither literal in the query matches that row and the collation
+    # does not reach it either, so cleaning goes ahead and the message lands in the other person's
+    # mailbox. Closing it needs a stored normalized-email column to look up, because the other
+    # row's dirty form cannot be reconstructed from this one — we know the mailbox the cleaned
+    # address points at, not where somebody else's invisible character sat inside it.
     rows = User.where(email: [address, normalized]).select(:id, :email).to_a
     rows.any? { _1.email == address } && rows.any? { _1.email != address }
   end

@@ -107,6 +107,35 @@ describe InvisibleCharacterRecipientSanitizer do
       expect(other.reload.email).to eq "\uFEFFbuyer@example.com"
     end
 
+    # A Unicode space is not collation-ignorable the way a format character is, so it is worth
+    # pinning that the guard covers it anyway. It does, because the query names the dirty address
+    # and the cleaned address as literals and each row is found by matching itself — the collation
+    # only ever widens the result, it is not what makes a variant visible. Without these examples,
+    # the guard reads as if it only covered the format characters, and somebody would eventually
+    # "narrow it to the cases that work" and reopen the takeover for every Unicode space.
+    it "leaves the recipient alone when a no-break space is what the legacy account stored" do
+      legacy = stored_as("buyer\u00A0@example.com")
+      other = stored_as("buyer@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["buyer\u00A0@example.com"]
+      expect(other.reload.email).to eq "buyer@example.com"
+    end
+
+    it "leaves the recipient alone for every Unicode space and format character we clean" do
+      ["\u00A0", "\u1680", "\u2000", "\u2009", "\u202F", "\u205F", "\u3000", "\u00AD", "\u200B", "\u200E", "\u200F", "\u2060", "\uFEFF"].each_with_index do |invisible, index|
+        clean = "buyer#{index}name@example.com"
+        dirty = "buyer#{index}#{invisible}name@example.com"
+        legacy = stored_as(dirty)
+        stored_as(clean)
+
+        codepoint = invisible.codepoints.first.to_s(16).upcase.rjust(4, "0")
+        expect(deliver_to(legacy.email).to).to(
+          eq([dirty]),
+          "expected a legacy address holding U+#{codepoint} to be left alone, because #{clean} is a different account's mailbox"
+        )
+      end
+    end
+
     it "still cleans the other recipients in the same message" do
       legacy = stored_as("\u200Fbuyer@example.com")
       stored_as("buyer@example.com")
@@ -142,6 +171,24 @@ describe InvisibleCharacterRecipientSanitizer do
       stored_as("buyer@example.com").mark_deleted!
 
       expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+    end
+
+    # The one case this guard genuinely does NOT catch, pinned so it is a known, documented gap
+    # rather than something a later reader assumes is covered. It needs BOTH accounts to store a
+    # dirty address, from the two different classes: this one with a format character, the other
+    # with a Unicode space on the same mailbox. The query names this account's stored address and
+    # its cleaned form, and the other row is neither of those, so nothing sees it.
+    #
+    # It is left open rather than papered over because the other row's dirty form cannot be
+    # derived from this one — we know which mailbox the cleaned address points at, not where
+    # somebody else's invisible character sat inside it. Closing it needs a stored normalized-email
+    # column to look up. This example exists so that column's eventual arrival has a failing test
+    # to turn green, and so nobody reports it as a fresh finding.
+    it "is a known gap when both accounts store different classes of invisible character" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      stored_as("buyer\u00A0@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["buyer@example.com"]
     end
   end
 
