@@ -73,6 +73,17 @@ class Ai::StoreAgentService
     \s+(?:nothing|none|no\s+(?:product\s+)?(?:change|changes?|update|updates?|discount|discounts?|
       action|actions?|offer|offers?|code|codes?|edit|edits?))\b
   /ix
+  # Things the agent stages. The subjectless opener ("Staged deletion of the draft.") needs one of
+  # these to follow, so prose about the staging feature in general cannot be mistaken for a claim
+  # that this turn staged something. The re-staging anchor below reuses the same list: it used to
+  # carry its own copy, the two drifted, and re-staging claims with an object the copy had missed
+  # reached creators as phantom confirmation prompts.
+  STAGED_CLAIM_ACTION_NOUN = /
+    (?:deletions?|removals?|creations?|additions?|renames?|renaming|archival|
+       updates?|changes?|edits?|fixe?s?|
+       discounts?|offer\s+codes?|price\s+changes?|products?(?:\s+updates?)?|
+       publish(?:ing)?|unpublish(?:ing)?)
+  /ix
   STAGED_CLAIM_HISTORICAL_TAIL = /
     (?:
       \s+(?:(?:it|that|this)|(?:the|that|this|your)\s+
@@ -95,12 +106,10 @@ class Ai::StoreAgentService
       # ("I staged it again"), because "tap that card again" is an instruction about a card that
       # IS there, and treating it as re-staging would swallow the truthful point-back.
       # The re-staging verb takes a named object as readily as a pronoun ("I've staged the discount
-      # again"), so the anchor allows both, in the plural and two-word forms the model writes
-      # ("the changes", "the price change") as well.
-      (?!\s+(?:(?:it|that|this)\s+|
-        (?:the|that|this|your|my)\s+
-        (?:price\s+changes?|offer\s+codes?|changes?|updates?|discounts?|offers?|codes?|edits?|
-          deletions?|removals?|renames?)\s+)?again\b)
+      # again"), so the anchor allows both. The object list is STAGED_CLAIM_ACTION_NOUN rather than
+      # a copy of it, so widening what the agent can stage widens this anchor with it.
+      (?!\s+(?:(?:it|that|this|them|those|both)\s+|
+        (?:a|an|the|that|this|your|my)\s+#{STAGED_CLAIM_ACTION_NOUN}\s+)?again\b)
       # The dead-card markers scan to the end of the sentence, not just the clause holding the
       # staging verb: "I've staged the update in my previous message; that card is gone now" is a
       # re-staging claim, and stopping the scan at `;` or a dash loses it. The cost is that a
@@ -160,15 +169,6 @@ class Ai::StoreAgentService
       |
       (?:[:,;—–-]\s*|[.!]\s*|\b(?:and|then)\s+)#{STAGED_CLAIM_CARD_INSTRUCTION}
     )
-  /ix
-  # Things the agent stages. The subjectless opener ("Staged deletion of the draft.") needs one of
-  # these to follow, so prose about the staging feature in general cannot be mistaken for a claim
-  # that this turn staged something.
-  STAGED_CLAIM_ACTION_NOUN = /
-    (?:deletions?|removals?|creations?|additions?|renames?|renaming|archival|
-       updates?|changes?|edits?|fixe?s?|
-       discounts?|offer\s+codes?|price\s+changes?|
-       publish(?:ing)?|unpublish(?:ing)?)
   /ix
   STAGED_CLAIM_CONDITIONAL_TAIL = /
     (?:

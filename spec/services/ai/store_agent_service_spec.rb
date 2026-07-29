@@ -747,6 +747,8 @@ describe Ai::StoreAgentService do
           "I staged the update in my previous message; tap it again if the page didn't refresh.",
           "I staged the changes in my previous message — tap that card again.",
           "I staged the price change in my previous message — tap that card again.",
+          "I staged a change in my previous message — tap that card again.",
+          "I staged them in my previous message — tap that card again.",
           "It's staged on my earlier message — scroll up and confirm it again.",
           # a compound subject is still a subject, however many nouns it has
           "Staged changes and updates wait for your approval.",
@@ -850,6 +852,11 @@ describe Ai::StoreAgentService do
           # "the changes" is the phrasing the model reaches for most.
           "I've staged the changes again because the card on my earlier message was hidden. Tap the card.",
           "I've staged the price change again because the card on my earlier message was hidden. Tap the card.",
+          # the anchor's object list is shared with the staging nouns, so an indefinite article or a
+          # plural pronoun is no more of an escape than a named object is
+          "I've staged a change again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged them again because the card on my earlier message was hidden. Tap the card.",
+          "I've staged the product update again because the card on my earlier message was hidden. Tap the card.",
         ]
 
         phantoms.each do |reply|
