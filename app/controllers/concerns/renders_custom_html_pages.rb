@@ -202,6 +202,78 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  # Injected into the sandboxed landing document at serve time (never authored
+  # by the seller). The seller's CSS can only style the document *inside* the
+  # iframe, so the wrapper around it stays transparent — which paints white in
+  # the areas the iframe doesn't cover: iOS Safari's status-bar and bottom-bar
+  # strips, and the overscroll gutter on every browser. A page with a
+  # non-white background therefore renders with white bands above and below it
+  # (gumroad-private#1530).
+  #
+  # The wrapper can't read the color itself (opaque origin), and the seller
+  # can't declare one (Ai::PageSanitizer strips <meta>, so theme-color never
+  # survives). So the child reports its own canvas color up and the wrapper
+  # mirrors it — no seller HTML changes, and existing pages are fixed on next
+  # load.
+  #
+  # Reported again on class/style mutations and on a color-scheme change so a
+  # theme toggle re-colors the bands instead of stranding the first value.
+  BACKGROUND_BRIDGE_SCRIPT = <<~HTML
+    <script data-cfasync="false" data-gumroad-background-bridge>
+      (function () {
+        // Viewed directly (not framed) there is no wrapper to color.
+        if (window.parent === window) return;
+        function opaque(color) {
+          if (!color || color === "transparent") return false;
+          // rgba()/rgb() with a zero alpha is the computed value for "unset".
+          var parts = color.match(/^rgba?\\(([^)]+)\\)$/i);
+          if (!parts) return true;
+          var values = parts[1].split(/[,\\/]/);
+          return values.length < 4 || parseFloat(values[3]) > 0;
+        }
+        // CSS propagates body's background to the canvas only when html has
+        // none of its own, so html has to be consulted first or a page that
+        // sets both would report the wrong band color.
+        function canvasColor() {
+          var candidates = [document.documentElement, document.body];
+          for (var i = 0; i < candidates.length; i++) {
+            if (!candidates[i]) continue;
+            var color = window.getComputedStyle(candidates[i]).backgroundColor;
+            if (opaque(color)) return color;
+          }
+          return null;
+        }
+        var reported = null;
+        function report() {
+          var color = canvasColor();
+          if (!color || color === reported) return;
+          reported = color;
+          parent.postMessage({ type: "gumroad:background", color: color }, "*");
+        }
+        var queued = false;
+        function queueReport() {
+          if (queued) return;
+          queued = true;
+          requestAnimationFrame(function () { queued = false; report(); });
+        }
+        report();
+        // After load the stylesheet and any seller scripts have applied, so
+        // this is the first reading that reflects the finished page.
+        window.addEventListener("load", queueReport);
+        try {
+          new MutationObserver(queueReport).observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ["class", "style"],
+            subtree: true
+          });
+        } catch (_err) {}
+        try {
+          window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", queueReport);
+        } catch (_err) {}
+      })();
+    </script>
+  HTML
+
   POLL_INTERVAL_MS = 2000
 
   # The HTML comment the agent-preview endpoint splices in front of an edit's replacement so the
@@ -466,6 +538,48 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # The trusted-wrapper half of the background bridge. Applies the color the
+    # sandboxed page reports (see BACKGROUND_BRIDGE_SCRIPT) to the wrapper
+    # canvas and to <meta name="theme-color">, so iOS Safari tints its
+    # status/toolbar strips to match instead of leaving white bands, and the
+    # overscroll gutter matches on every browser.
+    #
+    # The color is untrusted seller-influenced input, so it is never written
+    # into HTML or parsed here: it round-trips through the browser's own CSS
+    # parser via style.backgroundColor, and only the value the browser
+    # normalizes back out is used. A rejected value leaves the property empty
+    # and the whole update is skipped, so nothing can be injected through it.
+    def custom_html_background_wrapper_script(nonce:)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-background-wrapper>
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var meta = null;
+            var probe = document.createElement("div");
+            window.addEventListener("message", function (e) {
+              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
+              if (typeof d.color !== "string") return;
+              // Let the CSS parser vet it: an unparseable value leaves the
+              // property untouched, so a non-empty read-back is the check.
+              probe.style.backgroundColor = "";
+              probe.style.backgroundColor = d.color;
+              var color = probe.style.backgroundColor;
+              if (!color) return;
+              document.documentElement.style.backgroundColor = color;
+              if (!meta) {
+                meta = document.createElement("meta");
+                meta.setAttribute("name", "theme-color");
+                document.head.appendChild(meta);
+              }
+              meta.setAttribute("content", color);
+            });
+          })();
+        </script>
+      HTML
+    end
+
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end
@@ -494,6 +608,7 @@ module RendersCustomHtmlPages
             #{custom_html}
             #{navigation_bridge}
             #{follow_bridge}
+            #{BACKGROUND_BRIDGE_SCRIPT}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
             #{scroll_to_change ? PREVIEW_SCROLL_TO_CHANGE_SCRIPT : ""}
           </body>
