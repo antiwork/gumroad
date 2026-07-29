@@ -17,14 +17,55 @@
 # This only rewrites the envelope for this delivery. It deliberately does NOT touch the stored
 # record — repairing the row is a separate, auditable backfill, and a delivery-time hook is the
 # wrong place to be writing to the database.
+#
+# The one case where cleaning is NOT safe is when the cleaned address is the stored address of a
+# DIFFERENT account. Two accounts can hold the two variants of the same-looking address: one
+# signed up before we started refusing hidden characters, the other after. Rewriting the
+# recipient there would take a message addressed to the first account — a password reset link, a
+# login code, a receipt with download links — and deliver it to the second account's mailbox,
+# whose owner could then take over the first account. So when the database shows two separate
+# accounts behind the two variants, the address is left exactly as it was addressed. That
+# delivery still bounces at the mail provider, which is what happened before this fix existed;
+# silence for one account is recoverable, handing that account to a stranger is not.
 class InvisibleCharacterRecipientSanitizer
   def self.delivering_email(message)
     %i[to cc bcc].each do |field|
       addresses = message.send(field)
       next if addresses.blank?
 
-      cleaned = Array(addresses).map { InvisibleCharacters.normalize_email(_1) }
-      message.send("#{field}=", cleaned) if cleaned != Array(addresses)
+      addresses = Array(addresses)
+      cleaned = addresses.map { sanitized_recipient(_1) }
+      message.send("#{field}=", cleaned) if cleaned != addresses
     end
   end
+
+  # The cleaned form of one recipient, or the recipient untouched when cleaning it would point the
+  # message at somebody else's mailbox.
+  def self.sanitized_recipient(address)
+    # Almost every delivery takes this line and never reaches the database. The lookup below only
+    # runs for an address that actually carries an invisible character, which is rare.
+    return address unless InvisibleCharacters.present_in?(address.to_s)
+
+    normalized = InvisibleCharacters.normalize_email(address.to_s)
+    return address if normalized == address || normalized.blank?
+    return address if owned_by_a_different_account?(address.to_s, normalized)
+
+    normalized
+  end
+  private_class_method :sanitized_recipient
+
+  # True when one live account stores the address exactly as it was addressed here and a
+  # DIFFERENT live account stores the cleaned form.
+  def self.owned_by_a_different_account?(address, normalized)
+    # One query returns both rows: the email column collates as utf8mb4_unicode_ci, which treats
+    # these characters as ignorable, so `WHERE email = '<RLM>buyer@example.com'` matches the plain
+    # `buyer@example.com` row as well. The database therefore cannot tell the two variants apart
+    # at all, and the rows have to be compared here in Ruby, byte for byte.
+    rows = User.alive.where(email: [address, normalized]).select(:id, :email).to_a
+    exact_owner = rows.find { _1.email == address }
+    cleaned_owner = rows.find { _1.email == normalized }
+
+    exact_owner.present? && cleaned_owner.present? && exact_owner.id != cleaned_owner.id
+  end
+  private_class_method :owned_by_a_different_account?
 end

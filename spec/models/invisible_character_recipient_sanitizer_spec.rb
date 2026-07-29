@@ -64,6 +64,58 @@ describe InvisibleCharacterRecipientSanitizer do
     expect(user.reload.email).to eq "\u200Fbuyer@example.com"
   end
 
+  # Cleaning the recipient is only safe while the cleaned address belongs to the same person. Two
+  # live accounts can hold the two variants of the same-looking address — one signed up before we
+  # started refusing hidden characters, the other after — and rewriting the recipient there would
+  # take a message addressed to the first account (a reset link, a login code, a receipt with
+  # download links) and deliver it into the second account's mailbox, letting its owner take over
+  # the first account. The message is left addressed as it was instead, so it bounces exactly as
+  # it did before this interceptor existed.
+  describe "when the cleaned address belongs to a different account" do
+    # Both rows are written with update_column, which is the only way this pair can exist. Signup
+    # itself cannot produce it: User's own uniqueness check is `User.by_email(email)`, and because
+    # the email column collates as utf8mb4_unicode_ci that query matches across the invisible
+    # character, so whichever variant is submitted second is refused as "An account already exists
+    # with this email." The pair can still arrive from a path that writes the column directly — a
+    # data migration, an admin correction, a save that skips validation — and the cost of being
+    # wrong is an account takeover, so the interceptor checks rather than assuming.
+    def stored_as(address)
+      create(:user).tap { _1.update_column(:email, address) }
+    end
+
+    it "leaves the recipient alone rather than delivering to the other mailbox" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      other = stored_as("buyer@example.com")
+
+      expect(deliver_to(legacy.email).to).to eq ["\u200Fbuyer@example.com"]
+      expect(other.reload.email).to eq "buyer@example.com"
+    end
+
+    it "still cleans the other recipients in the same message" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      stored_as("buyer@example.com")
+
+      mail = deliver_to([legacy.email, "\u200Fsomeone-else@example.com"])
+
+      expect(mail.to).to eq ["\u200Fbuyer@example.com", "someone-else@example.com"]
+    end
+
+    it "cleans it when the same account owns both variants" do
+      user = stored_as("\u200Fbuyer@example.com")
+
+      expect(deliver_to(user.email).to).to eq ["buyer@example.com"]
+    end
+
+    # A deleted account cannot receive anything, so it is not a mailbox the message could leak
+    # into and it must not block the legacy account from hearing from us.
+    it "cleans it when the account owning the cleaned form is deleted" do
+      legacy = stored_as("\u200Fbuyer@example.com")
+      stored_as("buyer@example.com").mark_deleted!
+
+      expect(deliver_to(legacy.email).to).to eq ["buyer@example.com"]
+    end
+  end
+
   # The examples above call the interceptor directly, which proves the logic but not that Rails
   # actually runs it. This one goes through a real delivery so a future change that drops the
   # registration in config/initializers/mail_observers.rb fails here rather than silently
