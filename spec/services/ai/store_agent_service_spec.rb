@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "timeout"
 
 describe Ai::StoreAgentService do
   let(:seller) { create(:user) }
@@ -658,6 +659,23 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action]).to include(type: "api_write")
       end
 
+      it "keeps subjectless parsing bounded on long near-matches" do
+        replies = [
+          "Staged deletion of the #{"very " * 4_000}last draft is permanent. Approve it.",
+          "Staged again. #{"The confirm card should be back " * 2_000}but it is not.",
+          "Staged deletion of the draft (#{"x" * 10_000}. Approve it.",
+          "Staged deletion of the draft (#{"x" * 121}). Approve it.",
+          "Staged again#{" " * 10_000}x",
+          "Staged deletion of the draft. Approve it#{" " * 20_000}x",
+        ]
+
+        matches = Timeout.timeout(1) do
+          replies.map { |reply| service.send(:phantom_staged_claim?, reply:, proposed_action: nil) }
+        end
+
+        expect(matches).to eq([false, false, false, false, false, false])
+      end
+
       it "leaves truthful replies that use the same words alone" do
         # A match REPLACES the model's reply, so a false positive tells the seller a change doesn't
         # exist when it does — worse than the phantom claim. Every one of these is truthful with no
@@ -690,6 +708,7 @@ describe Ai::StoreAgentService do
           "I’ve staged similar changes in the past.",
           "I’ve staged no product update.",
           "The earlier reply said: I’ve staged it.",
+          "For context, the earlier reply said: I have now staged it for confirmation.",
           # a card on an EARLIER message can genuinely still be pending
           "The confirm button is on my earlier message — scroll up to that card.",
           "The confirm button is on the earlier message — scroll up.",
@@ -718,6 +737,18 @@ describe Ai::StoreAgentService do
           "The confirmation card appears below when a change is staged.",
           "The confirmation card appears below only after api_write succeeds.",
           "This request is still non-staged.",
+          # Subjectless detection stays at the measured reply start and exact action/card frames.
+          "Example output: Staged deletion of the last draft. Approve it.",
+          "Do not say: Staged again. Tap the card below.",
+          "Staged deletion of the draft is permanent. Approve it.",
+          "Staged deletion of the very last remaining draft is permanent. Approve it.",
+          "Staged deletion of the draft is explained in this block. Click it.",
+          "Staged deletion of the draft is permanent. This is a block. Click it.",
+          "Staged deletion of the last Bidcheckpro draft (from my previous message). Approve it.",
+          "Staged deletion of the draft. Approve it only in the demo.",
+          "Staged removal of the block. Tap the card, then watch the recording.",
+          "Staged again. It's on my earlier message.",
+          "Staged again. You already applied it.",
           "You have 3 products.",
         ]
 
@@ -765,6 +796,11 @@ describe Ai::StoreAgentService do
           "Staged successfully — confirm below.",
           "Staged, but not already applied.",
           "It's staged but hasn't already been applied.",
+          # The two exact post-#6506 survivors plus two bounded synthetic sibling frames.
+          "Staged deletion of the last Bidcheckpro draft (enviac, $149). Approve it, then tell me if you want to move on to creating Auru API at $25.",
+          "Staged again. The confirm card should be back — tap it whenever you're ready and the archive goes live.",
+          "Staged removal of the duplicate mobile block. Tap the card to apply it.",
+          "Staged the price change. Click that card and it goes live.",
         ]
 
         phantoms.each do |reply|
@@ -788,6 +824,9 @@ describe Ai::StoreAgentService do
           "It wasn't staged before, so I staged it now.",
           "No change was prepared before, although I have now prepared it for approval.",
           "I staged that yesterday; it was already applied. I've now staged the replacement for your confirmation.",
+          "The earlier reply said: Nothing was staged. Staged again. The confirm card should be back — tap it whenever you're ready and the archive goes live.",
+          "The previous message read: Nothing was staged; Staged deletion of the last Bidcheckpro draft (enviac, $149). Approve it, then tell me if you want to move on to creating Auru API at $25.",
+          "For context, the earlier reply said: Nothing was staged. I have now staged it for confirmation.",
         ]
 
         mixed_claims.each do |reply|
