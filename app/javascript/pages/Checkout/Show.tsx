@@ -4,6 +4,7 @@ import typia from "typia";
 
 import { type SurchargesResponse } from "$app/data/customer_surcharge";
 import { PaymentConfirmedError, startClientConfirmOrderCreation, startOrderCreation } from "$app/data/order";
+import { type CartPurchaseResult } from "$app/data/purchase";
 import { getPlugins, trackUserActionEvent, trackUserProductAction } from "$app/data/user_action_event";
 import { type SavedCreditCard } from "$app/parsers/card";
 import { type CardProduct, COMMISSION_DEPOSIT_PROPORTION, type CustomFieldDescriptor } from "$app/parsers/product";
@@ -24,6 +25,11 @@ import {
   getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
+import {
+  buildBuyerCurrencyQuoteRecoveryDeps,
+  recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote,
+  useLatestCartGetter,
+} from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import {
   type CartItem,
   type CartState,
@@ -381,6 +387,29 @@ const CheckoutIndexPage = () => {
   const [showLargeTipConfirmation, setShowLargeTipConfirmation] = React.useState(false);
   const largeTipConfirmedRef = React.useRef(false);
 
+  // The cart stays editable while the charge request is in flight — the Edit and Remove
+  // controls in the cart rows are not disabled during processing — so the buyer can change a
+  // quantity, an option, or a pay-what-you-want price, or drop an item entirely, between
+  // pressing Pay and the server answering. This getter always reads the cart from the latest
+  // committed render, so the recovery writes back whatever the buyer is holding at that
+  // moment rather than the snapshot from the render that started the charge, which would
+  // resurrect selections they had already changed and then quote them.
+  const getLatestCart = useLatestCartGetter(cartForm.data.cart);
+
+  // Recovers a checkout whose local-currency quote the server refused at charge time. The
+  // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
+  function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"]) {
+    recoverBuyerCurrencyQuote({
+      lineItems,
+      ...buildBuyerCurrencyQuoteRecoveryDeps({
+        getLatestCart,
+        setCart: (cart) => cartForm.setData({ cart }),
+        getProducts,
+        dispatchUpdateProducts: (products) => dispatch({ type: "update-products", products }),
+      }),
+    });
+  }
+
   async function pay() {
     if (state.status.type !== "finished") return;
     if (isTipSuspiciouslyLarge(state) && !largeTipConfirmedRef.current) {
@@ -550,7 +579,7 @@ const CheckoutIndexPage = () => {
       ) {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
-        dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
+        recoverFromInvalidBuyerCurrencyQuote(result.lineItems);
         return;
       }
 

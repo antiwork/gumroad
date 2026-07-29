@@ -13,7 +13,7 @@ class AffiliateRequestMailer < ApplicationMailer
     @requester_has_existing_account = User.exists?(email: @affiliate_request.email)
     mail to: @affiliate_request.email,
          subject: @subject,
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller)
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller, to: @affiliate_request.email)
   end
 
   def notify_requester_of_request_approval(affiliate_request_id)
@@ -38,7 +38,7 @@ class AffiliateRequestMailer < ApplicationMailer
 
     mail to: @affiliate_request.email,
          subject: @subject,
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller)
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller, to: @affiliate_request.email)
   end
 
   def notify_requester_of_ignored_request(affiliate_request_id)
@@ -47,7 +47,7 @@ class AffiliateRequestMailer < ApplicationMailer
     @subject = "Your affiliate request to #{@affiliate_request.seller.display_name} was not approved"
     mail to: @affiliate_request.email,
          subject: @subject,
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller)
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller, to: @affiliate_request.email)
   end
 
   def notify_unregistered_requester_of_request_approval(affiliate_request_id)
@@ -57,7 +57,7 @@ class AffiliateRequestMailer < ApplicationMailer
 
     mail to: @affiliate_request.email,
          subject: @subject,
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller)
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller, to: @affiliate_request.email)
   end
 
   def notify_seller_of_new_request(affiliate_request_id)
@@ -67,6 +67,6 @@ class AffiliateRequestMailer < ApplicationMailer
 
     mail to: @affiliate_request.seller.email,
          subject: @subject,
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller)
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller, to: @affiliate_request.seller.email)
   end
 end

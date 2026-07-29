@@ -9,6 +9,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import {
   Table,
   TableBody,
@@ -107,15 +108,26 @@ export const ProductsPageMembershipsTable = (props: {
                 href={membership.can_edit ? membership.edit_url : membership.url}
                 thumbnail={membership.thumbnail?.url ?? null}
               />
-              <TableCell hideLabel>
-                {/* Safari currently doesn't support position: relative on <tr>, so we can't make the whole row a link here */}
-                <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
+              {/* The name cell is `relative` so StretchedLink can fill it. Before this, only the
+                  bold name text was clickable, which is a small target — sellers reported that
+                  clicking a row "does nothing" when they had in fact tapped the dead space beside
+                  the name (gumroad-private#1469). Making the entire cell clickable is as far as we
+                  can widen it without nesting links: Safari doesn't support `position: relative` on
+                  <tr>, so the row itself can't be the link. */}
+              <TableCell hideLabel className="relative">
+                <StretchedLink href={membership.can_edit ? membership.edit_url : membership.url}>
                   {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
-                  <h4 className="font-bold" dir="auto">
+                  <h4 className="relative font-bold" dir="auto">
                     {membership.name}
                   </h4>
-                </a>
-                <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer">
+                </StretchedLink>
+                <a
+                  href={membership.url}
+                  title={membership.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="relative z-1"
+                >
                   <small className="block">{membership.url_without_protocol}</small>
                 </a>
               </TableCell>

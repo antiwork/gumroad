@@ -1,101 +1,64 @@
 # frozen_string_literal: true
 
-# Server-authoritative policy boundary for the client-confirmed Intent path (Lane B). Given a cart's
-# sellers and product lifecycle, it decides whether the cart may confirm client-side and which Stripe
-# payment methods it may use. The frontend cannot widen this: payment_method_types is the intersection
-# of the eligible set with a hardcoded launched set, so no client-supplied value can add a method.
+# Server-authoritative policy boundary for the client-confirmed Intent path (Lane B): whether a cart
+# may confirm client-side at all, and which Stripe payment methods it may use. The frontend cannot
+# widen it — payment_method_types is the intersection of the eligible set with a hardcoded launched
+# set.
 #
-# Two method sets are distinguished:
-#   - eligible_payment_method_types: the policy set the cart *could* use (the eligibility-by-product-type
-#     policy). This is the logged decision and what later units intersect with per-method launch/PPP gates.
-#   - payment_method_types: what Stripe actually receives on the client-confirmed path today. Card and
-#     Link are always launched (Link is inline and auto-enables with the Payment Element itself); the
-#     US-locked first-launch method (Cash App Pay) joins for US buyers via the GeoIP gate below.
+#   - client_confirm_eligible?: may this cart take Lane B, or must it fall back to Lane A.
+#   - eligible_payment_method_types: the policy set the cart *could* use. Logged, and intersected
+#     downstream with per-method launch/PPP gates.
+#   - payment_method_types: what Stripe actually receives today.
 #
-# Handshake note: the deferred PaymentIntent's payment_method_types must equal the Payment Element's or
-# Stripe rejects the ConfirmationToken (which is payment_method_types-scoped, so it also can't be
-# confirmed against an automatic_payment_methods intent — hence an explicit array here, never
-# automatic_payment_methods). Both sides read this resolver, but they derive its lifecycle inputs
-# independently (the presenter from the cart, PreparePaymentIntentService from the persisted purchases).
-# Both derive buyer_country from the same GeoIP basis (the presenter from the request ip, the service
-# from the purchase's server-owned ip_country), so they resolve identical sets — and
-# PreparePaymentIntentService hard-stops an ineligible cart before creating the intent, so any residual
-# mismatch fails closed rather than reaching Stripe with the wrong method list.
+# The deferred PaymentIntent's payment_method_types must equal the Payment Element's or Stripe
+# rejects the ConfirmationToken — hence an explicit array, never automatic_payment_methods. The
+# presenter and PreparePaymentIntentService both resolve through here from the same GeoIP basis, and
+# the service hard-stops an ineligible cart before creating the intent, so a mismatch fails closed.
 class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
   # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
   # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay].freeze
-  # Afterpay/Clearpay, Affirm, UPI, and Pix are one-time, buyer-present only, so a recurring
-  # lifecycle drops them. (Recurring carts currently fall back to Lane A before any Stripe method
-  # list is built, but the eligible-policy set is logged and intersected by later units, so it must
-  # not claim a recurring-incapable method.) Klarna is here as a v1 launch decision, not a Stripe
-  # limitation: Stripe supports Klarna on recurring payments, but memberships/preorders are
-  # excluded from Klarna's first launch (gumroad-private#933) so the policy set must not claim it.
-  # Alipay is here for a stronger reason than Klarna's: Stripe gates recurring Alipay behind
-  # its own approval and does not support Alipay in Checkout's subscription mode at all
-  # (docs.stripe.com/payments/alipay), and memberships/preorders are out of scope for its
-  # first launch anyway (gumroad-private#1339), so the policy set must not claim it on a
-  # recurring cart.
-  # iDEAL and Bancontact are one-shot bank approvals: the buyer authorises a single payment in
-  # their banking app, and charging them again later requires separately collecting a SEPA Direct
-  # Debit mandate, which Gumroad's checkout does not do. So a membership or preorder priced in
-  # euros must never claim them either — the buyer would authorise the first charge and every
-  # renewal after it would have nothing to charge against. Pix works the same way in Brazil: the
-  # buyer approves one QR-code transfer from their bank account and there is no stored mandate to
-  # bill again, so it is one-time only too.
+  # Dropped on a recurring lifecycle, for four different reasons:
+  #   - afterpay_clearpay, affirm, upi: one-time, buyer-present only.
+  #   - ideal, bancontact, pix: one-shot bank approvals with no stored mandate, so renewals would
+  #     have nothing to charge against. Re-billing iDEAL/Bancontact would need a SEPA Direct Debit
+  #     mandate we don't collect; Pix has no re-billing mechanism at all.
+  #   - alipay: Stripe gates recurring Alipay behind approval and excludes it from subscription
+  #     mode, so it stays out until that changes, not until we widen our launch scope.
+  #   - klarna: a launch decision, not a capability limit — memberships and preorders are out of
+  #     scope for its first launch (gumroad-private#933).
+  # Recurring carts fall back to Lane A before a Stripe list is built, but this set is logged and
+  # intersected downstream, so it must not claim a recurring-incapable method.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi pix klarna alipay ideal bancontact].freeze
-  # Launched on the client-confirmed path: card everywhere; Link everywhere (inline — it rides
-  # card's two-step confirm machinery with no return-page/webhook dependency, launched under the
-  # element flags themselves since Stripe's dashboard payment-method settings are the emergency
-  # kill switch, per-seller Flipper adds no useful lever); plus Cash App Pay (US-locked, region-gated
-  # below; redirect — confirms via the #5664 return page). The EUR forced-currency methods
-  # (iDEAL/Bancontact) launch per-method via LOCAL_METHOD_LAUNCH_FEATURES on
-  # Checkout::BuyerCurrencyEligibility — see forced_currency_methods below; SEPA stays
-  # unwired until its own launch. Klarna and Alipay ride the canonical-USD lane behind their own
-  # per-seller launch flags — see KLARNA_LAUNCH_FEATURE / ALIPAY_LAUNCH_FEATURE, neither of which
-  # lives in this constant because they are flag-gated rather than always-on.
-  # ACH Direct Debit (us_bank_account) was launched and
-  # then withdrawn platform-wide: it settles in ~4 business days and content only delivers on
-  # settlement, which doesn't fit digital products (gumroad-private#1143). Its webhook settlement
-  # lifecycle stays wired so in-flight ACH purchases still complete. Sellers who want it anyway
-  # (e.g. large-ticket sales where card limits bite) can opt back in per seller — see
-  # SELLER_OPT_IN_PAYMENT_METHOD_TYPES below.
+  # Always-on for the client-confirmed path. Link is inline (rides card's confirm machinery, no
+  # return page); cashapp is US-locked and region-gated below.
+  # Not here because they are flag-gated instead: the forced-currency methods iDEAL, Bancontact,
+  # UPI and Pix (LOCAL_METHOD_LAUNCH_FEATURES on Checkout::BuyerCurrencyEligibility), plus Klarna
+  # and Alipay (KLARNA_/ALIPAY_LAUNCH_FEATURE). SEPA is unwired until its own launch.
+  # ACH (us_bank_account) was launched then withdrawn platform-wide — ~4 business days to settle and
+  # content only delivers on settlement (gumroad-private#1143). Its webhook lifecycle stays wired so
+  # in-flight purchases complete, and sellers can opt back in via SELLER_OPT_IN_PAYMENT_METHOD_TYPES.
   LAUNCHED_PAYMENT_METHOD_TYPES = %w[card link cashapp].freeze
-  # Methods a seller can re-enable for their own checkouts from the checkout settings page
-  # (User#ach_payments_enabled?). They join the launched set only for that seller's carts and then
-  # flow through every downstream gate unchanged: the US region gate (ACH debits a US bank
-  # account), the PPP matrix, and the per-account capability intersection for direct-charge
-  # sellers. Opting in can therefore never widen the set past what the buyer/account could
-  # actually complete. Both the presenter and PreparePaymentIntentService resolve through this
-  # same class with the same seller, so the Payment Element and the deferred intent stay in sync
-  # (the handshake note above).
+  # Re-enabled per seller from checkout settings (User#ach_payments_enabled?). Joins the launched
+  # set for that seller's carts only, and still passes every downstream gate (US region, PPP matrix,
+  # per-account capabilities), so opting in cannot widen the set past what the buyer could complete.
   SELLER_OPT_IN_PAYMENT_METHOD_TYPES = %w[us_bank_account].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
-  # Klarna (buy now, pay later; redirect-based) launches behind its own per-seller Flipper flag,
-  # following the per-method launch-flag pattern of the forced-currency local methods
-  # (checkout_local_method_ideal / _upi) so it can ramp and roll back independently
-  # (gumroad-private#933 — Klarna is the top-ranked next method by GMV lift). Unlike iDEAL/UPI,
-  # Klarna does NOT force a presentment currency, so it does not live in
-  # Checkout::BuyerCurrencyEligibility's forced-currency registry: it rides the existing
-  # canonical-USD element/intent lane.
+  # Per-seller Flipper flag so it can ramp and roll back independently (gumroad-private#933).
+  # Unlike iDEAL/UPI, Klarna forces no presentment currency, so it rides the canonical-USD lane and
+  # is absent from Checkout::BuyerCurrencyEligibility's forced-currency registry.
   KLARNA_PAYMENT_METHOD_TYPE = "klarna"
   KLARNA_LAUNCH_FEATURE = :checkout_local_method_klarna
-  # v1 offers Klarna to US buyers only. Stripe's cross-border rules for Klarna require the
-  # customer's location currency as the presentment currency (and, for a US business like the
-  # platform account, US customers specifically) — and this lane only creates USD intents, whose
-  # customer-location currency is the US dollar. Offering Klarna to a UK/DE/SE buyer here would
-  # render a method whose confirm Stripe rejects (their location currencies are GBP/EUR/SEK).
-  # Reaching those buyers needs the buyer-currency presentment lane (GBP/EUR intents), which is
-  # a later phase. Deliberately NOT in US_LOCKED_PAYMENT_METHOD_TYPES: that constant feeds the
-  # PPP region-locked allowance, and Klarna stays gated out of PPP checkouts (see
-  # ppp_method_matrix — its funding country is not verifiable pre-charge).
+  # US only: Stripe requires the buyer's location currency as the presentment currency for Klarna,
+  # and this lane only creates USD intents — a UK/DE/SE buyer's confirm would be rejected. Reaching
+  # them needs the buyer-currency lane. Deliberately NOT in US_LOCKED_PAYMENT_METHOD_TYPES, which
+  # feeds the PPP allowance: Klarna stays out of PPP checkouts (funding country unverifiable
+  # pre-charge — see ppp_method_matrix).
   KLARNA_SUPPORTED_BUYER_COUNTRY = "US"
-  # Stripe enforces Klarna transaction limits per payment option and country; a cart outside
-  # every option's range fails at confirm with no recoverable buyer action. Fail eligibility
-  # closed instead: only offer Klarna when the cart total sits inside the widest USD window
-  # (Pay in full: 0–4,000 USD; the floor is kept at $1 so near-zero carts, which Klarna's other
-  # options all reject, never render the method). An unknown total also fails closed.
+  # Outside every Klarna option's range the confirm fails with no recoverable buyer action, so fail
+  # eligibility closed instead: offer it only inside the widest USD window (Pay in full, 0–4,000),
+  # floored at $1 so near-zero carts never render it. Unknown total also fails closed.
   KLARNA_MIN_USD_CHARGE_CENTS = 1_00
   KLARNA_MAX_USD_CHARGE_CENTS = 4_000_00
   # Alipay (Chinese digital wallet; redirect-based) launches behind its own per-seller Flipper

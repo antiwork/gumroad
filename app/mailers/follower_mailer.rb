@@ -11,6 +11,6 @@ class FollowerMailer < ApplicationMailer
 
     mail to: @follower.email,
          subject: "Please confirm your follow request.",
-         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :followers)
+         delivery_method_options: MailerInfo.random_delivery_method_options(domain: :followers, to: @follower.email)
   end
 end

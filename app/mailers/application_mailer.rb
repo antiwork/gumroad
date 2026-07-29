@@ -27,10 +27,26 @@ class ApplicationMailer < ActionMailer::Base
 
   ruby2_keywords def process(name, *args)
     super
+    redirect_united_internet_recipients_to_sendgrid!
     set_custom_headers(name, args)
   end
 
   private
+    # Safety net for MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS. Mailers pass
+    # `to:` so the provider is picked up front; this catches the ones that don't,
+    # which is easy to miss when writing a new mailer. Runs post-build so the
+    # recipients are already known, and before set_custom_headers, which derives
+    # X-GUM-Email-Provider from the SMTP address we end up with.
+    def redirect_united_internet_recipients_to_sendgrid!
+      return if message.class == ActionMailer::Base::NullMail
+      return unless MailerInfo.force_sendgrid_for_recipients?(message.to)
+
+      sendgrid_settings = MailerInfo::DeliveryMethod.sendgrid_equivalent_options(message.delivery_method.settings)
+      return if sendgrid_settings.nil?
+
+      message.delivery_method.settings = message.delivery_method.settings.merge(sendgrid_settings)
+    end
+
     def from_email_address_with_name(name = "", email = NOREPLY_EMAIL)
       name = from_email_address_name(name)
       email_address_with_name(email, name)
