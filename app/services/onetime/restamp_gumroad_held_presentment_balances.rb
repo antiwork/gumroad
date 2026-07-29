@@ -283,20 +283,37 @@ class Onetime::RestampGumroadHeldPresentmentBalances
       :eligible
     end
 
-    # Whether this balance transaction traces back to a purchase with presentment records, which is
+    # Whether this balance transaction traces back to purchases with presentment records, which is
     # the signature of the branch this service repairs.
     #
     # Refund and dispute legs carry no `purchase_id` of their own — they hang off the refund or
-    # dispute — so the purchase is resolved through whichever association is present. Anything with
+    # dispute — so the purchases are resolved through whichever association is present. Anything with
     # no reachable purchase at all (a credit leg, say) cannot be shown to come from this regression
     # and is refused.
+    #
+    # A dispute needs one more step than a refund: a dispute raised against a combined-cart charge
+    # is recorded on the Charge itself (`disputes.charge_id` set, `disputes.purchase_id` empty), so
+    # reading only `dispute.purchase` refuses those legs as having no related purchase — and the
+    # affected set contains exactly that shape, a chargeback leg against a charge-level dispute.
+    # `Dispute#purchases` resolves both shapes: the charge's purchases when the dispute is
+    # charge-level, the directly-attached purchase otherwise. Every reachable purchase must carry
+    # presentment records; a charge whose purchases disagree on that was not written by this
+    # regression (presentment rows are created for all of a presentment charge's purchases or none),
+    # so it is refused for hand review rather than relabelled.
     def presentment_backed?(balance_transaction)
-      purchase = balance_transaction.purchase ||
-                 balance_transaction.refund&.purchase ||
-                 balance_transaction.dispute&.purchase
+      purchases =
+        if balance_transaction.purchase
+          [balance_transaction.purchase]
+        elsif balance_transaction.refund
+          [balance_transaction.refund.purchase]
+        elsif balance_transaction.dispute
+          balance_transaction.dispute.purchases
+        else
+          []
+        end.compact
 
-      return :bt_no_related_purchase if purchase.nil?
-      return :bt_purchase_not_presentment if purchase.purchase_presentment.blank?
+      return :bt_no_related_purchase if purchases.empty?
+      return :bt_purchase_not_presentment unless purchases.all? { |purchase| purchase.purchase_presentment.present? }
 
       :ok
     end

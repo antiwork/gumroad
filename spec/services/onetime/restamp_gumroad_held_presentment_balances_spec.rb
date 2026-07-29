@@ -230,13 +230,20 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
 
     it "restamps a negative dispute leg, the one non-purchase shape in the affected set" do
       # Production balance 16800893 is a chargeback leg, not a sale: holding gbp/-4551/-4275 against
-      # issued usd/-6000/-4275. It matters because the amounts are negative, because it is booked
-      # against a dispute rather than a purchase (so the presentment check has to reach the purchase
-      # through the dispute), and because it was booked after the lane was ramped down — a chargeback
-      # can arrive long after the charge it disputes.
+      # issued usd/-6000/-4275. It matters because the amounts are negative, because it was booked
+      # after the lane was ramped down — a chargeback can arrive long after the charge it disputes —
+      # and because the dispute is recorded against the whole Charge rather than the purchase
+      # (`disputes.charge_id` set, `disputes.purchase_id` empty, which is how combined-cart
+      # chargebacks are stored). That last part is the trap: the presentment check has to walk
+      # dispute → charge → purchases, and a check that reads only `dispute.purchase` refuses this
+      # balance as having no related purchase — a silent skip that leaves the seller's row
+      # mislabelled after an otherwise clean-looking run.
       dispute_time = Time.utc(2026, 7, 28, 15, 18, 5)
-      disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 54_00)
-      dispute = create(:dispute_formalized, purchase: disputed_purchase)
+      disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 45_51, presentment_currency: Currency::GBP)
+      charge = disputed_purchase.purchase_presentment.charge_presentment.charge
+      charge.purchases << disputed_purchase
+      dispute = create(:dispute_formalized, purchase: nil, charge:)
+      expect(dispute.purchase).to be_nil
 
       bt = travel_to(dispute_time) do
         BalanceTransaction.create!(
@@ -261,6 +268,33 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(bt.reload.holding_amount_currency).to eq(Currency::USD)
       expect(bt.holding_amount_gross_cents).to eq(-60_00)
       expect(bt.holding_amount_net_cents).to eq(-42_75)
+    end
+
+    it "restamps a dispute leg whose dispute carries the purchase directly" do
+      # The other dispute shape: a dispute raised against a single purchase stores the purchase on
+      # the dispute row itself, no charge involved. Covered separately from the charge-level example
+      # above so that resolving one shape can never silently stop resolving the other.
+      disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 54_00)
+      dispute = create(:dispute_formalized, purchase: disputed_purchase)
+
+      bt = travel_to(mislabelled_at) do
+        BalanceTransaction.create!(
+          user: seller,
+          merchant_account: gumroad_account,
+          dispute:,
+          issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -60_00, net_cents: -42_75),
+          holding_amount: BalanceTransaction::Amount.new(currency: Currency::EUR, gross_cents: -54_00, net_cents: -42_75),
+          update_user_balance: true,
+        )
+      end
+      balance = Balance.find(bt.balance_id)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:corrected]).to eq(1)
+
+      expect(balance.reload.holding_currency).to eq(Currency::USD)
+      expect(bt.reload.holding_amount_currency).to eq(Currency::USD)
+      expect(bt.holding_amount_gross_cents).to eq(-60_00)
     end
 
     it "refuses a row whose holding net disagrees with its issued net, rather than moving money" do
