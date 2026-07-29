@@ -234,6 +234,46 @@ describe Onetime::RestampGumroadHeldPresentmentBalances do
       expect(bt.holding_amount_net_cents).to eq(-42_75)
     end
 
+    it "restamps a charge-level dispute whose charge also carries a free companion line" do
+      # The shape the charge-wide check used to refuse. A charge carries the seller's free/test
+      # lines next to the paid ones, but only the paid lines get a presentment row, so this is a
+      # normal presentment charge with one presentment-backed purchase and one without. It is
+      # exactly the kind of row this repair exists to fix, so it must not be skipped.
+      dispute_time = Time.utc(2026, 7, 28, 15, 18, 5)
+      paid_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 45_51, presentment_currency: Currency::GBP)
+      charge = paid_purchase.purchase_presentment.charge_presentment.charge
+      free_companion = create(:purchase, seller:, link: product, price_cents: 0, total_transaction_cents: 0,
+                                         displayed_price_currency_type: Currency::GBP,
+                                         created_at: mislabelled_at, succeeded_at: mislabelled_at)
+      charge.purchases << paid_purchase
+      charge.purchases << free_companion
+      expect(free_companion.reload.purchase_presentment).to be_nil
+
+      dispute = create(:dispute_formalized, purchase: nil, charge:)
+      expect(dispute.purchases.map(&:id)).to match_array([paid_purchase.id, free_companion.id])
+
+      bt = travel_to(dispute_time) do
+        BalanceTransaction.create!(
+          user: seller,
+          merchant_account: gumroad_account,
+          dispute:,
+          issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: -60_00, net_cents: -42_75),
+          holding_amount: BalanceTransaction::Amount.new(currency: Currency::GBP, gross_cents: -45_51, net_cents: -42_75),
+          update_user_balance: true,
+        )
+      end
+      balance = Balance.find(bt.balance_id)
+
+      result = service(balance_ids: [balance.id], dry_run: false).process
+      expect(result[:stats][:corrected]).to eq(1)
+      expect(result[:stats][:bt_purchase_not_presentment]).to eq(0)
+
+      balance.reload
+      expect(balance.holding_currency).to eq(Currency::USD)
+      expect(balance.holding_amount_cents).to eq(-42_75)
+      expect(bt.reload.holding_amount_currency).to eq(Currency::USD)
+    end
+
     it "restamps a dispute leg whose dispute carries the purchase directly" do
       # The other dispute shape: purchase_id on the dispute row itself, no charge involved.
       disputed_purchase = create_presentment_purchase(canonical_gross_cents: 60_00, presentment_cents: 54_00)

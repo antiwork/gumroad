@@ -181,6 +181,17 @@ class Onetime::RestampGumroadHeldPresentmentBalances
     # Refund and dispute legs carry no purchase_id of their own, and a combined-cart dispute
     # carries only charge_id — Dispute#purchases handles both dispute shapes. No reachable
     # purchase (a credit leg, say) means the row cannot be tied to this regression: refuse.
+    #
+    # For a charge-level dispute this is every purchase on the charge, and only SOME of them
+    # can have a presentment row. A charge carries the seller's free/test lines alongside the
+    # paid ones (Order::PreparePaymentIntentService#charge_purchases appends them), while the
+    # presentment snapshot is built from the paid lines only, because a free line contributes
+    # no money to the charge (Charge::PresentmentOrchestrator.persist! writes a row per paid
+    # allocation). So a paid EUR line plus a $0 EUR companion is a normal presentment charge
+    # with one presentment-backed purchase and one without. Requiring all of them would refuse
+    # exactly the rows this repair exists to fix, and tell the operator they were never part of
+    # the regression. One presentment-backed purchase is the proof we need: it can only exist
+    # if this charge went down the presentment path.
     def presentment_backed?(balance_transaction)
       purchases =
         if balance_transaction.purchase
@@ -194,7 +205,7 @@ class Onetime::RestampGumroadHeldPresentmentBalances
         end.compact
 
       return :bt_no_related_purchase if purchases.empty?
-      return :bt_purchase_not_presentment unless purchases.all? { |purchase| purchase.purchase_presentment.present? }
+      return :bt_purchase_not_presentment unless purchases.any? { |purchase| purchase.purchase_presentment.present? }
 
       :ok
     end
