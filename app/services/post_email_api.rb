@@ -12,16 +12,25 @@ class PostEmailApi
       return PostSendgridApi.process(**args)
     end
 
+    # United Internet (web.de / GMX) policy-blocks Resend's sending IPs, so those
+    # recipients have to be carved out BEFORE the force-Resend flag, not after.
+    # Sending them via Resend is not "mostly fine" — it is a guaranteed bounce, so
+    # honouring the flag for them would knowingly drop the email. See
+    # MailerInfo::UNITED_INTERNET_RECIPIENT_DOMAINS.
     if Feature.active?(:force_resend_for_post_emails, post&.seller)
-      return PostResendApi.process(**args)
+      blocked, resendable = recipients.partition { MailerInfo.force_sendgrid_for_recipients?(_1[:email]) }
+      PostSendgridApi.process(**args.merge(recipients: blocked)) if blocked.any?
+      return PostResendApi.process(**args.merge(recipients: resendable)) if resendable.any?
+      return
     end
 
     # Split recipients based on email provider determination
     recipients_by_provider = recipients.group_by do |recipient|
       email = recipient[:email]
 
-      # If the email contains non-ASCII characters or special characters, route it through SendGrid
-      if valid_email_address_for_resend?(email)
+      # If the email contains non-ASCII characters or special characters, route it through SendGrid.
+      # Recipients at domains that reject Resend outright (web.de / GMX) go the same way.
+      if valid_email_address_for_resend?(email) && !MailerInfo.force_sendgrid_for_recipients?(email)
         MailerInfo::Router.determine_email_provider(MailerInfo::DeliveryMethod::DOMAIN_CREATORS)
       else
         MailerInfo::EMAIL_PROVIDER_SENDGRID

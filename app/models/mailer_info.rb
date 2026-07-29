@@ -63,22 +63,37 @@ module MailerInfo
     decrypt(header_value)
   end
 
-  # Recipient domains operated by United Internet, which runs web.de and GMX —
-  # together Germany's two largest consumer mail providers. United Internet
-  # policy-blocks the Amazon SES IP range that Resend sends from: every send
-  # bounces with "550 Reject due to policy restrictions" (their code r1102),
-  # so a buyer at these domains who gets routed to Resend pays and never
-  # receives their receipt or download link. The very same addresses accept
-  # our SendGrid mail without issue, so we pin them to SendGrid instead of
-  # letting the random provider split pick Resend.
+  # Recipient domains operated by United Internet's 1&1 Mail & Media, which runs
+  # web.de, GMX and mail.com — together Germany's largest consumer mail estate,
+  # and all three on one inbound platform (mail.com was migrated onto the GMX
+  # platform after United Internet acquired it in 2010, and the three brands
+  # share a postmaster/blocklist operation). United Internet policy-blocks the
+  # Amazon SES IP range that Resend sends from: every send bounces with
+  # "550 Reject due to policy restrictions" (their code r1102), so a buyer at
+  # these domains who gets routed to Resend pays and never receives their
+  # receipt or download link. The very same addresses accept our SendGrid mail
+  # without issue, so we pin them to SendGrid instead of letting the random
+  # provider split pick Resend.
+  #
+  # Matched exactly rather than by suffix: these are consumer mailboxes that
+  # exist only at the apex, and suffix matching would also capture unrelated
+  # third-party subdomains that happen to end in one of these names.
+  #
+  # mail.com additionally fronts a large family of vanity domains (email.com,
+  # usa.com, …) on the same platform. Those are NOT listed here because the set
+  # has not been verified against United Internet's own documentation; add them
+  # if a bounce is actually observed rather than guessing at the list.
   # See https://github.com/antiwork/gumroad-private/issues/1462
-  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[web.de gmx.de gmx.net gmx.com gmx.at gmx.ch].freeze
+  UNITED_INTERNET_RECIPIENT_DOMAINS = %w[web.de gmx.de gmx.net gmx.com gmx.at gmx.ch mail.com].freeze
 
   # `to` accepts whatever a mailer passes as the `to:` header: a single email
   # string (possibly in "Name <email>" form) or an array of them.
   def force_sendgrid_for_recipients?(to)
     Array(to).compact.any? do |recipient|
-      domain = recipient.to_s.split("@").last.to_s.delete_suffix(">").strip.downcase
+      # strip BEFORE removing the bracket: " Name <user@web.de> " ends in a
+      # space, so delete_suffix(">") would be a no-op and the domain would keep
+      # its bracket and never match.
+      domain = recipient.to_s.strip.split("@").last.to_s.delete_suffix(">").strip.downcase
       UNITED_INTERNET_RECIPIENT_DOMAINS.include?(domain)
     end
   end

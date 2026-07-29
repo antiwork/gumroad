@@ -46,6 +46,48 @@ describe PostEmailApi do
         PostEmailApi.process(**non_ascii_args)
       end
 
+      it "routes web.de/GMX recipients through SendGrid even when the Router picks Resend" do
+        # United Internet policy-blocks Resend's sending IPs, so a post email to
+        # one of these addresses would bounce rather than arrive.
+        allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)
+
+        mixed = [{ email: "buyer@web.de" }, { email: "buyer@gmx.net" }, { email: "buyer@gmail.com" }]
+
+        expect(PostSendgridApi).to receive(:process)
+          .with(post: post, recipients: [{ email: "buyer@web.de" }, { email: "buyer@gmx.net" }])
+        expect(PostResendApi).to receive(:process)
+          .with(post: post, recipients: [{ email: "buyer@gmail.com" }])
+
+        PostEmailApi.process(post: post, recipients: mixed)
+      end
+
+      context "when force_resend_for_post_emails is active" do
+        before do
+          allow(Feature).to receive(:active?).and_call_original
+          allow(Feature).to receive(:active?).with(:force_resend_for_post_emails, seller).and_return(true)
+        end
+
+        it "still carves out web.de/GMX recipients rather than sending them to a provider that rejects them" do
+          mixed = [{ email: "buyer@web.de" }, { email: "buyer@gmail.com" }]
+
+          expect(PostSendgridApi).to receive(:process)
+            .with(post: post, recipients: [{ email: "buyer@web.de" }])
+          expect(PostResendApi).to receive(:process)
+            .with(post: post, recipients: [{ email: "buyer@gmail.com" }])
+
+          PostEmailApi.process(post: post, recipients: mixed)
+        end
+
+        it "sends everything via Resend when no recipient is at a blocked domain" do
+          only_ok = [{ email: "buyer@gmail.com" }]
+
+          expect(PostResendApi).to receive(:process).with(post: post, recipients: only_ok)
+          expect(PostSendgridApi).not_to receive(:process)
+
+          PostEmailApi.process(post: post, recipients: only_ok)
+        end
+      end
+
       it "routes emails with local parts exceeding 64 characters through SendGrid" do
         # Set to resend to test the fallback
         allow(MailerInfo::Router).to receive(:determine_email_provider).and_return(MailerInfo::EMAIL_PROVIDER_RESEND)

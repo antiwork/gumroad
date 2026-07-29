@@ -156,6 +156,16 @@ RSpec.describe MailerInfo do
       expect(described_class.force_sendgrid_for_recipients?("buyer@gmx.net")).to be(true)
     end
 
+    it "returns true for mail.com, which runs on the same GMX platform" do
+      expect(described_class.force_sendgrid_for_recipients?("buyer@mail.com")).to be(true)
+    end
+
+    it "handles surrounding whitespace on a name-addr recipient" do
+      # " Name <user@web.de> " ends in a space, so stripping the angle bracket
+      # before trimming leaves "web.de>" and silently misses the match.
+      expect(described_class.force_sendgrid_for_recipients?(" Buyer Name <buyer@web.de> ")).to be(true)
+    end
+
     it "returns false for other domains, nil, and blank recipients" do
       expect(described_class.force_sendgrid_for_recipients?("buyer@gmail.com")).to be(false)
       expect(described_class.force_sendgrid_for_recipients?(nil)).to be(false)

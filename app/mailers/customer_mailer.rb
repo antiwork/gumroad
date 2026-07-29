@@ -266,7 +266,8 @@ class CustomerMailer < ApplicationMailer
 
     mail(
       to: email,
-      subject: "Magic Link"
+      subject: "Magic Link",
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :gumroad, to: email)
     )
   end
 
@@ -343,7 +344,11 @@ class CustomerMailer < ApplicationMailer
     @purchase = Call.find(call_id).purchase
     @subject = "Your scheduled call with #{@purchase.seller.display_name} is tomorrow!"
     @item_info = ReceiptPresenter::ItemInfo.new(@purchase)
-    mail(to: @purchase.email, subject: @subject)
+    mail(
+      to: @purchase.email,
+      subject: @subject,
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :gumroad, to: @purchase.email)
+    )
   end
 
   def files_ready_for_download(purchase_id)
