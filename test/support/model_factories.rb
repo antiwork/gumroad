@@ -948,6 +948,8 @@ module ModelFactories
   end
 
   def create_product_file(installment: nil, link: nil, **attrs)
+    link = create_product if link.nil? && installment.nil?
+
     ProductFile.create!({
       url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf",
       filetype: "pdf",
@@ -976,8 +978,11 @@ module ModelFactories
     readable_document: { url: "#{S3_BASE_URL}specs/billion-dollar-company-chapter-0.pdf", filetype: "pdf", filegroup: "document" },
   }.freeze
 
-  def create_installment_file(shape, **attrs)
-    ProductFile.create!(PRODUCT_FILE_SHAPES.fetch(shape).merge(attrs))
+  # Files delivered with a post rather than a product. The installment is
+  # required because a ProductFile must belong to exactly one parent, and these
+  # shapes exist for the post-delivery side.
+  def create_installment_file(shape, installment:, **attrs)
+    ProductFile.create!(PRODUCT_FILE_SHAPES.fetch(shape).merge(installment:).merge(attrs))
   end
 
   # A product thumbnail with the smilie.png fixture attached and analyzed

@@ -81,13 +81,13 @@ class InstallmentTest < ActiveSupport::TestCase
   end
 
   test "is_downloadable? returns false if post has only stream-only files" do
-    @installment.product_files << create_installment_file(:streamable_video, stream_only: true)
+    @installment.product_files << create_installment_file(:streamable_video, installment: @installment, stream_only: true)
     assert_equal false, @installment.is_downloadable?
   end
 
   test "is_downloadable? returns true if post has files that are not stream-only" do
-    @installment.product_files << create_installment_file(:readable_document)
-    @installment.product_files << create_installment_file(:streamable_video, stream_only: true)
+    @installment.product_files << create_installment_file(:readable_document, installment: @installment)
+    @installment.product_files << create_installment_file(:streamable_video, installment: @installment, stream_only: true)
     assert_equal true, @installment.is_downloadable?
   end
 
@@ -543,7 +543,7 @@ const b = 2;</code></pre>
 
   test "send_preview_email creates a UrlRedirect (once) when the post has files" do
     recipient = create_user
-    @post.product_files << create_installment_file(:readable_document)
+    @post.product_files << create_installment_file(:readable_document, installment: @post)
     calls = []
     PostSendgridApi.stub(:process, ->(**kw) { calls << kw }) do
       assert_difference -> { UrlRedirect.count }, 1 do

@@ -3,6 +3,77 @@
 require "spec_helper"
 
 describe ProductFile do
+  describe "parent presence" do
+    # A file's parent is what gives it a delivery path and an owner: a product
+    # file is downloaded from the product, an installment file is delivered with
+    # the post. With no parent it can be reached from neither, and with both it
+    # is ambiguous which surface governs access. The check used to be declared
+    # with `on: :save`, which is not a Rails context, so it never ran.
+    it "rejects a file that belongs to neither a product nor an installment" do
+      file = build(:product_file, link: nil, installment: nil)
+
+      expect(file).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    it "rejects a file that belongs to both a product and an installment" do
+      file = build(:product_file, link: create(:product), installment: create(:installment))
+
+      expect(file).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    it "accepts a file that belongs to a product" do
+      expect(build(:product_file, link: create(:product))).to be_valid
+    end
+
+    it "accepts a file that belongs to an installment" do
+      expect(build(:product_file, link: nil, installment: create(:installment))).to be_valid
+    end
+
+    it "keeps rejecting a parentless file on update, not just on create" do
+      file = create(:product_file, link: create(:product))
+      file.link = nil
+
+      expect(file).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    # The validation was inert for years, so a handful of rows in production
+    # already have no parent or both parents. Those rows still have to be
+    # writable — soft-deleting one is an update, so a hard rejection would make
+    # the bad rows impossible to clean up.
+    context "with a row that was already saved without a valid parent" do
+      let(:file) do
+        create(:product_file, link: create(:product)).tap do |record|
+          record.update_columns(link_id: nil, installment_id: nil)
+          record.reload
+        end
+      end
+
+      it "allows an unrelated update" do
+        expect(file.update(display_name: "Renamed")).to eq(true)
+      end
+
+      it "allows soft deletion" do
+        expect { file.mark_deleted! }.not_to raise_error
+        expect(file.reload).to be_deleted
+      end
+
+      it "still rejects a write that sets both parents" do
+        file.link = create(:product)
+        file.installment = create(:installment)
+
+        expect(file).to be_invalid
+        expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+      end
+
+      it "accepts a write that gives it a single parent" do
+        expect(file.update(link: create(:product))).to eq(true)
+      end
+    end
+  end
+
   describe ".archivable" do
     it "only includes archivable files" do
       create(:streamable_video)

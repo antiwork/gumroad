@@ -7419,7 +7419,7 @@ class PurchaseTest < ActiveSupport::TestCase
       @purchase.chargeable = build_chargeable
       @purchase.process!
       @post = create_installment(link: @product, published_at: 1.hour.ago)
-      @post.product_files << create_product_file
+      @post.product_files << create_product_file(installment: @post)
       @workflow = create_workflow(seller: @user, link: @product, published_at: Time.current)
       @workflow_post = create_installment(link: @product, workflow: @workflow, published_at: Time.current)
       create_installment_rule(installment: @workflow_post, delayed_delivery_time: 3.days)
