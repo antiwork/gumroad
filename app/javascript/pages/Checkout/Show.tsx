@@ -1,4 +1,4 @@
-import { router, useForm, usePage } from "@inertiajs/react";
+import { Head, router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
@@ -45,6 +45,12 @@ import {
   createLaneInvalidationSuppressor,
   type CartSaveCallbacks,
 } from "$app/components/Checkout/checkoutPaymentRefresh";
+import {
+  type CheckoutStyle,
+  CheckoutThemeProvider,
+  getCheckoutIndicatorCss,
+  useCheckoutStyle,
+} from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -80,6 +86,9 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
+  // Optional because partial reloads can omit a prop that full renders always include.
+  checkout_style?: CheckoutStyle | null;
+  stripe_fonts_css_source: string;
   checkout: {
     add_products: ProductToAdd[];
     address: { street: string | null; city: string | null; zip: string | null } | null;
@@ -273,6 +282,10 @@ const CheckoutIndexPage = () => {
   const listedProductTotalCents = listedTipLines.reduce((sum, line) => sum + line.price, 0);
   const listedTipCents = listedCurrency ? computeTipForListedLines(state, listedTipLines) : 0;
   const [results, setResults] = React.useState<Result[] | null>(null);
+  const [checkoutStyle, capturePurchasedCheckoutStyle] = useCheckoutStyle(
+    props.checkout_style,
+    cartForm.data.cart.items.map(({ product }) => product.creator.id),
+  );
   const [canBuyerSignUp, setCanBuyerSignUp] = React.useState(false);
   const [redirecting, setRedirecting] = React.useState(false);
   const addThirdPartyAnalytics = useAddThirdPartyAnalytics();
@@ -723,6 +736,7 @@ const CheckoutIndexPage = () => {
         window.location.href = libraryUrl.toString();
       }
 
+      capturePurchasedCheckoutStyle(results.map(({ item }) => item.product.creator.id));
       setResults(results);
       setCanBuyerSignUp(result.canBuyerSignUp);
     } catch (e) {
@@ -769,8 +783,9 @@ const CheckoutIndexPage = () => {
       // checkout_payment comes back with the save because it is derived from the cart: which
       // element this checkout mounts, and in which currency, can change when the cart changes.
       // Asking for it in the same request means there is no window where the persisted cart and
-      // the payment configuration on screen describe different carts.
-      only: ["cart", "flash", "checkout_payment"],
+      // the payment configuration on screen describe different carts. checkout_style rides along
+      // for the same reason: branding cannot outlive a one-to-mixed-seller transition.
+      only: ["cart", "flash", "checkout_payment", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
       ...callbacks,
@@ -916,6 +931,12 @@ const CheckoutIndexPage = () => {
 
   return (
     <StateContext.Provider value={reducer}>
+      {/* Unlayered seller styles override the stock values declared in `@layer base`. */}
+      {checkoutStyle ? (
+        <Head>
+          <style>{`${checkoutStyle.css}\n${getCheckoutIndicatorCss(checkoutStyle.theme)}`}</style>
+        </Head>
+      ) : null}
       {redirecting ? null : results ? (
         (!user && results.every(({ result }) => result.success && result.content_url != null)) ||
         results.some(
@@ -926,12 +947,19 @@ const CheckoutIndexPage = () => {
           <Receipt results={results} discoverUrl={discover_url} canBuyerSignUp={canBuyerSignUp} />
         )
       ) : (
-        <Checkout
-          discoverUrl={discover_url}
-          cart={cartForm.data.cart}
-          updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
-          recommendedProducts={props.recommended_products ?? null}
-        />
+        <CheckoutThemeProvider
+          value={{
+            theme: checkoutStyle?.theme ?? null,
+            stripe_fonts_css_source: props.stripe_fonts_css_source,
+          }}
+        >
+          <Checkout
+            discoverUrl={discover_url}
+            cart={cartForm.data.cart}
+            updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
+            recommendedProducts={props.recommended_products ?? null}
+          />
+        </CheckoutThemeProvider>
       )}
       {currentOffer && surchargesIfAccepted ? (
         <Modal open onClose={completeOffer} title={currentOffer.text}>

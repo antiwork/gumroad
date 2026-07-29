@@ -9,11 +9,21 @@ vi.mock("$app/utils/request", async (importOriginal) => {
 
 vi.stubGlobal("Routes", {
   internal_agent_messages_stream_path: () => "/internal/agent/messages/stream",
+  internal_agent_actions_path: () => "/internal/agent/actions",
+  internal_agent_action_status_path: ({ proposal_message_id }: { proposal_message_id: string }) =>
+    `/internal/agent/actions/status?proposal_message_id=${encodeURIComponent(proposal_message_id)}`,
   internal_agent_turn_status_path: (id: string) => `/internal/agent/turns/${id}`,
 });
 
 const { request } = vi.mocked(await import("$app/utils/request"));
-const { AgentStreamInterruptedError, fetchAgentTurnStatus, streamAgentMessage } = await import("$app/data/agent");
+const {
+  AgentActionError,
+  AgentStreamInterruptedError,
+  executeAgentAction,
+  fetchAgentActionStatus,
+  fetchAgentTurnStatus,
+  streamAgentMessage,
+} = await import("$app/data/agent");
 
 // A real Response whose body streams the given SSE chunks. `fail` ends the stream by erroring the
 // reader (a dropped connection) instead of a clean EOF.
@@ -60,6 +70,161 @@ const MESSAGES = [{ role: "user" as const, content: "hello" }];
 // before the client treats the connection as dead.
 const INACTIVITY_TIMEOUT_MS = 130_000;
 
+describe("executeAgentAction", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends the persisted proposal message id with the confirmed action", async () => {
+    request.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, message: "Done." }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await executeAgentAction(
+      { type: "api_write", params: { endpoint: "create_offer_code" }, summary: "Create a discount." },
+      "message1",
+      "conversation1",
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          type: "api_write",
+          params: { endpoint: "create_offer_code" },
+          conversation_id: "conversation1",
+          proposal_message_id: "message1",
+        },
+      }),
+    );
+  });
+
+  it("reports when a failed confirmation retained its one-shot claim", async () => {
+    request.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          message: "That change couldn't be saved.",
+          action_status: "executing",
+        }),
+        { status: 422, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const confirmation = executeAgentAction(
+      { type: "api_write", params: { endpoint: "refund_sale" }, summary: "Refund the sale." },
+      "message1",
+      "conversation1",
+    );
+
+    await expect(confirmation).rejects.toBeInstanceOf(AgentActionError);
+    await expect(confirmation).rejects.toMatchObject({
+      message: "That change couldn't be saved.",
+      actionStatus: "executing",
+    });
+  });
+
+  it("reports a retry-safe server rejection as acknowledged pending", async () => {
+    request.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          message: "You don't have permission to do that.",
+          retryable: true,
+        }),
+        {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const confirmation = executeAgentAction(
+      { type: "api_write", params: { endpoint: "create_offer_code" }, summary: "Create a discount." },
+      "message1",
+      "conversation1",
+    );
+
+    await expect(confirmation).rejects.toMatchObject({
+      message: "You don't have permission to do that.",
+      actionStatus: null,
+      retryable: true,
+    });
+    await expect(confirmation).rejects.toBeInstanceOf(AgentActionError);
+  });
+
+  it("keeps an acknowledged binding mismatch non-retryable", async () => {
+    request.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          message: "That confirmation doesn't match a pending proposal.",
+        }),
+        {
+          status: 422,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const confirmation = executeAgentAction(
+      { type: "api_write", params: { endpoint: "create_offer_code" }, summary: "Create a discount." },
+      "message1",
+      "conversation1",
+    );
+
+    await expect(confirmation).rejects.toMatchObject({
+      actionStatus: null,
+      retryable: false,
+    });
+  });
+
+  it("does not treat an unparseable response as an acknowledged server rejection", async () => {
+    request.mockResolvedValue(
+      new Response("not json", {
+        status: 422,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const confirmation = executeAgentAction(
+      { type: "api_write", params: { endpoint: "create_offer_code" }, summary: "Create a discount." },
+      "message1",
+      "conversation1",
+    );
+
+    await expect(confirmation).rejects.toBeInstanceOf(SyntaxError);
+    await expect(confirmation).rejects.not.toBeInstanceOf(AgentActionError);
+  });
+});
+
+describe("fetchAgentActionStatus", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("reads the exact persisted proposal state", async () => {
+    const abortController = new AbortController();
+    request.mockResolvedValue(
+      new Response(JSON.stringify({ success: true, action_status: "applied", objects: [] }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await expect(fetchAgentActionStatus("message1", abortController.signal)).resolves.toEqual({
+      actionStatus: "applied",
+      objects: [],
+    });
+    expect(request).toHaveBeenCalledWith({
+      method: "GET",
+      accept: "json",
+      url: "/internal/agent/actions/status?proposal_message_id=message1",
+      abortSignal: abortController.signal,
+    });
+  });
+});
+
 describe("streamAgentMessage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -85,6 +250,25 @@ describe("streamAgentMessage", () => {
     expect(onToken.mock.calls.map(([text]) => text)).toEqual(["Want me to ", "pull up"]);
     expect(result.reply).toBe("Want me to pull up what you have there now?");
     expect(result.conversationId).toBe("conv1");
+  });
+
+  it("returns the persisted proposal message id from the done frame", async () => {
+    const action = { type: "api_write" as const, params: { endpoint: "create_offer_code" }, summary: "Create it." };
+    request.mockResolvedValue(
+      sseResponse([
+        frame("proposed_action", { proposed_action: action }),
+        frame("done", {
+          reply: "Confirm this change.",
+          proposed_action: action,
+          proposal_message_id: "message1",
+          conversation_id: "conv1",
+        }),
+      ]),
+    );
+
+    const result = await streamAgentMessage(MESSAGES);
+
+    expect(result.proposalMessageId).toBe("message1");
   });
 
   it("throws AgentStreamInterruptedError when the stream ends without a done frame", async () => {

@@ -93,6 +93,20 @@ describe Api::Internal::AgentMessageStreamsController do
         expect(response.body).to include(conversation.external_id)
       end
 
+      it "emits the persisted proposal message id on the done event" do
+        stub_streaming_service(
+          reply: "Confirm this discount.",
+          proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_offer_code" } },
+          objects: [],
+        )
+
+        post :create, params: valid_params, format: :json
+
+        message = seller.ai_conversations.sole.ai_messages.role_assistant.sole
+        done_data = JSON.parse(response.body[/event: done\ndata: (.*)\n/, 1])
+        expect(done_data["proposal_message_id"]).to eq(message.external_id)
+      end
+
       it "replays the stored transcript when resuming a conversation" do
         conversation = create(:ai_conversation, seller:)
         create(:ai_message, ai_conversation: conversation, content: "Earlier question")
@@ -118,23 +132,49 @@ describe Api::Internal::AgentMessageStreamsController do
         expect(conversation.ai_messages.reload.count).to eq(3)
       end
 
-      it "still emits the done event when persisting the turn fails after streaming" do
-        # The seller has already watched the reply stream in by the time persistence runs, so a DB
-        # failure here must not turn the turn into an error — the done event (and the reply it
-        # carries) still has to arrive. The conversation id is simply omitted.
-        stub_streaming_service(reply: "You have 3 products.", proposed_action: nil, objects: [])
+      it "still emits the done event but suppresses an unpersisted proposal" do
+        proposal = { "type" => "api_write", "params" => { "endpoint" => "create_offer_code" } }
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+          turn = { reply: "Confirm this discount.", proposed_action: proposal, objects: [] }
+          emit.call(:token, { text: turn[:reply] })
+          on_reply_complete&.call(turn)
+          emit.call(:objects, { objects: [{ type: "product", title: "Course" }] })
+          emit.call(:proposed_action, { proposed_action: proposal })
+          emit.call(:suggestions, { suggestions: ["Show my products"] })
+          turn.merge(suggestions: ["Show my products"])
+        end
         allow(controller).to receive(:create_agent_conversation!).and_raise(ActiveRecord::StatementInvalid)
         expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+        client_turn_id = SecureRandom.uuid
+        turn_status_key = RedisKey.agent_turn_status(seller.id, client_turn_id)
 
-        post :create, params: valid_params, format: :json
+        post :create, params: valid_params.merge(client_turn_id:), format: :json
 
         expect(response.body).to include("event: done")
-        expect(response.body).to include("You have 3 products.")
+        expect(response.body).to include("event: reset")
+        expect(response.body).to include("there is nothing to confirm")
         expect(response.body).not_to include("event: error")
+        expect(response.body).to include("event: objects")
+        expect(response.body).not_to include("event: suggestions")
+        expect(response.body).not_to include("event: proposed_action")
+        expect(response.body.scan(/^event: (.+)$/).flatten).to eq(
+          %w[token reset token objects done],
+        )
         # The key must be omitted (not serialized as null) so the frame stays valid against the
         # client schema, where conversation_id is an optional string.
-        done_data = response.body[/event: done\ndata: (.*)\n/, 1]
-        expect(JSON.parse(done_data)).not_to have_key("conversation_id")
+        done_data = JSON.parse(response.body[/event: done\ndata: (.*)\n/, 1])
+        expect(done_data["reply"]).to eq(
+          "I couldn't save that proposed change, so there is nothing to confirm. Please ask me to prepare it again.",
+        )
+        expect(done_data).not_to have_key("conversation_id")
+        expect(done_data["proposed_action"]).to be_nil
+        expect(done_data["suggestions"]).to eq([])
+        expect(done_data).not_to have_key("proposal_message_id")
+        expect($redis.get(turn_status_key)).to eq("failed")
+      ensure
+        $redis.del(turn_status_key) if turn_status_key
       end
 
       it "persists the turn before any trailing write, so a client disconnect can't drop it" do

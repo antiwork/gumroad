@@ -13,7 +13,7 @@ export const useInputGroup = () => React.useContext(InputGroupContext);
 
 const inputGroupVariants = cva(
   [
-    "inline-flex items-center w-full gap-2 relative py-0 px-4 min-h-12 border border-border rounded bg-background text-foreground focus-within:outline-2 focus-within:outline-accent focus-within:outline-offset-0",
+    "inline-flex items-center w-full gap-2 relative py-0 px-4 min-h-12 border border-border rounded bg-background text-foreground focus-within:outline-2 focus-within:outline-indicator focus-within:outline-offset-0",
     "[&>.icon]:text-muted",
   ],
   {

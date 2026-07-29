@@ -47,7 +47,7 @@ export const buttonVariants = cva(
         accent: "bg-accent-with-text text-accent-foreground",
         filled: "bg-background text-foreground",
         success: "bg-success text-white",
-        danger: "bg-danger text-white",
+        danger: "bg-danger text-danger-foreground",
         warning: "bg-warning text-black",
         info: "bg-primary text-primary-foreground",
         paypal: "bg-[#00457c] text-white border-[#00457c]",
@@ -71,7 +71,7 @@ export const buttonVariants = cva(
       {
         variant: "outline",
         color: "danger",
-        className: "bg-transparent text-current hover:bg-danger hover:text-white",
+        className: "bg-transparent text-current hover:bg-danger hover:text-danger-foreground",
       },
       {
         variant: "outline",

@@ -20,6 +20,10 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
   before_action :ensure_can_use_agent
   before_action :throttle_agent_requests
 
+  # Match the web stream's heartbeat cadence. Mobile turns have the same silent tool-use stretches,
+  # and the periodic refresh prevents the Redis recovery marker from expiring during healthy work.
+  STREAM_HEARTBEAT_INTERVAL = 15.seconds
+  private_constant :STREAM_HEARTBEAT_INTERVAL
 
   # POST /api/mobile/agent/messages/stream
   # params: { messages: [{ role:, content: }, ...], conversation_id: <optional external id>,
@@ -45,12 +49,19 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
     response.headers["X-Accel-Buffering"] = "no"
     sse = ActionController::Live::SSE.new(response.stream)
     client_turn_id = agent_client_turn_id
+    write_lock = Mutex.new
+    write_event = ->(payload, event) { write_lock.synchronize { sse.write(payload, event:) } }
+    # Commit the stream immediately; the app can start its liveness handling before the first model
+    # token, even when the turn opens with silent tool work.
+    write_lock.synchronize { response.stream.write(": connected\n\n") }
+    heartbeat = nil
+    stop_heartbeat = Thread::Queue.new
 
     begin
       messages = sanitize_messages(params[:messages])
       if messages.empty?
         mark_agent_turn_failed!(client_turn_id)
-        sse.write({ message: "A message is required." }, event: "error")
+        write_event.call({ message: "A message is required." }, "error")
         return
       end
 
@@ -60,7 +71,7 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         conversation = find_agent_conversation!
       rescue ActiveRecord::RecordNotFound
         mark_agent_turn_failed!(client_turn_id)
-        sse.write({ message: "That conversation could not be found." }, event: "error")
+        write_event.call({ message: "That conversation could not be found." }, "error")
         return
       end
 
@@ -68,6 +79,26 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
       # stream write below) so an app whose connection breaks can distinguish "still generating —
       # keep waiting" from "gone".
       mark_agent_turn_in_progress!(client_turn_id)
+
+      heartbeat = Thread.new do
+        socket_alive = true
+        until stop_heartbeat.pop(timeout: STREAM_HEARTBEAT_INTERVAL.to_f)
+          begin
+            refresh_agent_turn_in_progress!(client_turn_id)
+          rescue => e
+            Rails.logger.error("Mobile store agent heartbeat marker refresh failed: #{e.message}")
+          end
+          next unless socket_alive
+
+          begin
+            write_lock.synchronize { response.stream.write(": heartbeat\n\n") }
+          rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
+            # Keep refreshing the recovery marker after the socket dies. The request thread can
+            # still finish the turn and persist it during a silent tool iteration.
+            socket_alive = false
+          end
+        end
+      end
 
       # The last user entry in the posted history is this turn's new message; when resuming, the
       # earlier entries are replaced by the stored transcript so a stale client can't rewrite
@@ -83,43 +114,65 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         end
 
       # The turn is persisted from on_reply_complete — as soon as the reply is final, before the
-      # trailing SSE writes and the follow-up-suggestions call — so a client connection that died
-      # mid-stream (the next write raises ClientDisconnected) can't cause a fully generated reply
-      # to be dropped unpersisted. Persistence failures are logged but must not break the stream:
-      # the only cost is that this turn isn't stored — the failure marker tells a recovering app
-      # to stop waiting for it.
+      # trailing SSE writes and the follow-up-suggestions call. A persistence failure still ends
+      # cleanly; if it strands a proposed write, reset the confirmation wording that has no stored
+      # proposal behind it.
       turn_persisted = false
+      assistant_message = nil
+      unpersisted_proposal = false
       on_reply_complete = lambda do |turn|
-        conversation = persist_agent_turn!(conversation, new_user_message, turn, fallback_first_message: messages.last[:content], client_turn_id:)
+        conversation, assistant_message = persist_agent_turn!(
+          conversation,
+          new_user_message,
+          turn,
+          fallback_first_message: messages.last[:content],
+          client_turn_id:,
+        )
         turn_persisted = true
       rescue => e
         mark_agent_turn_failed!(client_turn_id)
         Rails.logger.error("Mobile store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
+        unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
+        if unpersisted_proposal
+          write_event.call({}, "reset")
+          write_event.call({ text: turn[:reply] }, "token")
+        end
       end
       result = ::Ai::StoreAgentService.new(seller:, pundit_user:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
-        # Each write proves the turn is still alive — refresh the marker so long multi-tool turns
-        # never read as dead to a recovering app.
-        mark_agent_turn_in_progress!(client_turn_id)
-        sse.write(payload, event:)
+        # Extend only a marker that is still in progress. on_reply_complete runs before trailing
+        # object/proposal/suggestion events and can mark persistence failed; no later event may
+        # resurrect that terminal state.
+        refresh_agent_turn_in_progress!(client_turn_id)
+        # A proposal without a persisted assistant message has no id the confirmation endpoint can
+        # claim. finish_stream invokes on_reply_complete first, so suppress the proposal event when
+        # that persistence step failed.
+        next if event.to_s == "proposed_action" && assistant_message.nil?
+        # Suggestions generated from discarded confirmation wording would contradict the
+        # replacement reply, so suppress them when no persisted proposal backs this turn.
+        next if event.to_s == "suggestions" && unpersisted_proposal
+
+        write_event.call(payload, event)
       end
       # conversation_id is omitted entirely (not null) when creating the conversation itself
       # failed above — this matches the web streaming controller, whose client validates the
       # done frame against a schema where conversation_id is an optional string (a null would
       # fail validation and turn a benign persistence failure into a spurious interrupted-stream
       # recovery). Keeping the mobile frame shape identical means one contract for both clients.
+      # A generated proposal is returned only when its assistant message persisted.
       done_payload = {
         reply: result[:reply],
-        proposed_action: result[:proposed_action],
+        proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        suggestions: result[:suggestions] || [],
+        suggestions: unpersisted_proposal ? [] : result[:suggestions] || [],
       }
       done_payload[:conversation_id] = conversation.external_id if conversation
-      sse.write(done_payload, event: "done")
+      done_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
+      write_event.call(done_payload, "done")
     rescue ::Ai::StoreAgentService::Error => e
       mark_agent_turn_failed!(client_turn_id) unless turn_persisted
-      sse.write({ message: e.message }, event: "error")
+      write_event.call({ message: e.message }, "error")
     rescue ActionController::Live::ClientDisconnected
       # The seller backgrounded or closed the app mid-stream. Nothing to surface on the dead
       # socket. If this raised before the turn persisted (a token write failed mid-generation, so
@@ -130,8 +183,12 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
       mark_agent_turn_failed!(client_turn_id) unless turn_persisted
       Rails.logger.error("Mobile store agent stream failed: #{e.full_message}")
       ErrorNotifier.notify(e)
-      sse.write({ message: "Something went wrong. Please try again." }, event: "error")
+      write_event.call({ message: "Something went wrong. Please try again." }, "error")
     ensure
+      if heartbeat
+        stop_heartbeat << true
+        heartbeat.join
+      end
       sse.close
     end
   end

@@ -4,6 +4,11 @@ require "spec_helper"
 require "shared_examples/explained_agent_rate_limit"
 
 describe Api::Mobile::AgentController do
+  let(:execution_abandoned_after) do
+    AgentConversationPersistence.const_get(:ACTION_EXECUTION_ABANDONED_AFTER, false)
+  end
+  let(:database_now) { AiMessage.connection.select_value("SELECT CURRENT_TIMESTAMP(6)") }
+
   before do
     @seller = create(:user)
     @app = create(:oauth_application, owner: @seller)
@@ -66,6 +71,20 @@ describe Api::Mobile::AgentController do
       )
     end
 
+    it "returns the persisted proposal message id" do
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond).and_return(
+        reply: "Confirm this discount.",
+        proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_discount" } },
+      )
+
+      post :create, params: valid_params
+
+      message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
+      expect(response.parsed_body["proposal_message_id"]).to eq(message.external_id)
+    end
+
     it "scopes the agent service to the authenticated seller" do
       expect(Ai::StoreAgentService).to receive(:new) do |args|
         expect(args[:seller]).to eq(@seller)
@@ -115,7 +134,29 @@ describe Api::Mobile::AgentController do
   end
 
   describe "POST execute" do
-    let(:valid_params) { @auth_params.merge(type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 }) }
+    let(:confirmed_action_params) { { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 } }
+    let(:conversation) { create(:ai_conversation, seller: @seller) }
+    let(:proposal_message) do
+      create(
+        :ai_message,
+        ai_conversation: conversation,
+        role: "assistant",
+        metadata: {
+          "proposed_action" => {
+            "type" => "api_write",
+            "params" => confirmed_action_params,
+          },
+        },
+      )
+    end
+    let(:valid_params) do
+      @auth_params.merge(
+        type: "api_write",
+        params: confirmed_action_params,
+        conversation_id: conversation.external_id,
+        proposal_message_id: proposal_message.external_id,
+      )
+    end
 
     it "executes a confirmed action and returns the result" do
       executor_double = instance_double(Ai::StoreAgentActionExecutor)
@@ -128,12 +169,12 @@ describe Api::Mobile::AgentController do
       expect(response.parsed_body).to eq("success" => true, "message" => "Created discount LAUNCH.")
     end
 
-    it "passes the confirmed action through to the executor" do
+    it "passes the persisted confirmed action through to the executor" do
       executor_double = instance_double(Ai::StoreAgentActionExecutor)
       allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
       expect(executor_double).to receive(:execute).with(
         type: "api_write",
-        params: { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => "20" },
+        params: { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => 20 },
       ).and_return(success: true, message: "Created discount LAUNCH.")
 
       post :execute, params: valid_params
@@ -148,7 +189,7 @@ describe Api::Mobile::AgentController do
       expect(response.parsed_body["success"]).to be(false)
     end
 
-    it "returns unprocessable when the executor reports failure" do
+    it "returns unprocessable and keeps the claim when the nested API reports failure" do
       executor_double = instance_double(Ai::StoreAgentActionExecutor)
       allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
       allow(executor_double).to receive(:execute).and_return(
@@ -161,7 +202,141 @@ describe Api::Mobile::AgentController do
       post :execute, params: valid_params
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body).to eq("success" => false, "message" => "That change couldn't be saved.")
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "message" => "That change couldn't be saved.",
+        "action_status" => "unknown",
+      )
+      expect(proposal_message.reload.metadata["action_status"]).to eq("unknown")
+    end
+
+    it "returns the honest failure to an installed client when a post-dispatch outcome is unknown" do
+      allow(ErrorNotifier).to receive(:notify)
+      executor_double = instance_double(Ai::StoreAgentActionExecutor)
+      allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+      allow(executor_double).to receive(:execute).and_return(
+        success: false,
+        message: "That change couldn't be saved.",
+        failure_reason: "api_failure",
+      )
+
+      post :execute, params: valid_params.except(:proposal_message_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "message" => "That change couldn't be saved.",
+        "action_status" => "unknown",
+      )
+      expect(proposal_message.reload.metadata["action_status"]).to eq("unknown")
+    end
+
+    it "accepts a deployed client without persisted ids when its payload has one recent pending match" do
+      allow(ErrorNotifier).to receive(:notify)
+      executor_double = instance_double(Ai::StoreAgentActionExecutor)
+      allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+      allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount LAUNCH.")
+
+      post :execute, params: valid_params.except(:conversation_id, :proposal_message_id)
+
+      expect(response).to be_successful
+      expect(proposal_message.reload.metadata["action_status"]).to eq("applied")
+    end
+
+    it "rejects a tampered confirmed action before dispatch" do
+      expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+      post :execute, params: valid_params.deep_merge(params: { percent_off: 100 })
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to include("doesn't match")
+      expect(response.parsed_body).not_to have_key("retryable")
+    end
+
+    it "rejects a replay before dispatch" do
+      proposal_message.update!(metadata: proposal_message.metadata.merge("action_status" => "applied"))
+      expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+      post :execute, params: valid_params
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("That proposal has already been confirmed.")
+      expect(response.parsed_body["action_status"]).to eq("applied")
+    end
+
+    it "settles a stale exact-id retry as unknown without dispatch" do
+      proposal_message.update_columns(
+        metadata: proposal_message.metadata.merge("action_status" => "executing"),
+        updated_at: database_now - execution_abandoned_after - 1.second,
+      )
+      expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+      post :execute, params: valid_params
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to include(
+        "message" => "That proposal has already been confirmed.",
+        "action_status" => "unknown",
+      )
+      expect(proposal_message.reload.metadata["action_status"]).to eq("unknown")
+    end
+
+    it "returns the completed state when an installed client retries one completed proposal" do
+      proposal_message.update!(metadata: proposal_message.metadata.merge("action_status" => "unknown"))
+      allow(ErrorNotifier).to receive(:notify)
+      expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+      post :execute, params: valid_params.except(:proposal_message_id)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq(
+        "success" => false,
+        "message" => "That proposal has already been confirmed.",
+        "action_status" => "unknown",
+      )
+    end
+
+    it "returns the winning state when another confirmation applies during the claim race" do
+      allow(controller).to receive(:compare_and_set_agent_action_claim) do
+        proposal_message.update_column(:metadata, proposal_message.metadata.merge("action_status" => "applied"))
+        0
+      end
+      expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+      post :execute, params: valid_params
+
+      expect(controller).to have_received(:compare_and_set_agent_action_claim).once
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to include(
+        "message" => "That proposal has already been confirmed.",
+        "action_status" => "applied",
+      )
+    end
+
+    it "retries the claim when a concurrent pre-dispatch rejection safely releases it" do
+      claim_attempts = 0
+      allow(controller).to receive(:compare_and_set_agent_action_claim).and_wrap_original do |method, message|
+        claim_attempts += 1
+        if claim_attempts == 1
+          message.update_column(:metadata, message.metadata.merge("action_status" => "executing"))
+          expect(controller.send(:release_agent_action_claim!, message)).to be(true)
+          0
+        else
+          method.call(message)
+        end
+      end
+      executor_double = instance_double(Ai::StoreAgentActionExecutor)
+      allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+      expect(executor_double).to receive(:execute).once.and_return(
+        success: true,
+        message: "Created discount LAUNCH.",
+      )
+
+      post :execute, params: valid_params
+
+      expect(controller).to have_received(:compare_and_set_agent_action_claim).twice
+      expect(response).to be_successful
+      expect(proposal_message.reload.metadata["action_status"]).to eq("applied")
     end
 
     it "halts on throttle without invoking the action executor" do
@@ -188,7 +363,7 @@ describe Api::Mobile::AgentController do
       create(:ai_message, ai_conversation: older, content: "Old question")
       newer = create(:ai_conversation, seller: @seller, title: "Newer chat")
       create(:ai_message, ai_conversation: newer, content: "Create a discount")
-      create(
+      proposal_message = create(
         :ai_message,
         ai_conversation: newer,
         role: "assistant",
@@ -212,10 +387,67 @@ describe Api::Mobile::AgentController do
             "role" => "assistant",
             "content" => "Here's a discount to confirm.",
             "proposed_action" => { "type" => "api_write", "params" => { "code" => "LAUNCH" } },
+            "proposal_message_id" => proposal_message.external_id,
             "action_status" => "applied",
           },
         ],
       )
+    end
+
+    it "hides executing and unknown proposals from mobile releases that would make them confirmable again" do
+      %w[executing unknown].each do |action_status|
+        conversation = create(:ai_conversation, seller: @seller)
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "Check your discount.",
+          metadata: {
+            "proposed_action" => { "type" => "api_write", "params" => { "code" => "LAUNCH" } },
+            "action_status" => action_status,
+          },
+        )
+
+        get :latest_conversation, params: @auth_params
+
+        expect(response.parsed_body.dig("conversation", "messages")).to eq(
+          [
+            {
+              "role" => "assistant",
+              "content" => "The outcome of this change is not available in this app. Check your store before asking the agent to try again.",
+            },
+          ],
+        )
+      end
+    end
+
+    it "durably settles an abandoned execution before hiding it from mobile hydration" do
+      conversation = create(:ai_conversation, seller: @seller)
+      proposal_message = create(
+        :ai_message,
+        ai_conversation: conversation,
+        role: "assistant",
+        content: "Check your discount.",
+        metadata: {
+          "proposed_action" => { "type" => "api_write", "params" => { "code" => "LAUNCH" } },
+          "action_status" => "executing",
+        },
+      )
+      proposal_message.update_column(:updated_at, database_now - execution_abandoned_after - 1.second)
+      conversation_activity_at = conversation.reload.updated_at
+
+      get :latest_conversation, params: @auth_params
+
+      expect(response.parsed_body.dig("conversation", "messages")).to eq(
+        [
+          {
+            "role" => "assistant",
+            "content" => "The outcome of this change is not available in this app. Check your store before asking the agent to try again.",
+          },
+        ],
+      )
+      expect(proposal_message.reload.metadata["action_status"]).to eq("unknown")
+      expect(conversation.reload.updated_at).to eq(conversation_activity_at)
     end
 
     it "skips soft-deleted conversations and never returns another seller's" do
@@ -253,6 +485,31 @@ describe Api::Mobile::AgentController do
         "conversation_id" => conversation.external_id,
         "message" => { "role" => "assistant", "content" => "Your bio has three lines." },
       )
+    end
+
+    it "hides executing and unknown proposals from recovered mobile turns" do
+      %w[executing unknown].each do |action_status|
+        recovered_turn_id = SecureRandom.uuid
+        conversation = create(:ai_conversation, seller: @seller)
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "Check your discount.",
+          metadata: {
+            "client_turn_id" => recovered_turn_id,
+            "proposed_action" => { "type" => "api_write", "params" => { "code" => "LAUNCH" } },
+            "action_status" => action_status,
+          },
+        )
+
+        get :turn_status, params: @auth_params.merge(client_turn_id: recovered_turn_id)
+
+        expect(response.parsed_body["message"]).to eq(
+          "role" => "assistant",
+          "content" => "The outcome of this change is not available in this app. Check your store before asking the agent to try again.",
+        )
+      end
     end
 
     it "reads the same liveness markers the streaming endpoint arms" do
@@ -397,12 +654,10 @@ describe Api::Mobile::AgentController do
     end
 
     describe "POST execute" do
-      let(:valid_params) { @auth_params.merge(type: "api_write", params: { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 }) }
-
-      it "marks the stored proposal applied when a conversation id is sent" do
-        conversation = create(:ai_conversation, seller: @seller)
-        create(:ai_message, ai_conversation: conversation, content: "Create a discount")
-        proposal = create(
+      let(:confirmed_action_params) { { endpoint: "create_discount", code: "LAUNCH", percent_off: 20 } }
+      let(:conversation) { create(:ai_conversation, seller: @seller) }
+      let(:proposal) do
+        create(
           :ai_message,
           ai_conversation: conversation,
           role: "assistant",
@@ -410,43 +665,129 @@ describe Api::Mobile::AgentController do
           metadata: {
             "proposed_action" => {
               "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => "20" },
+              "params" => confirmed_action_params,
             },
           },
         )
+      end
+      let(:valid_params) do
+        @auth_params.merge(
+          type: "api_write",
+          params: confirmed_action_params,
+          conversation_id: conversation.external_id,
+          proposal_message_id: proposal.external_id,
+        )
+      end
+
+      it "marks the exact stored proposal applied" do
+        create(:ai_message, ai_conversation: conversation, content: "Create a discount")
 
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
         allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount LAUNCH.")
 
-        post :execute, params: valid_params.merge(conversation_id: conversation.external_id)
+        post :execute, params: valid_params
 
         expect(response).to be_successful
         expect(proposal.reload.metadata["action_status"]).to eq("applied")
       end
 
-      it "leaves the proposal untouched when the executor reports failure" do
-        conversation = create(:ai_conversation, seller: @seller)
-        proposal = create(
-          :ai_message,
-          ai_conversation: conversation,
-          role: "assistant",
-          content: "Want me to create LAUNCH?",
-          metadata: {
-            "proposed_action" => {
-              "type" => "api_write",
-              "params" => { "endpoint" => "create_discount", "code" => "LAUNCH", "percent_off" => "20" },
-            },
-          },
+      it "matches an unchanged decimal after the client serializes it as an integer" do
+        proposal.update!(
+          metadata: proposal.metadata.deep_merge(
+            "proposed_action" => { "params" => { "percent_off" => 20.0 } },
+          ),
         )
-
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
-        allow(executor_double).to receive(:execute).and_return(success: false, message: "That change couldn't be saved.")
+        expect(executor_double).to receive(:execute).once do |type:, params:|
+          expect(type).to eq("api_write")
+          expect(params["percent_off"]).to eql(20)
+          { success: true, message: "Created discount LAUNCH." }
+        end
 
-        post :execute, params: valid_params.merge(conversation_id: conversation.external_id)
+        post :execute, params: valid_params
+
+        expect(response).to be_successful
+        expect(proposal.reload.metadata["action_status"]).to eq("applied")
+      end
+
+      it "matches an unchanged decimal sent as an ordinary form string" do
+        proposal.update!(
+          metadata: proposal.metadata.deep_merge(
+            "proposed_action" => { "params" => { "percent_off" => 20.0 } },
+          ),
+        )
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        expect(executor_double).to receive(:execute).once do |type:, params:|
+          expect(type).to eq("api_write")
+          expect(params["percent_off"]).to eql(20)
+          { success: true, message: "Created discount LAUNCH." }
+        end
+
+        post :execute, params: valid_params.deep_merge(params: { percent_off: "20" })
+
+        expect(response).to be_successful
+        expect(proposal.reload.metadata["action_status"]).to eq("applied")
+      end
+
+      it "rejects a numeric-looking string changed to an equivalent number before dispatch" do
+        proposal.update!(
+          metadata: proposal.metadata.deep_merge(
+            "proposed_action" => { "params" => { "name" => "1e3" } },
+          ),
+        )
+        expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+        post :execute, params: valid_params.deep_merge(params: { name: "1000" })
 
         expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["message"]).to include("doesn't match")
+        expect(proposal.reload.metadata["action_status"]).to be_nil
+      end
+
+      it "rejects scientific notation for a stored numeric before dispatch" do
+        expect(Ai::StoreAgentActionExecutor).not_to receive(:new)
+
+        post :execute, params: valid_params.deep_merge(params: { percent_off: "2e1" })
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["message"]).to include("doesn't match")
+        expect(proposal.reload.metadata["action_status"]).to be_nil
+      end
+
+      it "keeps success but records an unknown outcome when finalizing the audit fails" do
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(success: true, message: "Created discount LAUNCH.")
+        allow(controller).to receive(:record_agent_action_applied!).and_raise(ActiveRecord::StatementInvalid)
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+
+        post :execute, params: valid_params
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true, "message" => "Created discount LAUNCH.")
+        expect(proposal.reload.metadata["action_status"]).to eq("unknown")
+      end
+
+      it "releases the proposal claim when the executor rejects before dispatch" do
+        executor_double = instance_double(Ai::StoreAgentActionExecutor)
+        allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
+        allow(executor_double).to receive(:execute).and_return(
+          success: false,
+          message: "That change couldn't be saved.",
+          retry_safe: true,
+        )
+
+        post :execute, params: valid_params
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq(
+          "success" => false,
+          "message" => "That change couldn't be saved.",
+          "retryable" => true,
+        )
         expect(proposal.reload.metadata["action_status"]).to be_nil
       end
 
@@ -459,20 +800,23 @@ describe Api::Mobile::AgentController do
         expect(response).to have_http_status(:not_found)
       end
 
-      it "reports a RecordNotFound raised inside the executor as a 500, not a missing conversation" do
+      it "reports a RecordNotFound raised inside the executor as an indeterminate claim" do
         # A RecordNotFound from the executor (e.g. an internal dispatch calling find! on a product
         # that no longer exists) is an unexpected failure — it must be logged + notified and return
-        # a 500, not reuse the "conversation could not be found" 404 meant for a bad conversation_id.
-        conversation = create(:ai_conversation, seller: @seller)
+        # the retained-claim status, not reuse the 404 meant for a bad conversation_id.
         executor_double = instance_double(Ai::StoreAgentActionExecutor)
         allow(Ai::StoreAgentActionExecutor).to receive(:new).and_return(executor_double)
         allow(executor_double).to receive(:execute).and_raise(ActiveRecord::RecordNotFound)
         expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::RecordNotFound))
 
-        post :execute, params: valid_params.merge(conversation_id: conversation.external_id)
+        post :execute, params: valid_params
 
-        expect(response).to have_http_status(:internal_server_error)
-        expect(response.parsed_body["message"]).to eq("Something went wrong. Please try again.")
+        expect(response).to have_http_status(:conflict)
+        expect(response.parsed_body).to include(
+          "message" => "The action may have completed, so it can't be retried automatically.",
+          "action_status" => "unknown",
+        )
+        expect(proposal.reload.metadata["action_status"]).to eq("unknown")
       end
     end
   end

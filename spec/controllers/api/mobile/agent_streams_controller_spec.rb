@@ -60,6 +60,40 @@ describe Api::Mobile::AgentStreamsController do
       expect(response.body).to include(conversation.external_id)
     end
 
+    it "commits the stream with a keepalive comment before any event" do
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs|
+        turn = { reply: "Done.", proposed_action: nil, objects: [] }
+        on_reply_complete&.call(turn)
+        turn.merge(suggestions: [])
+      end
+
+      post :create, params: valid_params
+
+      expect(response.body).to start_with(": connected\n\n")
+    end
+
+    it "emits the persisted proposal message id on the done event" do
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &_emit|
+        turn = {
+          reply: "Confirm this discount.",
+          proposed_action: { "type" => "api_write", "params" => { "endpoint" => "create_discount" } },
+          objects: [],
+        }
+        on_reply_complete&.call(turn)
+        turn.merge(suggestions: [])
+      end
+
+      post :create, params: valid_params
+
+      message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
+      done_data = JSON.parse(response.body[/event: done\ndata: (.*)/, 1])
+      expect(done_data["proposal_message_id"]).to eq(message.external_id)
+    end
+
     it "replays the stored transcript when resuming a conversation" do
       conversation = create(:ai_conversation, seller: @seller)
       create(:ai_message, ai_conversation: conversation, content: "Earlier question")
@@ -85,31 +119,51 @@ describe Api::Mobile::AgentStreamsController do
       expect(conversation.ai_messages.reload.count).to eq(3)
     end
 
-    it "still emits the done event when persisting the turn fails after streaming" do
-      # The seller has already watched the reply stream in by the time persistence runs, so a DB
-      # failure here must not turn the turn into an error — the done event (and the reply it
-      # carries) still has to arrive. The conversation id is simply omitted.
+    it "still emits the done event but suppresses an unpersisted proposal" do
+      proposal = { "type" => "api_write", "params" => { "endpoint" => "create_discount" } }
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
-      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &_emit|
-        turn = { reply: "You have 3 products.", proposed_action: nil, objects: [] }
+      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+        turn = { reply: "Confirm this discount.", proposed_action: proposal, objects: [] }
+        emit.call(:token, { text: turn[:reply] })
         on_reply_complete&.call(turn)
-        turn.merge(suggestions: [])
+        emit.call(:objects, { objects: [{ type: "product", title: "Course" }] })
+        emit.call(:proposed_action, { proposed_action: proposal })
+        emit.call(:suggestions, { suggestions: ["Show my products"] })
+        turn.merge(suggestions: ["Show my products"])
       end
       allow(controller).to receive(:create_agent_conversation!).and_raise(ActiveRecord::StatementInvalid)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::StatementInvalid))
+      client_turn_id = SecureRandom.uuid
+      turn_status_key = RedisKey.agent_turn_status(@seller.id, client_turn_id)
 
-      post :create, params: valid_params
+      post :create, params: valid_params.merge(client_turn_id:)
 
       expect(response.body).to include("event: done")
-      expect(response.body).to include("You have 3 products.")
+      expect(response.body).to include("event: reset")
+      expect(response.body).to include("there is nothing to confirm")
       expect(response.body).not_to include("event: error")
+      expect(response.body).to include("event: objects")
+      expect(response.body).not_to include("event: suggestions")
+      expect(response.body).not_to include("event: proposed_action")
+      expect(response.body.scan(/^event: (.+)$/).flatten).to eq(
+        %w[token reset token objects done],
+      )
 
       # The key must be absent from the done payload, not present-with-null: the client validates
       # the frame against a schema where conversation_id is an optional string, so a null would
       # fail validation and turn a benign persistence failure into a spurious stream interruption.
-      done_data = response.body[/event: done\ndata: (.*)/, 1]
-      expect(JSON.parse(done_data)).not_to have_key("conversation_id")
+      done_data = JSON.parse(response.body[/event: done\ndata: (.*)/, 1])
+      expect(done_data["reply"]).to eq(
+        "I couldn't save that proposed change, so there is nothing to confirm. Please ask me to prepare it again.",
+      )
+      expect(done_data).not_to have_key("conversation_id")
+      expect(done_data["proposed_action"]).to be_nil
+      expect(done_data["suggestions"]).to eq([])
+      expect(done_data).not_to have_key("proposal_message_id")
+      expect($redis.get(turn_status_key)).to eq("failed")
+    ensure
+      $redis.del(turn_status_key) if turn_status_key
     end
 
     it "emits an error event (not a new conversation) for another seller's conversation id" do
@@ -146,6 +200,24 @@ describe Api::Mobile::AgentStreamsController do
 
         message = @seller.ai_conversations.sole.ai_messages.role_assistant.sole
         expect(message.metadata["client_turn_id"]).to eq(client_turn_id)
+      end
+
+      it "refreshes the in-progress marker during a silent turn" do
+        stub_const("Api::Mobile::AgentStreamsController::STREAM_HEARTBEAT_INTERVAL", 0.02.seconds)
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs|
+          $redis.expire(turn_status_key, 1)
+          sleep 0.1
+          expect($redis.ttl(turn_status_key)).to be > 1
+          turn = { reply: "Done.", proposed_action: nil, objects: [] }
+          on_reply_complete&.call(turn)
+          turn.merge(suggestions: [])
+        end
+
+        post :create, params: valid_params.merge(client_turn_id:)
+
+        expect(response.body).to include(": heartbeat\n\n")
       end
 
       it "records a failed marker when the service errors before the turn persists" do
