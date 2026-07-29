@@ -88,6 +88,22 @@ describe "Stripe rate-limit retries in the test environment" do
       end
     end
 
+    it "retries inside a cassette that ignores the Stripe host, where Stripe is live" do
+      # The shipping and taxjar specs record TaxJar only and let every other host
+      # through, so a cassette is open while Stripe is being called for real.
+      # Treating that as a replay is what left ten Test Slow shards red on
+      # 2026-07-29 with 46 unretried 429s.
+      error = stripe_error(Stripe::RateLimitError, "Request rate limit exceeded", status: 429)
+
+      vcr_turned_on do
+        only_matching_vcr_request_from(["taxjar"]) do
+          VCR.use_cassette("stripe_rate_limit_retries_guard", record: :none, allow_unused_http_interactions: true) do
+            expect(should_retry?(error, num_retries: 0)).to be true
+          end
+        end
+      end
+    end
+
     it "does not retry unrelated Stripe errors" do
       card_error = Stripe::CardError.new("Your card was declined", "number", http_status: 402)
       bad_request = stripe_error(Stripe::InvalidRequestError, "No such customer", status: 400)

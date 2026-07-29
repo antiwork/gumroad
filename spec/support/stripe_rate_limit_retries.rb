@@ -38,8 +38,10 @@
 #
 # What this does NOT cover: :js specs drive Stripe Elements in the browser, so
 # card tokenization goes Chrome → Stripe directly and the Ruby gem never sees it.
-# A rate limit on that path is out of reach here. Both observed failure shapes
-# were server-side, so this addresses what actually broke.
+# A rate limit on that path is out of reach here. The server-side half of a :js
+# spec — the charge the Rails app makes when the form is submitted — IS covered,
+# including inside a cassette that ignores the Stripe host; see
+# stripe_served_from_a_cassette? below for why that case needs asking about.
 module StripeTestRateLimitRetries
   # Stripe does not always set an HTTP status or a machine-readable code on
   # these: account-creation throttling arrives as a Stripe::InvalidRequestError
@@ -77,7 +79,7 @@ module StripeTestRateLimitRetries
   BACKING_OFF_FOR_RATE_LIMIT = :stripe_test_backing_off_for_rate_limit
 
   def should_retry?(error, num_retries:, config: Stripe.config)
-    if rate_limited?(error) && !replaying_a_cassette?
+    if rate_limited?(error) && !stripe_served_from_a_cassette?
       if num_retries < MAX_RETRIES
         # The gem retries silently. Without a line here, a CI shard spending a
         # minute waiting out the shared Stripe test account looks like a slow
@@ -124,13 +126,21 @@ module StripeTestRateLimitRetries
     # Under VCR there is no live Stripe to back off from: the 429 came out of a
     # recorded cassette, and a dozen cassettes in spec/support/fixtures do
     # contain one. Retrying would sleep for nothing and then ask VCR for an
-    # interaction it has already played, which raises instead of replaying. The
-    # helper this file replaces had the same guard, for the same reason.
-    def replaying_a_cassette?
-      defined?(VCR) && VCR.current_cassette.present?
+    # interaction it has already played, which raises instead of replaying.
+    #
+    # An OPEN cassette does not mean Stripe is coming from it. The shipping and
+    # taxjar specs wrap themselves in only_matching_vcr_request_from(["taxjar"])
+    # (see spec_helper), which tells VCR to ignore every host but TaxJar — so
+    # Stripe inside those cassettes is live and rate-limitable, and refusing to
+    # retry there is what reddens those shards. Ask VCR whether it would
+    # intercept a Stripe request, not whether a cassette happens to be open.
+    def stripe_served_from_a_cassette?
+      return false unless defined?(VCR) && VCR.current_cassette.present?
+
+      !VCR.request_ignorer.ignore?(VCR::Request.new(:post, "#{Stripe.api_base}/v1/", nil, {}))
     rescue StandardError
-      # If VCR itself cannot answer, assume a cassette is in play: declining to
-      # retry only restores the Stripe gem's own default behaviour.
+      # If VCR itself cannot answer, assume a cassette is serving Stripe:
+      # declining to retry only restores the gem's own default behaviour.
       true
     end
 end
