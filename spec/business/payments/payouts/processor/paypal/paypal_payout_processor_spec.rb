@@ -995,6 +995,52 @@ describe PaypalPayoutProcessor do
     end
   end
 
+  describe ".update_split_payment_state" do
+    let(:user) { create(:user, payment_address: "seller@example.com") }
+    let(:payment) do
+      create(:payment, user:, payment_address: user.payment_address, was_created_in_split_mode: true,
+                       split_payments_info: split_payments_info)
+    end
+
+    context "when every part failed with the same PayPal rejection code" do
+      let(:split_payments_info) do
+        [{ "state" => "failed", "reason_code" => "3148" }, { "state" => "failed", "reason_code" => "3148" }]
+      end
+
+      it "records the code, so a permanently refused split payout stops being retried" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.state).to eq "failed"
+        expect(payment.failure_reason).to eq "PAYPAL 3148"
+        expect(payment.terminal_paypal_failure?).to eq true
+      end
+    end
+
+    context "when PayPal sent no rejection code" do
+      let(:split_payments_info) { [{ "state" => "failed" }, { "state" => "failed" }] }
+
+      it "falls back to the generic reason and keeps retrying" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.state).to eq "failed"
+        expect(payment.failure_reason).to eq Payment::FailureReason::PAYPAL_PAYOUT_FAILED
+        expect(payment.terminal_paypal_failure?).to eq false
+      end
+    end
+
+    context "when the parts disagree about why they failed" do
+      let(:split_payments_info) do
+        [{ "state" => "failed", "reason_code" => "3148" }, { "state" => "failed", "reason_code" => "3015" }]
+      end
+
+      it "falls back to the generic reason rather than picking one part's code" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.failure_reason).to eq Payment::FailureReason::PAYPAL_PAYOUT_FAILED
+      end
+    end
+  end
+
   describe ".handle_paypal_event_for_non_split_payment" do
     before do
       @creator = create(:singaporean_user_with_compliance_info, payment_address: "amir_1351103838_biz@gumroad.com", should_paypal_payout_be_split: true)

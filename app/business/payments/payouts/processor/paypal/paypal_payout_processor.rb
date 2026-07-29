@@ -80,7 +80,9 @@ class PaypalPayoutProcessor
     # Deliberately no note is written here. The failure that ended the retries already recorded a
     # seller-facing note naming PayPal and the fix, and it stays the newest payout note precisely
     # because this path is silent — a weekly internal note would bury it and add another row to
-    # the hundreds of automated comments these accounts already carry.
+    # the hundreds of automated comments these accounts already carry. Sellers who were already
+    # stuck before this check existed have no such failure to have written one, so
+    # Onetime::ExplainTerminalPaypalPayoutFailures backfilled the note for them.
     #
     # Three things lift the block on their own, so this is not a dead end: adding a bank account
     # (handled at the top of this method, and the fix we point sellers at), switching to a
@@ -101,9 +103,16 @@ class PaypalPayoutProcessor
       state: Payment::FAILED,
       failure_reason: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
     )
+    # Check for a rejection before looking up the last completed payout. Almost every seller in the
+    # weekly payout walk has never had one, and this method runs for each of them — the walk has
+    # twice been slow enough to cause problems (gumroad-private#1021, #1284), so the second query
+    # only runs for the rare seller who actually has a rejection on record.
+    return false unless terminal_failures.exists?
+
     last_completed_at = payouts_to_address.completed.maximum(:created_at)
-    terminal_failures = terminal_failures.where("created_at > ?", last_completed_at) if last_completed_at
-    terminal_failures.exists?
+    return true if last_completed_at.nil?
+
+    terminal_failures.where("created_at > ?", last_completed_at).exists?
   end
 
   def self.has_valid_payout_info?(user)
@@ -360,6 +369,12 @@ class PaypalPayoutProcessor
 
       split_payment_info["txn_id"] = paypal_event["masspay_txn_id"]
       split_payment_info["state"] = paypal_event["status"].try(:downcase)
+      # Keep the rejection code PayPal sent for this part. Without it a split payout that PayPal
+      # refuses is marked failed with no reason at all, which means none of the failure-reason
+      # handling applies to it — no support-facing solution, and no way to tell a permanent
+      # rejection from a retryable one, so a doomed split payout would be re-attempted every week
+      # forever (gumroad-private#1478).
+      split_payment_info["reason_code"] = paypal_event["reason_code"] if paypal_event["reason_code"].present?
       payment.processor_fee_cents += 100 * paypal_event["mc_fee"].to_f if paypal_event["mc_fee"]
       payment.save!
 
@@ -384,11 +399,25 @@ class PaypalPayoutProcessor
       payment.txn_id = SPLIT_PAYMENT_TXN_ID
       payment.mark_completed!
     elsif all_split_payments_failed
-      payment.mark_failed!
+      payment.mark_failed!(split_payment_failure_reason(payment))
     elsif no_split_payments_are_processing
       # This means that no split payments are in the processing state. It also means that some of them have failed and some have succeeded.
       ErrorNotifier.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
     end
+  end
+
+  # Why the whole split payout failed, in the same "PAYPAL <code>" form a single payout records.
+  #
+  # Every part of a split payout goes to the same PayPal address, so when they all fail they nearly
+  # always fail for the same reason. Taking one code is enough to classify the payout, and it is
+  # what lets a permanently-refused split payout stop retrying like any other. If the parts somehow
+  # disagree, or PayPal sent no code at all, fall back to the generic reason rather than picking a
+  # code that only describes part of the payout.
+  def self.split_payment_failure_reason(payment)
+    reason_codes = payment.split_payments_info.map { |split_payment_info| split_payment_info["reason_code"] }.compact.uniq
+    return Payment::FailureReason::PAYPAL_PAYOUT_FAILED unless reason_codes.one?
+
+    "PAYPAL #{reason_codes.first}"
   end
 
   def self.get_latest_payment_state_from_paypal(amount_cents, transaction_id, start_date, current_state)

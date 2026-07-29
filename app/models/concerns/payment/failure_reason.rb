@@ -39,6 +39,24 @@ module Payment::FailureReason
     "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars. " \
     "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
 
+  # Same fix, but for a seller whose payouts are ALSO already on hold for the account as a whole.
+  #
+  # Three consecutive failed payouts to the same destination trip an automatic hold
+  # (Payment#pause_payouts_after_repeated_failures), and these sellers have failed dozens of
+  # times, so most of the ones stuck long enough to hear from us are already holding one. That
+  # hold is checked in Payouts.is_user_payable BEFORE we ever reach the PayPal processor, and
+  # nothing a seller can do to their own payout settings lifts it: changing the PayPal address
+  # clears only a Stripe-sourced hold (UpdatePayoutMethod), and the one automatic release job
+  # covers chargeback-rate holds, not this one. Someone on support has to resume it.
+  #
+  # So promising "your balance goes out on the next payout date" would be a second false promise
+  # on top of the one this whole change exists to fix. Ask them to reply instead, which is the
+  # only thing that actually gets the hold looked at.
+  TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_WHILE_PAUSED =
+    "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars. " \
+    "Your balance is safe. Because these repeated failures also placed a hold on payouts for your account, " \
+    "reply to this message once a working payout method is on file and we will review the hold and release your balance."
+
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",
     "PAYPAL 1000" => "Unknown error",
@@ -200,7 +218,7 @@ module Payment::FailureReason
         user.add_payout_note(
           content: "Your payout on #{created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
                    "#{TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(failure_reason)}. " \
-                   "#{TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION}",
+                   "#{terminal_paypal_failure_seller_solution}",
           seller_visible: true
         )
         return

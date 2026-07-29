@@ -45,6 +45,23 @@ describe ContactingCreatorMailer do
 
       expect(mail.body.encoded).to include("your PayPal account cannot receive US dollars")
     end
+
+    it "does not promise a payout date when the account is also under a payout hold" do
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("placed a hold on payouts for your account")
+      expect(mail.body.encoded).to include("reply to this email")
+      expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "promises the next payout date when the account is not under a payout hold" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to_not include("placed a hold on payouts")
+    end
   end
 
   describe "purchase refunded" do

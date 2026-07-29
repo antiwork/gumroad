@@ -53,6 +53,18 @@ describe Payment::FailureReason do
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
           end
 
+          it "tells a seller whose account is also on hold to reply instead of promising a date" do
+            payment.user.update!(payouts_paused_internally: true)
+
+            payment.mark_failed!("PAYPAL 3148")
+
+            note = payment.user.comments.last
+            expect(note.content).to include("placed a hold on payouts for your account")
+            expect(note.content).to include("reply to this message")
+            expect(note.content).to_not include("next payout date")
+            expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+          end
+
           it "names the currency restriction when PayPal cannot send US dollars to the account" do
             payment.mark_failed!("PAYPAL 14159")
 

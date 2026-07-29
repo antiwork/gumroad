@@ -185,16 +185,25 @@ class Payment < ApplicationRecord
   end
 
   # Tell the seller their PayPal account cannot receive the payout, and that we have stopped
-  # retrying it. Sent once per payout period, like the other payout-failure emails, so a
-  # support-issued retry in the same week doesn't email them twice.
+  # retrying it.
+  #
+  # This has its own "already sent" marker rather than sharing
+  # payout_date_of_last_payment_failure_email with the other payout-failure emails. That column is
+  # written by any failure email in the period, so sharing it would mean an unrelated earlier email
+  # silently swallows this one — and because the retries stop here, there is no later period in
+  # which it would be sent instead. The seller would never be told why their money stopped moving.
   def send_paypal_terminal_failure_email
-    return if user.payout_date_of_last_payment_failure_email.present? &&
-              Date.parse(user.payout_date_of_last_payment_failure_email) >= payout_period_end_date
+    return if user.payout_date_of_last_paypal_terminal_failure_email.present? &&
+              Date.parse(user.payout_date_of_last_paypal_terminal_failure_email) >= payout_period_end_date
 
     ContactingCreatorMailer.paypal_payout_permanently_failed(id).deliver_later(queue: "critical")
 
-    user.payout_date_of_last_payment_failure_email = payout_period_end_date
-    user.save!
+    user.payout_date_of_last_paypal_terminal_failure_email = payout_period_end_date
+    # Skip validations: this is bookkeeping about an email, and the seller rows that reach here are
+    # exactly the ones likely to be invalid for unrelated reasons (incomplete payout details). A
+    # raise here would roll back the whole failure transition, leaving the payout stuck in
+    # `processing`, which then blocks every future payout for that seller with nothing to show why.
+    user.save!(validate: false)
   end
 
   def humanized_failure_reason
@@ -211,6 +220,20 @@ class Payment < ApplicationRecord
   def terminal_paypal_failure?
     processor == PayoutProcessorType::PAYPAL &&
       FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
+  # What to tell the seller to do about a terminal PayPal rejection.
+  #
+  # Fixing their payout method is only enough when payouts for the account are otherwise free to
+  # run. If the account is also under a payout hold, fixing the method alone changes nothing —
+  # Payouts.is_user_payable rejects on the hold before it ever reaches the PayPal processor — so
+  # the seller has to be told to come to us rather than to expect money on the next payout date.
+  def terminal_paypal_failure_seller_solution
+    if user.payouts_paused?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_WHILE_PAUSED
+    else
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION
+    end
   end
 
   def reversed_by?(reversing_payout_id)
@@ -294,6 +317,21 @@ class Payment < ApplicationRecord
 
     def pause_payouts_after_repeated_failures
       return if user.nil? || user.payouts_paused?
+
+      # A terminal PayPal rejection is handled by a narrower mechanism and must not also pause the
+      # account. Pausing would contradict what we just told the seller: the note and email say to
+      # add a bank account and they will be paid on the next payout date, but a paused account is
+      # skipped before the payout method is even considered, so they would follow our instructions
+      # and still not get paid until support noticed and resumed them by hand. That is how these
+      # sellers ended up with nothing but "payouts were paused by the system" to go on
+      # (gumroad-private#1478).
+      #
+      # Nothing is lost by skipping the pause here. This check exists to stop us hammering a
+      # destination that keeps rejecting us, and the terminal block does that job more precisely:
+      # it is keyed on the PayPal address rather than the whole account, it engages on the first
+      # rejection instead of the third, and it lifts on its own when the seller fixes their payout
+      # details rather than needing a human to resume them.
+      return if terminal_paypal_failure?
 
       if bank_account_id.present?
         destination = "bank account"

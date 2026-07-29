@@ -141,11 +141,50 @@ describe Payment do
     end
 
     it "emails only once per payout period" do
-      compliant_creator.update!(payout_date_of_last_payment_failure_email: payment.payout_period_end_date)
+      compliant_creator.update!(payout_date_of_last_paypal_terminal_failure_email: payment.payout_period_end_date)
 
       expect do
         payment.reload.mark_failed!("PAYPAL 3148")
       end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+    end
+
+    it "still emails when an unrelated payout-failure email already went out this period" do
+      compliant_creator.update!(payout_date_of_last_payment_failure_email: payment.payout_period_end_date)
+
+      expect do
+        payment.reload.mark_failed!("PAYPAL 3148")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+    end
+
+    it "records the failure even when the seller's record is invalid for unrelated reasons" do
+      compliant_creator.update_columns(name: "x" * 1_000)
+
+      expect do
+        payment.mark_failed!("PAYPAL 3148")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+      expect(payment.reload.state).to eq("failed")
+    end
+
+    it "does not pause the whole account, so adding a bank account is enough to get paid" do
+      2.times do
+        create(:payment_failed, user: compliant_creator, payment_address: payment.payment_address,
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+      end
+
+      payment.mark_failed!("PAYPAL 3148")
+
+      expect(compliant_creator.reload.payouts_paused?).to eq(false)
+    end
+
+    it "still pauses the account after repeated retryable failures" do
+      2.times do
+        create(:payment_failed, user: compliant_creator, payment_address: payment.payment_address,
+                                failure_reason: "PAYPAL 3015", txn_id: nil, processor_fee_cents: nil)
+      end
+
+      payment.mark_failed!("PAYPAL 3015")
+
+      expect(compliant_creator.reload.payouts_paused?).to eq(true)
     end
 
     it "does not email for a retryable PayPal rejection" do

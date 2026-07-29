@@ -183,6 +183,9 @@ class ContactingCreatorMailer < ApplicationMailer
       # the local database happens to have.
       Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
     )
+    # A hold on the account outlives the payout method fix and only support can lift it, so the
+    # email has to ask a seller in that position to reply instead of promising the next payout date.
+    @payouts_on_hold = @seller.payouts_paused?
   end
 
   def flagged_for_explicit_nsfw_tos_violation(user_id)
