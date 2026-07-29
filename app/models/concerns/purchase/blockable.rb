@@ -45,6 +45,12 @@ module Purchase::Blockable
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
+  # How many settled, never-refunded, never-disputed purchases a buyer needs behind them before a
+  # fraud-flavoured decline from their card issuer stops being treated as a fraud signal about the
+  # person. Three is well above what a card tester accumulates (their charges fail) and well below
+  # what an ordinary repeat customer or a membership subscriber has.
+  MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY = 3
+
   MAX_PURCHASER_AGE_FOR_SUSPENSION = 6.hours
   private_constant :MAX_PURCHASER_AGE_FOR_SUSPENSION
 
@@ -198,6 +204,21 @@ module Purchase::Blockable
     ContactingCreatorMailer.refund_policy_enforced_notification(seller.id).deliver_later
   end
 
+  # True when the person behind this purchase has a payment record that speaks for itself:
+  # several settled purchases, none refunded, none charged back. Matched on the account when the
+  # buyer is logged in and on the email either way, because most membership renewals belong to a
+  # buyer who never created a Gumroad account.
+  def buyer_has_clean_payment_history?
+    history = Purchase.successful.not_fully_refunded.not_chargedback
+    history = if purchaser_id.present?
+      history.where("purchaser_id = :purchaser_id OR email = :email", purchaser_id:, email:)
+    else
+      history.where(email:)
+    end
+
+    history.where.not(id:).limit(MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY).count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
+  end
+
   private
     def recent_stripe_fingerprint
       Purchase.with_stripe_fingerprint
@@ -230,11 +251,46 @@ module Purchase::Blockable
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
     end
 
+    # A single fraud-flavoured decline from the card issuer used to platform-block everything we
+    # know about the person who attempted the payment: their browser, their email addresses, their
+    # IP address and their card. That is the right response to somebody testing a stolen card on us.
+    # It is the wrong response to a long-standing customer whose bank reissued their card, which is
+    # what the "lost card" and "pickup card" codes almost always mean in practice — and because we
+    # blocked the email and the browser too, those customers could not pay us with a replacement
+    # card either, so a renewal that should have recovered by itself turned into a lost membership
+    # (gumroad-private#1480).
+    #
+    # Two guards now stand in front of the block:
+    #
+    #   1. Only the codes where the issuer is actually reporting card misuse count
+    #      (PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES). Lost/pickup declines still fail the charge,
+    #      they just do not brand the buyer.
+    #   2. A buyer with real successful payment history behind them is not blocked at all. Somebody
+    #      who has paid us repeatedly, with nothing refunded and nothing charged back, is not a card
+    #      tester; whatever the issuer is reporting, the right outcome is that they can put a new
+    #      card in and carry on.
+    #
+    # And when we do block, we block the payment method only — see #block_buyer_payment_method!.
     def ban_buyer_on_fraud_related_error_code!
       failure_code = stripe_error_code || error_code
-      return if PurchaseErrorCode::FRAUD_RELATED_ERROR_CODES.exclude?(failure_code)
+      return if PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES.exclude?(failure_code)
+      return if buyer_has_clean_payment_history?
 
-      block_buyer!
+      block_buyer_payment_method!
+    end
+
+    # Blocks the card this decline came in on, and nothing else.
+    #
+    # Deliberately narrower than #block_buyer!: blocking the buyer's email, browser and IP takes
+    # away the only route they have to fix the problem themselves (add a different card, pay
+    # through PayPal), and there is no version of "your card was reported stolen" where we want to
+    # stop the actual human from paying with a card that is fine. Somebody spraying many stolen
+    # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
+    # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
+    # distinct cards have failed.
+    def block_buyer_payment_method!
+      block_by_charge_processor_fingerprint!
+      block_by_recent_stripe_fingerprint!
     end
 
     def suspend_buyer_on_fraudulent_card_decline!

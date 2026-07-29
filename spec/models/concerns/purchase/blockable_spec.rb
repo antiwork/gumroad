@@ -75,17 +75,30 @@ describe Purchase::Blockable do
     end
   end
 
-  describe "email blocking on fraud" do
-    context "for a fraudulent transaction" do
-      it "blocks the email" do
+  describe "blocking on a fraud-related decline" do
+    context "for a decline reporting card misuse" do
+      it "blocks the card but leaves the buyer's email usable" do
         purchase = build(:purchase_in_progress,
                          email: "foo@example.com",
-                         error_code: PurchaseErrorCode::FRAUD_RELATED_ERROR_CODES.sample)
+                         error_code: PurchaseErrorCode::CARD_DECLINED_FRAUDULENT)
 
         purchase.mark_failed!
 
-        expect(purchase.blocked_by_email?).to be true
-        expect(purchase.blocked_by_email_object&.object_value).to eq("foo@example.com")
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+        expect(purchase.blocked_by_email?).to be false
+        expect(purchase.blocked_by_browser_guid?).to be false
+        expect(purchase.blocked_by_ip_address?).to be false
+      end
+    end
+
+    context "for a lost or reissued card decline" do
+      it "does not block anything" do
+        [PurchaseErrorCode::CARD_DECLINED_LOST_CARD, PurchaseErrorCode::CARD_DECLINED_PICKUP_CARD].each do |error_code|
+          purchase = build(:purchase_in_progress, email: "foo@example.com", error_code:)
+
+          expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+          expect(purchase.buyer_blocked?).to be false
+        end
       end
     end
 
@@ -98,6 +111,66 @@ describe Purchase::Blockable do
         purchase.mark_failed!
 
         expect(purchase.blocked_by_email?).to be false
+      end
+    end
+
+    context "when the buyer already has a clean payment history" do
+      it "does not block them, matching on email" do
+        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                    email: "loyal@example.com", purchase_state: "successful")
+        purchase = build(:purchase_in_progress,
+                         email: "loyal@example.com",
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+        expect(purchase.buyer_blocked?).to be false
+      end
+
+      it "does not block them, matching on the buyer's account" do
+        purchaser = create(:user)
+        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                    purchaser:, email: "old-address@example.com", purchase_state: "successful")
+        purchase = build(:purchase_in_progress,
+                         purchaser:,
+                         email: "new-address@example.com",
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        expect { purchase.mark_failed! }.not_to change { PlatformBlock.count }
+      end
+
+      it "still blocks the card when the past purchases were all refunded" do
+        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                    email: "refunded@example.com", purchase_state: "successful", stripe_refunded: true)
+        purchase = build(:purchase_in_progress,
+                         email: "refunded@example.com",
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      end
+
+      # Note: a buyer with a standing chargeback can't reach the decline path at all — the
+      # chargeback check in Purchase::Risk fails the purchase first — so the exclusion is
+      # asserted directly on the history check.
+      it "does not count charged-back purchases as clean history" do
+        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY,
+                    email: "disputed@example.com", purchase_state: "successful", chargeback_date: 1.month.ago)
+        purchase = build(:purchase_in_progress, email: "disputed@example.com")
+
+        expect(purchase.buyer_has_clean_payment_history?).to be false
+      end
+
+      it "still blocks the card when the buyer is just short of the threshold" do
+        create_list(:purchase, Purchase::Blockable::MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY - 1,
+                    email: "newish@example.com", purchase_state: "successful")
+        purchase = build(:purchase_in_progress,
+                         email: "newish@example.com",
+                         error_code: PurchaseErrorCode::CARD_DECLINED_STOLEN_CARD)
+
+        purchase.mark_failed!
+
+        expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
       end
     end
   end
@@ -279,20 +352,23 @@ describe Purchase::Blockable do
   describe "#mark_failed" do
     context "when the purchase fails due to a fraud related reason" do
       let(:purchaser) { create(:user, email: "purchaser@example.com") }
-      let(:purchase) { create(:purchase, purchaser:, email: "another-email@example.com", purchase_state: "in_progress", stripe_error_code: "card_declined_lost_card", charge_processor_id: StripeChargeProcessor.charge_processor_id) }
-      let(:expected_blocked_objects) do [
-        ["email", "purchaser@example.com"],
-        ["browser_guid", purchase.browser_guid],
-        ["email", "another-email@example.com"],
-        ["ip_address", purchase.ip_address],
-        ["charge_processor_fingerprint", purchase.stripe_fingerprint]
-      ] end
+      let(:purchase) { create(:purchase, purchaser:, email: "another-email@example.com", purchase_state: "in_progress", stripe_error_code: "card_declined_stolen_card", charge_processor_id: StripeChargeProcessor.charge_processor_id) }
 
-      it "blocks buyer's email, browser_guid, ip_address and stripe_fingerprint" do
+      it "blocks the card only, leaving the buyer able to pay with another one" do
         expect do
           purchase.mark_failed
-        end.to change { PlatformBlock.count }.from(0).to(5)
-        expect(PlatformBlock.pluck(:object_type, :object_value)).to match_array(expected_blocked_objects)
+        end.to change { PlatformBlock.count }.from(0).to(1)
+        expect(PlatformBlock.pluck(:object_type, :object_value)).to eq([["charge_processor_fingerprint", purchase.stripe_fingerprint]])
+      end
+    end
+
+    context "when the purchase fails because the card was reported lost" do
+      let(:purchase) { create(:purchase, purchase_state: "in_progress", stripe_error_code: "card_declined_lost_card", charge_processor_id: StripeChargeProcessor.charge_processor_id) }
+
+      it "doesn't block anything, because this is usually a reissued card" do
+        expect do
+          purchase.mark_failed
+        end.to_not change { PlatformBlock.count }
       end
     end
 

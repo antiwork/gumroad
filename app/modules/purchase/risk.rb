@@ -62,7 +62,11 @@ module Purchase::Risk
       return unless past_blocked_object(browser_guid)
 
       self.error_code = PurchaseErrorCode::BLOCKED_BROWSER_GUID
-      errors.add :base, "Your card was not charged. Please try again on a different browser and/or internet connection."
+      # Do not suggest another browser or connection here. This block follows the person, not the
+      # device: we block the browser together with the email address, so switching browser, network
+      # or payment method changes nothing, and the old wording sent blocked buyers around that loop
+      # until they gave up (gumroad-private#1480). Only support can look at the block and lift it.
+      errors.add :base, "Your card was not charged. This payment could not be completed — please contact support@gumroad.com for help."
     end
 
     def check_for_past_chargebacks
