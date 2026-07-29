@@ -219,7 +219,11 @@ module RendersCustomHtmlPages
     function opaque(color) {
       if (!color || color === "transparent") return false;
       var body = color.match(/\\(([^)]*)\\)\\s*$/);
-      if (!body) return true;
+      // A keyword serialization has no parens and no alpha to find, so it is
+      // opaque. Anything that DOES carry parens and still fails to match is a
+      // shape this cannot read — default it to transparent, because guessing
+      // "opaque" on an unreadable value is how a zero-alpha color gets painted.
+      if (!body) return color.indexOf("(") === -1;
       var parts = body[1].split("/");
       var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
       if (alpha === null) {
@@ -308,8 +312,11 @@ module RendersCustomHtmlPages
         // ticking countdown — is skipped, because reading the canvas forces a
         // style recalc and this observer covers the whole document.
         function stylesheetNode(node) {
-          var name = node && node.nodeName;
-          return name === "STYLE" || name === "LINK";
+          // localName, not nodeName: an SVG <style> styles the whole document
+          // and its nodeName is lowercase, so an uppercase compare misses it.
+          // Undefined on text and comment nodes, which is the right answer.
+          var name = node && node.localName;
+          return name === "style" || name === "link";
         }
         // A <link> only repaints the canvas once the stylesheet it points at has
         // loaded, which is after the mutation that inserted it — so the report
@@ -319,7 +326,7 @@ module RendersCustomHtmlPages
         // Re-adding the same function is a no-op per spec, so a <link> touched
         // twice needs no bookkeeping.
         function watchStylesheetLoad(node) {
-          if (node && node.nodeName === "LINK") node.addEventListener("load", queueReport);
+          if (node && node.localName === "link") node.addEventListener("load", queueReport);
         }
         // A record names only the node that moved, so a seller script appending
         // or dropping a container carries its <style>/<link> descendants past
@@ -701,6 +708,9 @@ module RendersCustomHtmlPages
                 probeAttached = true;
               }
               probe.style.backgroundColor = "";
+              // Must stay `backgroundColor` — a color property cannot fetch, so
+              // `var(--x, url(https://evil.example/pixel))` never dereferences.
+              // The `background` shorthand or `backgroundImage` would fire it.
               probe.style.backgroundColor = value;
               var computed = window.getComputedStyle(probe).backgroundColor;
               // Zero alpha is what an unresolvable var()/keyword collapses to,
