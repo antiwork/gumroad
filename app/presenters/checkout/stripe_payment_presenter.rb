@@ -59,15 +59,7 @@ class Checkout::StripePaymentPresenter
     # CardElement candidates keep wallets suppressed: that lane never mounts a Payment Element,
     # so a wallet there is the Payment Request Button, whose sheet is built from the canonical USD
     # total and cannot show the buyer-currency total the cart displays.
-    #
-    # Only when the cart can actually be quoted, though. A cart spanning more than one seller is
-    # never quoted at all — Checkout::BuyerCurrencyQuote#create requires a single seller, because
-    # the order pipeline creates one charge per seller and a quote locks one total for one
-    # PaymentIntent. With no quote the checkout shows canonical USD totals and the charge takes
-    # canonical USD, so there is nothing for a wallet sheet to disagree with. Suppressing wallets
-    # on those carts removed Apple Pay and Google Pay from multi-seller checkouts that had them
-    # before buyer-currency presentment existed, for no safety benefit.
-    disable_wallets = sellers.one? && checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
+    disable_wallets = checkout_items.any? { buyer_currency_presentment_candidate?(_1) }
     fallback_reason = fallback_reason_for(checkout_items)
     return card_element_props(fallback_reason, disable_wallets:) if fallback_reason.present?
 
@@ -388,11 +380,7 @@ class Checkout::StripePaymentPresenter
       total_price_cents = items.sum { _1[:price_cents].to_i }
       return "not_charged" unless total_price_cents.positive?
       return "stripe_payment_element_amount_below_minimum" if total_price_cents < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS
-      # Single-seller only: buyer-currency presentment is a single-seller feature end to end (the
-      # quote endpoint, the element shape, and the charge-time eligibility service all require
-      # one seller), so a multi-seller cart can never be quoted and must not be judged against a
-      # presentment gate at all. See the note in `props` above.
-      if sellers.one? && items.any? { buyer_currency_presentment_candidate?(_1) }
+      if items.any? { buyer_currency_presentment_candidate?(_1) }
         # PR-1 safety gate, progressively narrowed: presentment candidates originally rode
         # CardElement because the canonical USD Payment Element couldn't carry buyer-currency
         # presentment. Two shapes now stay on the Payment Element:
@@ -430,14 +418,23 @@ class Checkout::StripePaymentPresenter
 
     # The cart shape whose buyer-currency presentment the CARD charge path supports, mirroring
     # the gates of Checkout::BuyerCurrencyEligibility#decision that are knowable at render time:
-    # one-time, non-commission items that all belong to ONE seller and are each a
-    # presentment candidate (candidate? already covers the seller's flags and an active
-    # buyer-local display). One seller matters because the order pipeline creates one
-    # charge per seller, and the quote locks the cart total for a single PaymentIntent —
-    # multi-seller carts would need that one locked total split across several intents (Open
-    # Question 9 on issue #5419), so they stay on CardElement. Products that offer installments
-    # stay on CardElement even when the buyer chooses a one-time purchase because quote creation
-    # cannot see that choice and rejects the product.
+    # one-time, non-commission items that are each a presentment candidate (candidate? already
+    # covers the seller's flags and an active buyer-local display). Products that offer
+    # installments stay on CardElement even when the buyer chooses a one-time purchase because
+    # quote creation cannot see that choice and rejects the product.
+    #
+    # A cart may span several sellers. The order pipeline turns it into one charge per seller,
+    # and the surcharge endpoint locks one quote per prospective charge before the buyer is
+    # shown a total, so each charge is priced from its own locked amount and the cart total is
+    # their sum — no locked figure is ever split across intents. Every seller in the cart must
+    # be in the multi-seller ramp (Checkout::BuyerCurrencyEligibility.multi_seller_enabled?),
+    # which is the same predicate the quote service and the charge path apply, so the surface
+    # the buyer sees and the charge the server will accept cannot disagree.
+    #
+    # The seller count is capped for the same reason the quote service caps it
+    # (Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES): past that many sellers the endpoint
+    # withholds the quote, and mounting the element for a currency no quote will arrive for
+    # would only make the browser fall back to canonical US dollars a moment later.
     #
     # There is deliberately no condition on the currency the SELLER priced in. The quote
     # converts the cart's canonical USD total into the buyer's currency, which works the same
@@ -454,10 +451,13 @@ class Checkout::StripePaymentPresenter
     # element mints supports just as well.
     def buyer_currency_presentment_element_shape?(items)
       return false if items.empty?
-      return false unless items.map { _1[:seller] }.uniq.one?
 
-      # The quote locks the whole cart total, so every item must individually pass the
-      # presentment gates: one unsupported item means the charge path could not honor the
+      cart_sellers = items.map { _1[:seller] }.uniq
+      return false if cart_sellers.length > Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES
+      return false if cart_sellers.many? && !Checkout::BuyerCurrencyEligibility.multi_seller_enabled?(cart_sellers)
+
+      # Each charge's quote locks that charge's total, so every item must individually pass the
+      # presentment gates: one unsupported item means the charge path could not honor its
       # locked total, and the whole cart falls back.
       items.all? do |item|
         buyer_currency_presentment_candidate?(item) &&

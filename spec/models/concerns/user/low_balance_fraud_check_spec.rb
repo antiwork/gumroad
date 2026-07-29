@@ -90,6 +90,27 @@ describe User::LowBalanceFraudCheck do
             expect(@creator.reload.on_probation?).to eq(false)
           end
         end
+
+        context "when the row was suspended after this check loaded the creator" do
+          # The guarded transition refuses the probation, but `disable_refunds!` had
+          # already saved. Without the surrounding transaction the account would be left
+          # with refunds disabled by a lane whose whole job is to skip suspended accounts.
+          it "leaves refunds enabled and the suspension intact" do
+            stale_copy = User.find(@creator.id)
+            allow(stale_copy).to receive(:unpaid_balance_cents).and_return(-200_00)
+
+            @creator.flag_for_fraud!(author_name: "admin", content: "fraud detected")
+            @creator.suspend_for_fraud!(author_name: "admin", content: "confirmed fraud")
+
+            expect do
+              stale_copy.check_for_low_balance_and_probate(@purchase.id)
+            end.to_not raise_error
+
+            expect(@creator.reload.suspended_for_fraud?).to eq(true)
+            expect(@creator.reload.on_probation?).to eq(false)
+            expect(@creator.reload.refunds_disabled?).to eq(false)
+          end
+        end
       end
 
       context "when the creator is not on probation" do

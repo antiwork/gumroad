@@ -5,7 +5,11 @@ import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-d
 import typia from "typia";
 
 import {
+  applyRichContentPageSaveResponse,
+  canonicalRichContentScope,
   HiddenVariantContentConflictError,
+  reconcileConfirmedRemovalIds,
+  richContentMoveSourceIds,
   SaveProductResponse,
   StaleContentConflictError,
   saveProduct,
@@ -91,6 +95,7 @@ type Props = {
   receipt_email_from: string;
   price_checker_enabled: boolean;
   custom_html_pages_enabled: boolean;
+  custom_html_store_hostnames: string[];
   ai_generated: boolean;
 };
 
@@ -123,7 +128,9 @@ const createContextValue = (props: Props) => ({
   availableCountries: props.available_countries,
   saving: false,
   save: () => Promise.resolve(false),
-  serverIdMappings: {},
+  variantIdMappings: {},
+  richContentIdMappings: {},
+  richContentRemovedFileEmbedIds: {},
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
@@ -131,6 +138,7 @@ const createContextValue = (props: Props) => ({
   receiptEmailFrom: props.receipt_email_from,
   priceCheckerEnabled: props.price_checker_enabled,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
+  customHtmlStoreHostnames: props.custom_html_store_hostnames,
   contentUpdates: null,
   setContentUpdates: () => {},
   aiGenerated: props.ai_generated,
@@ -219,12 +227,21 @@ const findPendingDeletions = (product: Product, lastSavedProduct: Product): Pend
 // the next save would submit the same records under ids the server doesn't
 // know — re-creating them and tripping the content deletion guard (see the
 // server's Product::RichContentDeletionGuard).
-const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
+type ScopedPage = { page: Page; scope: string | null };
+
+const allScopedRichContentPages = (product: Product): ScopedPage[] => [
+  ...product.rich_content.map((page) => ({ page, scope: null })),
+  ...product.variants.flatMap((variant) => variant.rich_content.map((page) => ({ page, scope: variant.id }))),
+];
+
+const applyCanonicalIds = (
+  product: Product,
+  response: SaveProductResponse,
+  sentPagesById: ReadonlyMap<string, ScopedPage> = new Map(),
+) => {
   const variantMappings = response.variant_id_mappings ?? {};
-  const pageMappings = response.rich_content_id_mappings ?? {};
   const variantTimestamps = response.variant_updated_at ?? {};
   const variantBaselines = response.variant_loaded_integrations ?? {};
-  const pageTimestamps = response.rich_content_updated_at ?? {};
   // Adopt the revision token for the state this save committed. The token the
   // page loaded with describes the pre-save snapshot, and the save moved it, so
   // keeping the old one would make the next deletion in this session look like
@@ -256,15 +273,25 @@ const applyCanonicalIds = (product: Product, response: SaveProductResponse) => {
     const variantBaseline = variantBaselines[variant.id];
     if (variantBaseline) variant.loaded_integrations = variantBaseline;
     for (const page of variant.rich_content) {
-      page.id = pageMappings[page.id] ?? page.id;
-      const timestamp = pageTimestamps[page.id];
-      if (timestamp) page.updated_at = timestamp;
+      const sent = sentPagesById.get(page.id);
+      applyRichContentPageSaveResponse(
+        page,
+        response,
+        sent?.page ?? page,
+        variant.id,
+        canonicalRichContentScope(sent?.scope, variantMappings),
+      );
     }
   }
   for (const page of product.rich_content) {
-    page.id = pageMappings[page.id] ?? page.id;
-    const timestamp = pageTimestamps[page.id];
-    if (timestamp) page.updated_at = timestamp;
+    const sent = sentPagesById.get(page.id);
+    applyRichContentPageSaveResponse(
+      page,
+      response,
+      sent?.page ?? page,
+      null,
+      canonicalRichContentScope(sent?.scope, variantMappings),
+    );
   }
 };
 
@@ -320,10 +347,13 @@ const ProductEditPage = (props: Props) => {
   const [staleContentConflict, setStaleContentConflict] = React.useState<
     { type: "page" | "variant"; id: string; name: string | null }[] | null
   >(null);
-  // Client-generated id → canonical server id, accumulated from save
-  // responses; exposed via context so components holding an id in local state
-  // (the content tab's selection) can follow the swap.
-  const [serverIdMappings, setServerIdMappings] = React.useState<Record<string, string>>({});
+  // Client-generated id → canonical server id, accumulated separately because
+  // variant and page external ids are not distinct namespaces.
+  const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
+  const [richContentIdMappings, setRichContentIdMappings] = React.useState<Record<string, string>>({});
+  const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
+    {},
+  );
   // Resolves true only when the save request actually succeeded — callers that
   // chain follow-up actions on save() (navigating to the next tab, opening the
   // preview) use this to stay put when the save failed or the seller cancelled
@@ -363,9 +393,21 @@ const ProductEditPage = (props: Props) => {
         preserved_rich_content_ids: conflictResolution.hiddenPageIds,
       };
     }
+    // Freeze the exact request snapshot before awaiting the network. The seller
+    // can keep editing while a save runs; response reconciliation must update
+    // those later edits without pretending they were part of this request.
+    const sentConfirmedPageIds = new Set(productToSave.confirmed_removed_rich_content_ids ?? []);
+    const productSent = structuredClone(productToSave);
+    productSent.confirmed_removed_rich_content_ids = [
+      ...new Set([...(productSent.confirmed_removed_rich_content_ids ?? []), ...richContentMoveSourceIds(productSent)]),
+    ];
+    const sentPagesById = new Map(
+      allScopedRichContentPages(productSent).map((scopedPage) => [scopedPage.page.id, scopedPage]),
+    );
+    const sentConfirmedVariantIds = new Set(productSent.confirmed_removed_variant_ids ?? []);
     try {
       setSaving(true);
-      const response = await saveProduct(props.unique_permalink, props.id, productToSave, currencyType, {
+      const response = await saveProduct(props.unique_permalink, props.id, productSent, currencyType, {
         keepAllFiles: conflictResolution?.choice === "keep_version",
       });
       saved = true;
@@ -378,7 +420,7 @@ const ProductEditPage = (props: Props) => {
       }
       // Compute the changed-content diff before the baseline moves.
       const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
-        product,
+        productSent,
         lastSavedProductRef.current,
       );
 
@@ -389,25 +431,25 @@ const ProductEditPage = (props: Props) => {
       // Runs for warning responses too — the save succeeded, so the baseline
       // must move or the next save would re-confirm (and re-report) changes
       // that are already persisted.
-      const sentConfirmedVariantIds = new Set(productToSave.confirmed_removed_variant_ids ?? []);
-      const sentConfirmedPageIds = new Set(productToSave.confirmed_removed_rich_content_ids ?? []);
-      const reconciled = structuredClone(product);
-      applyCanonicalIds(reconciled, response);
+      const reconciled = structuredClone(productSent);
+      applyCanonicalIds(reconciled, response, sentPagesById);
       reconciled.confirmed_removed_variant_ids = [];
       reconciled.confirmed_removed_rich_content_ids = [];
       lastSavedProductRef.current = reconciled;
-      setServerIdMappings((previous) => ({
-        ...previous,
-        ...response.variant_id_mappings,
-        ...response.rich_content_id_mappings,
-      }));
+      setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
+      setRichContentIdMappings((previous) => ({ ...previous, ...response.rich_content_id_mappings }));
+      setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {
-        applyCanonicalIds(current, response);
-        current.confirmed_removed_variant_ids = (current.confirmed_removed_variant_ids ?? []).filter(
-          (id) => !sentConfirmedVariantIds.has(id),
+        applyCanonicalIds(current, response, sentPagesById);
+        current.confirmed_removed_variant_ids = reconcileConfirmedRemovalIds(
+          current.confirmed_removed_variant_ids ?? [],
+          sentConfirmedVariantIds,
+          response.variant_id_mappings,
         );
-        current.confirmed_removed_rich_content_ids = (current.confirmed_removed_rich_content_ids ?? []).filter(
-          (id) => !sentConfirmedPageIds.has(id),
+        current.confirmed_removed_rich_content_ids = reconcileConfirmedRemovalIds(
+          current.confirmed_removed_rich_content_ids ?? [],
+          sentConfirmedPageIds,
+          response.rich_content_id_mappings,
         );
       });
 
@@ -416,7 +458,7 @@ const ProductEditPage = (props: Props) => {
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
 
         if (props.successful_sales_count > 0 && contentUpdated) {
-          const uniquePermalinkOrVariantIds = product.has_same_rich_content_for_all_variants
+          const uniquePermalinkOrVariantIds = productSent.has_same_rich_content_for_all_variants
             ? [props.unique_permalink]
             : // Report canonical ids for variants created by this very save.
               contentUpdatedVariantIds.map((id) => response.variant_id_mappings?.[id] ?? id);
@@ -486,12 +528,23 @@ const ProductEditPage = (props: Props) => {
       updateProduct,
       save,
       saving,
-      serverIdMappings,
+      variantIdMappings,
+      richContentIdMappings,
+      richContentRemovedFileEmbedIds,
       contentUpdates,
       setContentUpdates,
       filesById,
     }),
-    [product, updateProduct, existingFiles, setExistingFiles, filesById, serverIdMappings],
+    [
+      product,
+      updateProduct,
+      existingFiles,
+      setExistingFiles,
+      filesById,
+      variantIdMappings,
+      richContentIdMappings,
+      richContentRemovedFileEmbedIds,
+    ],
   );
 
   const imageSettings = React.useMemo(

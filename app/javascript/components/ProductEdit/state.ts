@@ -270,12 +270,15 @@ export const ProductEditContext = React.createContext<{
   // request failure or when the seller cancels the deletion confirmation) —
   // callers chaining navigation on save() must check it before proceeding.
   save: () => Promise<boolean>;
-  // Client-generated id → canonical server id for variants/pages created in
-  // this session, accumulated from save responses. Successful saves rewrite
-  // the ids in the product state itself; components holding an id in their
-  // own state (e.g. the content tab's selection) use this map to follow the
-  // swap instead of losing their reference.
-  serverIdMappings: Record<string, string>;
+  // Client-generated id → canonical server id, accumulated separately by
+  // record type. Variant and page external ids can collide because both encode
+  // a numeric database id, so a shared map cannot safely follow mapping chains.
+  variantIdMappings: Record<string, string>;
+  richContentIdMappings: Record<string, string>;
+  // Canonical page id → file ids removed by the last successful save. The
+  // content tab uses this one-shot response signal to reconcile its mounted
+  // TipTap document; changing product state alone does not update that editor.
+  richContentRemovedFileEmbedIds: Record<string, string[]>;
   googleClientId: string;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;
@@ -285,6 +288,10 @@ export const ProductEditContext = React.createContext<{
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
   customHtmlPagesEnabled: boolean;
+  // Hostnames this seller controls (their subdomain, their live custom domain).
+  // The landing-page preview only follows a navigation request from the
+  // sandboxed seller HTML when the destination is one of these.
+  customHtmlStoreHostnames: string[];
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

@@ -281,6 +281,13 @@ class Purchase
       canonical_gross_refund_cents = derived.canonical_gross_refund_cents
       presentment_refund ||= derived.presentment_refund
     end
+    # Building on the note above the method signature: `funds_refunded` is canonical US dollar
+    # cents in both branches, which is what makes the comparison against `total_transaction_cents`
+    # below a canonical-to-canonical one. On an ordinary (non-buyer-currency) purchase,
+    # `flow_of_funds.issued_amount` is already canonical US dollars — that is the leg Gumroad
+    # issues the charge in — so the fallback is safe to use directly. On a buyer-currency
+    # purchase the block above always sets `canonical_gross_refund_cents` (or returns false), so
+    # the fallback is unreachable there and a presentment amount can never be booked as canonical.
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
     ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.

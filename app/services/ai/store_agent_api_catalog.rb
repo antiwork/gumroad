@@ -95,6 +95,11 @@ module Ai::StoreAgentApiCatalog
     ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
                                                                                            params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
+    # The store theme columns (SellerProfile#background_color/highlight_color/font). Read-only: there
+    # is no self-serve editor for them, support applies changes by request. This endpoint exists
+    # because the agent previously could not see the theme at all, and told creators their product
+    # pages could not be styled while those pages were visibly rendering these very colours.
+    ep("get_user_theme", :get, "/user/theme", "Get the creator's store theme: background color, highlight (accent) color, and font, plus the list of surfaces they render on. Those include the storefront AND every product page — product pages are NOT unstyleable. There is no self-serve screen for them and you have no endpoint to change them, so when a creator wants different colors or fonts, tell them Gumroad support can apply it and offer to note exactly what they want.", read: true, scope: "view_profile"),
     ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile custom HTML with a new page. Destructive: anything not included in custom_html is lost, and the page becomes the whole storefront — so it must show everything the store shows: render all products (with working links) dynamically from the gumroad-data JSON injected into every served page, plus the creator's name and bio via data-gumroad-field elements the server fills at render time (they are NOT in the JSON). Only use this to author a brand-new page; to change part of an existing page, use edit_user_custom_html.", scope: "edit_profile", params: %w[custom_html]),
     ep("edit_user_custom_html", :post, "/user/custom_html/edit", "Make a targeted edit to the creator's existing profile custom HTML: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_user_custom_html when a page already exists.", scope: "edit_profile", params: %w[find replace]),
 
@@ -107,6 +112,16 @@ module Ai::StoreAgentApiCatalog
     ep("upload_media", :post, "/media", "Upload an image file to the creator's media library by giving the file's public url; Gumroad downloads and hosts it. Use this whenever the creator wants their image (logo, photo, banner) shown on their page: upload first, then embed the returned hosted url in the page HTML. Optional name labels the file in their library.", scope: "edit_profile", params: %w[url name]),
     ep("delete_media", :delete, "/media/:id", "Delete a file from the creator's media library. Its hosted url stops working, so remove it from any page that embeds it.", scope: "edit_profile", path_params: %w[id]),
     ep("get_categories", :get, "/categories", "List the product categories Gumroad supports.", read: true),
+
+    # ---- Gumroad's own documentation ----
+    # The help center pages at gumroad.com/help, as plain text. These exist so the agent can answer
+    # a product question from Gumroad's real documentation instead of its own assumptions — without
+    # them it has no source of truth for anything it has no write endpoint for, and it has told
+    # creators a supported feature does not exist because it couldn't find a tool for it.
+    ep("search_help_articles", :get, "/help/articles", "Search Gumroad's own help center articles by keyword and get back their titles, descriptions, and slugs (pass query; omit it to list every article). Use this whenever the creator asks how something on Gumroad works, or before telling them something isn't possible — Gumroad's documented behavior is here, and your own assumptions about the product are often out of date. Then read the most relevant one with get_help_article.", read: true,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    params: %w[query]),
+    ep("get_help_article", :get, "/help/articles/:slug", "Read one help center article in full (plain text), by the slug that search_help_articles returned. This is Gumroad's documentation for creators, so quote or paraphrase it rather than guessing, and share the article url when it answers the creator's question.", read: true, path_params: %w[slug]),
+
     ep("get_refund_policy", :get, "/refund_policy", "Get the creator's account-level refund policy.", read: true, scope: "view_profile"),
     # Account-level refund policy is changed via Settings in the dashboard, which is owner-only
     # (Settings::Main::UserPolicy#update?). Gate admin_only so a marketing member can't change refund

@@ -41,6 +41,41 @@ class SellerProfile < ApplicationRecord
     end
   end
 
+  # The accent colour to actually fill text-bearing accent areas with (pay button, offer banner
+  # price, anything using --accent-with-text together with --contrast-accent), and the text colour
+  # to put on it. Usually this is exactly what the seller saved; where their colour cannot carry
+  # either black or white text at 4.5:1, its brightness is nudged by the smallest amount that clears
+  # the floor.
+  # The saved highlight_color is never changed — see ContrastColor#accessible_accent for why the
+  # adjustment happens at display time and how the text colour is chosen.
+  def accessible_accent
+    # Deliberately not memoized: the editor updates highlight_color on a live record and then reads
+    # these colours back, so a cached pair would show the seller the colour they just replaced.
+    ContrastColor.accessible_accent(highlight_color)
+  end
+
+  # The displayed accent for areas that carry text. Every other use keeps the seller's saved colour
+  # through --accent.
+  def accent_color_for_text_areas
+    accessible_accent[:accent]
+  end
+
+  # The text colour that goes on top of accent_color_for_text_areas.
+  def text_color_on_highlight
+    accessible_accent[:text]
+  end
+
+  # The text colour for body copy sitting directly on the seller's background colour.
+  def text_color_on_background
+    ContrastColor.for(background_color)
+  end
+
+  # --primary is the body text colour, so --contrast-primary is what sits on top of *it*: the
+  # readable colour against the body text colour, which is what a filled primary button needs.
+  def text_color_on_primary
+    ContrastColor.for(text_color_on_background)
+  end
+
   def font_family
     fallback = case font
                when "Domine", "Merriweather", "Roboto Slab"
@@ -54,7 +89,10 @@ class SellerProfile < ApplicationRecord
   end
 
   def custom_style_cache_name
-    "users/#{seller.id}/custom_styles_v2"
+    # Bumped to v4 when text-bearing accent areas started rendering a brightness-adjusted accent so
+    # their text could clear 4.5:1 (v3 was the move from HSL lightness to WCAG contrast). Without the
+    # bump, sellers with already-cached CSS would keep being served the old colour pair.
+    "users/#{seller.id}/custom_styles_v4"
   end
 
   def validate_json_data

@@ -381,7 +381,18 @@ class User < ApplicationRecord
     # undo a suspension it never looked at. Registered on every transition into
     # compliant (not just the ones out of a suspended state) because the object in
     # memory can be older than the row — see User::Risk#refuse_unauthorized_suspension_clear.
-    before_transition any => :compliant, :do => :refuse_unauthorized_suspension_clear
+    #
+    # `on_probation` and `not_reviewed` need the same guard, because compliant is not
+    # the only way out of a suspension. Probation re-enables the seller's links exactly
+    # like compliant does (see the enable_links_and_tell_chat transition below), and
+    # not_reviewed drops the account back to its initial state, so either one silently
+    # undoes a suspension the caller never looked at. The realistic path is not a human
+    # in the admin UI: LowBalanceFraudCheck#disable_refunds_and_put_on_probation! decides
+    # whether to act by reading `suspended?` off an in-memory copy, which is precisely
+    # the stale read this guard exists to defeat — by the time it writes, the row may
+    # have been suspended by someone else.
+    before_transition any => %i[compliant on_probation not_reviewed],
+                      :do => :refuse_unauthorized_suspension_clear
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :invalidate_active_sessions!
     after_transition any => %i[suspended_for_fraud suspended_for_tos_violation], :do => :disable_links_and_tell_chat
     after_transition any => %i[on_probation compliant not_reviewed flagged_for_tos_violation flagged_for_fraud suspended_for_tos_violation suspended_for_fraud],
@@ -1003,6 +1014,29 @@ class User < ApplicationRecord
     return unless subdomain_url
 
     "#{PROTOCOL}://#{subdomain_url}"
+  end
+
+  # The hostnames this seller controls: their Gumroad subdomain and their live
+  # custom domain. Custom-HTML pages run inside a sandboxed iframe that cannot
+  # navigate the top-level window on its own; it asks the trusted page around it
+  # to do so, and that page only agrees when the destination is one of these
+  # hosts. Shared Gumroad hosts (gumroad.com and friends) are deliberately
+  # absent, so seller-authored HTML can never walk a visitor around arbitrary
+  # gumroad.com paths. Living on the model means the public product wrapper and
+  # the editor's landing-page preview decide from the same list instead of each
+  # rebuilding it and drifting apart.
+  #
+  # A custom domain only counts once it is active — DNS verified and holding a
+  # current SSL certificate, the same bar UrlService uses before it will build
+  # any custom-domain URL. Anyone can type a domain they don't own into the
+  # custom-domain field and the record sticks around whether verification
+  # succeeded or not, so trusting mere presence would let a seller's HTML send
+  # a visitor's tab to a host they never proved they control.
+  def custom_html_store_hostnames
+    hostnames = []
+    hostnames << URI("#{PROTOCOL}://#{subdomain}").host if subdomain.present?
+    hostnames << custom_domain.domain if custom_domain&.active?
+    hostnames.compact.uniq
   end
 
   def auto_transcode_videos?

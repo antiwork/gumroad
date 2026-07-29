@@ -2460,6 +2460,15 @@ class Purchase < ApplicationRecord
   def decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund: nil, dispute: nil)
     return unless seller_balance_update_eligible?
     snapshot_presentment_dispute_debited_gross! if dispute.present?
+    # Every amount compared below is denominated in US dollar cents, including on a
+    # buyer-currency (presentment) purchase where the buyer was actually charged in their own
+    # currency. That is safe, and it is safe for a reason worth stating: `refund.amount_cents`
+    # is the amount Gumroad's books recorded, not the amount Stripe moved. The buyer-currency
+    # figure lives separately on the refund's presentment fields, and `refund_purchase!`
+    # converts the processor's number into the canonical one before ever building this row.
+    # So this is a canonical-to-canonical comparison. Do not "fix" it to read a presentment
+    # amount — that would compare a euro figure against a dollar one and silently misclassify
+    # a full refund as partial.
     if (dispute && !stripe_partially_refunded) || [price_cents, total_transaction_cents].include?(refund&.amount_cents)
       # Short circuit for full refund, or dispute
       seller_refund_cents = payment_cents - affiliate_credit_cents
@@ -3663,6 +3672,19 @@ class Purchase < ApplicationRecord
     # amount is split across all purchases in the charge with the
     # largest-remainder method so the per-purchase shares always reconcile to
     # the combined charge amount; this purchase takes its own share by index.
+    #
+    # The weights are canonical US dollar cents while the amounts being split come from the
+    # processor and may be in the buyer's currency on a buyer-currency (presentment) charge.
+    # That mismatch is harmless because the weights are only ever used as a ratio against each
+    # other: each weight is a purchase's canonical total and the divisor is the charge's
+    # canonical total, so the ratio carries no denomination of its own and applying it to a
+    # buyer-currency amount is correct. The split also preserves whatever currency the
+    # combined flow of funds arrived in, rather than relabelling it as dollars.
+    #
+    # This is load-bearing, not theoretical. A multi-item cart from one seller is a single
+    # buyer-currency charge covering several purchases (Charge::PresentmentAllocator splits the
+    # presentment total across them), and every checkout purchase is part of a combined charge,
+    # so those purchases do reach this split with buyer-currency amounts.
     transaction_weights = charge_purchases.map(&:total_transaction_cents)
     gumroad_weights = charge_purchases.map(&:total_transaction_amount_for_gumroad_cents)
     seller_weights = charge_purchases.map { |purchase| purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents }
@@ -4034,6 +4056,12 @@ class Purchase < ApplicationRecord
     end
 
     def load_flow_of_funds(processor_charge)
+      # Synthesising a US dollar flow of funds from the canonical total would be wrong for a
+      # buyer-currency (presentment) charge, where the money actually moved in the buyer's
+      # currency. It is safe here because the guard restricts it to non-Stripe processors, and
+      # only Stripe charges can be presentment charges today. If another processor ever gains
+      # buyer-currency support, this line has to build the flow of funds from that processor's
+      # own amounts instead of assuming dollars.
       processor_charge.flow_of_funds ||= FlowOfFunds.build_simple_flow_of_funds(Currency::USD, self.total_transaction_cents) if StripeChargeProcessor.charge_processor_id != charge_processor_id
       self.flow_of_funds = if is_part_of_combined_charge?
         build_flow_of_funds_from_combined_charge(processor_charge.flow_of_funds)

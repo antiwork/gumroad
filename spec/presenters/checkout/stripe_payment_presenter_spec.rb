@@ -268,65 +268,97 @@ describe Checkout::StripePaymentPresenter do
     end
   end
 
-  it "keeps the canonical USD Payment Element, wallets included, for a presentment-candidate cart spanning multiple sellers" do
+  it "selects the buyer-currency presentment Payment Element for a cart spanning several ramped sellers" do
     sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
     buyer_currency_display = {
       display_mode: "buyer_local",
       buyer_currency_shown: Currency::CAD,
     }
-    # Two sellers means two charges (two PaymentIntents), and the quote endpoint refuses to mint a
-    # quote for a cart spanning sellers, so there is no buyer-currency presentment to protect here:
-    # the checkout displays canonical USD and the charge takes canonical USD. The cart therefore
-    # keeps the ordinary USD Payment Element with its wallet rows, exactly as it did before
-    # buyer-currency presentment existed.
+    # Two sellers means two charges (two PaymentIntents), and the surcharge endpoint locks one
+    # quote per charge before the buyer is shown a total — so the cart can present in the
+    # buyer's currency, with each charge priced from its own locked amount.
     add_products = sellers.map do |seller|
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+      checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
+    end
+
+    props = stripe_payment_props(add_products:)
+
+    expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION)
+    expect(props[:fallback_reason]).to be_nil
+    expect(props[:elements_options][:buyer_currency_presentment]).to be(true)
+  ensure
+    (sellers || []).each do |seller|
+      Feature.deactivate_user(:buyer_local_currency, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+    end
+  end
+
+  it "falls back to CardElement for a presentment-candidate cart spanning sellers when one is not in the multi-seller ramp" do
+    sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
+    allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+    buyer_currency_display = {
+      display_mode: "buyer_local",
+      buyer_currency_shown: Currency::CAD,
+    }
+    # The ramp is a decision about the cart the buyer sees, so one seller being outside it
+    # withholds the lane from the whole cart: it keeps riding CardElement in canonical USD.
+    add_products = sellers.each_with_index.map do |seller, index|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(:buyer_local_currency, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller) if index.zero?
       checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
     expect(stripe_payment_props(add_products:)).to eq(
-      payment_element_props(payment_element_wallets: true)
+      integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION,
+      fallback_reason: "buyer_currency_presentment_unsupported",
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
+      flat_payment_methods: false,
+      elements_options: nil,
     )
   ensure
     (sellers || []).each do |seller|
-      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
   end
 
-  it "keeps the Payment Request Button on a multi-seller candidate cart that falls back to CardElement for another reason" do
-    # The other half of the narrowing. A multi-seller cart no longer falls back for
-    # "buyer_currency_presentment_unsupported", but it can still land on CardElement for an
-    # unrelated reason — here, one seller is not in the Payment Element rollout. On that lane the
-    # wallet surface is the Payment Request Button, whose sheet shows the canonical USD total. That
-    # is exactly what this cart charges (no quote is minted across sellers), so the button must
-    # stay: suppressing it would keep taking Apple Pay and Google Pay away.
-    sellers = Array.new(2) { create(:user, disable_buyer_local_currency: false) }
+  it "falls back to CardElement for a cart holding more sellers than the lane quotes" do
+    # The surcharge endpoint withholds the quote past this many sellers, so mounting the element
+    # in the buyer's currency would only make the browser drop back to dollars a moment later.
+    sellers = Array.new(Checkout::BuyerCurrencyQuote::MAX_QUOTED_CHARGES + 1) { create(:user, disable_buyer_local_currency: false) }
     allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
-    add_products = sellers.each_with_index.map do |seller, index|
-      # Only the first seller is in the Payment Element rollout, so the cart falls back.
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller) if index.zero?
+    buyer_currency_display = {
+      display_mode: "buyer_local",
+      buyer_currency_shown: Currency::CAD,
+    }
+    add_products = sellers.map do |seller|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
-      checkout_product_for(
-        create(:product, user: seller, price_cents: 1234),
-        buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::CAD }
-      )
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
+      checkout_product_for(create(:product, user: seller, price_cents: 1234), buyer_currency_display:)
     end
 
-    expect(stripe_payment_props(add_products:))
-      .to eq(card_element_fallback("stripe_payment_element_flag_disabled"))
+    props = stripe_payment_props(add_products:)
+
+    expect(props[:integration]).to eq(described_class::STRIPE_CARD_ELEMENT_INTEGRATION)
+    expect(props[:fallback_reason]).to eq("buyer_currency_presentment_unsupported")
   ensure
     (sellers || []).each do |seller|
-      Feature.deactivate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
       Feature.deactivate_user(:buyer_local_currency, seller)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, seller)
     end
   end
 

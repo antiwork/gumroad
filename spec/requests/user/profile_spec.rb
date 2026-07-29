@@ -188,6 +188,11 @@ describe "User profile page", type: :system, js: true do
       end
 
       it "shows the subscribe block when there are no sections and no products" do
+        # The subscribe form only takes a follow with no challenge for a seller we
+        # have reviewed and marked compliant (see FollowRecaptcha); a headless
+        # browser has no Google challenge to solve. This example is about the
+        # block rendering and the follow landing, not about the challenge.
+        seller.update!(user_risk_state: "compliant")
         seller.links.each { _1.update!(deleted_at: Time.current) }
         visit seller.subdomain_with_protocol
         expect(page).to_not have_selector "main > header"

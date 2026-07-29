@@ -13,10 +13,20 @@ module ValidateRecaptcha
   ENTERPRISE_VERIFICATION_URL =
     "https://recaptchaenterprise.googleapis.com/v1/projects/#{GOOGLE_CLOUD_PROJECT_ID}/" \
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"
+  # `follow` fails open for the same reason checkout does: when Google's
+  # verification call errors we have no evidence about the visitor either way, and
+  # a Google outage would otherwise break the subscribe form for every seller who
+  # has not been reviewed yet — which is every new account. Nothing else catches
+  # abuse during such a window today, so the tradeoff is deliberate and narrow:
+  # the outage has to be happening while the ring is running, the oversized-token
+  # lane below stops a visitor from inducing one on demand, and every decision is
+  # logged as `infra_error_fail_open` so the window is visible after the fact.
+  # Override per environment with RECAPTCHA_FAIL_OPEN_FOLLOW=false.
   RECAPTCHA_FAIL_OPEN_DEFAULTS = {
     checkout: true,
     checkout_score: true,
     checkout_score_trusted: true,
+    follow: true,
     login: false,
   }.freeze
   # Default score thresholds used when the per-surface Redis key is unset.
@@ -32,7 +42,16 @@ module ValidateRecaptcha
   }.freeze
   RECAPTCHA_SCORE_LOG_PREFIX = "[recaptcha_score]"
 
-  private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_THRESHOLD_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX
+  # A real reCAPTCHA token is on the order of 1-2 KB. Anything an order of
+  # magnitude past that was not minted by Google, and forwarding it upstream
+  # risks the verification request failing for size or timeout reasons — which
+  # lands on the infrastructure-error path, and that path fails OPEN for checkout
+  # and follow. So an absurdly long token counts as an invalid token (fail
+  # closed) and is never sent to Google, which closes the one lane where a
+  # visitor could deliberately induce a fail-open decision on every request.
+  MAX_RECAPTCHA_TOKEN_LENGTH = 32_768
+
+  private_constant :ENTERPRISE_VERIFICATION_URL, :RECAPTCHA_FAIL_OPEN_DEFAULTS, :RECAPTCHA_SCORE_THRESHOLD_DEFAULTS, :RECAPTCHA_SCORE_LOG_PREFIX, :MAX_RECAPTCHA_TOKEN_LENGTH
 
   private
     def valid_recaptcha_response_and_hostname?(site_key:, surface: :checkout)
@@ -80,6 +99,12 @@ module ValidateRecaptcha
     end
 
     def recaptcha_assessment(site_key:)
+      token = params["g-recaptcha-response"]
+      if token.is_a?(String) && token.length > MAX_RECAPTCHA_TOKEN_LENGTH
+        Rails.logger.error("Oversized reCAPTCHA token rejected without verification: #{token.length} characters")
+        return { valid: false, score: nil, hostname: nil, infra_error: false }
+      end
+
       verification_response = recaptcha_verification_response(site_key:)
       return { valid: false, score: nil, hostname: nil, infra_error: true } if verification_response.blank?
 

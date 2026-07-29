@@ -289,6 +289,35 @@ describe Product::VariantCategoryUpdaterService do
       end
     end
 
+    context "when variant rich content has a malformed collection shape" do
+      before do
+        @product = create(:product)
+        @variant_category = create(:variant_category, link: @product)
+        @variant = create(:variant, variant_category: @variant_category)
+      end
+
+      it "treats serialized scalars, serialized objects, and non-string values as an empty collection" do
+        ['"text"', '{"page":1}', { page: 1 }, 123].each do |malformed_rich_content|
+          expect do
+            Product::VariantCategoryUpdaterService.new(
+              product: @product,
+              category_params: {
+                id: @variant_category.external_id,
+                title: @variant_category.title,
+                options: [{
+                  id: @variant.external_id,
+                  name: @variant.name,
+                  rich_content: malformed_rich_content,
+                }]
+              }
+            ).perform
+          end.not_to raise_error
+        end
+
+        expect(@variant.reload.alive_rich_contents).to be_empty
+      end
+    end
+
     context "when clearing all options from a category" do
       before do
         @product = create(:product)
@@ -711,6 +740,42 @@ describe Product::VariantCategoryUpdaterService do
             ]
           }
         ).perform
+      end
+
+      it "reports stale file embeds removed from variant content" do
+        foreign_product = create(:product, user: @product.user)
+        dead_foreign_file = create(:product_file, link: foreign_product, deleted_at: Time.current)
+        dead_foreign_embed = { "type" => "fileEmbed", "attrs" => { "id" => dead_foreign_file.external_id, "uid" => SecureRandom.uuid } }
+        paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Keep me" }] }
+        @rich_content.update_column(:description, [dead_foreign_embed])
+        id_mappings = { variants: {}, rich_content: {}, removed_file_embeds: {} }
+
+        Product::VariantCategoryUpdaterService.new(
+          product: @product,
+          category_params: {
+            id: @variant_category.external_id,
+            title: @variant_category.title,
+            options: [
+              {
+                id: @variant.external_id,
+                name: @variant.name,
+                rich_content: [
+                  {
+                    id: @rich_content.external_id,
+                    title: "Page title",
+                    description: [dead_foreign_embed, paragraph]
+                  }
+                ]
+              }
+            ]
+          },
+          id_mappings:
+        ).perform
+
+        expect(id_mappings[:removed_file_embeds]).to eq(
+          @rich_content.external_id => [dead_foreign_file.external_id]
+        )
+        expect(@rich_content.reload.description).to eq([paragraph])
       end
     end
   end

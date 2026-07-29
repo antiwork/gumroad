@@ -10,7 +10,7 @@ describe "Public serving of seller pages", type: :request do
   include Devise::Test::IntegrationHelpers
 
   let(:seller) { create(:user, username: "pageseller", name: "Jane Doe") }
-  let!(:custom_domain) { create(:custom_domain, user: seller, domain: "seller.example.com") }
+  let!(:custom_domain) { create(:custom_domain, :verified_with_certificate, user: seller, domain: "seller.example.com") }
 
   before do
     Feature.activate_user(:custom_html_pages, seller)
