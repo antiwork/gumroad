@@ -155,7 +155,13 @@ module CheckoutHelpers
     expect do
       click_on is_free ? "Get" : "Pay", exact: true
 
-      within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil?
+      case sca
+      when nil then nil
+      when true then within_sca_frame { click_on "Complete" }
+      when false then within_sca_frame { click_on "Fail" }
+      when :if_challenged then within_sca_frame_if_challenged { click_on "Complete" }
+      else raise ArgumentError, "sca must be nil, true, false, or :if_challenged (got #{sca.inspect})"
+      end
 
       if error.present?
         expect(page).to have_alert(text: error) if error != true
@@ -237,12 +243,29 @@ def fill_in_stripe_field(labels, with:)
   field.fill_in(with:)
 end
 
-def within_sca_frame(&block)
-  expect(page).to have_selector("iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']", wait: 240)
+SCA_CHALLENGE_IFRAME = "iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']"
 
-  within_frame(page.find("[src^='https://js.stripe.com/v3/three-ds-2-challenge']")) do
+def within_sca_frame(wait: 240, &block)
+  expect(page).to have_selector(SCA_CHALLENGE_IFRAME, wait:)
+
+  within_frame(page.find(SCA_CHALLENGE_IFRAME)) do
     within_frame("challengeFrame", &block)
   end
+end
+
+# Stripe decides per card whether to challenge, and has flipped test cards both ways.
+# Use only where 3DS is incidental; specs whose subject IS authentication must keep
+# the strict `within_sca_frame` so a vanished challenge still fails them.
+#
+# Races the challenge against the settle toast, so the no-challenge case costs seconds
+# instead of waiting `wait` out. Visibility is what distinguishes them: the toast element
+# is always in the DOM and only becomes visible once checkout settles, so matching it
+# `visible: :all` would return instantly and skip a challenge still on its way.
+# Callers that settle without a toast (gift, preorder) fall back to the full wait.
+def within_sca_frame_if_challenged(wait: 60, &block)
+  page.has_selector?("#{SCA_CHALLENGE_IFRAME}, [role=alert]", wait:)
+
+  within_sca_frame(wait: 1, &block) if page.has_selector?(SCA_CHALLENGE_IFRAME, wait: 0)
 end
 
 def within_cart_item(name, &block)
