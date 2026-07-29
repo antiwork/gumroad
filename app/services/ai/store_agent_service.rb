@@ -80,8 +80,16 @@ class Ai::StoreAgentService
       (?:yesterday|previously|earlier|before|many\s+times|
         last\s+(?:night|week|month|year)|in\s+the\s+past)\b
       |
-      \s+(?:(?:it|that|this)\s+)?(?:on|in)\s+(?:my|the)\s+
+      \s+(?:(?:it|that|this)\s+)?(?:from|on|in)\s+(?:my|the)\s+
         (?:earlier|previous)\s+message\b
+      |
+      # A reply pointing back at a card the creator can still click is truthful, and the model
+      # phrases the point-back many ways ("...the price change in my previous message", "...is on
+      # my previous message"). Anything naming an earlier message counts, UNLESS it says that
+      # card is gone — that is a fresh claim about this turn, not a point-back.
+      [^.!?\n]*\b(?:earlier|previous)\s+message\b
+        (?![^.!?\n]*\b(?:gone|missing|disappeared|vanished|no\s+longer|
+          isn['’]t\s+there|not\s+there)\b)
       |
       [^.!?\n]*\b(?:before|many\s+times|in\s+the\s+past)\b
     )
@@ -224,17 +232,21 @@ class Ai::StoreAgentService
         ,\s*(?:please\s+)?(?:confirm|approve)\b))
     /ix,
     # The subjectless participle opener, which production produces and the arms above miss because
-    # they all need a subject: "Staged deletion of the last draft. Approve it, then...". The action
-    # noun plus an instruction to act on the card is what separates it from prose describing how
-    # staging works in general ("Staged changes are reviewed before they apply").
+    # they all need a subject: "Staged deletion of the last draft. Approve it, then...". The noun
+    # has to read as the OBJECT of the staging — either introduced by a determiner or followed by
+    # "of" — because as a bare sentence subject it is prose about the feature rather than a claim
+    # about this turn ("Staged updates wait for your approval").
     /
       #{STAGED_CLAIM_BOUNDARY}
       staged\s+
-        (?:the\s+|a\s+|an\s+|your\s+|that\s+|this\s+|two\s+|both\s+)?
-        #{STAGED_CLAIM_ACTION_NOUN}\b
-      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?:
+        (?:the|a|an|your|that|this|two|both)\s+#{STAGED_CLAIM_ACTION_NOUN}\b
+        |
+        #{STAGED_CLAIM_ACTION_NOUN}\s+of\b
+      )
       (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
       (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?![^.!?\n]*#{STAGED_CLAIM_CONDITIONAL_TAIL})
       (?![^.!?\n]*\?)
       (?:
         (?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})
@@ -739,6 +751,10 @@ class Ai::StoreAgentService
     def phantom_staged_claim?(reply:, proposed_action:)
       return false if proposed_action.present?
       return false if reply.blank?
+      # The patterns are alternation-heavy and scan the whole reply, so cost grows with length.
+      # No claim can match without one of these words, and the check is a single linear pass, so
+      # it keeps a long reply from paying for every pattern.
+      return false unless reply.match?(/\b(?:staged|prepared|queued|confirm|approve|ready)/i)
 
       # A reply can quote an earlier assistant message before giving its current answer. Remove only
       # that attributed clause; a later current claim in the same reply still goes through the guard.

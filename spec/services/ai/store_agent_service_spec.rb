@@ -610,10 +610,15 @@ describe Ai::StoreAgentService do
         compliant = [
           "No change is prepared and I'm not waiting on you.",
           "Nothing is prepared — I couldn't set that up.",
+          "No new change is prepared, so there's no card to click. Want me to stage the deletion again?",
         ]
         compliant.each do |reply|
           expect(described_class::STAGED_CLAIM_PATTERNS.any? { |pattern| reply.match?(pattern) }).to be(false), reply
         end
+        # The correction is replayed to the model as a user turn rather than run through the guard,
+        # but it describes the very claim the guard hunts. If it matched, any future change that
+        # fed it back through the guard would silence the model instead of correcting it.
+        expect(described_class::STAGED_CLAIM_PATTERNS.any? { |p| described_class::STAGED_CLAIM_CORRECTION.match?(p) }).to be(false)
       end
 
       it "gives up honestly rather than repeating the false claim" do
@@ -719,10 +724,24 @@ describe Ai::StoreAgentService do
           "The confirmation card appears below only after api_write succeeds.",
           "This request is still non-staged.",
           # prose about how staging works reads as a subjectless claim word-for-word, so the
-          # participle opener must not match on the action noun alone
+          # participle opener needs the noun to be the OBJECT of the staging, not the subject
           "Staged changes are reviewed before they apply.",
           "Staged updates need your approval before they go live.",
+          "Staged updates wait for your approval.",
+          "Staged edits are now supported in the agent tab.",
+          "Staged updates now show up as cards below my replies.",
+          "Staged changes always appear again if you refresh.",
+          "Staged deletion is permanent; click the card only when you're sure.",
+          "Staged deletion removes the product permanently. Tap the card whenever a change is pending.",
           "Staged deletion is how I remove a product; you always get to review it first.",
+          # pointing back at a card on an earlier message is truthful — that card is still there
+          # to click, so replacing the reply would deny a change that really is pending
+          "I staged the price change in my previous message — tap the card above to apply it.",
+          "The change is staged from my earlier message — tap the card there to apply it.",
+          "Staged deletion of the draft is on my previous message — tap the card there.",
+          # hypothetical and conditional descriptions of what staging WOULD do
+          "Staged deletion of the draft would appear as a card below my reply — tap it and the product is gone.",
+          "If you want, I can stage deletion of the draft — then tap the card.",
           # instructions to act on something that isn't a confirmation card
           "Click Publish when you're happy with it.",
           "Tap Save on that form and your bio updates.",
@@ -780,9 +799,12 @@ describe Ai::StoreAgentService do
           "Staged again. The confirm card should be back — tap it whenever you're ready.",
           "Staged removal of the duplicate mobile block. Tap the card to apply it.",
           "Staged the price change. Click that card and it goes live.",
-          # The model's instruction vocabulary is not limited to "confirm".
-          "I've staged the update — hit the confirm button when you're ready.",
-          "That's staged, so press the card and it goes live.",
+          # The model's instruction vocabulary is not limited to "confirm". Each of these needs
+          # the new vocabulary to be caught at all: the simple past and the change-noun openers
+          # only read as current claims when the same sentence tells the creator to act.
+          "I staged the update — hit the confirm button when you're ready.",
+          "I staged the discount — click the card to apply it.",
+          "The change is staged. Tap the card to apply it.",
         ]
 
         phantoms.each do |reply|
