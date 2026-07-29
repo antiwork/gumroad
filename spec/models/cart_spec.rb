@@ -195,4 +195,38 @@ describe Cart do
       end
     end
   end
+
+  describe "#sole_seller" do
+    let(:cart) { create(:cart) }
+    let(:seller) { create(:user) }
+
+    it "returns the seller when every product belongs to them" do
+      create(:cart_product, cart:, product: create(:product, user: seller))
+      create(:cart_product, cart:, product: create(:product, user: seller))
+
+      expect(cart.sole_seller).to eq(seller)
+    end
+
+    it "returns nil when the cart spans two sellers" do
+      # A cart can be paid for in one transaction across sellers, so there is no seller whose
+      # branding could represent it. Checkout keeps Gumroad's palette in this case.
+      create(:cart_product, cart:, product: create(:product, user: seller))
+      create(:cart_product, cart:, product: create(:product, user: create(:user)))
+
+      expect(cart.sole_seller).to be_nil
+    end
+
+    it "returns nil for an empty cart" do
+      expect(cart.sole_seller).to be_nil
+    end
+
+    it "ignores deleted cart products when deciding" do
+      # Removing the second seller's product from the cart must make it single-seller again, or a
+      # buyer who deletes an item keeps seeing the neutral palette.
+      create(:cart_product, cart:, product: create(:product, user: seller))
+      create(:cart_product, cart:, product: create(:product, user: create(:user)), deleted_at: 1.minute.ago)
+
+      expect(cart.sole_seller).to eq(seller)
+    end
+  end
 end

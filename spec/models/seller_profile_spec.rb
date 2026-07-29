@@ -83,6 +83,49 @@ describe SellerProfile do
     end
   end
 
+  describe "#accent_styles" do
+    subject { create(:seller_profile, highlight_color: "#009a49", font: "Roboto Mono", background_color: "#000000") }
+
+    it "emits the accent trio and nothing else" do
+      # Same colour maths as #custom_styles above: white on #009a49 is only 3.67:1, so the displayed
+      # accent darkens to #008941 (0 137 65) while --accent keeps the seller's saved colour.
+      expect(subject.accent_styles).to eq(":root{--accent:0 154 73;--accent-with-text:0 137 65;--contrast-accent:255 255 255}")
+    end
+
+    it "leaves the page chrome alone" do
+      # The whole point of this being separate from #custom_styles: checkout takes the accent without
+      # inheriting the seller's background, body text colour or font.
+      %w[--body-bg --font-family --color --filled --primary body].each do |chrome|
+        expect(subject.accent_styles).not_to include(chrome)
+      end
+    end
+
+    it "produces the same RGB triples as the full stylesheet for the same colours" do
+      # rgb_triplet re-implements the SCSS split-color() function, so the two paths must not drift.
+      # Asserted against #custom_styles rather than literals so a change to either side is caught.
+      expect(subject.custom_styles).to include("--accent: 0 154 73")
+      expect(subject.accent_styles).to include("--accent:0 154 73")
+    end
+
+    it "handles a colour whose channels have leading zeroes" do
+      # Only six-digit hex can reach rgb_triplet (HexColorValidator requires exactly six digits, so
+      # a three-digit colour cannot be saved at all). "#0a0b0c" is the case a naive to_i would get
+      # wrong by dropping the leading zero of each channel.
+      subject.update!(highlight_color: "#0a0b0c")
+      expect(subject.accent_styles).to include("--accent:10 11 12")
+    end
+
+    it "is invalidated when the seller changes their accent colour" do
+      # The after_save hook clears both cache keys. Without the accent_styles deletion this returns
+      # the stale colour forever, so checkout and the storefront disagree.
+      expect(subject.accent_styles).to include("--accent:0 154 73")
+
+      subject.update!(highlight_color: "#ff0000")
+
+      expect(subject.accent_styles).to include("--accent:255 0 0")
+    end
+  end
+
   describe "#font_family" do
     subject { create(:seller_profile) }
 

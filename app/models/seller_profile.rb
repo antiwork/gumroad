@@ -26,6 +26,27 @@ class SellerProfile < ApplicationRecord
     [updated_at, seller.seller_profile_sections.on_profile.maximum(:updated_at)].compact.max
   end
 
+  # Just the accent custom properties, with no page chrome — for surfaces that should carry the
+  # seller's accent colour without adopting their background, text colour or font.
+  #
+  # Checkout uses this rather than custom_styles because checkout is a shared Gumroad surface that a
+  # buyer reaches mid-flow: the pay button, links and focus rings reading as the seller's brand is
+  # the win sellers are asking for, while swapping --body-bg and --font-family underneath a payment
+  # form changes the legibility of every element on it. Those live on a separate change.
+  #
+  # The three properties are emitted together on purpose. --accent-with-text and --contrast-accent
+  # are a matched pair produced by ContrastColor#accessible_accent, so emitting the accent without
+  # them would leave text-bearing accent areas (the pay button most importantly) drawing the
+  # seller's colour underneath Gumroad's default text colour, which is exactly the contrast failure
+  # #6511 fixed.
+  def accent_styles
+    Rails.cache.fetch(accent_style_cache_name) do
+      <<~CSS.strip
+        :root{--accent:#{rgb_triplet(highlight_color)};--accent-with-text:#{rgb_triplet(accent_color_for_text_areas)};--contrast-accent:#{rgb_triplet(text_color_on_highlight)}}
+      CSS
+    end
+  end
+
   def custom_styles
     Rails.cache.fetch(custom_style_cache_name) do
       component_path = File.read(Rails.root.join("app", "views", "layouts", "custom_styles", "styles.scss.erb"))
@@ -95,6 +116,10 @@ class SellerProfile < ApplicationRecord
     "users/#{seller.id}/custom_styles_v4"
   end
 
+  def accent_style_cache_name
+    "users/#{seller.id}/accent_styles_v1"
+  end
+
   def validate_json_data
     # slice away the "in schema [id]" part that JSON::Validator otherwise includes
     json_validator.validate(json_data).each { errors.add(:base, _1[..-48]) }
@@ -113,5 +138,19 @@ class SellerProfile < ApplicationRecord
   private
     def clear_custom_style_cache
       Rails.cache.delete custom_style_cache_name
+      # The accent-only CSS is derived from highlight_color too, so it has to be invalidated by the
+      # same save. Missing this would serve checkout the seller's previous accent indefinitely while
+      # their storefront showed the new one.
+      Rails.cache.delete accent_style_cache_name
+    end
+
+    # The "R G B" triple the CSS custom properties expect, matching the SCSS split-color() function
+    # used by custom_styles so both paths produce byte-identical values for the same hex colour.
+    #
+    # Six-digit form only, which is all that can reach here: HexColorValidator::HEX_COLOR_REGEX
+    # requires exactly six digits, and it validates both highlight_color and background_color.
+    # accessible_accent's derived colours come from ContrastColor, which also emits six digits.
+    def rgb_triplet(hex_color)
+      hex_color.to_s.delete_prefix("#").scan(/../).map { _1.to_i(16) }.join(" ")
     end
 end

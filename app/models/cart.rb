@@ -49,6 +49,26 @@ class Cart < ApplicationRecord
     alive? && updated_at >= ABANDONED_IF_UPDATED_AFTER_AGO.ago.beginning_of_day && updated_at <= ABANDONED_IF_UPDATED_BEFORE_AGO.ago && sent_abandoned_cart_emails.none? && alive_cart_products.exists?
   end
 
+  # The one seller every product in this cart belongs to, or nil when the cart is empty or spans
+  # more than one seller.
+  #
+  # A cart can hold products from several sellers and pay for them in a single transaction, so there
+  # is no seller whose branding could fairly represent a mixed cart. Deliberately nil in that case
+  # rather than picking (say) the first product's seller: "whichever product happened to be added
+  # first" is not a rule a buyer or a seller can predict, and showing seller A's colours over
+  # seller B's product misrepresents both. Checkout falls back to Gumroad's own palette there,
+  # which is the honest answer for a genuinely multi-brand purchase.
+  #
+  # `distinct.pluck` rather than loading the products: this runs on every checkout page render and
+  # only the seller ids are needed, so it stays a single narrow query no matter how many products
+  # are in the cart (the cap is MAX_ALLOWED_CART_PRODUCTS).
+  def sole_seller
+    seller_ids = alive_cart_products.joins(:product).distinct.pluck("links.user_id")
+    return if seller_ids.length != 1
+
+    User.find_by(id: seller_ids.first)
+  end
+
   def self.fetch_by(user:, browser_guid:)
     return user.carts.alive.first if user.present?
     alive.find_by(browser_guid:, user: nil) if browser_guid.present?

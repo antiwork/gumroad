@@ -67,6 +67,54 @@ describe CheckoutController, type: :controller, inertia: true do
       expect(response).to be_successful
     end
 
+    describe "accent_styles prop" do
+      let(:browser_guid) { SecureRandom.uuid }
+      let(:branded_seller) { create(:user).tap { _1.seller_profile.update!(highlight_color: "#009a49") } }
+
+      before { cookies[:_gumroad_guid] = browser_guid }
+
+      def cart_with(*products)
+        create(:cart, :guest, browser_guid:).tap do |cart|
+          products.each { create(:cart_product, cart:, product: _1) }
+        end
+      end
+
+      it "carries the seller's accent when every product in the cart is theirs" do
+        cart_with(create(:product, user: branded_seller), create(:product, user: branded_seller))
+
+        get :show
+
+        expect(inertia.props[:accent_styles]).to eq(branded_seller.seller_profile.accent_styles)
+        expect(inertia.props[:accent_styles]).to include("--accent:0 154 73")
+      end
+
+      it "sends no accent for a cart spanning two sellers" do
+        cart_with(create(:product, user: branded_seller), create(:product, user: create(:user)))
+
+        get :show
+
+        expect(inertia.props[:accent_styles]).to be_nil
+      end
+
+      it "sends no accent when there is no cart at all" do
+        get :show
+
+        expect(inertia.props[:accent_styles]).to be_nil
+      end
+
+      it "sends only the accent trio, never the seller's background or font" do
+        # Guards the split between #accent_styles and #custom_styles at the surface that consumes it:
+        # a later change routing checkout at custom_styles would swap the payment form's background
+        # and typography, which is deliberately out of scope here.
+        cart_with(create(:product, user: branded_seller))
+
+        get :show
+
+        expect(inertia.props[:accent_styles]).not_to include("--body-bg")
+        expect(inertia.props[:accent_styles]).not_to include("--font-family")
+      end
+    end
+
     describe "process_cart_id_param check" do
       let(:user) { create(:user) }
       let(:cart) { create(:cart, user:) }
