@@ -42,6 +42,28 @@ describe User::PasswordsController, type: :controller, inertia: true do
       expect(flash[:warning]).to eq("An account does not exist with that email.")
     end
 
+    # Accounts whose stored address carries an invisible character are the ones most likely to need
+    # a reset, because they never received a confirmation email in the first place. The stored
+    # address holds the character while the person types the clean version, so looking up only one
+    # form would tell them no account exists with the address they are looking straight at.
+    context "when the stored address carries an invisible character" do
+      before { @user.update_column(:email, "\u200Fbuyer@example.com") }
+
+      it "still finds the account when the clean address is typed" do
+        post(:create, params: { user: { email: "buyer@example.com" } })
+
+        expect(response).to redirect_to(login_url)
+        expect(flash[:notice]).to eq("Password reset sent! Please make sure to check your spam folder.")
+      end
+
+      it "still finds the account when the address is pasted with the character" do
+        post(:create, params: { user: { email: "\u200Fbuyer@example.com" } })
+
+        expect(response).to redirect_to(login_url)
+        expect(flash[:notice]).to eq("Password reset sent! Please make sure to check your spam folder.")
+      end
+    end
+
     it "redirects with warning if email is not valid" do
       post(:create, params: { user: { email: "this is no sort of valid email address" } })
       expect(response).to redirect_to(login_url)

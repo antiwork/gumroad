@@ -232,7 +232,11 @@ class Api::Internal::Customers::SingleCustomerEmailsController < Api::Internal::
     end
 
     def customer_can_receive_email?(purchase)
-      purchase.can_contact? && EmailFormatValidator.valid?(purchase.email) && !purchase.is_gift_sender_purchase?
+      # deliverable? rather than valid?: a purchase whose email was stored before we started
+      # refusing invisible characters is still reachable, because the delivery-time sanitizer
+      # cleans the recipient. Asking valid? here would tell the seller they cannot email a
+      # customer we can in fact reach.
+      purchase.can_contact? && EmailFormatValidator.deliverable?(purchase.email) && !purchase.is_gift_sender_purchase?
     end
 
     def render_error(message, status)

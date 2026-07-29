@@ -18,7 +18,15 @@ class User::PasswordsController < Devise::PasswordsController
 
   def create
     email = params.dig(:user, :email)
-    user = User.alive.by_email(email).first if EmailFormatValidator.valid?(email)
+    # Look the address up in both the form the person typed and the cleaned form, because either
+    # side may carry an invisible character: an account created before we started refusing them
+    # still holds one in the stored address, while the person resetting almost certainly types the
+    # clean version. Matching only one form tells them no account exists with the address they are
+    # looking straight at — and these are the people most likely to need a reset, since they never
+    # received a confirmation email in the first place.
+    candidates = [email, InvisibleCharacters.normalize_email(email)].compact.uniq
+                                                                    .select { EmailFormatValidator.deliverable?(_1) }
+    user = User.alive.where(email: candidates).first if candidates.any?
 
     if user&.send_reset_password_instructions
       redirect_to login_url, notice: "Password reset sent! Please make sure to check your spam folder.", status: :see_other
