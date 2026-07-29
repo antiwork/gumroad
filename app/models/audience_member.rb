@@ -358,8 +358,14 @@ class AudienceMember < ApplicationRecord
       JSON::Validator.fully_validate(schema_file, details).each { errors.add(:details, _1) }
     end
 
+    # An audience member is derived from rows that already exist (purchases, followers,
+    # affiliates), so unlike the signup and checkout fields this one must repair rather than
+    # refuse. Some of those rows were saved before we rejected invisible characters, and an
+    # audience member that cannot validate would silently drop that person out of the seller's
+    # audience — losing them from posts and emails on top of the delivery problem they already
+    # have.
     def normalize_email
-      self.email = email.strip.downcase
+      self.email = InvisibleCharacters.normalize_email(email).downcase
     end
 
     def assign_derived_columns

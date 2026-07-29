@@ -5241,9 +5241,14 @@ class Purchase < ApplicationRecord
       price || subscription&.price
     end
 
+    # Invisible characters are removed here rather than rejected. The checkout field already
+    # stops them from reaching us, and this path also carries purchases created on the seller's
+    # behalf and repeat purchases keyed off an address stored before we started rejecting them —
+    # refusing here would block a real buyer from completing a real purchase over a character
+    # nobody can see. Removing it means the receipt reaches them, which is the whole point.
     def downcase_email
       return if email.blank?
-      self.email = email.downcase
+      self.email = InvisibleCharacters.normalize_email(email).downcase
     end
 
     def all_workflows

@@ -26,6 +26,30 @@ RSpec.describe AudienceMember, :freeze_time do
   end
 
   describe "callbacks" do
+    # An audience member is derived from rows that already exist, some of them saved before we
+    # started refusing addresses that carry an invisible character. It has to repair the address
+    # rather than refuse it: a member that cannot validate drops that person out of the seller's
+    # audience entirely, so they stop receiving posts as well as receipts.
+    describe "normalizing the email" do
+      it "removes an invisible character rather than refusing the record" do
+        member = create(:audience_member, email: "\u200FBuyer@Example.com")
+
+        expect(member.email).to eq "buyer@example.com"
+      end
+
+      it "removes a Unicode space, which an address never legitimately contains" do
+        member = create(:audience_member, email: "buyer\u00A0@example.com")
+
+        expect(member.email).to eq "buyer@example.com"
+      end
+
+      it "still downcases and strips an ordinary address" do
+        member = create(:audience_member, email: "  Buyer@Example.com  ")
+
+        expect(member.email).to eq "buyer@example.com"
+      end
+    end
+
     it "saving assigns derived columns" do
       member = create(:audience_member, details: { "follower" => { "id" => 1, "created_at" => 7.days.ago.iso8601 } })
       expect(member.attributes).to include(
