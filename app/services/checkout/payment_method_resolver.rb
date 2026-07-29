@@ -19,13 +19,14 @@ class Checkout::PaymentMethodResolver
   # Element, so they are not separate types here. us_bank_account (ACH Direct Debit) is a
   # delayed-notification method: it settles asynchronously via the PaymentIntent webhook lifecycle.
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay].freeze
-  # Dropped on a recurring lifecycle, for three different reasons:
+  # Dropped on a recurring lifecycle, for four different reasons:
   #   - afterpay_clearpay, affirm, upi: one-time, buyer-present only.
   #   - ideal, bancontact, pix: one-shot bank approvals with no stored mandate — renewals would
   #     have nothing to charge against (re-billing needs a SEPA mandate we don't collect).
-  #   - klarna, alipay: launch decisions, not capability limits. Memberships/preorders are out of
-  #     scope for their first launches (gumroad-private#933, #1339); Stripe additionally gates
-  #     recurring Alipay behind approval and excludes it from subscription mode.
+  #   - alipay: Stripe gates recurring Alipay behind approval and excludes it from subscription
+  #     mode, so it stays out until that changes, not until we widen our launch scope.
+  #   - klarna: a launch decision, not a capability limit — memberships and preorders are out of
+  #     scope for its first launch (gumroad-private#933).
   # Recurring carts fall back to Lane A before a Stripe list is built, but this set is logged and
   # intersected downstream, so it must not claim a recurring-incapable method.
   RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES = %w[afterpay_clearpay affirm upi pix klarna alipay ideal bancontact].freeze
