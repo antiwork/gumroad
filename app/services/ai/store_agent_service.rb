@@ -207,13 +207,31 @@ class Ai::StoreAgentService
   # rather than ending it ("of the draft (the one from March) is permanent"). Requiring the closing
   # mark is what separates it from a sentence break: one unpaired comma or dash still ends the
   # subject, and the words after it belong to the instruction.
+  #
+  # Brackets nest, so their bodies recurse (\g<-1> re-enters the group it sits in) rather than
+  # excluding the opening mark — a depth limit here would only move the false positive one bracket
+  # deeper. Groups are relative for that reason too: a NAMED group raises "multiplex definition
+  # name" once this constant is interpolated more than once into the same pattern.
+  #
+  # Recursion is confined to the bracket bodies. A quote or dash aside cannot contain its own
+  # opening mark, and a comma aside that swallowed brackets would make the whole span quadratic —
+  # the nesting shapes that matter are already reachable the other way round, as a bracket
+  # containing commas.
   STAGED_CLAIM_SUBJECT_ASIDE = /
     (?:
-      \s*\([^()\n]*\)
+      \s*(\((?:[^()\n]|\g<-1>)*\))
+      |
+      \s*(\[(?:[^\[\]\n]|\g<-1>)*\])
+      |
+      \s*(\{(?:[^{}\n]|\g<-1>)*\})
       |
       \s*"[^"\n]*"
       |
       \s*[“][^”\n]*[”]
+      |
+      \s+'[^'’.!?\n]+'(?=[\s,;:]|\z)
+      |
+      \s+[‘][^‘’.!?\n]+[’](?=[\s,;:]|\z)
       |
       \s*,[^,.!?\n]*,
       |

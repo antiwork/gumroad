@@ -763,6 +763,14 @@ describe Ai::StoreAgentService do
           "Staged renaming of the product #2 in your archive is instant. Click the card when you're sure.",
           "Staged deletion of the 3rd draft is permanent. Tap the card when you're sure.",
           "Staged deletion of the draft (the one from March) that I reviewed is permanent. Tap the card.",
+          # Brackets nest, so the aside has to close at its own depth rather than at the first mark.
+          "Staged deletion of the draft (the March copy (archived)) is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft (the copy (from (early) March)) is permanent. Tap the card when you're sure.",
+          # Every bracket pair and quote style the model writes an aside in, not just the round one.
+          "Staged deletion of the draft [the March copy] is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft {March notes} is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft 'March notes' is permanent. Tap the card when you're sure.",
+          "Staged deletion of the draft ‘March notes’ is permanent. Tap the card when you're sure.",
           "Staged the price change (20% off) is not something I can undo. Confirm the card only when sure.",
           # pointing back at a card on an earlier message is truthful — that card is still there
           # to click, so replacing the reply would deny a change that really is pending
@@ -860,6 +868,17 @@ describe Ai::StoreAgentService do
           "Staged deletion of the draft, the one from March, is ready for your confirmation.",
           "Staged deletion of the draft — the one from March — is ready for your confirmation.",
           "Staged deletion of the 3rd draft is ready for your confirmation.",
+          "Staged deletion of the draft (the March copy (archived)) is ready for your confirmation.",
+          "Staged deletion of the draft [the March copy] is ready for your confirmation.",
+          "Staged deletion of the draft {March notes} is ready for your confirmation.",
+          "Staged deletion of the draft 'March notes' is ready for your confirmation.",
+          "Staged deletion of the draft ‘March notes’ is ready for your confirmation.",
+          # An aside body must not reach across a sentence break, or the instruction that proves the
+          # claim gets absorbed into the subject and the phantom escapes at this shape only.
+          "Staged deletion of the draft 'a. Tap the card' is fine when you're sure.",
+          "Staged deletion of the draft ‘a. Tap the card’ is fine when you're sure.",
+          # A possessive is not an opening quote, and reading it as one loses the claim entirely.
+          "Staged deletion of the seller's draft. Approve it.",
           "Staged the change that you requested. Approve it, then I'll apply it.",
           "Staged the update that will apply to all products. Confirm the card.",
           # A verb that ENDS its clause is part of the relative clause the filler walked through,
