@@ -16,6 +16,21 @@ class Follower::CreateService
 
   def perform
     return if followed_user.blank? || follower_email.blank?
+    # Refuse to create (or revive) a follow for a suspended or deleted seller.
+    #
+    # Creating a Follower row sends a "Please confirm your follow request" email
+    # to whatever address was submitted, from Gumroad's own sending domain. That
+    # makes this endpoint an email relay pointed at arbitrary third parties, and
+    # suspending the seller does NOT close it: /follow is a plain POST that never
+    # loads the storefront, so a banned account whose pages 404 keeps accepting
+    # submissions and keeps sending mail. A ring of accounts used exactly that to
+    # deliver loan-phishing lures to hundreds of thousands of harvested addresses,
+    # and kept going after every account in it was banned.
+    #
+    # `account_active?` is `alive? && !suspended?` — once we have decided an
+    # account may no longer transact, it should not be able to make us send mail
+    # on its behalf either.
+    return unless followed_user.account_active?
 
     @follower = followers.find_by(email: follower_email)
 

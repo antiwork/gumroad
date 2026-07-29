@@ -11,6 +11,12 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import {
+  RECAPTCHA_UNAVAILABLE_MESSAGE,
+  RecaptchaCancelledError,
+  RecaptchaUnavailableError,
+  useRecaptcha,
+} from "$app/components/useRecaptcha";
 
 export const FollowUserForm = ({
   creatorProfile,
@@ -24,13 +30,20 @@ export const FollowUserForm = ({
   const loggedInUser = useLoggedInUser();
   const isOwnProfile = loggedInUser?.id === creatorProfile.external_id;
   const emailInputRef = React.useRef<HTMLInputElement>(null);
+  // Non-null only for sellers we haven't reviewed yet, whose subscribe form has
+  // to pass a CAPTCHA before we'll email the address (see FollowRecaptcha).
+  const recaptchaSiteKey = creatorProfile.follow_recaptcha_site_key ?? null;
+  const recaptcha = useRecaptcha({ siteKey: recaptchaSiteKey });
 
   const form = useForm({
     email: isOwnProfile ? "" : (loggedInUser?.email ?? ""),
     seller_id: creatorProfile.external_id,
+    // Sent under the name Google's verification API expects, which is also what
+    // the server reads it from. Stays empty when no challenge is required.
+    "g-recaptcha-response": "",
   });
 
-  const followUser = (e: React.FormEvent) => {
+  const followUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidEmail(form.data.email)) {
       const message =
@@ -44,11 +57,29 @@ export const FollowUserForm = ({
       showAlert("As the creator of this profile, you can't follow yourself!", "warning");
       return;
     }
+
+    // The challenge has to resolve before the post, because the token travels
+    // with it. Nothing submits if the visitor dismisses the challenge.
+    if (recaptchaSiteKey) {
+      let token: string;
+      try {
+        token = await recaptcha.execute();
+      } catch (error) {
+        // Dismissing the challenge is a deliberate choice, so it needs no error
+        // message; a CAPTCHA that never loaded is something the visitor can fix,
+        // so it gets actionable guidance.
+        if (error instanceof RecaptchaUnavailableError) showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
+        else if (!(error instanceof RecaptchaCancelledError)) throw error;
+        return;
+      }
+      form.transform((data) => ({ ...data, "g-recaptcha-response": token }));
+    }
+
     form.post(Routes.follow_user_path());
   };
 
   return (
-    <form onSubmit={followUser} style={{ flexGrow: 1 }} noValidate>
+    <form onSubmit={(e) => void followUser(e)} style={{ flexGrow: 1 }} noValidate>
       <Fieldset state={form.errors.email != null ? "danger" : undefined}>
         <div className="flex gap-2">
           <Input
@@ -72,6 +103,7 @@ export const FollowUserForm = ({
                   : "Subscribe"}
           </Button>
         </div>
+        {recaptcha.container}
       </Fieldset>
     </form>
   );

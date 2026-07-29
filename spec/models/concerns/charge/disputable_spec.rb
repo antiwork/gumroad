@@ -851,6 +851,29 @@ describe Charge::Disputable, :vcr do
             expect(balance_transaction.issued_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
           end
 
+          # The holding fields are the ones that decide whether the seller can be paid: both
+          # payout processors refuse a Gumroad-held balance that is not USD, one by failing the
+          # seller's whole payment and one by silently dropping the row. The examples above asserted
+          # only the issued fields, so this re-credit could have booked the buyer's currency into
+          # holding_* without any of them noticing.
+          it "books the re-credit's holding fields in USD against the Gumroad-held account" do
+            @p.update!(presentment_dispute_debited_gross_cents: @p.gross_amount_refundable_cents)
+            expect(@p.merchant_account.holder_of_funds).to eq(HolderOfFunds::GUMROAD)
+
+            Purchase.handle_charge_event(@e)
+            @p.reload
+
+            balance_transaction = Credit.last.balance_transaction
+            expect(balance_transaction.holding_amount_currency).to eq(Currency::USD)
+            expect(balance_transaction.holding_amount_gross_cents).to eq(@p.gross_amount_refundable_cents)
+            # Explicitly not the buyer's figure, which is what the flow of funds carries.
+            expect(balance_transaction.holding_amount_currency).to_not eq(Currency::CAD)
+
+            # The label keys the balance, so a CAD leg would open a second, unpayable balance
+            # alongside the seller's USD one rather than crediting the one they get paid from.
+            expect(balance_transaction.balance.holding_currency).to eq(Currency::USD)
+          end
+
           it "books the re-credit from the snapshotted debit gross when a refund lands after the debit" do
             create(:dispute_formalized, purchase: @p, formalized_at: 1.day.ago)
             # The debit snapshotted the gross it booked. A refund webhook arriving while

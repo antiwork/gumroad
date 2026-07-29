@@ -60,10 +60,50 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::CAD,
                                         canonical_total_cents: 10_00,
                                         presentment_total_cents: 12_50,
-                                        fx_rate: BigDecimal("0.8"),
-                                        stripe_fx_quote_id: "fxq_test",
                                         stripe_fx_quote_expires_at: stripe_fx_quote.expires_at)
+      # A created quote covers the cart, which is one prospective charge here; the FX quote it
+      # locked lives on that charge.
+      expect(result.charges.sole).to have_attributes(canonical_total_cents: 10_00,
+                                                     presentment_total_cents: 12_50,
+                                                     fx_rate: BigDecimal("0.8"),
+                                                     stripe_fx_quote_id: "fxq_test")
       expect(result.token).to be_present
+    end
+
+    it "reports the exact rate from the locked quote when the cart is one charge" do
+      # A cart of one charge has one Stripe rate, so the browser gets that rate rather than a
+      # ratio of totals that were each already rounded to the cent. At $3.34 the ratio would be
+      # 1.2514970, and a CA$10.00 tip typed against it would store 799 canonical cents instead
+      # of 800.
+      product.update!(price_cents: 3_34)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 3_34, ip: "24.48.0.1")
+
+      expect(result.display_rate).to eq(BigDecimal("1.25"))
+    end
+
+    it "signs a single-charge quote in the flat shape too, so a rollback can still verify it" do
+      # The charge path this token may meet is not necessarily the one that minted it: during a
+      # deploy, and for as long as a rollback is possible, it can be read by code that predates
+      # per-charge quoting and looks these fields up at the top level, failing the payment if
+      # they are missing. Single-seller carts are all of today's buyer-currency traffic, so
+      # this shape has to stay readable both ways. Asserted on the payload rather than through
+      # `verify!` because it is the OLD verifier, no longer in this codebase, that reads it.
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      payload = Rails.application.message_verifier(described_class::TOKEN_PURPOSE).verify(result.token)
+
+      expect(payload).to include("currency" => Currency::CAD,
+                                 "seller_id" => seller.id,
+                                 "canonical_total_cents" => 10_00,
+                                 "presentment_total_cents" => 12_50,
+                                 "stripe_fx_quote_id" => "fxq_test")
+      expect(payload.fetch("stripe_fx_quote_expires_at")).to eq(stripe_fx_quote.expires_at.iso8601)
+      # The same figures are in the per-charge entry the current code reads.
+      expect(payload.fetch("charges").sole).to include("seller_id" => seller.id,
+                                                       "canonical_total_cents" => 10_00,
+                                                       "presentment_total_cents" => 12_50,
+                                                       "stripe_fx_quote_id" => "fxq_test")
     end
 
     context "with price-ending mirroring on (the default for sellers charging in the buyer's currency)" do
@@ -132,9 +172,8 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect(result).to have_attributes(currency: Currency::CAD,
                                         canonical_total_cents: 15_00,
-                                        presentment_total_cents: 18_75,
-                                        fx_rate: BigDecimal("0.8"),
-                                        stripe_fx_quote_id: "fxq_test")
+                                        presentment_total_cents: 18_75)
+      expect(result.charges.sole).to have_attributes(fx_rate: BigDecimal("0.8"), stripe_fx_quote_id: "fxq_test")
       expect(result.token).to be_present
     end
 
@@ -227,21 +266,247 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
-    it "returns nil for carts spanning multiple sellers even when both sellers are flagged in" do
-      # One quote locks one PaymentIntent total, but each seller gets their own charge
-      # (and intent) — splitting the locked total across intents is not supported.
-      other_seller = create(:user, disable_buyer_local_currency: false)
-      Feature.activate_user(:buyer_local_currency, other_seller)
-      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
-      other_seller_product = create(:product, user: other_seller, price_cents: 5_00, price_currency_type: Currency::USD)
-      expect(StripeFxQuote).not_to receive(:create)
+    context "with a cart spanning several sellers" do
+      let(:other_seller) { create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true) }
+      let(:other_seller_product) { create(:product, user: other_seller, price_cents: 5_00, price_currency_type: Currency::USD) }
 
-      result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+      before do
+        Feature.activate_user(:buyer_local_currency, other_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
+        [seller, other_seller].each { Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+      end
 
-      expect(result).to be_nil
-    ensure
-      Feature.deactivate_user(:buyer_local_currency, other_seller) if other_seller
-      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
+      after do
+        Feature.deactivate_user(:buyer_local_currency, other_seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
+        [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+      end
+
+      it "locks one quote per seller and reports their sum as the cart total" do
+        # Each seller becomes one charge (one PaymentIntent), so each gets its own FX quote:
+        # $10 → CA$12.50 and $5 → CA$6.25, and the buyer is shown CA$18.75.
+        expect(StripeFxQuote).to receive(:create).twice.and_return(stripe_fx_quote)
+
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(currency: Currency::CAD,
+                                          canonical_total_cents: 15_00,
+                                          presentment_total_cents: 18_75)
+        expect(result.charges.map(&:canonical_total_cents)).to eq([10_00, 5_00])
+        expect(result.charges.map(&:presentment_total_cents)).to eq([12_50, 6_25])
+        expect(result.charges.map { _1.seller.id }).to eq([seller.id, other_seller.id])
+      end
+
+      it "verifies each charge against its OWN locked total, not the cart's" do
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        first = described_class.verify!(token: result.token, seller:, merchant_account:, currency: Currency::CAD,
+                                        canonical_total_cents: 10_00, canonical_line_items: canonical_line_items_for(product))
+        second = described_class.verify!(token: result.token, seller: other_seller, merchant_account:, currency: Currency::CAD,
+                                         canonical_total_cents: 5_00, canonical_line_items: canonical_line_items_for(other_seller_product))
+
+        expect(first.presentment_total_cents).to eq(12_50)
+        expect(second.presentment_total_cents).to eq(6_25)
+        # Each charge is independently priced, which is what lets the two intents be created
+        # and confirmed separately without any cross-charge commit.
+        expect(first.canonical_total_cents).to eq(10_00)
+        expect(second.canonical_total_cents).to eq(5_00)
+      end
+
+      it "rejects a charge that presents the cart total instead of its own" do
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect do
+          described_class.verify!(token: result.token, seller:, merchant_account:, currency: Currency::CAD,
+                                  canonical_total_cents: 15_00, canonical_line_items: canonical_line_items_for(product, other_seller_product))
+        end.to raise_error(described_class::InvalidToken, /total mismatch/)
+      end
+
+      it "rejects a seller the token covers no charge for" do
+        uninvolved_seller = create(:user)
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect do
+          described_class.verify!(token: result.token, seller: uninvolved_seller, merchant_account:, currency: Currency::CAD,
+                                  canonical_total_cents: 10_00, canonical_line_items: canonical_line_items_for(product))
+        end.to raise_error(described_class::InvalidToken, /no charge for this seller/)
+      end
+
+      it "keeps line allocations in cart order when the cart's sellers interleave" do
+        # Charges are built per seller, so the second seller's line is quoted with the first
+        # seller's two lines around it. The checkout matches allocations to cart rows by
+        # position, so the returned order must be the cart's, not the per-seller grouping's.
+        second_product = create(:product, user: seller, price_cents: 3_00, price_currency_type: Currency::USD)
+        line_items = line_items_for(product, other_seller_product, second_product)
+
+        result = described_class.create(line_items:, canonical_total_cents: 18_00, ip: "24.48.0.1")
+
+        expect(result.line_allocations.map(&:permalink)).to eq(line_items.map(&:permalink))
+        expect(result.line_allocations.sum(&:presentment_total_cents)).to eq(result.presentment_total_cents)
+      end
+
+      it "reports the soonest expiry across the cart's quotes" do
+        soonest = 5.minutes.from_now
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(id: "fxq_a", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8")),
+          StripeFxQuote::Quote.new(id: "fxq_b", expires_at: soonest, fx_rate: BigDecimal("0.8"))
+        )
+
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result.stripe_fx_quote_expires_at).to be_within(1.second).of(soonest)
+      end
+
+      it "reports a rate that returns a typed tip to the buyer unchanged when one seller carries tax" do
+        # The browser converts a typed tip through this rate into canonical cents, splits those
+        # across the cart by each line's PRICE, then converts each seller's share back at that
+        # seller's own rate. Blending the rate over the charge totals would weight it by tax the
+        # split never sees, so a buyer typing CA$5.00 would watch the box settle on a different
+        # figure. This walks that exact round trip.
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(id: "fxq_a", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8")),
+          StripeFxQuote::Quote.new(id: "fxq_b", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.5"))
+        )
+        # Equal prices, and $10 of tax on the second seller's line only.
+        taxed_line_items = [
+          described_class::LineItem.new(permalink: product.unique_permalink, product:, price_cents: 10_00,
+                                        tip_cents: 0, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0),
+          described_class::LineItem.new(permalink: other_seller_product.unique_permalink, product: other_seller_product,
+                                        price_cents: 10_00, tip_cents: 0, seller_tax_cents: 10_00,
+                                        gumroad_tax_cents: 0, shipping_cents: 0),
+        ]
+
+        result = described_class.create(line_items: taxed_line_items, canonical_total_cents: 30_00, ip: "24.48.0.1")
+
+        typed_tip_cents = 5_00
+        canonical_tip_cents = (BigDecimal(typed_tip_cents) / result.display_rate).round
+        # allocateFixedTipCents splits by price and floors each share, so the equal price bases
+        # here take half each.
+        first_share = canonical_tip_cents / 2
+        returned_tip_cents = [[first_share, BigDecimal("0.8")], [canonical_tip_cents - first_share, BigDecimal("0.5")]]
+                             .sum { |share, fx_rate| (BigDecimal(share) / fx_rate).round }
+
+        expect(returned_tip_cents).to be_within(1).of(typed_tip_cents)
+      end
+
+      it "falls back to canonical USD when one seller's charge cannot be quoted" do
+        # One unquotable charge takes the whole cart back to dollars: a cart cannot honestly
+        # show a total made of local currency for one seller and dollars for another.
+        #
+        # The mismatch marker write is stubbed out because both sellers here fall back to the
+        # SHARED Gumroad platform merchant account, and recording CAD on it would suppress
+        # quoting for every other example in this file. Which account the marker lands on is
+        # covered by its own example below.
+        allow_any_instance_of(MerchantAccount).to receive(:record_settlement_currency_mismatch!)
+        call_count = 0
+        allow(StripeFxQuote).to receive(:create) do
+          call_count += 1
+          raise StripeFxQuote::SettlementCurrencyMismatch, "settles in cad" if call_count > 1
+
+          stripe_fx_quote
+        end
+
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "records the settlement mismatch against the account that rejected the quote" do
+        # Per-account, per-currency: a mismatch learned for one seller's account must not
+        # suppress quoting for another seller's. Asserted on the receiver rather than on
+        # persisted state, because actually writing the marker to the SHARED Gumroad platform
+        # account (which every seller here falls back to) would suppress quoting for the rest
+        # of this file.
+        other_seller_account = create(:merchant_account_stripe_connect, user: other_seller, currency: Currency::USD)
+        other_seller.update!(check_merchant_account_is_linked: true)
+        allow(StripeFxQuote).to receive(:create)
+          .with(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: merchant_account.charge_processor_merchant_id)
+          .and_return(stripe_fx_quote)
+        allow(StripeFxQuote).to receive(:create)
+          .with(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: other_seller_account.charge_processor_merchant_id)
+          .and_raise(StripeFxQuote::SettlementCurrencyMismatch, "settles in cad")
+        expect_any_instance_of(MerchantAccount).to receive(:record_settlement_currency_mismatch!).with(Currency::CAD) do |account|
+          expect(account.id).to eq(other_seller_account.id)
+        end
+
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "falls back to canonical USD when one seller is not in the multi-seller ramp" do
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, other_seller)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        result = described_class.create(line_items: line_items_for(product, other_seller_product), canonical_total_cents: 15_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "quotes a cart holding as many sellers as the lane will quote" do
+        # One FX round trip per seller, right at the limit.
+        extra_sellers = Array.new(described_class::MAX_QUOTED_CHARGES - 2) do
+          create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true).tap do |extra_seller|
+            Feature.activate_user(:buyer_local_currency, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+          end
+        end
+        extra_products = extra_sellers.map { create(:product, user: _1, price_cents: 1_00, price_currency_type: Currency::USD) }
+        products = [product, other_seller_product, *extra_products]
+        expect(StripeFxQuote).to receive(:create).exactly(described_class::MAX_QUOTED_CHARGES).times.and_return(stripe_fx_quote)
+
+        result = described_class.create(line_items: line_items_for(*products),
+                                        canonical_total_cents: products.sum(&:price_cents),
+                                        ip: "24.48.0.1")
+
+        expect(result.charges.length).to eq(described_class::MAX_QUOTED_CHARGES)
+      ensure
+        extra_sellers&.each do |extra_seller|
+          Feature.deactivate_user(:buyer_local_currency, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+        end
+      end
+
+      it "falls back to canonical USD without asking Stripe when the cart holds more sellers than the lane quotes" do
+        # Each seller costs one sequential FX round trip on the request the buyer is waiting on,
+        # so a cart wider than the limit takes dollars instead of making them wait through the
+        # whole chain. No quote is minted at all: the limit is checked before the first call.
+        extra_sellers = Array.new(described_class::MAX_QUOTED_CHARGES - 1) do
+          create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true).tap do |extra_seller|
+            Feature.activate_user(:buyer_local_currency, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+            Feature.activate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+          end
+        end
+        extra_products = extra_sellers.map { create(:product, user: _1, price_cents: 1_00, price_currency_type: Currency::USD) }
+        products = [product, other_seller_product, *extra_products]
+        expect(products.map(&:user_id).uniq.length).to be > described_class::MAX_QUOTED_CHARGES
+        expect(StripeFxQuote).not_to receive(:create)
+
+        result = described_class.create(line_items: line_items_for(*products),
+                                        canonical_total_cents: products.sum(&:price_cents),
+                                        ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      ensure
+        extra_sellers&.each do |extra_seller|
+          Feature.deactivate_user(:buyer_local_currency, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, extra_seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, extra_seller)
+        end
+      end
+
+      it "still quotes a single-seller cart when the multi-seller ramp is off" do
+        # The ramp gates only multi-seller carts; pulling it must not touch the checkouts
+        # that have been live since 2026-07-23.
+        [seller, other_seller].each { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::MULTI_SELLER_FEATURE_NAME, _1) }
+
+        result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result.presentment_total_cents).to eq(12_50)
+      end
     end
 
     it "quotes a cart priced in a non-USD currency that is not the buyer's own" do

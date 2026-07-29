@@ -82,5 +82,37 @@ describe Ai::StoreAgentObjectFormatter do
 
       expect(cards.map { |c| c[:title] }).to eq(%w[Track Banner])
     end
+
+    # A looked-up help article gets a card so the creator gets a link to the documentation the
+    # answer came from, rather than only the agent's paraphrase of it.
+    it "builds a help article card with a link to the live article" do
+      response = {
+        "success" => true,
+        "help_article" => {
+          "slug" => "124-your-gumroad-profile-page",
+          "title" => "Your Gumroad profile page",
+          "description" => "How your storefront works.",
+          "category" => "Start selling",
+          "url" => "https://gumroad.com/help/article/124-your-gumroad-profile-page",
+          "content" => "Long plain text...",
+        },
+      }
+
+      card = described_class.from_response(catalog.find("get_help_article"), response).first
+
+      expect(card[:type]).to eq("help_article")
+      expect(card[:title]).to eq("Your Gumroad profile page")
+      expect(card[:subtitle]).to eq("Start selling")
+      expect(card[:url]).to eq("https://gumroad.com/help/article/124-your-gumroad-profile-page")
+      expect(card[:fields]).to include({ label: "About", value: "How your storefront works." })
+    end
+
+    # The search results are a list the model reads to pick an article; rendering 100+ doc cards
+    # under the reply would bury the answer, so only the article it actually reads gets a card.
+    it "does not build cards for a help article search" do
+      response = { "success" => true, "help_articles" => [{ "slug" => "a", "title" => "A" }] }
+
+      expect(described_class.from_response(catalog.find("search_help_articles"), response)).to eq([])
+    end
   end
 end

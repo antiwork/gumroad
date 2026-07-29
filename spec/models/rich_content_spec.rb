@@ -77,7 +77,7 @@ describe RichContent do
   describe "rejecting cross-product file embeds" do
     let(:product) { create(:product) }
     let(:own_file) { create(:product_file, link: product) }
-    let(:foreign_file) { create(:product_file, link: create(:product)) }
+    let(:foreign_file) { create(:product_file, link: create(:product, user: product.user)) }
 
     def embed(file)
       { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
@@ -87,7 +87,32 @@ describe RichContent do
       rich_content = build(:product_rich_content, entity: product, description: [embed(own_file), embed(foreign_file)])
       expect(rich_content).to be_invalid
       expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
+      # The message names the file and its owning product rather than an
+      # obfuscated id, which is not visible anywhere in the seller's UI.
+      expect(rich_content.errors.full_messages.first).to include(foreign_file.name_displayable)
+      expect(rich_content.errors.full_messages.first).to include(foreign_file.link.name)
+    end
+
+    it "does not expose another seller's file or product names" do
+      other_product = create(:product, name: "Private product")
+      other_seller_file = create(:product_file, link: other_product, display_name: "Private file")
+      rich_content = build(:product_rich_content, entity: product, description: [embed(other_seller_file)])
+
+      expect(rich_content).to be_invalid
+      expect(rich_content.errors.full_messages.first).to include(other_seller_file.external_id)
+      expect(rich_content.errors.full_messages.first).not_to include(other_seller_file.name_displayable)
+      expect(rich_content.errors.full_messages.first).not_to include(other_product.name)
+    end
+
+    it "does not expose the seller's other file or product names to a product collaborator" do
+      collaborator = create(:collaborator, seller: product.user, apply_to_all_products: false)
+      create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 30_00)
+      rich_content = build(:product_rich_content, entity: product, description: [embed(foreign_file)])
+
+      expect(rich_content).to be_invalid
       expect(rich_content.errors.full_messages.first).to include(foreign_file.external_id)
+      expect(rich_content.errors.full_messages.first).not_to include(foreign_file.name_displayable)
+      expect(rich_content.errors.full_messages.first).not_to include(foreign_file.link.name)
     end
 
     it "rejects a variant's content embedding a file owned by another product" do
@@ -113,6 +138,110 @@ describe RichContent do
     it "allows content with no file embeds" do
       rich_content = build(:product_rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }])
       expect(rich_content).to be_valid
+    end
+
+    context "when the foreign file has been soft-deleted" do
+      # These rows predate the validation above (usually copy-pasted content
+      # pages), so they already exist in the database. Once the foreign file is
+      # soft-deleted its embed renders as nothing in the editor, leaving the
+      # seller no node to remove and no way to ever save the product again.
+      let!(:dead_foreign_file) { create(:product_file, link: create(:product), deleted_at: Time.current) }
+
+      def persist_with_foreign_embed(nodes)
+        rich_content = build(:product_rich_content, entity: product, description: nodes)
+        rich_content.save!(validate: false)
+        rich_content
+      end
+
+      it "drops a stale dead embed at the product-save boundary" do
+        rich_content = persist_with_foreign_embed([embed(own_file), embed(dead_foreign_file)])
+
+        rich_content.description = [embed(own_file), embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "An unrelated edit" }] }]
+        removed_file_ids = rich_content.remove_stale_dead_cross_product_file_embeds
+        expect(rich_content.save).to be(true)
+
+        # The seller's own file and their new edit both survive; only the dead
+        # foreign embed is gone.
+        expect(removed_file_ids).to eq([dead_foreign_file.external_id])
+        expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+        expect(rich_content.description.last["content"].first["text"]).to eq("An unrelated edit")
+      end
+
+      it "saves a page whose only embed is a dead foreign one" do
+        rich_content = persist_with_foreign_embed([embed(dead_foreign_file)])
+
+        rich_content.description = [embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        expect(rich_content.save).to be(true)
+        expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([])
+      end
+
+      it "drops a dead foreign embed nested inside a file embed group" do
+        group = { "type" => "fileEmbedGroup", "attrs" => { "uid" => SecureRandom.uuid, "name" => "Files" }, "content" => [embed(own_file), embed(dead_foreign_file)] }
+        rich_content = persist_with_foreign_embed([group])
+
+        rich_content.description = [group.merge("attrs" => group["attrs"].merge("name" => "Renamed"))]
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        expect(rich_content.save).to be(true)
+        expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+      end
+
+      it "still rejects an ALIVE foreign embed on the same page" do
+        # Only dead embeds are safe to drop silently. An alive foreign file is
+        # still content the seller may have meant to include, so it stays a
+        # validation failure rather than being deleted for them.
+        alive_foreign_file = create(:product_file, link: create(:product, user: product.user))
+        rich_content = persist_with_foreign_embed([embed(dead_foreign_file), embed(alive_foreign_file)])
+
+        rich_content.description = [embed(dead_foreign_file), embed(alive_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        expect(rich_content.save).to be(false)
+        expect(rich_content.errors.full_messages.first).to include(alive_foreign_file.name_displayable)
+        expect(rich_content.errors.full_messages.first).not_to include(dead_foreign_file.name_displayable)
+        # The explicit cleanup changes the in-memory candidate, but a rejected save must
+        # not persist a partial cleanup.
+        expect(rich_content.reload.embedded_product_file_ids_in_order).to match_array([dead_foreign_file.id, alive_foreign_file.id])
+      end
+
+      it "does not drop a newly submitted dead foreign embed" do
+        rich_content = create(:product_rich_content, entity: product, description: [embed(own_file)])
+
+        rich_content.description = [embed(own_file), embed(dead_foreign_file)]
+        removed_file_ids = rich_content.remove_stale_dead_cross_product_file_embeds
+
+        expect(removed_file_ids).to eq([])
+        expect(rich_content.save).to be(false)
+        expect(rich_content.errors.full_messages.first).to include("not belonging to this product")
+        expect(rich_content.embedded_product_file_ids_in_order).to include(dead_foreign_file.id)
+      end
+
+      it "drops a dead embed from a new destination only with stored source provenance" do
+        source = persist_with_foreign_embed([embed(dead_foreign_file)])
+        destination = build(
+          :product_rich_content,
+          entity: product,
+          description: [embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Copied" }] }]
+        )
+
+        removed_file_ids = destination.remove_stale_dead_cross_product_file_embeds(
+          legacy_dead_file_ids: source.stored_stale_dead_cross_product_file_embed_ids
+        )
+
+        expect(removed_file_ids).to eq([dead_foreign_file.external_id])
+        expect(destination.save).to be(true)
+        expect(destination.reload.embedded_product_file_ids_in_order).to eq([])
+      end
+
+      it "drops the dead embed for a variant's content page too" do
+        variant = create(:variant, variant_category: create(:variant_category, link: product))
+        rich_content = build(:rich_content, entity: variant, description: [embed(own_file), embed(dead_foreign_file)])
+        rich_content.save!(validate: false)
+
+        rich_content.description = [embed(own_file), embed(dead_foreign_file), { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Edit" }] }]
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        expect(rich_content.save).to be(true)
+        expect(rich_content.reload.embedded_product_file_ids_in_order).to eq([own_file.id])
+      end
     end
   end
 
