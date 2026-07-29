@@ -52,6 +52,22 @@ export const loadProductEditPage = async () => {
   return module;
 };
 
+// Raised when the editor's code could not be downloaded, as distinct from an error thrown by the
+// editor once it is running. The boundary needs to tell those two apart because only the first one
+// can be helped by a reload — see the comment on `attemptRecoveryReload`, and the one in
+// ProductEdit/Boundary explaining why reloading for the second would loop forever.
+export class ProductEditChunkLoadError extends Error {
+  // The original fetch error, kept for error reporting. Assigned explicitly rather than through
+  // `new Error(message, { cause })`, which this project's TypeScript target does not include.
+  readonly reason: unknown;
+
+  constructor(reason: unknown) {
+    super("The product editor's code could not be downloaded");
+    this.name = "ProductEditChunkLoadError";
+    this.reason = reason;
+  }
+}
+
 // A dynamic import that has failed is remembered as failed. The browser keeps one entry per module
 // URL, and a fetch that failed leaves that entry holding the error, so every later import of the
 // same URL re-throws it immediately without going back to the network. Nothing inside the page can
@@ -129,6 +145,14 @@ export const useWarmProductEditPage = () => {
   }, []);
 };
 
-export const LazyProductEditPage = lazy(async () => ({
-  default: (await loadProductEditPage()).ProductEditPage,
-}));
+export const LazyProductEditPage = lazy(async () => {
+  // Only the download is wrapped, so the error React sees says which of the two failures this is:
+  // the code never arrived (reloadable), or the editor itself threw once running (not).
+  let module;
+  try {
+    module = await loadProductEditPage();
+  } catch (error) {
+    throw new ProductEditChunkLoadError(error);
+  }
+  return { default: module.ProductEditPage };
+});

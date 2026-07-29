@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { attemptRecoveryReload } from "$app/components/ProductEdit/load";
+import { attemptRecoveryReload, ProductEditChunkLoadError } from "$app/components/ProductEdit/load";
 
 // Catches the case where the product editor's code cannot be downloaded at all.
 //
@@ -56,8 +56,16 @@ export class ProductEditBoundary extends React.Component<{ children: React.React
   // which is the only way to get a real request for that chunk again. `attemptRecoveryReload` does
   // it at most once per tab, so a real outage still ends up here showing the error rather than
   // reloading in circles.
-  override componentDidCatch() {
-    attemptRecoveryReload();
+  //
+  // Only when the editor's code never arrived, though. Once it has downloaded, anything reaching
+  // this boundary came from the editor running — a bad prop, a crash in a child — and a reload
+  // cannot help with that: the fresh document downloads the chunk successfully, which clears the
+  // "already reloaded once" marker, and then hits the same deterministic error and reloads again.
+  // That is an endless loop, and the seller never reaches this error screen with its way out. So the
+  // reload is offered only for the failure a reload can actually fix, which the loader marks with
+  // its own error type.
+  override componentDidCatch(error: unknown) {
+    if (error instanceof ProductEditChunkLoadError) attemptRecoveryReload();
   }
 
   override render() {

@@ -155,10 +155,10 @@ describe("product editor loading", () => {
       vi.stubGlobal("Routes", { products_path: () => "/products" });
     });
 
-    const renderFailingEditor = () => {
+    const renderFailingEditor = (error: unknown) => {
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
       const Exploding = () => {
-        throw new Error("Failed to fetch dynamically imported module");
+        throw error;
       };
       render(
         <ProductEditBoundary>
@@ -168,27 +168,32 @@ describe("product editor loading", () => {
       consoleError.mockRestore();
     };
 
-    it("reloads once so the editor's code gets a real request again", () => {
-      renderFailingEditor();
+    const renderUndownloadableEditor = async () => {
+      const { ProductEditChunkLoadError } = await import("$app/components/ProductEdit/load");
+      renderFailingEditor(new ProductEditChunkLoadError(new Error("Failed to fetch dynamically imported module")));
+    };
+
+    it("reloads once so the editor's code gets a real request again", async () => {
+      await renderUndownloadableEditor();
 
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    it("does not reload a second time, so a real outage shows the error instead of looping", () => {
-      renderFailingEditor();
+    it("does not reload a second time, so a real outage shows the error instead of looping", async () => {
+      await renderUndownloadableEditor();
       cleanup();
-      renderFailingEditor();
+      await renderUndownloadableEditor();
 
       expect(reload).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("alert")).toBeTruthy();
     });
 
-    it("does not reload while the browser knows it is offline", () => {
+    it("does not reload while the browser knows it is offline", async () => {
       // Reloading offline would replace a screen offering a way back with the browser's own error
       // page, which offers none.
       vi.stubGlobal("navigator", { onLine: false });
 
-      renderFailingEditor();
+      await renderUndownloadableEditor();
 
       expect(reload).not.toHaveBeenCalled();
       expect(screen.getByRole("alert")).toBeTruthy();
@@ -203,6 +208,19 @@ describe("product editor loading", () => {
       await loadProductEditPage();
 
       expect(attemptRecoveryReload()).toBe(true);
+    });
+
+    it("does not reload for a failure inside the editor, which a reload would repeat forever", () => {
+      // A reload only helps when the editor's code never arrived. Once it has, an error means the
+      // editor itself failed while running, and that failure will happen again in the fresh
+      // document — which by then has downloaded the chunk successfully and so has forgotten it
+      // already reloaded once, leaving nothing to stop it reloading again. The seller would never
+      // reach the error screen and its way back to the products list.
+      renderFailingEditor(new TypeError("Cannot read properties of undefined (reading 'variants')"));
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Back to products" }).getAttribute("href")).toBe("/products");
     });
   });
 });
