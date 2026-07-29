@@ -366,7 +366,7 @@ module StripeMerchantAccountManager
     # above). If this read fails after the marker has moved, every later retry sees "already a
     # business" and skips seeding the representative entirely, leaving the seller stuck with a
     # company whose representative owns nothing — the state this whole code path exists to avoid.
-    unclaimed_percent_ownership = switching_to_business ? unclaimed_percent_ownership(stripe_account) : nil
+    unclaimed_percent_ownership = switching_to_business ? unclaimed_percent_ownership_on_stripe(stripe_account) : nil
 
     # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
     # diffed out and Stripe never re-validates it. Re-add the address from the current attributes so a
@@ -447,8 +447,12 @@ module StripeMerchantAccountManager
   # beneficial-owner form accepts shares with more than two decimals.
   def self.unclaimed_percent_ownership_on_stripe(stripe_account)
     persons = Stripe::Account.list_persons(stripe_account.id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
-    claimed = persons.reject { |person| person.relationship&.representative }
-                     .sum { |person| person.relationship&.percent_ownership.to_f }
+    # Read through to_h: a person Stripe returns without a relationship object at all raises
+    # NoMethodError on a plain `person.relationship`, and this must never be the thing that breaks
+    # a payout-settings save.
+    relationships = persons.filter_map { |person| person.to_h[:relationship] }
+    claimed = relationships.reject { |relationship| relationship[:representative] }
+                           .sum { |relationship| relationship[:percent_ownership].to_f }
     [(100 - claimed).floor(2), 0].max
   end
 
