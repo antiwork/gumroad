@@ -359,6 +359,14 @@ module StripeMerchantAccountManager
     diff_attributes[:capabilities] = capabilities.index_with { |capability| { requested: true } }
 
     entity_key = user_compliance_info.is_business? ? :company : :individual
+    switching_to_business = user_compliance_info.is_business? && last_user_compliance_info&.is_individual?
+
+    # Read the ownership Stripe already has on file BEFORE the account update below, because that
+    # update rewrites the metadata marker we use to detect the switch (see last_user_compliance_info
+    # above). If this read fails after the marker has moved, every later retry sees "already a
+    # business" and skips seeding the representative entirely, leaving the seller stuck with a
+    # company whose representative owns nothing — the state this whole code path exists to avoid.
+    unclaimed_percent_ownership = switching_to_business ? unclaimed_percent_ownership(stripe_account) : nil
 
     # On an automated retry the seller's compliance info is usually unchanged, so the postal code is
     # diffed out and Stripe never re-validates it. Re-add the address from the current attributes so a
@@ -371,7 +379,7 @@ module StripeMerchantAccountManager
 
     person_address_submitted = false
     if user_compliance_info.is_business?
-      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:)
+      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, unclaimed_percent_ownership:)
     end
 
     if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
@@ -382,7 +390,7 @@ module StripeMerchantAccountManager
     raise
   end
 
-  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false)
+  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false, unclaimed_percent_ownership: nil)
     stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
@@ -401,10 +409,10 @@ module StripeMerchantAccountManager
       # outright and the seller is left mid-migration. Claim only the ownership nobody else holds,
       # and claim none at all when the existing owners already account for the whole company.
       relationship = { title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE }
-      unclaimed_percent_ownership = unclaimed_percent_ownership(stripe_account, stripe_person)
-      if unclaimed_percent_ownership.positive?
+      unclaimed = unclaimed_percent_ownership || unclaimed_percent_ownership_on_stripe(stripe_account)
+      if unclaimed.positive?
         relationship[:owner] = true
-        relationship[:percent_ownership] = unclaimed_percent_ownership
+        relationship[:percent_ownership] = unclaimed
       end
       current_attributes.deep_merge!(relationship:)
     end
@@ -432,11 +440,16 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.unclaimed_percent_ownership(stripe_account, representative_person)
+  # How much of the company nobody has claimed yet, ignoring the representative's own recorded share
+  # so a partially-completed earlier attempt does not count against them on a retry. Rounds DOWN:
+  # under-claiming by a hundredth of a percent is harmless, whereas rounding up past what is actually
+  # free is how Stripe's "combined ownership would exceed 100 percent" rejection happens, and our own
+  # beneficial-owner form accepts shares with more than two decimals.
+  def self.unclaimed_percent_ownership_on_stripe(stripe_account)
     persons = Stripe::Account.list_persons(stripe_account.id, relationship: { owner: true }, limit: OWNER_LIST_LIMIT)["data"]
-    claimed = persons.reject { |person| person.id == representative_person.id }
+    claimed = persons.reject { |person| person.relationship&.representative }
                      .sum { |person| person.relationship&.percent_ownership.to_f }
-    [(100 - claimed).round(2), 0].max
+    [(100 - claimed).floor(2), 0].max
   end
 
   private_class_method

@@ -12959,6 +12959,67 @@ describe StripeMerchantAccountManager, :vcr do
         )
       end
 
+      it "rounds the claimed share DOWN so a fractional remainder cannot push the company over 100 percent" do
+        almost_everything_owner = Stripe::Person.construct_from(
+          id: "person_almost_everything",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: false, owner: true, percent_ownership: 99.995 }
+        )
+        stub_owner_list([almost_everything_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        # Rounding to the nearest hundredth would ask for 0.01 here, totalling 100.005 and drawing
+        # the very rejection this guard exists to prevent. Rounding down leaves nothing to claim.
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
+        expect(captured_attributes[:relationship]).not_to have_key(:owner)
+      end
+
+      it "treats an owner with no recorded share as owning nothing" do
+        share_less_owner = Stripe::Person.construct_from(
+          id: "person_share_less",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: false, owner: true, percent_ownership: nil }
+        )
+        stub_owner_list([share_less_owner])
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship][:percent_ownership]).to eq(100)
+      end
+
+      it "claims nothing when the recorded owners already add up to more than the whole company" do
+        over_claimed = [
+          Stripe::Person.construct_from(id: "person_a", object: "person", account: stripe_account.id,
+                                        relationship: { representative: false, owner: true, percent_ownership: 80 }),
+          Stripe::Person.construct_from(id: "person_b", object: "person", account: stripe_account.id,
+                                        relationship: { representative: false, owner: true, percent_ownership: 40 }),
+        ]
+        stub_owner_list(over_claimed)
+
+        captured_attributes = capture_person_update(last_individual_info)
+
+        expect(captured_attributes[:relationship]).not_to have_key(:owner)
+        expect(captured_attributes[:relationship]).not_to have_key(:percent_ownership)
+      end
+
+      it "uses the ownership figure the caller already read instead of asking Stripe again" do
+        expect(Stripe::Account).not_to receive(:list_persons)
+          .with(stripe_account.id, relationship: { owner: true }, limit: 100)
+
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, last_individual_info.external_id, "1234", unclaimed_percent_ownership: 25.0)
+
+        expect(captured_attributes[:relationship][:percent_ownership]).to eq(25.0)
+      end
+
       it "claims no ownership at all when the existing beneficial owners already account for the whole company" do
         full_owner = Stripe::Person.construct_from(
           id: "person_full_owner",
