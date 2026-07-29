@@ -171,11 +171,13 @@ class Api::V2::VariantsController < Api::V2::BaseController
           content: description,
           old_content: rich_content.description || []
         ).from_rich_content
-        rich_content.update!(
+        rich_content.assign_attributes(
           title: page[:title].presence,
           description: description.presence || [],
           position: index
         )
+        rich_content.remove_stale_dead_cross_product_file_embeds
+        rich_content.save!
         rich_contents_to_keep << rich_content
       end
 
