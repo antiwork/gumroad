@@ -106,6 +106,17 @@ class Ai::StoreAgentService
         (?:confirmed|approved|applied|live|done)\b
     )
   /ix
+  # Telling the creator to act on the card. The model does not stick to the word "confirm": in
+  # production it also writes "Approve it", "tap it whenever you're ready" and "click the card".
+  # Each verb needs an object that refers to the card or the change, so ordinary product advice
+  # such as "click Publish when you're happy with it" cannot match.
+  STAGED_CLAIM_CARD_INSTRUCTION = /
+    \b(?:please\s+)?(?:confirm|approve|tap|click|hit|press)\s+
+      (?:(?:on|it)\s+)?
+      (?:it|that|this|
+         (?:the|that|this|your)\s+(?:confirm(?:ation)?\s+)?(?:card|button))
+    \b
+  /ix
   STAGED_CLAIM_CURRENT_CUE = /
     (?:
       \b(?:again|now)\b
@@ -117,7 +128,18 @@ class Ai::StoreAgentService
            for\s+(?:your\s+)?(?:confirmation|approval))\b
       |
       (?:[:,;—–-]\s*|[.!]\s*|\band\s+)(?:please\s+)?(?:confirm|approve)\b
+      |
+      (?:[:,;—–-]\s*|[.!]\s*|\b(?:and|then)\s+)#{STAGED_CLAIM_CARD_INSTRUCTION}
     )
+  /ix
+  # Things the agent stages. The subjectless opener ("Staged deletion of the draft.") needs one of
+  # these to follow, so prose about the staging feature in general cannot be mistaken for a claim
+  # that this turn staged something.
+  STAGED_CLAIM_ACTION_NOUN = /
+    (?:deletion|removal|creation|addition|rename|renaming|archival|
+       update|updates|change|changes|edit|edits|
+       discount|discounts|offer\s+code|offer\s+codes|price\s+change|
+       publish(?:ing)?|unpublish(?:ing)?)
   /ix
   STAGED_CLAIM_CONDITIONAL_TAIL = /
     (?:
@@ -188,10 +210,11 @@ class Ai::StoreAgentService
       )
       (?![^.!?\n]*\?)
     /ix,
-    # "Staged.", "Staged successfully — confirm below", and the terse production opener.
+    # "Staged.", "Staged again", "Staged successfully — confirm below", and the terse production
+    # opener.
     /
       #{STAGED_CLAIM_BOUNDARY}
-      (?:(?:all|successfully)\s+)?staged(?:\s+(?:now|successfully))?\b
+      (?:(?:all|successfully)\s+)?staged(?:\s+(?:now|again|successfully))?\b
       (?!#{STAGED_CLAIM_NEGATED_OBJECT})
       (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
       (?!#{STAGED_CLAIM_COMPLETED_TAIL})
@@ -199,6 +222,25 @@ class Ai::StoreAgentService
       (?=\s*(?:\z|[.!]|[—–-]|\band\b|,\s*but\b|
         :\s*(?:please\s+)?(?:confirm|approve)\b|
         ,\s*(?:please\s+)?(?:confirm|approve)\b))
+    /ix,
+    # The subjectless participle opener, which production produces and the arms above miss because
+    # they all need a subject: "Staged deletion of the last draft. Approve it, then...". The action
+    # noun plus an instruction to act on the card is what separates it from prose describing how
+    # staging works in general ("Staged changes are reviewed before they apply").
+    /
+      #{STAGED_CLAIM_BOUNDARY}
+      staged\s+
+        (?:the\s+|a\s+|an\s+|your\s+|that\s+|this\s+|two\s+|both\s+)?
+        #{STAGED_CLAIM_ACTION_NOUN}\b
+      (?!#{STAGED_CLAIM_NEGATED_OBJECT})
+      (?!#{STAGED_CLAIM_HISTORICAL_TAIL})
+      (?!#{STAGED_CLAIM_COMPLETED_TAIL})
+      (?![^.!?\n]*\?)
+      (?:
+        (?=[^.!?\n]*#{STAGED_CLAIM_CURRENT_CUE})
+        |
+        (?=[^.!?\n]*[.!]\s*#{STAGED_CLAIM_CARD_INSTRUCTION})
+      )
     /ix,
     # Prepared/queued phrasing only counts with an instruction or explicit confirmation purpose in
     # the same sentence. Draft content and explanations can be reviewed without an action card.

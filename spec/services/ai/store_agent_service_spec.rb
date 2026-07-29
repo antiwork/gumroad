@@ -718,6 +718,14 @@ describe Ai::StoreAgentService do
           "The confirmation card appears below when a change is staged.",
           "The confirmation card appears below only after api_write succeeds.",
           "This request is still non-staged.",
+          # prose about how staging works reads as a subjectless claim word-for-word, so the
+          # participle opener must not match on the action noun alone
+          "Staged changes are reviewed before they apply.",
+          "Staged updates need your approval before they go live.",
+          "Staged deletion is how I remove a product; you always get to review it first.",
+          # instructions to act on something that isn't a confirmation card
+          "Click Publish when you're happy with it.",
+          "Tap Save on that form and your bio updates.",
           "You have 3 products.",
         ]
 
@@ -765,6 +773,16 @@ describe Ai::StoreAgentService do
           "Staged successfully — confirm below.",
           "Staged, but not already applied.",
           "It's staged but hasn't already been applied.",
+          # Subjectless participle openers, sampled from rows that persisted with no
+          # proposed_action AFTER the first guard shipped. Every arm before this one needed a
+          # subject ("I've staged", "it is staged", "the change is staged"), so these got through.
+          "Staged deletion of the last draft. Approve it, then tell me if you want to move on.",
+          "Staged again. The confirm card should be back — tap it whenever you're ready.",
+          "Staged removal of the duplicate mobile block. Tap the card to apply it.",
+          "Staged the price change. Click that card and it goes live.",
+          # The model's instruction vocabulary is not limited to "confirm".
+          "I've staged the update — hit the confirm button when you're ready.",
+          "That's staged, so press the card and it goes live.",
         ]
 
         phantoms.each do |reply|
