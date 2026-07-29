@@ -37,10 +37,8 @@ const tabVariants = cva("", {
     {
       variant: "buttons",
       active: true,
-      // `indicator` follows the seller's accent except on a themed checkout, where it is floored to
-      // stay visible against their background. The important modifier is required: Tab wraps Button
-      // via asChild, so both class strings are joined and Button's `border-border` can otherwise win
-      // the CSS-order fight.
+      // The important modifier is required: Tab wraps Button via asChild, so both class strings are
+      // joined and Button's `border-border` can otherwise win the CSS-order fight.
       className: "border-indicator! ring-1 ring-indicator",
     },
   ],
