@@ -18,7 +18,7 @@ class TwoFactorAuthenticationMailer < ApplicationMailer
   private
     def deliver_email
       email = @user.email
-      return unless EmailFormatValidator.valid?(email)
+      return unless EmailFormatValidator.deliverable?(email)
 
       mailer_args = { to: email, subject: @subject }
       mailer_args[:from] = @from if @from.present?

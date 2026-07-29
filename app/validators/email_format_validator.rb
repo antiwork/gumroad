@@ -38,6 +38,18 @@ class EmailFormatValidator < ActiveModel::EachValidator
       return false unless InvisibleCharacters.present_in?(email)
       InvisibleCharacters.normalize_email(email).match?(EMAIL_REGEX)
     end
+
+    # Whether we should attempt to DELIVER to this address, which is a different question from
+    # whether we would accept it as input today.
+    #
+    # Addresses stored before we started refusing invisible characters still carry them, and the
+    # delivery-time sanitizer cleans the recipient on the way out, so such an address is
+    # genuinely deliverable. Mailers must use this rather than valid?: guarding delivery on
+    # valid? would make us silently stop mailing exactly the accounts that already receive
+    # nothing, which is the problem we are fixing rather than a safety check.
+    def deliverable?(email)
+      valid?(InvisibleCharacters.normalize_email(email))
+    end
   end
 
   def validate_each(record, attribute, value)

@@ -262,7 +262,7 @@ class CustomerMailer < ApplicationMailer
   def subscription_magic_link(subscription_id, email)
     @subscription = Subscription.find(subscription_id)
 
-    return unless EmailFormatValidator.valid?(email)
+    return unless EmailFormatValidator.deliverable?(email)
 
     mail(
       to: email,

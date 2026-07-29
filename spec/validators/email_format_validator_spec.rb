@@ -121,4 +121,26 @@ RSpec.describe EmailFormatValidator do
       expect(EmailFormatValidator.valid?("a\u200Db@example.com")).to be true
     end
   end
+
+  # Whether we should try to DELIVER to an address is a different question from whether we would
+  # accept it as input. Addresses stored before the rejection existed still carry the character,
+  # and the delivery-time sanitizer cleans the recipient on the way out — so guarding delivery on
+  # valid? would silently stop mailing exactly the accounts that already receive nothing.
+  describe ".deliverable?" do
+    it "is true for an address carrying an invisible character, because the recipient is cleaned at delivery" do
+      expect(EmailFormatValidator.deliverable?("\u200Fbuyer@example.com")).to be true
+      expect(EmailFormatValidator.deliverable?("buyer\u00A0@example.com")).to be true
+    end
+
+    it "is true for an ordinary address" do
+      expect(EmailFormatValidator.deliverable?("buyer@example.com")).to be true
+    end
+
+    it "is false for an address that is malformed for any other reason" do
+      expect(EmailFormatValidator.deliverable?("not-an-address")).to be false
+      expect(EmailFormatValidator.deliverable?("\u200Fnot-an-address")).to be false
+      expect(EmailFormatValidator.deliverable?(nil)).to be false
+      expect(EmailFormatValidator.deliverable?("")).to be false
+    end
+  end
 end

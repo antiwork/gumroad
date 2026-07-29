@@ -40,7 +40,7 @@ class CreatorMailer < ApplicationMailer
     return unless user
 
     email = user.form_email
-    return unless EmailFormatValidator.valid?(email)
+    return unless EmailFormatValidator.deliverable?(email)
 
     @subject = "You're a Top Creator!"
 
@@ -58,7 +58,7 @@ class CreatorMailer < ApplicationMailer
 
     user = @scheduled_payout.user
     email = user.form_email
-    return if !EmailFormatValidator.valid?(email)
+    return if !EmailFormatValidator.deliverable?(email)
 
     @subject = "Your payout has been delayed"
 

@@ -10,7 +10,7 @@ class OneOffMailer < ApplicationMailer
   # param `reply_to`, e.g. reply_to: ApplicationMailer::NOREPLY_EMAIL_WITH_NAME
   def email(user_id: nil, email: nil, from: nil, subject:, body:, reply_to: nil, sender_domain: nil)
     email ||= User.alive.not_suspended.find_by(id: user_id)&.form_email
-    return unless EmailFormatValidator.valid?(email)
+    return unless EmailFormatValidator.deliverable?(email)
 
     from ||= "Gumroad <hi@#{CUSTOMERS_MAIL_DOMAIN}>"
     sender_domain ||= :customers

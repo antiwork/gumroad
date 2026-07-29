@@ -630,7 +630,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
       recipient = @recipient || @seller
       email = recipient.form_email
-      return unless EmailFormatValidator.valid?(email)
+      return unless EmailFormatValidator.deliverable?(email)
 
       mailer_args = { to: email, subject: @subject }
       mailer_args[:reply_to] = @reply_to if @reply_to.present?
