@@ -157,7 +157,22 @@ async function resolvePageComponent(name) {
 }
 
 createInertiaApp({
-  progress: false,
+  // Show Inertia's top-of-page progress bar on client-side navigations. This used to be `false`,
+  // which meant a tap on a link produced no feedback whatsoever until the next page finished
+  // rendering. Some of our page chunks are large (the product editor is a few hundred kilobytes),
+  // so on a slow connection a tap that WORKED and a tap that MISSED looked exactly the same for
+  // several seconds — sellers reasonably concluded the app was broken and filed support tickets
+  // saying clicks "do nothing" (gumroad-private#1343, gumroad-private#1469).
+  //
+  // `delay: 250` is Inertia's default: navigations that resolve faster than 250ms never draw the
+  // bar, so instant transitions (including prefetched sidebar links) still look instant and don't
+  // flash. Prefetch requests never show the bar at all — Inertia sets `showProgress: false` on
+  // them internally. `showSpinner: false` keeps it to the thin top bar with no corner spinner.
+  progress: {
+    color: "#ff90e8", // Gumroad pink, legible against both the light and dark page backgrounds.
+    delay: 250,
+    showSpinner: false,
+  },
   resolve: resolvePageComponent,
   title: (title) => title || "Gumroad",
   setup({ el, App, props }) {

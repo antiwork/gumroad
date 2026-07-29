@@ -53,6 +53,68 @@ describe SalesRelatedProductsInfo do
       # created record
       expect(described_class.find_by(smaller_product: products[1], larger_product: products[4]).sales_count).to eq(0)
     end
+
+    it "keeps every statement bounded to the batch size regardless of how many pairs there are" do
+      product = create(:product)
+      related = create_list(:product, 5)
+      stub_const("#{described_class}::SALES_COUNT_UPSERT_BATCH_SIZE", 2)
+
+      statements = []
+      allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
+        statements << sql if sql.include?(described_class.table_name)
+        original.call(sql, *args)
+      end
+
+      described_class.update_sales_counts(product_id: product.id, related_product_ids: related.map(&:id), increment: true)
+
+      # 5 pairs at 2 per statement => 3 statements, none carrying more than 2 VALUES tuples.
+      expect(statements.size).to eq(3)
+      expect(statements.map { _1.scan(/\(\d+, \d+, \d+, /).size }).to eq([2, 2, 1])
+      expect(related.all? { described_class.find_by(smaller_product_id: [product.id, _1.id].min, larger_product_id: [product.id, _1.id].max).sales_count == 1 }).to be(true)
+    end
+
+    it "accumulates repeated increments on the same pair" do
+      # Note this passes on the old read-then-write code too: sequential calls are not a
+      # real race. It is here as a regression guard on the upsert's arithmetic, since
+      # `ON DUPLICATE KEY UPDATE` is where a wrong increment source would show up. The
+      # concurrent case the upsert actually fixes (two callers both finding the pair
+      # missing, one increment lost to INSERT IGNORE) cannot be reproduced in-process.
+      product1 = create(:product)
+      product2 = create(:product)
+
+      2.times do
+        described_class.update_sales_counts(product_id: product1.id, related_product_ids: [product2.id], increment: true)
+      end
+
+      info = described_class.find_by(smaller_product_id: [product1.id, product2.id].min, larger_product_id: [product1.id, product2.id].max)
+      expect(info.sales_count).to eq(2)
+      expect(described_class.where(smaller_product_id: info.smaller_product_id, larger_product_id: info.larger_product_id).count).to eq(1)
+    end
+
+    it "counts a repeated related product once and never pairs a product with itself" do
+      product = create(:product)
+      other = create(:product)
+
+      described_class.update_sales_counts(
+        product_id: product.id,
+        related_product_ids: [other.id, other.id, product.id],
+        increment: true
+      )
+
+      expect(described_class.count).to eq(1)
+      info = described_class.last
+      expect(info.sales_count).to eq(1)
+      expect([info.smaller_product_id, info.larger_product_id]).to match_array([product.id, other.id])
+    end
+
+    it "does nothing when there are no pairs to touch" do
+      product = create(:product)
+
+      expect do
+        described_class.update_sales_counts(product_id: product.id, related_product_ids: [], increment: true)
+        described_class.update_sales_counts(product_id: product.id, related_product_ids: [product.id], increment: true)
+      end.not_to change(described_class, :count)
+    end
   end
 
   describe ".related_products" do

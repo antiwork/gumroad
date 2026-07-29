@@ -52,6 +52,18 @@ describe Api::Internal::Installments::PreviewEmailsController do
       expect(response.parsed_body).to eq("message" => "Failed to send preview email. Please try again later.")
     end
 
+    it "returns an error when the email service raises SendGridApiResponseError" do
+      # A preview to a web.de/GMX recipient is deliberately sent via SendGrid
+      # rather than Resend, so a SendGrid failure has to surface as the same
+      # friendly error instead of an unhandled 500.
+      allow(PostEmailApi).to receive(:process).and_raise(SendGridApiResponseError, "Bad Request")
+
+      post :create, params: { id: installment.external_id }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("message" => "Failed to send preview email. Please try again later.")
+    end
+
     it "returns an error while previewing an email if the logged-in user has uncofirmed email" do
       controller.logged_in_user.update_attribute(:unconfirmed_email, "john@example.com")
       expect(PostSendgridApi).to_not receive(:process)
