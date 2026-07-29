@@ -13,13 +13,18 @@ class CheckoutController < ApplicationController
       cart: -> { cart_presenter.cart_props },
       checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
-      # Carry the seller's accent colour through checkout so the buyer's journey does not go
+      stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
+      # Carry the seller's branding through checkout so the buyer's journey does not go
       # seller-branded product page → Gumroad-pink payment screen → seller-branded content page
-      # (gumroad-private#1493). Only the accent: see SellerProfile#accent_styles for why the
-      # background and font are deliberately left as Gumroad's.
+      # (gumroad-private#1493).
       #
-      # nil for empty and multi-seller carts, in which case the page keeps the stock palette.
-      accent_styles: -> { sole_seller_accent_styles(cart_presenter.cart) },
+      # The CSS matches the storefront and post-purchase content page, while the structured theme
+      # lets Stripe's cross-origin fields use the same values without waiting for the CSS to reach
+      # the DOM.
+      #
+      # nil for empty and multi-seller checkouts, in which case the page keeps the stock palette —
+      # see the method for why a mixed checkout deliberately gets no branding.
+      checkout_style: -> { sole_seller_checkout_style(cart_presenter.cart, checkout_presenter.checkout_seller_context(params: checkout_params)) },
     }
   end
 
@@ -110,44 +115,50 @@ class CheckoutController < ApplicationController
   end
 
   private
-    # The seller accent CSS for this checkout, or nil when there is no single seller to take it from.
+    # The seller's palette CSS for this checkout, or nil when there is no single seller to take it
+    # from.
     #
-    # The seller has to be resolved from the saved cart AND from the `?product=` parameter together,
-    # because the two arrival paths carry the products differently and the page renders the union of
-    # both. A buyer clicking "I want this!" on a product page lands on /checkout?product=<permalink>
-    # with the product not yet persisted — the frontend merges it in from `checkout.add_products` and
-    # only saves it to the cart afterwards, in a partial visit. Reading the saved cart alone would
-    # therefore mean:
+    # The seller has to be resolved from the saved cart and the products introduced by checkout URL
+    # parameters together, because the page renders the union of both. A buyer clicking "I want
+    # this!" on a product page lands on /checkout?product=<permalink> with the product not yet
+    # persisted — the frontend merges it in from `checkout.add_products` and only saves it to the
+    # cart afterwards, in a partial visit. Wishlists introduce products the same way, while a
+    # gift-wishlist arrival clears the saved cart before adding its product.
     #
-    #   - a first-time buyer, who has no saved cart at all, never sees the seller's accent. That is
+    # Reading the saved cart alone would therefore mean:
+    #
+    #   - a first-time buyer, who has no saved cart at all, never sees the seller's palette. That is
     #     exactly the product-page-to-payment-screen journey this is meant to fix, so the feature
     #     would be a no-op on its main path.
     #   - a buyer who already had seller X's product saved and clicks buy on seller Y's product page
-    #     would get X's accent over a checkout showing both sellers' products, which is the
+    #     would get X's palette over a checkout showing both sellers' products, which is the
     #     misbranding the single-seller rule exists to prevent.
     #
-    # So both sources are unioned, and the accent is used only when the union is exactly one seller.
-    def sole_seller_accent_styles(cart)
-      seller_ids = cart ? cart.visible_seller_ids : []
-      seller_ids = (seller_ids + [arriving_product&.user_id]).compact.uniq
+    # So both sources are combined with the same clear-cart rule as CheckoutPresenter, and the
+    # palette is used only when the final product set has exactly one seller.
+    def sole_seller_checkout_style(cart, checkout_seller_context)
+      seller_ids = checkout_seller_context[:clear_cart] ? [] : (cart ? cart.visible_seller_ids : [])
+      seller_ids = (seller_ids + checkout_seller_context[:seller_ids]).uniq
       return unless seller_ids.one?
 
-      User.find_by(id: seller_ids.first)&.seller_profile&.accent_styles
-    end
+      profile = User.find_by(id: seller_ids.first)&.seller_profile
+      css = profile&.custom_styles.presence
+      return unless css
 
-    # The product named by `?product=<permalink>`, resolved the same way CheckoutPresenter's
-    # add_single_product_props resolves it, so the accent and the cart item rendered from that same
-    # parameter cannot disagree about which seller this checkout is for.
-    #
-    # Guarded on String because the parameter is buyer-supplied and can arrive as a nested hash
-    # (`?product[x]=y`), which the query builder cannot quote — see the "nested values" spec.
-    def arriving_product
-      return @arriving_product if defined?(@arriving_product)
-
-      permalink = params[:product]
-      return @arriving_product = nil unless permalink.is_a?(String) && permalink.present?
-
-      @arriving_product = logged_in_user ? Link.fetch_leniently(permalink, user: logged_in_user) : Link.find_by_unique_permalink(permalink)
+      {
+        css:,
+        theme: {
+          accent_color: profile.highlight_color,
+          background_color: profile.background_color,
+          text_color: profile.text_color_on_background,
+          danger_color: profile.danger_color,
+          font_family: profile.font_family,
+        },
+      }
+    rescue SassC::SyntaxError
+      # A template compilation bug must not break the shared payment surface. Persisted values are
+      # checked before compilation, but checkout still fails closed if Sass rejects trusted input.
+      nil
     end
 
     # True when the exception is a CartProduct validation failure caused ONLY by a

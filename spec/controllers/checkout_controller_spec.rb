@@ -51,6 +51,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                us_states: STATES,
                                              })
       expect(inertia.props[:recommended_products]).to be_nil
+      expect(inertia.props[:stripe_fonts_css_source]).to eq(SellerProfile.seller_fonts_css_source)
       meta_by_property = inertia.props[:_inertia_meta].filter_map { |t| [t[:property], t[:content]] if t[:property] }.to_h
       expect(meta_by_property).to include(
         "gr:google_analytics:enabled" => "true",
@@ -67,9 +68,13 @@ describe CheckoutController, type: :controller, inertia: true do
       expect(response).to be_successful
     end
 
-    describe "accent_styles prop" do
+    describe "checkout_style prop" do
       let(:browser_guid) { SecureRandom.uuid }
-      let(:branded_seller) { create(:user).tap { _1.seller_profile.update!(highlight_color: "#009a49") } }
+      let(:branded_seller) do
+        create(:user).tap do |seller|
+          seller.seller_profile.update!(highlight_color: "#009a49", background_color: "#f8efe3", font: "Roboto Mono")
+        end
+      end
 
       before { cookies[:_gumroad_guid] = browser_guid }
 
@@ -79,30 +84,66 @@ describe CheckoutController, type: :controller, inertia: true do
         end
       end
 
-      it "carries the seller's accent when every product in the cart is theirs" do
+      it "carries the seller's palette when every product in the cart is theirs" do
         cart_with(create(:product, user: branded_seller), create(:product, user: branded_seller))
 
         get :show
 
-        expect(inertia.props[:accent_styles]).to eq(branded_seller.seller_profile.accent_styles)
-        expect(inertia.props[:accent_styles]).to include("--accent:0 154 73")
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
-      it "sends no accent for a cart spanning two sellers" do
+      it "sends the whole palette, not just the accent" do
+        # The point of this change over the accent-only version: the payment screen picks up the
+        # seller's background, body text colour and font as well, so it matches the product page
+        # the buyer just came from and the content page they land on.
+        cart_with(create(:product, user: branded_seller))
+
+        get :show
+
+        checkout_style = inertia.props[:checkout_style]
+        styles = checkout_style[:css]
+        # Note the space after each colon: SassC's :compressed output keeps it inside a custom
+        # property's value, so these are the literals the browser actually receives.
+        expect(styles).to include("--accent: 0 154 73")
+        expect(styles).to include("--body-bg: #f8efe3")
+        expect(styles).to include(%(--font-family: "Roboto Mono"))
+        # checkout_style.css also carries a body { } rule, which is what actually repaints the page
+        # background rather than only exposing the custom property for components to opt into.
+        expect(styles).to include("body{background-color:#f8efe3")
+        expect(checkout_style[:theme]).to eq({
+                                               accent_color: "#009a49",
+                                               background_color: "#f8efe3",
+                                               text_color: "#000000",
+                                               danger_color: "#9b1c12",
+                                               font_family: %("Roboto Mono", "ABC Favorit", monospace),
+                                             })
+      end
+
+      it "sends no styles for a cart spanning two sellers" do
+        # A mixed cart has no seller whose branding could fairly represent it — see
+        # Cart#visible_seller_ids and CheckoutController#sole_seller_checkout_style.
         cart_with(create(:product, user: branded_seller), create(:product, user: create(:user)))
 
         get :show
 
-        expect(inertia.props[:accent_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
-      it "sends no accent when there is no cart and no product parameter" do
+      it "sends no styles when there is no cart and no product parameter" do
         get :show
 
-        expect(inertia.props[:accent_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
-      it "carries the seller's accent for a direct product arrival with no saved cart" do
+      it "sends no styles for an empty cart" do
+        cart_with
+
+        get :show
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "carries the seller's palette for a direct product arrival with no saved cart" do
         # The main journey: clicking "I want this!" links to /checkout?product=<permalink> and the
         # product is not persisted until the frontend saves the cart afterwards, in a partial visit.
         # Reading only the saved cart would make the feature a no-op for every first-time buyer.
@@ -110,10 +151,10 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show, params: { product: product.unique_permalink }
 
-        expect(inertia.props[:accent_styles]).to eq(branded_seller.seller_profile.accent_styles)
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
-      it "sends no accent when the arriving product's seller differs from the saved cart's" do
+      it "sends no styles when the arriving product's seller differs from the saved cart's" do
         # The page renders the saved cart plus the arriving product, so this checkout shows two
         # sellers' products. Branding it with either one misrepresents the other.
         cart_with(create(:product, user: branded_seller))
@@ -121,66 +162,84 @@ describe CheckoutController, type: :controller, inertia: true do
 
         get :show, params: { product: arriving.unique_permalink }
 
-        expect(inertia.props[:accent_styles]).to be_nil
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
-      it "still carries the accent when the arriving product's seller matches the saved cart's" do
+      it "still carries the palette when the arriving product's seller matches the saved cart's" do
         cart_with(create(:product, user: branded_seller))
         arriving = create(:product, user: branded_seller)
 
         get :show, params: { product: arriving.unique_permalink }
 
-        expect(inertia.props[:accent_styles]).to eq(branded_seller.seller_profile.accent_styles)
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
       end
 
-      it "sends no accent when the stored colour is not a usable hex value" do
-        # HexColorValidator anchors per line rather than per string, and update_column bypasses it
-        # entirely, so unparseable values are persistable. A malformed --accent would unset the pay
-        # button's colour; no CSS at all leaves Gumroad's default palette in place instead.
+      it "carries the seller's palette for products added from a wishlist" do
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when wishlist products differ from the saved cart's seller" do
+        cart_with(create(:product, user: branded_seller))
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "ignores the saved cart when a gift-wishlist arrival clears it" do
+        cart_with(create(:product, user: create(:user)))
+        wishlist_product = create(
+          :wishlist_product,
+          wishlist: create(:wishlist),
+          product: create(:product, user: branded_seller)
+        )
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when the stored colour contains injected SCSS" do
         seller = create(:user)
         # tap(&:save!) first: seller_profile is built-but-unsaved until something persists it, and
         # update_column on a new record raises.
-        seller.seller_profile.tap(&:save!).update_column(:highlight_color, "not a colour")
+        seller.seller_profile.tap(&:save!).update_column(
+          :highlight_color,
+          "#ffffff\n)}; } body { display:none !important; } :root { --x: \#{split-color(#ffffff"
+        )
         cart_with(create(:product, user: seller))
 
         get :show
 
-        expect(inertia.props[:accent_styles]).to be_nil
+        expect(response).to be_successful
+        expect(inertia.props[:checkout_style]).to be_nil
       end
 
-      it "sends only the accent trio, never the seller's background or font" do
-        # Guards the split between #accent_styles and #custom_styles at the surface that consumes it:
-        # a later change routing checkout at custom_styles would swap the payment form's background
-        # and typography, which is deliberately out of scope here.
-        cart_with(create(:product, user: branded_seller))
-
-        get :show
-
-        # Asserted on a present value rather than a bare `not_to include`, which nil would satisfy
-        # trivially and so would pass even if the prop were missing altogether.
-        styles = inertia.props[:accent_styles]
-        expect(styles).to be_present
-        expect(styles).not_to include("--body-bg")
-        expect(styles).not_to include("--font-family")
-      end
-
-      it "recomputes the accent on the partial request the frontend makes when the cart changes" do
+      it "recomputes the palette on the partial request the frontend makes when the cart changes" do
         # Saving the cart is a partial Inertia visit (see the `only:` list in Checkout/Show.tsx),
-        # and the accent depends on which sellers are in the cart. If this prop stopped being
+        # and the palette depends on which sellers are in the cart. If this prop stopped being
         # served on a partial request, a buyer emptying a mixed cart down to one seller would keep
-        # whatever accent the page loaded with. Asserting the server half of that contract here.
+        # whatever branding the page loaded with. Asserting the server half of that contract here.
         #
         # Reads the response body rather than the `inertia` matcher helper, which only captures
         # props for a full page render.
         cart_with(create(:product, user: branded_seller))
         request.headers["X-Inertia"] = "true"
         request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
-        request.headers["X-Inertia-Partial-Data"] = "cart,flash,accent_styles"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,checkout_style"
 
         get :show
 
-        expect(response.parsed_body["props"]).to include("accent_styles")
-        expect(response.parsed_body["props"]["accent_styles"]).to include("--accent:0 154 73")
+        expect(response.parsed_body["props"]).to include("checkout_style")
+        expect(response.parsed_body.dig("props", "checkout_style", "css")).to include("--accent: 0 154 73")
       end
     end
 

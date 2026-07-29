@@ -16,6 +16,7 @@ describe SellerProfile do
       expect(subject.custom_styles).to include("--filled: 0 0 0")
       expect(subject.custom_styles).to include("--body-bg: #000000")
       expect(subject.custom_styles).to include("--color: 255 255 255")
+      expect(subject.custom_styles).to include("--danger: 220 52 30;--contrast-danger: 255 255 255")
       expect(subject.custom_styles).to include("--font-family: \"Roboto Mono\", \"ABC Favorit\", monospace")
     end
 
@@ -62,6 +63,43 @@ describe SellerProfile do
 
       expect(just_under_the_old_cutoff).to eq(just_over_the_old_cutoff)
     end
+
+    it "expands a legacy three-digit accent colour rather than breaking on it" do
+      # HexColorValidator only runs on normal saves, so update_column and raw SQL have written
+      # three-digit values historically. Checkout now serves this same CSS (see
+      # CheckoutController#sole_seller_checkout_style), so those legacy rows have to keep producing
+      # a usable accent — SassC's split-color() understands short hex natively.
+      subject.update_column(:highlight_color, "#0f0")
+      subject.reload
+
+      expect(subject.custom_styles).to include("--accent: 0 255 0")
+    end
+
+    it "does not compile stored values that can inject SCSS" do
+      subject.custom_styles
+      subject.update_column(
+        :highlight_color,
+        "#ffffff\n)}; } body { display:none !important; } :root { --x: \#{split-color(#ffffff"
+      )
+
+      expect(subject.reload.custom_styles).to eq("")
+    end
+
+    it "does not return cached CSS for an unsafe stored font" do
+      subject.custom_styles
+      subject.update_column(:font, "Roboto Mono; } body { display: none }")
+
+      expect(subject.reload.custom_styles).to eq("")
+    end
+  end
+
+  describe "validations" do
+    it "rejects a colour with a valid first line and trailing content" do
+      subject = build(:seller_profile, highlight_color: "#ffffff\nbody { display: none }")
+
+      expect(subject).not_to be_valid
+      expect(subject.errors[:highlight_color]).to include("is not a valid hexadecimal color")
+    end
   end
 
   describe "text colour helpers" do
@@ -83,66 +121,26 @@ describe SellerProfile do
     end
   end
 
-  describe "#accent_styles" do
-    subject { create(:seller_profile, highlight_color: "#009a49", font: "Roboto Mono", background_color: "#000000") }
+  describe "danger colour helpers" do
+    it "keeps the standard red when it contrasts with the background" do
+      subject = build(:seller_profile, background_color: "#ffffff")
 
-    it "emits the accent trio and nothing else" do
-      # Same colour maths as #custom_styles above: white on #009a49 is only 3.67:1, so the displayed
-      # accent darkens to #008941 (0 137 65) while --accent keeps the seller's saved colour.
-      expect(subject.accent_styles).to eq(":root{--accent:0 154 73;--accent-with-text:0 137 65;--contrast-accent:255 255 255}")
+      expect(subject.danger_color).to eq("#dc341e")
+      expect(subject.text_color_on_danger).to eq("#ffffff")
     end
 
-    it "leaves the page chrome alone" do
-      # The whole point of this being separate from #custom_styles: checkout takes the accent without
-      # inheriting the seller's background, body text colour or font.
-      %w[--body-bg --font-family --color --filled --primary body].each do |chrome|
-        expect(subject.accent_styles).not_to include(chrome)
-      end
+    it "uses a darker red on a light background where the standard red is not legible" do
+      subject = build(:seller_profile, background_color: "#f8efe3")
+
+      expect(subject.danger_color).to eq("#9b1c12")
+      expect(ContrastColor.ratio_between(subject.danger_color, subject.background_color)).to be >= 4.5
     end
 
-    it "produces the same RGB triples as the full stylesheet for the same colours" do
-      # rgb_triplet re-implements the SCSS split-color() function, so the two paths must not drift.
-      # Asserted against #custom_styles rather than literals so a change to either side is caught.
-      expect(subject.custom_styles).to include("--accent: 0 154 73")
-      expect(subject.accent_styles).to include("--accent:0 154 73")
-    end
+    it "falls back to readable neutral text when no red candidate contrasts" do
+      subject = build(:seller_profile, background_color: "#dc341e")
 
-    it "handles a colour whose channels have leading zeroes" do
-      # "#0a0b0c" is the case a naive to_i gets wrong by dropping each channel's leading zero.
-      subject.update!(highlight_color: "#0a0b0c")
-
-      expect(subject.accent_styles).to include("--accent:10 11 12")
-    end
-
-    it "expands a legacy three-digit colour rather than truncating it" do
-      # HexColorValidator only runs on normal saves, so update_column and raw SQL have written
-      # three-digit values historically. Splitting into pairs would drop the trailing digit and emit
-      # a one-number accent, which is not a valid colour — the pay button and focus rings would lose
-      # their colour on checkout while the seller's storefront still rendered correctly.
-      subject.update_column(:highlight_color, "#0f0")
-      subject.reload
-
-      expect(subject.accent_styles).to include("--accent:0 255 0")
-    end
-
-    it "emits nothing at all when the stored colour cannot be parsed" do
-      # A malformed --accent unsets the pay button's colour, which is worse on a payment page than
-      # keeping Gumroad's default palette. Multiline values are persistable because the validator's
-      # regex anchors per line rather than per string.
-      subject.update_column(:highlight_color, "#abcdef\n} body{display:none}")
-      subject.reload
-
-      expect(subject.accent_styles).to be_nil
-    end
-
-    it "is invalidated when the seller changes their accent colour" do
-      # The after_save hook clears both cache keys. Without the accent_styles deletion this returns
-      # the stale colour forever, so checkout and the storefront disagree.
-      expect(subject.accent_styles).to include("--accent:0 154 73")
-
-      subject.update!(highlight_color: "#ff0000")
-
-      expect(subject.accent_styles).to include("--accent:255 0 0")
+      expect(subject.danger_color).to eq("#ffffff")
+      expect(subject.text_color_on_danger).to eq("#000000")
     end
   end
 
@@ -161,6 +159,25 @@ describe SellerProfile do
     it "returns a monospace fallback for a monospace font" do
       subject.update!(font: "Roboto Mono")
       expect(subject.font_family).to eq(%("Roboto Mono", "ABC Favorit", monospace))
+    end
+  end
+
+  describe "font CSS sources" do
+    it "builds one Stripe-compatible stylesheet containing every seller font" do
+      source = described_class.seller_fonts_css_source
+
+      expect(source).not_to include("ABC%20Favorit")
+      described_class::FONT_CHOICES.without("ABC Favorit").each do |font|
+        expect(source).to include("family=#{Addressable::URI.encode(font)}:wght@400;600")
+      end
+    end
+
+    it "builds the active font's storefront stylesheet from the same source" do
+      subject = build(:seller_profile, font: "Roboto Mono")
+
+      expect(subject.font_css_source).to eq(
+        "https://fonts.googleapis.com/css2?family=Roboto%20Mono:wght@400;600&display=swap"
+      )
     end
   end
 end

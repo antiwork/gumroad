@@ -34,6 +34,7 @@ import {
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
+import { type CheckoutTheme, CheckoutThemeProvider } from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -69,11 +70,13 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
-  // The seller's accent custom properties, when a single seller owns everything on this checkout.
+  // The seller's custom CSS and the matching values for Stripe's cross-origin fields, when a
+  // single seller owns everything on this checkout.
   // The controller always evaluates it, so on a full page load the key is present and merely null
-  // for empty and multi-seller carts; declared optional so a partial reload omitting it still
+  // for empty and multi-seller checkouts; declared optional so a partial reload omitting it still
   // satisfies validation.
-  accent_styles?: string | null;
+  checkout_style?: { css: string; theme: CheckoutTheme } | null;
+  stripe_fonts_css_source: string;
   checkout: {
     add_products: ProductToAdd[];
     address: { street: string | null; city: string | null; zip: string | null } | null;
@@ -675,12 +678,12 @@ const CheckoutIndexPage = () => {
 
   const debouncedSaveCartState = useDebouncedCallback(() => {
     cartForm.patch(Routes.checkout_path(), {
-      // `accent_styles` is derived from the cart's contents (see CheckoutController#show), so it has
+      // `checkout_style` is derived from the cart's contents (see CheckoutController#show), so it has
       // to be refreshed by the same request that saves them. Without it, removing or adding an item
       // that changes the cart between one seller and several would save the new cart while the
-      // injected <head> style kept the old seller's accent — branding that no longer matches what
+      // injected <head> style kept the old seller's palette — branding that no longer matches what
       // the buyer is paying for.
-      only: ["cart", "flash", "accent_styles"],
+      only: ["cart", "flash", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
     });
@@ -772,13 +775,15 @@ const CheckoutIndexPage = () => {
 
   return (
     <StateContext.Provider value={reducer}>
-      {/* Applies the seller's accent to the pay button, links and focus rings. The defaults it
-          overrides are declared inside `@layer base` (stylesheets/_global.scss), and an unlayered
-          style beats a layered one wherever it sits in the document — so this wins the cascade by
-          layer precedence, not by insertion order. Absent for empty and multi-seller carts. */}
-      {props.accent_styles ? (
+      {/* Applies the seller's palette — accent, background, body text colour and font — to the
+          checkout page. The defaults it overrides are declared inside `@layer base`
+          (stylesheets/_global.scss), and an unlayered style beats a layered one wherever it sits
+          in the document — so this wins the cascade by layer precedence, not by insertion order.
+          The CSS also carries a `body { }` rule, which is why the background follows too.
+          Absent for empty and multi-seller checkouts. */}
+      {props.checkout_style ? (
         <Head>
-          <style>{props.accent_styles}</style>
+          <style>{props.checkout_style.css}</style>
         </Head>
       ) : null}
       {redirecting ? null : results ? (
@@ -791,12 +796,19 @@ const CheckoutIndexPage = () => {
           <Receipt results={results} discoverUrl={discover_url} canBuyerSignUp={canBuyerSignUp} />
         )
       ) : (
-        <Checkout
-          discoverUrl={discover_url}
-          cart={cartForm.data.cart}
-          updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
-          recommendedProducts={props.recommended_products ?? null}
-        />
+        <CheckoutThemeProvider
+          value={{
+            theme: props.checkout_style?.theme ?? null,
+            stripe_fonts_css_source: props.stripe_fonts_css_source,
+          }}
+        >
+          <Checkout
+            discoverUrl={discover_url}
+            cart={cartForm.data.cart}
+            updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
+            recommendedProducts={props.recommended_products ?? null}
+          />
+        </CheckoutThemeProvider>
       )}
       {currentOffer && surchargesIfAccepted ? (
         <Modal open onClose={completeOffer} title={currentOffer.text}>

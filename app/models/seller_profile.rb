@@ -2,6 +2,16 @@
 
 class SellerProfile < ApplicationRecord
   FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"]
+  DANGER_COLOR_CHOICES = ["#dc341e", "#9b1c12", "#ffb4ab"]
+
+  def self.google_fonts_css_source(fonts)
+    families = fonts.sort.map { "family=#{_1}:wght@400;600" }.join("&")
+    Addressable::URI.encode("https://fonts.googleapis.com/css2?#{families}&display=swap")
+  end
+
+  def self.seller_fonts_css_source
+    google_fonts_css_source(FONT_CHOICES.without("ABC Favorit"))
+  end
 
   belongs_to :seller, class_name: "User"
 
@@ -26,34 +36,9 @@ class SellerProfile < ApplicationRecord
     [updated_at, seller.seller_profile_sections.on_profile.maximum(:updated_at)].compact.max
   end
 
-  # Just the accent custom properties, with no page chrome — for surfaces that should carry the
-  # seller's accent colour without adopting their background, text colour or font.
-  #
-  # Checkout uses this rather than custom_styles because checkout is a shared Gumroad surface that a
-  # buyer reaches mid-flow: the pay button, links and focus rings reading as the seller's brand is
-  # the win sellers are asking for, while swapping --body-bg and --font-family underneath a payment
-  # form changes the legibility of every element on it. Those live on a separate change.
-  #
-  # The three properties are emitted together on purpose. --accent-with-text and --contrast-accent
-  # are a matched pair produced by ContrastColor#accessible_accent, so emitting the accent without
-  # them would leave text-bearing accent areas (the pay button most importantly) drawing the
-  # seller's colour underneath Gumroad's default text colour, which is exactly the contrast failure
-  # #6511 fixed.
-  def accent_styles
-    Rails.cache.fetch(accent_style_cache_name) do
-      accent = rgb_triplet(highlight_color)
-      # An unusable stored colour means emit nothing rather than a broken custom property: a
-      # malformed `--accent` takes the pay button, links and focus rings down to their unset state,
-      # which is worse on a payment page than simply keeping Gumroad's default palette.
-      next if accent.nil?
-
-      <<~CSS.strip
-        :root{--accent:#{accent};--accent-with-text:#{rgb_triplet(accent_color_for_text_areas)};--contrast-accent:#{rgb_triplet(text_color_on_highlight)}}
-      CSS
-    end
-  end
-
   def custom_styles
+    return "" unless custom_style_attributes_safe?
+
     Rails.cache.fetch(custom_style_cache_name) do
       component_path = File.read(Rails.root.join("app", "views", "layouts", "custom_styles", "styles.scss.erb"))
       sass = ERB.new(component_path).result(binding)
@@ -103,6 +88,16 @@ class SellerProfile < ApplicationRecord
     ContrastColor.for(text_color_on_background)
   end
 
+  def danger_color
+    DANGER_COLOR_CHOICES.find do |color|
+      ContrastColor.ratio_between(color, background_color).to_f >= ContrastColor::WCAG_AA_NORMAL_TEXT
+    end || text_color_on_background
+  end
+
+  def text_color_on_danger
+    ContrastColor.for(danger_color)
+  end
+
   def font_family
     fallback = case font
                when "Domine", "Merriweather", "Roboto Slab"
@@ -115,15 +110,16 @@ class SellerProfile < ApplicationRecord
     %("#{font}", "ABC Favorit", #{fallback})
   end
 
-  def custom_style_cache_name
-    # Bumped to v4 when text-bearing accent areas started rendering a brightness-adjusted accent so
-    # their text could clear 4.5:1 (v3 was the move from HSL lightness to WCAG contrast). Without the
-    # bump, sellers with already-cached CSS would keep being served the old colour pair.
-    "users/#{seller.id}/custom_styles_v4"
+  def font_css_source
+    return if font == "ABC Favorit"
+
+    self.class.google_fonts_css_source([font])
   end
 
-  def accent_style_cache_name
-    "users/#{seller.id}/accent_styles_v1"
+  def custom_style_cache_name
+    # v5 invalidated CSS compiled before persisted style values were checked as a complete string.
+    # Without the bump, a previously cached injection could outlive a repaired database row.
+    "users/#{seller.id}/custom_styles_v5"
   end
 
   def validate_json_data
@@ -142,29 +138,13 @@ class SellerProfile < ApplicationRecord
   end
 
   private
-    def clear_custom_style_cache
-      Rails.cache.delete custom_style_cache_name
-      # The accent-only CSS is derived from highlight_color too, so it has to be invalidated by the
-      # same save. Missing this would serve checkout the seller's previous accent indefinitely while
-      # their storefront showed the new one.
-      Rails.cache.delete accent_style_cache_name
+    def custom_style_attributes_safe?
+      HexColorValidator.safe_for_css?(highlight_color) &&
+        HexColorValidator.safe_for_css?(background_color) &&
+        font.in?(FONT_CHOICES)
     end
 
-    # The "R G B" triple the CSS custom properties expect, or nil for a value that is not a colour.
-    #
-    # Parsed by ContrastColor.parse — the same parser the contrast maths already uses, so all three
-    # emitted properties agree about what a stored value means. Going through it also handles the two
-    # stored shapes a naive six-digit split gets wrong:
-    #
-    #   - Three-digit hex (#f0a). These rows exist: HexColorValidator only runs on normal saves, so
-    #     update_column and raw SQL have written short forms historically. Splitting into pairs drops
-    #     the last digit and emits a one-number accent, which is not a valid colour — the pay button
-    #     and focus rings would lose their colour on checkout while the seller's own storefront still
-    #     rendered correctly, because SassC's split-color() understands short hex.
-    #   - Anything else, including a multiline value. HexColorValidator's regex uses line anchors
-    #     (^...$) rather than string anchors, so a value like "#abcdef\n<more css>" passes validation
-    #     and is persistable. parse rejects it and accent_styles then emits nothing at all.
-    def rgb_triplet(hex_color)
-      ContrastColor.parse(hex_color)&.join(" ")
+    def clear_custom_style_cache
+      Rails.cache.delete custom_style_cache_name
     end
 end
