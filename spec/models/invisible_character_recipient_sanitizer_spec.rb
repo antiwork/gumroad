@@ -63,4 +63,29 @@ describe InvisibleCharacterRecipientSanitizer do
 
     expect(user.reload.email).to eq "\u200Fbuyer@example.com"
   end
+
+  # The examples above call the interceptor directly, which proves the logic but not that Rails
+  # actually runs it. This one goes through a real delivery so a future change that drops the
+  # registration in config/initializers/mail_observers.rb fails here rather than silently
+  # returning us to bouncing every message to these accounts.
+  describe "registration" do
+    it "is registered as an ActionMailer delivery interceptor" do
+      registered = Mail.class_variable_get(:@@delivery_interceptors).flatten.map(&:to_s)
+
+      expect(registered).to include(described_class.to_s)
+    end
+
+    it "cleans the recipient on a message delivered through ActionMailer" do
+      expect do
+        ActionMailer::Base.mail(
+          to: "\u200Fbuyer@example.com",
+          from: "noreply@#{DEFAULT_EMAIL_DOMAIN}",
+          subject: "Test",
+          body: "Test"
+        ).deliver_now
+      end.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+      expect(ActionMailer::Base.deliveries.last.to).to eq ["buyer@example.com"]
+    end
+  end
 end
