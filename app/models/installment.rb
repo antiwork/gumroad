@@ -320,7 +320,12 @@ class Installment < ApplicationRecord
   end
 
   def member_cancellation_trigger?
-    workflow_trigger == MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    return true if workflow_trigger == MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    # Workflow::ManageService copies workflow.json_data down at save time, so an installment
+    # whose workflow became cancellation-triggered afterwards still carries the old (or no)
+    # trigger. Deferring to the workflow keeps the delivery guards from leaking a goodbye
+    # email on that drift.
+    workflow.present? && workflow.member_cancellation_trigger?
   end
 
   def displayed_name
