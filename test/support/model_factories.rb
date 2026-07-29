@@ -1386,20 +1386,24 @@ module ModelFactories
   end
 
   # A subtitle track (mirrors :subtitle_file, whose default parent is a plain
-  # product file).
+  # product file). That parent is attached to a product, because a ProductFile
+  # is only meaningful once it hangs off a product or an installment, and a
+  # caller that reaches through to `subtitle_file.product_file.link` should find
+  # one there rather than nil.
   def create_subtitle_file(product_file: nil, **attrs)
     SubtitleFile.create!({
-      product_file: product_file || create_product_file,
+      product_file: product_file || create_product_file(link: create_product),
       url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{SecureRandom.hex}.srt",
       language: "English",
     }.merge(attrs))
   end
 
-  # An HLS rendition of a video file (mirrors :transcoded_video).
+  # An HLS rendition of a video file (mirrors :transcoded_video). The default
+  # source video is attached to a product for the same reason as above.
   def create_transcoded_video(streamable: nil, **attrs)
     key_base_path = "/attachments/#{SecureRandom.hex}"
     TranscodedVideo.create!({
-      streamable: streamable || create_streamable_video(is_transcoded_for_hls: true),
+      streamable: streamable || create_streamable_video(link: create_product, is_transcoded_for_hls: true),
       original_video_key: "#{key_base_path}/movie.mp4",
       transcoded_video_key: "#{key_base_path}/movie/hls/index.m3u8",
       job_id: "somejobid",
