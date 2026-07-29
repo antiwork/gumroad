@@ -9,6 +9,7 @@ import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
 import ActionsPopover from "$app/components/ProductsPage/ActionsPopover";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import {
   Table,
   TableBody,
@@ -107,9 +108,8 @@ export const ProductsPageProductsTable = (props: {
                 href={product.can_edit ? product.edit_url : product.url}
                 thumbnail={product.thumbnail?.url ?? null}
               />
-              {/* The name cell is `relative` so the product link inside it can stretch to fill the
-                  whole cell (see the `absolute inset-0` overlay below). Before this, only the bold
-                  name text itself was clickable, which is a small target — sellers reported that
+              {/* The name cell is `relative` so StretchedLink can fill it. Before this, only the
+                  bold name text was clickable, which is a small target — sellers reported that
                   clicking a product row "does nothing" when they had in fact tapped the dead space
                   beside the name (gumroad-private#1469). Making the entire cell clickable is as far
                   as we can widen it without nesting links: Safari doesn't support
@@ -118,31 +118,26 @@ export const ProductsPageProductsTable = (props: {
               <TableCell hideLabel className="relative">
                 <div>
                   {product.can_edit ? (
-                    <Link href={product.edit_url} style={{ textDecoration: "none" }}>
-                      {/* This empty overlay is what widens the hit area: it stretches the
-                          surrounding link over the full cell, including the padding and the empty
-                          space to the right of a short product name. It sits behind the two
-                          positioned links below, so the storefront URL link still wins a tap on
-                          its own text. */}
-                      <span className="absolute inset-0" aria-hidden="true" />
-                      {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
-                          (gumroad-private#1259; same fix as the product page in #6190). */}
-                      <h4 className="relative font-bold" dir="auto">
-                        {product.name}
-                      </h4>
-                    </Link>
+                    <StretchedLink asChild>
+                      <Link href={product.edit_url}>
+                        {/* dir="auto" lets RTL product names (Hebrew, Arabic) render right-to-left
+                            (gumroad-private#1259; same fix as the product page in #6190). */}
+                        <h4 className="relative font-bold" dir="auto">
+                          {product.name}
+                        </h4>
+                      </Link>
+                    </StretchedLink>
                   ) : (
-                    <a href={product.url} title={product.url} target="_blank" rel="noreferrer">
-                      <span className="absolute inset-0" aria-hidden="true" />
+                    <StretchedLink href={product.url} title={product.url} target="_blank" rel="noreferrer">
                       <h4 className="relative font-bold" dir="auto">
                         {product.name}
                       </h4>
-                    </a>
+                    </StretchedLink>
                   )}
 
-                  <Link href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative">
+                  <a href={product.url} title={product.url} target="_blank" rel="noreferrer" className="relative z-1">
                     <small className="block">{product.url_without_protocol}</small>
-                  </Link>
+                  </a>
                 </div>
               </TableCell>
 

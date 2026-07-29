@@ -7,6 +7,7 @@ import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
+import { StretchedLink } from "$app/components/ui/StretchedLink";
 import {
   Table,
   TableBody,
@@ -72,25 +73,26 @@ export const CollabsMembershipsTable = (props: { entries: Membership[]; paginati
                 thumbnail={membership.thumbnail?.url ?? null}
               />
 
-              {/* The name cell is `relative` so the membership link inside it can stretch to fill the
-                  whole cell — see the `absolute inset-0` overlay below and the same pattern in
-                  ProductsPage/ProductsTable.tsx. Only the bold name text used to be clickable, which
-                  is a small target, and sellers reported that clicking a row "does nothing" when
-                  they had in fact tapped the dead space beside the name (gumroad-private#1469).
-                  Safari doesn't support `position: relative` on <tr>, so the row itself can't be the
-                  link. */}
+              {/* The name cell is `relative` so StretchedLink can fill it, as in
+                  ProductsPage/ProductsTable.tsx. Only the bold name text used to be clickable,
+                  which is a small target, and sellers reported that clicking a row "does nothing"
+                  when they had in fact tapped the dead space beside the name (gumroad-private#1469).
+                  Safari doesn't support `position: relative` on <tr>, so the row itself can't be
+                  the link. */}
               <TableCell hideLabel className="relative">
-                <a href={membership.can_edit ? membership.edit_url : membership.url} style={{ textDecoration: "none" }}>
-                  {/* This empty overlay is what widens the hit area: it stretches the surrounding
-                      link over the full cell. It sits behind the positioned link below, so the
-                      storefront URL still wins a tap on its own text. */}
-                  <span className="absolute inset-0" aria-hidden="true" />
+                <StretchedLink href={membership.can_edit ? membership.edit_url : membership.url}>
                   {/* dir="auto" lets RTL product names render right-to-left (gumroad-private#1259). */}
                   <h4 className="relative font-bold" dir="auto">
                     {membership.name}
                   </h4>
-                </a>
-                <a href={membership.url} title={membership.url} target="_blank" rel="noreferrer" className="relative">
+                </StretchedLink>
+                <a
+                  href={membership.url}
+                  title={membership.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="relative z-1"
+                >
                   <small className="block">{membership.url_without_protocol}</small>
                 </a>
               </TableCell>

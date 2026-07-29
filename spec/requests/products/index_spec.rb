@@ -89,7 +89,7 @@ describe "Products Page Scenario", type: :system, js: true do
         end
 
         expect(page).to have_current_path(products_path)
-        within_window(new_tab) { expect(page).to have_current_path(product.long_url(include_protocol: false), url: false) }
+        within_window(new_tab) { expect(page).to have_current_path(product.long_url, url: true) }
       end
     end
   end
