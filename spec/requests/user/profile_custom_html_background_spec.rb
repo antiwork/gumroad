@@ -277,4 +277,68 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       end
     end
   end
+
+  # Not every theme toggle touches an attribute. Rewriting a <style>'s text or
+  # inserting a new one repaints the canvas with html and body untouched, so an
+  # attribute-only observer sees nothing and the bands keep the old theme.
+  context "when the page changes its background by rewriting a stylesheet" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style id="theme">html,body{margin:0}body{background:#EBEBEB}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="rewrite" type="button">Rewrite theme</button>
+        </main>
+        <script>
+          document.getElementById("rewrite").addEventListener("click", function () {
+            document.getElementById("theme").textContent = "html,body{margin:0}body{background:#101010}";
+          });
+        </script>
+      HTML
+    end
+
+    it "re-reports the new color to the wrapper" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Rewrite theme" }
+
+      expect_wrapper_background("rgb(16, 16, 16)")
+      expect(theme_color).to eq("rgb(16, 16, 16)")
+    end
+  end
+
+  # The seller's HTML renders inside <body>, so a stylesheet they add later goes
+  # in there too — appending to <head> would land BEFORE their own style and lose
+  # the cascade, leaving the canvas unchanged and proving nothing.
+  context "when the page changes its background by inserting a stylesheet" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main>
+          <h1>BG Studio</h1>
+          <button id="insert" type="button">Add theme</button>
+        </main>
+        <script>
+          document.getElementById("insert").addEventListener("click", function () {
+            var style = document.createElement("style");
+            style.textContent = "body{background:#101010}";
+            document.body.appendChild(style);
+          });
+        </script>
+      HTML
+    end
+
+    it "re-reports the new color to the wrapper" do
+      visit seller.subdomain_with_protocol
+
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      within_frame(find("iframe#gumroad-landing-frame")) { click_on "Add theme" }
+
+      expect_wrapper_background("rgb(16, 16, 16)")
+      expect(theme_color).to eq("rgb(16, 16, 16)")
+    end
+  end
 end

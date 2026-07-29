@@ -216,8 +216,9 @@ module RendersCustomHtmlPages
   # mirrors it — no seller HTML changes, and existing pages are fixed on next
   # load.
   #
-  # Reported again on class/style mutations and on a color-scheme change so a
-  # theme toggle re-colors the bands instead of stranding the first value —
+  # Reported again whenever something that could repaint the canvas changes —
+  # an attribute, a stylesheet arriving or being edited, a color-scheme switch —
+  # so a theme toggle re-colors the bands instead of stranding the first value,
   # including a toggle that lands on no color at all, which reports null so the
   # wrapper drops the tint rather than holding the previous theme.
   #
@@ -266,14 +267,52 @@ module RendersCustomHtmlPages
           queued = true;
           requestAnimationFrame(function () { queued = false; report(); });
         }
+        // Only html/body's computed background can be the canvas, so the
+        // mutations that can change it are: any attribute (class for Tailwind's
+        // dark mode, data-theme for most hand-rolled togglers, style for inline
+        // writes, and arbitrary names because CSS can select on them), a
+        // <style>/<link> node appearing or leaving, and a rewrite of the text
+        // inside a <style>. Everything else — the seller's own DOM churn, a
+        // ticking countdown — is skipped, because reading the canvas forces a
+        // style recalc and this observer covers the whole document.
+        function stylesheetNode(node) {
+          var name = node && node.nodeName;
+          return name === "STYLE" || name === "LINK";
+        }
+        function affectsCanvas(records) {
+          for (var i = 0; i < records.length; i++) {
+            var record = records[i];
+            if (record.type === "attributes") return true;
+            // A rewrite arrives as characterData when the text node is edited
+            // in place, but as childList on the <style> itself when the text is
+            // swapped wholesale — which is what `textContent = ...` does, the
+            // common way to retheme. Both look at the target, not the node.
+            if (stylesheetNode(record.target)) return true;
+            if (stylesheetNode(record.target.parentNode)) return true;
+            for (var j = 0; j < record.addedNodes.length; j++) {
+              if (stylesheetNode(record.addedNodes[j])) return true;
+            }
+            for (var k = 0; k < record.removedNodes.length; k++) {
+              if (stylesheetNode(record.removedNodes[k])) return true;
+            }
+          }
+          return false;
+        }
         report();
         // After load the stylesheet and any seller scripts have applied, so
         // this is the first reading that reflects the finished page.
         window.addEventListener("load", queueReport);
+        // A stylesheet <link> inserted later applies when it finishes loading,
+        // which is after the mutation that added it. Resource load events don't
+        // bubble, so this has to capture from the window down to reach them.
+        window.addEventListener("load", queueReport, true);
         try {
-          new MutationObserver(queueReport).observe(document.documentElement, {
+          new MutationObserver(function (records) {
+            if (affectsCanvas(records)) queueReport();
+          }).observe(document.documentElement, {
             attributes: true,
-            attributeFilter: ["class", "style"],
+            childList: true,
+            characterData: true,
             subtree: true
           });
         } catch (_err) {}
