@@ -929,15 +929,9 @@ describe Payment do
     end
 
     it "still pauses when the threshold is reached by non-transient failures alone" do
+      # The nil-reason rows are the point: most failures store nothing in failure_reason, and a
+      # `NOT IN` filter without the IS NULL arm drops them and disables this check entirely.
       failed_payout_with_reason(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
-      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { failed_payout }
-
-      expect(user.reload.payouts_paused_internally).to be(true)
-    end
-
-    it "keeps counting failures that carry no failure reason at all" do
-      # Most failures store nothing in failure_reason. A `NOT IN` filter without an IS NULL arm
-      # drops those rows and disables this check entirely.
       Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { failed_payout }
 
       expect(user.reload.payouts_paused_internally).to be(true)
