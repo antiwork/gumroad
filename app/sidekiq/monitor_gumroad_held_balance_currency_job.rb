@@ -28,7 +28,9 @@
 #      "usd"` treats "USD", "Usd" and "usd " as equal to "usd" and skips them --
 #      while the processors, comparing in Ruby, treat all three as broken and fail
 #      the payout. A monitor that exists because of a silent failure mode must not
-#      have a silent blind spot of its own.
+#      have a silent blind spot of its own. CAST(... AS BINARY) rather than the
+#      shorter `BINARY expr` prefix, which MySQL 8 reports as deprecated and slated
+#      for removal.
 #   2. NULL is included explicitly. `NULL != "usd"` is NULL in SQL, so a NULL row
 #      would be filtered out, yet `nil == "usd"` is false in Ruby and breaks
 #      payouts the same way. The model validates presence, but the rows that
@@ -39,9 +41,15 @@
 #      PayPal and Braintree charge processors report HolderOfFunds::GUMROAD for
 #      every merchant account including a seller's own, so scoping on a nil
 #      user_id would have missed mislabelled balances that still break payouts.
-#      The currency filter runs in SQL first, which leaves a handful of rows at
-#      most, and holder_of_funds is then evaluated per row in Ruby -- the same way
-#      the payout processors evaluate it.
+#      Only the Stripe implementation distinguishes by owner, and there a nil
+#      user_id is exactly what makes an account Gumroad-held (a Stripe Connect
+#      account always has a user and reports CREATOR). So the SQL below narrows
+#      to "platform-owned OR not Stripe", which is an exact superset of
+#      Gumroad-held, and holder_of_funds is then confirmed per row in Ruby -- the
+#      same call the payout processors make, so the monitor cannot drift from them
+#      if that logic changes. Without the SQL narrowing this would load every
+#      seller's foreign-currency balance: measured against production, 418 rows a
+#      day and rising, against 0 that are actually Gumroad-held.
 class MonitorGumroadHeldBalanceCurrencyJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low, lock: :until_executed, on_conflict: :replace
@@ -56,16 +64,32 @@ class MonitorGumroadHeldBalanceCurrencyJob
   # run ever exceeds this, the count in the alert still reports the true total.
   SAMPLE_LIMIT = 25
 
+  # A ceiling on rows loaded into memory, so a regression that mislabels balances at
+  # scale produces an alert rather than a job that dies trying to describe it. The
+  # count is queried separately, so the alert still reports the true total.
+  MAX_ROWS_LOADED = 500
+
   def perform
-    candidates = Balance
+    scope = Balance
       .where(state: "unpaid")
       .where("balances.created_at >= ?", BASELINE_CUTOFF)
-      .where("balances.holding_currency IS NULL OR BINARY balances.holding_currency <> ?", Currency::USD)
-      .includes(:merchant_account)
-      .order(id: :desc)
-      .to_a
+      .where("balances.holding_currency IS NULL OR CAST(balances.holding_currency AS BINARY) <> ?", Currency::USD)
+      .joins(:merchant_account)
+      .where(
+        "merchant_accounts.user_id IS NULL OR merchant_accounts.charge_processor_id <> ?",
+        StripeChargeProcessor.charge_processor_id
+      )
 
-    offending = candidates.select { _1.merchant_account&.holder_of_funds == HolderOfFunds::GUMROAD }
+    candidates = scope.includes(:merchant_account).order(id: :desc).limit(MAX_ROWS_LOADED).to_a
+
+    # holder_of_funds routes through the charge processor and can raise for a row whose
+    # processor no longer resolves. A monitor that raises stops monitoring, so treat an
+    # unanswerable row as worth reporting rather than letting it abort the run.
+    offending = candidates.select do |balance|
+      balance.merchant_account&.holder_of_funds == HolderOfFunds::GUMROAD
+    rescue StandardError
+      true
+    end
     return if offending.empty?
 
     # A stable message keeps every run of this alert in one Sentry issue instead of
@@ -76,13 +100,14 @@ class MonitorGumroadHeldBalanceCurrencyJob
       seller_count: offending.map(&:user_id).uniq.size,
       currencies: offending.map(&:holding_currency).uniq,
       created_since: BASELINE_CUTOFF.iso8601,
+      truncated: candidates.size == MAX_ROWS_LOADED,
       sample: offending.first(SAMPLE_LIMIT).map do |balance|
         {
           balance_id: balance.id,
           seller_id: balance.user_id,
           holding_currency: balance.holding_currency,
           amount_cents: balance.amount_cents,
-          date: balance.date,
+          date: balance.date.to_s,
         }
       end
     )

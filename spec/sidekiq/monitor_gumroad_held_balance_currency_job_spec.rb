@@ -129,10 +129,10 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     expect(ErrorNotifier).not_to have_received(:notify)
   end
 
-  # PaypalChargeProcessor#holder_of_funds returns GUMROAD for EVERY merchant account,
-  # including a seller's own, so these balances break payouts exactly like the platform
-  # account's do. Scoping the query on `merchant_accounts.user_id IS NULL` would have
-  # missed them, which is why the Gumroad-held test is holder_of_funds instead.
+  # The SQL narrows to "platform-owned OR not Stripe" before Ruby confirms
+  # holder_of_funds, purely to avoid loading every seller's foreign-currency Stripe
+  # balance. This example is what proves the narrowing did not throw away the rows the
+  # widened scope was added to catch.
   it "alerts on a mislabelled balance held by Gumroad through a seller's PayPal merchant account" do
     paypal_account = create(:merchant_account_paypal, user: create(:user))
     balance = travel_to(after_baseline) do
@@ -140,6 +140,20 @@ describe MonitorGumroadHeldBalanceCurrencyJob do
     end
 
     described_class.new.perform
+
+    expect(ErrorNotifier).to have_received(:notify).with(
+      anything, hash_including(sample: [hash_including(balance_id: balance.id)])
+    )
+  end
+
+  # holder_of_funds resolves through the charge processor and can raise for a row whose
+  # processor no longer resolves. A monitor that dies on one row stops monitoring every
+  # other row, so an unanswerable row is reported rather than allowed to abort the run.
+  it "reports a row whose holder_of_funds cannot be resolved instead of dying on it" do
+    balance = create_balance_at(after_baseline, holding_currency: Currency::EUR)
+    allow_any_instance_of(MerchantAccount).to receive(:holder_of_funds).and_raise(StandardError, "unknown processor")
+
+    expect { described_class.new.perform }.not_to raise_error
 
     expect(ErrorNotifier).to have_received(:notify).with(
       anything, hash_including(sample: [hash_including(balance_id: balance.id)])
