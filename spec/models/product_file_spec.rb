@@ -33,10 +33,10 @@ describe ProductFile do
 
     it "keeps rejecting a parentless file on update, not just on create" do
       file = create(:product_file, link: create(:product))
-      file.link = nil
 
-      expect(file).to be_invalid
+      expect(file.update(link: nil)).to be(false)
       expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+      expect(file.reload.link).to be_present
     end
 
     it "rejects a saved file that a direct column write left without a parent" do
@@ -45,6 +45,14 @@ describe ProductFile do
 
       expect(file.reload).to be_invalid
       expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    it "keeps rejecting a file left with no parent when its installment is stripped" do
+      file = create(:product_file, link: nil, installment: create(:installment))
+
+      expect(file.update(installment: nil)).to be(false)
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+      expect(file.reload.installment).to be_present
     end
 
     it "accepts a write that gives a parentless file a single parent" do
