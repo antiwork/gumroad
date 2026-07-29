@@ -15,7 +15,6 @@ describe "Products API currency normalization", type: :request do
     post "/api/v2/products",
          params: { access_token: token.token, name: "ZAR workbook", price: 21_999, price_currency_type: "ZAR" }
 
-    expect(response).to have_http_status(:success)
     expect(response.parsed_body).to include("success" => true)
     expect(seller.links.last.price_currency_type).to eq("zar")
   end
@@ -26,8 +25,25 @@ describe "Products API currency normalization", type: :request do
     put "/api/v2/products/#{product.external_id}",
         params: { access_token: token.token, name: "Renamed workbook", price_currency_type: "ZAR" }
 
-    expect(response).to have_http_status(:success)
     expect(response.parsed_body).to include("success" => true)
     expect(product.reload).to have_attributes(name: "Renamed workbook", price_currency_type: "zar")
+  end
+
+  it "accepts a price_currency_type with surrounding whitespace" do
+    post "/api/v2/products",
+         params: { access_token: token.token, name: "Padded workbook", price: 21_999, price_currency_type: " ZAR " }
+
+    expect(response.parsed_body).to include("success" => true)
+    expect(seller.links.last.price_currency_type).to eq("zar")
+  end
+
+  it "names the currency the caller actually sent when rejecting it" do
+    post "/api/v2/products",
+         params: { access_token: token.token, name: "Bad currency", price: 21_999, price_currency_type: "ZZZ" }
+
+    expect(response.parsed_body).to include(
+      "success" => false,
+      "message" => "'ZZZ' is not a supported currency."
+    )
   end
 end

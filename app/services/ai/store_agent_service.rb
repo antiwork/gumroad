@@ -1149,7 +1149,7 @@ class Ai::StoreAgentService
     def normalize_product_currency_param!(endpoint, body)
       return unless endpoint.id.in?(%w[create_product update_product]) && body.key?("price_currency_type")
 
-      body["price_currency_type"] = body["price_currency_type"].to_s.downcase
+      body["price_currency_type"] = body["price_currency_type"].to_s.strip.downcase
     end
 
     def preview_field(label, value)

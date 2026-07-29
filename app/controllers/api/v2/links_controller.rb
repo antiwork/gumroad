@@ -85,7 +85,9 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     currency = normalize_price_currency_type(params[:price_currency_type]) || current_resource_owner.currency_type
     if !CURRENCY_CHOICES.key?(currency)
-      return render_response(false, message: "'#{currency}' is not a supported currency.")
+      # Echo what the caller sent, not the normalized form — telling someone who typed "ZZZ"
+      # that 'zzz' is unsupported reads like a different error than the one they caused.
+      return render_response(false, message: "'#{params[:price_currency_type].presence || currency}' is not a supported currency.")
     end
 
     if params.key?(:tags)
@@ -216,7 +218,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     currency = normalize_price_currency_type(params[:price_currency_type])
     if params.key?(:price_currency_type) && !CURRENCY_CHOICES.key?(currency)
-      return render_response(false, message: "'#{currency}' is not a supported currency.")
+      return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
     if params.key?(:custom_html) && !Feature.active?(:custom_html_pages, current_resource_owner)
@@ -558,7 +560,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     def normalize_price_currency_type(currency)
-      currency.to_s.downcase.presence
+      currency.to_s.strip.downcase.presence
     end
 
     # Same gate the inline custom_html paths (update / preview_custom_html) apply; a before_action
