@@ -13,13 +13,18 @@ class CheckoutController < ApplicationController
       cart: -> { cart_presenter.cart_props },
       checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
-      # Carry the seller's accent colour through checkout so the buyer's journey does not go
+      # Carry the seller's branding through checkout so the buyer's journey does not go
       # seller-branded product page → Gumroad-pink payment screen → seller-branded content page
-      # (gumroad-private#1493). Only the accent: see SellerProfile#accent_styles for why the
-      # background and font are deliberately left as Gumroad's.
+      # (gumroad-private#1493).
       #
-      # nil for empty and multi-seller carts, in which case the page keeps the stock palette.
-      accent_styles: -> { cart_presenter.cart&.sole_seller&.seller_profile&.accent_styles },
+      # This is the same `custom_styles` CSS the storefront and the post-purchase content page
+      # already serve (LinksController, Purchases::ProductController), so a single-seller
+      # checkout now matches the pages either side of it exactly — accent, background, body text
+      # colour and font.
+      #
+      # nil for empty and multi-seller carts, in which case the page keeps the stock palette —
+      # see Cart#sole_seller for why a mixed cart deliberately gets no branding.
+      custom_styles: -> { cart_presenter.cart&.sole_seller&.seller_profile&.custom_styles.presence },
     }
   end
 

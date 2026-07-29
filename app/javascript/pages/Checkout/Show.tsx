@@ -69,10 +69,11 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
-  // The seller's accent custom properties, when every product in the cart belongs to one seller.
+  // The seller's full custom-styles CSS, when every product in the cart belongs to one seller —
+  // the same string the storefront and post-purchase content page render.
   // Optional rather than `| null` because the controller omits it for empty carts, and typia
   // rejects a missing key on a nullable-but-required prop.
-  accent_styles?: string | null;
+  custom_styles?: string | null;
   checkout: {
     add_products: ProductToAdd[];
     address: { street: string | null; city: string | null; zip: string | null } | null;
@@ -766,13 +767,15 @@ const CheckoutIndexPage = () => {
 
   return (
     <StateContext.Provider value={reducer}>
-      {/* Applies the seller's accent to the pay button, links and focus rings. Rendered into <head>
-          via Inertia's Head so it lands after the stylesheet <link> and therefore wins the cascade
-          — the defaults it overrides are :root custom properties from the same specificity, so the
-          later declaration is the one that applies. Absent for empty and multi-seller carts. */}
-      {props.accent_styles ? (
+      {/* Applies the seller's palette — accent, background, body text colour and font — to the
+          checkout page. Rendered into <head> via Inertia's Head so it lands after the stylesheet
+          <link> and therefore wins the cascade: the defaults it overrides are :root custom
+          properties from the same specificity, so the later declaration is the one that applies.
+          The CSS also carries a `body { }` rule, which is why the background follows too.
+          Absent for empty and multi-seller carts. */}
+      {props.custom_styles ? (
         <Head>
-          <style>{props.accent_styles}</style>
+          <style>{props.custom_styles}</style>
         </Head>
       ) : null}
       {redirecting ? null : results ? (
