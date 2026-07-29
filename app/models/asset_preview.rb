@@ -243,20 +243,46 @@ class AssetPreview < ApplicationRecord
   # Generating a poster means downloading the video and running ffmpeg, which
   # can take a while for large files. That work never happens on a web
   # request thread: GenerateVideoPosterWorker is enqueued when the cover is
-  # created and does the generation in the background, writing the result to
-  # the cache. Renders only ever read the cache.
-  #   - success caches the poster URL;
-  #   - failure caches an empty-string sentinel (for an hour) so the worker's
-  #     retries don't re-download and re-run ffmpeg on a video that can't be
-  #     previewed.
-  # If a render happens before the worker has finished (or for covers created
-  # before this existed), this returns nil — the player shows its plain idle
-  # state — and we enqueue a generation so the poster appears on later views.
+  # created and does the generation in the background. Renders only ever read
+  # an already-generated result.
+  #
+  # Where that result lives matters, and getting it wrong caused a real bug.
+  # Originally the poster URL was kept *only* in Rails.cache. In production the
+  # cache store is namespaced by the deploy revision
+  # (config/environments/production.rb: `namespace: ENV.fetch("REVISION")`), so
+  # every deploy moved the whole cache to a fresh namespace and every poster URL
+  # became unreachable at once. Video covers went back to rendering as a black
+  # rectangle on every deploy — measured at 60% of the newest 1,200 video covers
+  # missing a poster, across 240 distinct sellers (gumroad-private#1491).
+  #
+  # The durable artifact was always there: `file.preview(...).processed` persists
+  # an ActiveStorage preview_image attachment on the blob, and that survives
+  # deploys. We were only throwing away the pointer to it. So the read order is:
+  #
+  #   1. the blob's persisted preview_image, if ActiveStorage has one;
+  #   2. otherwise Rails.cache, which is now just a cheap memo for the URL
+  #      string so we don't rebuild it on every render;
+  #   3. otherwise nil, and enqueue a generation so the poster appears on later
+  #      views (the player shows its plain idle state this time).
+  #
+  # Failures still cache an empty-string sentinel for an hour so the worker's
+  # retries don't re-download and re-run ffmpeg on a video ffmpeg cannot preview.
   FAILED_POSTER_SENTINEL = ""
   FAILED_POSTER_RETRY_INTERVAL = 1.hour
 
   def video_poster_url
     return nil unless file.attached? && file.video? && file.previewable?
+
+    # Read through to the persisted preview first. This is what makes a poster
+    # survive a deploy: unlike the cache, the preview_image attachment is a real
+    # database record pointing at a real object in storage.
+    persisted = persisted_video_poster_url
+    if persisted.present?
+      # Keep the memo warm so subsequent renders skip the URL construction, but
+      # never let a cache miss hide a poster we demonstrably have.
+      Rails.cache.write(video_poster_cache_key, persisted)
+      return persisted
+    end
 
     cached = Rails.cache.read(video_poster_cache_key)
     if cached.nil?
@@ -270,11 +296,37 @@ class AssetPreview < ApplicationRecord
     cached == FAILED_POSTER_SENTINEL ? nil : cached
   end
 
+  # The URL of the poster frame ActiveStorage has already persisted for this
+  # video, or nil if it hasn't persisted one. Returns nil rather than raising if
+  # the attachment record exists but its URL can't be built (a half-written
+  # preview shouldn't 500 a product page — a missing poster only costs us the
+  # nicety of a preview frame).
+  def persisted_video_poster_url
+    blob = file.blob
+    return nil unless blob&.preview_image&.attached?
+
+    variant = blob.preview_image.variant(resize_to_limit: [retina_width || RETINA_DISPLAY_WIDTH, nil])
+    cdn_url_for(variant.processed.url)
+  rescue StandardError => e
+    Rails.logger.warn("AssetPreview#persisted_video_poster_url failed for asset_preview #{id}: #{e.message}")
+    nil
+  end
+
   # Does the actual download + ffmpeg frame extraction. Only called from
   # GenerateVideoPosterWorker — web requests read the cached result via
   # video_poster_url above.
   def generate_video_poster!
     return nil unless file.attached? && file.video? && file.previewable?
+
+    # Already persisted by an earlier generation (possibly many deploys ago) —
+    # reuse it instead of re-downloading the video and re-running ffmpeg. This is
+    # what makes the backfill cheap for covers whose preview_image survived even
+    # though the cache pointer didn't.
+    persisted = persisted_video_poster_url
+    if persisted.present?
+      Rails.cache.write(video_poster_cache_key, persisted)
+      return persisted
+    end
 
     cached = Rails.cache.read(video_poster_cache_key)
     return (cached == FAILED_POSTER_SENTINEL ? nil : cached) unless cached.nil?
