@@ -155,8 +155,13 @@ module CheckoutHelpers
     expect do
       click_on is_free ? "Get" : "Pay", exact: true
 
-      within_sca_frame { click_on sca ? "Complete" : "Fail" } unless sca.nil? || sca == :if_challenged
-      within_sca_frame_if_challenged { click_on "Complete" } if sca == :if_challenged
+      case sca
+      when nil then nil
+      when true then within_sca_frame { click_on "Complete" }
+      when false then within_sca_frame { click_on "Fail" }
+      when :if_challenged then within_sca_frame_if_challenged { click_on "Complete" }
+      else raise ArgumentError, "sca must be nil, true, false, or :if_challenged (got #{sca.inspect})"
+      end
 
       if error.present?
         expect(page).to have_alert(text: error) if error != true
@@ -248,13 +253,17 @@ def within_sca_frame(wait: 240, &block)
   end
 end
 
-# Stripe decides per card whether to challenge, and has flipped this card both ways.
+# Stripe decides per card whether to challenge, and has flipped test cards both ways.
 # Use only where 3DS is incidental; specs whose subject IS authentication must keep
 # the strict `within_sca_frame` so a vanished challenge still fails them.
+#
+# Races the challenge against checkout settling, so the no-challenge case costs seconds
+# instead of waiting `wait` out. Callers that settle without an alert (gift, preorder)
+# just fall back to the full wait.
 def within_sca_frame_if_challenged(wait: 60, &block)
-  return unless page.has_selector?(SCA_CHALLENGE_IFRAME, wait:)
+  page.has_selector?("#{SCA_CHALLENGE_IFRAME}, [role=alert]", visible: :all, wait:)
 
-  within_sca_frame(wait: 0, &block)
+  within_sca_frame(wait: 1, &block) if page.has_selector?(SCA_CHALLENGE_IFRAME, wait: 0)
 end
 
 def within_cart_item(name, &block)
