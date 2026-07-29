@@ -257,11 +257,13 @@ end
 # Use only where 3DS is incidental; specs whose subject IS authentication must keep
 # the strict `within_sca_frame` so a vanished challenge still fails them.
 #
-# Races the challenge against checkout settling, so the no-challenge case costs seconds
-# instead of waiting `wait` out. Callers that settle without an alert (gift, preorder)
-# just fall back to the full wait.
+# Races the challenge against the settle toast, so the no-challenge case costs seconds
+# instead of waiting `wait` out. Visibility is what distinguishes them: the toast element
+# is always in the DOM and only becomes visible once checkout settles, so matching it
+# `visible: :all` would return instantly and skip a challenge still on its way.
+# Callers that settle without a toast (gift, preorder) fall back to the full wait.
 def within_sca_frame_if_challenged(wait: 60, &block)
-  page.has_selector?("#{SCA_CHALLENGE_IFRAME}, [role=alert]", visible: :all, wait:)
+  page.has_selector?("#{SCA_CHALLENGE_IFRAME}, [role=alert]", wait:)
 
   within_sca_frame(wait: 1, &block) if page.has_selector?(SCA_CHALLENGE_IFRAME, wait: 0)
 end
