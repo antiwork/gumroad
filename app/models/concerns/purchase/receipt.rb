@@ -55,11 +55,23 @@ module Purchase::Receipt
   # A gift receiver purchase is deliberately excluded: it shares a subscription with the GIFTER's
   # paid purchase, which is the only `successful` row on that subscription, so resolving through
   # the subscription would serve the giftee the gifter's email, amount, and card.
+  #
+  # Resolving away from `self` requires the two rows to agree on the email exactly, because the
+  # email is the only thing the receipt and invoice endpoints check. A membership reassigned by
+  # editing the sign-up's email leaves earlier charges on the previous holder's address, so
+  # without this guard the new holder would be handed a working link to someone else's receipt.
+  # Exact match, not case-insensitive: the invoice endpoint compares byte-for-byte.
   def receipt_purchase
-    return bundle_purchase if is_bundle_product_purchase?
-    return self unless subscription.present? && !is_gift_receiver_purchase?
+    candidate =
+      if is_bundle_product_purchase?
+        bundle_purchase
+      elsif subscription.present? && !is_gift_receiver_purchase?
+        subscription.last_successful_not_reversed_or_refunded_charge
+      end
+    return self if candidate.nil? || candidate.id == id
+    return self unless candidate.email == email
 
-    subscription.last_successful_not_reversed_or_refunded_charge || self
+    candidate
   end
 
   def has_invoice?

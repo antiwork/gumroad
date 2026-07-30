@@ -175,7 +175,7 @@ describe UrlRedirectPresenter do
       @user = create(:user, name: "John Doe")
       @product = create(:product, user: @user)
       @purchase = create(:purchase, link: @product, is_bundle_product_purchase: true)
-      create(:bundle_product_purchase, product_purchase: @purchase, bundle_purchase: create(:purchase, link: @product, seller: @user))
+      create(:bundle_product_purchase, product_purchase: @purchase, bundle_purchase: create(:purchase, link: @product, seller: @user, email: @purchase.email))
 
       @installment = create(:seller_installment, seller: @product.user, published_at: 1.day.ago, send_emails: false, shown_on_profile: true)
       @url_redirect = create(:url_redirect, purchase: @purchase)
@@ -272,8 +272,8 @@ describe UrlRedirectPresenter do
       # parent, so the flag has to be answered from the parent too — reading the free child would
       # hide the link from every paid bundle buyer.
       it "is true for bundle content when the bundle purchase itself was paid" do
-        bundle_purchase = create(:purchase, link: @product, seller: @user)
         child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true)
+        bundle_purchase = create(:purchase, link: @product, seller: @user, email: child_purchase.email)
         create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
         url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
 
@@ -286,8 +286,8 @@ describe UrlRedirectPresenter do
       end
 
       it "is false for bundle content when the bundle purchase was free" do
-        bundle_purchase = create(:free_purchase, link: @product)
         child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true)
+        bundle_purchase = create(:free_purchase, link: @product, email: child_purchase.email)
         create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
         url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
 
@@ -297,16 +297,18 @@ describe UrlRedirectPresenter do
     end
 
     describe "receipt_purchase_id on a membership" do
-      def membership_with_charge(original_email: nil, charge_email: nil, charge_attrs: {})
+      # Every row on a real membership carries the same buyer email; the factory would otherwise
+      # generate a distinct one per purchase, which `receipt_purchase` treats as a reassignment.
+      def membership_with_charge(original_email: "buyer@example.com", charge_email: "buyer@example.com", charge_attrs: {})
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
         original = create(:membership_purchase, link: product, subscription:,
                                                 is_original_subscription_purchase: true,
                                                 succeeded_at: 2.months.ago,
-                                                **(original_email ? { email: original_email } : {}))
+                                                email: original_email)
         charge = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false,
                                               succeeded_at: 1.month.ago,
-                                              **(charge_email ? { email: charge_email } : {}),
+                                              email: charge_email,
                                               **charge_attrs)
         [original, charge, create(:url_redirect, purchase: original, link: product)]
       end
@@ -323,9 +325,10 @@ describe UrlRedirectPresenter do
       it "orders by succeeded_at rather than by insertion order" do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, succeeded_at: 2.months.ago)
-        newest = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago)
-        create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 6.weeks.ago)
+        email = "buyer@example.com"
+        original = create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: true, succeeded_at: 2.months.ago)
+        newest = create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago)
+        create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 6.weeks.ago)
         url_redirect = create(:url_redirect, purchase: original, link: product)
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
@@ -336,9 +339,10 @@ describe UrlRedirectPresenter do
       it "skips a latest charge that was fully refunded" do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
-        earlier = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
-        create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago, stripe_refunded: true)
+        email = "buyer@example.com"
+        original = create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
+        earlier = create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
+        create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago, stripe_refunded: true)
         url_redirect = create(:url_redirect, purchase: original, link: product)
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
@@ -349,9 +353,10 @@ describe UrlRedirectPresenter do
       it "skips a latest charge that was charged back" do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
-        earlier = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
-        create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago, chargeback_date: 1.week.ago)
+        email = "buyer@example.com"
+        original = create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
+        earlier = create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
+        create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago, chargeback_date: 1.week.ago)
         url_redirect = create(:url_redirect, purchase: original, link: product)
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
@@ -360,13 +365,35 @@ describe UrlRedirectPresenter do
       end
 
       it "sends the charge's own email so the receipt and invoice pages accept it" do
-        _original, charge, url_redirect = membership_with_charge(original_email: "new@example.com", charge_email: "old@example.com")
+        _original, charge, url_redirect = membership_with_charge(original_email: "buyer@example.com", charge_email: "buyer@example.com")
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
         expect(props[:receipt_purchase_id]).to eq(charge.external_id)
+        expect(props[:receipt_purchase_email]).to eq("buyer@example.com")
+      end
+
+      it "stays on the sign-up purchase when a charge carries a different email" do
+        original, charge, url_redirect = membership_with_charge(original_email: "new@example.com", charge_email: "old@example.com")
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(original.external_id)
+        expect(props[:receipt_purchase_id]).not_to eq(charge.external_id)
         expect(props[:email]).to eq("new@example.com")
-        expect(props[:receipt_purchase_email]).to eq("old@example.com")
+        expect(props[:receipt_purchase_email]).to eq("new@example.com")
+      end
+
+      it "stays on the product purchase when a bundle parent carries a different email" do
+        child_purchase = create(:free_purchase, link: @product, is_bundle_product_purchase: true, email: "new@example.com")
+        bundle_purchase = create(:purchase, link: @product, seller: @user, email: "old@example.com")
+        create(:bundle_product_purchase, product_purchase: child_purchase, bundle_purchase:)
+        url_redirect = create(:url_redirect, purchase: child_purchase, link: @product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(child_purchase.external_id)
+        expect(props[:receipt_purchase_email]).to eq("new@example.com")
       end
 
       it "omits the charge's email while email confirmation is pending" do
