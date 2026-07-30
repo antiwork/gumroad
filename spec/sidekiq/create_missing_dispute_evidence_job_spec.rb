@@ -588,6 +588,40 @@ describe CreateMissingDisputeEvidenceJob do
       end
     end
 
+    context "when the mail server permanently rejects the notice" do
+      include ActiveJob::TestHelper
+
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before do
+        allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(
+          Net::SMTPFatalError.new("550 recipient rejected")
+        )
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      # RescueSmtpErrors logs the 5xx and returns, so nothing raises in MailDeliveryJob and nothing
+      # reaches the rescue above. The window stays stamped with the seller never asked — which is
+      # what the stamp handing ownership to FightDisputesJob is for: the statement is lost, the
+      # dispute is still fought before the deadline rather than conceded by silence.
+      it "keeps the stamped window and still submits the evidence at the deadline" do
+        expect do
+          perform_enqueued_jobs { described_class.new.perform }
+        end.not_to raise_error
+
+        dispute_evidence = dispute.reload.dispute_evidence
+        expect(ActionMailer::Base.deliveries).to be_empty
+        expect(dispute_evidence.seller_contacted_at).to be_present
+
+        travel_to(dispute_evidence.seller_contacted_at + DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours + 1.hour) do
+          expect do
+            FightDisputesJob.new.perform
+          end.to change { FightDisputeJob.jobs.size }.by(1)
+        end
+      end
+    end
+
     context "when one dispute cannot be built" do
       let!(:broken_purchase) { charged_back_purchase }
       let!(:broken_dispute) { create(:dispute_formalized, purchase: broken_purchase) }

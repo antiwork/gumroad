@@ -160,6 +160,13 @@ class CreateMissingDisputeEvidenceJob
         # the sweep sees this dispute again instead of leaving a started window the seller was
         # never told about — a window with no notice is worse than no window.
         #
+        # SMTP rejections do not arrive here, and cannot: ApplicationMailer includes
+        # RescueSmtpErrors, which logs Net::SMTPFatalError and returns, so a permanently rejected
+        # notice raises nothing in either delivery path. Such a window stays stamped, which is
+        # why the stamp hands ownership to FightDisputesJob — the evidence is still submitted at
+        # the deadline, without a seller statement. Formalization's own notice has the same
+        # exposure and no rollback at all; closing it means changing where mailers swallow 5xx.
+        #
         # Only clear the window this run opened, and decide that in the write itself. Formalization
         # stamps the same row and sends its own notice, and its check-then-stamp is not atomic
         # against this one, so it can land between our commit and this rescue — including between
