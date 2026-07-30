@@ -201,7 +201,7 @@ describe UrlRedirectPresenter do
         seller_analytics: nil,
         purchase: {
           id: @purchase.external_id,
-          bundle_purchase_id: @purchase.bundle_purchase.external_id,
+          receipt_purchase_id: @purchase.bundle_purchase.external_id,
           created_at: @purchase.created_at,
           email: @purchase.email,
           email_digest: @purchase.email_digest,
@@ -280,7 +280,7 @@ describe UrlRedirectPresenter do
         props = instance.download_page_with_content_props[:purchase]
 
         expect(child_purchase.has_invoice?).to be(false)
-        expect(props[:bundle_purchase_id]).to eq(bundle_purchase.external_id)
+        expect(props[:receipt_purchase_id]).to eq(bundle_purchase.external_id)
         expect(props[:has_invoice]).to be(true)
       end
 
@@ -292,6 +292,30 @@ describe UrlRedirectPresenter do
 
         instance = described_class.new(url_redirect:, logged_in_user: nil)
         expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(false)
+      end
+    end
+
+    describe "receipt_purchase_id on a membership" do
+      it "points at the latest successful charge, not the sign-up purchase" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true)
+        recurring = create(:membership_purchase, link: product, subscription:, created_at: 1.month.from_now)
+        url_redirect = create(:url_redirect, purchase: original, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:id]).to eq(original.external_id)
+        expect(props[:receipt_purchase_id]).to eq(recurring.external_id)
+      end
+
+      it "falls back to the purchase itself when the membership has no successful charge yet" do
+        original = create(:free_trial_membership_purchase)
+        url_redirect = create(:url_redirect, purchase: original, link: original.link)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(original.external_id)
       end
     end
 
@@ -696,7 +720,7 @@ describe UrlRedirectPresenter do
         redirect_id: @url_redirect.external_id,
         purchase: {
           id: @purchase.external_id,
-          bundle_purchase_id: nil,
+          receipt_purchase_id: @purchase.external_id,
           created_at: @purchase.created_at,
           email: @purchase.email,
           email_digest: @purchase.email_digest,

@@ -45,7 +45,7 @@ export type LayoutProps = {
   add_to_library_option: AddToLibraryOption;
   purchase: {
     id: string;
-    bundle_purchase_id: string | null;
+    receipt_purchase_id: string | null;
     email: string | null;
     email_digest: string;
     is_archived: boolean;
@@ -105,7 +105,7 @@ export const Layout = ({
     setIsResendingReceipt(false);
   });
 
-  const receiptPurchaseId = purchase?.bundle_purchase_id ?? purchase?.id;
+  const receiptPurchaseId = purchase?.receipt_purchase_id ?? purchase?.id;
 
   const disabledStatus =
     purchase && !purchase.product_available
