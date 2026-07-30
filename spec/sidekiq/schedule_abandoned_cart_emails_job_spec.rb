@@ -162,8 +162,49 @@ describe ScheduleAbandonedCartEmailsJob do
       opts = described_class.sidekiq_options
 
       expect(opts["lock"].to_sym).to eq(:until_executed)
-      expect(opts["lock_ttl"]).to be > described_class::SCAN_TIME_BUDGET.to_i
+      expect(opts["lock_ttl"]).to eq(described_class::LOCK_TTL.to_i)
+      expect(opts["lock_ttl"]).to be > described_class::ATTEMPT_TIME_BUDGET.to_i
       expect(opts["lock_ttl"]).to be < 1.day.to_i
+    end
+
+    # The lock only prevents concurrency while the attempt holding it is still alive, so the
+    # attempt must be the shorter of the two bounds. SCAN_TIME_BUDGET caps one statement, not
+    # the attempt, hence the separate ceiling.
+    it "keeps the attempt budget under the lock TTL and above a single statement budget" do
+      expect(described_class::ATTEMPT_TIME_BUDGET).to be > described_class::SCAN_TIME_BUDGET
+      expect(described_class::ATTEMPT_TIME_BUDGET).to be < described_class::LOCK_TTL
+    end
+  end
+
+  describe "attempt time budget" do
+    let(:seller) { create(:user) }
+    let!(:seller_payment) { create(:payment_completed, user: seller) }
+    let!(:product) { create(:product, user: seller) }
+    let!(:workflow) { create(:abandoned_cart_workflow, seller:, published_at: 1.day.ago, bought_products: [product.unique_permalink]) }
+    let(:cart) { create(:cart) }
+    let!(:cart_product) { create(:cart_product, cart:, product:) }
+
+    before { cart.update!(updated_at: 2.days.ago) }
+
+    it "aborts rather than running past the point where its unique lock can expire" do
+      # An attempt that outlives LOCK_TTL lets the next day's enqueue take the same digest and
+      # run concurrently; the sent_abandoned_cart_emails dedupe is a check-then-write with no
+      # unique index, so two live copies could email one cart twice. Fail instead.
+      # The first read sets the deadline, so only later reads advance past it.
+      started_at = Time.current
+      reads = 0
+      allow(Time).to receive(:current) do
+        reads += 1
+        reads == 1 ? started_at : started_at + described_class::ATTEMPT_TIME_BUDGET + 1.minute
+      end
+
+      expect do
+        described_class.new.perform
+      end.to raise_error(described_class::AttemptTimeBudgetExceeded, /#{Regexp.escape(described_class::LOCK_TTL.inspect)}/)
+    end
+
+    it "does not abort a run that finishes within the budget" do
+      expect { described_class.new.perform }.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
     end
   end
 end

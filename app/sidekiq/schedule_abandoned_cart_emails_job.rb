@@ -21,12 +21,25 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
+  # Wall-clock ceiling on one attempt. SCAN_TIME_BUDGET only caps a single statement, and the
+  # attempt runs many of them across ~30 day windows plus workflow matching, so nothing else
+  # bounds the whole thing. It has to stay under LOCK_TTL: an attempt that outlived its lock
+  # would let the next day's enqueue acquire the same digest and run concurrently, and the
+  # `sent_abandoned_cart_emails` dedupe is a check-then-write with no unique index behind it,
+  # so two live copies can email the same cart twice. Failing loudly instead retries under a
+  # fresh lock, and surfaces in Sentry via the retries-exhausted handler below.
+  ATTEMPT_TIME_BUDGET = 18.hours
+
   # An `until_executed` lock is released in an `ensure`, so an exception or a retry cannot strand
   # it — but a SIGKILL (OOM, deploy reap) never runs that ensure and leaves the digest with no
   # expiry. This job takes no arguments, so its digest is constant: one strand drops every later
   # enqueue forever (gumroad-private#1576). The TTL is re-applied on each acquire, so it only has
   # to outlast a single attempt, and must stay under the 24h schedule so a strand costs one run.
-  sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: 20.hours.to_i
+  LOCK_TTL = 20.hours
+
+  class AttemptTimeBudgetExceeded < StandardError; end
+
+  sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
   # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
   # the Sidekiq dead set with no alert, and no abandoned-cart emails went out platform-wide.
@@ -41,11 +54,14 @@ class ScheduleAbandonedCartEmailsJob
   end
 
   def perform
+    @deadline = Time.current + ATTEMPT_TIME_BUDGET
+
     # cart_product_ids_with_cart_ids is a hash of { product_id => { cart_id => [variant_ids] } }
     cart_product_ids_with_cart_ids = {}
 
     days_to_process = (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i)
     (1..days_to_process).each do |day|
+      check_attempt_deadline!
       day_start = day.days.ago.beginning_of_day
       day_end = day == 1 ? Cart::ABANDONED_IF_UPDATED_BEFORE_AGO.ago : (day - 1).days.ago.beginning_of_day
 
@@ -72,6 +88,7 @@ class ScheduleAbandonedCartEmailsJob
 
     start_time = Time.current
     Workflow.distinct.alive.abandoned_cart_type.published.joins(seller: :links).merge(User.alive.not_suspended).merge(Link.visible_and_not_archived).includes(:seller).find_each do |workflow|
+      check_attempt_deadline!
       next unless workflow.seller&.eligible_for_abandoned_cart_workflows?
 
       workflow.abandoned_cart_products(only_product_and_variant_ids: true).each do |product_id, variant_ids|
@@ -96,6 +113,15 @@ class ScheduleAbandonedCartEmailsJob
   end
 
   private
+    # Raises once the attempt has outrun ATTEMPT_TIME_BUDGET. Called from every unbounded loop —
+    # each day window, each scan batch, each workflow — because any one of them can be the part
+    # that runs long, and an attempt that outlives LOCK_TTL is the concurrency hazard.
+    def check_attempt_deadline!
+      return if Time.current < @deadline
+
+      raise AttemptTimeBudgetExceeded, "exceeded #{ATTEMPT_TIME_BUDGET.inspect} before finishing; aborting so the run cannot outlive its #{LOCK_TTL.inspect} unique lock"
+    end
+
     # Returns the ids of all abandoned carts in the given updated_at window, equivalent to
     # `Cart.abandoned(updated_at: window).pluck(:id)` but walked in id-ordered keyset batches
     # so no single statement has to materialize the whole window. The cursor advances past
@@ -105,6 +131,7 @@ class ScheduleAbandonedCartEmailsJob
       last_id = 0
       WithMaxExecutionTime.timeout_queries(seconds: SCAN_TIME_BUDGET) do
         loop do
+          check_attempt_deadline!
           batch = Cart.abandoned(updated_at: window)
                       .where("carts.id > ?", last_id)
                       .reorder("carts.id ASC")
