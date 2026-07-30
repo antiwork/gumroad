@@ -172,7 +172,7 @@ describe SslCertificates::Generate do
       it "does not activate results generated for a domain that changed" do
         allow(@custom_domain)
           .to receive(:activate_with_routability!)
-          .with(true, checked_domain: @custom_domain.domain)
+          .with(true, checked_domain: @custom_domain.domain, observed_at: kind_of(Time))
           .and_return(false)
 
         @resolving_domains.each do |domain|

@@ -5,7 +5,9 @@ require "spec_helper"
 describe RefreshCustomDomainRoutabilityWorker do
   let(:custom_domain) { create(:custom_domain, :verified_with_certificate, domain: "shop.example.com") }
   let(:resolving_domains) { [] }
-  let(:verification_service) { double(domains_resolving_to_gumroad: resolving_domains) }
+  let(:verification_service) do
+    double(domains_resolving_to_gumroad: resolving_domains, has_valid_ssl_certificate_for?: true)
+  end
 
   before do
     allow(CustomDomainVerificationService)

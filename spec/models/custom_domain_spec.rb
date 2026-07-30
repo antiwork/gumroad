@@ -319,6 +319,16 @@ describe CustomDomain do
       expect(custom_domain.reload.ssl_certificate_issued_at).to be_nil
       expect(custom_domain.routability_checked_at).to be_nil
     end
+
+    it "does not let an older observation overwrite a newer result" do
+      newer_observation = Time.current
+      older_observation = 1.minute.ago
+      custom_domain.set_routability!(false, observed_at: newer_observation)
+
+      expect(custom_domain.set_routability!(true, observed_at: older_observation)).to be(false)
+      expect(custom_domain.reload).not_to be_routable
+      expect(custom_domain.routability_checked_at).to eq(newer_observation)
+    end
   end
 
   describe "scopes" do

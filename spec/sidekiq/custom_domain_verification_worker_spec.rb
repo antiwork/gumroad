@@ -6,7 +6,13 @@ describe CustomDomainVerificationWorker do
   let!(:valid_custom_domain) { create(:custom_domain) }
   let!(:invalid_custom_domain) { create(:custom_domain, state: "unverified", failed_verification_attempts_count: 2) }
   let!(:deleted_custom_domain) { create(:custom_domain, deleted_at: 2.days.ago) }
-  let(:valid_verification_service) { double(process: true, domains_resolving_to_gumroad: [valid_custom_domain.domain]) }
+  let(:valid_verification_service) do
+    double(
+      process: true,
+      domains_resolving_to_gumroad: [valid_custom_domain.domain],
+      has_valid_ssl_certificate_for?: true
+    )
+  end
   let(:invalid_verification_service) { double(process: false, domains_resolving_to_gumroad: []) }
 
   before do

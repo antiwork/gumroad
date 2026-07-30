@@ -88,12 +88,16 @@ class CustomDomain < ApplicationRecord
     routable?
   end
 
-  def set_routability!(routable, checked_domain: domain)
-    persist_routability!(routable:, checked_domain:, activate_certificate: false)
+  def set_routability!(routable, checked_domain: domain, observed_at: Time.current)
+    persist_routability!(routable:, checked_domain:, observed_at:, certificate_action: :keep)
   end
 
-  def activate_with_routability!(routable, checked_domain: domain)
-    persist_routability!(routable:, checked_domain:, activate_certificate: true)
+  def activate_with_routability!(routable, checked_domain: domain, observed_at: Time.current)
+    persist_routability!(routable:, checked_domain:, observed_at:, certificate_action: :activate)
+  end
+
+  def require_certificate_for_routability!(checked_domain: domain, observed_at: Time.current)
+    persist_routability!(routable: false, checked_domain:, observed_at:, certificate_action: :clear)
   end
 
   def routability_refresh_due?
@@ -146,18 +150,19 @@ class CustomDomain < ApplicationRecord
       self.routability_checked_at = nil
     end
 
-    def persist_routability!(routable:, checked_domain:, activate_certificate:)
-      checked_at = Time.current
+    def persist_routability!(routable:, checked_domain:, observed_at:, certificate_action:)
       attributes = {
         routable:,
-        routability_checked_at: checked_at,
-        updated_at: checked_at,
+        routability_checked_at: observed_at,
+        updated_at: Time.current,
       }
-      attributes[:ssl_certificate_issued_at] = checked_at if activate_certificate
+      attributes[:ssl_certificate_issued_at] = observed_at if certificate_action == :activate
+      attributes[:ssl_certificate_issued_at] = nil if certificate_action == :clear
 
-      updated = self.class.alive.where(id:, domain: checked_domain).update_all(
-        attributes
-      )
+      matching_row = self.class.alive
+        .where(id:, domain: checked_domain)
+        .where("routability_checked_at IS NULL OR routability_checked_at < ?", observed_at)
+      updated = matching_row.update_all(attributes)
       return false unless updated == 1
 
       reload

@@ -9,14 +9,6 @@ class RefreshCustomDomainRoutabilityWorker
     return unless custom_domain&.active?
     return unless custom_domain.routability_refresh_due?
 
-    checked_domain = custom_domain.domain
-    resolving_domains = CustomDomainVerificationService
-      .new(domain: checked_domain)
-      .domains_resolving_to_gumroad
-
-    custom_domain.set_routability!(
-      resolving_domains.include?(checked_domain),
-      checked_domain:
-    )
+    CustomDomainRoutabilityService.new(custom_domain).process
   end
 end
