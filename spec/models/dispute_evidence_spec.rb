@@ -173,6 +173,35 @@ describe DisputeEvidence do
     end
   end
 
+  describe "#claim_seller_contacted_window!" do
+    before { dispute_evidence.update_as_not_seller_contacted! }
+
+    it "opens the window and reports the claim" do
+      at = 30.hours.ago
+
+      expect(dispute_evidence.claim_seller_contacted_window!(at:)).to be(true)
+      expect(dispute_evidence.seller_contacted_at).to be_within(1.second).of(at)
+    end
+
+    it "leaves an already-open window alone" do
+      # Both writers of this column — formalization and CreateMissingDisputeEvidenceJob — claim
+      # here, and the sweep's stamp is deliberately backdated to beat the processor's cutoff. A
+      # later claim overwriting it with a fresh full-length window would submit evidence too late.
+      dispute_evidence.claim_seller_contacted_window!(at: 30.hours.ago)
+      original = dispute_evidence.seller_contacted_at
+
+      expect(dispute_evidence.claim_seller_contacted_window!).to be(false)
+      expect(dispute_evidence.reload.seller_contacted_at).to eq(original)
+    end
+
+    it "does not open a window on resolved evidence" do
+      dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+      expect(dispute_evidence.claim_seller_contacted_window!).to be(false)
+      expect(dispute_evidence.reload.seller_contacted_at).to be_nil
+    end
+  end
+
   describe "#customer_communication_file_max_size" do
     before do
       dispute_evidence.receipt_image.attach(

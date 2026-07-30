@@ -505,11 +505,9 @@ describe CreateMissingDisputeEvidenceJob do
 
       before { stub_processor_deadline(12.hours.from_now) }
 
-      it "leaves the dispute alone until the side effects finish" do
-        # An atomic claim cannot defend against formalization's own check-then-stamp in the reverse
-        # order: it reads a NULL stamp BEFORE this job claims, and writes AFTER. Its write is a
-        # fresh 72-hour window, replacing the backdated one — so evidence would be submitted after
-        # the processor's cutoff. Not selecting an in-flight formalization is what removes the race.
+      it "leaves the dispute alone while a webhook retry could still finish it" do
+        # Formalization stamps the same column and sends its own notice. Within the retry window it
+        # is expected to get there, so sweeping now would only duplicate the seller's email.
         expect do
           described_class.new.perform
         end.not_to change { DisputeEvidence.count }
@@ -527,23 +525,45 @@ describe CreateMissingDisputeEvidenceJob do
         expect(dispute.reload.dispute_evidence.hours_left_to_submit_evidence).to eq(6)
       end
 
-      it "does not let formalization's stale write replace a deadline-aware window" do
-        # The harm played out end to end. Formalization's stamp is a check-then-write
-        # (`update_as_seller_contacted! if !seller_contacted?`), so it reads NULL, and if this sweep
-        # claims in between, formalization's later write lands a FRESH 72 hours over our backdated
-        # 6 — pushing submission past the cutoff. Simulated by doing exactly that write after the
-        # sweep runs.
+      it "recovers a formalization abandoned after its webhook retries ran out" do
+        # HandleStripeEventWorker gives up after ten retries (~5 hours), and nothing else ever
+        # writes the marker. Gating on the marker alone left such a dispute owned by nobody:
+        # excluded from this sweep for having no marker, and excluded from FightDisputesJob for
+        # having no seller window. It has to be swept once no retry is coming.
+        dispute.update!(formalized_at: (described_class::ABANDONED_FORMALIZATION_GRACE + 1.hour).ago)
+
+        expect do
+          described_class.new.perform
+        end.to change { DisputeEvidence.count }.by(1)
+
+        evidence = dispute.reload.dispute_evidence
+        expect(evidence.seller_contacted_at).to be_present
+        expect(evidence.hours_left_to_submit_evidence).to eq(6)
+      end
+
+      it "recovers an abandoned formalization that never reached its formalized_at stamp" do
+        # A crash before mark_formalized! leaves formalized_at NULL, so the grace period has to
+        # fall back to the row's own age or the dispute is excluded forever.
+        dispute.update!(formalized_at: nil)
+        dispute.update_column(:created_at, (described_class::ABANDONED_FORMALIZATION_GRACE + 1.hour).ago)
+
+        expect do
+          described_class.new.perform
+        end.to change { DisputeEvidence.count }.by(1)
+      end
+
+      it "keeps the deadline-aware window when formalization arrives after the recovery sweep" do
+        # Both paths claim the window through the same compare-and-claim, so a late formalization
+        # cannot replace a backdated 6-hour window with a fresh 72-hour one and push the submission
+        # past the processor's cutoff.
+        dispute.update!(formalized_at: (described_class::ABANDONED_FORMALIZATION_GRACE + 1.hour).ago)
         described_class.new.perform
-        expect(dispute.reload.dispute_evidence).to be_nil, "sweep must not touch an in-flight formalization"
 
-        # Formalization now completes for real, evidence and all.
-        dispute.update!(formalized_side_effects_finished_at: Time.current)
-        evidence = purchase.create_dispute_evidence_if_needed!
-        evidence.update_as_seller_contacted! unless evidence.seller_contacted?
+        evidence = dispute.reload.dispute_evidence
+        expect(evidence.hours_left_to_submit_evidence).to eq(6)
 
-        # One window, written by one path. Had the sweep claimed first, this row would now carry
-        # formalization's 72 hours instead of the 6 the cutoff allows.
-        expect(evidence.reload.hours_left_to_submit_evidence).to eq(72)
+        expect(purchase.create_dispute_evidence_if_needed!.claim_seller_contacted_window!).to be(false)
+        expect(evidence.reload.hours_left_to_submit_evidence).to eq(6)
         expect(DisputeEvidence.where(dispute_id: dispute.id).count).to eq(1)
       end
     end

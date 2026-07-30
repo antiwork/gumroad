@@ -48,21 +48,27 @@ class CreateMissingDisputeEvidenceJob
   # The second defers the dispute rather than giving it an unverified 72 hours.
   DEADLINE_UNKNOWN = :unknown
 
+  # How long a dispute may sit formalized with unfinished side effects before this job takes it
+  # anyway. HandleStripeEventWorker carries the resumption (retry: 10, Sidekiq's default backoff)
+  # and gives up after roughly five hours, so past this point no retry is coming and nothing else
+  # will ever finish that formalization — the marker stays NULL forever. Waiting on the marker
+  # alone therefore excluded exactly the disputes that most need the backstop.
+  ABANDONED_FORMALIZATION_GRACE = 12.hours
+
   def perform
     # A NULL seller_contacted_at covers both shapes of the gap — no evidence row at all, and a row
     # whose notice never went out — because a LEFT JOIN reports a missing row as NULL too. Matching
     # on the absent row alone would make the never-announced shape invisible forever. Resolved rows
     # are excluded because this job submits them itself and must not reselect what it already sent.
     #
-    # Only disputes whose formalization side effects finished. That path stamps the same column with
-    # its own check-then-stamp, and an atomic claim here cannot defend against it: if it reads a NULL
-    # stamp before this job's claim and writes after, its stale write replaces a deadline-aware
-    # window with a fresh 72-hour one — submitting after the cutoff. Waiting for the marker means the
-    # two never run against one dispute. Every dispute formalized before the marker existed was
-    # backfilled (20261204000000), so this excludes only formalizations still in flight.
+    # Formalizations still in flight are left to finish: their own path stamps the same column, and
+    # a duplicate notice within the retry window is noise the seller does not need. Once the grace
+    # period has passed no retry is coming, so the dispute is swept whether the marker was written
+    # or not. Racing that path is safe either way, because both open the window through
+    # DisputeEvidence#claim_seller_contacted_window! and the loser leaves the winner's window alone.
     Dispute.where(state: OPEN_DISPUTE_STATES)
            .where(event_created_at: LOOKBACK.ago..)
-           .where.not(formalized_side_effects_finished_at: nil)
+           .where("(disputes.formalized_side_effects_finished_at IS NOT NULL OR COALESCE(disputes.formalized_at, disputes.created_at) < ?)", ABANDONED_FORMALIZATION_GRACE.ago)
            .left_joins(:dispute_evidence)
            .where(dispute_evidences: { seller_contacted_at: nil, resolved_at: nil })
            .find_each do |dispute|
@@ -110,14 +116,11 @@ class CreateMissingDisputeEvidenceJob
             # elapsed. window_start is backdated where the cutoff is nearer than a full window, so
             # that submission lands before the deadline rather than after it.
             #
-            # Claim the row in the WHERE rather than checking and then writing: formalization stamps
-            # the same column with its own check-then-stamp, so a read here could be stale by the time
-            # the write lands and would overwrite a live window the seller was already told about.
-            # Nothing may `return` out of this block — that rolls the transaction back, discarding a
-            # concurrent writer's committed work along with our own.
-            claimed = DisputeEvidence.where(id: dispute_evidence.id, seller_contacted_at: nil, resolved_at: nil)
-                                     .update_all(seller_contacted_at: window_start, updated_at: Time.current)
-                                     .positive?
+            # claim_seller_contacted_window! is the protocol formalization uses too: the condition is
+            # in the WHERE, so whichever path gets there first owns the window and the other writes
+            # nothing. Nothing may `return` out of this block — that rolls the transaction back,
+            # discarding a concurrent writer's committed work along with our own.
+            claimed = dispute_evidence.claim_seller_contacted_window!(at: window_start)
           end
         end
       rescue => e

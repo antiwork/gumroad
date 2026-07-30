@@ -85,6 +85,21 @@ class DisputeEvidence < ApplicationRecord
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
   end
 
+  # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
+  #
+  # Two paths open it — formalization and CreateMissingDisputeEvidenceJob — and they can run against
+  # one row at the same time. Both must claim through here rather than checking seller_contacted? and
+  # then writing: the sweep backdates the stamp to land its submission before the processor's cutoff,
+  # so a stale check elsewhere would replace that with a fresh full-length window and submit too
+  # late. The condition lives in the WHERE, so the loser writes nothing and keeps the winner's window.
+  def claim_seller_contacted_window!(at: Time.current)
+    claimed = self.class.where(id:, seller_contacted_at: nil, resolved_at: nil)
+                  .update_all(seller_contacted_at: at, updated_at: Time.current)
+                  .positive?
+    reload if claimed
+    claimed
+  end
+
   def all_files_size_within_limit
     all_files_size = receipt_image.byte_size.to_i +
       policy_image.byte_size.to_i +
