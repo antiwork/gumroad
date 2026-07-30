@@ -718,6 +718,12 @@ class User < ApplicationRecord
     custom_html.present?
   end
 
+  # Saved custom HTML only replaces the public profile while the feature is active. Keep this
+  # separate from has_custom_landing_page?, which reports saved content for editing and recovery.
+  def custom_landing_page_visible?
+    Feature.active?(:custom_html_pages, self) && has_custom_landing_page?
+  end
+
   def valid_password?(password)
     super(password)
   rescue BCrypt::Errors::InvalidHash
