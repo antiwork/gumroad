@@ -321,8 +321,8 @@ describe CustomDomain do
     end
 
     it "does not let an older observation overwrite a newer result" do
-      newer_observation = Time.current
-      older_observation = 1.minute.ago
+      newer_observation = Time.current.change(usec: 0)
+      older_observation = newer_observation - 1.minute
       custom_domain.set_routability!(false, observed_at: newer_observation)
 
       expect(custom_domain.set_routability!(true, observed_at: older_observation)).to be(false)
@@ -331,8 +331,8 @@ describe CustomDomain do
     end
 
     it "records successful certificate issuance without overwriting a newer routability result" do
-      newer_observation = Time.current
-      older_observation = 1.minute.ago
+      newer_observation = Time.current.change(usec: 0)
+      older_observation = newer_observation - 1.minute
       custom_domain.set_routability!(false, observed_at: newer_observation)
       custom_domain.update_column(:ssl_certificate_issued_at, nil)
 
