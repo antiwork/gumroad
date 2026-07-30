@@ -45,6 +45,16 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  it "names the room and sender it reports to" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async).with("risk", "Blocked established subscribers", anything)
+  end
+
   # The gap the pre-merge review found: a renewal can fail on a domain block too, and those rows
   # have no expiry either, so leaving them out would have made a quiet alert mean "nobody is
   # stranded" when domain-blocked subscribers were.
@@ -316,6 +326,193 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include("blocked since #{domain_block.blocked_at.to_date}")
+    end
+  end
+
+  # A block outlives the membership it broke: UnsubscribeAndFailWorker terminates ~5 days after the
+  # failed renewal, so most reported entries name a subscription nobody can save by unblocking.
+  # Measured on production: 56 of 114 qualifying entries were already terminated.
+  describe "reachability of the reported subscriber" do
+    it "says whether the membership is still alive, and leads with the ones that are" do
+      dead = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription: dead, created_at: 20.days.ago)
+      dead.update!(failed_at: 15.days.ago)
+      live = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription: live, guid: "guid-live", buyer_email: "live@example.com", created_at: 10.days.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-live")
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("1 of them can still be saved")
+        expect(message).to match(/subscription #{live.id}.*still renewing/)
+        expect(message).to match(/subscription #{dead.id}.*membership already terminated/)
+        expect(message.index("subscription #{live.id}")).to be < message.index("subscription #{dead.id}")
+      end
+    end
+
+    it "marks a failure from the last day as new so the delta is readable" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:, created_at: 2.hours.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("• NEW — subscription #{subscription.id}")
+      end
+    end
+
+    it "does not mark an older failure as new" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:, created_at: 8.days.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("• subscription #{subscription.id}")
+        expect(message).not_to include("NEW —")
+      end
+    end
+  end
+
+  # The domain check reads four addresses; two of them had no coverage, so deleting either from the
+  # lookup kept the suite green while silently dropping those subscribers.
+  describe "the four domains the block check reads" do
+    it "alerts on a blocked gifter domain" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      renewal = failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+      create(:gift, gifter_purchase: renewal, gifter_email: "sender@gifted-domain.com")
+      renewal.update!(is_gift_sender_purchase: true)
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "gifted-domain.com")
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("subscription #{subscription.id}")
+        expect(message).to include("blocked since #{block.blocked_at.to_date}")
+      end
+    end
+
+    it "does not raise on an unparseable email address" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      renewal = failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+      renewal.update_column(:email, "not@an@address")
+
+      expect { described_class.new.perform }.not_to raise_error
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "skips a domain-blocked renewal with no usable address at all" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      renewal = failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+      renewal.update_column(:email, "")
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "skips a guid-blocked renewal that carries no guid" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      renewal = failed_renewal(subscription:)
+      renewal.update_column(:browser_guid, nil)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+  end
+
+  # Both entries are live, so recency is the only thing that can order them — otherwise a passing
+  # example proves nothing about the sort, only about the liveness tier.
+  it "reports the newest failure first among equally reachable subscribers" do
+    older = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: older, created_at: 9.days.ago)
+    newer = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: newer, guid: "guid-newer", buyer_email: "newer@example.com", created_at: 2.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-newer")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect([older, newer].all? { |sub| sub.reload.alive? }).to be(true)
+      expect(message.index("subscription #{newer.id}")).to be < message.index("subscription #{older.id}")
+    end
+  end
+
+  # Recency must NOT outrank reachability: a fresh failure on a dead membership is not more
+  # actionable than an older one that can still be saved.
+  it "puts a saveable subscriber above a more recent one whose membership is gone" do
+    dead = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: dead, created_at: 1.hour.ago)
+    dead.update!(failed_at: 30.minutes.ago)
+    live = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: live, guid: "guid-live", buyer_email: "live@example.com", created_at: 12.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-live")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message.index("subscription #{live.id}")).to be < message.index("subscription #{dead.id}")
+    end
+  end
+
+  # The cap renders the top of the sorted list, so a saveable subscriber must not be dropped in
+  # favour of terminated ones just because their failure is older.
+  it "spends a limited report on the saveable subscribers first" do
+    stub_const("#{described_class}::MAX_REPORTED", 1)
+    2.times do |i|
+      dead = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription: dead, guid: "guid-dead-#{i}", buyer_email: "dead#{i}@example.com",
+                     created_at: (i + 1).minutes.ago)
+      dead.update!(failed_at: 1.day.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-dead-#{i}")
+    end
+    live = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: live, guid: "guid-live", buyer_email: "live@example.com", created_at: 20.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-live")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{live.id}")
+      expect(message).to include("…and 2 more.")
+    end
+  end
+
+  it "ignores a blocked failure that is not a subscription renewal" do
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+    create(:purchase, email:, browser_guid:, purchase_state: "failed",
+                      error_code: PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  it "reports both truncations at once without contradicting itself" do
+    stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 2)
+    stub_const("#{described_class}::MAX_REPORTED", 1)
+    3.times do |i|
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:, guid: "guid-#{i}", buyer_email: "buyer#{i}@example.com",
+                     created_at: (i + 1).hours.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-#{i}")
+    end
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("At least 2 subscriptions with")
+      expect(message).to include("The scan stopped at the newest 2 subscriptions")
+      expect(message).to include("…and 1 more.")
     end
   end
 
