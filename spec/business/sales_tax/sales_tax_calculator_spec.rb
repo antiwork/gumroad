@@ -101,6 +101,8 @@ describe SalesTaxCalculator do
                              actual: sales_tax)
       end
 
+      # Guards the seller-rate escape against legacy console-created rows; nothing in the app
+      # writes seller-owned rates today.
       it "still assesses a seller-supplied EU rate on a physical product" do
         seller_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21,
                                             is_seller_responsible: false, user_id: @seller.id)
