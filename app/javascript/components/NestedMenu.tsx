@@ -22,7 +22,7 @@ export type MenuItem = {
   label: string;
   href?: string;
   css?: CSSProperties;
-  image?: string;
+  image?: string | undefined;
 };
 
 type NestedMenuType = "menubar" | "menu";

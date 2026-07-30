@@ -233,6 +233,80 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     end
   end
 
+  describe "external account block-listed by Stripe" do
+    let!(:merchant_account) { create(:merchant_account, user:) }
+    let(:blocked_message) do
+      "You cannot use this external account because it is on your block list. Please contact us via https://support.stripe.com/contact if you think this is an error."
+    end
+
+    def add_blocked_note(notified: true)
+      note = user.add_payout_note(content: "#{bank_prefix}: unknown — #{blocked_message}")
+      note.json_data["stripe_error_code"] = nil
+      note.json_data["stripe_error_message"] = blocked_message
+      note.json_data["seller_notified"] = true if notified
+      note.save!
+      note
+    end
+
+    it "stops retrying instead of re-sending an account Stripe will always refuse" do
+      # This is the whole defect: the account details are valid, so nothing about re-sending them
+      # can change the answer. Before this the note fell through to the generic retry path and
+      # burned the full weekly window, while the seller was told to wait (gumroad-private#1476).
+      note = add_blocked_note
+      expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_at"]).to be_present
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_ACCOUNT_BLOCKED)
+      expect(note.json_data["retry_count"]).to be_nil
+      expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::BANK_ACCOUNT_BLOCKED_NOTE)
+    end
+
+    it "emails the seller the add-a-different-account instruction, not the correct-your-code one" do
+      # The rejection_kind is the load-bearing part: with BANK_REJECTION_KIND_FORMAT the seller is
+      # told to re-enter details they already entered correctly, which is the advice that produced
+      # a three-month loop.
+      note = add_blocked_note(notified: false)
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, blocked_message)
+
+      note.reload
+      expect(note.json_data["seller_notified"]).to be(true)
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_ACCOUNT_BLOCKED)
+    end
+
+    it "recognises the block from an older note that carries only the human-readable content" do
+      # Notes written before the structured stripe_error_message field existed only have the note
+      # text, so the classifier has to fall back to sniffing it — same as the format one.
+      note = user.add_payout_note(content: "#{bank_prefix}: unknown — #{blocked_message}")
+      note.json_data["seller_notified"] = true
+      note.save!
+      expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_ACCOUNT_BLOCKED)
+    end
+
+    it "still classifies a format rejection as a format rejection" do
+      # The two terminal branches sit next to each other and both abandon, so a spec that only
+      # checked "was abandoned" would pass even if the block branch swallowed format rejections
+      # and sent them the wrong email. Pin the reason.
+      note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+      note.json_data["seller_notified"] = true
+      note.save!
+
+      described_class.new.perform(user.id)
+
+      expect(note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
+    end
+  end
+
   describe "bank account remediation when the seller has no Stripe account yet" do
     let!(:note) { add_note(bank_prefix) }
 
