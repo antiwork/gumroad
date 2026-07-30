@@ -1039,16 +1039,9 @@ class User < ApplicationRecord
     hostnames.compact.uniq
   end
 
-  # The host to build store links on: the seller's live custom domain when they have one,
-  # their subdomain otherwise. Deliberately the DB-only `active?` predicate rather than
-  # UrlService.widget_product_link_base_url, whose live DNS resolution would land in the
-  # profile render path — and `active?` is already what custom_html_store_hostnames trusts
-  # to decide the same question for the navigation bridge on the same pages.
-  #
-  # nil when the seller has neither, because the shared gumroad.com root is not a store host:
-  # only /:username/p/:slug exists there, so forcing it on Installment#full_url would build
-  # https://gumroad.com/p/:slug, which routes nowhere. Callers fall back to their own default.
-  def store_base_url
+  # Match the navigation bridge's DB-only predicate without resolving DNS in the render path.
+  # nil preserves each caller's root-domain or relative-path fallback.
+  def store_host_with_protocol
     return "#{PROTOCOL}://#{custom_domain.domain}" if custom_domain&.active?
 
     subdomain_with_protocol

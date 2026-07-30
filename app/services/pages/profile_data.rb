@@ -14,7 +14,7 @@ class Pages::ProfileData
     # no profile row yet, so every read off this is nil-safe.
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     Rails.cache.fetch(cache_key(seller, seller_profile)) do
-      base_url = seller.store_base_url
+      base_url = seller.store_host_with_protocol
       {
         products: products(seller, base_url),
         posts: posts(seller, base_url),
@@ -33,22 +33,17 @@ class Pages::ProfileData
     [
       "profile_data",
       CACHE_VERSION,
-      # The cached payload embeds full product and post URLs built from User#store_base_url,
-      # so the key carries that host itself rather than the custom-domain row's version: the
-      # row's `active?` is partly time-relative (the certificate ages out after a week with no
-      # write), so an updated_at-based segment would keep serving a host the live navigation
-      # bridge has already dropped from its allowlist, and those links go dead. Keying on the
-      # username too (rather than the whole user record) avoids rebuilding the cache on
-      # unrelated user-row updates.
+      # Certificate validity can lapse without a DB write, so key on the emitted host rather
+      # than the custom-domain row's version.
       seller.username,
-      seller.store_base_url,
+      seller.store_host_with_protocol,
       seller.products.cache_key_with_version,
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
     ].join("/")
   end
 
-  def self.products(seller, base_url = seller.store_base_url)
+  def self.products(seller, base_url = seller.store_host_with_protocol)
     seller.products.alive.not_archived.not_draft
           .includes(:thumbnail_alive, display_asset_previews: { file_attachment: :blob })
           .order(created_at: :desc).limit(MAX_ITEMS).map do |product|
@@ -94,7 +89,7 @@ class Pages::ProfileData
     seller.installments.visible_on_profile.count
   end
 
-  def self.posts(seller, base_url = seller.store_base_url)
+  def self.posts(seller, base_url = seller.store_host_with_protocol)
     seller.installments.visible_on_profile.includes(:seller).order(published_at: :desc).limit(MAX_ITEMS).map do |post|
       {
         name: post.name,

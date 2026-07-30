@@ -227,8 +227,8 @@ describe Pages::ProfileData do
     end
 
     context "when the seller has neither a subdomain nor a live custom domain" do
-      # store_base_url returns nil here rather than the shared gumroad.com root, so posts keep
-      # their relative /:username/p/:slug form — https://gumroad.com/p/:slug routes nowhere.
+      # A nil store host keeps posts on /:username/p/:slug rather than the invalid
+      # gumroad.com/p/:slug route.
       it "does not build post URLs on the shared root domain" do
         create(:product, user: seller, name: "My product")
         create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update")
