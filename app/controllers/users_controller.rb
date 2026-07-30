@@ -259,10 +259,11 @@ class UsersController < ApplicationController
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
-      # Same share-card chain as the standard profile (PageMeta::User): the
+      # Share-card chain mirroring the standard profile (PageMeta::User): the
       # branded subscribe-preview card wins, then a real uploaded avatar.
       # avatar_url always returns a value (it falls back to the default avatar),
-      # so only advertise it when the seller uploaded one. Resolve the preview
+      # so only advertise it when the seller uploaded one — unlike PageMeta::User,
+      # whose avatar_url.present? guard lets the default through. Resolve the preview
       # once — it rescues to nil internally, so re-reading it could mix the two
       # branches' tags.
       preview_url = user.subscribe_preview_url.presence
