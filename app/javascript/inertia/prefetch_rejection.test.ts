@@ -14,7 +14,10 @@
 // module (Vitest leaves dependencies inside node_modules unmocked) we install a
 // custom axios adapter on the shared axios instance the router itself imports.
 import axios, { type AxiosAdapter } from "axios";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Loading and initialising the real router costs seconds on a cold Vitest
 // environment, so the default one-second waitFor budget is not enough to be
@@ -64,6 +67,18 @@ const adapter: AxiosAdapter = (config) => {
 };
 
 describe("inertia prefetch rejection", () => {
+  // When node_modules predates the patch (a git pull without npm install), every
+  // test below fails as an unhelpful 5s timeout, so name the fix up front. The
+  // ESM build is the one vitest resolves the router import to.
+  beforeAll(() => {
+    const distDir = dirname(createRequire(import.meta.url).resolve("@inertiajs/core"));
+    if (!readFileSync(join(distDir, "index.esm.js"), "utf8").includes("abandonCurrentUse")) {
+      throw new Error(
+        "@inertiajs/core in node_modules is missing patches/@inertiajs+core+2.3.13.patch — your install is stale; run npm install (or npx patch-package).",
+      );
+    }
+  });
+
   beforeEach(() => {
     requests.length = 0;
     pendingPrefetchReject = null;
