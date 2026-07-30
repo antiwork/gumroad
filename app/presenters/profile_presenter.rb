@@ -57,7 +57,8 @@ class ProfilePresenter
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         # Version stamp for optimistic concurrency: the editor sends it back on save so the server
-        # can reject a stale pages/sections write. Nil for a not-yet-saved profile.
+        # can reject a stale pages/sections write. Unsaved empty profiles use the same fingerprint
+        # as a newly persisted profile whose layout is still empty.
         profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
         seller_fonts_css_source: SellerProfile.seller_fonts_css_source,

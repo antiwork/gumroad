@@ -64,7 +64,7 @@ const FONT_DESCRIPTIONS: Record<string, string> = {
 type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
-  profile_version: string | null;
+  profile_version: string;
   custom_html_pages_enabled: boolean;
   has_custom_landing_page: boolean;
   seller_fonts_css_source: string;

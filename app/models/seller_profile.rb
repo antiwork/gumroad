@@ -33,8 +33,6 @@ class SellerProfile < ApplicationRecord
   # updated_at would falsely reject an otherwise current layout from another tab.
   def layout_version
     section_updated_at = seller.seller_profile_sections.on_profile.maximum(:updated_at)
-    return if !persisted? && section_updated_at.nil?
-
     tabs = Array(json_data["tabs"]).map { [_1["name"], Array(_1["sections"])] }
     Digest::SHA256.hexdigest([tabs, section_updated_at&.iso8601(6)].to_json)
   end

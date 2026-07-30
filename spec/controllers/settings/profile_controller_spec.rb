@@ -297,6 +297,25 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         )
       end
 
+      it "does not reject an empty layout after another tab creates the profile with only theme changes" do
+        loaded_version = seller.seller_profile.layout_version
+        expect(seller.seller_profile).not_to be_persisted
+
+        seller.seller_profile.update!(font: "Domine")
+
+        put :update, params: {
+          tabs: [{ name: "Tab 1", sections: [] }],
+          profile_version: loaded_version,
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
+        expect(seller.reload.seller_profile).to have_attributes(
+          font: "Domine",
+          json_data: { "tabs" => [{ "name" => "Tab 1", "sections" => [] }] },
+        )
+      end
+
       it "leaves the avatar unchanged when a stale layout save is rejected" do
         seller.avatar.attach(file_fixture("test.png"))
         original_blob_id = seller.avatar.blob.id
