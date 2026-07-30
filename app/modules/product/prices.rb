@@ -369,12 +369,13 @@ module Product::Prices
     # The uses-left read is a purchases aggregate, so it runs only for capped codes and its
     # result is shared across every card on the page that carries the same default code
     # (Current resets between requests, so a redemption is reflected on the next one).
-    # Per-card fallback is deliberate for grid collections: a capped code's counted purchases
-    # are bounded by its own cap, so each aggregate scans a handful of index rows — batching
-    # every grid call site is not worth the coupling. Pages::ProductPrices, which prices up to
-    # 100 products uncached, seeds this memo in one grouped query (OfferCode.uses_left_by_id).
+    # Every cap is checked, however large: the aggregate ranges the offer_code_id index over
+    # redemptions actually made, not over the cap, so a millions-high "unlimited" cap with a
+    # handful of sales costs what a cap of ten does — and checkout pays this same read on every
+    # attempt. Pages::ProductPrices, which prices up to 100 products uncached, seeds this memo
+    # in one grouped query (OfferCode.uses_left_by_id).
     def default_offer_code_uses_left?(offer_code)
-      return true unless offer_code.cap_exhaustible_for_quoting?
+      return true if offer_code.max_purchase_count.nil?
 
       cache = (Current.default_offer_code_uses_left ||= {})
       return cache[offer_code.id] if cache.key?(offer_code.id)
