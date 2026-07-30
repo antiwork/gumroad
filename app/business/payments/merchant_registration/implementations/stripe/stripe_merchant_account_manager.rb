@@ -36,9 +36,22 @@ module StripeMerchantAccountManager
   BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
   BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
 
+  # Stripe refuses a specific external account outright when it is on the connected account's
+  # block list: "You cannot use this external account because it is on your block list."
+  # This is neither a format problem nor a directory miss. The details the seller typed are
+  # perfectly valid and re-entering them changes nothing — Stripe will refuse the same account
+  # every time, forever. Sellers have re-saved a correct account monthly for months against
+  # this refusal because we swallowed it and then told them to wait for a weekly re-check
+  # (gumroad-private#1476). The only fix is a DIFFERENT bank account, so it needs its own
+  # classification: no automated retries, and an email that says so.
+  BANK_ACCOUNT_BLOCKED_MESSAGE = /because it is on your block list/i
+
   # Passed to ContactingCreatorMailer#invalid_bank_account so the email can tell the seller
   # whether waiting might help (directory miss) or whether they must re-enter the code (format).
   BANK_REJECTION_KIND_FORMAT = "format_rejected"
+  # As above, but for a block-listed external account: the seller must use a different account,
+  # because correcting or re-entering this one can never succeed.
+  BANK_REJECTION_KIND_BLOCKED = "account_blocked"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
   # Prefix for the breadcrumb left when Stripe rejects account creation or an account update
   # for a reason we do not handle specifically. See record_account_rejection_note below.
@@ -576,7 +589,11 @@ module StripeMerchantAccountManager
     # cover older rejection shapes that carry no code or param.
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       if notify
-        rejection_kind = bank_details_format_rejection?(e) ? BANK_REJECTION_KIND_FORMAT : nil
+        rejection_kind = if bank_account_blocked?(e)
+          BANK_REJECTION_KIND_BLOCKED
+        elsif bank_details_format_rejection?(e)
+          BANK_REJECTION_KIND_FORMAT
+        end
         ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
         mark_bank_sync_note_seller_notified!(failure_note)
       end
@@ -650,6 +667,23 @@ module StripeMerchantAccountManager
   def self.bank_details_format_rejection_note?(note)
     code, message = bank_sync_note_error_details(note)
     format_rejection_signals?(code:, message:)
+  end
+
+  # True when Stripe refused this specific external account because it is block-listed on the
+  # connected account (see BANK_ACCOUNT_BLOCKED_MESSAGE). Distinct from a format rejection: the
+  # details are valid, so there is nothing for the seller to correct and nothing for waiting to
+  # fix. They have to add a different account.
+  def self.bank_account_blocked?(error)
+    error.message.to_s.match?(BANK_ACCOUNT_BLOCKED_MESSAGE)
+  end
+
+  # Same question answered from the payout-note breadcrumb rather than a live Stripe error, so
+  # the weekly retry loop can recognise a block it did not itself observe. Mirrors
+  # bank_details_format_rejection_note?, including the fallback to the note's human-readable
+  # content for notes written before the structured fields existed.
+  def self.bank_account_blocked_note?(note)
+    _code, message = bank_sync_note_error_details(note)
+    message.to_s.match?(BANK_ACCOUNT_BLOCKED_MESSAGE)
   end
 
   def self.bank_sync_note_error_details(note)
@@ -790,6 +824,13 @@ module StripeMerchantAccountManager
 
     param = error.respond_to?(:param) ? error.param.to_s : ""
     return true if param.start_with?("bank_account", "external_account")
+
+    # A block-listed external account is a rejection of the seller's bank details in the sense
+    # that matters here — only the seller can resolve it, by using a different account — and it
+    # is returned indefinitely for the same input, so paging Sentry on every attempt is pure
+    # noise. It is matched explicitly because the error does not reliably carry a code or param
+    # (gumroad-private#1476).
+    return true if bank_account_blocked?(error)
 
     # Stripe rejects some bank accounts with "Stripe is unable to support this bank at this
     # time." and populates neither `code` nor `param` on the error, so the checks above miss

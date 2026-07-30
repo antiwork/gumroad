@@ -9624,6 +9624,35 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      describe "account refused because it is on Stripe's block list" do
+        # Stripe returns this with neither code nor param, so the classification hangs entirely on
+        # the message match. Asserted at this level and not only through the retry job: the job
+        # specs stay green if the wrong rejection_kind reaches the mailer, which is the difference
+        # between telling the seller to use a different account and telling them to retype details
+        # that can never work (gumroad-private#1476).
+        let(:error_message) { "The bank account provided cannot be used because it is on your block list." }
+
+        before do
+          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, nil))
+        end
+
+        it "emails the creator with the blocked rejection kind and returns invalid_bank_account" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, described_class::BANK_REJECTION_KIND_BLOCKED, error_message)
+          expect(result).to eq(:invalid_bank_account)
+        end
+
+        it "records a bank-sync payout note naming the block list" do
+          subject.update_bank_account(user, passphrase: "1234")
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to include("Stripe bank sync failed")
+          expect(note.content).to include("block list")
+        end
+      end
+
       describe "account holder name rejected by Stripe" do
         before do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("Account holder name is invalid", "account_holder_name", code: "incorrect_account_holder_name"))
