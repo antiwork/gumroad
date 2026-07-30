@@ -2862,6 +2862,26 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
     StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
     assert_equal "returned", payment.reload.state
+    # `mark_returned!` has no `before_transition` hook to carry the reason, so it is assigned before
+    # the transition and persisted by the transition's own write. Nothing else asserts it on this arm,
+    # and the re-stamp to `unreversed_internal_transfer` reads the column.
+    assert_equal "account_closed", payment.failure_reason
+  end
+
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment a blank failure code records no reason rather than an empty string" do
+    create_merchant_account(charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment
+    object = payout_event_object(payment_external_id: payment.external_id, failure_code: "")
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    # Same `.presence` as the sync path in `Payment#sync_with_stripe`: the two must agree, or one
+    # stores "" where the other stores NULL and the admin failure-reason column renders blank
+    # instead of "None provided".
+    assert_equal "failed", payment.reload.state
+    assert_nil payment.failure_reason
   end
 
   test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment had an internal transfer reverses the internal transfer" do

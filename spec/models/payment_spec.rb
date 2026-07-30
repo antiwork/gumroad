@@ -147,6 +147,17 @@ describe Payment do
         payment.reload.send_payout_failure_email
       end.to_not have_enqueued_mail(ContactingCreatorMailer, :cannot_pay).with(payment.id)
     end
+
+    it "does not send the payout failure email if failure_reason is debit_card_limit" do
+      # Both skipped reasons are mailed by the `processing => failed` callbacks, which see the reason
+      # now that the transition itself writes it. Without this arm the seller is mailed twice.
+      payment.failure_reason = Payment::FailureReason::DEBIT_CARD_LIMIT
+      payment.save!
+
+      expect do
+        payment.reload.send_payout_failure_email
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :cannot_pay).with(payment.id)
+    end
   end
 
   describe "send_payout_failure_email_best_effort" do
