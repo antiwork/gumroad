@@ -340,12 +340,9 @@ class SettingsPresenter
       bank_account = seller.active_bank_account
       return nil if bank_account.nil?
 
-      # A seller on their own Stripe account is being paid out through it, so a rejected
-      # Gumroad-managed bank account is no longer blocking anything. Connecting Stripe does not
-      # delete the bank row, and #stripe_account deliberately ignores Connect accounts, so the
-      # guard at the call site cannot see this — and nothing would ever clear the note, because
-      # bank notes are only soft-deleted by a successful managed-account sync that can never run
-      # while Connect is active. Without this the banner would be permanent and false.
+      # A Connect seller is paid through their own account, so a rejected Gumroad-managed bank
+      # account blocks nothing — and the banner would never clear, since bank notes are only
+      # soft-deleted by a managed-account sync that cannot run while Connect is active.
       return nil if seller.has_stripe_account_connected?
 
       note = seller.comments
@@ -487,26 +484,30 @@ class SettingsPresenter
       #
       # Each branch deliberately says the same thing as the email sent on that same path, because
       # RetryStripeRejectedPayoutSetupForSellerJob owns the terminality decision and a second
-      # opinion here would contradict the mail the seller just received. That is also why there is
-      # no "add a different bank account" wording: the only reason that would justify it
-      # (ACCOUNT_BLOCKED) is diagnosed exclusively while a managed account is live, which the guard
-      # below excludes — so every note that reaches here is either a format rejection or an
-      # exhausted retry loop, and neither one proves the account itself is unusable.
-      if stripe_account.blank? && (bank_note = current_bank_sync_failure_note)
+      # opinion here would contradict the mail the seller just received. An abandoned_reason we
+      # have no copy for means the retries stopped for something that is not the seller's bank
+      # details to fix (a platform-level block, or a move off Stripe payouts), so say nothing.
+      #
+      # Unlike the postal code above, this is NOT gated on a missing Stripe account: the common
+      # rejection path is update_bank_account on an existing managed account, which leaves the
+      # account present while payouts stay broken. Only the terminal-rejection banner takes
+      # precedence, since it already tells that seller their account is finished.
+      if !stripe_rejected && (bank_note = current_bank_sync_failure_note)
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
-        bank_message = if bank_note.json_data["abandoned_reason"] == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
+        abandoned_reason = bank_note.json_data["abandoned_reason"]
+        bank_message = if abandoned_reason == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
           "Our payment partner couldn't accept your bank details as entered, and re-checking won't clear it. Please double-check your account and bank code and re-save them."
         elsif bank_note.json_data["abandoned_at"].present?
           # give_up! abandons without a reason, and it counts transient failures toward the retry
           # cap too, so exhaustion is not evidence the details are wrong. Mirrors
           # ContactingCreatorMailer#payout_setup_retry_exhausted, sent from that same method.
-          "We've been re-checking the bank account you added, but our payment partner still hasn't been able to verify it. Please double-check your details and re-save them. If everything looks correct, contact support and we'll look into it."
+          "We've been re-checking the bank account you added, but our payment partner still hasn't been able to verify it. Please double-check your details and re-save them. If everything looks correct, contact support and we'll look into it." if abandoned_reason.blank?
         else
           # Matches ContactingCreatorMailer#invalid_bank_account: the sweep is weekly
           # (RetryStripeRejectedPayoutSetupsJob), so don't promise anything faster.
           "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{weeks} weeks."
         end
-        compliance_actions << { message: bank_message, href: nil }
+        compliance_actions << { message: bank_message, href: nil } if bank_message.present?
       end
 
       gumroad_status = if is_under_review && !is_suspended

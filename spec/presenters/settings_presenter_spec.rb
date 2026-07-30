@@ -910,10 +910,9 @@ describe SettingsPresenter do
         end
 
         it "stays silent for a seller paid through their own connected Stripe account" do
-          # #stripe_account deliberately ignores Connect accounts, so the caller's blank? guard
-          # cannot catch this, and connecting Stripe does not delete the bank row. Without the
-          # explicit check the banner would be permanent: bank notes are only cleared by a
-          # successful managed-account sync, which never runs while Connect is active.
+          # Connecting Stripe does not delete the bank row, and nothing clears the note either:
+          # bank notes are only soft-deleted by a successful managed-account sync, which never
+          # runs while Connect is active. Without the explicit check the banner is permanent.
           create(:ach_account, user: seller)
           create(:merchant_account_stripe_connect, user: seller)
           seller.update!(check_merchant_account_is_linked: true)
@@ -945,12 +944,41 @@ describe SettingsPresenter do
           expect(account_status[:show_section]).to eq(false)
         end
 
-        it "does not surface the bank rejection once a Stripe account exists" do
+        it "surfaces the rejection when the seller already has a managed Stripe account" do
+          # The common producer is update_bank_account on an existing managed account, which
+          # leaves stripe_account present while payouts stay broken — gating on a missing account
+          # hid the banner from exactly the sellers who hit this path.
           create(:ach_account, user: seller)
           create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_bank_note_test")
           seller.add_payout_note(content: bank_note_content)
 
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
+            hash_including(message: a_string_matching(/couldn't verify the bank account you entered/), href: nil)
+          )
+        end
+
+        it "stays silent when the retries stopped for something the seller can't fix by re-saving" do
+          # A platform-level block, or a move off Stripe payouts, abandons the note with a reason
+          # this banner has no copy for. Falling through to the exhausted-retries wording would
+          # tell the seller to check details that were never the problem.
+          create(:ach_account, user: seller)
+          note = seller.add_payout_note(content: bank_note_content)
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.json_data["abandoned_reason"] = RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_ACCOUNT_BLOCKED
+          note.save!
+
           expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+        end
+
+        it "yields to the terminal-rejection banner, which already says the account is finished" do
+          create(:ach_account, user: seller)
+          merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_bank_note_rejected", stripe_disabled_reason: "rejected.listed")
+          create(:balance, user: seller, merchant_account:, amount_cents: 50)
+          seller.add_payout_note(content: bank_note_content)
+
+          account_status = presenter.payments_props[:account_status]
+          expect(account_status[:stripe_rejected]).to eq(true)
+          expect(account_status[:compliance_actions]).to eq([])
         end
 
         it "does not surface a bank rejection whose breadcrumb note was cleared by a successful sync" do
