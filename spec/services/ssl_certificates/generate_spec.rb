@@ -184,6 +184,20 @@ describe SslCertificates::Generate do
 
         @obj.process
       end
+
+      it "rechecks routability after certificate generation" do
+        travel_to(Time.current.change(usec: 123_456)) do
+          allow(@obj).to receive(:generate_certificate) do
+            @custom_domain.set_routability!(false, observed_at: Time.current)
+            travel 1.second
+            true
+          end
+
+          @obj.process
+        end
+
+        expect(@custom_domain.reload).to be_routable
+      end
     end
 
     context "when only the configured hostname's counterpart receives a certificate" do

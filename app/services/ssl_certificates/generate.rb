@@ -11,7 +11,6 @@ module SslCertificates
 
       @custom_domain = custom_domain
       @domain_verification_service = CustomDomainVerificationService.new(domain: custom_domain.domain)
-      @routability_observed_at = Time.current
     end
 
     def process
@@ -25,7 +24,7 @@ module SslCertificates
     end
 
     private
-      attr_reader :domain_verification_service, :routability_observed_at
+      attr_reader :domain_verification_service
 
       def order_certificates
         # Only order for names whose DNS actually resolves to Gumroad. A name
@@ -42,10 +41,11 @@ module SslCertificates
         end
 
         if all_certificates_generated
+          routable, observed_at = observe_current_routability
           activated = custom_domain.activate_with_routability!(
-            resolving_domains.include?(custom_domain.domain),
+            routable,
             checked_domain: custom_domain.domain,
-            observed_at: routability_observed_at
+            observed_at:
           )
           if activated
             resolving_domains.each { |domain| log_message(domain, "Issued SSL certificate.") }
@@ -68,6 +68,12 @@ module SslCertificates
 
       def generate_certificate(domain)
         certificate_authority.new(domain).process
+      end
+
+      def observe_current_routability
+        observed_at = Time.current
+        resolving_domains = CustomDomainVerificationService.new(domain: custom_domain.domain).domains_resolving_to_gumroad
+        [resolving_domains.include?(custom_domain.domain), observed_at]
       end
 
       def hourly_rate_limit_reached?
