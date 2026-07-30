@@ -273,8 +273,16 @@ class StripePayoutProcessor
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
+  rescue Stripe::RateLimitError => e
+    # Stripe's own retries deliberately exclude 429s, so this reaches us on the first response.
+    failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_RATE_LIMITED
+    payment.error_message = e.message.to_s.truncate(1000)
+    ErrorNotifier.notify(e)
+    [e.message]
   rescue Stripe::StripeError => e
     failed = true
     payment.error_message = e.message.to_s.truncate(1000)
@@ -282,6 +290,7 @@ class StripePayoutProcessor
     [e.message]
   rescue RuntimeError => e
     failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   ensure
@@ -439,8 +448,16 @@ class StripePayoutProcessor
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
+  rescue Stripe::RateLimitError => e
+    failed = true
+    failure_reason = Payment::FailureReason::PROCESSOR_RATE_LIMITED
+    payment.error_message = e.message.to_s.truncate(1000)
+    ErrorNotifier.notify(e)
+    Rails.logger.info("Payouts: Payout errors for user with id: #{payment.user_id} #{e.message}")
+    [e.message]
   rescue Stripe::StripeError => e
     failed = true
     payment.error_message = e.message.to_s.truncate(1000)

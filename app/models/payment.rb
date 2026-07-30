@@ -408,6 +408,12 @@ class Payment < ApplicationRecord
         FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
       )
       failed_payouts = failed_payouts.where("created_at > ?", last_completed_at) if last_completed_at
+      # A payout we failed ourselves says nothing about the seller's bank account, so it must not
+      # push them toward the pause threshold. The IS NULL arm is load-bearing — `NOT IN` alone
+      # drops NULL rows, which is most failures, silently disabling this check.
+      failed_payouts = failed_payouts.where(
+        "failure_reason IS NULL OR failure_reason NOT IN (?)", TRANSIENT_REASONS
+      )
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS
 

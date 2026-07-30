@@ -15,6 +15,20 @@ const groupOf = (input: HTMLElement) => {
 };
 
 describe("InputGroup", () => {
+  it("uses the indicator token for grouped and standalone input focus", () => {
+    render(
+      <>
+        <Input aria-label="Standalone" />
+        <InputGroup>
+          <Input aria-label="Grouped" />
+        </InputGroup>
+      </>,
+    );
+
+    expect(screen.getByLabelText("Standalone").className).toContain("focus:outline-indicator");
+    expect(groupOf(screen.getByLabelText("Grouped")).className).toContain("focus-within:outline-indicator");
+  });
+
   it("keeps a disabled group's contents at full opacity", () => {
     render(
       <InputGroup disabled>

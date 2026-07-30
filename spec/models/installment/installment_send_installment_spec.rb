@@ -93,6 +93,16 @@ describe "InstallmentSendInstallment"  do
       @purchase2 = create(:purchase, link: @product, email: "tuhinA@gumroad.com", created_at: 2.weeks.ago, price_cents: 100)
     end
 
+    it "does not send a member-cancellation post down the purchase branch" do
+      cancellation_workflow = create(:workflow, seller: @seller, link: @product,
+                                                workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+      cancellation_installment = create(:installment, link: @product, workflow: cancellation_workflow)
+
+      expect(PostSendgridApi).to_not receive(:process)
+
+      cancellation_installment.send_installment_from_workflow_for_purchase(@purchase1.id)
+    end
+
     it "sends a purchase_installment email for the purchase" do
       expect(PostSendgridApi).to receive(:process).with(
         post: @installment,

@@ -11,7 +11,14 @@ module Payment::FailureReason
   DESTINATION_CURRENCY_MISMATCH = "destination_currency_mismatch"
   BELOW_STRIPE_PAYOUT_MINIMUM = "below_stripe_payout_minimum"
   STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
+  PROCESSOR_RATE_LIMITED = "processor_rate_limited"
+  PROCESSOR_UNAVAILABLE = "processor_unavailable"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
+
+  # Failures caused by us or by the processor being unreachable, never by the seller's payout
+  # details. They must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no
+  # STRIPE_FAILURE_SOLUTIONS entry, because there is nothing for the seller to fix.
+  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
 
   # PayPal rejections we explain to the seller in their own words, because the seller has to change
   # something about the receiving PayPal account before the money can move. 3148 means the country

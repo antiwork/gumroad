@@ -143,40 +143,56 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # that reconciles a broken stream against the stored conversation finds the turn right away
       # instead of racing the suggestions call.
       #
-      # Persistence itself must not mask a reply the seller has already watched stream in. If
-      # recording the turn fails (e.g. a DB hiccup after a long LLM call), log + report it but let
-      # the stream finish — dropping `done` would leave the client without a conversation id, so
-      # the next turn would silently start a brand-new conversation. The only cost of a
-      # persistence failure is that this turn isn't stored — the failure marker tells a
-      # recovering client to stop waiting for it.
+      # A persistence failure still ends the stream cleanly. If it strands a proposed write,
+      # replace the already-streamed confirmation wording because no stored proposal can back it.
       turn_persisted = false
+      assistant_message = nil
+      unpersisted_proposal = false
       on_reply_complete = lambda do |turn|
-        conversation = persist_agent_turn!(conversation, new_user_message, turn, fallback_first_message: messages.last[:content], client_turn_id:)
+        conversation, assistant_message = persist_agent_turn!(
+          conversation,
+          new_user_message,
+          turn,
+          fallback_first_message: messages.last[:content],
+          client_turn_id:,
+        )
         turn_persisted = true
       rescue => e
         mark_agent_turn_failed!(client_turn_id)
         Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
+        unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
       end
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
-        # Each write proves the turn is still alive — refresh the marker so long multi-tool turns
-        # never read as dead to a recovering client.
-        mark_agent_turn_in_progress!(client_turn_id)
+        # Extend only a marker that is still in progress. on_reply_complete runs before trailing
+        # object/proposal/suggestion events and can mark persistence failed; no later event may
+        # resurrect that terminal state.
+        refresh_agent_turn_in_progress!(client_turn_id)
+        # finish_stream invokes on_reply_complete before emitting the proposal. If persistence
+        # failed, suppress that event: without a stored assistant message there is no proposal id
+        # the confirmation endpoint can claim.
+        next if event.to_s == "proposed_action" && assistant_message.nil?
+        # The suggestion call still used the discarded confirmation wording. Do not pair the
+        # honest fallback with prompts derived from a write that cannot be confirmed.
+        next if event.to_s == "suggestions" && unpersisted_proposal
+
         write_event.call(payload, event)
       end
       # conversation_id is omitted entirely (not null) when creating the conversation itself
       # failed above — the client validates this frame against a schema where conversation_id
       # is an optional string, so a null would fail validation and turn a benign persistence
       # failure into a spurious interrupted-stream recovery. proposed_action stays present even
-      # when nil: the client schema requires it (nullable, not optional).
+      # when nil: the client schema requires it (nullable, not optional). A generated proposal is
+      # returned only when its assistant message persisted and has a claimable id.
       done_payload = {
         reply: result[:reply],
-        proposed_action: result[:proposed_action],
+        proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        suggestions: result[:suggestions] || [],
+        suggestions: unpersisted_proposal ? [] : result[:suggestions] || [],
       }
       done_payload[:conversation_id] = conversation.external_id if conversation
+      done_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
       write_event.call(done_payload, "done")
     rescue ::Ai::StoreAgentService::Error => e
       mark_agent_turn_failed!(client_turn_id) unless turn_persisted

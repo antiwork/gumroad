@@ -18,14 +18,15 @@ class CheckoutPresenter
     @ip = ip
   end
 
-  def checkout_props(params:, browser_guid:, cart: nil)
+  def checkout_props(params:, browser_guid:, cart: nil, arrival_props: nil)
     geo = GeoIp.lookup(@ip)
     detected_country = geo.try(:country_name)
     country = logged_in_user&.country || detected_country
     detected_state = geo.try(:region_name) if [Compliance::Countries::USA, Compliance::Countries::CAN].any? { |country| country.common_name == detected_country }
     credit_card = logged_in_user&.credit_card
     saved_credit_card = CheckoutPresenter.saved_card(credit_card)
-    user = params[:username] && User.find_by_username(params[:username])
+    user = checkout_user(params)
+    arrival_props ||= checkout_arrival_props(params:, user:)
 
     props = {
       **checkout_common,
@@ -40,10 +41,7 @@ class CheckoutPresenter
       } : nil,
       saved_credit_card:,
       gift: nil,
-      clear_cart: false,
-      **add_single_product_props(params:, user:),
-      **checkout_wishlist_props(params:),
-      **checkout_wishlist_gift_props(params:),
+      **arrival_props,
       max_allowed_cart_products: Cart::MAX_ALLOWED_CART_PRODUCTS,
       cart_save_debounce_ms: CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
       tip_options: TipOptionsService.get_tip_options,
@@ -59,6 +57,31 @@ class CheckoutPresenter
     ).props
 
     props
+  end
+
+  def checkout_arrival_props(params:, user: checkout_user(params))
+    {
+      clear_cart: false,
+      **add_single_product_props(params:, user:),
+      **checkout_wishlist_props(params:),
+      **checkout_wishlist_gift_props(params:),
+    }
+  end
+
+  # Gift-wishlist arrivals replace the saved cart; all other URL products extend it.
+  def checkout_seller_context(arrival_props:)
+    add_products = arrival_props[:add_products]
+    seller_ids = Link.where(unique_permalink: add_products.map { _1.dig(:product, :permalink) })
+      .pluck(:unique_permalink, :user_id).to_h
+
+    {
+      clear_cart: arrival_props[:clear_cart],
+      products: add_products.filter_map do |product|
+        permalink = product.dig(:product, :permalink)
+        seller_id = seller_ids[permalink]
+        { seller_id:, cart_key: [permalink, product[:option_id]] } if seller_id
+      end,
+    }
   end
 
   def checkout_product(product, cart_item, params, include_cross_sells: true)
@@ -259,7 +282,7 @@ class CheckoutPresenter
 
   private
     def add_single_product_props(params:, user:)
-      product = params[:product] && (user ? Link.fetch_leniently(params[:product], user:) : Link.find_by_unique_permalink(params[:product]))
+      product = single_product(params, user:)
       cart_item = product.cart_item(params) if product
       {
         add_products: [checkout_product(product, cart_item, params)].compact
@@ -267,34 +290,22 @@ class CheckoutPresenter
     end
 
     def checkout_wishlist_props(params:)
-      return {} if params[:wishlist].blank?
-      wishlist = Wishlist.alive.find_by_external_id(params[:wishlist])
-      return {} if wishlist.blank?
+      wishlist_with_products = checkout_wishlist_with_products(params)
+      return {} if wishlist_with_products.nil?
 
-      wishlist_products = wishlist.alive_wishlist_products.available_to_buy.preload(
-        :variant,
-        product: [
-          :user,
-          :thumbnail,
-          :installment_plan,
-          :variant_categories_alive,
-          :alive_variants,
-          { available_upsell: :seller },
-        ]
-      )
+      wishlist, products = wishlist_with_products
       affiliate_id = wishlist.user.global_affiliate.external_id_numeric.to_s
 
       {
-        add_products: wishlist_products.map do |wishlist_product|
+        add_products: products.map do |wishlist_product|
           checkout_wishlist_product(wishlist_product, params.reverse_merge(affiliate_id:))
         end
       }
     end
 
     def checkout_wishlist_gift_props(params:)
-      return {} if params[:gift_wishlist_product].blank?
-      wishlist_product = WishlistProduct.alive.find_by_external_id(params[:gift_wishlist_product])
-      return {} if wishlist_product.blank? || wishlist_product.wishlist.user == logged_in_user
+      wishlist_product = gift_wishlist_product(params)
+      return {} if wishlist_product.nil?
 
       {
         clear_cart: true,
@@ -315,6 +326,39 @@ class CheckoutPresenter
         cart_item,
         params.reverse_merge(recommended_by: RecommendationType::WISHLIST_RECOMMENDATION),
       )
+    end
+
+    def checkout_user(params)
+      params[:username] && User.find_by_username(params[:username])
+    end
+
+    def single_product(params, user: checkout_user(params))
+      params[:product] && (user ? Link.fetch_leniently(params[:product], user:) : Link.find_by_unique_permalink(params[:product]))
+    end
+
+    def checkout_wishlist_with_products(params)
+      wishlist = Wishlist.alive.find_by_external_id(params[:wishlist]) if params[:wishlist].present?
+      return if wishlist.nil?
+
+      [
+        wishlist,
+        wishlist.alive_wishlist_products.available_to_buy.preload(
+          :variant,
+          product: [
+            :user,
+            :thumbnail,
+            :installment_plan,
+            :variant_categories_alive,
+            :alive_variants,
+            { available_upsell: :seller },
+          ]
+        ),
+      ]
+    end
+
+    def gift_wishlist_product(params)
+      wishlist_product = WishlistProduct.alive.find_by_external_id(params[:gift_wishlist_product]) if params[:gift_wishlist_product].present?
+      wishlist_product unless wishlist_product&.wishlist&.user == logged_in_user
     end
 
     def checkout_common

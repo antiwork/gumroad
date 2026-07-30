@@ -8,11 +8,16 @@ class CheckoutController < ApplicationController
   def show
     cart_presenter = CartPresenter.new(logged_in_user:, ip: request.remote_ip, browser_guid: cookies[:_gumroad_guid])
     checkout_presenter = CheckoutPresenter.new(logged_in_user:, ip: request.remote_ip)
+    # Keep this cache request-scoped; callers can reuse presenters across product state changes.
+    arrival_props = nil
+    load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
 
     render inertia: "Checkout/Show", props: {
       cart: -> { cart_presenter.cart_props },
-      checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart) },
+      checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart, arrival_props: load_arrival_props.call) },
       recommended_products: InertiaRails.optional { recommended_products },
+      stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
+      checkout_style: -> { sole_seller_checkout_style(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call)) },
     }
   end
 
@@ -103,6 +108,59 @@ class CheckoutController < ApplicationController
   end
 
   private
+    # Match CheckoutPresenter's product sources and precedence so the theme cannot identify a seller
+    # whose products the checkout does not render. Gift-wishlist arrivals replace the saved cart;
+    # every other arrival extends it.
+    def sole_seller_checkout_style(cart, checkout_seller_context)
+      products = checkout_seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart)
+      arriving_products = checkout_seller_context[:products]
+      existing_cart_keys = products.index_by { _1[:cart_key] }
+      new_product_count = arriving_products.count { !existing_cart_keys.key?(_1[:cart_key]) }
+
+      # The frontend rejects every arriving product when the combined cart is over the limit.
+      products = if products.size + new_product_count > Cart::MAX_ALLOWED_CART_PRODUCTS
+        products.first(Cart::MAX_ALLOWED_CART_PRODUCTS)
+      else
+        products + arriving_products
+      end
+
+      seller_ids = products.pluck(:seller_id).uniq
+      return unless seller_ids.one?
+
+      seller = User.find_by(id: seller_ids.first)
+      profile = seller&.seller_profile
+      css = profile&.custom_styles.presence
+      return unless css
+
+      {
+        css:,
+        seller_id: seller.external_id,
+        theme: {
+          accent_color: profile.highlight_color,
+          indicator_color: profile.accent_color_for_indicators,
+          background_color: profile.background_color,
+          text_color: profile.text_color_on_background,
+          danger_color: profile.danger_color,
+          font_family: profile.font_family,
+        },
+      }
+    rescue SassC::SyntaxError
+      # A template compilation bug must not break the shared payment surface. Persisted values are
+      # checked before compilation, but checkout still fails closed if Sass rejects trusted input.
+      nil
+    end
+
+    def checkout_style_cart_products(cart)
+      return [] unless cart
+
+      cart.visible_cart_products.preload(:product, :option).map do |cart_product|
+        {
+          seller_id: cart_product.product.user_id,
+          cart_key: [cart_product.product.unique_permalink, cart_product.option&.external_id],
+        }
+      end
+    end
+
     # True when the exception is a CartProduct validation failure caused ONLY by a
     # quantity or price above its column limit (see CartProduct::MAX_QUANTITY /
     # CartProduct::MAX_PRICE) — the known, expected shape of buyer-supplied bad input.

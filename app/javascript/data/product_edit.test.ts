@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyRichContentPageSaveResponse,
   buildRichContentReconciliationTransaction,
+  HiddenVariantContentConflictError,
   canonicalRichContentScope,
   copyRichContentPages,
   filesForSave,
@@ -15,7 +16,11 @@ import {
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
   richContentMoveSourceIds,
+  saveProductError,
+  StaleContentConflictError,
+  StaleDeletionConflictError,
 } from "$app/data/product_edit";
+import { ResponseError } from "$app/utils/request";
 
 vi.mock("@tiptap/core", () => ({
   Editor: class {
@@ -403,5 +408,63 @@ describe("removeFileEmbedsFromRichContent", () => {
       type: "doc",
       content: [{ type: "paragraph", content: [{ type: "text", text: "First edit" }] }],
     });
+  });
+});
+
+describe("save contract conflict responses", () => {
+  // The seller-visible bug (gumroad-private#1508): the server answers a
+  // stale-token deletion with 409 + error_code, but the mapping only recognised
+  // the two content-conflict codes, so this one fell through to a bare
+  // ResponseError and the page turned it into a generic red toast that never
+  // said the deletion had not happened.
+  it("maps stale_deletion_conflict to its own typed error", () => {
+    const error = saveProductError({
+      error_message: "This product changed since you opened it.",
+      error_code: "stale_deletion_conflict",
+      editor_revision: "revision-issued-with-the-409",
+    });
+
+    expect(error).toBeInstanceOf(StaleDeletionConflictError);
+    expect(error).not.toBeInstanceOf(StaleContentConflictError);
+    expect(error.message).toBe("This product changed since you opened it.");
+  });
+
+  // The 409's fresh token must not reach the editor. Adopting it would let the
+  // session's next save — still the full stale snapshot — delete AND revert
+  // every field another session changed in between (gumroad-private#1532).
+  it("does not carry the fresh revision onto the error", () => {
+    const error = saveProductError({
+      error_message: "Stale.",
+      error_code: "stale_deletion_conflict",
+      editor_revision: "revision-issued-with-the-409",
+    });
+
+    expect(Object.values({ ...error })).not.toContain("revision-issued-with-the-409");
+  });
+
+  // Pins the discrimination to error_code, not to HTTP status. stale-content and
+  // stale-deletion are both 409 and describe different things: a write that
+  // would clobber newer content vs. a deletion that did not happen.
+  it("keeps the two 409 conflicts distinct", () => {
+    const contentConflict = saveProductError({
+      error_message: "Someone else saved.",
+      error_code: "stale_content_conflict",
+      stale_records: [{ type: "variant", id: "8056662", name: "ADManager-Portable" }],
+    });
+    expect(contentConflict).toBeInstanceOf(StaleContentConflictError);
+    expect(contentConflict).not.toBeInstanceOf(StaleDeletionConflictError);
+
+    const hiddenConflict = saveProductError({
+      error_message: "Choose which content to keep.",
+      error_code: "hidden_variant_content_conflict",
+      hidden_variant_pages: [{ id: "p1", title: null, variant_name: null }],
+    });
+    expect(hiddenConflict).toBeInstanceOf(HiddenVariantContentConflictError);
+
+    // An unrecognised code stays a plain ResponseError, so new server codes
+    // degrade to the generic toast instead of being silently mis-handled.
+    const unknown = saveProductError({ error_message: "Nope.", error_code: "some_future_code" });
+    expect(unknown).toBeInstanceOf(ResponseError);
+    expect(unknown).not.toBeInstanceOf(StaleDeletionConflictError);
   });
 });

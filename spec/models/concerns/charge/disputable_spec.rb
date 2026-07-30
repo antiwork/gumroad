@@ -352,6 +352,43 @@ describe Charge::Disputable, :vcr do
           expect(purchase.subscription.cancelled_at).to_not be(nil)
           expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
         end
+
+        context "when the seller has since converted the product away from a membership" do
+          before do
+            # A seller can turn a membership product into a one-off product after the sale.
+            # The subscription bought under the old type is still live and still billing, so
+            # the chargeback must still cancel it.
+            product.is_recurring_billing = false
+            product.native_type = Link::NATIVE_TYPE_COURSE
+            product.save!(validate: false)
+          end
+
+          it "still cancels the subscription" do
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.subscription.cancelled_at).to be_present
+          end
+        end
+      end
+
+      context "when the purchase is an installment plan" do
+        let(:product) { create(:product, :with_installment_plan, user: seller) }
+        let!(:purchase) do
+          subscription = create(:subscription, link: product, is_installment_plan: true, cancelled_at: nil)
+          purchase = create(:purchase, link: product, stripe_transaction_id: "ch_zitkxbhds3zqlt")
+          purchase.update!(is_original_subscription_purchase: true, subscription:)
+          purchase
+        end
+
+        # The model rejects a by_buyer cancel on an installment plan, so cancelling here would
+        # raise mid-side-effects and strand the payout pause and dispute evidence on every retry.
+        it "leaves the plan alone and still runs the rest of the side effects" do
+          expect { Purchase.handle_charge_event(event) }.to_not raise_error
+
+          expect(purchase.reload.subscription.cancelled_at).to be_nil
+          expect(purchase.chargeback_date).to be_present
+          expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+        end
       end
 
       it "sends emails to admin, creator, and customer" do
@@ -1106,6 +1143,42 @@ describe Charge::Disputable, :vcr do
             Purchase.handle_charge_event(@event)
 
             expect(CustomerMailer).to have_received(:subscription_restarted).with(@subscription.id, Subscription::ResubscriptionReason::PAYMENT_ISSUE_RESOLVED)
+          end
+
+          context "when the seller has since converted the product away from a membership" do
+            before do
+              product = @subscription.link
+              product.is_recurring_billing = false
+              product.native_type = Link::NATIVE_TYPE_COURSE
+              product.save!(validate: false)
+            end
+
+            it "still restarts the subscription" do
+              Purchase.handle_charge_event(@event)
+
+              expect(@subscription.reload).to be_alive
+              expect(@subscription.cancelled_at).to be_nil
+            end
+          end
+
+          context "when the subscription has already ended" do
+            before do
+              @subscription.update!(ended_at: 1.day.ago)
+            end
+
+            # resubscribe! never clears ended_at, so restarting an ended subscription would tell
+            # the buyer and seller it is back while alive? still returns false.
+            it "leaves it ended and sends no restart notification" do
+              mail_double = double
+              allow(mail_double).to receive(:deliver_later)
+              allow(CustomerMailer).to receive(:subscription_restarted).and_return(mail_double)
+
+              Purchase.handle_charge_event(@event)
+
+              expect(@subscription.reload.ended_at).to be_present
+              expect(@subscription).not_to be_alive
+              expect(CustomerMailer).not_to have_received(:subscription_restarted)
+            end
           end
         end
 

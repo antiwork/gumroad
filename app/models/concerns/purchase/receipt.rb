@@ -44,6 +44,40 @@ module Purchase::Receipt
     end
   end
 
+  # The purchase whose receipt and invoice this one's buyer should be shown. Usually itself, but
+  # the row a buyer reaches through their library is not always the row that holds the money:
+  #
+  # - bundle content: this is the $0 per-product access record the bundle created, and the money
+  #   was paid on the bundle purchase;
+  # - membership: `Purchase.for_library` excludes recurring charges, so this is the sign-up —
+  #   potentially years and several cards before the period the buyer wants invoiced.
+  #
+  # The GIFTER's purchase is rejected as a candidate rather than the giftee's row being excluded
+  # from the subscription branch: it shares a subscription with the giftee's row, so resolving to
+  # it would serve the giftee the gifter's email, amount, and card. Once the giftee adds a card
+  # and the membership renews, those renewals carry the giftee's own email (`Subscription#email`
+  # via `#build_purchase`), and excluding the giftee's row wholesale would have pinned them to the
+  # original $0 gift forever.
+  #
+  # Resolving away from `self` requires the two rows to agree on the email exactly, because the
+  # email is the only thing the receipt and invoice endpoints check. A membership reassigned by
+  # editing the sign-up's email leaves earlier charges on the previous holder's address, so
+  # without this guard the new holder would be handed a working link to someone else's receipt.
+  # Exact match, not case-insensitive: the invoice endpoint compares byte-for-byte.
+  def receipt_purchase
+    candidate =
+      if is_bundle_product_purchase?
+        bundle_purchase
+      elsif subscription.present?
+        subscription.last_successful_not_reversed_or_refunded_charge
+      end
+    return self if candidate.nil? || candidate.id == id
+    return self if candidate.is_gift_sender_purchase?
+    return self unless candidate.email == email
+
+    candidate
+  end
+
   def has_invoice?
     subscription.present? ? !is_free_trial_purchase? : !free_purchase?
   end
