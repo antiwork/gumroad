@@ -9161,6 +9161,271 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "when Stripe rejects the service agreement we derived from the legal-entity country" do
+      let(:user_compliance_info_1) { create(:user_compliance_info, user:, country: "Korea, Republic of") }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:merchant_account) { subject.create_account(user, passphrase: "1234") }
+      let(:user_compliance_info_2) { create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul") }
+      let(:rejection) do
+        Stripe::InvalidRequestError.new(
+          "The recipient ToS agreement is not supported for platforms in US creating accounts in US.",
+          nil
+        )
+      end
+
+      before do
+        user_compliance_info_1
+        create(:korea_bank_account, user:)
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+        merchant_account
+        user_compliance_info_2
+
+        original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
+          stripe_account = original_stripe_account_retrieve.call(*args)
+          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
+          stripe_account
+        end
+      end
+
+      it "retries without the agreement so the fields Gumroad already holds still land" do
+        merchant_id = user.stripe_account.charge_processor_merchant_id
+
+        expect(Stripe::Account).to receive(:update)
+          .with(merchant_id, hash_including(:tos_acceptance))
+          .and_raise(rejection)
+        expect(Stripe::Account).to receive(:update)
+          .with(merchant_id, hash_excluding(:tos_acceptance)) do |_id, attributes|
+            expect(attributes[:business_profile]).to be_present
+            expect(attributes[:individual][:address][:city]).to eq("Seoul")
+          end
+
+        expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+      end
+
+      it "leaves one private payout-note breadcrumb naming the rejection" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect do
+          2.times { subject.update_account(user, passphrase: "1234") }
+        end.to change {
+          user.comments.with_type_payout_note.alive
+              .where("content LIKE ?", "#{StripeMerchantAccountManager::SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
+              .count
+        }.by(1)
+
+        note = user.comments.with_type_payout_note.alive.last
+        expect(note.content).to include("recipient ToS agreement is not supported")
+      end
+
+      # Two resyncs for the same seller can both see no note before either writes one, so the
+      # look-then-write has to run under the user row lock for the once-per-account rule to hold.
+      it "takes the user row lock around the breadcrumb check and write" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        locked = false
+        allow(user).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          original.call(*args) do
+            locked = true
+            block.call
+          end
+        end
+        allow(user).to receive(:add_payout_note).and_wrap_original do |original, **kwargs|
+          expect(locked).to be(true)
+          original.call(**kwargs)
+        end
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(user).to have_received(:add_payout_note)
+      end
+
+      it "still raises for any other invalid-request rejection" do
+        other = Stripe::InvalidRequestError.new("Invalid Tax ID.", nil)
+        allow(Stripe::Account).to receive(:update).and_raise(other)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
+      end
+
+      # The guard is the whole safety argument: a rejection of some OTHER part of tos_acceptance
+      # must not make us drop the seller's acceptance and report success.
+      it "does not retry when a different tos_acceptance field is rejected" do
+        other = Stripe::InvalidRequestError.new("Invalid timestamp.", "tos_acceptance[date]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(other)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(other)
+        expect(Stripe::Account).not_to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
+      end
+
+      it "lets a rejection of the retry itself surface" do
+        postal = Stripe::InvalidRequestError.new("Invalid postal code.", "individual[address][postal_code]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance)).and_raise(postal)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(postal)
+      end
+
+      # Stripe's live rejection carries no `code` and names the field in `param`, so the param is
+      # what the predicate has to key off. Probed against the test API.
+      it "recognises the rejection from the param alone" do
+        by_param = Stripe::InvalidRequestError.new("Some other wording", "tos_acceptance[service_agreement]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(by_param)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+        expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
+      end
+
+      # The agreement id is Stripe's marker that the acceptance is on file. Stripe rejected the
+      # acceptance, so the retry must not move it — measured against the test API: it otherwise
+      # lands on an account whose tos_acceptance is empty.
+      it "does not move the ToS agreement marker on the retry" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance)) do |_id, attributes|
+          expect(attributes[:metadata]).not_to have_key(:tos_agreement_id)
+          expect(attributes[:metadata][:user_compliance_info_id]).to eq(user_compliance_info_2.external_id)
+        end
+      end
+    end
+
+    # Measured on a real mismatched account: peeling `tos_acceptance` off after the rejection only
+    # exposes the legal-entity address as the next one (`account_country_invalid_address` on
+    # `company[address][country]`), so nothing ever landed. Both are excluded up front instead.
+    describe "when the Stripe account's country disagrees with the legal-entity country" do
+      let(:user_compliance_info_1) { create(:user_compliance_info, user:, country: "Korea, Republic of") }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:merchant_account) { subject.create_account(user, passphrase: "1234") }
+      let(:user_compliance_info_2) { create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul") }
+      # The account was created in the platform's own country, which is the whole cohort.
+      let(:stripe_account_country) { "US" }
+
+      before do
+        user_compliance_info_1
+        create(:korea_bank_account, user:)
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+        merchant_account
+        user_compliance_info_2
+
+        original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
+          stripe_account = original_stripe_account_retrieve.call(*args)
+          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
+          stripe_account["country"] = stripe_account_country
+          stripe_account
+        end
+      end
+
+      it "sends the fields Gumroad already holds without the agreement or the legal-entity address" do
+        allow(Stripe::Account).to receive(:update)
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+          expect(attributes).not_to have_key(:tos_acceptance)
+          # Asserted positively as well as negatively: dropping the whole entity hash would
+          # discard email and phone, which is the regression a bare "no address" check misses.
+          expect(attributes[:individual]).to be_present
+          expect(attributes[:individual]).to include(:email)
+          expect(attributes.fetch(:individual, {})).not_to have_key(:address)
+          expect(attributes.fetch(:company, {})).not_to have_key(:address)
+          expect(attributes[:business_profile]).to be_present
+        end
+      end
+
+      it "does not claim a ToS agreement Stripe never accepted" do
+        allow(Stripe::Account).to receive(:update)
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update) do |_id, attributes|
+          expect(attributes[:metadata]).not_to have_key(:tos_agreement_id)
+          expect(attributes[:metadata][:user_compliance_info_id]).to eq(user_compliance_info_2.external_id)
+        end
+      end
+
+      it "leaves one private payout-note breadcrumb naming the mismatch" do
+        allow(Stripe::Account).to receive(:update)
+
+        expect do
+          2.times { subject.update_account(user, passphrase: "1234") }
+        end.to change {
+          user.comments.with_type_payout_note.alive
+              .where("content LIKE ?", "#{StripeMerchantAccountManager::SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
+              .count
+        }.by(1)
+
+        note = user.comments.with_type_payout_note.alive.last
+        expect(note.content).to include("does not match")
+        expect(note.json_data[PayoutNoteVisibility::SELLER_VISIBLE_FLAG]).to be(false)
+      end
+
+      # The phone on these accounts is often not E.164, and that is a real problem the seller has
+      # to fix. Holding back the country-validated fields must not start swallowing it.
+      it "still raises for a rejection of any other field" do
+        phone = Stripe::InvalidRequestError.new(%("0094776448826" is not a valid phone number), "company[phone]")
+        allow(Stripe::Account).to receive(:update).and_raise(phone)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(phone)
+      end
+
+      # The rescue retries from what was SENT, not the original diff. Keying it off the diff would
+      # put the held-back address back on the wire, guaranteeing a second rejection.
+      it "never restores the held-back fields on the agreement retry" do
+        rejection = Stripe::InvalidRequestError.new("Some wording", "tos_acceptance[service_agreement]")
+        allow(Stripe::Account).to receive(:update).and_raise(rejection)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(rejection)
+
+        expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+          expect(attributes).not_to have_key(:tos_acceptance)
+          expect(attributes.fetch(:individual, {})).not_to have_key(:address)
+        end
+      end
+
+      # The guard has to be load-bearing: when the countries agree there is nothing structural to
+      # hold back, and the address must still be sent.
+      context "when the countries agree" do
+        let(:stripe_account_country) { "KR" }
+
+        it "sends the legal-entity address" do
+          allow(Stripe::Account).to receive(:update)
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(Stripe::Account).to have_received(:update) do |_id, attributes|
+            expect(attributes[:individual][:address][:city]).to eq("Seoul")
+          end
+        end
+      end
+
+      # The payload and the country it is judged against have to come from the same compliance
+      # record. If a newer record goes alive mid-call, re-reading it here would compare the new
+      # country against a payload built from the old one and send the address after all.
+      it "judges the payload against the compliance record it was built from" do
+        allow(Stripe::Account).to receive(:update)
+        newly_alive = build(:user_compliance_info, user:, country: "United States")
+        allow(user).to receive(:alive_user_compliance_info).and_return(user_compliance_info_2, newly_alive)
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+          expect(attributes).not_to have_key(:tos_acceptance)
+          expect(attributes.fetch(:individual, {})).not_to have_key(:address)
+        end
+      end
+    end
+
     describe "updating business type" do
       let(:user_compliance_info_1) { create(:user_compliance_info, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
@@ -9415,7 +9680,7 @@ describe StripeMerchantAccountManager, :vcr do
           stripe_account
         end
         expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(expected_account_params)).and_call_original
-        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, unclaimed_percent_ownership: nil).and_call_original
+        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, seed_representative_ownership: false, unclaimed_percent_ownership: nil).and_call_original
         expect(Stripe::Account).to receive(:update_person).with(kind_of(String), kind_of(String), a_hash_including(expected_person_params).and(excluding(:first_name))).and_call_original
         subject.update_account(user, passphrase: "1234")
       end
@@ -9584,11 +9849,11 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "invalid_account_number"))
         end
 
-        it "emails the creator without flagging it as a format rejection" do
+        it "asks for a different account rather than a corrected code" do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-            .with(user.id, nil, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
         end
       end
 
@@ -9603,7 +9868,8 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end
@@ -9619,8 +9885,38 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
           expect(result).to eq(:invalid_bank_account)
+        end
+      end
+
+      describe "account refused because it is on Stripe's block list" do
+        # Stripe returns this with neither code nor param, so the classification hangs entirely on
+        # the message match. Asserted at this level and not only through the retry job: the job
+        # specs stay green if the wrong rejection_kind reaches the mailer, which is the difference
+        # between telling the seller to use a different account and telling them to retype details
+        # that can never work (gumroad-private#1476).
+        let(:error_message) { "The bank account provided cannot be used because it is on your block list." }
+
+        before do
+          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, nil))
+        end
+
+        it "emails the creator with the blocked rejection kind and returns invalid_bank_account" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, described_class::BANK_REJECTION_KIND_BLOCKED, error_message)
+          expect(result).to eq(:invalid_bank_account)
+        end
+
+        it "records a bank-sync payout note naming the block list" do
+          subject.update_bank_account(user, passphrase: "1234")
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to include("Stripe bank sync failed")
+          expect(note.content).to include("block list")
         end
       end
 
@@ -13138,6 +13434,574 @@ describe StripeMerchantAccountManager, :vcr do
           expect(call_count).to eq(1)
         end
       end
+    end
+
+    context "when an earlier switch left the account a company that nobody owns" do
+      # The individual→business switch writes the compliance-info marker into Stripe's account
+      # metadata before seeding the representative, so a failure in between leaves an account whose
+      # business_type is already "company" while no person holds any ownership. Our marker then says
+      # "already a business" forever, and without a live ownership check nothing ever seeds the
+      # representative again.
+      let(:unowned_representative) do
+        Stripe::Person.construct_from(
+          id: "person_representative",
+          object: "person",
+          account: stripe_account.id,
+          relationship: { representative: true, owner: false }
+        )
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [unowned_representative])
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { owner: true }, limit: 100)
+          .and_return("data" => [])
+      end
+
+      it "seeds the representative's ownership when the caller says to, even with no prior individual compliance record" do
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: true)
+
+        expect(captured_attributes[:relationship]).to include(representative: true, owner: true, percent_ownership: 100)
+      end
+
+      it "leaves ownership alone when the caller says not to seed it" do
+        captured_attributes = nil
+        expect(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          captured_attributes = attributes
+          true
+        end
+
+        described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: false)
+
+        expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+    end
+  end
+
+  describe "healing an account left mid individual-to-business migration" do
+    let(:user) { create(:user) }
+    let(:tos_agreement) { create(:tos_agreement, user:) }
+    let(:individual_info) { create(:user_compliance_info, user:) }
+    let(:business_info) { create(:user_compliance_info_business, user:) }
+    let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_stuck_migration") }
+
+    let(:representative) do
+      Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: "acct_stuck_migration",
+        relationship: { representative: true, owner: false }
+      )
+    end
+
+    # The marker already points at the CURRENT business record, which is what makes the account
+    # invisible to the switch branch: as far as update_account is concerned it has always been a
+    # business, so nothing re-seeds the representative.
+    def stuck_account(owners_provided_in:)
+      requirements = { currently_due: [], past_due: [], eventually_due: [] }
+      requirements[owners_provided_in] = ["company.owners_provided"]
+      Stripe::Account.construct_from(
+        id: "acct_stuck_migration",
+        object: "account",
+        business_type: "company",
+        company: { owners_provided: false },
+        capabilities: {},
+        metadata: { "user_compliance_info_id" => business_info.external_id },
+        requirements:
+      )
+    end
+
+    before do
+      tos_agreement
+      individual_info.mark_deleted!
+      business_info
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { representative: true }, limit: 1)
+        .and_return("data" => [representative])
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => [])
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", limit: 100)
+        .and_return("data" => [representative])
+      allow(Stripe::Account).to receive(:update_person).and_return(true)
+    end
+
+    it "seeds the representative and attests the owner list on a save the seller makes themselves" do
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      # Stripe really does hold the seeded owner from this point on, and the attestation re-reads the
+      # list before stating it is complete — a stub frozen at empty would make that read a no-op and
+      # hide whether the attestation ever fires.
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        allow(Stripe::Account).to receive(:list_persons)
+          .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+          .and_return("data" => [
+                        Stripe::Person.construct_from(
+                          id: "person_representative",
+                          object: "person",
+                          account: "acct_stuck_migration",
+                          relationship: attributes[:relationship]
+                        )
+                      ])
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to include(owner: true, percent_ownership: 100)
+      expect(attested).to be(true)
+    end
+
+    # eventually_due requirements only bind at a future volume threshold, so the account is not
+    # blocked and there is nothing to repair. Acting on it would mean re-seeding ownership and
+    # attesting owner lists across business accounts that are working fine.
+    it "leaves an account alone when the requirement is only eventually due" do
+      account = stuck_account(owners_provided_in: :eventually_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # Without an earlier individual record this is an account created as a business whose seller
+    # never filled the beneficial-owners form. Seeding a 100% owner there would invent an ownership
+    # claim the seller never made, and then attest it to Stripe as complete.
+    it "leaves an account created as a business alone even when nobody owns it" do
+      individual_info.destroy!
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # A seller who switched successfully and then unchecked Owner on their own representative. The
+    # form submits percent_ownership 0 for that, so the total is zero exactly as it is on a switch
+    # that never seeded — the difference is that Stripe holds the share AS zero rather than not
+    # holding one at all. Seeding 100% here would overwrite a share the seller set on purpose, and
+    # then attest it.
+    it "leaves a representative whose ownership the seller set to zero alone" do
+      representative_at_zero = Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: "acct_stuck_migration",
+        relationship: { representative: true, owner: false, percent_ownership: 0 }
+      )
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", limit: 100)
+        .and_return("data" => [representative_at_zero])
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => [representative_at_zero])
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # The other 9 of the 25 stuck accounts: the representative already holds 100%, and the account is
+    # blocked purely because nothing ever attested the list. Seeding here would be wrong; attesting
+    # is the entire fix, so it must not be gated behind the seeding decision.
+    it "attests without seeding when the representative already owns the company" do
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => [
+                      Stripe::Person.construct_from(
+                        id: "person_representative",
+                        object: "person",
+                        account: "acct_stuck_migration",
+                        relationship: { representative: true, owner: true, percent_ownership: 100 }
+                      )
+                    ])
+      account = stuck_account(owners_provided_in: :currently_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(true)
+    end
+
+    # A failed persons read is not evidence that nobody owns anything. Guessing either way here
+    # would mean inventing an ownership claim or attesting a list we never saw.
+    it "does nothing when the ownership read fails" do
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_raise(Stripe::APIError.new("Stripe is down"))
+      allow(ErrorNotifier).to receive(:notify)
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # The false-attestation case: a company whose representative holds 25% has 75% belonging to
+    # beneficial owners nobody has entered. Telling Stripe that list is complete is a false statement
+    # that can clear the payout restriction while three quarters of the company is unaccounted for.
+    it "does not attest a list that accounts for only part of the company" do
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => [
+                      Stripe::Person.construct_from(
+                        id: "person_representative",
+                        object: "person",
+                        account: "acct_stuck_migration",
+                        relationship: { representative: true, owner: true, percent_ownership: 25 }
+                      )
+                    ])
+      account = stuck_account(owners_provided_in: :currently_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # Shares Stripe and our own form accept with more than two decimals do not sum to exactly 100, so
+    # a list that really does cover the company must still read as complete.
+    it "attests a list whose shares cover the company after rounding" do
+      thirds = [33.33, 33.33, 33.33].each_with_index.map do |percent, index|
+        Stripe::Person.construct_from(
+          id: "person_owner_#{index}",
+          object: "person",
+          account: "acct_stuck_migration",
+          relationship: { representative: false, owner: true, percent_ownership: percent }
+        )
+      end
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => thirds)
+      account = stuck_account(owners_provided_in: :currently_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(attested).to be(true)
+    end
+
+    # A seller who switched long ago, has saved payout settings since, and later cleared their
+    # representative's ownership has a legitimate company state. The record immediately before the
+    # live one is a business, so the soft-deleted individual record further back must not read as an
+    # interrupted switch and re-seed a 100% claim.
+    it "leaves a settled company alone when the individual record is not the one before the live record" do
+      business_info.mark_deleted!
+      later_business_info = create(:user_compliance_info_business, user:)
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(account.metadata).to receive(:[]).with("user_compliance_info_id").and_return(later_business_info.external_id)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
+    # A zero-ownership list on an account the seller has entered people into is a shape they
+    # configured — the beneficial-owners form can clear the representative's own share — so seeding
+    # 100% there would overwrite a claim they deliberately gave up.
+    it "leaves ownership alone when the seller has entered someone besides the representative" do
+      director = Stripe::Person.construct_from(
+        id: "person_director",
+        object: "person",
+        account: "acct_stuck_migration",
+        relationship: { representative: false, owner: false, director: true }
+      )
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", limit: 100)
+        .and_return("data" => [representative, director])
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+  end
+
+  # The whole heal turns on Stripe distinguishing "no share was ever recorded" from "the share is
+  # zero". Every other example here constructs the person locally, which cannot prove that: if Stripe
+  # normalised an explicit zero to null, a seller who deliberately unchecked Owner would read as a
+  # never-seeded representative and get 100% written over their own choice. These examples pin the
+  # round trip against Stripe itself, recorded, so the distinction is a fact about the API rather than
+  # an assumption in a stub.
+  describe "how Stripe stores a representative's percent_ownership" do
+    let(:account_id) do
+      Stripe::Account.create(
+        type: "custom",
+        country: "US",
+        business_type: "company",
+        capabilities: { transfers: { requested: true }, card_payments: { requested: true } }
+      ).id
+    end
+
+    def representative_on(account_id)
+      Stripe::Account.create_person(
+        account_id,
+        first_name: "Rep",
+        last_name: "Resentative",
+        relationship: { representative: true, title: "CEO" }
+      )
+    end
+
+    it "leaves percent_ownership absent on a representative created without one" do
+      person = representative_on(account_id)
+
+      expect(Stripe::Account.retrieve_person(account_id, person.id).relationship.percent_ownership).to be_nil
+    end
+
+    it "keeps an explicit zero as zero rather than normalising it to null" do
+      person = representative_on(account_id)
+
+      # What the beneficial-owners form sends when the seller unchecks Owner on their representative.
+      Stripe::Account.update_person(account_id, person.id, relationship: { owner: false, percent_ownership: 0 })
+
+      expect(Stripe::Account.retrieve_person(account_id, person.id).relationship.percent_ownership).to eq(0)
+    end
+
+    it "keeps a seeded share when owner is later unset" do
+      person = representative_on(account_id)
+      Stripe::Account.update_person(account_id, person.id, relationship: { owner: true, percent_ownership: 100 })
+
+      Stripe::Account.update_person(account_id, person.id, relationship: { owner: false })
+
+      relationship = Stripe::Account.retrieve_person(account_id, person.id).relationship
+      expect(relationship.owner).to be(false)
+      expect(relationship.percent_ownership).to eq(100)
+    end
+  end
+
+  describe "company.owners_provided attestation" do
+    let(:account_id) { "acct_owners_provided_123" }
+
+    def stripe_account_object(owners_provided:, outstanding:)
+      Stripe::Account.construct_from(
+        id: account_id,
+        object: "account",
+        business_type: "company",
+        company: { owners_provided: },
+        requirements: { currently_due: outstanding, past_due: [], eventually_due: [] }
+      )
+    end
+
+    def owner_list(persons)
+      allow(Stripe::Account).to receive(:list_persons)
+        .with(account_id, relationship: { owner: true }, limit: 100)
+        .and_return("data" => persons)
+    end
+
+    def owning_representative
+      Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: account_id,
+        relationship: { representative: true, owner: true, percent_ownership: 100 }
+      )
+    end
+
+    it "tells Stripe the owner list is complete once someone actually holds ownership" do
+      owner_list([owning_representative])
+      expect(Stripe::Account).to receive(:update).with(account_id, { company: { owners_provided: true } })
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    it "reports no recorded ownership distinctly from a Stripe read that failed" do
+      owner_list([])
+      expect(described_class.send(:recorded_ownership_percent_on, account_id)).to eq(0)
+
+      allow(Stripe::Account).to receive(:list_persons).and_raise(Stripe::APIError.new("Stripe is down"))
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(described_class.send(:recorded_ownership_percent_on, account_id)).to be_nil
+    end
+
+    # The caller decides to attest from its intent to seed, and update_person returns without seeding
+    # when the account has no representative person. Attesting then would tell Stripe an empty list
+    # is complete.
+    it "does not attest an owner list nobody is on" do
+      owner_list([])
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    # The tolerance absorbs decimal rounding, nothing more: a total short by a whole percentage point
+    # is a list missing a share, not a list that rounded.
+    it "does not attest a total that falls short by more than the rounding allowance" do
+      owner_list([
+                   Stripe::Person.construct_from(
+                     id: "person_representative",
+                     object: "person",
+                     account: account_id,
+                     relationship: { representative: true, owner: true, percent_ownership: 99 }
+                   )
+                 ])
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    it "does not attest when the ownership read fails" do
+      allow(Stripe::Account).to receive(:list_persons).and_raise(Stripe::APIError.new("Stripe is down"))
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(Stripe::Account).not_to receive(:update)
+
+      described_class.send(:attest_owners_provided, account_id)
+    end
+
+    it "reads an account Stripe has already accepted the attestation for as not blocking" do
+      account = stripe_account_object(owners_provided: true, outstanding: [])
+
+      expect(described_class.send(:owners_provided_blocking_payouts?, account)).to be(false)
+    end
+
+    it "reads an account Stripe is still holding on the attestation as blocking" do
+      account = stripe_account_object(owners_provided: false, outstanding: ["company.owners_provided"])
+
+      expect(described_class.send(:owners_provided_blocking_payouts?, account)).to be(true)
+    end
+
+    it "does not treat an unrelated outstanding requirement as this one" do
+      account = stripe_account_object(owners_provided: false, outstanding: ["company.tax_id"])
+
+      expect(described_class.send(:owners_provided_blocking_payouts?, account)).to be(false)
+    end
+
+    # The seller's own compliance details are already saved on Stripe by the time this runs, so a
+    # failure here must not turn a successful save into an error on the payments settings page.
+    it "reports a Stripe failure without raising, so the seller's save still succeeds" do
+      owner_list([owning_representative])
+      allow(Stripe::Account).to receive(:update).and_raise(Stripe::APIError.new("Stripe is down"))
+
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(Stripe::APIError))
+
+      expect { described_class.send(:attest_owners_provided, account_id) }.not_to raise_error
     end
   end
 

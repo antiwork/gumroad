@@ -373,6 +373,12 @@ class Payouts
       ) &&
       (
         from_admin ||
+        # A requeue pays the period the seller already qualified for, so the cycle gate has
+        # nothing left to decide — and it would reject exactly the sellers a requeue exists for.
+        # #next_payout_cycle_date advances past this batch's period in two cases a requeue lands
+        # in: the seller already has a payment row created today (it counts the row, not whether
+        # it succeeded), and a monthly or quarterly seller whose cadence Friday is weeks out.
+        retrying ||
         (
           # Compare the batch against the seller's payout CYCLE, not the day their own rail
           # runs on. The cycle is what schedules this batch, while the seller's payout day

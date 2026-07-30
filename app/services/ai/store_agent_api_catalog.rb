@@ -16,15 +16,17 @@
 #     could do.
 #
 # Path templates use :name placeholders filled from the tool call's `path_params`. `params` lists the
-# query (reads) or body (writes) keys the endpoint accepts. For writes this list is load-bearing: a
-# proposed body carrying a key not listed here is refused (see StoreAgentService and
-# StoreAgentActionExecutor), because the v2 API silently ignores unknown body keys — a misnamed key
-# (e.g. `price_cents` instead of `price`) would otherwise drop the value the model meant to send and
-# fail downstream with a confusing error. The list is a deliberately curated subset of what each
-# endpoint can accept: it is exactly what the system-prompt manifest teaches the model, so the agent
-# only drives the surface it was told about.
+# query (reads) or body (writes) keys the endpoint accepts. `forced_params` holds catalog-owned values
+# applied to a read regardless of model input. `requires_read` names the full-read endpoint a write
+# must follow for the same target and turn. For writes, `params` is load-bearing: a proposed body
+# carrying a key not listed here is refused (see StoreAgentService and StoreAgentActionExecutor),
+# because the v2 API silently ignores unknown body keys — a misnamed key (e.g. `price_cents` instead
+# of `price`) would otherwise drop the value the model meant to send and fail downstream with a
+# confusing error. The list is a deliberately curated subset of what each endpoint can accept: it
+# is exactly what the system-prompt manifest teaches the model, so the agent only drives the surface
+# it was told about.
 module Ai::StoreAgentApiCatalog
-  Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, keyword_init: true) do
+  Endpoint = Struct.new(:id, :method, :path, :read, :scope, :admin_only, :summary, :path_params, :params, :forced_params, :requires_read, keyword_init: true) do
     def read? = read == true
     def write? = !read?
 
@@ -68,7 +70,7 @@ module Ai::StoreAgentApiCatalog
     # then fails downstream with a confusing validation error. Both the propose path (service) and
     # the confirm path (executor) refuse such bodies up front using this list.
     def unknown_param_keys(body)
-      (body || {}).keys.map(&:to_s) - params
+      (body || {}).keys.map(&:to_s) - params - forced_params.keys
     end
 
     # The corrective message for a body carrying undeclared keys, or nil when the body is fine.
@@ -79,14 +81,27 @@ module Ai::StoreAgentApiCatalog
       unknown = unknown_param_keys(body)
       return nil if unknown.empty?
 
-      accepted = params.any? ? "this endpoint accepts: #{params.join(', ')}" : "this endpoint accepts no params"
+      accepted_params = (params + forced_params.keys).uniq
+      accepted = accepted_params.any? ? "this endpoint accepts: #{accepted_params.join(', ')}" : "this endpoint accepts no params"
       "Unknown param#{"s" if unknown.size > 1} #{unknown.join(', ')} for #{id}; #{accepted}."
     end
   end
 
   # Build one endpoint row. read defaults to false (i.e. a write that must be confirmed).
-  def self.ep(id, method, path, summary, read: false, scope: nil, admin_only: false, path_params: [], params: [])
-    Endpoint.new(id:, method:, path:, read:, scope:, admin_only:, summary:, path_params:, params:)
+  def self.ep(id, method, path, summary, read: false, scope: nil, admin_only: false, path_params: [], params: [], forced_params: {}, requires_read: nil)
+    Endpoint.new(
+      id:,
+      method:,
+      path:,
+      read:,
+      scope:,
+      admin_only:,
+      summary:,
+      path_params:,
+      params:,
+      forced_params: forced_params.transform_keys(&:to_s).freeze,
+      requires_read:,
+    )
   end
 
   ENDPOINTS = [
@@ -95,13 +110,30 @@ module Ai::StoreAgentApiCatalog
     ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
                                                                                            params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
-    # The store theme columns (SellerProfile#background_color/highlight_color/font). Read-only: there
-    # is no self-serve editor for them, support applies changes by request. This endpoint exists
-    # because the agent previously could not see the theme at all, and told creators their product
-    # pages could not be styled while those pages were visibly rendering these very colours.
-    ep("get_user_theme", :get, "/user/theme", "Get the creator's store theme: background color, highlight (accent) color, and font, plus the list of surfaces they render on. Those include the storefront AND every product page — product pages are NOT unstyleable. There is no self-serve screen for them and you have no endpoint to change them, so when a creator wants different colors or fonts, tell them Gumroad support can apply it and offer to note exactly what they want.", read: true, scope: "view_profile"),
-    ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile custom HTML with a new page. Destructive: anything not included in custom_html is lost, and the page becomes the whole storefront — so it must show everything the store shows: render all products (with working links) dynamically from the gumroad-data JSON injected into every served page — and when products_total exceeds the products array's length, or posts_total exceeds the posts array's length, that list is capped, so the page must show the count for that section rather than silently omitting the rest — plus the creator's name and bio via data-gumroad-field elements the server fills at render time (they are NOT in the JSON). Only use this to author a brand-new page; to change part of an existing page, use edit_user_custom_html.", scope: "edit_profile", params: %w[custom_html]),
-    ep("edit_user_custom_html", :post, "/user/custom_html/edit", "Make a targeted edit to the creator's existing profile custom HTML: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_user_custom_html when a page already exists.", scope: "edit_profile", params: %w[find replace]),
+    # The store theme columns (SellerProfile#background_color/highlight_color/font). Read-only here:
+    # sellers set these in Settings > Profile > Design. This endpoint exists because the agent
+    # previously could not see the theme at all, and told creators their product pages could not be
+    # styled while those pages were visibly rendering these very colours.
+    ep("get_user_theme", :get, "/user/theme", "Get the creator's store theme: background color, highlight (accent) color, and font, plus the list of surfaces they render on. Those include the storefront AND every product page — product pages are NOT unstyleable. You have no endpoint to change them, but the creator can change them themselves in Settings > Profile > Design, which shows a live preview before saving — point them there when they want different colors or fonts.", read: true, scope: "view_profile"),
+    # The DEFAULT storefront layout: the seller's own tabs and sections, each with its heading. Also
+    # read-only, and for the same reason as the theme above — the agent used to be blind to this
+    # surface entirely, so for a seller with no custom HTML it saw nothing and reported the
+    # storefront as Gumroad's untouched default. That is how it came to tell a seller the heading on
+    # his own live page was not there, was "actually Products, not Albums", and was his browser cache
+    # (gumroad-private#1466). The heading was his own section header all along.
+    ep("get_user_profile_layout", :get, "/user/profile_layout", "Get the layout of the creator's DEFAULT storefront profile: their tabs, the sections in each tab, and each section's heading (the <h2> the visitor sees above it). Use this for questions about the default profile's tabs, sections, or headings. A standalone page is a different surface; use list_pages and get_page for that. On a store with no custom HTML this layout is still creator-owned, and get_user_custom_html returning nothing does NOT mean the profile is Gumroad's untouched default. rendering says which surface the visitor actually sees (custom_html takes over the whole storefront when published). tab_bar_visible is false when there is only one tab, because the public profile hides the tab bar until there are two — that is why a creator's single named tab appears to have vanished. The creator edits all of this in the dashboard; you have no endpoint to change it.", read: true, scope: "view_profile"),
+    ep("update_user_custom_html", :patch, "/user/custom_html", "Replace the creator's ENTIRE profile custom HTML with a new page. Destructive: anything not included in custom_html is lost, and the page becomes the whole storefront — so it must show everything the store shows: render all products (with working links) dynamically from the gumroad-data JSON injected into every served page — and when products_total exceeds the products array's length, or posts_total exceeds the posts array's length, that list is capped, so the page must show the count for that section rather than silently omitting the rest — plus the creator's name and bio via data-gumroad-field elements the server fills at render time (they are NOT in the JSON). Only use this to author a brand-new page; to change part of an existing page, use edit_user_custom_html.", scope: "edit_profile", params: %w[custom_html], requires_read: "get_user_custom_html"),
+    ep("edit_user_custom_html", :post, "/user/custom_html/edit", "Make a targeted edit to the creator's existing profile custom HTML: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_user_custom_html when a page already exists.", scope: "edit_profile", params: %w[find replace], requires_read: "get_user_custom_html"),
+
+    # ---- Standalone storefront pages (first-class Pages, addressed by slug) ----
+    # A separate surface from the profile root above: additional pages a creator publishes under
+    # their storefront at /<slug>, managed in the dashboard under "Pages" and by the `gumroad pages`
+    # CLI commands. The agent had no endpoints for these, and told a creator that standalone pages
+    # do not exist on Gumroad and that the CLI's own `pages push`/`pages preview` commands "aren't
+    # real Gumroad features" (gumroad-private#1466). They are, and they have been readable through
+    # this same v2 API the whole time.
+    ep("list_pages", :get, "/pages", "List metadata for the creator's standalone storefront pages (the ones under \"Pages\" in their dashboard, served at their store url plus /slug). These are real and separate from the profile page — never tell a creator standalone pages do not exist. Returns each page's slug, title, url, and timestamps without loading every page body. Use get_page only when the creator's question requires one page's full content.", read: true, scope: "view_profile", forced_params: { metadata_only: true }),
+    ep("get_page", :get, "/pages/:id", "Read one standalone storefront page in full by its slug (the id here IS the slug, as returned by list_pages). Gives the title plus either its rich text content or its custom HTML, whichever the page uses. Only fetch the full page when the creator's question requires its body.", read: true, scope: "view_profile", path_params: %w[id], forced_params: { source_only: true }),
 
     # ---- Public media library ----
     # The creator's hosted image files. These are the ONLY file URLs that render on
@@ -149,8 +181,8 @@ module Ai::StoreAgentApiCatalog
     # deliberately does NOT accept custom_html, so every full-page write flows through the id whose
     # summary carries that warning.
     ep("get_product_custom_html", :get, "/products/:id/custom_html", "Get a product's custom landing page HTML (the /l/ page buyers see). has_landing_page says whether a custom page is currently published; when it is false the product serves its native Gumroad page.", read: true, scope: "view_sales", path_params: %w[id]),
-    ep("update_product_custom_html", :put, "/products/:id", "Replace a product's ENTIRE custom landing page with a new page (or clear it by sending blank custom_html, restoring the native product page). Destructive: anything not included in custom_html is lost. A published page REPLACES the product's native page — price and buy button included — so the page MUST contain a buy element like <a data-gumroad-action=\"buy\">Buy now</a>; publishing HTML without one makes the product unpurchasable. The server fills elements marked data-gumroad-field=\"name\", \"price\", or \"description\" with live product values on every render. Product pages do NOT receive the gumroad-data JSON (that exists only on profile pages). Only use this to author a brand-new page; to change part of an existing page, use edit_product_custom_html.", scope: "edit_products", path_params: %w[id], params: %w[custom_html]),
-    ep("edit_product_custom_html", :post, "/products/:id/custom_html/edit", "Make a targeted edit to a product's existing custom landing page: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_product_custom_html when a page already exists. Keep the page's buy element intact — a page without one makes the product unpurchasable.", scope: "edit_products", path_params: %w[id], params: %w[find replace]),
+    ep("update_product_custom_html", :put, "/products/:id", "Replace a product's ENTIRE custom landing page with a new page (or clear it by sending blank custom_html, restoring the native product page). Destructive: anything not included in custom_html is lost. A published page REPLACES the product's native page — price and buy button included — so the page MUST contain a buy element like <a data-gumroad-action=\"buy\">Buy now</a>; publishing HTML without one makes the product unpurchasable. The server fills elements marked data-gumroad-field=\"name\", \"price\", or \"description\" with live product values on every render. Product pages do NOT receive the gumroad-data JSON (that exists only on profile pages). Only use this to author a brand-new page; to change part of an existing page, use edit_product_custom_html.", scope: "edit_products", path_params: %w[id], params: %w[custom_html], requires_read: "get_product_custom_html"),
+    ep("edit_product_custom_html", :post, "/products/:id/custom_html/edit", "Make a targeted edit to a product's existing custom landing page: replaces one exact snippet (find) with new HTML (replace) and leaves the rest of the page untouched. find must match the current HTML exactly once — include enough surrounding context. Always prefer this over update_product_custom_html when a page already exists. Keep the page's buy element intact — a page without one makes the product unpurchasable.", scope: "edit_products", path_params: %w[id], params: %w[find replace], requires_read: "get_product_custom_html"),
 
     # ---- Custom fields (per product) ----
     ep("list_custom_fields", :get, "/products/:link_id/custom_fields", "List a product's custom fields.", read: true, scope: "view_sales", path_params: %w[link_id]),
@@ -271,7 +303,8 @@ module Ai::StoreAgentApiCatalog
     list.map do |e|
       pp = e.path_params.any? ? " (path: #{e.path_params.join(', ')})" : ""
       bp = e.params.any? ? " (params: #{e.params.join(', ')})" : ""
-      "- #{e.id}#{pp}#{bp}: #{e.summary}"
+      precondition = e.requires_read.present? ? " (requires a successful #{e.requires_read} for the same target in this turn)" : ""
+      "- #{e.id}#{pp}#{bp}#{precondition}: #{e.summary}"
     end.join("\n")
   end
 end

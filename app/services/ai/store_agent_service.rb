@@ -40,6 +40,7 @@ class Ai::StoreAgentService
   # below when the normal budget no longer has room for them.
   MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
+  MISSING_REQUIRED_READ_MESSAGE = "Store agent write proposal blocked by missing required full read"
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
   # long description's full HTML) inside the tool call's JSON arguments. A cap sized only for text
@@ -495,13 +496,32 @@ class Ai::StoreAgentService
       "legacy setting", an "older per-product option"). Say you can't see that from here, look it up
       in the help center, and if it's outside what you can read or change, offer to hand it to
       Gumroad support with the details.
+    - The creator's storefront has THREE separate content surfaces, and you must not confuse them or
+      deny the ones you have fewer tools for:
+        1. The profile page itself. Either the creator's own tabs and sections (Gumroad's normal
+           profile — read it with get_user_profile_layout) or a custom HTML takeover
+           (get_user_custom_html), never both at once. get_user_custom_html coming back empty means
+           only "no custom HTML" — it does NOT mean the storefront is Gumroad's untouched default.
+           Headings the creator sees on their storefront are their own section headers, so read
+           get_user_profile_layout before you say anything about a heading, and never claim the
+           default profile ships a heading of its own.
+        2. Standalone pages under the creator's store url, listed with list_pages. These are real:
+           the creator manages them under "Pages" in the dashboard, and Gumroad's CLI drives them
+           with `gumroad pages pull/preview/push`. You can list them with list_pages and read one
+           with get_page, but you cannot create, update, or delete them. NEVER tell a creator that
+           standalone pages don't exist on Gumroad, or that those CLI commands aren't real features.
+        3. Each product's own landing page (get_product_custom_html), separate from both of the
+           above.
+      When a creator describes content you cannot find, first read the surface they named. If the
+      surface is unclear, inspect the profile layout and compact standalone-page list before fetching
+      a full page body. Do not claim content is missing until you have checked the relevant surfaces.
     - Store colors and fonts come from the creator's store theme: a background color, a highlight
       (accent) color, and a font. Read them with get_user_theme, which also lists the surfaces they
       cover. They apply to the storefront AND to every product page — product pages ARE themed, so
-      never tell a creator their product pages can't be styled. There is no self-serve
-      fonts-and-colors screen in the dashboard, and you have no endpoint to change the theme: when
-      the creator wants different colors or a different font, say Gumroad support applies those, and
-      offer to write down exactly what they want (which color, where) so support can action it. A
+      never tell a creator their product pages can't be styled. You have no endpoint to change the
+      theme, but the creator changes it themselves in Settings > Profile > Design, which previews
+      the change before saving: when they want different colors or a different font, send them
+      there. A
       custom HTML page is a separate thing — it brings its own design and does not follow the theme
       — so only reach for it when the creator wants a custom page, not as a workaround for a color
       change.
@@ -512,7 +532,7 @@ class Ai::StoreAgentService
     - When the creator has NO custom HTML page yet and wants a custom page — a layout, structure, or
       imagery the default storefront doesn't give them — author a COMPLETE page with
       update_user_custom_html. A colour or font change is NOT that: colours and fonts are the store
-      theme, which support applies, so never author a whole custom page as a way to change a colour.
+      theme, so never author a whole custom page as a way to change a colour.
       Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
       type="application/json"> element, refreshed on every page load. That JSON holds exactly
@@ -521,7 +541,13 @@ class Ai::StoreAgentService
       products_total and posts_total. Those are
       the ONLY field names that exist — reading any other name (say a field you'd expect but
       that isn't in this list) gives undefined and renders blank or broken, so never invent
-      one. The products and posts arrays are capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
+      one. The JSON is injected on the PROFILE page only, never on a page you author at its
+      own slug — a page reading it there sees nothing and its product grid renders empty, so
+      build slugged pages from HTML you write rather than from this JSON. The url values are
+      built on the creator's own store host (their custom domain when they have a live one,
+      their gumroad.com subdomain otherwise) and are safe to use verbatim; the page must not
+      rewrite them onto another host, which breaks the link. The products and posts arrays are
+      capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
       catalogue products_total exceeds products.length, and on a long archive posts_total
       exceeds posts.length. Whenever either total exceeds the array the page renders, the page
       MUST show a visible count for that section (for example "Showing 100 of 114 products",
@@ -536,6 +562,26 @@ class Ai::StoreAgentService
       src, which shows a broken-image icon. If the products array is empty,
       render a visible empty state (like "No products yet") so the page still reads as a real
       storefront and not a broken or unfinished page.
+    - Whenever a page displays a price, render it from the gumroad-prices JSON — a separate
+      <script id="gumroad-prices" type="application/json"> element, rebuilt on every request,
+      keyed by the last path segment of each product's url. The price in the gumroad-data JSON
+      is the creator's raw set price: always their own currency, never discounted, and for
+      memberships it can quote a recurrence no buyer selects — so treat it as a fallback string
+      only. Each gumroad-prices entry holds price (a formatted string, in the visitor's own
+      currency when Gumroad can localize this checkout), price_cents, currency_code, localized
+      (true when converted for this visitor), and — only while the creator's default offer code
+      discounts the product — original_price and original_price_cents, for rendering the
+      struck-through pre-sale price next to the live one. Equivalently, mark up one element per
+      price with both data-gumroad-product set to that permalink and data-gumroad-field="price"
+      (or "original-price", or "currency"), and the server fills it in server-side — use that
+      form when the price is static markup rather than built by a script, since it then renders
+      without JavaScript. Whichever you use, write the creator's own price as the element's text
+      so the page still reads correctly if a permalink stops matching (except original-price,
+      which must stay empty — it renders only during a sale). The prices are served only to
+      pages that reference them, so reference the blob by its literal id ("gumroad-prices"),
+      never a computed string. The priced set is the same capped product list gumroad-data
+      carries, so never write price markup for a product outside it. Both mechanisms exist
+      only on the profile page — a slugged page gets neither, so never put price markup there.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live
@@ -561,7 +607,8 @@ class Ai::StoreAgentService
       <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
       Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
       data-gumroad-field="name", "price", or "description" with the product's live values on every
-      render.
+      render. That price is the amount a first-time buyer pays — default offer code applied, and
+      memberships quoted at their default recurrence — matching the native page it replaces.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
@@ -622,6 +669,8 @@ class Ai::StoreAgentService
     proposed_action = nil
     # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
     @objects = []
+    @completed_read_targets = {}
+    @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
 
     remaining_iterations = MAX_TOOL_ITERATIONS
@@ -686,6 +735,8 @@ class Ai::StoreAgentService
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
     @objects = []
+    @completed_read_targets = {}
+    @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
 
     remaining_iterations = MAX_TOOL_ITERATIONS
@@ -906,6 +957,10 @@ class Ai::StoreAgentService
       end
       conversation << { role: "assistant", content: assistant_content }
 
+      # A read only satisfies a write precondition after its result has gone back to the model.
+      # Otherwise the model could request a read and a speculative write in the same tool-use batch,
+      # before it had seen the page it was supposed to preserve.
+      @reads_completed_in_tool_batch = {}
       tool_results = tool_uses.map do |tool_use|
         arguments = sanitize_param_hash(tool_use[:input])
         result, action = run_tool(name: tool_use[:name], arguments:)
@@ -921,6 +976,8 @@ class Ai::StoreAgentService
         end
         { type: "tool_result", tool_use_id: tool_use[:id], content: result.to_json }
       end
+      @completed_read_targets.merge!(@reads_completed_in_tool_batch)
+      @reads_completed_in_tool_batch = nil
       conversation << { role: "user", content: tool_results }
 
       proposed_action
@@ -1099,7 +1156,16 @@ class Ai::StoreAgentService
       end
 
       path = endpoint.expand_path(arguments["path_params"])
-      result = api_client.get(path, sanitize_param_hash(arguments["params"]))
+      params = sanitize_param_hash(arguments["params"])
+      if (error = endpoint.unknown_param_keys_error(params))
+        return [{ error: }, nil]
+      end
+
+      # Catalog-owned values win over model input, so a specialized read can share a controller
+      # route without exposing its fixed query contract to the model or adding endpoint-id branches.
+      params.merge!(endpoint.forced_params)
+      result = api_client.get(path, params)
+      record_successful_read(endpoint:, expanded_path: path, result:)
       # Collect any renderable objects from the response so the chat can show them inline as cards.
       @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result)) if @objects
       [result, nil]
@@ -1136,6 +1202,42 @@ class Ai::StoreAgentService
         return [{ error: e.message }, nil]
       end
 
+      if endpoint.requires_read.present?
+        required_read = Ai::StoreAgentApiCatalog.find(endpoint.requires_read)
+        unless required_read&.read?
+          raise Error, "Catalog endpoint #{endpoint.id} requires invalid read endpoint #{endpoint.requires_read}"
+        end
+
+        required_path = required_read.expand_path(path_params)
+        required_target = [required_read.id, required_path]
+        unless @completed_read_targets&.key?(required_target)
+          log_missing_required_read(endpoint:, required_read:)
+          return [
+            {
+              error: "#{endpoint.id} requires a successful full read of this exact target first. Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count.",
+              corrective_action: {
+                condition: "The seller explicitly requested this custom-page work.",
+                if_requested: {
+                  tool: "api_read",
+                  endpoint: required_read.id,
+                  path_params: path_params.slice(*required_read.path_params),
+                  after_success: {
+                    action: "retry_write",
+                    endpoint: endpoint.id,
+                    timing: "this_turn",
+                  },
+                },
+                otherwise: {
+                  action: "do_not_read_or_retry",
+                  instruction: "Do not read the page body and do not retry the write.",
+                },
+              },
+            },
+            nil,
+          ]
+        end
+      end
+
       # Refuse to stage a body carrying keys the endpoint doesn't declare. The v2 API silently
       # ignores unknown body keys, so without this check a write like create_product with
       # "price_cents" (instead of the declared "price") sails through to the API missing its real
@@ -1158,6 +1260,38 @@ class Ai::StoreAgentService
         fields: write_fields(endpoint, path_params, body),
       )
       [{ proposed: true, summary: }, action]
+    end
+
+    # A read precondition is satisfied only by a successful response from the exact catalog endpoint
+    # and expanded target path the write names. A status endpoint may share the same HTTP route, but
+    # its distinct catalog id cannot unlock a body-changing write.
+    def record_successful_read(endpoint:, expanded_path:, result:)
+      return unless successful_api_read?(result)
+
+      (@reads_completed_in_tool_batch || @completed_read_targets)[[endpoint.id, expanded_path]] = true
+    end
+
+    def successful_api_read?(result)
+      return false unless result.is_a?(Hash)
+      return false if result["success"] == false || result[:success] == false
+
+      status = result["http_status"] || result[:http_status]
+      status.blank? || status.to_i.between?(200, 299)
+    end
+
+    # Keep the message fixed in both logs and Sentry so every blocked proposal groups together.
+    # Endpoint ids and the catalog path template are safe structured context. Never report the
+    # expanded path because its model-supplied target id could contain seller text. The notifier
+    # also strips ambient request data from this event.
+    def log_missing_required_read(endpoint:, required_read:)
+      Rails.logger.warn(MISSING_REQUIRED_READ_MESSAGE)
+      ErrorNotifier.notify(
+        MISSING_REQUIRED_READ_MESSAGE,
+        exclude_request_context: true,
+        write_endpoint: endpoint.id,
+        required_read_endpoint: required_read.id,
+        required_read_path: required_read.path,
+      )
     end
 
     # A human-readable description of the pending change for the confirmation card. Built from the

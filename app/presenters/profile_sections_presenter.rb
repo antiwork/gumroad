@@ -11,6 +11,12 @@ class ProfileSectionsPresenter
   # email signup box even though they had products for sale. The frontend passes this id back
   # as section_id when it fetches more results, so LinksController#search recognizes it too.
   DEFAULT_PRODUCTS_SECTION_ID = "default-products"
+  DEFAULT_PRODUCTS_SECTION_TYPE = "SellerProfileProductsSection"
+  DEFAULT_PRODUCTS_TAB_NAME = "Products"
+
+  def self.default_products_section_available?(seller:, sections:)
+    sections.empty? && seller.products.alive.not_archived.exists?
+  end
 
   # seller is the owner of the section
   # pundit_user.seller is the selected seller for the logged-in user (pundit_user.user) - which may be different from seller
@@ -39,11 +45,11 @@ class ProfileSectionsPresenter
     # public page (never in the profile editor, so `editing` must be false), only when the
     # creator has no saved sections, and only when they have products to show. The moment they
     # save a real section in the editor, their own layout takes over.
-    if include_default_products_section && !editing && sections.empty?
+    if include_default_products_section &&
+       !editing &&
+       self.class.default_products_section_available?(seller:, sections:)
       default_section = cached_default_products_section
-      if default_section
-        props[:sections] = [section_props(nil, cached_props: default_section, request:, pundit_user:, seller_custom_domain_url:, editing: false)]
-      end
+      props[:sections] = [section_props(nil, cached_props: default_section, request:, pundit_user:, seller_custom_domain_url:, editing: false)]
     end
     if editing
       props[:products] = seller.products.alive.not_archived.select(:id, :name).map { { id: ObfuscateIds.encrypt(_1.id), name: _1.name } }
@@ -97,22 +103,17 @@ class ProfileSectionsPresenter
       @products_cache_key ||= seller.products.cache_key_with_version
     end
 
-    # Builds the cacheable data for the virtual default products section (see
-    # DEFAULT_PRODUCTS_SECTION_ID above). Returns nil when the creator has no products that
-    # could appear on their profile, so the caller can keep the existing email-signup fallback.
-    # Cached with the same 10-minute window as saved sections; the cache key includes the
-    # products' cache version so publishing, archiving, or deleting a product refreshes it.
+    # Builds the cacheable data for the virtual default products section after the shared
+    # availability check above. Cached with the same 10-minute window as saved sections; the cache
+    # key includes the products' cache version so publishing, archiving, or deleting a product
+    # refreshes it.
     def cached_default_products_section
-      # `alive.not_archived` mirrors the `is_alive_on_profile` flag the product search index
-      # uses, so this guard agrees with what the search below would actually return.
-      return nil unless seller.products.alive.not_archived.exists?
-
       cache_key = "#{CACHE_KEY_PREFIX}_default_#{REVISION}-#{products_cache_key}"
       Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
         {
           id: DEFAULT_PRODUCTS_SECTION_ID,
           header: nil,
-          type: "SellerProfileProductsSection",
+          type: DEFAULT_PRODUCTS_SECTION_TYPE,
           # Match what a freshly added products section would use: no filter sidebar, and the
           # page-layout sort (which, with no saved ordering, falls back to newest first).
           show_filters: false,

@@ -36,6 +36,17 @@ describe SellerProfile do
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(true)
     end
 
+    it "keeps cached CSS until the theme update commits" do
+      subject.custom_styles
+
+      subject.transaction do
+        subject.update!(highlight_color: "#ff90e8")
+        expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(true)
+      end
+
+      expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
+    end
+
     it "picks the accent text colour by contrast, not by HSL lightness" do
       # A bright green accent reads as "dark" to HSL lightness (54.9%, just under the old 55%
       # cutoff) and used to get white text at 1.37:1. Black is 15.36:1 against it.
@@ -91,6 +102,14 @@ describe SellerProfile do
   end
 
   describe "validations" do
+    it "normalizes legacy three-digit colours on save" do
+      subject = build(:seller_profile, background_color: "#fff", highlight_color: "#0F0")
+
+      subject.save!
+
+      expect(subject).to have_attributes(background_color: "#ffffff", highlight_color: "#00ff00")
+    end
+
     it "rejects a colour with a valid first line and trailing content" do
       subject = build(:seller_profile, highlight_color: "#ffffff\nbody { display: none }")
 
@@ -159,11 +178,31 @@ describe SellerProfile do
     end
   end
 
+  describe "FONT_CHOICES" do
+    it "matches the list the profile settings editor offers" do
+      # The editor hardcodes its own copy of this list, so a font added here alone would never be
+      # offered to sellers, and one added there alone would fail the inclusion validation on save.
+      source = File.read(Rails.root.join("app", "javascript", "pages", "Settings", "Profile", "Show.tsx"))
+      declaration = source[/const FONT_CHOICES = \[(.*?)\];/m, 1]
+      expect(declaration).to be_present, "could not find FONT_CHOICES in Show.tsx"
+
+      editor_fonts = declaration.scan(/"([^"]+)"/).flatten
+      # The editor's first entry is the DEFAULT_PROFILE_FONT constant rather than a literal.
+      expect([SellerProfile::FONT_CHOICES.first] + editor_fonts).to eq(SellerProfile::FONT_CHOICES)
+    end
+  end
+
   describe "#accent_color_for_indicators" do
     it "keeps the saved accent when it is already visible on the background" do
       subject = build(:seller_profile, highlight_color: "#009a49", background_color: "#f8efe3")
 
       expect(subject.accent_color_for_indicators).to eq("#009a49")
+    end
+
+    it "keeps the default pink on the default white background" do
+      subject = build(:seller_profile, highlight_color: "#ff90e8", background_color: "#ffffff")
+
+      expect(subject.accent_color_for_indicators).to eq("#ff90e8")
     end
 
     it "moves an accent that matches the background far enough to be seen" do

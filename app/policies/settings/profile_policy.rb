@@ -31,6 +31,7 @@ class Settings::ProfilePolicy < ApplicationPolicy
       :profile_version,
       {
         user: user_attributes,
+        seller_profile: [:font, :background_color, :highlight_color],
         tabs: [:name, { sections: [] }],
         sections: [:id, *ProfileSectionPolicy::CREATE_ATTRIBUTES]
       }

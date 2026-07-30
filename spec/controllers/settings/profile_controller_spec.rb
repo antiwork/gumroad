@@ -63,7 +63,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(seller.reload.name).to eq("New name")
     end
 
-    it "does not allow profile design fields to be updated from profile settings" do
+    it "updates the profile design fields" do
       seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
 
       put :update, params: { seller_profile: { background_color: "#000000", highlight_color: "#009a49", font: "Roboto Mono" } }
@@ -72,10 +72,48 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(response).to have_http_status :see_other
       expect(flash[:notice]).to eq("Changes saved!")
       expect(seller.reload.seller_profile).to have_attributes(
+        background_color: "#000000",
+        highlight_color: "#009a49",
+        font: "Roboto Mono",
+      )
+    end
+
+    it "leaves the other design fields alone when only one is sent" do
+      seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
+
+      put :update, params: { seller_profile: { font: "Domine" } }
+
+      expect(seller.reload.seller_profile).to have_attributes(
+        font: "Domine",
         background_color: "#ffffff",
         highlight_color: "#ff90e8",
-        font: "ABC Favorit",
       )
+    end
+
+    it "rejects a font outside the allowed choices" do
+      seller.seller_profile.update!(font: "ABC Favorit")
+
+      put :update, params: { seller_profile: { font: "Comic Sans" } }
+
+      expect(seller.reload.seller_profile.font).to eq("ABC Favorit")
+    end
+
+    it "rejects a colour that is not a hex value" do
+      seller.seller_profile.update!(highlight_color: "#ff90e8")
+
+      put :update, params: { seller_profile: { highlight_color: "not-a-colour" } }
+
+      expect(seller.reload.seller_profile.highlight_color).to eq("#ff90e8")
+    end
+
+    it "rejects a non-string colour without raising an exception" do
+      seller.seller_profile.update!(background_color: "#ffffff")
+
+      put :update, params: { seller_profile: { background_color: 1 } }
+
+      expect(response).to redirect_to(profile_path)
+      expect(flash[:alert]).to eq("Background color is not a valid hexadecimal color")
+      expect(seller.reload.seller_profile.background_color).to eq("#ffffff")
     end
 
     describe "when the user has not confirmed their email address" do
@@ -170,7 +208,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
             { id: temp_id, type: "SellerProfileProductsSection", header: "New", shown_products: [], default_product_sort: "page_layout", show_filters: false, add_new_products: true },
           ],
           tabs: [{ name: "Tab 1", sections: [existing.external_id, temp_id] }],
-          profile_version: seller.seller_profile.layout_version.iso8601(6),
+          profile_version: seller.seller_profile.layout_version,
         }, as: :json
 
         expect(response).to have_http_status :see_other
@@ -190,7 +228,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         put :update, params: {
           sections: [{ id: existing.external_id, header: "Updated", shown_posts: [post1.external_id, post2.external_id] }],
           tabs: [{ name: "Tab 1", sections: [existing.external_id] }],
-          profile_version: seller.seller_profile.layout_version.iso8601(6),
+          profile_version: seller.seller_profile.layout_version,
         }, as: :json
 
         expect(response).to have_http_status :see_other
@@ -205,7 +243,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         put :update, params: {
           sections: [{ id: kept.external_id, header: "Kept" }],
           tabs: [{ name: "Tab 1", sections: [kept.external_id] }],
-          profile_version: seller.seller_profile.layout_version.iso8601(6),
+          profile_version: seller.seller_profile.layout_version,
         }, as: :json
 
         expect(response).to have_http_status :see_other
@@ -217,7 +255,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       it "rejects the save and keeps the current layout when the profile changed since it was loaded" do
         section = create(:seller_profile_products_section, seller:, header: "Section 1")
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
-        stale_version = seller.seller_profile.layout_version.iso8601(6)
+        stale_version = seller.seller_profile.layout_version
 
         # Another session adds a section and saves, advancing the profile's version.
         concurrent = create(:seller_profile_products_section, seller:, header: "Added elsewhere")
@@ -237,12 +275,53 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [section.id, concurrent.id] }].as_json
       end
 
+      it "does not reject a loaded layout after another tab changes only the theme" do
+        section = create(:seller_profile_products_section, seller:, header: "Section 1")
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+        loaded_version = seller.seller_profile.layout_version
+
+        seller.seller_profile.update!(background_color: "#000000", highlight_color: "#009a49")
+
+        put :update, params: {
+          sections: [{ id: section.external_id, header: "Renamed" }],
+          tabs: [{ name: "Tab 1", sections: [section.external_id] }],
+          profile_version: loaded_version,
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
+        expect(section.reload.header).to eq "Renamed"
+        expect(seller.reload.seller_profile).to have_attributes(
+          background_color: "#000000",
+          highlight_color: "#009a49",
+        )
+      end
+
+      it "does not reject an empty layout after another tab creates the profile with only theme changes" do
+        loaded_version = seller.seller_profile.layout_version
+        expect(seller.seller_profile).not_to be_persisted
+
+        seller.seller_profile.update!(font: "Domine")
+
+        put :update, params: {
+          tabs: [{ name: "Tab 1", sections: [] }],
+          profile_version: loaded_version,
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(flash[:notice]).to eq("Changes saved!")
+        expect(seller.reload.seller_profile).to have_attributes(
+          font: "Domine",
+          json_data: { "tabs" => [{ "name" => "Tab 1", "sections" => [] }] },
+        )
+      end
+
       it "leaves the avatar unchanged when a stale layout save is rejected" do
         seller.avatar.attach(file_fixture("test.png"))
         original_blob_id = seller.avatar.blob.id
         section = create(:seller_profile_products_section, seller:, header: "Section 1")
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
-        stale_version = seller.seller_profile.layout_version.iso8601(6)
+        stale_version = seller.seller_profile.layout_version
 
         # Another session edits the section, advancing the profile's version.
         section.update!(header: "Changed elsewhere")
@@ -263,7 +342,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       it "rejects the save when a section's content was edited in another session" do
         section = create(:seller_profile_products_section, seller:, header: "Section 1")
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
-        stale_version = seller.seller_profile.layout_version.iso8601(6)
+        stale_version = seller.seller_profile.layout_version
 
         # Another session edits the section's content. That bumps the section row's updated_at, not
         # the profile's, so the version must fold in section timestamps to notice the change.
@@ -299,7 +378,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
         put :update, params: {
           tabs: [{ name: "Tab 1", sections: [kept.external_id, temp_id] }],
-          profile_version: seller.seller_profile.layout_version.iso8601(6),
+          profile_version: seller.seller_profile.layout_version,
         }, as: :json
 
         expect(response).to have_http_status :see_other

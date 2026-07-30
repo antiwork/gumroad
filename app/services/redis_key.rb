@@ -74,5 +74,10 @@ class RedisKey
     def mobile_minimum_version = "mobile:minimum_version"
     def mobile_minimum_update_created_at = "mobile:minimum_update_created_at"
     def gmail_abuse_normalized_emails = "gmail_abuse:normalized_emails"
+    # Marks that RequeueTransientlyFailedPayoutsJob has already reported this seller as having
+    # exhausted its requeue attempts for this payout period. Once requeueing stops the seller's
+    # failure count stops growing, so without this the daily run would re-alert on the same
+    # seller for the rest of the period.
+    def transient_payout_requeue_exhaustion_reported(user_id, payout_period_end_date) = "payouts:transient_requeue_exhaustion_reported:#{payout_period_end_date}:#{user_id}"
   end
 end
