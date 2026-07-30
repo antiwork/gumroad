@@ -101,9 +101,13 @@ module Product::Prices
   # price_formatted_verbose over an arbitrary amount, for surfaces that show a price other than
   # the product's set one (a default-offer-code discount, say) and still need the "+" and
   # recurrence wording that make the number read correctly.
-  def price_formatted_verbose_for_price_cents(price_cents)
+  #
+  # Pass `recurrence:` when the amount came from a specific duration rather than from
+  # display_price_cents: the default display_recurrence is the *cheapest* tier's recurrence, so
+  # labelling a default-duration amount with it quotes a monthly price as a yearly one.
+  def price_formatted_verbose_for_price_cents(price_cents, recurrence: display_recurrence)
     formatted = format_price(display_price_for_price_cents(price_cents))
-    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_long_indicator(display_recurrence)}" : ''}"
+    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_long_indicator(recurrence)}" : ''}"
   end
 
   def price_formatted_including_rental_verbose

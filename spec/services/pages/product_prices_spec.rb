@@ -103,6 +103,50 @@ describe Pages::ProductPrices do
       expect(entry[:price]).to eq(membership.price_formatted_verbose)
     end
 
+    # display_price_cents defaults to the cheapest amount across every enabled recurrence, while
+    # the wording comes from the default recurrence. On a yearly-default membership that pairs a
+    # monthly amount with "a year", so the storefront quotes a price no buyer is charged and
+    # disagrees with the native card, which passes for_default_duration.
+    it "quotes a tiered membership at its default recurrence, matching the native card" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller,
+                                                                          subscription_duration: :yearly,
+                                                                          recurrence_price_values: [
+                                                                            { monthly: { enabled: true, price: 4 },
+                                                                              yearly: { enabled: true, price: 40 } },
+                                                                            { monthly: { enabled: true, price: 9 },
+                                                                              yearly: { enabled: true, price: 90 } },
+                                                                          ])
+
+      entry = described_class.build(seller, ip: nil)[membership.general_permalink]
+      native = ProductPresenter::Card.new(product: membership.reload).for_web
+
+      expect(entry[:price_cents]).to eq(4000)
+      expect(entry[:price]).to eq("$40+ a year")
+      expect(entry[:price_cents]).to eq(native[:price_cents])
+    end
+
+    # discounted_price_cents reads default_offer_code for every product, so a profile whose
+    # products are all discounted issues one offer-code query per product unless it is preloaded —
+    # on an uncached public page rendered up to MAX_ITEMS times.
+    it "loads the default offer codes in one query regardless of how many products carry one" do
+      offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
+      product.update!(default_offer_code: offer_code)
+      3.times do |i|
+        extra = create(:product, user: seller, price_cents: 1000)
+        code = seller.offer_codes.create!(code: "off#{i}", amount_percentage: 10, products: [extra])
+        extra.update!(default_offer_code: code)
+      end
+
+      queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        queries << payload[:sql] if payload[:sql].include?("offer_codes") && payload[:name] != "SCHEMA"
+      end
+      described_class.build(seller, ip: nil)
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      expect(queries.size).to eq(1)
+    end
+
     it "takes the default offer code off, so the card cannot quote a price checkout would not honor" do
       offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
       product.update!(default_offer_code: offer_code)

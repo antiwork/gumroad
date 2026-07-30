@@ -44,17 +44,16 @@ class Pages::ProductPrices
     # runs uncached on a public page for up to MAX_ITEMS products, so the preload is load-bearing.
     def products
       seller.products.alive.not_archived.not_draft
-            .includes(:alive_prices, :installment_plan, :user, :skus,
+            .includes(:alive_prices, :installment_plan, :user, :skus, :default_offer_code,
                       tiers: :alive_prices, variant_categories_alive: :alive_variants)
             .order(created_at: :desc).limit(Pages::ProfileData::MAX_ITEMS)
     end
 
     def entry_for(product)
-      # The number a buyer would be charged: display_price_cents is what price_formatted_verbose
-      # formats, and discounted_price_cents takes the default offer code off it — the same pair
-      # ProductPresenter::Card feeds the native grid, so a storefront card and the product page
-      # can't quote different prices for the same product.
-      base_price_cents = product.display_price_cents
+      # The number a buyer would be charged, computed exactly as ProductPresenter::Card computes it
+      # for the native grid — including `for_default_duration`, without which a tiered membership
+      # quotes its cheapest recurrence's amount here and its default recurrence's amount there.
+      base_price_cents = product.display_price_cents(for_default_duration: true)
       price_cents = product.discounted_price_cents(base_price_cents)
       display = localizable?(product) ? buyer_currency_display_props(product:, price_cents:, ip:) : nil
 
@@ -67,7 +66,9 @@ class Pages::ProductPrices
         }
       else
         {
-          price: product.price_formatted_verbose_for_price_cents(price_cents),
+          price: product.price_formatted_verbose_for_price_cents(
+            price_cents, recurrence: product.subscription_duration
+          ),
           price_cents:,
           currency_code: product.price_currency_type.to_s.downcase,
           localized: false,
