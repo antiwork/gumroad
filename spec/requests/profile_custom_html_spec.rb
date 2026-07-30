@@ -210,6 +210,41 @@ describe "Profile custom HTML rendering", type: :request do
       expect(data["products"].map { _1["name"] }).to include("Cool thing")
       expect(data["products"].first.keys).to match_array(%w[name url price native_type thumbnail_url cover_url description])
     end
+
+    it "embeds a per-request price blob keyed by permalink alongside the cached catalog" do
+      product = create(:product, user: seller, name: "Cool thing", price_cents: 1400)
+
+      get "http://seller.example.com/landing/embed"
+
+      json = response.body[%r{<script id="gumroad-prices"[^>]*>(.*?)</script>}m, 1]
+      prices = JSON.parse(json)
+      expect(prices[product.general_permalink]).to eq(
+        "price" => "$14", "price_cents" => 1400, "currency_code" => "usd", "localized" => false
+      )
+    end
+
+    it "interpolates a product-scoped price into the seller's markup" do
+      product = create(:product, user: seller, price_cents: 3900)
+      seller.update!(custom_html: %(<span data-gumroad-product="#{product.general_permalink}" data-gumroad-field="price">$0</span>))
+
+      get "http://seller.example.com/landing/embed"
+
+      expect(response.body).to include(">$39<")
+      expect(response.body).not_to include(">$0<")
+    end
+
+    # The blob is rebuilt per request while gumroad-data is cached per seller, so a price edit
+    # shows up in the prices blob even on a cache hit for the catalog payload.
+    it "reflects a price edit immediately" do
+      product = create(:product, user: seller, price_cents: 1400)
+      get "http://seller.example.com/landing/embed"
+      product.update!(price_cents: 3900)
+
+      get "http://seller.example.com/landing/embed"
+
+      prices = JSON.parse(response.body[%r{<script id="gumroad-prices"[^>]*>(.*?)</script>}m, 1])
+      expect(prices[product.general_permalink]["price_cents"]).to eq(3900)
+    end
   end
 
   describe "preview field sync" do

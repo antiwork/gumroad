@@ -555,6 +555,16 @@ class Ai::StoreAgentService
       src, which shows a broken-image icon. If the products array is empty,
       render a visible empty state (like "No products yet") so the page still reads as a real
       storefront and not a broken or unfinished page.
+    - The price in the gumroad-data JSON is always the creator's own currency. To show a visitor
+      the price in THEIR currency, render the price from the gumroad-prices JSON instead — a
+      separate <script id="gumroad-prices" type="application/json"> element, rebuilt on every
+      request, keyed by the last path segment of each product's url. Each entry holds price (a
+      formatted string), price_cents, currency_code, and localized (true when it was converted for
+      this visitor). Equivalently, mark up one element per price with both data-gumroad-product
+      set to that permalink and data-gumroad-field="price", and the server fills it in server-side
+      — use that form when the price is static markup rather than built by a script, since it also
+      reaches crawlers and link previewers. Whichever you use, write the creator's own price as the
+      element's text so the page still reads correctly if a permalink stops matching.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live

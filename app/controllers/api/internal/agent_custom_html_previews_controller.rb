@@ -79,9 +79,11 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
     return render_cleared_page_preview if sanitized.nil?
 
     display_html, scroll_to_change = marked_preview_html(sanitized, marked_html)
+    prices = Pages::ProductPrices.build(current_seller, ip: request.remote_ip)
     document = profile_custom_html_document(
-      Pages::Interpolator.interpolate_profile(display_html, profile: current_seller),
+      Pages::Interpolator.interpolate_profile(display_html, profile: current_seller, prices:),
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
+      prices_json: ERB::Util.json_escape(prices.to_json),
       scroll_to_change:,
     )
     render json: { success: true, preview_url: stage_preview_document(document) }

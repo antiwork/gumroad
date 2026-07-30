@@ -201,5 +201,72 @@ describe Pages::Interpolator do
       expect(described_class.interpolate_profile("", profile: seller)).to eq("")
       expect(described_class.interpolate_profile(nil, profile: seller)).to be_nil
     end
+
+    describe "product-scoped price fields" do
+      let(:prices) do
+        { "quicklauncher" => { price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true } }
+      end
+
+      it "writes the product's price into an element scoped to its permalink" do
+        html = %(<span data-gumroad-product="quicklauncher" data-gumroad-field="price">$14</span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">€11.20<")
+        expect(result).not_to include("$14")
+      end
+
+      it "writes the currency the price is in" do
+        html = %(<span data-gumroad-product="quicklauncher" data-gumroad-field="currency">usd</span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">eur<")
+      end
+
+      it "leaves the element's own text alone when the permalink is unknown" do
+        html = %(<span data-gumroad-product="gone" data-gumroad-field="price">$14</span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">$14<")
+      end
+
+      it "leaves the element's own text alone when no prices are supplied" do
+        html = %(<span data-gumroad-product="quicklauncher" data-gumroad-field="price">$14</span>)
+
+        expect(described_class.interpolate_profile(html, profile: seller)).to include(">$14<")
+      end
+
+      # Without this the seller's name would be written into every product card that reused
+      # data-gumroad-field="name" inside a product-scoped element.
+      it "does not answer a product-scoped element with a seller-level field" do
+        html = %(<h2 data-gumroad-product="quicklauncher" data-gumroad-field="name">Quicklauncher</h2>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">Quicklauncher<")
+        expect(result).not_to include("Jane Doe")
+      end
+
+      it "still fills seller-level fields on elements with no product scope" do
+        html = %(<h1 data-gumroad-field="name"></h1><span data-gumroad-product="quicklauncher" data-gumroad-field="price"></span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">Jane Doe<")
+        expect(result).to include(">€11.20<")
+      end
+
+      it "html-escapes the interpolated price" do
+        html = %(<span data-gumroad-product="x" data-gumroad-field="price"></span>)
+        malicious = { "x" => { price: %(<script>alert("xss")</script>), currency_code: "usd" } }
+
+        result = described_class.interpolate_profile(html, profile: seller, prices: malicious)
+
+        expect(result).not_to include("<script>")
+        expect(result).to include("&lt;script&gt;")
+      end
+    end
   end
 end

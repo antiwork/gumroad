@@ -15,15 +15,41 @@ class Pages::Interpolator
     "bio" => ->(user) { user.bio.to_s }
   }.freeze
 
+  # Fields a profile page can ask for about ONE product, via data-gumroad-product="<permalink>"
+  # alongside data-gumroad-field. Values come from the per-request Pages::ProductPrices payload,
+  # so "price" is visitor-localized where checkout can settle in that currency and "currency"
+  # names the currency that price is in.
+  PRODUCT_PRICE_FIELDS = {
+    "price" => :price,
+    "currency" => :currency_code,
+  }.freeze
+
   # Profiles have no buy affordance, so profile interpolation only fills in
   # display fields — no buy-button validation or ?wanted=true href rewriting.
-  def self.interpolate_profile(html, profile:)
+  #
+  # `prices` is a Pages::ProductPrices payload keyed by product permalink. It arrives per request
+  # (never from the per-seller profile cache), which is what lets a profile page show a price that
+  # is both visitor-localized and current: an element carrying data-gumroad-product plus
+  # data-gumroad-field="price" gets that product's price written into it on every render.
+  def self.interpolate_profile(html, profile:, prices: {})
     return html if html.blank?
 
     fragment = Loofah.fragment(html)
     fragment.css("[data-gumroad-field]").each do |node|
-      handler = PROFILE_FIELDS[node["data-gumroad-field"]]
-      node.inner_html = ERB::Util.h(handler.call(profile)) if handler
+      field = node["data-gumroad-field"]
+      permalink = node["data-gumroad-product"]
+      # A data-gumroad-product attribute means the element is asking about one product, so the
+      # user-level fields must not answer it — otherwise <span data-gumroad-product="x"
+      # data-gumroad-field="name"> would render the seller's name inside a product card.
+      if permalink.present?
+        value = prices.dig(permalink, PRODUCT_PRICE_FIELDS[field])
+        # An unknown permalink or field leaves the element untouched, so whatever the page wrote
+        # inside it still shows. Blanking it would turn a typo into a card with no price at all.
+        node.inner_html = ERB::Util.h(value.to_s) if value.present?
+      else
+        handler = PROFILE_FIELDS[field]
+        node.inner_html = ERB::Util.h(handler.call(profile)) if handler
+      end
     end
     fragment.to_html
   end

@@ -40,10 +40,14 @@ class UsersController < ApplicationController
     return head :not_found unless custom_html_visible?
 
     apply_custom_html_response_headers
-    interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user)
+    # Rebuilt per request, unlike the per-seller-cached gumroad-data payload, so the prices a page
+    # renders are the visitor's currency and cannot be served stale by that cache.
+    prices = Pages::ProductPrices.build(@user, ip: request.remote_ip)
+    interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user, prices:)
     render html: profile_custom_html_document(
       interpolated,
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
+      prices_json: ERB::Util.json_escape(prices.to_json),
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
       follow_bridge: FOLLOW_BRIDGE_SCRIPT,
