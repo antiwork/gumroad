@@ -25,7 +25,9 @@ type ReusableCCVariation<CardParams extends CardPaymentMethodParams | PaymentReq
 type CardData = {
   cardElement: StripeCardElement | { token: string };
   email: string;
-  zipCode?: string | null;
+  // Explicitly `| undefined` because callers pass an absent ZIP through as a value rather than
+  // omitting the key, and `exactOptionalPropertyTypes` treats those as different types.
+  zipCode?: string | null | undefined;
 };
 export const prepareCardPaymentMethodData = async (
   cardData: CardData,
