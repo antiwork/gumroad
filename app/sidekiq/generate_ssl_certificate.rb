@@ -2,7 +2,12 @@
 
 class GenerateSslCertificate
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low
+  sidekiq_options retry: 5, queue: :low, lock: :while_executing, on_conflict: :reschedule
+
+  # The retry counter is transient; all certificate work for a domain must share one runtime lock.
+  def self.lock_args(args)
+    [args.first]
+  end
 
   # Fallback delay when the rate-limit error doesn't tell us when to retry.
   RATE_LIMIT_FALLBACK_DELAY = 1.hour

@@ -1,6 +1,15 @@
 # frozen_string_literal: true
 
 describe GenerateSslCertificate do
+  describe "job uniqueness" do
+    it "serializes certificate generation by custom domain across rate-limit reschedules" do
+      expect(described_class.sidekiq_options["lock"]).to eq(:while_executing)
+      expect(described_class.sidekiq_options["on_conflict"]).to eq(:reschedule)
+      expect(described_class.lock_args([123])).to eq([123])
+      expect(described_class.lock_args([123, 4])).to eq([123])
+    end
+  end
+
   describe "#perform" do
     before do
       @custom_domain = create(:custom_domain, domain: "www.example.com")
