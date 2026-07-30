@@ -10,7 +10,6 @@ rescue LoadError
 end
 
 require Rails.root.join("lib", "extras", "sidekiq_makara_reset_context_middleware")
-require Rails.root.join("lib", "extras", "sidekiq_dead_lock_cleanup")
 
 Sidekiq.configure_server do |config|
   config.redis = { url: "redis://#{ENV["SIDEKIQ_REDIS_HOST"]}" }
@@ -22,11 +21,6 @@ Sidekiq.configure_server do |config|
     # https://github.com/mperham/sidekiq/wiki/Reliability#scheduler
     config.reliable_scheduler!
   end
-
-  # Releases the `until_executed` lock of a job that died; without it the lock outlives the job
-  # and every later enqueue is dropped as a duplicate (gumroad-private#1576). The body lives in
-  # lib/extras so a spec can exercise the shipped handler rather than a copy of it.
-  config.death_handlers << SidekiqDeadLockCleanup::HANDLER
 
   config.client_middleware do |chain|
     chain.add SidekiqUniqueJobs::Middleware::Client

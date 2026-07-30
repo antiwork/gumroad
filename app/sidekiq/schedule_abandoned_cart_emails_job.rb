@@ -21,12 +21,11 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  # `lock_ttl` is the backstop for the gem's death handler: a SIGKILL (OOM, deploy reap) fires no
-  # death event at all, so an `until_executed` lock with no expiry survives forever and silently
-  # drops every subsequent enqueue — which is what muted this job platform-wide for seven days
-  # (gumroad-private#1576). 20h is far beyond any real scan (bounded by SCAN_TIME_BUDGET above)
-  # yet lands before the next 14:00 UTC enqueue, so a stranded lock costs one run rather than
-  # racing the next one. Keep it strictly under the 24h schedule interval.
+  # An `until_executed` lock is released in an `ensure`, so an exception or a retry cannot strand
+  # it — but a SIGKILL (OOM, deploy reap) never runs that ensure and leaves the digest with no
+  # expiry. This job takes no arguments, so its digest is constant: one strand drops every later
+  # enqueue forever (gumroad-private#1576). The TTL is re-applied on each acquire, so it only has
+  # to outlast a single attempt, and must stay under the 24h schedule so a strand costs one run.
   sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: 20.hours.to_i
 
   # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
