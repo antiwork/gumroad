@@ -756,6 +756,26 @@ describe Payouts do
           described_class.create_payments_for_balances_up_to_date_for_users(payout_date, PayoutProcessorType::PAYPAL, [seller])
         end.not_to change { Payment.count }
       end
+
+      it "creates payments when retrying even though the cycle has moved past this payout date" do
+        # A failed payout pushes the seller's next cycle forward, which is exactly the state a
+        # requeue runs in — so the gate must not reject them.
+        allow(Payouts).to receive(:is_user_payable).and_return(true)
+        allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 1.month)
+
+        expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([seller.id], payout_date.to_s)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(payout_date, PayoutProcessorType::PAYPAL, [seller], perform_async: true, retrying: true)
+      end
+
+      it "skips the seller when not retrying and the cycle has moved past this payout date" do
+        allow(Payouts).to receive(:is_user_payable).and_return(true)
+        allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 1.month)
+
+        expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([], payout_date.to_s)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(payout_date, PayoutProcessorType::PAYPAL, [seller], perform_async: true)
+      end
     end
 
     describe "payout skipped notes" do

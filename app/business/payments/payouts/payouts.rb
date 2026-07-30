@@ -224,6 +224,12 @@ class Payouts
       ) &&
       (
         from_admin ||
+        # A requeue pays the same period the seller already qualified for, so the cycle gate
+        # has nothing left to decide — and applying it would drop exactly the sellers the
+        # requeue exists for. A failed payout pushes the seller's next cycle forward (monthly
+        # sellers to the following month), so `date + PAYOUT_DELAY_DAYS >= next_payout_cycle_date`
+        # is false for them and they would be skipped while their balance sits unpaid.
+        retrying ||
         (
           # Compare the batch against the seller's payout CYCLE, not the day their own rail
           # runs on. The cycle is what schedules this batch, while the seller's payout day
