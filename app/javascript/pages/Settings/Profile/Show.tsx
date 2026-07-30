@@ -5,6 +5,11 @@ import * as React from "react";
 import typia from "typia";
 
 import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
+import {
+  ProfileSettingsForm,
+  changedProfileSettings,
+  rebaseProfileSettings,
+} from "$app/pages/Settings/Profile/profileSettingsForm";
 import { CreatorProfile } from "$app/parsers/profile";
 import { classNames } from "$app/utils/classNames";
 import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
@@ -42,15 +47,6 @@ type ProfileSettingsTab = "about" | "design" | "pages" | "share";
 // retry of the same navigation. Long enough to absorb a burst of repeated attempts (the bug
 // this guards against), short enough that a deliberate second click a few seconds later asks again.
 const LEAVE_ANSWER_REUSE_WINDOW_MS = 2000;
-
-type ProfileSettingsForm = {
-  name: string | null;
-  bio: string | null;
-  font: string;
-  background_color: string;
-  highlight_color: string;
-  profile_picture_blob_id: string | null;
-};
 
 // Mirrors SellerProfile::FONT_CHOICES and the after_initialize defaults in app/models/seller_profile.rb.
 // The model validates inclusion, so adding a font here without adding it there fails the save.
@@ -128,7 +124,7 @@ export default function SettingsPage() {
   React.useEffect(() => {
     const previousBaseline = lastSavedSettings.current;
     lastSavedSettings.current = profile_settings;
-    setProfileSettings((prevSettings) => (isEqual(prevSettings, previousBaseline) ? profile_settings : prevSettings));
+    setProfileSettings((current) => rebaseProfileSettings(current, previousBaseline, profile_settings));
   }, [profile_settings]);
   const updateProfileSettings = (newSettings: Partial<ProfileSettingsForm>) =>
     setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
@@ -205,19 +201,7 @@ export default function SettingsPage() {
     setIsSaving(true);
     const settings = profileSettings;
     const previousSettings = lastSavedSettings.current;
-    const changedSettings: Partial<ProfileSettingsForm> = {};
-    if (settings.name !== previousSettings.name) changedSettings.name = settings.name;
-    if (settings.bio !== previousSettings.bio) changedSettings.bio = settings.bio;
-    if (settings.profile_picture_blob_id !== previousSettings.profile_picture_blob_id) {
-      changedSettings.profile_picture_blob_id = settings.profile_picture_blob_id;
-    }
-    if (settings.font !== previousSettings.font) changedSettings.font = settings.font;
-    if (settings.background_color !== previousSettings.background_color) {
-      changedSettings.background_color = settings.background_color;
-    }
-    if (settings.highlight_color !== previousSettings.highlight_color) {
-      changedSettings.highlight_color = settings.highlight_color;
-    }
+    const changedSettings = changedProfileSettings(settings, previousSettings);
     const { sections, tabs } = editableProfile;
     // Only submit pages/sections when they actually changed. A save that left them untouched
     // (e.g. editing just the name or bio) must not resend a now-stale list, or the server would
