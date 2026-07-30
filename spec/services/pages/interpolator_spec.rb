@@ -306,6 +306,17 @@ describe Pages::Interpolator do
         expect(result).not_to include("Jane Doe")
       end
 
+      # The attribute's presence is what scopes — the preview listener excludes any node
+      # carrying it, so a valueless marker must not fall back to profile fields either.
+      it "treats an empty product marker as product-scoped, keeping its fallback text" do
+        html = %(<h2 data-gumroad-product="" data-gumroad-field="name">Quicklauncher</h2>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">Quicklauncher<")
+        expect(result).not_to include("Jane Doe")
+      end
+
       it "still fills seller-level fields on elements with no product scope" do
         html = %(<h1 data-gumroad-field="name"></h1><span data-gumroad-product="quicklauncher" data-gumroad-field="price"></span>)
 

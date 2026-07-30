@@ -202,16 +202,18 @@ module Product::Prices
 
   # The default offer code taken off a base price, which is what a buyer would be charged
   # buying one of this product right now. A surface showing a lower number quotes a price
-  # checkout will not honour, so every code the default checkout rejects is left on the shelf:
-  # existing-customers-only (a first-time visitor does not get it), a quantity minimum above
-  # one (the native page shows the quantity-1 price undiscounted for those, per
-  # ProductPresenter::ProductProps#discounted_price_cents), and a spent use cap. Erring the
+  # checkout will not honour, so every code the default one-product checkout rejects is left on
+  # the shelf: existing-customers-only (a first-time visitor does not get it), a quantity
+  # minimum above one (the native page shows the quantity-1 price undiscounted for those, per
+  # ProductPresenter::ProductProps#discounted_price_cents), a spend minimum this product alone
+  # cannot meet (Purchase::CreateService raises below it), and a spent use cap. Erring the
   # other way is safe — a buyer who qualifies later sees the price drop at checkout, where the
   # binding amount is minted. PPP stays out entirely: it needs per-cart context.
   def discounted_price_cents(base_price_cents)
     offer_code = default_offer_code
     return base_price_cents if offer_code.blank? || offer_code.inactive? || offer_code.existing_customers_only?
     return base_price_cents if offer_code.minimum_quantity.to_i > 1
+    return base_price_cents if offer_code.minimum_amount_cents.to_i > base_price_cents
     return base_price_cents unless default_offer_code_uses_left?(offer_code)
 
     [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
@@ -364,6 +366,10 @@ module Product::Prices
     # The uses-left read is a purchases aggregate, so it runs only for capped codes and its
     # result is shared across every card on the page that carries the same default code
     # (Current resets between requests, so a redemption is reflected on the next one).
+    # Per-card fallback is deliberate for grid collections: a capped code's counted purchases
+    # are bounded by its own cap, so each aggregate scans a handful of index rows — batching
+    # every grid call site is not worth the coupling. Pages::ProductPrices, which prices up to
+    # 100 products uncached, seeds this memo in one grouped query (OfferCode.uses_left_by_id).
     def default_offer_code_uses_left?(offer_code)
       return true if offer_code.max_purchase_count.nil?
 

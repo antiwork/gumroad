@@ -208,6 +208,19 @@ describe Pages::ProductPrices do
       expect(sums).to eq(1)
     end
 
+    # Purchase::CreateService raises when the eligible cart is below the code's minimum amount,
+    # so a one-product quote may only show the discount when that product alone clears it.
+    it "honors a spend minimum: skipped below it, applied at or above it" do
+      offer_code = seller.offer_codes.create!(code: "spend", amount_percentage: 50, products: [product],
+                                              minimum_amount_cents: 5000)
+      product.update!(default_offer_code: offer_code)
+
+      expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(1400)
+
+      offer_code.update!(minimum_amount_cents: 1400)
+      expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(700)
+    end
+
     # Checkout rejects a code whose use cap is spent, so subtracting it here would advertise a
     # sale price and strikethrough the buyer is never charged.
     it "leaves an exhausted default offer code on the shelf" do

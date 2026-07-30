@@ -50,7 +50,10 @@ class Pages::Interpolator
       # A data-gumroad-product attribute means the element is asking about one product, so the
       # user-level fields must not answer it — otherwise <span data-gumroad-product="x"
       # data-gumroad-field="name"> would render the seller's name inside a product card.
-      if permalink.present?
+      # Presence of the attribute is what scopes, even valueless: the preview listener excludes
+      # any node carrying it, so an empty marker answered by a profile field would make the
+      # published page and the live preview disagree.
+      unless permalink.nil?
         entry = prices[permalink]
         handler = PRODUCT_PRICE_FIELDS[field]
         value = entry && handler ? handler.call(entry) : nil
