@@ -115,7 +115,36 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).not_to include "Any additional information you can provide"
             expect(mail.body.encoded).not_to include "in the next 0 hours"
             expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
             expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        # The mailer renders whenever the queue gets to it, so the seller may have answered the ask —
+        # or the row may have been resolved — after the notice was enqueued. Both states make
+        # Purchases::DisputeEvidenceController redirect away, so the button would go nowhere.
+        context "when the seller has already submitted evidence by the time the mail renders" do
+          before { dispute_evidence.update!(seller_submitted_at: Time.current) }
+
+          it "does not ask again for evidence the submission page will not accept" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        context "when the evidence has been resolved by the time the mail renders" do
+          before { dispute_evidence.update!(resolved_at: Time.current, resolution: DisputeEvidence::RESOLUTION_SUBMITTED) }
+
+          it "does not ask for evidence the submission page will not accept" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
           end
         end
       end

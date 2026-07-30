@@ -201,6 +201,48 @@ describe DisputeEvidence do
     end
   end
 
+  describe ".accepting_evidence?" do
+    def accepting?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
+      described_class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    end
+
+    it "accepts an open window" do
+      expect(accepting?).to be(true)
+    end
+
+    # These two are what Purchases::DisputeEvidenceController#check_if_needs_redirect bounces on. A
+    # caller that asks only about the window sends an action-required email to a page that redirects.
+    it "declines once the seller has submitted" do
+      expect(accepting?(seller_submitted_at: Time.current)).to be(false)
+    end
+
+    it "declines once the row is resolved" do
+      expect(accepting?(resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines an elapsed window" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+    end
+
+    # A dispute with no evidence surface at all (PayPal, Stripe Connect) has never had a window, and
+    # still gets the plain notice — declining here would suppress every first notice instead.
+    it "accepts an unstamped row so the first notice still goes out" do
+      expect(accepting?(seller_contacted_at: nil)).to be(true)
+    end
+
+    it "declines an unstamped row that is already resolved" do
+      expect(accepting?(seller_contacted_at: nil, resolved_at: Time.current)).to be(false)
+    end
+
+    it "agrees with the instance method reading the same row" do
+      dispute_evidence.update!(seller_contacted_at: 1.hour.ago)
+      expect(dispute_evidence.accepting_evidence?).to be(true)
+
+      dispute_evidence.update!(seller_submitted_at: Time.current)
+      expect(dispute_evidence.accepting_evidence?).to be(false)
+    end
+  end
+
   describe "#claim_seller_contacted_window!" do
     before { dispute_evidence.update_as_not_seller_contacted! }
 

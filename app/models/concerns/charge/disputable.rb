@@ -364,8 +364,9 @@ module Charge::Disputable
       stamped_at, submitted_at, resolved_at =
         dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
                                            .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
-      accepting_evidence = submitted_at.nil? && resolved_at.nil? &&
-        (stamped_at.nil? || DisputeEvidence.hours_left_in_window(stamped_at).positive?)
+      accepting_evidence = DisputeEvidence.accepting_evidence?(
+        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+      )
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window

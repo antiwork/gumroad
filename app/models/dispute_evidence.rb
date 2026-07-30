@@ -93,6 +93,24 @@ class DisputeEvidence < ApplicationRecord
     self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
   end
 
+  # Whether asking the seller for evidence would lead anywhere. The first two conditions are what
+  # Purchases::DisputeEvidenceController#check_if_needs_redirect bounces on, plus the window: an ask
+  # that survives one gate and not the other is an "action required" email whose button redirects
+  # away, or whose own sentence quotes zero hours.
+  #
+  # Takes raw column values because neither caller can trust a loaded record — the sweep must not
+  # #reload mid-transaction (see claim_seller_contacted_window!), and the mailer must recompute at
+  # delivery rather than trust what was true at enqueue.
+  def self.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    return false if seller_submitted_at.present? || resolved_at.present?
+
+    seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?
+  end
+
+  def accepting_evidence?
+    self.class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+  end
+
   # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
   #
   # Two paths open it — formalization and CreateMissingDisputeEvidenceJob — and they can run against
