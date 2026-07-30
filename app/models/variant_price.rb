@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class VariantPrice < BasePrice
+  include TouchesProductForPriceCache
+
   belongs_to :variant, optional: true
 
   validates :variant, presence: true
