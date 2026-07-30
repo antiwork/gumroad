@@ -41,7 +41,7 @@ module SslCertificates
         end
 
         if all_certificates_generated
-          routable, observed_at = observe_current_routability
+          routable, observed_at = observe_current_routability(certified_domains: resolving_domains)
           activated = custom_domain.activate_with_routability!(
             routable,
             checked_domain: custom_domain.domain,
@@ -70,10 +70,11 @@ module SslCertificates
         certificate_authority.new(domain).process
       end
 
-      def observe_current_routability
+      def observe_current_routability(certified_domains:)
         observed_at = Time.current
         resolving_domains = CustomDomainVerificationService.new(domain: custom_domain.domain).domains_resolving_to_gumroad
-        [resolving_domains.include?(custom_domain.domain), observed_at]
+        routable = certified_domains.include?(custom_domain.domain) && resolving_domains.include?(custom_domain.domain)
+        [routable, observed_at]
       end
 
       def hourly_rate_limit_reached?

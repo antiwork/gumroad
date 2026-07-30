@@ -215,6 +215,16 @@ describe SslCertificates::Generate do
         expect(@custom_domain.reload).not_to be_routable
         expect(@custom_domain.routability_checked_at).to be_present
       end
+
+      it "does not route the configured hostname if it starts resolving after certificates are generated" do
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com"], ["www.example.com"])
+
+        @obj.process
+
+        expect(@custom_domain.reload).not_to be_routable
+      end
     end
 
     context "when the certificate generation fails" do
