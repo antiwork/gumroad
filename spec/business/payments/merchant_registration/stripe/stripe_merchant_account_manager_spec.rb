@@ -13458,6 +13458,44 @@ describe StripeMerchantAccountManager, :vcr do
       expect(attested).to be(false)
     end
 
+    # A seller who switched successfully and then unchecked Owner on their own representative. The
+    # form submits percent_ownership 0 for that, so the total is zero exactly as it is on a switch
+    # that never seeded — the difference is that Stripe holds the share AS zero rather than not
+    # holding one at all. Seeding 100% here would overwrite a share the seller set on purpose, and
+    # then attest it.
+    it "leaves a representative whose ownership the seller set to zero alone" do
+      representative_at_zero = Stripe::Person.construct_from(
+        id: "person_representative",
+        object: "person",
+        account: "acct_stuck_migration",
+        relationship: { representative: true, owner: false, percent_ownership: 0 }
+      )
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", limit: 100)
+        .and_return("data" => [representative_at_zero])
+      allow(Stripe::Account).to receive(:list_persons)
+        .with("acct_stuck_migration", relationship: { owner: true }, limit: 100)
+        .and_return("data" => [representative_at_zero])
+      account = stuck_account(owners_provided_in: :past_due)
+      allow(Stripe::Account).to receive(:retrieve).with("acct_stuck_migration").and_return(account)
+
+      seeded = nil
+      attested = false
+      allow(Stripe::Account).to receive(:update) do |_id, params|
+        attested = true if params.dig(:company, :owners_provided)
+        account
+      end
+      allow(Stripe::Account).to receive(:update_person) do |_id, _person_id, attributes|
+        seeded = attributes[:relationship]
+        true
+      end
+
+      described_class.update_account(user, passphrase: "1234")
+
+      expect(seeded).to eq(representative: true)
+      expect(attested).to be(false)
+    end
+
     # The other 9 of the 25 stuck accounts: the representative already holds 100%, and the account is
     # blocked purely because nothing ever attested the list. Seeding here would be wrong; attesting
     # is the entire fix, so it must not be gated behind the seeding decision.

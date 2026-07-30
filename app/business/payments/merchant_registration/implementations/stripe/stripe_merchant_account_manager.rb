@@ -401,11 +401,13 @@ module StripeMerchantAccountManager
     # nil means the read failed, which is not the same as "nobody owns anything" — the seeding stays
     # off in that case rather than guessing.
     recorded_ownership_percent = owners_provided_blocking ? recorded_ownership_percent_on(stripe_account.id) : nil
-    # An owner list holding nobody but the representative, who owns nothing, is the fingerprint of a
-    # switch that died before it seeded. Once the seller has added anyone under Settings → Payments,
-    # a zero-ownership list is a shape they configured — that form can clear the representative's own
-    # ownership too — and re-seeding 100% would overwrite a claim they deliberately gave up.
-    stuck_mid_migration = (recorded_ownership_percent&.zero? && sole_person_is_representative?(stripe_account.id)) || false
+    # An owner list holding nobody but the representative, whose share was never set at all, is the
+    # fingerprint of a switch that died before it seeded. Once the seller has added anyone under
+    # Settings → Payments, a zero-ownership list is a shape they configured, and a representative
+    # whose share Stripe holds AS zero is one the seller set to zero themselves — the beneficial-owners
+    # form sends 0 when Owner is unchecked. Re-seeding 100% in either case would overwrite a claim
+    # they deliberately gave up.
+    stuck_mid_migration = (recorded_ownership_percent&.zero? && sole_unseeded_representative?(stripe_account.id)) || false
     seed_representative_ownership = switching_to_business || stuck_mid_migration
 
     # The other half of the stuck population: a representative who already holds a share, on an
@@ -677,9 +679,14 @@ module StripeMerchantAccountManager
   end
   private_class_method :fully_accounted_ownership?
 
-  # Whether the representative is the only person on the account. A switch that died before seeding
-  # leaves exactly that shape; a seller who has entered anyone under Settings → Payments has not, so
-  # their zero-ownership list is a configuration to leave alone rather than a gap to fill.
+  # Whether the representative is the only person on the account AND has no ownership share recorded
+  # at all. A switch that died before seeding leaves exactly that shape: Stripe was never told
+  # anything about the representative's ownership, so percent_ownership is absent.
+  #
+  # An explicit 0 is a different account. Unchecking Owner on the beneficial-owners form submits
+  # percent_ownership 0, so a stored zero is a share the seller set to zero on purpose, and
+  # re-seeding 100% over it would invent a claim they had deliberately given up. Both shapes sum to
+  # a zero total, so the caller's total cannot tell them apart — only the presence of the field can.
   #
   # Lists ALL persons, not just owners: a director or executive entered with owner=false is invisible
   # to an owner-scoped read, and overwriting the representative's share on that account would still
@@ -688,17 +695,19 @@ module StripeMerchantAccountManager
   #
   # Indexed rather than dug: Stripe's to_h is shallow, so the relationship is still a StripeObject,
   # which supports [] but raises NoMethodError on dig.
-  def self.sole_person_is_representative?(stripe_account_id)
+  def self.sole_unseeded_representative?(stripe_account_id)
     persons = Stripe::Account.list_persons(stripe_account_id, limit: OWNER_LIST_LIMIT)["data"]
     return false unless persons.one?
 
     relationship = persons.first.to_h[:relationship]
-    !!(relationship && relationship[:representative])
+    return false unless relationship && relationship[:representative]
+
+    relationship[:percent_ownership].nil?
   rescue Stripe::StripeError => e
     ErrorNotifier.notify(e)
     false
   end
-  private_class_method :sole_person_is_representative?
+  private_class_method :sole_unseeded_representative?
 
   # Whether the compliance record immediately preceding the live one was an individual — the shape an
   # interrupted individual-to-business switch leaves behind.
