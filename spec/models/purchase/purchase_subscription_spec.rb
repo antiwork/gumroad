@@ -511,6 +511,37 @@ describe "PurchaseSubscription", :vcr do
           expect(purchase.stripe_transaction_id).to be_nil
         end
       end
+
+      context "when a caller supplies a live IP" do
+        let(:original_purchase) do
+          create(:membership_purchase, link: product, country: "United States", state: "CA",
+                                       ip_address: "1.2.3.4", ip_country: "Cuba", ip_state: "03")
+        end
+
+        it "drops the original purchase's derived IP location rather than screening it as current" do
+          purchase = subscription.build_purchase(override_params: { ip_address: "5.6.7.8" })
+
+          expect(purchase.ip_location_inherited).to be false
+          expect(purchase.ip_country).to be_nil
+          expect(purchase.ip_state).to be_nil
+        end
+
+        it "screens the live IP's own geolocation" do
+          allow(GeoIp).to receive(:lookup).with("5.6.7.8").and_return(
+            GeoIp::Result.new(country_name: "Cuba", country_code: "CU", region_name: "03",
+                              city_name: "Havana", postal_code: nil, latitude: nil, longitude: nil)
+          )
+
+          purchase = subscription.build_purchase(override_params: { ip_address: "5.6.7.8" })
+          purchase.purchase_state = "in_progress"
+          purchase.skip_preparing_for_charge = true
+          purchase.process!
+
+          expect(purchase.errors.full_messages).to include sanctions_message
+          expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+          expect(purchase.stripe_transaction_id).to be_nil
+        end
+      end
     end
   end
 end
