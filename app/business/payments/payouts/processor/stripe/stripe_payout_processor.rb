@@ -167,6 +167,7 @@ class StripePayoutProcessor
   def self.prepare_payment_and_set_amount(payment, balances)
     failed = false
     failure_reason = nil
+    transfer_requested = false
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
 
     if merchant_account.nil?
@@ -204,6 +205,9 @@ class StripePayoutProcessor
     # If the user is being paid out funds held by Gumroad, transfer those funds to the creators Stripe account.
     amount_cents_held_by_gumroad = balances_held_by_gumroad.sum(&:holding_amount_cents)
     if amount_cents_held_by_gumroad > 0
+      # Past this point Stripe may have accepted the transfer even if we never see the response, so
+      # a dropped connection here is not the same as one raised while building the request.
+      transfer_requested = true
       internal_transfer = StripeTransferInternallyToCreator.transfer_funds_to_account(
         message_why: "Funds held by Gumroad for Payment #{payment.external_id}.",
         stripe_account_id: payment.stripe_connect_account_id,
@@ -264,7 +268,14 @@ class StripePayoutProcessor
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
-    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
+    # If the connection dropped around `Transfer.create` we have no transfer id, so the reversal
+    # below cannot send the funds back and we cannot tell whether Stripe moved them at all. The
+    # gem's idempotency key is per call, so a retry would be a second transfer.
+    failure_reason = if transfer_requested && payment.stripe_internal_transfer_id.nil?
+      Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+    else
+      Payment::FailureReason::PROCESSOR_UNAVAILABLE
+    end
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   rescue Stripe::RateLimitError => e
@@ -287,29 +298,7 @@ class StripePayoutProcessor
   ensure
     if failed
       payment.mark_failed!(failure_reason)
-      # A failure anywhere after the internal transfer leaves Gumroad's funds sitting on the
-      # seller's connected account while the balances go back to `unpaid` — so the next payout
-      # would transfer the same money again. Send it back. No-ops unless the transfer happened.
-      #
-      # Rescued because this runs in an `ensure`: a reversal that fails must not replace the
-      # original error (which is what tells us why the payout failed) with its own. But the
-      # failure reason has to change, because the money is still out there — re-stamping it
-      # UNREVERSED_INTERNAL_TRANSFER takes the payment out of REQUEUEABLE_REASONS so the daily
-      # requeue cannot transfer the same funds a second time. Reconciling the transfer at Stripe
-      # is a human's job; this only stops the automation from compounding it.
-      begin
-        reverse_internal_transfer!(payment)
-      rescue => e
-        payment.update!(failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
-        ErrorNotifier.notify(
-          e,
-          payment_id: payment.id,
-          user_id: payment.user_id,
-          stripe_internal_transfer_id: payment.stripe_internal_transfer_id,
-          original_failure_reason: failure_reason,
-          action_required: "Reverse or reconcile this transfer at Stripe by hand; the payout will not be requeued automatically"
-        )
-      end
+      reverse_internal_transfer_or_hold_payouts!(payment, failure_reason)
     end
   end
 
@@ -500,30 +489,59 @@ class StripePayoutProcessor
       # Mark the bank account deleted before the reversal so a transient Stripe error
       # in `reverse_internal_transfer!` cannot leave a dead bank reference alive for the next nightly run.
       payment.bank_account&.mark_deleted! if failure_reason == Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
-      # Same reasoning as the reversal in `prepare_payment_and_set_amount`: if the reversal fails the
-      # funds stay on the seller's connected account, so the reason must move outside
-      # REQUEUEABLE_REASONS or the daily requeue would transfer the same money again. Only overwrite
-      # a still-requeueable reason — PAYOUT_OUTCOME_UNKNOWN already blocks the requeue and carries
-      # the stronger warning that a bank payout may exist, which is what a human needs to see first.
-      # Unlike that method, the error is re-raised: callers here rely on it surfacing.
-      begin
-        reverse_internal_transfer!(payment)
-      rescue => e
-        if failure_reason.in?(Payment::FailureReason::REQUEUEABLE_REASONS)
-          payment.update!(failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
-        end
-        ErrorNotifier.notify(
-          e,
-          payment_id: payment.id,
-          user_id: payment.user_id,
-          stripe_internal_transfer_id: payment.stripe_internal_transfer_id,
-          original_failure_reason: failure_reason,
-          action_required: "Reverse or reconcile this transfer at Stripe by hand; the payout will not be requeued automatically"
-        )
-        raise
-      end
+      # Unlike the call in `prepare_payment_and_set_amount`, a reversal failure here re-raises:
+      # that is what `main` did, and no caller distinguishes the exception class.
+      reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: true)
     end
   end
+
+  # Sends a failed payout's internal transfer back, and — when the money's whereabouts cannot be
+  # established from our own records — holds the seller's payouts so nothing re-pays the same
+  # balances before a human reconciles against Stripe.
+  #
+  # The hold is the load-bearing part. `mark_failed!` returns the balances to `unpaid`, and neither
+  # the daily requeue nor the weekly batch reads `failure_reason`, so a failure reason alone only
+  # stops the requeue — the seller's next scheduled batch, days later, would move the money again.
+  def self.reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: false)
+    reverse_internal_transfer!(payment)
+    # An unknown payout outcome means Stripe may have accepted the bank payout even though the
+    # reversal of the (separate) internal transfer succeeded, so the hold is still owed.
+    hold_payouts_for_unaccounted_money!(payment, failure_reason) if failure_reason == Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+  rescue => e
+    # A failed reversal leaves Gumroad's funds on the seller's connected account. Re-stamp only a
+    # still-requeueable reason: PAYOUT_OUTCOME_UNKNOWN already blocks the requeue and carries the
+    # stronger warning that a bank payout may also exist, which is what a human needs to see first.
+    if failure_reason.in?(Payment::FailureReason::REQUEUEABLE_REASONS)
+      payment.update!(failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
+    end
+    hold_payouts_for_unaccounted_money!(payment, failure_reason)
+    ErrorNotifier.notify(
+      e,
+      payment_id: payment.id,
+      user_id: payment.user_id,
+      stripe_internal_transfer_id: payment.stripe_internal_transfer_id,
+      original_failure_reason: failure_reason,
+      action_required: "Payouts are paused for this seller. Reverse or reconcile this transfer at Stripe by hand, then resume payouts."
+    )
+    raise if reraise
+  end
+  private_class_method :reverse_internal_transfer_or_hold_payouts!
+
+  def self.hold_payouts_for_unaccounted_money!(payment, failure_reason)
+    user = payment.user
+    return if user.payouts_paused_internally?
+
+    user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    user.comments.create!(
+      content: "Payouts paused automatically: payout #{payment.external_id} failed as #{payment.reload.failure_reason} " \
+               "(original reason #{failure_reason.inspect}), so Gumroad cannot tell from its own records whether the " \
+               "money reached the seller. Reconcile transfer #{payment.stripe_internal_transfer_id.inspect} and any " \
+               "bank payout at Stripe before resuming.",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
+    )
+  end
+  private_class_method :hold_payouts_for_unaccounted_money!
 
   def self.stripe_invalid_request_error_failure_reason(error)
     return Payment::FailureReason::INSUFFICIENT_FUNDS if error.code.to_s == "balance_insufficient"

@@ -144,16 +144,40 @@ describe RequeueTransientlyFailedPayoutsJob do
   # The examples above stub the payout path to assert routing. These drive the real one, because
   # what matters on a money path is what the requeue actually does to the seller's balance.
   describe "end to end" do
+    let!(:merchant_account) { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_requeuetest") }
+
     let(:seller) do
       seller = create(:user_with_compliance_info)
-      create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_requeuetest")
       create(:ach_account, user: seller, stripe_bank_account_id: "ba_bankaccountid")
       seller.update!(user_risk_state: "compliant")
       seller
     end
 
     before do
-      create(:balance, user: seller, date: payout_period_end_date - 3, amount_cents: 500_00)
+      # Held by the seller's own connected account, so the payout is a single `Stripe::Payout.create`
+      # with no internal transfer to stub.
+      create(:balance, user: seller, merchant_account:, date: payout_period_end_date - 3, amount_cents: 500_00)
+      # The two Stripe calls the payout leg makes: the drift guard's balance read, then the payout.
+      allow(Stripe::Balance).to receive(:retrieve).and_return(
+        Stripe::Balance.construct_from(
+          object: "balance",
+          available: [{ currency: "usd", amount: 500_00 }],
+          pending: [{ currency: "usd", amount: 0 }]
+        )
+      )
+      allow(Stripe::Payout).to receive(:create).and_return(
+        Stripe::Payout.construct_from(id: "po_requeued", arrival_date: 2.days.from_now.to_i, application_fee_amount: nil)
+      )
+    end
+
+    # The payout leg has to actually run: asserting only `payments.count` passes while the payment
+    # is stuck in `creating` with a nil amount, which is what a broken Stripe boundary looks like.
+    def expect_completed_payout(seller, amount_cents:)
+      payment = seller.payments.last
+      expect(payment.state).to eq("processing")
+      expect(payment.amount_cents).to eq(amount_cents)
+      expect(payment.stripe_transfer_id).to eq("po_requeued")
+      expect(payment.failure_reason).to be_nil
     end
 
     it "creates a new payout for the failed seller and moves their balance out of unpaid" do
@@ -164,6 +188,7 @@ describe RequeueTransientlyFailedPayoutsJob do
         PayoutUsersWorker.drain
       end.to change { seller.payments.count }.by(1)
 
+      expect_completed_payout(seller, amount_cents: 500_00)
       expect(seller.reload.unpaid_balance_cents).to eq(0)
     end
 
@@ -181,6 +206,7 @@ describe RequeueTransientlyFailedPayoutsJob do
           PayoutUsersWorker.drain
         end.to change { seller.payments.count }.by(1)
 
+        expect_completed_payout(seller, amount_cents: 500_00)
         expect(seller.reload.unpaid_balance_cents).to eq(0)
       end
     end

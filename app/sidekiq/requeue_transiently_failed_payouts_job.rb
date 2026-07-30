@@ -23,9 +23,7 @@ class RequeueTransientlyFailedPayoutsJob
   # past the cap the payout waits for its next scheduled slot and the exhaustion is reported.
   MAX_REQUEUE_ATTEMPTS = 2
 
-  # How long the "already reported this seller" marker lives. Comfortably longer than a payout
-  # period so the daily runs against one period all see the same marker, and short enough that the
-  # key is gone well before the same end date could come round again.
+  # Comfortably longer than a payout period, so every daily run against one period sees the marker.
   EXHAUSTION_REPORT_DEDUPE_WINDOW = 30.days
 
   def perform
@@ -51,16 +49,11 @@ class RequeueTransientlyFailedPayoutsJob
 
     user_ids, exhausted_user_ids = failures_by_user.keys.partition { |user_id| failures_by_user[user_id] <= MAX_REQUEUE_ATTEMPTS }
 
-    # Report each exhausted seller once per payout period. Counting is not enough to dedupe: once a
-    # seller is over the cap this job stops requeueing them, so their failure count stops growing
-    # and stays at whatever value first crossed the cap. Any count-based condition therefore stays
-    # true on every later run of the same period. A Redis marker per (period, seller) is what makes
-    # the run quiet, expiring after the period can no longer be the one being processed.
+    # Report each exhausted seller once per payout period. Counting cannot dedupe this: once a
+    # seller is over the cap the job stops requeueing them, so their failure count stops growing and
+    # any count-based condition stays true on every later run of the same period.
     newly_exhausted = exhausted_user_ids.reject do |user_id|
-      key = RedisKey.transient_payout_requeue_exhaustion_reported(user_id, payout_period_end_date)
-      # nx: only the first run to claim the key reports; set and test in one round trip so two
-      # overlapping runs cannot both alert.
-      !$redis.set(key, "1", ex: EXHAUSTION_REPORT_DEDUPE_WINDOW.to_i, nx: true)
+      $redis.exists?(RedisKey.transient_payout_requeue_exhaustion_reported(user_id, payout_period_end_date))
     end
     if newly_exhausted.present?
       ErrorNotifier.notify(
@@ -68,6 +61,13 @@ class RequeueTransientlyFailedPayoutsJob
         payout_period_end_date: payout_period_end_date.to_s,
         user_ids: newly_exhausted
       )
+      # Claimed only after the alert is out. A duplicate alert (crash between the two) is a far
+      # better failure than the silence that a claim-first order would make permanent — silence is
+      # the incident this job exists to prevent.
+      newly_exhausted.each do |user_id|
+        $redis.set(RedisKey.transient_payout_requeue_exhaustion_reported(user_id, payout_period_end_date),
+                   "1", ex: EXHAUSTION_REPORT_DEDUPE_WINDOW.to_i)
+      end
     end
     return if user_ids.empty?
 

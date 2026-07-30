@@ -5,6 +5,11 @@ class RetryFailedPaypalPayoutsWorker
   sidekiq_options retry: 0, queue: :critical, lock: :until_executed
 
   def perform
+    # `retrying` was dead until this branch made it live, so this worker has been largely inert:
+    # the payout-cycle gate rejected the very sellers it selects. Reviving a money path needs the
+    # same lever the Stripe requeue has — a flag, not a deploy.
+    return if Feature.active?(:disable_transient_payout_failure_requeue)
+
     payout_period_end_date = User::PayoutSchedule.manual_payout_end_date
     failed_payments_users = User.joins(:payments)
                                 .where({

@@ -316,9 +316,10 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_empty @user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE)
   end
 
-  test "prepare_payment_and_set_amount error handling when Stripe is unreachable records the transient failure reason" do
+  test "prepare_payment_and_set_amount error handling when Stripe is unreachable around the internal transfer records an unknown outcome" do
     setup_prepare_payment_error_handling
     StripeTransferInternallyToCreator.stubs(:transfer_funds_to_account).raises(Stripe::APIConnectionError.new("Connection refused"))
+    ErrorNotifier.stubs(:notify)
 
     assert_raises(Stripe::APIConnectionError) do
       StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
@@ -327,7 +328,26 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     # This rescue re-raises, but the ensure still marks the payment failed on the way out, so the
     # reason has to be set here or the row lands unexplained and counts against the seller.
     assert_equal "failed", @payment.reload.state
-    assert_equal Payment::FailureReason::PROCESSOR_UNAVAILABLE, @payment.failure_reason
+    # Stripe may have created the transfer before the connection dropped, and we have no id for it,
+    # so nothing can reverse it and a retry would move the money twice.
+    assert_equal Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN, @payment.failure_reason
+    assert_not_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
+    assert_nil @payment.stripe_internal_transfer_id
+    assert @payment.user.reload.payouts_paused_internally?
+  end
+
+  test "prepare_payment_and_set_amount error handling when Stripe is unreachable before the transfer is requested stays requeueable" do
+    setup_prepare_payment_error_handling
+    # Raised while resolving the payout destination, before any transfer is attempted.
+    StripePayoutProcessor.stubs(:get_payout_details).raises(Stripe::APIConnectionError.new("Connection refused"))
+
+    assert_raises(Stripe::APIConnectionError) do
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
+    end
+
+    assert_equal Payment::FailureReason::PROCESSOR_UNAVAILABLE, @payment.reload.failure_reason
+    assert_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
+    assert_not @payment.user.reload.payouts_paused_internally?
   end
 
   test "prepare_payment_and_set_amount error handling when the failure lands after the internal transfer records the transfer id and reverses it so the funds are not left on the connected account" do
@@ -1020,6 +1040,67 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
       # money twice.
       assert_equal Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER, @payment.reload.failure_reason
       assert_not_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
+      # Keeping it out of the requeue set is not enough on its own: the weekly batch does not read
+      # failure_reason, so without the hold it would re-pay these balances days later.
+      assert @payment.user.reload.payouts_paused_internally?
+    end
+  end
+
+  test "perform_payment holds payouts with a system comment when a reversal failure strands the transfer" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::RateLimitError.new("Request rate limit exceeded."))
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+      StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(Stripe::APIConnectionError.new("Connection refused"))
+      ErrorNotifier.stubs(:notify)
+
+      assert_raises(Stripe::APIConnectionError) do
+        StripePayoutProcessor.perform_payment(@payment)
+      end
+
+      user = @payment.user.reload
+      assert user.payouts_paused_internally?
+      assert_equal User::PAYOUT_PAUSE_SOURCE_SYSTEM, user.payouts_paused_by
+      comment = user.comments.last
+      assert_equal Comment::COMMENT_TYPE_ON_PROBATION, comment.comment_type
+      assert_match(/Reconcile transfer/, comment.content)
+    end
+  end
+
+  test "perform_payment holds payouts when the bank-payout outcome is unknown even though the transfer reversal succeeded" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::APIConnectionError.new("Connection refused"))
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+      # Reversing the internal transfer says nothing about whether Stripe accepted the bank payout.
+      StripePayoutProcessor.stubs(:reverse_internal_transfer!).returns(nil)
+      ErrorNotifier.stubs(:notify)
+
+      assert_raises(Stripe::APIConnectionError) do
+        StripePayoutProcessor.perform_payment(@payment)
+      end
+
+      assert_equal Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN, @payment.reload.failure_reason
+      assert @payment.user.reload.payouts_paused_internally?
+    end
+  end
+
+  test "perform_payment does not hold payouts for a plain rate limit, which moved no money" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::RateLimitError.new("Request rate limit exceeded."))
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+      StripePayoutProcessor.stubs(:reverse_internal_transfer!).returns(nil)
+      ErrorNotifier.stubs(:notify)
+
+      StripePayoutProcessor.perform_payment(@payment)
+
+      # The requeue this branch adds exists for exactly this case, so a hold here would disable it.
+      assert_equal Payment::FailureReason::PROCESSOR_RATE_LIMITED, @payment.reload.failure_reason
+      assert_not @payment.user.reload.payouts_paused_internally?
     end
   end
 

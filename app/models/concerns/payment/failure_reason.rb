@@ -23,15 +23,20 @@ module Payment::FailureReason
   TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE, UNREVERSED_INTERNAL_TRANSFER,
                        PAYOUT_OUTCOME_UNKNOWN].freeze
 
-  # The subset an automated requeue may re-issue: failures we know happened BEFORE Stripe could
-  # accept anything, so re-issuing cannot duplicate money.
-  #
-  # Deliberately absent, both because the money may already be gone:
-  #   UNREVERSED_INTERNAL_TRANSFER — Gumroad's funds are still on the seller's connected account
-  #     because the reversal failed, so re-issuing would transfer the same money twice.
-  #   PAYOUT_OUTCOME_UNKNOWN — the bank payout request was in flight when the connection dropped,
-  #     so Stripe may have accepted it while we recorded no payout id.
-  # Both need a human to reconcile against Stripe first.
+  # Failures where money may ALREADY have left Gumroad and we cannot tell from our own records:
+  #   UNREVERSED_INTERNAL_TRANSFER — funds are on the seller's connected account because the
+  #     reversal failed.
+  #   PAYOUT_OUTCOME_UNKNOWN — a Stripe request was in flight when the connection dropped, so
+  #     Stripe may have accepted it while we recorded no id (the gem's idempotency key is per call,
+  #     so a later retry is a new key and can move the money a second time).
+  # `mark_failed!` returns the balances to `unpaid`, and neither the daily requeue NOR the weekly
+  # batch reads failure_reason — so keeping these out of REQUEUEABLE_REASONS is not enough on its
+  # own to stop re-payment. StripePayoutProcessor pauses the seller's payouts when it stamps one,
+  # which is what actually holds the balance until a human reconciles against Stripe.
+  UNACCOUNTED_MONEY_REASONS = [UNREVERSED_INTERNAL_TRANSFER, PAYOUT_OUTCOME_UNKNOWN].freeze
+
+  # The subset an automated requeue may re-issue: failures raised before Stripe could accept
+  # anything, so re-issuing cannot duplicate money.
   REQUEUEABLE_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
 
   PAYPAL_MASS_PAY = {
