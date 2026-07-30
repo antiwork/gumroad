@@ -352,17 +352,23 @@ class SettingsPresenter
       # soft-deleted by a managed-account sync that cannot run while Connect is active.
       return nil if seller.has_stripe_account_connected?
 
-      note = seller.comments
+      notes = seller.comments
             .with_type_payout_note
             .alive
             .where(author_id: GUMROAD_ADMIN_ID)
             .where("content LIKE ?", "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%")
             .order(created_at: :desc, id: :desc)
-            .first
-      return nil if note.nil?
 
-      # An equal timestamp still counts: the note is always written after the row it describes.
-      note.created_at >= bank_account.created_at ? note : nil
+      # Prefer a note that names this bank row. Newest-first alone is not enough: the sync makes
+      # network calls, so a rejection for a replaced row can be written AFTER the seller saved
+      # the replacement, and that stale note would otherwise win on timestamp and show the wrong
+      # account's guidance.
+      notes.find { |note| note.json_data["bank_account_id"] == bank_account.id } ||
+        # Notes recorded before we stamped the row fall back to the timestamp cutoff. An equal
+        # timestamp still counts: the note is always written after the row it describes.
+        notes.find do |note|
+          note.json_data["bank_account_id"].nil? && note.created_at >= bank_account.created_at
+        end
     end
 
     def country_code_for_compliance_field(field, user_compliance_info)

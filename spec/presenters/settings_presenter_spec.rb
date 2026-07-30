@@ -1053,6 +1053,25 @@ describe SettingsPresenter do
           expect(account_status[:show_section]).to eq(false)
         end
 
+        it "blames the bank row Stripe actually rejected, not whichever row is active when the note lands" do
+          # update_bank_account makes network calls, so a seller can save replacement details before
+          # the rejection for the previous row is written. The stale note is then NEWER than the new
+          # row and would win on timestamp alone, showing the old account's terminal "use a different
+          # account" guidance for details Stripe has not objected to.
+          rejected_account = create(:ach_account, user: seller)
+          stale_note = seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+          stale_note.json_data["bank_account_id"] = rejected_account.id
+          stale_note.save!
+          rejected_account.mark_deleted!
+
+          current_account = create(:ach_account, user: seller)
+          stale_note.update!(created_at: current_account.created_at + 1.minute)
+
+          account_status = presenter.payments_props[:account_status]
+          expect(account_status[:compliance_actions]).to eq([])
+          expect(account_status[:show_section]).to eq(false)
+        end
+
         it "does not demand a bank fix from a seller who has moved to PayPal payouts" do
           # Switching to PayPal soft-deletes the bank row, and bank-sync notes are only cleared on a
           # SUCCESSFUL sync, so the note stays alive forever. Without the no-bank-account guard this
