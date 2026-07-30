@@ -52,12 +52,13 @@ class LicensesController < Sellers::BaseController
 
     # A hand-edited count is indistinguishable from real activations afterwards, which matters when
     # a buyer disputes how many activations they used. paper_trail is the wrong home for it: every
-    # /v2/licenses/verify would write a version row.
+    # /v2/licenses/verify would write a version row. Reads the before-value from the save itself
+    # rather than the pre-yield instance, which a concurrent verify call may already have outdated.
     def log_uses_change(license)
-      before = license.uses
       yield
       Rails.logger.info(
-        "License uses edited by seller: license_id=#{license.id} user_id=#{logged_in_user.id} #{before} -> #{license.uses}"
+        "License uses edited by seller: license_id=#{license.id} user_id=#{logged_in_user.id} " \
+        "#{license.uses_before_last_save} -> #{license.uses}"
       )
     end
 end

@@ -1541,18 +1541,24 @@ const LicenseSection = ({
 
   const handleSetUses = async (uses: number) => {
     setIsLoading(true);
-    const succeeded = await onSetUses(uses).then(
-      () => true,
-      () => false,
-    );
-    setIsLoading(false);
-    return succeeded;
+    try {
+      const succeeded = await onSetUses(uses).then(
+        () => true,
+        () => false,
+      );
+      return succeeded;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAdjustUses = async (delta: number) => {
     setIsLoading(true);
-    await onAdjustUses(delta);
-    setIsLoading(false);
+    try {
+      await onAdjustUses(delta);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleReset = async () => {

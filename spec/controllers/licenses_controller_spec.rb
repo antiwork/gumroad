@@ -144,9 +144,9 @@ describe LicensesController do
         expect(license.reload.uses).to eq 2
       end
 
-      # The whole point of the relative endpoint: the browser's count is stale by the time the
-      # click lands, and a verify call that arrived in between must survive the seller's edit.
-      it "applies the delta to the stored count, not the client's stale one" do
+      # Pins the request shape: the client sends a delta, never an absolute count. The concurrency
+      # guarantee that shape buys is pinned in the model spec.
+      it "takes a delta rather than an absolute count" do
         license.update!(uses: 6)
         put :update, format: :json, params: { id: secure_id, adjust_uses: -1 }
         expect(license.reload.uses).to eq 5

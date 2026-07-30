@@ -117,6 +117,14 @@ describe License do
       expect(license.reload.uses).to eq 0
     end
 
+    # The controller bounds the delta, not the count it lands on — verify calls move that without
+    # a ceiling — so the clamp has to live here.
+    it "clamps at the ceiling" do
+      license.update!(uses: License::MAX_SELLER_SETTABLE_USES)
+      expect(license.adjust_uses!(1)).to be(true)
+      expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES
+    end
+
     # Reads the stored value under the lock, so a change made after this instance was loaded is
     # preserved rather than overwritten.
     it "applies the delta to the stored count rather than the loaded one" do
