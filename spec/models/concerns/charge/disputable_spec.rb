@@ -801,6 +801,34 @@ describe Charge::Disputable, :vcr do
           end
         end
 
+        # The old gate tested `elapsed < 72.hours` exactly while every other consumer — including
+        # the notice's own body — asks the rounded hours_left_to_submit_evidence. Between 71.5h and
+        # 72h the two disagreed, so the gate called the window open and the email it sent read "in
+        # the next 0 hours". One predicate now answers for both.
+        context "when rounding has taken the window to its last half hour" do
+          let(:boundary_stamp) { (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago }
+
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              DisputeEvidence.where(id: evidence.id).update_all(seller_contacted_at: boundary_stamp) if evidence
+              evidence
+            end
+          end
+
+          it "does not send a notice that would quote zero hours" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            evidence = purchase.reload.dispute.dispute_evidence
+            # Still inside the window by exact arithmetic, which is what made this band send.
+            expect(Time.current - evidence.seller_contacted_at)
+              .to be < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+            expect(evidence.hours_left_to_submit_evidence).to eq(0)
+          end
+        end
+
         context "when the seller already answered the recovery notice" do
           # The sweep can open the window, notify the seller, and have them submit before a
           # re-delivery arrives. A second notice would ask for a statement the form no longer

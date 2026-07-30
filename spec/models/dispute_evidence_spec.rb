@@ -173,6 +173,34 @@ describe DisputeEvidence do
     end
   end
 
+  describe ".hours_left_in_window" do
+    it "returns 0 without a stamp" do
+      expect(described_class.hours_left_in_window(nil)).to eq(0)
+    end
+
+    it "agrees with the instance method for the same stamp" do
+      stamp = 3.hours.ago
+      dispute_evidence.update!(seller_contacted_at: stamp)
+
+      expect(described_class.hours_left_in_window(stamp))
+        .to eq(dispute_evidence.hours_left_to_submit_evidence)
+    end
+
+    # The band where the old exact `elapsed < 72.hours` test in Charge::Disputable disagreed with
+    # this rounded one: it called the window open while the notice's own body would have read
+    # "in the next 0 hours". One predicate now answers for both, so the band cannot reopen.
+    it "reports no hours left once rounding takes the window to zero, where an exact test would not" do
+      elapsed = (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours
+
+      expect(described_class.hours_left_in_window(elapsed.ago)).to eq(0)
+      expect(Time.current - elapsed.ago).to be < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+    end
+
+    it "goes negative past the window rather than flooring" do
+      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 1).hours.ago)).to eq(-1)
+    end
+  end
+
   describe "#claim_seller_contacted_window!" do
     before { dispute_evidence.update_as_not_seller_contacted! }
 

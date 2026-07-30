@@ -79,10 +79,18 @@ class DisputeEvidence < ApplicationRecord
     errors.add(:base, "Invalid file type.")
   end
 
-  def hours_left_to_submit_evidence
-    return 0 unless seller_contacted?
+  # Hours the seller has left, from a stamp. Every consumer must ask through here: the number the
+  # notice quotes and the number the gates test have to be the same one, or a window reads open to
+  # one caller while the email it triggers says "0 hours". Rounded, so callers that hold a raw
+  # timestamp cannot reintroduce a second arithmetic.
+  def self.hours_left_in_window(seller_contacted_at)
+    return 0 if seller_contacted_at.nil?
 
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
+  end
+
+  def hours_left_to_submit_evidence
+    self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
   end
 
   # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
@@ -93,9 +101,10 @@ class DisputeEvidence < ApplicationRecord
   # so a stale check elsewhere would replace that with a fresh full-length window and submit too
   # late. The condition lives in the WHERE, so the loser writes nothing and keeps the winner's window.
   #
-  # Deliberately does not reload: callers run this inside the transaction that creates the record and
-  # its attachments, and reloading there resets the attachment associations before ActiveStorage has
-  # uploaded the blobs. Reload after the commit if you need the persisted stamp.
+  # Deliberately does not reload: the sweep runs this inside the transaction that creates the record
+  # and its attachments, and reloading there resets the attachment associations before ActiveStorage's
+  # after_commit upload, so the blobs would never reach storage. Read the stamp back with a fresh
+  # query rather than #reload on this object.
   def claim_seller_contacted_window!(at: Time.current)
     self.class.where(id:, seller_contacted_at: nil, resolved_at: nil)
         .update_all(seller_contacted_at: at, updated_at: Time.current)

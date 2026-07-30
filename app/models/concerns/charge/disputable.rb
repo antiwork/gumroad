@@ -345,16 +345,18 @@ module Charge::Disputable
       # that sweep cannot extend the seller's deadline past the point evidence is still accepted.
       dispute_evidence.claim_seller_contacted_window! if dispute_evidence.present?
 
-      # Ask for the seller's side only while the form behind the notice would still take it. These
-      # are check_if_needs_redirect's own conditions, read here before promising the seller
-      # anything: the notice reads "in the next #{hours_left} hours" and links a page that turns
-      # them away once the window has elapsed or the row has been submitted or resolved.
+      # Ask for the seller's side only while the form behind the notice would still take it, and
+      # only while there are whole hours left to quote them: the notice's own body promises "in the
+      # next N hours", so a window with none left would ask for information against a "0 hours"
+      # deadline. The submitted and resolved conditions are the controller's; the hours test is not
+      # — check_if_needs_redirect lets an elapsed window through until FightDisputesJob resolves the
+      # row, and that imminent submission is what the notice must not invite a race with.
       #
       # All three shapes are reachable on a re-delivery, because losing the claim above does not
-      # stop this path. CreateMissingDisputeEvidenceJob may have opened this window hours earlier
-      # and backdated it past its own end, or opened it, notified the seller, and had the evidence
-      # answered and submitted before the re-delivery arrived. A dispute with no evidence surface
-      # at all (PayPal, Stripe Connect) still gets the plain notice, as it always has.
+      # stop this path: CreateMissingDisputeEvidenceJob may have opened this window hours earlier
+      # and backdated it past its own end, or had the evidence answered and submitted before the
+      # re-delivery arrived. A dispute with no evidence surface at all (PayPal, Stripe Connect)
+      # still gets the plain notice, as it always has.
       #
       # Read the columns rather than #reload: claim_seller_contacted_window! writes through
       # update_all and leaves this object stale, and reloading it here would reset the attachment
@@ -363,8 +365,7 @@ module Charge::Disputable
         dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
                                            .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
       accepting_evidence = submitted_at.nil? && resolved_at.nil? &&
-        (stamped_at.nil? ||
-          (Time.current - stamped_at) < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours)
+        (stamped_at.nil? || DisputeEvidence.hours_left_in_window(stamped_at).positive?)
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
