@@ -464,9 +464,10 @@ module StripeMerchantAccountManager
 
   # `legal_entity_country` must come from the same compliance record the caller built
   # `diff_attributes` from — re-reading it here would filter one snapshot's payload against
-  # another's country.
+  # another's country. Required rather than defaulted: omitting it would silently disable the
+  # country guard and send fields Stripe can never accept.
   private_class_method
-  def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true, legal_entity_country: nil)
+  def self.update_account_attributes(user, stripe_account, diff_attributes, legal_entity_country:, notify: true)
     account_country = stripe_account_country(stripe_account)
     attributes = diff_attributes
     # The agreement and the legal-entity address are derived from the legal-entity country but
