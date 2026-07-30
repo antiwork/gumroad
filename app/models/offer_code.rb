@@ -419,6 +419,9 @@ class OfferCode < ApplicationRecord
       products.each(&:invalidate_cache)
     end
 
+    # Consumed at commit by repair_detached_default_discounts. Direct collection
+    # mutations (products.delete) never save the owner, so nothing consumes it —
+    # they bypass the detachment guards. Change product lists through update.
     def note_applicability_change(_product)
       @applicability_changed = true unless new_record?
     end
