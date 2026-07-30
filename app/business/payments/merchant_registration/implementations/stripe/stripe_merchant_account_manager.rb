@@ -49,8 +49,11 @@ module StripeMerchantAccountManager
   SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX = "Stripe rejected service agreement"
 
   # Stripe validates `tos_acceptance[:service_agreement]` against the country the connected
-  # account was created in, not the legal-entity country we derive it from, and does not set a
-  # code on the rejection.
+  # account was created in, not the legal-entity country we derive it from. Probed against the
+  # test API: `param` names the field and `code` is nil, so `param` is the discriminator and the
+  # message is the fallback for older error shapes.
+  SERVICE_AGREEMENT_REJECTION_PARAM = "tos_acceptance[service_agreement]"
+  private_constant :SERVICE_AGREEMENT_REJECTION_PARAM
   SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE = /tos agreement is not supported/i
   private_constant :SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE
 
@@ -430,7 +433,12 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.service_agreement_unsupported_error?(error)
-    error.is_a?(Stripe::InvalidRequestError) && error.message.to_s.match?(SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return true if param == SERVICE_AGREEMENT_REJECTION_PARAM
+
+    error.message.to_s.match?(SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE)
   end
 
   # One breadcrumb per account, not per attempt: the resync runs on every compliance change and

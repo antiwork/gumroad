@@ -9227,6 +9227,17 @@ describe StripeMerchantAccountManager, :vcr do
 
         expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
       end
+
+      # Stripe's live rejection carries no `code` and names the field in `param`, so the param is
+      # what the predicate has to key off. Probed against the test API.
+      it "recognises the rejection from the param alone" do
+        by_param = Stripe::InvalidRequestError.new("Some other wording", "tos_acceptance[service_agreement]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(by_param)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+        expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
+      end
     end
 
     describe "updating business type" do
