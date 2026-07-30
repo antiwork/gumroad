@@ -9,16 +9,22 @@ require "test_helper"
 # moves the assertions with it rather than silently reading the wrong cell.
 module PurchaseExportTestHelpers
   # The Gumroad-owned managed accounts the service resolves processors against.
-  # Fixtures supply the Stripe one; PayPal and Braintree are created on demand
-  # because no ported test needs them as fixtures.
+  # Fixtures supply the Stripe one; PayPal and Braintree are created on demand.
+  #
+  # These must NOT go through create_merchant_account* — those builders do
+  # `user: user || create_user`, so an explicit nil becomes a fresh owner and
+  # MerchantAccount.gumroad (which keys on user_id: nil) can never find the row.
   def ensure_gumroad_merchant_accounts
-    MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
-      create_merchant_account(user: nil, charge_processor_merchant_id: "acct_#{unique_suffix}")
-    MerchantAccount.gumroad(PaypalChargeProcessor.charge_processor_id) ||
-      create_merchant_account_paypal(user: nil, charge_processor_merchant_id: "paypal_#{unique_suffix}")
-    MerchantAccount.gumroad(BraintreeChargeProcessor.charge_processor_id) ||
-      create_merchant_account(user: nil, charge_processor_id: BraintreeChargeProcessor.charge_processor_id,
-                              charge_processor_merchant_id: "braintree_#{unique_suffix}")
+    [
+      StripeChargeProcessor.charge_processor_id,
+      PaypalChargeProcessor.charge_processor_id,
+      BraintreeChargeProcessor.charge_processor_id,
+    ].each do |processor_id|
+      next if MerchantAccount.gumroad(processor_id)
+      MerchantAccount.create!(user: nil, charge_processor_id: processor_id,
+                              charge_processor_merchant_id: "#{processor_id}_#{unique_suffix}",
+                              charge_processor_alive_at: Time.current)
+    end
   end
 
   def setup_seller_product_and_purchase
@@ -145,9 +151,13 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
     assert_equal "This is a great product!", field_value(row, "Review")
   end
 
+  # Note: this one cannot pin the service's own gift indirection. Purchase#original_product_review
+  # resolves the giftee independently, so the Rating column is correct even with
+  # main_or_giftee_purchase collapsed to `purchase`. The License Key tests below do pin it.
   test "includes product rating posted by the giftee" do
     @purchase.update!(is_gift_sender_purchase: true)
-    giftee_purchase = create_purchase(link: @product, is_gift_receiver_purchase: true, price_cents: 0)
+    giftee_purchase = create_purchase(link: @product, is_gift_receiver_purchase: true, price_cents: 0,
+                                      purchase_state: "gift_receiver_purchase_successful")
     create_gift(link: @product, gifter_purchase: @purchase, giftee_purchase:)
     create_product_review(purchase: giftee_purchase, rating: 5)
 
@@ -381,7 +391,8 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
   test "includes licence key belonging to the giftee" do
     @product.update!(is_licensed: true)
     @purchase.update!(is_gift_sender_purchase: true)
-    giftee_purchase = create_purchase(link: @product, is_gift_receiver_purchase: true, price_cents: 0)
+    giftee_purchase = create_purchase(link: @product, is_gift_receiver_purchase: true, price_cents: 0,
+                                      purchase_state: "gift_receiver_purchase_successful")
     create_gift(link: @product, gifter_purchase: @purchase, giftee_purchase:)
     giftee_purchase.create_license!
 
@@ -403,7 +414,8 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
   test "includes license key activation count for giftee" do
     @product.update!(is_licensed: true)
     @purchase.update!(is_gift_sender_purchase: true)
-    giftee_purchase = create_purchase(link: @product, is_gift_receiver_purchase: true, price_cents: 0)
+    giftee_purchase = create_purchase(link: @product, is_gift_receiver_purchase: true, price_cents: 0,
+                                      purchase_state: "gift_receiver_purchase_successful")
     create_gift(link: @product, gifter_purchase: @purchase, giftee_purchase:)
     giftee_purchase.create_license!
     giftee_purchase.license.update!(uses: 3)
@@ -603,10 +615,10 @@ class PurchaseExportServicePreordersTest < ActiveSupport::TestCase
     preorder = nil
     travel_to(preorder_auth_time) do
       # The original spec ran the real `preorder.authorize!`, which tokenizes a
-      # card against Stripe. What the export reads is only the authorization
-      # purchase's created_at, so land the same end state — an authorized
-      # preorder whose authorization purchase is dated here — without the
-      # round trip.
+      # card against Stripe. What the export reads is only the preorder row's
+      # created_at, so land the same end state — an authorized preorder whose
+      # row is dated here — without the round trip. Keep preorder creation
+      # inside this block: moving it out changes what the export reads.
       authorization_purchase = build_purchase(link: @product, is_preorder_authorization: true,
                                               purchase_state: "in_progress")
       preorder = @preorder_link.build_preorder(authorization_purchase)
