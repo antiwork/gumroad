@@ -14,17 +14,24 @@ module Payment::FailureReason
   PROCESSOR_RATE_LIMITED = "processor_rate_limited"
   PROCESSOR_UNAVAILABLE = "processor_unavailable"
   UNREVERSED_INTERNAL_TRANSFER = "unreversed_internal_transfer"
+  PAYOUT_OUTCOME_UNKNOWN = "payout_outcome_unknown"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   # Failures caused by us or by the processor being unreachable, never by the seller's payout
   # details. They must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no
   # STRIPE_FAILURE_SOLUTIONS entry, because there is nothing for the seller to fix.
-  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE, UNREVERSED_INTERNAL_TRANSFER].freeze
+  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE, UNREVERSED_INTERNAL_TRANSFER,
+                       PAYOUT_OUTCOME_UNKNOWN].freeze
 
-  # The subset an automated requeue may re-issue. UNREVERSED_INTERNAL_TRANSFER is deliberately
-  # absent: it means Gumroad's funds are still sitting on the seller's connected account because
-  # the reversal failed, so re-issuing would transfer the same money a second time. Those payments
-  # need the transfer reconciled at Stripe by a human first.
+  # The subset an automated requeue may re-issue: failures we know happened BEFORE Stripe could
+  # accept anything, so re-issuing cannot duplicate money.
+  #
+  # Deliberately absent, both because the money may already be gone:
+  #   UNREVERSED_INTERNAL_TRANSFER — Gumroad's funds are still on the seller's connected account
+  #     because the reversal failed, so re-issuing would transfer the same money twice.
+  #   PAYOUT_OUTCOME_UNKNOWN — the bank payout request was in flight when the connection dropped,
+  #     so Stripe may have accepted it while we recorded no payout id.
+  # Both need a human to reconcile against Stripe first.
   REQUEUEABLE_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
 
   PAYPAL_MASS_PAY = {

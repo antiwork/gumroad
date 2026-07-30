@@ -960,6 +960,93 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     end
   end
 
+  test "perform_payment when the connection drops around the payout request records an unknown outcome so the payout is never automatically requeued" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      # Stripe may have accepted the bank payout before the connection dropped, and the Stripe gem
+      # generates a fresh idempotency key per call, so a requeue here could pay the seller twice.
+      Stripe::Payout.stubs(:create).raises(Stripe::APIConnectionError.new("Connection refused"))
+      ErrorNotifier.stubs(:notify)
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+
+      assert_raises(Stripe::APIConnectionError) do
+        StripePayoutProcessor.perform_payment(@payment)
+      end
+
+      assert_equal "failed", @payment.reload.state
+      assert_equal Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN, @payment.failure_reason
+      assert_not_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
+    end
+  end
+
+  test "perform_payment when the connection drops before the payout is requested stays requeueable because nothing could have been accepted" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+      # Raised while resolving the merchant account, before the request is built.
+      @payment.user.merchant_accounts.stubs(:find_by).raises(Stripe::APIConnectionError.new("Connection refused"))
+      ErrorNotifier.stubs(:notify)
+
+      assert_raises(Stripe::APIConnectionError) do
+        StripePayoutProcessor.perform_payment(@payment)
+      end
+
+      assert_equal Payment::FailureReason::PROCESSOR_UNAVAILABLE, @payment.reload.failure_reason
+      assert_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
+    end
+  end
+
+  test "perform_payment when the payout fails and its internal transfer cannot be reversed takes the payment out of the requeue set" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::RateLimitError.new("Request rate limit exceeded."))
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+      reversal_error = Stripe::APIConnectionError.new("Connection refused")
+      StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(reversal_error)
+      ErrorNotifier.stubs(:notify)
+      ErrorNotifier.expects(:notify).with(
+        reversal_error,
+        has_entries(original_failure_reason: Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+      )
+
+      assert_raises(Stripe::APIConnectionError) do
+        StripePayoutProcessor.perform_payment(@payment)
+      end
+
+      # The funds are still on the seller's connected account, so re-issuing would move the same
+      # money twice.
+      assert_equal Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER, @payment.reload.failure_reason
+      assert_not_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
+    end
+  end
+
+  test "perform_payment when a failed reversal follows an unknown payout outcome keeps the unknown outcome, which is the stronger warning" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::APIConnectionError.new("Connection refused"))
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+      StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(Stripe::APIConnectionError.new("Connection refused"))
+      ErrorNotifier.stubs(:notify)
+
+      assert_raises(Stripe::APIConnectionError) do
+        StripePayoutProcessor.perform_payment(@payment)
+      end
+
+      # A possible bank payout at Stripe is what a human must reconcile first; both reasons block
+      # the requeue, so nothing is lost by keeping this one.
+      assert_equal Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN, @payment.reload.failure_reason
+    end
+  end
+
+  test "an unknown payout outcome is still a transient reason so a failure of ours does not push the seller toward the automatic payout pause" do
+    assert_includes Payment::FailureReason::TRANSIENT_REASONS, Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+    assert_not_includes Payment::FailureReason::REQUEUEABLE_REASONS, Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+  end
+
   test "perform_payment the payment includes funds not held by stripe, which don't sum to a positive amount the external transfer fails marks the payment as failed" do
     with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_fails/marks_the_payment_as_failed") do
       setup_perform_payment_us

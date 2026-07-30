@@ -414,6 +414,7 @@ class StripePayoutProcessor
   def self.perform_payment(payment)
     failed = false
     failure_reason = nil
+    payout_requested = false
     # We have transferred the balance held by gumroad to the connected Stripe standard account.
     # No payout needs to be issued in this case.
     merchant_account = payment.user.merchant_accounts.find_by(charge_processor_merchant_id: payment.stripe_connect_account_id)
@@ -449,6 +450,9 @@ class StripePayoutProcessor
                                                        max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
     }
     params.merge!(method: payment.payout_type) if payment.payout_type.present?
+    # Past this point a bank payout may exist at Stripe even if we never see the response, so a
+    # connection loss here is NOT the same as one raised while building the request above.
+    payout_requested = true
     stripe_payout = Stripe::Payout.create(params, { stripe_account: payment.stripe_connect_account_id })
     payment.stripe_transfer_id = stripe_payout.id
     payment.arrival_date = stripe_payout.arrival_date
@@ -464,7 +468,16 @@ class StripePayoutProcessor
     [e.message]
   rescue Stripe::AuthenticationError, Stripe::APIConnectionError => e
     failed = true
-    failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
+    # A dropped connection around `Stripe::Payout.create` does not tell us whether Stripe accepted
+    # the bank payout. The Stripe gem generates a fresh idempotency key per call, so requeueing such
+    # a payment could pay the seller twice — record an unknown outcome instead, which sits outside
+    # REQUEUEABLE_REASONS and needs a human to reconcile against Stripe. A 429 is safe by contrast:
+    # Stripe rejected the request outright, so nothing was accepted.
+    failure_reason = if payout_requested
+      Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+    else
+      Payment::FailureReason::PROCESSOR_UNAVAILABLE
+    end
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   rescue Stripe::RateLimitError => e
@@ -487,7 +500,28 @@ class StripePayoutProcessor
       # Mark the bank account deleted before the reversal so a transient Stripe error
       # in `reverse_internal_transfer!` cannot leave a dead bank reference alive for the next nightly run.
       payment.bank_account&.mark_deleted! if failure_reason == Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
-      reverse_internal_transfer!(payment)
+      # Same reasoning as the reversal in `prepare_payment_and_set_amount`: if the reversal fails the
+      # funds stay on the seller's connected account, so the reason must move outside
+      # REQUEUEABLE_REASONS or the daily requeue would transfer the same money again. Only overwrite
+      # a still-requeueable reason — PAYOUT_OUTCOME_UNKNOWN already blocks the requeue and carries
+      # the stronger warning that a bank payout may exist, which is what a human needs to see first.
+      # Unlike that method, the error is re-raised: callers here rely on it surfacing.
+      begin
+        reverse_internal_transfer!(payment)
+      rescue => e
+        if failure_reason.in?(Payment::FailureReason::REQUEUEABLE_REASONS)
+          payment.update!(failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
+        end
+        ErrorNotifier.notify(
+          e,
+          payment_id: payment.id,
+          user_id: payment.user_id,
+          stripe_internal_transfer_id: payment.stripe_internal_transfer_id,
+          original_failure_reason: failure_reason,
+          action_required: "Reverse or reconcile this transfer at Stripe by hand; the payout will not be requeued automatically"
+        )
+        raise
+      end
     end
   end
 

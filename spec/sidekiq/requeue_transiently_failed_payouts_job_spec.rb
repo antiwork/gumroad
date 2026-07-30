@@ -96,6 +96,18 @@ describe RequeueTransientlyFailedPayoutsJob do
     described_class.new.perform
   end
 
+  it "does not requeue a payout whose bank-payout outcome is unknown, because Stripe may already have accepted it" do
+    seller = create(:user)
+    create_transient_failure(
+      user: seller,
+      failure_reason: Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+    )
+
+    expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
+
+    described_class.new.perform
+  end
+
   it "does not requeue a failure from an earlier payout period" do
     create_transient_failure(user: create(:user), payout_period_end_date: payout_period_end_date - 7)
 
@@ -223,15 +235,50 @@ describe RequeueTransientlyFailedPayoutsJob do
       described_class.new.perform
     end
 
-    it "reports a seller only on the run they cross the cap, not on every later run" do
-      # The job runs daily against a week-long period, so re-reporting the same cohort would
-      # bury whoever newly needs attention.
+    it "reports a seller once per period, staying quiet on the next day's run" do
+      # The job runs daily against a week-long period. Counting cannot dedupe this: requeueing has
+      # stopped for this seller, so their failure count no longer moves and any count-based
+      # condition would hold on every later run.
       exhausted = create(:user)
-      (described_class::MAX_REQUEUE_ATTEMPTS + 2).times { create_transient_failure(user: exhausted) }
+      (described_class::MAX_REQUEUE_ATTEMPTS + 1).times { create_transient_failure(user: exhausted) }
+
+      expect(ErrorNotifier).to receive(:notify).once
+      described_class.new.perform
 
       expect(ErrorNotifier).to_not receive(:notify)
       expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
+      described_class.new.perform
+    end
 
+    it "reports a seller who crosses the cap by more than one failure" do
+      # Nothing guarantees the count lands exactly one past the cap: several payouts can fail in the
+      # same batch, so the seller's first appearance here can already be well over it.
+      exhausted = create(:user)
+      (described_class::MAX_REQUEUE_ATTEMPTS + 3).times { create_transient_failure(user: exhausted) }
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        /1 seller\(s\) hit #{described_class::MAX_REQUEUE_ATTEMPTS} transient payout failures/o,
+        hash_including(user_ids: [exhausted.id])
+      )
+
+      described_class.new.perform
+    end
+
+    it "reports the same seller again for a new payout period" do
+      # The dedupe is per period, not forever — a fresh period is a fresh problem worth an alert.
+      exhausted = create(:user)
+      (described_class::MAX_REQUEUE_ATTEMPTS + 1).times { create_transient_failure(user: exhausted) }
+
+      expect(ErrorNotifier).to receive(:notify).once
+      described_class.new.perform
+
+      next_period = payout_period_end_date + 7
+      (described_class::MAX_REQUEUE_ATTEMPTS + 1).times do
+        create_transient_failure(user: exhausted, payout_period_end_date: next_period)
+      end
+      allow(User::PayoutSchedule).to receive(:manual_payout_end_date).and_return(next_period)
+
+      expect(ErrorNotifier).to receive(:notify).once
       described_class.new.perform
     end
   end
