@@ -724,7 +724,11 @@ describe AlertOnBlockedEstablishedSubscribersJob do
   # first. Candidates arrive newest-failure-first, so terminated memberships with fresher failures
   # occupy the leading batches; a scan that stopped once it had enough rows ranked only those and
   # never saw the older membership that is still renewing — the one row unblocking can still save.
+  # The row budget this example guards against is gone, so the stub below is inert here on purpose:
+  # it is what makes the example red on any tree that still stops the walk at that budget, instead
+  # of silently passing because three rows never reach a bound of two thousand.
   it "keeps a saveable subscriber sitting behind whole batches of newer terminated ones" do
+    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
     stub_const("#{described_class}::MAX_REPORTED", 1)
     stub_const("#{described_class}::CHARGE_COUNT_BATCH", 1)
     dead = 2.times.map do |i|
