@@ -69,10 +69,20 @@ describe Guardian do
       expect(build(:guardian)).to have_attributes(has_completed_info?: true)
     end
 
-    %i[first_name last_name email date_of_birth street_address city state zip_code country individual_tax_id].each do |field|
+    %i[first_name last_name email date_of_birth street_address city zip_code country individual_tax_id].each do |field|
       it "is false without #{field}" do
         expect(build(:guardian, field => nil).has_completed_info?).to be(false)
       end
+    end
+
+    # Both directions of the country gate: Stripe wants a state where it has a subdivision list and
+    # rejects one elsewhere, so requiring it unconditionally would strand a German guardian's minor.
+    it "is false without state in a country whose addresses carry one" do
+      expect(build(:guardian, country: "United States", state: nil).has_completed_info?).to be(false)
+    end
+
+    it "is true without state in a country whose addresses do not carry one" do
+      expect(build(:guardian, country: "Germany", state: nil).has_completed_info?).to be(true)
     end
 
     it "is false until the guardian accepts the terms, because our payment partner requires their acceptance rather than the minor's" do
@@ -114,15 +124,23 @@ describe Guardian do
     end
 
     # Erasure is a column-for-column obligation, so a column added to this table later must be
-    # classified rather than quietly surviving. This fails on the migration that adds one.
-    it "leaves nothing populated except the columns it deliberately retains" do
-      guardian = create(:guardian, nationality: "US", stripe_person_id: "person_1", stripe_tos_ip: "1.2.3.4",
-                                   stripe_tos_accepted_at: Time.current)
+    # classified rather than quietly surviving. This fails on the migration that adds one, whether or
+    # not the new column happens to be populated in any example.
+    it "classifies every column as erased or retained" do
+      expect(Guardian::ERASED_ON_ANONYMIZE + Guardian::RETAINED_ON_ANONYMIZE + ["updated_at"])
+        .to match_array(Guardian.column_names)
+    end
+
+    it "nulls every column it classifies as erased" do
+      guardian = create(:guardian, nationality: "US", stripe_tos_ip: "1.2.3.4")
+      Guardian::ERASED_ON_ANONYMIZE.each { |column| expect(guardian[column]).to be_present }
 
       guardian.anonymize!
 
-      populated = guardian.reload.attributes.reject { |_, value| value.nil? }.keys
-      expect(populated).to match_array(Guardian::RETAINED_ON_ANONYMIZE - ["deleted_at"])
+      guardian.reload
+      # individual_tax_id is a Strongbox Lock rather than the raw column, so read it through the DB.
+      erased = Guardian.where(id: guardian.id).pick(*Guardian::ERASED_ON_ANONYMIZE)
+      expect(erased).to all(be_nil)
     end
 
     it "keeps the Stripe handle and the record that an adult accepted the terms" do

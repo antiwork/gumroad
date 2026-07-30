@@ -23,8 +23,30 @@ class Guardian < ApplicationRecord
   # Stripe's own floor for a person who can take responsibility for an account.
   MINIMUM_AGE = 18
 
-  # The columns anonymize! deliberately leaves alone, so that a column added to this table later has
-  # to be classified as erased or retained rather than silently surviving erasure.
+  # Erasure is a column-for-column obligation, so every column on this table is classified here and
+  # a spec asserts the two lists still cover it. A column added later fails that spec rather than
+  # silently outliving erasure.
+  ERASED_ON_ANONYMIZE = %w[
+    first_name
+    last_name
+    email
+    phone
+    date_of_birth
+    street_address
+    city
+    state
+    zip_code
+    country
+    country_code
+    nationality
+    individual_tax_id
+    stripe_tos_ip
+  ].freeze
+
+  # stripe_person_id is the handle for the copy Stripe holds, so nulling it would orphan that copy
+  # rather than erase it — the Stripe sync in a later PR is what deletes the remote Person. The
+  # acceptance flag and timestamp stay with it as the record that an adult did once take
+  # responsibility; their IP address is in the erased list above, being personal data and nothing else.
   RETAINED_ON_ANONYMIZE = %w[
     id
     stripe_person_id
@@ -32,7 +54,6 @@ class Guardian < ApplicationRecord
     stripe_tos_accepted_at
     deleted_at
     created_at
-    updated_at
   ].freeze
 
   # Compliance revisions are immutable, so a seller who edits their details leaves several rows
@@ -76,7 +97,7 @@ class Guardian < ApplicationRecord
       date_of_birth.present? &&
       street_address.present? &&
       city.present? &&
-      state.present? &&
+      (!state_required? || state.present?) &&
       zip_code.present? &&
       country.present? &&
       has_individual_tax_id? &&
@@ -86,30 +107,9 @@ class Guardian < ApplicationRecord
   # Removes the guardian's own identifying details while keeping the row, so the compliance
   # revisions that reference it stay intact and auditable. The guardian is a third party who never
   # agreed to anything beyond taking responsibility for one seller's account, so their details go
-  # when the seller's do.
-  #
-  # stripe_person_id stays: it is the handle for the copy Stripe holds, and nulling it here would
-  # orphan that copy rather than erase it. The acceptance flag and timestamp stay with it as the
-  # record that an adult did once take responsibility; the IP address does not, being personal data
-  # about them and nothing else.
+  # when the seller's do. What survives, and why, is ERASED/RETAINED_ON_ANONYMIZE above.
   def anonymize!
-    update_columns(
-      first_name: nil,
-      last_name: nil,
-      email: nil,
-      phone: nil,
-      date_of_birth: nil,
-      street_address: nil,
-      city: nil,
-      state: nil,
-      zip_code: nil,
-      country: nil,
-      country_code: nil,
-      nationality: nil,
-      individual_tax_id: nil,
-      stripe_tos_ip: nil,
-      updated_at: Time.current
-    )
+    update_columns(ERASED_ON_ANONYMIZE.index_with(nil).merge("updated_at" => Time.current))
   end
 
   def has_individual_tax_id?
@@ -118,6 +118,17 @@ class Guardian < ApplicationRecord
   alias_method :has_individual_tax_id, :has_individual_tax_id?
 
   private
+    # Stripe asks for a state only where it has a subdivision list, and rejects one elsewhere. Reuses
+    # the beneficial-owner list rather than restating it: a guardian is a Person on the same account,
+    # so a second copy of this list would be free to drift from the one we actually send Stripe.
+    #
+    # Derives the code from country rather than reading country_code, which is only filled in by the
+    # before_validation hook and so is still nil on an unsaved record.
+    def state_required?
+      alpha2 = country_code.presence || Compliance::Countries.find_by_name(country)&.alpha2
+      StripeBeneficialOwnersManager::COUNTRIES_WITH_STATE_LIST.include?(alpha2)
+    end
+
     def guardian_is_an_adult
       return if date_of_birth.blank?
       return if date_of_birth <= MINIMUM_AGE.years.ago.to_date
