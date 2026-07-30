@@ -1,18 +1,22 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  WCAG_AA_NON_TEXT,
   WCAG_AA_NORMAL_TEXT,
   accentBrightnessShiftFor,
   getAccessibleAccent,
   getContrastColor,
   getContrastRatio,
+  getVisibleIndicator,
   hexToRgb,
+  rgbToHex,
   shiftAccentBrightness,
 } from "$app/utils/color";
 
 // The shared server/browser fixture. It lives under spec/ because the Ruby suite asserts the same
 // file — see the "matches the server implementation" test below.
 import accentContrastPairs from "../../../spec/fixtures/accent_contrast_pairs.json";
+import indicatorContrastPairs from "../../../spec/fixtures/indicator_contrast_pairs.json";
 
 describe("getContrastColor", () => {
   it("picks black on a bright accent that HSL lightness misjudged as dark", () => {
@@ -279,6 +283,71 @@ describe("getAccessibleAccent", () => {
         accent: expected.accent,
         text: expected.text,
       });
+    }
+  });
+});
+
+describe("rgbToHex", () => {
+  it("round-trips both the space- and comma-joined forms a CSS custom property can hold", () => {
+    expect(rgbToHex("255 144 232")).toBe("#ff90e8");
+    expect(rgbToHex("255,144,232")).toBe("#ff90e8");
+    expect(rgbToHex("  0 0 0  ")).toBe("#000000");
+    expect(rgbToHex(hexToRgb("#19ff1d"))).toBe("#19ff1d");
+  });
+
+  it("degrades to black rather than raising on anything that isn't three 0-255 channels", () => {
+    for (const invalid of ["", "255 144", "255 144 232 1", "255 144 300", "-1 0 0", "a b c", "1.5 2 3"]) {
+      expect(rgbToHex(invalid), `for ${JSON.stringify(invalid)}`).toBe("#000000");
+    }
+  });
+});
+
+describe("getVisibleIndicator", () => {
+  it("leaves a colour that already clears the non-text floor untouched", () => {
+    // The stock pink on the dark neutral background: 10.41:1, nothing to fix.
+    expect(getVisibleIndicator("#ff90e8", "#000000")).toBe("#ff90e8");
+    expect(getVisibleIndicator("#009a49", "#f8efe3")).toBe("#009a49");
+  });
+
+  it("darkens on a light background and lightens on a dark one, keeping the hue", () => {
+    expect(getVisibleIndicator("#ff90e8", "#ffffff")).toBe("#d075bd");
+    expect(getVisibleIndicator("#111111", "#000000")).toBe("#5a5a5a");
+  });
+
+  it("shifts by the smallest amount that clears the floor", () => {
+    const indicator = getVisibleIndicator("#ff90e8", "#ffffff");
+    expect(getContrastRatio(indicator, "#ffffff")).toBeGreaterThanOrEqual(WCAG_AA_NON_TEXT);
+    expect(getContrastRatio(indicator, "#ffffff")).toBeLessThan(WCAG_AA_NON_TEXT + 0.05);
+  });
+
+  it("rescues a colour identical to its background", () => {
+    for (const color of ["#ffffff", "#f8efe3", "#000000"]) {
+      expect(getContrastRatio(getVisibleIndicator(color, color), color), `${color} on itself`).toBeGreaterThanOrEqual(
+        WCAG_AA_NON_TEXT,
+      );
+    }
+  });
+
+  it("falls back to black rather than raising on a value that isn't a hex colour", () => {
+    expect(getVisibleIndicator("red", "#ffffff")).toBe("#000000");
+    expect(getVisibleIndicator("#ff90e8", "not-a-colour")).toBe("#000000");
+  });
+
+  it("reads a legacy three-digit value the same as its six-digit equivalent", () => {
+    expect(getVisibleIndicator("#f0a", "#fff")).toBe(getVisibleIndicator("#ff00aa", "#ffffff"));
+  });
+
+  it("matches the server implementation on every pair in the shared fixture", () => {
+    // ContrastColor.visible_indicator floors the seller's saved indicator server-side while this
+    // floors the neutral checkout palette in the browser. The fixture was generated from the Ruby
+    // side, so this half holds the browser to the server's answers; contrast_color_spec.rb asserts
+    // the same file, which stops a Ruby change from quietly rewriting the contract instead.
+    expect(indicatorContrastPairs.length).toBeGreaterThanOrEqual(40);
+    for (const expected of indicatorContrastPairs) {
+      expect(
+        getVisibleIndicator(expected.input, expected.background),
+        `${expected.input} on ${expected.background}`,
+      ).toBe(expected.indicator);
     }
   });
 });

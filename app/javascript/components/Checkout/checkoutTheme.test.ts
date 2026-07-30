@@ -2,6 +2,8 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { WCAG_AA_NON_TEXT, getContrastRatio, rgbToHex } from "$app/utils/color";
+
 import {
   type CheckoutStyle,
   type CheckoutTheme,
@@ -9,6 +11,7 @@ import {
   getCheckoutIndicatorCss,
   shouldInvertNativePayPalButton,
   useCheckoutStyle,
+  useNeutralCheckoutThemeColors,
 } from "$app/components/Checkout/checkoutTheme";
 
 afterEach(cleanup);
@@ -110,5 +113,49 @@ describe("useCheckoutStyle", () => {
     act(() => captureFromSubmittingRender(["seller-a"]));
 
     expect(result.current[0]).toBe(checkoutStyle);
+  });
+});
+
+describe("useNeutralCheckoutThemeColors", () => {
+  // The hook reads the live palette off the document root, so the test sets the same custom
+  // properties _definitions.scss does rather than stubbing the getter.
+  const withNeutralPalette = (background: string) => {
+    document.documentElement.style.setProperty("--neutral-color", background === "0 0 0" ? "255 255 255" : "0 0 0");
+    document.documentElement.style.setProperty("--neutral-filled", background);
+    document.documentElement.style.setProperty("--neutral-border-alpha", "0.25");
+    document.documentElement.style.setProperty("--neutral-accent", "255 144 232");
+    document.documentElement.style.setProperty("--neutral-danger", "155 28 18");
+    document.documentElement.style.setProperty("--gray-3", "0.5");
+  };
+
+  afterEach(() => document.documentElement.removeAttribute("style"));
+
+  it("floors the stock pink indicator on the light background it fails against", () => {
+    withNeutralPalette("255 255 255");
+
+    const { result } = renderHook(() => useNeutralCheckoutThemeColors());
+
+    // Pink is 2.02:1 on white — below the 3:1 non-text floor. #d075bd is 3.02:1, same hue.
+    expect(result.current.indicator).toBe("rgb(208,117,189)");
+    expect(getContrastRatio(rgbToHex(result.current.indicator.slice(4, -1)), "#ffffff")).toBeGreaterThanOrEqual(
+      WCAG_AA_NON_TEXT,
+    );
+  });
+
+  it("leaves the indicator alone in dark mode, where the stock pink already clears the floor", () => {
+    withNeutralPalette("0 0 0");
+
+    const { result } = renderHook(() => useNeutralCheckoutThemeColors());
+
+    // 10.41:1 on black. Flooring here would change a colour that is already compliant.
+    expect(result.current.indicator).toBe("rgb(255,144,232)");
+  });
+
+  it("does not move the fill accent, which carries text and is governed by the 4.5:1 rule instead", () => {
+    withNeutralPalette("255 255 255");
+
+    const { result } = renderHook(() => useNeutralCheckoutThemeColors());
+
+    expect(result.current.accent).toBe("rgb(255,144,232)");
   });
 });

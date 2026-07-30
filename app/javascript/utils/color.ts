@@ -2,6 +2,12 @@
 // is ever allowed below it.
 export const WCAG_AA_NORMAL_TEXT = 4.5;
 
+// WCAG 2.2 SC 1.4.11 requires 3:1 for non-text state indicators.
+export const WCAG_AA_NON_TEXT = 3;
+
+// Relative luminance of #808080, used to choose the direction of the brightness shift.
+const BACKGROUND_LUMINANCE_MIDPOINT = 0.2159;
+
 // If APCA rates black and white within 10 Lc of each other, neither has a strong perceptual lead.
 // In that narrow case, prefer the one that changes the creator's colour less.
 const APCA_TIE_BAND = 10;
@@ -31,6 +37,22 @@ const parseHex = (hex: string) => {
 };
 
 export const hexToRgb = (hex: string) => (parseHex(hex) ?? [0, 0, 0]).join(" ");
+
+/**
+ * Inverse of hexToRgb, for CSS custom properties that hold bare channels ("255 144 232" or the
+ * comma-joined form). Out-of-range or non-numeric channels give black, matching how parseHex
+ * degrades rather than raising mid-render.
+ */
+export const rgbToHex = (rgb: string) => {
+  const channels = rgb
+    .trim()
+    .split(/[\s,]+/u)
+    .map(Number);
+  if (channels.length !== 3 || channels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 255))
+    return BLACK;
+
+  return toHex(channels);
+};
 
 const toHex = (rgb: number[]) => `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 
@@ -202,6 +224,39 @@ export const getAccessibleAccent = (accent: string): { accent: string; text: str
     accent: toHex(shiftBrightness(rgb, whiteText, displayShift)),
     text: whiteText ? WHITE : BLACK,
   };
+};
+
+/**
+ * Shifts a hex colour's brightness until it clears the 3:1 non-text floor against `backgroundHex`,
+ * keeping its hue. Returns the colour unchanged when it already clears.
+ *
+ * WCAG 2.2 SC 1.4.11 holds a state indicator to 3:1 rather than 4.5:1 because it carries no text.
+ * The background IS an input here, unlike getAccessibleAccent: an indicator only has to be visible
+ * on the surface it is drawn on.
+ *
+ * Keep this in step with ContrastColor.visible_indicator in lib/utilities/contrast_color.rb — that
+ * one floors the seller's saved indicator server-side while this floors the neutral checkout palette
+ * in the browser, so a divergence means the same colour renders two ways. The shared fixture in
+ * spec/fixtures/indicator_contrast_pairs.json is asserted by both suites for that reason.
+ */
+export const getVisibleIndicator = (hex: string, backgroundHex: string) => {
+  const rgb = parseHex(hex);
+  const background = parseHex(backgroundHex);
+  if (rgb === null || background === null) return BLACK;
+
+  // Moving away from the background keeps contrast monotonic for the binary search.
+  const whiteText = relativeLuminance(background) > BACKGROUND_LUMINANCE_MIDPOINT;
+  if (ratioBetween(rgb, background) >= WCAG_AA_NON_TEXT) return toHex(rgb);
+
+  let low = 0;
+  let high = 255;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (ratioBetween(shiftBrightness(rgb, whiteText, middle), background) >= WCAG_AA_NON_TEXT) high = middle;
+    else low = middle + 1;
+  }
+
+  return toHex(shiftBrightness(rgb, whiteText, low));
 };
 
 /** WCAG contrast ratio between two hex colours, e.g. 15.36 for black on bright green. */

@@ -1,7 +1,7 @@
 import { type StripeElementStyleVariant, type StripeElementsOptions } from "@stripe/stripe-js";
 import * as React from "react";
 
-import { getContrastColor, hexToRgb } from "$app/utils/color";
+import { getContrastColor, getVisibleIndicator, hexToRgb, rgbToHex } from "$app/utils/color";
 import { getCssVariable } from "$app/utils/styles";
 
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
@@ -107,7 +107,11 @@ export const useNeutralCheckoutThemeColors = () => {
       background: `rgb(${background})`,
       border: `rgb(${text}, ${borderAlpha})`,
       accent: `rgb(${accent})`,
-      indicator: `rgb(${accent})`,
+      // The stock pink accent is only 2.02:1 on the light-mode neutral background, so using it
+      // directly leaves Stripe's selected-method indicator below the 3:1 floor #6531 already
+      // enforces on sellers' own indicators. Dark mode clears it at 10.41:1 and comes back
+      // unchanged (gumroad#6581).
+      indicator: `rgb(${rgb(getVisibleIndicator(rgbToHex(accent), rgbToHex(background)))})`,
       danger: `rgb(${danger})`,
     }),
     [accent, background, borderAlpha, colorScheme, danger, placeholderAlpha, text],

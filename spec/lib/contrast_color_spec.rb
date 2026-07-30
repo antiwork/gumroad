@@ -369,5 +369,25 @@ describe ContrastColor do
     it "reads a legacy three-digit row the same as its six-digit equivalent" do
       expect(described_class.visible_indicator("#f0a", "#fff")).to eq(described_class.visible_indicator("#ff00aa", "#ffffff"))
     end
+
+    it "matches the browser implementation on every pair in the shared fixture" do
+      # This renders the seller's saved indicator into the live storefront CSS while
+      # getVisibleIndicator in app/javascript/utils/color.ts floors the neutral checkout palette in
+      # the browser. The fixture was generated from THIS implementation, so the load-bearing half is
+      # color.test.ts asserting the same file — this side stops a Ruby change from silently editing
+      # the contract the browser is held to. Each pair is re-checked against the floor here too, so a
+      # wrong fixture value cannot pass both.
+      fixture = JSON.parse(File.read(Rails.root.join("spec", "fixtures", "indicator_contrast_pairs.json")))
+      expect(fixture.size).to be >= 40
+
+      fixture.each do |expected|
+        input = expected.fetch("input")
+        background = expected.fetch("background")
+        expect(described_class.visible_indicator(input, background)).to eq(expected.fetch("indicator")),
+                                                                        "indicator for #{input} on #{background}"
+        expect(described_class.ratio_between(expected.fetch("indicator"), background))
+          .to be >= ContrastColor::WCAG_AA_NON_TEXT - 0.001, "fixture pair for #{input} on #{background} is below the floor"
+      end
+    end
   end
 end
