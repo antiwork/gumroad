@@ -248,7 +248,6 @@ module RendersCustomHtmlPages
             style.maskImage === "none" &&
             (!style.webkitMaskImage || style.webkitMaskImage === "none") &&
             style.mixBlendMode === "normal" &&
-            style.transform === "none" &&
             style.display !== "none";
         }
         function schemeBackplate(style) {

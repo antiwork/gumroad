@@ -97,6 +97,22 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
   end
 
   [
+    ["on <html>", "html{background:#000;transform:translateZ(0)}body{margin:0}"],
+    ["from <body>", "html{transform:translateZ(0)}body{margin:0;background:#000}"],
+  ].each do |placement, styles|
+    context "when a transformed root paints the canvas #{placement}" do
+      before do
+        seller.update!(custom_html: "<style>#{styles}</style><main><h1>BG Studio</h1></main>")
+      end
+
+      it "mirrors the unaffected canvas color" do
+        visit seller.subdomain_with_protocol
+        expect_wrapper_background("rgb(0, 0, 0)")
+      end
+    end
+  end
+
+  [
     ["<html>", "html{display:none;background:#000}"],
     ["<body>", "body{display:none;background:#000}"],
   ].each do |element, styles|
