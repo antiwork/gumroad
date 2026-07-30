@@ -31,7 +31,7 @@ describe Subscription::PresentmentRenewal do
 
   let(:quote) { double(id: "fxq_test_1", fx_rate: 0.8, expires_at: 1.day.from_now) }
 
-  def service(purchases: [renewal_purchase], amount_cents: 1000, gumroad_amount_cents: 100)
+  def service(purchases: [renewal_purchase], amount_cents: 1000, gumroad_amount_cents: 100, charge: self.charge)
     described_class.new(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:)
   end
 
@@ -92,15 +92,27 @@ describe Subscription::PresentmentRenewal do
     expect(presentment.presentment_total_cents).to eq(899)
   end
 
+  it "persists a standalone renewal without inventing a charge" do
+    expect { service(charge: nil).perform }
+      .to change(PurchasePresentment, :count).by(1)
+      .and not_change(ChargePresentment, :count)
+
+    expect(renewal_purchase.reload.purchase_presentment).to have_attributes(
+      charge_presentment: nil,
+      presentment_currency: "eur",
+      presentment_total_cents: 899
+    )
+  end
+
   it "converts tax at today's rate instead of freezing it with the price" do
     renewal_purchase.update!(tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0)
     baseline = service.perform.processor_amount_cents
     expect(baseline).to eq(899)
 
     charge.reload.charge_presentment&.destroy!
-    renewal_purchase.update!(tax_cents: 100)
+    renewal_purchase.update!(tax_cents: 100, total_transaction_cents: 1100)
 
-    result = service.perform
+    result = service(amount_cents: 1100).perform
 
     # The price stays fixed at 899 while tax moves with the market. The quote is minted
     # from_currency EUR to_currency USD, so fx_rate 0.8 means 1 EUR buys 0.80 USD — $1.00 of
@@ -177,9 +189,9 @@ describe Subscription::PresentmentRenewal do
   end
 
   it "keeps the persisted components summing to the total when conversion rounds" do
-    renewal_purchase.update!(tax_cents: 33, shipping_cents: 17)
+    renewal_purchase.update!(tax_cents: 33, shipping_cents: 17, total_transaction_cents: 1050)
 
-    service.perform
+    service(amount_cents: 1050).perform
 
     presentment = renewal_purchase.reload.purchase_presentment
     components = presentment.presentment_price_cents + presentment.presentment_tip_cents +

@@ -128,30 +128,17 @@ class Subscription::PresentmentRenewal
     # about — rather than on a tax figure that has to stay truthful.
     reconcile_price_component!(allocation)
 
-    # Snapshot rows hang off a Charge, which a standalone renewal
-    # (RecurringChargeWorker -> Purchase#create_charge_intent) does not have, so this is skipped
-    # and NOTHING records the amounts afterwards: persist! is the only writer of
-    # PurchasePresentment, and #save_charge_data stores the fee and transaction id instead.
-    #
-    # So a renewal Stripe charges in the member's currency leaves #buyer_presentment? false, and
-    # its consumers then read it as canonical: the balance books from the processor's flow of funds
-    # rather than the canonical override, and a refund sends canonical cents against a
-    # foreign-currency charge. That is what keeps :buyer_currency_subscriptions unramped. Closing
-    # it needs a snapshot a renewal can own (PurchasePresentment validates charge_presentment
-    # presence) or this lane held in dollars until one exists.
-    if charge.present?
-      Charge::PresentmentOrchestrator.persist!(
-        charge:,
-        presentment_currency: currency,
-        presentment_total_cents:,
-        presentment_gumroad_amount_cents:,
-        allocations: [allocation],
-        stripe_fx_quote_id: quote.id,
-        stripe_fx_quote_expires_at: quote.expires_at,
-        fx_rate: quote.fx_rate,
-        rounding_delta_cents: 0
-      )
-    end
+    Charge::PresentmentOrchestrator.persist!(
+      charge:,
+      presentment_currency: currency,
+      presentment_total_cents:,
+      presentment_gumroad_amount_cents:,
+      allocations: [allocation],
+      stripe_fx_quote_id: quote.id,
+      stripe_fx_quote_expires_at: quote.expires_at,
+      fx_rate: quote.fx_rate,
+      rounding_delta_cents: 0
+    )
 
     Result.new(
       processor_amount_cents: presentment_total_cents,

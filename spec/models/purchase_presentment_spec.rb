@@ -30,11 +30,19 @@ describe PurchasePresentment do
                                           :presentment_gumroad_amount_cents)
   end
 
-  it "requires a charge presentment for Stripe rows" do
-    presentment = build(:purchase_presentment, charge_presentment: nil)
+  it "requires a charge presentment for Stripe rows belonging to a charge" do
+    purchase = create(:purchase)
+    create(:charge).purchases << purchase
+    presentment = build(:purchase_presentment, purchase:, charge_presentment: nil)
 
     expect(presentment).not_to be_valid
     expect(presentment.errors).to include(:charge_presentment)
+  end
+
+  it "allows a standalone Stripe purchase to own its presentment" do
+    presentment = build(:purchase_presentment, purchase: create(:purchase), charge_presentment: nil)
+
+    expect(presentment).to be_valid
   end
 
   it "requires component amounts to sum to the presentment total" do
