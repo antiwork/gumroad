@@ -108,14 +108,16 @@ class ScheduleAbandonedCartEmailsJob
     Rails.logger.info "Fetched #{cart_ids_with_matched_workflow_ids_and_product_ids.count} cart ids with matched workflow ids and product ids in #{(Time.current - start_time).round(2)} seconds"
 
     cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
+      check_attempt_deadline!
       CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
     end
   end
 
   private
     # Raises once the attempt has outrun ATTEMPT_TIME_BUDGET. Called from every unbounded loop —
-    # each day window, each scan batch, each workflow — because any one of them can be the part
-    # that runs long, and an attempt that outlives LOCK_TTL is the concurrency hazard.
+    # each day window, each scan batch, each workflow, each mail enqueue — because any one of them
+    # can be the part that runs long, and an attempt that outlives LOCK_TTL is the concurrency
+    # hazard. Miss one loop and the bound is only as good as the loops it does cover.
     def check_attempt_deadline!
       return if Time.current < @deadline
 

@@ -206,5 +206,27 @@ describe ScheduleAbandonedCartEmailsJob do
     it "does not abort a run that finishes within the budget" do
       expect { described_class.new.perform }.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
     end
+
+    it "aborts mid-way through the mail enqueue loop, not just while discovering carts" do
+      # The enqueue loop is per-cart and platform-wide, so it can be the part that runs long.
+      # Cross the deadline after the first enqueue and expect the second to raise instead of send.
+      second_cart = create(:cart)
+      create(:cart_product, cart: second_cart, product:)
+      second_cart.update!(updated_at: 2.days.ago)
+
+      real_mailer = CustomerMailer.method(:abandoned_cart)
+      enqueued = 0
+      allow(CustomerMailer).to receive(:abandoned_cart) do |*args|
+        enqueued += 1
+        travel described_class::ATTEMPT_TIME_BUDGET + 1.minute if enqueued == 1
+        real_mailer.call(*args)
+      end
+
+      expect do
+        described_class.new.perform
+      end.to raise_error(described_class::AttemptTimeBudgetExceeded)
+
+      expect(enqueued).to eq(1)
+    end
   end
 end
