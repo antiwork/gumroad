@@ -2876,6 +2876,107 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
   end
 
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment had an internal transfer the reversal fails holds payouts and keeps the failure reason and email" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678")
+    object = payout_event_object(payment_external_id: payment.external_id, failure_code: "account_closed")
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+    StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(Stripe::APIConnectionError.new("Connection refused"))
+    ErrorNotifier.stubs(:notify)
+
+    assert_raises(Stripe::APIConnectionError) do
+      StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+    end
+
+    # Gumroad's funds are still on the seller's connected account, and a webhook redelivery returns
+    # early on the now-failed payment, so nothing retries the reversal. The hold is what stops the
+    # weekly batch from paying these balances again before someone reconciles at Stripe.
+    assert payment.user.reload.payouts_paused_internally?
+    assert_equal User::PAYOUT_PAUSE_SOURCE_SYSTEM, payment.user.payouts_paused_by
+    # The Stripe failure code is what the seller needs to act on; recording it before the reversal
+    # keeps it (and the email) even when the reversal blows up.
+    assert_equal "account_closed", payment.reload.failure_reason
+  end
+
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment had an internal transfer the reversal fails a redelivered event returns early, so the hold is the only thing left protecting the balances" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678")
+    object = payout_event_object(payment_external_id: payment.external_id, failure_code: "account_closed")
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+    StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(Stripe::APIConnectionError.new("Connection refused"))
+    ErrorNotifier.stubs(:notify)
+
+    assert_raises(Stripe::APIConnectionError) do
+      StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+    end
+
+    # The payment is `failed` now, so the state case falls through to `return` and the reversal is
+    # never attempted again — which is why this path needs the hold rather than a retry.
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    assert_equal 1, user.reload.comments.with_type_on_probation.count
+  end
+
+  test "hold_payouts_for_unaccounted_money! writes one comment per payout no matter how many times a failure re-enters" do
+    user = create_user
+    payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678", state: "failed",
+                                           failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
+
+    2.times do
+      StripePayoutProcessor.send(:hold_payouts_for_unaccounted_money!, payment,
+                                 Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+    end
+
+    assert user.reload.payouts_paused_internally?
+    assert_equal 1, user.comments.with_type_on_probation.count
+  end
+
+  test "hold_payouts_for_unaccounted_money! writes a comment per distinct unaccounted payout" do
+    user = create_user
+    first = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678", state: "failed",
+                                         failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
+    second = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_9999", state: "failed",
+                                          failure_reason: Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN)
+
+    [first, second].each do |payment|
+      StripePayoutProcessor.send(:hold_payouts_for_unaccounted_money!, payment,
+                                 Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+    end
+
+    # Each stranded payout names a different transfer to reconcile, so collapsing them would hide
+    # one from whoever works the account.
+    assert_equal 2, user.reload.comments.with_type_on_probation.count
+  end
+
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment had an internal transfer the reversal fails writes the reconciliation comment even when the seller is already paused for chargebacks" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    user.comments.create!(content: "chargeback rate too high", comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+                          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate])
+    assert user.payouts_paused_for_chargeback_rate?
+
+    payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678")
+    object = payout_event_object(payment_external_id: payment.external_id, failure_code: "account_closed")
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+    StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(Stripe::APIConnectionError.new("Connection refused"))
+    ErrorNotifier.stubs(:notify)
+
+    assert_raises(Stripe::APIConnectionError) do
+      StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+    end
+
+    # Without a comment of our own the newest pausing comment stays the chargeback one, so
+    # ReleaseChargebackRatePayoutPauseForSellerJob would lift this hold once the rate recovered.
+    assert_not user.reload.payouts_paused_for_chargeback_rate?
+    assert_match(/Reconcile transfer/, user.comments.with_type_on_probation.order(:created_at, :id).last.content)
+  end
+
   test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment had an internal transfer the reverse amount was the same as the original internal transfer does not create a credit for the difference" do
     user = create_user
     create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)

@@ -527,19 +527,36 @@ class StripePayoutProcessor
   end
   private_class_method :reverse_internal_transfer_or_hold_payouts!
 
+  # The comment is written even when the account is already paused, and that is the point.
+  # `User#payouts_paused_for_chargeback_rate?` identifies the live hold by the most recent pausing
+  # comment, so returning early on an already-paused seller left an older chargeback comment
+  # looking like the current reason — and ReleaseChargebackRatePayoutPauseForSellerJob would lift
+  # the hold once the chargeback rate recovered, with this money still unaccounted for. The pause
+  # SOURCE is left alone: an admin or Stripe hold outranks ours and is cleared by its own path.
   def self.hold_payouts_for_unaccounted_money!(payment, failure_reason)
     user = payment.user
-    return if user.payouts_paused_internally?
+    author_name = User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
+    marker = "payout #{payment.external_id} could not be accounted for"
 
-    user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-    user.comments.create!(
-      content: "Payouts paused automatically: payout #{payment.external_id} failed as #{payment.reload.failure_reason} " \
-               "(original reason #{failure_reason.inspect}), so Gumroad cannot tell from its own records whether the " \
-               "money reached the seller. Reconcile transfer #{payment.stripe_internal_transfer_id.inspect} and any " \
-               "bank payout at Stripe before resuming.",
-      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
-    )
+    # Flag and comment land together, as they do in Payment#pause_payouts_after_repeated_failures:
+    # a window where the flag is set but the comment is not is exactly what misattributes the hold.
+    user.with_lock do
+      unless user.payouts_paused_internally?
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+      end
+      # Deduplicated per payout, so a webhook redelivery cannot bury the account in identical
+      # comments — and cannot flip an intervening chargeback comment back to being the newest.
+      next if user.comments.with_type_on_probation.where(author_name:).where("content LIKE ?", "%#{marker}%").exists?
+
+      user.comments.create!(
+        content: "Payouts paused automatically: #{marker} — it failed as #{payment.reload.failure_reason} " \
+                 "(original reason #{failure_reason.inspect}), so Gumroad cannot tell from its own records whether " \
+                 "the money reached the seller. Reconcile transfer #{payment.stripe_internal_transfer_id.inspect} " \
+                 "and any bank payout at Stripe before resuming.",
+        comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+        author_name:
+      )
+    end
   end
   private_class_method :hold_payouts_for_unaccounted_money!
 
@@ -729,12 +746,17 @@ class StripePayoutProcessor
       end
     end
 
-    reverse_internal_transfer!(payment)
+    # Record why before the reversal, not after. `mark_failed!` has already returned the balances to
+    # `unpaid`, and a reversal that raises used to abandon the method here — leaving the seller with
+    # no failure reason, no email, and Gumroad's funds still on their connected account. A webhook
+    # redelivery then hit the `else return` above, so nothing ever retried the reversal.
     if failure_reason
       payment.failure_reason = failure_reason
       payment.save!
       payment.send_payout_failure_email
     end
+
+    reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: true)
 
     alert_if_payout_credited_retired_account(payment)
   end
