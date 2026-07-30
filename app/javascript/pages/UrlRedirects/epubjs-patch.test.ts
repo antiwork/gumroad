@@ -7,7 +7,21 @@ import Rendition from "epubjs/src/rendition";
 import Resources from "epubjs/src/resources";
 import Queue from "epubjs/src/utils/queue";
 import JSZip from "jszip";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+// When node_modules predates the patch (a git pull without npm install), the
+// constants above import as undefined and every suite below fails as a wall of
+// unhelpful timeouts, so name the fix up front.
+beforeAll(() => {
+  const archiveSource = readFileSync(createRequire(import.meta.url).resolve("epubjs/src/archive"), "utf8");
+  if (!archiveSource.includes("MAX_EPUB_ENTRY_COUNT")) {
+    throw new Error(
+      "epubjs in node_modules is missing patches/epubjs+0.3.93.patch — your install is stale; run npm install (or npx patch-package).",
+    );
+  }
+});
 
 describe("epub.js resource cleanup patch", () => {
   afterEach(() => vi.unstubAllGlobals());
