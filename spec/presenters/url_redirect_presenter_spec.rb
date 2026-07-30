@@ -305,9 +305,9 @@ describe UrlRedirectPresenter do
                                                 succeeded_at: 2.months.ago,
                                                 **(original_email ? { email: original_email } : {}))
         charge = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false,
-                                                        succeeded_at: 1.month.ago,
-                                                        **(charge_email ? { email: charge_email } : {}),
-                                                        **charge_attrs)
+                                              succeeded_at: 1.month.ago,
+                                              **(charge_email ? { email: charge_email } : {}),
+                                              **charge_attrs)
         [original, charge, create(:url_redirect, purchase: original, link: product)]
       end
 
