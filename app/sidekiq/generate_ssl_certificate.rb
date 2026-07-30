@@ -6,6 +6,9 @@ class GenerateSslCertificate
 
   # Fallback delay when the rate-limit error doesn't tell us when to retry.
   RATE_LIMIT_FALLBACK_DELAY = 1.hour
+  # Lock contention is normally brief; jitter keeps duplicate jobs from retrying together.
+  LOCK_RETRY_DELAY = 1.minute
+  LOCK_RETRY_MAX_JITTER = 2.minutes
   # Random extra delay added to every rate-limited reschedule. Let's Encrypt
   # limits new certificate orders per account (300 per 3 hours), so when the
   # limit trips there is usually a backlog of queued jobs. Spreading the
@@ -47,7 +50,8 @@ class GenerateSslCertificate
     certificate_semaphore = SuoSemaphore.custom_domain_certificate(certificate_domain)
     certificate_lock_token = certificate_semaphore.lock
     unless certificate_lock_token
-      self.class.perform_in(SuoSemaphore::CUSTOM_DOMAIN_CERTIFICATE_LOCK_EXPIRATION, id, rate_limit_reschedules)
+      delay = LOCK_RETRY_DELAY + rand(LOCK_RETRY_MAX_JITTER.to_i)
+      self.class.perform_in(delay, id, rate_limit_reschedules)
       return
     end
 

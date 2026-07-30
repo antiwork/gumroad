@@ -22,9 +22,10 @@ describe GenerateSslCertificate do
           described_class.new.perform(@custom_domain.id)
         end
 
-        it "retries after a stale lock can expire instead of generating concurrently" do
+        it "retries soon with jitter instead of generating concurrently" do
           semaphore = instance_double(Suo::Client::Redis, lock: nil)
           allow(SuoSemaphore).to receive(:custom_domain_certificate).with(@custom_domain.domain).and_return(semaphore)
+          allow_any_instance_of(described_class).to receive(:rand).and_return(30)
           expect(SslCertificates::Generate).not_to receive(:new)
           described_class.clear
 
@@ -32,7 +33,7 @@ describe GenerateSslCertificate do
 
           job = described_class.jobs.sole
           expect(job["args"]).to eq([@custom_domain.id, 3])
-          expect(job["at"] - Time.current.to_f).to be_within(1.second).of(SuoSemaphore::CUSTOM_DOMAIN_CERTIFICATE_LOCK_EXPIRATION.to_i)
+          expect(job["at"] - Time.current.to_f).to be_within(1.second).of(90)
         end
       end
 
