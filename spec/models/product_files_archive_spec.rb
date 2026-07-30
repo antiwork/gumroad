@@ -168,7 +168,8 @@ describe ProductFilesArchive do
       folder2_archive = product.product_files_archives.create!(folder_id: folder2_id, product_files: [file3, file4, file5])
       entity_archive = product.product_files_archives.create!(product_files: [file3, file4, file5])
 
-      post = create(:installment, product_files: [create(:product_file), create(:product_file)])
+      post = create(:installment)
+      post.product_files = [create(:product_file, link: nil, installment: post), create(:product_file, link: nil, installment: post)]
       installment_archive = post.product_files_archives.create!(product_files: post.product_files)
 
       variant = create(:variant, product_files: [create(:product_file), create(:product_file)])
@@ -320,7 +321,7 @@ describe ProductFilesArchive do
   context "scopes" do
     before do
       post = create(:installment)
-      post.product_files = [create(:product_file), create(:product_file)]
+      post.product_files = [create(:product_file, link: nil, installment: post), create(:product_file, link: nil, installment: post)]
       post.save!
       installment_archive = post.product_files_archives.create
       installment_archive.product_files = post.product_files
@@ -390,9 +391,7 @@ describe ProductFilesArchive do
 
   it "is create-able through an installment" do
     post = create(:installment)
-    post.product_files << create(:product_file)
-    post.product_files << create(:product_file)
-    post.product_files << create(:product_file)
+    3.times { post.product_files << create(:product_file, link: nil, installment: post) }
     post.save
 
     product_files_archive = post.product_files_archives.create

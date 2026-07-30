@@ -58,7 +58,7 @@ class ProductFile < ApplicationRecord
   validates :isbn, absence: { unless: :supports_isbn? }
 
   validate :valid_url?, on: :create
-  validate :belongs_to_product_or_installment, on: :save
+  validate :belongs_to_product_or_installment
   validate :thumbnail_is_vaild
 
   after_save :invalidate_product_cache
