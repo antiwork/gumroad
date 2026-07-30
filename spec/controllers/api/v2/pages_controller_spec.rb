@@ -11,7 +11,7 @@ describe Api::V2::PagesController do
 
   describe "GET 'index'" do
     it "returns the seller's slugged pages" do
-      create(:user_page, pageable: @user, slug: "about", title: "About")
+      create(:user_page, pageable: @user, slug: "about", title: "About", content: "<p>About me</p>")
       create(:user_page, slug: "other", title: "Someone else's")
 
       get :index, params: { format: :json, access_token: @token.token }
@@ -20,6 +20,22 @@ describe Api::V2::PagesController do
       pages = response.parsed_body["pages"]
       expect(pages.map { _1["slug"] }).to eq(["about"])
       expect(pages.first["url"]).to eq("#{@user.subdomain_with_protocol}/about")
+      expect(pages.first["content"]).to eq("<p>About me</p>")
+      expect(pages.first).to have_key("custom_html")
+    end
+
+    it "returns metadata without loading every page body when requested" do
+      create(:user_page, pageable: @user, slug: "about", title: "About", content: "<p>Private draft details</p>")
+      create(:user_page, pageable: @user, slug: "studio", title: "Studio", content: nil, custom_html: "<main>Private studio details</main>")
+
+      get :index, params: { format: :json, access_token: @token.token, metadata_only: "true" }
+
+      expect(response).to have_http_status(:ok)
+      pages = response.parsed_body["pages"]
+      expect(pages.map { _1["slug"] }).to eq(%w[about studio])
+      pages.each do |page|
+        expect(page.keys).to match_array(%w[slug title url created_at updated_at])
+      end
     end
 
     it "returns 401 without a token" do
@@ -48,6 +64,15 @@ describe Api::V2::PagesController do
 
       expect(response.parsed_body["rendered_html"]).to include("<h1>Studio</h1>")
       expect(response.parsed_body["rendered_html"]).not_to include("page-title")
+    end
+
+    it "can return source without duplicating the page body as rendered HTML" do
+      create(:user_page, pageable: @user, slug: "studio", title: "Studio", content: nil, custom_html: "<h1>Studio</h1>")
+
+      get :show, params: { format: :json, access_token: @token.token, id: "studio", source_only: "true" }
+
+      expect(response.parsed_body["page"]["custom_html"]).to include("<h1>Studio</h1>")
+      expect(response.parsed_body).not_to have_key("rendered_html")
     end
 
     it "reports a missing page" do

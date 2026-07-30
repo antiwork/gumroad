@@ -20,11 +20,21 @@ class Api::V2::PagesController < Api::V2::BaseController
   before_action :set_page, only: [:show, :update, :destroy]
 
   def index
-    success_with_object(:pages, current_resource_owner.pages.map { page_json(_1) })
+    pages = if params[:metadata_only] == "true"
+      current_resource_owner.pages
+        .select(:slug, :title, :created_at, :updated_at)
+        .map { page_metadata_json(_1) }
+    else
+      current_resource_owner.pages.map { page_json(_1) }
+    end
+
+    success_with_object(:pages, pages)
   end
 
   def show
-    render_response(true, page: page_json(@page), rendered_html: rendered_html_for(@page))
+    result = { page: page_json(@page) }
+    result[:rendered_html] = rendered_html_for(@page) unless params[:source_only] == "true"
+    render_response(true, result)
   end
 
   def create
@@ -125,18 +135,23 @@ class Api::V2::PagesController < Api::V2::BaseController
       Page.generate_slug_for(current_resource_owner, title)
     end
 
-    def page_json(page)
+    def page_metadata_json(page)
       user = current_resource_owner
       url = user.username.present? ? "#{user.subdomain_with_protocol}/#{page.slug}" : nil
       {
         slug: page.slug,
         title: page.title.to_s,
-        content: page.content,
-        custom_html: page.custom_html,
         url:,
         created_at: page.created_at,
         updated_at: page.updated_at,
       }
+    end
+
+    def page_json(page)
+      page_metadata_json(page).merge(
+        content: page.content,
+        custom_html: page.custom_html,
+      )
     end
 
     # The pull path: a faithful standalone-HTML render of the page as it

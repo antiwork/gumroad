@@ -81,13 +81,13 @@ class InstallmentTest < ActiveSupport::TestCase
   end
 
   test "is_downloadable? returns false if post has only stream-only files" do
-    @installment.product_files << create_installment_file(:streamable_video, stream_only: true)
+    @installment.product_files << create_installment_file(:streamable_video, installment: @installment, stream_only: true)
     assert_equal false, @installment.is_downloadable?
   end
 
   test "is_downloadable? returns true if post has files that are not stream-only" do
-    @installment.product_files << create_installment_file(:readable_document)
-    @installment.product_files << create_installment_file(:streamable_video, stream_only: true)
+    @installment.product_files << create_installment_file(:readable_document, installment: @installment)
+    @installment.product_files << create_installment_file(:streamable_video, installment: @installment, stream_only: true)
     assert_equal true, @installment.is_downloadable?
   end
 
@@ -188,11 +188,21 @@ class InstallmentTest < ActiveSupport::TestCase
 
   test "member cancellation does not send for non member-cancellation installments" do
     ctx = member_cancellation_workflow_context
+    # The workflow's trigger has to go too: the installment's own copy is a stale snapshot, so
+    # member_cancellation_trigger? falls back to the workflow when it's blank (gumroad-private#1525).
+    ctx[:workflow].update!(workflow_trigger: nil)
     ctx[:installment].update!(workflow_trigger: nil)
     PostSendgridApi.stub(:process, ->(**) { flunk "process should not be called" }) do
       ctx[:installment].send_installment_from_workflow_for_member_cancellation(ctx[:subscription1].id)
       ctx[:installment].send_installment_from_workflow_for_member_cancellation(ctx[:subscription2].id)
     end
+  end
+
+  test "member cancellation still sends when only the workflow carries the trigger" do
+    ctx = member_cancellation_workflow_context
+    ctx[:installment].update!(workflow_trigger: nil)
+    calls = only_recipient_calls(ctx[:installment], ctx[:subscription1].id)
+    assert_equal [{ email: ctx[:sale1].email, purchase: ctx[:sale1], subscription: ctx[:subscription1] }], calls
   end
 
   test "member cancellation does not send for alive subscriptions" do
@@ -543,7 +553,7 @@ const b = 2;</code></pre>
 
   test "send_preview_email creates a UrlRedirect (once) when the post has files" do
     recipient = create_user
-    @post.product_files << create_installment_file(:readable_document)
+    @post.product_files << create_installment_file(:readable_document, installment: @post)
     calls = []
     PostSendgridApi.stub(:process, ->(**kw) { calls << kw }) do
       assert_difference -> { UrlRedirect.count }, 1 do

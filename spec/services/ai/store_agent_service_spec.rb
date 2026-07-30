@@ -261,6 +261,18 @@ describe Ai::StoreAgentService do
         expect(captured).to include("next_page_key" => "key-2")
       end
 
+      it "forces standalone page lists to stay metadata-only" do
+        expect(api_client).to receive(:get).with("/pages", { "metadata_only" => true }).and_return(
+          { "success" => true, "pages" => [{ "slug" => "about", "title" => "About" }], "http_status" => 200 },
+        )
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_read", { "endpoint" => "list_pages", "params" => { "metadata_only" => false } }),
+          text_result("You have an About page."),
+        )
+
+        service.respond(messages: [{ role: "user", content: "What standalone pages do I have?" }])
+      end
+
       # Regression for the review finding on gumroad-private#1168's fix: the pagination prompt rule
       # is useless if the tool-iteration cap stops the walk first. With the old cap of 5, a seller
       # whose list spanned more than ~4 pages got the generic "couldn't finish" fallback on exactly
@@ -433,6 +445,40 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/posts_total\s+exceeds posts\.length/)
         expect(captured[:system]).to match(/MUST show a visible count for that section/)
         expect(captured[:system]).to match(/Showing 100 of 260 posts/)
+      end
+
+      # Regression for gumroad-private#1466: a seller asked about the `<h2>Albums</h2>` on his own
+      # live storefront and about the pages he had created. The agent could read only the profile's
+      # custom HTML, which was nil, so it concluded his profile was Gumroad's untouched default and
+      # spent 45 minutes telling him: the heading was "actually Products, not Albums", it was
+      # probably his browser cache, standalone pages don't exist on Gumroad, and the CLI's own
+      # `pages push`/`pages preview` commands "aren't real Gumroad features". Every one of those was
+      # false. The heading was his own section header; the pages feature and the CLI commands ship.
+      #
+      # The prompt now has to name all three storefront surfaces, and — the load-bearing part —
+      # state that an empty custom HTML read does NOT mean the profile is the default.
+      it "teaches the model that the storefront has three surfaces and that empty custom HTML is not an empty profile" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        # The inference that caused the whole incident.
+        expect(captured[:system]).to match(/get_user_custom_html coming back empty means\s+only "no custom HTML" — it does NOT mean the storefront is Gumroad's untouched default/)
+        # Headings on the default profile are the seller's own, and are readable.
+        expect(captured[:system]).to include("get_user_profile_layout")
+        expect(captured[:system]).to match(/never claim the\s+default profile ships a heading of its own/)
+        # Standalone pages, and the CLI that drives them, are real.
+        expect(captured[:system]).to include("list_pages")
+        expect(captured[:system]).to match(/gumroad pages pull\/preview\/push/)
+        expect(captured[:system]).to match(/NEVER tell a creator that\s+standalone\s+pages don't exist on Gumroad/)
+        # It can list and read pages but cannot mutate them, so it must not offer to.
+        expect(captured[:system]).to include("get_page")
+        expect(captured[:system]).not_to include("update_page")
+        expect(captured[:system]).to match(/you cannot create, update, or delete them/)
       end
 
       it "rejects an unknown endpoint id without calling the API" do
@@ -683,6 +729,21 @@ describe Ai::StoreAgentService do
         expect(result[:proposed_action]).to be_nil
         expect(captured["error"]).to include("price_cents")
         expect(captured["error"]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
+      end
+
+      it "normalizes proposed product currency code case and whitespace before storing the action" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", { "endpoint" => "create_product", "params" => { "name" => "Workbook", "price" => 21_999, "price_currency_type" => " ZAR " } }),
+          text_result("Prepared."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "make a ZAR product" }])
+
+        expect(result[:proposed_action]).to include(
+          type: "api_write",
+          params: include("params" => include("price_currency_type" => "zar")),
+        )
+        expect(result[:proposed_action][:fields]).to include({ label: "Price currency type", value: "zar" })
       end
     end
 

@@ -83,9 +83,14 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     end
 
-    currency = params[:price_currency_type].presence || current_resource_owner.currency_type
+    # Only an absent key falls back to the seller's default: a supplied-but-blank currency is an
+    # invalid explicit value and has to reach validation, same as the update path.
+    supplied_currency = params.key?(:price_currency_type)
+    currency = supplied_currency ? normalize_price_currency_type(params[:price_currency_type]) : current_resource_owner.currency_type
     if !CURRENCY_CHOICES.key?(currency)
-      return render_response(false, message: "'#{currency}' is not a supported currency.")
+      # Echo what the caller sent, not the normalized form — telling someone who typed "ZZZ"
+      # that 'zzz' is unsupported reads like a different error than the one they caused.
+      return render_response(false, message: "'#{supplied_currency ? params[:price_currency_type] : currency}' is not a supported currency.")
     end
 
     if params.key?(:tags)
@@ -214,7 +219,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "Price cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
     end
 
-    if params.key?(:price_currency_type) && !CURRENCY_CHOICES.key?(params[:price_currency_type])
+    currency = normalize_price_currency_type(params[:price_currency_type])
+    if params.key?(:price_currency_type) && !CURRENCY_CHOICES.key?(currency)
       return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
@@ -329,7 +335,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         attrs[:name] = params[:name] if params.key?(:name)
         attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
         attrs[:price_cents] = params[:price] if params.key?(:price)
-        attrs[:price_currency_type] = params[:price_currency_type] if params.key?(:price_currency_type)
+        attrs[:price_currency_type] = currency if params.key?(:price_currency_type)
         attrs[:customizable_price] = params[:customizable_price] if params.key?(:customizable_price)
         attrs[:suggested_price_cents] = params[:suggested_price_cents] if params.key?(:suggested_price_cents)
         attrs[:max_purchase_count] = params[:max_purchase_count] if params.key?(:max_purchase_count)
@@ -554,6 +560,10 @@ class Api::V2::LinksController < Api::V2::BaseController
   private
     def success_with_product(product = nil)
       success_with_object(:product, product)
+    end
+
+    def normalize_price_currency_type(currency)
+      currency.to_s.strip.downcase.presence
     end
 
     # Same gate the inline custom_html paths (update / preview_custom_html) apply; a before_action

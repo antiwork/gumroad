@@ -7,7 +7,11 @@ class VariantCategory < ApplicationRecord
 
   has_many :variants
   has_many :alive_variants, -> { alive }, class_name: "Variant"
-  belongs_to :link, optional: true
+  # touch: true because soft-deleting or renaming this row moves the product's displayed
+  # price: Link#tier_category is scoped `alive.is_tier_category`, so losing it drops
+  # lowest_tier_price to the $0 fallback. Pages::ProfileData keys its cached storefront
+  # payload on links.updated_at, which no write here would otherwise move.
+  belongs_to :link, touch: true, optional: true
 
   # For tiered membership products, variants are "tiers"
   has_many :tiers, -> { alive }, class_name: "Variant"

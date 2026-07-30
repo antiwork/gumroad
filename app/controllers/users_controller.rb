@@ -53,7 +53,7 @@ class UsersController < ApplicationController
   def landing_version
     return render_landing_version(visible: false, page: nil) unless current_seller_owns_profile?
     page = @user.page
-    render_landing_version(visible: Feature.active?(:custom_html_pages, @user) && page&.custom_html.present?, page:)
+    render_landing_version(visible: @user.custom_landing_page_visible?, page:)
   end
 
   def edit
@@ -214,7 +214,7 @@ class UsersController < ApplicationController
     # before these actions run (unlike products, which aren't gated on alive?
     # upstream), so there's no owner/team preview branch to add here.
     def custom_html_visible?
-      Feature.active?(:custom_html_pages, @user) && @user.custom_html.present?
+      @user.custom_landing_page_visible?
     end
 
     def profile_landing_src(user, suffix)
