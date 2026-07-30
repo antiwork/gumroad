@@ -54,6 +54,11 @@ describe Compliance do
         expect(Compliance::Countries.find_by_name(nil)).to be_nil
       end
 
+      it "resolves the bare long form of an EU VAT state, which the gem itself does not know" do
+        # An unresolved name here means the purchase drops out of the EU OSS return entirely.
+        expect(Compliance::Countries.find_by_name("Slovak Republic")).to eq(Compliance::Countries::SVK)
+      end
+
       it "returns nil for an empty country name" do
         expect(Compliance::Countries.find_by_name("")).to be_nil
       end

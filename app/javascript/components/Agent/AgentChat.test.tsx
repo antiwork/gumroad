@@ -427,7 +427,7 @@ describe("AgentChat custom-html proposal cards", () => {
   };
 
   const streamTurnWithAction = (
-    proposedAction: typeof customHtmlAction,
+    proposedAction: import("$app/data/agent").ProposedAction,
     proposalMessageId: string | null = "message1",
   ) => {
     streamAgentMessage.mockResolvedValue({

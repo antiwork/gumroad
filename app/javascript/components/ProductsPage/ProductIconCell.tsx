@@ -8,7 +8,7 @@ export const ProductIconCell = ({
   thumbnail,
   placeholder = <Image pack="filled" className="size-5" />,
 }: {
-  href?: string;
+  href?: string | undefined;
   thumbnail: string | null;
   placeholder?: React.ReactNode;
 }) => {

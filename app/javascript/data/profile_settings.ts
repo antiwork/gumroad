@@ -38,7 +38,8 @@ export type SubscribeSection = Section & {
 
 export type FeaturedProductSection = Section & {
   type: "SellerProfileFeaturedProductSection";
-  featured_product_id?: string;
+  // Explicit `undefined` is how the editor clears the selection (serialized as absent).
+  featured_product_id?: string | undefined;
 };
 
 export type WishlistsSection = Section & {

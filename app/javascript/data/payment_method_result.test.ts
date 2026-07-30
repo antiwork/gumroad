@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   confirmCardIfNeeded,
+  prepareCardPaymentMethodData,
   prepareFutureCharges,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
@@ -13,6 +14,7 @@ import {
 import {
   getPaymentMethodResult,
   getReusablePaymentMethodResult,
+  type NewCardSelectedPaymentMethod,
   type NewPaymentElementSelectedPaymentMethod,
 } from "$app/data/payment_method_result";
 
@@ -86,6 +88,14 @@ const selectedPaymentMethod = (): NewPaymentElementSelectedPaymentMethod => ({
   billingDetailsCollection: "form",
 });
 
+const selectedCardPaymentMethod = (): NewCardSelectedPaymentMethod => ({
+  type: "card",
+  element: Object.create(null),
+  email: "buyer@example.com",
+  keepOnFile: true,
+  zipCode: "92663",
+});
+
 describe("getPaymentMethodResult", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -110,6 +120,24 @@ describe("getPaymentMethodResult", () => {
     expect(preparePaymentElementPaymentMethodData).toHaveBeenCalledWith(
       expect.objectContaining({ pendingSubmit: null }),
     );
+  });
+
+  // The ZIP has to reach tokenization, not just the cardParamsResult the server reads: only the
+  // value in billing_details is sent to the issuer, so AVS runs on this argument or not at all.
+  it("sends the buyer's ZIP into CardElement tokenization so AVS runs on it", async () => {
+    vi.mocked(prepareCardPaymentMethodData).mockResolvedValue(cardParams);
+
+    await getPaymentMethodResult(selectedCardPaymentMethod());
+
+    expect(prepareCardPaymentMethodData).toHaveBeenCalledWith(expect.objectContaining({ zipCode: "92663" }));
+  });
+
+  it("passes a null ZIP through to tokenization when the buyer gave none", async () => {
+    vi.mocked(prepareCardPaymentMethodData).mockResolvedValue(cardParams);
+
+    await getPaymentMethodResult({ ...selectedCardPaymentMethod(), zipCode: null });
+
+    expect(prepareCardPaymentMethodData).toHaveBeenCalledWith(expect.objectContaining({ zipCode: null }));
   });
 });
 
