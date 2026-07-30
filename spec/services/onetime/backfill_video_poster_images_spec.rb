@@ -53,6 +53,28 @@ describe Onetime::BackfillVideoPosterImages do
     expect(GenerateVideoPosterWorker.jobs).to be_empty
   end
 
+  it "does not enqueue a cover whose file was detached after its batch was selected" do
+    asset_preview = create(:asset_preview_mov)
+    GenerateVideoPosterWorker.jobs.clear
+
+    allow(ReplicaLagWatcher).to receive(:watch) { asset_preview.file.purge }
+
+    expect(described_class.process).to eq(enqueued: 0, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs).to be_empty
+  end
+
+  it "does not enqueue a cover retyped to a non-video after its batch was selected" do
+    asset_preview = create(:asset_preview_mov)
+    GenerateVideoPosterWorker.jobs.clear
+
+    allow(ReplicaLagWatcher).to receive(:watch) do
+      asset_preview.file.blob.update!(content_type: "image/jpeg")
+    end
+
+    expect(described_class.process).to eq(enqueued: 0, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs).to be_empty
+  end
+
   it "leaves image covers and deleted video covers alone" do
     create(:asset_preview_jpg)
     create(:asset_preview_mov).mark_deleted!

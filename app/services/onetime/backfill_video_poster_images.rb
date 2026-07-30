@@ -40,10 +40,12 @@ module Onetime
                           .where(ActiveStorage::Blob.arel_table[:content_type].matches("video%"))
       scope = scope.where("asset_previews.id <= ?", end_id) if end_id
 
-      # in_batches on a relation that both joins and includes the same
-      # association eager-loads the whole batch just to pluck its ids, then the
-      # yielded relation loads it again. Batch over ids only and do the
-      # eager-load inside the block, so each batch is read once.
+      # Keep `includes` off the batching scope: with it, in_batches' internal id
+      # pluck and any aggregate over the batch drag the eager-load's LEFT JOINs
+      # and GROUP BY into what should be a cheap indexed id scan. Batching over
+      # the join-only scope and eager-loading inside the block keeps every
+      # statement a light id lookup — the records themselves are loaded once
+      # either way.
       scope.in_batches(of: batch_size) do |batch|
         ids = batch.ids
 
