@@ -40,10 +40,21 @@ class UsersController < ApplicationController
     return head :not_found unless custom_html_visible?
 
     apply_custom_html_response_headers
-    interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user)
+    # Alone among the custom-HTML embeds this body can be derived from the visitor's IP (the
+    # prices below), so one visitor's currency must never be replayed to the next. Rails'
+    # default `private` already says so; state it explicitly because nothing else here would
+    # catch an edge cache rule or a future `expires_in` from turning this response shared.
+    # Unconditional, so the headers don't flip with the page's content.
+    response.cache_control.replace(private: true, no_store: true)
+    # Skipped for pages that reference no price: the build is uncached, per-request work for up
+    # to Pages::ProfileData::MAX_ITEMS products, and a page with no reference cannot consume it.
+    prices_referenced = Pages::ProductPrices.referenced_in?(@user.custom_html)
+    prices = prices_referenced ? Pages::ProductPrices.build(@user, ip: request.remote_ip) : {}
+    interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user, prices:)
     render html: profile_custom_html_document(
       interpolated,
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
+      prices_json: prices_referenced ? ERB::Util.json_escape(prices.to_json) : nil,
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
       follow_bridge: FOLLOW_BRIDGE_SCRIPT,

@@ -249,7 +249,9 @@ module RendersCustomHtmlPages
         if (!d || d.type !== "gumroad:profile-fields") return;
         ["name", "bio"].forEach(function (field) {
           var value = d[field] == null ? "" : String(d[field]);
-          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]');
+          // Product-scoped elements belong to the prices payload; the server-side interpolator
+          // never answers them with profile fields, so the preview must not either.
+          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]:not([data-gumroad-product])');
           for (var i = 0; i < nodes.length; i++) nodes[i].textContent = value;
         });
       });
@@ -478,7 +480,7 @@ module RendersCustomHtmlPages
     # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
     # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
     # comment, so an edit further down the page opens in view instead of hiding below the fold.
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
+    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -491,6 +493,7 @@ module RendersCustomHtmlPages
           </head>
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>
+            #{prices_json.present? ? %(<script id="gumroad-prices" type="application/json">#{prices_json}</script>) : ""}
             #{custom_html}
             #{navigation_bridge}
             #{follow_bridge}
