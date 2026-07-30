@@ -418,7 +418,7 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
   test "shows whether the purchase is associated to a sent abandoned cart email" do
     assert_equal "0", field_value(last_data_row, "Sent Abandoned Cart Email?")
 
-    cart = create_cart(order: create_order(purchases: [@purchase]))
+    cart = create_cart(order: create_order.tap { _1.purchases = [@purchase] })
     create_sent_abandoned_cart_email(cart:) # for a different seller's product
     assert_equal "0", field_value(last_data_row, "Sent Abandoned Cart Email?")
 
@@ -484,7 +484,7 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
                          cancelled_at: Date.new(2026, 1, 10))
     preorder = create_preorder(seller: @seller, preorder_link: create_preorder_link(link: @product),
                                created_at: Time.zone.parse("2025-12-01 08:00:00"))
-    cart = create_cart(order: create_order(purchases: [@purchase]))
+    cart = create_cart(order: create_order.tap { _1.purchases = [@purchase] })
     workflow = create_abandoned_cart_workflow(seller: @seller)
     create_sent_abandoned_cart_email(cart:, installment: workflow.installments.sole)
 

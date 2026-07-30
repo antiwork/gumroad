@@ -939,29 +939,31 @@ module ModelFactories
     }.merge(attrs))
   end
 
-  # Mirrors the :order factory: a bare order owned by a fresh purchaser.
+  # An order (mirrors :order).
   def create_order(purchaser: nil, **attrs)
     Order.create!({ purchaser: purchaser || create_user }.merge(attrs))
   end
 
-  # Mirrors the :charge factory — a $10 Stripe charge on its own order. Each
-  # charge gets its OWN merchant account: the factory shares one, which trips
-  # the Gumroad-managed-account uniqueness validation the moment a test needs
-  # two charges.
-  def create_charge(order: nil, seller: nil, merchant_account: nil, **attrs)
+  # A combined charge (mirrors :charge) — except the merchant account: the RSpec
+  # factory builds a fresh one whose sequenced charge_processor_merchant_id
+  # ("000000001") collides with the merchant_accounts(:gumroad_stripe) fixture
+  # row ("This account is already connected with another Gumroad account"), so
+  # reuse the fixture instead.
+  def create_charge(order: nil, seller: nil, merchant_account: :default, **attrs)
+    merchant_account = merchant_accounts(:gumroad_stripe) if merchant_account == :default
     Charge.create!({
       order: order || create_order,
       seller: seller || create_user,
-      merchant_account: merchant_account || create_merchant_account,
       processor: "stripe",
-      processor_transaction_id: "ch_#{unique_suffix}",
-      payment_method_fingerprint: "pm_#{unique_suffix}",
+      processor_transaction_id: "ch_#{SecureRandom.hex}",
+      payment_method_fingerprint: "pm_#{SecureRandom.hex}",
+      merchant_account:,
       amount_cents: 10_00,
       gumroad_amount_cents: 1_00,
       processor_fee_cents: 20,
       processor_fee_currency: "usd",
-      stripe_payment_intent_id: "pi_#{unique_suffix}",
-      stripe_setup_intent_id: "seti_#{unique_suffix}",
+      stripe_payment_intent_id: "pi_#{SecureRandom.hex}",
+      stripe_setup_intent_id: "seti_#{SecureRandom.hex}",
     }.merge(attrs))
   end
 
