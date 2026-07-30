@@ -21,6 +21,17 @@ describe Api::V2::UsersController, "GET 'profile_layout'" do
     expect(response.status).to eq(401)
   end
 
+  %w[view_public account view_sales].each do |scope|
+    it "returns 403 when the token has #{scope} instead of view_profile" do
+      token = create("doorkeeper/access_token", application: app, resource_owner_id: seller.id, scopes: scope)
+
+      get :profile_layout, params: { access_token: token.token }
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.body).not_to include("profile_layout")
+    end
+  end
+
   context "with a valid token" do
     let(:token) { create("doorkeeper/access_token", application: app, resource_owner_id: seller.id, scopes: "view_profile") }
 
@@ -81,15 +92,33 @@ describe Api::V2::UsersController, "GET 'profile_layout'" do
     end
 
     it "reports that custom HTML renders instead once the seller has published some" do
+      Feature.activate_user(:custom_html_pages, seller)
       Page.create!(pageable: seller, custom_html: "<h1>Hi</h1>")
 
       expect(layout["rendering"]).to eq("custom_html")
+    end
+
+    it "reports tabs and sections when saved custom HTML is not enabled for the public profile" do
+      Page.create!(pageable: seller, custom_html: "<h1>Hi</h1>")
+      Feature.deactivate_user(:custom_html_pages, seller)
+
+      expect(layout["rendering"]).to eq("tabs_and_sections")
     end
 
     # A seller with nothing set up must come back as an empty layout, never as an error — the
     # blindness this endpoint fixes was itself read as "there is nothing there".
     it "returns an empty layout for a seller who has never touched their profile" do
       expect(layout["tabs"]).to eq([])
+      expect(layout["tab_bar_visible"]).to be(false)
+    end
+
+    it "returns the default Products section that the public profile renders for a new seller" do
+      create(:product, user: seller)
+
+      expect(layout["tabs"]).to eq([{
+                                     "name" => "Products",
+                                     "sections" => [{ "header" => nil, "type" => "SellerProfileProductsSection" }],
+                                   }])
       expect(layout["tab_bar_visible"]).to be(false)
     end
 

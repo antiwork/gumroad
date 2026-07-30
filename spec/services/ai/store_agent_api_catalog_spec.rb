@@ -157,38 +157,17 @@ describe Ai::StoreAgentApiCatalog do
 
       expect(list.read?).to eq(true)
       expect(list.path).to eq("/pages")
+      expect(list.params).to be_empty
+      expect(list.forced_params).to eq("metadata_only" => true)
       expect(show.read?).to eq(true)
       expect(show.path).to eq("/pages/:id")
       expect(show.path_params).to eq(%w[id])
+      expect(show.forced_params).to eq("source_only" => true)
     end
 
-    it "exposes an update that can write either the rich text or the custom HTML" do
-      endpoint = described_class.find("update_page")
-
-      expect(endpoint.write?).to eq(true)
-      expect(endpoint.method).to eq(:patch)
-      expect(endpoint.scope).to eq("edit_profile")
-      expect(endpoint.params).to match_array(%w[title content custom_html])
-    end
-
-    # Sending both clears one of them server-side (Api::V2::PagesController#assign_content), so the
-    # summary has to say it or the agent will wipe a seller's editor content by accident.
-    it "warns that content and custom_html are mutually exclusive" do
-      expect(described_class.find("update_page").summary).to match(/mutually exclusive and sending one CLEARS the other/)
-    end
-
-    # Api::V2::PagesController#update only touches the body when content or custom_html is sent, so a
-    # rename keeps the existing body. The summary must not imply otherwise, or the agent resends a
-    # page's whole body just to change its title and risks overwriting content nobody asked to change.
-    it "says a title-only update keeps the existing body" do
-      expect(described_class.find("update_page").summary).to match(/title-only update leaves the existing body alone/)
-    end
-
-    # Creating and deleting pages is deliberately not exposed: those change what urls a storefront
-    # serves. The agent must not offer what it cannot do.
-    it "exposes no create or delete for pages" do
-      expect(described_class.write_ids).not_to include("create_page")
-      expect(described_class.write_ids).not_to include("delete_page")
+    it "keeps standalone pages read-only until page writes have structural safeguards" do
+      expect(described_class.find("update_page")).to be_nil
+      expect(described_class.write_ids).not_to include("create_page", "update_page", "delete_page")
     end
 
     # The claim it made to the seller: that these pages are not a real feature.

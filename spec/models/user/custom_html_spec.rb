@@ -46,6 +46,18 @@ describe User, "custom_html" do
     expect(seller.has_custom_landing_page?).to eq(true)
   end
 
+  it "reports saved custom HTML as publicly visible only while the feature is active" do
+    seller.update!(custom_html: "<section>Hello</section>")
+    Feature.activate_user(:custom_html_pages, seller)
+
+    expect(seller.custom_landing_page_visible?).to eq(true)
+
+    Feature.deactivate_user(:custom_html_pages, seller)
+
+    expect(seller.custom_landing_page_visible?).to eq(false)
+    expect(seller.has_custom_landing_page?).to eq(true)
+  end
+
   it "destroys the associated page when the user is destroyed" do
     seller.update!(custom_html: "<section>Hello</section>")
     page_id = seller.page.id

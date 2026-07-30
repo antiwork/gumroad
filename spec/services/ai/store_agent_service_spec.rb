@@ -261,6 +261,18 @@ describe Ai::StoreAgentService do
         expect(captured).to include("next_page_key" => "key-2")
       end
 
+      it "forces standalone page lists to stay metadata-only" do
+        expect(api_client).to receive(:get).with("/pages", { "metadata_only" => true }).and_return(
+          { "success" => true, "pages" => [{ "slug" => "about", "title" => "About" }], "http_status" => 200 },
+        )
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_read", { "endpoint" => "list_pages", "params" => { "metadata_only" => false } }),
+          text_result("You have an About page."),
+        )
+
+        service.respond(messages: [{ role: "user", content: "What standalone pages do I have?" }])
+      end
+
       # Regression for the review finding on gumroad-private#1168's fix: the pagination prompt rule
       # is useless if the tool-iteration cap stops the walk first. With the old cap of 5, a seller
       # whose list spanned more than ~4 pages got the generic "couldn't finish" fallback on exactly
@@ -461,11 +473,11 @@ describe Ai::StoreAgentService do
         # Standalone pages, and the CLI that drives them, are real.
         expect(captured[:system]).to include("list_pages")
         expect(captured[:system]).to match(/gumroad pages pull\/preview\/push/)
-        expect(captured[:system]).to match(/NEVER tell a creator that standalone\s+pages don't exist on Gumroad/)
-        # The rule that replaces "it isn't there".
-        expect(captured[:system]).to match(/the answer is which surface it lives on —\s+not that it isn't there/)
-        # It can read and change pages but not create or delete them, so it must not offer to.
-        expect(captured[:system]).to match(/you cannot create or delete them/)
+        expect(captured[:system]).to match(/NEVER tell a creator that\s+standalone\s+pages don't exist on Gumroad/)
+        # It can list and read pages but cannot mutate them, so it must not offer to.
+        expect(captured[:system]).to include("get_page")
+        expect(captured[:system]).not_to include("update_page")
+        expect(captured[:system]).to match(/you cannot create, update, or delete them/)
       end
 
       it "rejects an unknown endpoint id without calling the API" do

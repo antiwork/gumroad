@@ -17,7 +17,9 @@ class Api::V2::UsersController < Api::V2::BaseController
     "the emails a seller sends to their audience",
   ].freeze
 
-  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :theme, :profile_layout]
+  before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :theme]
+  before_action(only: [:profile_layout]) { doorkeeper_authorize! :view_profile }
+  before_action(only: [:profile_layout]) { require_oauth_scope! :view_profile }
   before_action(only: [:update, :update_custom_html, :edit_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
   before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :edit_custom_html, :preview_custom_html]
 
@@ -190,8 +192,15 @@ class Api::V2::UsersController < Api::V2::BaseController
   def profile_layout
     seller = current_resource_owner
     profile = seller.seller_profile
-    sections_by_id = seller.seller_profile_sections.on_profile.index_by(&:id)
+    sections = seller.seller_profile_sections.on_profile.to_a
+    sections_by_id = sections.index_by(&:id)
     tabs = profile.json_data["tabs"] || []
+    if ProfileSectionsPresenter.default_products_section_available?(seller:, sections:)
+      tabs = [{
+        "name" => ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME,
+        "sections" => [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID],
+      }]
+    end
 
     render_response(
       true,
@@ -199,7 +208,7 @@ class Api::V2::UsersController < Api::V2::BaseController
         # The profile root custom HTML takes over the whole storefront when present, in which case
         # none of the tabs/sections below are rendered. Say which one the buyer actually sees so a
         # caller does not describe a layout that is not on screen.
-        rendering: seller.page&.custom_html.present? ? "custom_html" : "tabs_and_sections",
+        rendering: seller.custom_landing_page_visible? ? "custom_html" : "tabs_and_sections",
         # The public profile hides the tab bar entirely while there is only one tab
         # (Profile/index.tsx). A seller who made exactly one named tab sees its sections render with
         # the name nowhere, which reads as "my page didn't save" — so state it rather than leaving a
@@ -209,16 +218,23 @@ class Api::V2::UsersController < Api::V2::BaseController
           {
             name: tab["name"],
             sections: (tab["sections"] || []).filter_map do |section_id|
-              section = sections_by_id[section_id]
-              next if section.nil?
+              if section_id == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID
+                {
+                  header: nil,
+                  type: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_TYPE,
+                }
+              else
+                section = sections_by_id[section_id]
+                next if section.nil?
 
-              {
-                # The heading text rendered as an <h2> above the section, when the seller set one
-                # and did not hide it. This is the field that answers "where is this heading coming
-                # from?".
-                header: section.hide_header? ? nil : section.header.presence,
-                type: section.type,
-              }
+                {
+                  # The heading text rendered as an <h2> above the section, when the seller set one
+                  # and did not hide it. This is the field that answers "where is this heading coming
+                  # from?".
+                  header: section.hide_header? ? nil : section.header.presence,
+                  type: section.type,
+                }
+              end
             end,
           }
         end,
