@@ -414,6 +414,34 @@ describe CreateMissingDisputeEvidenceJob do
       end
     end
 
+    context "when the builder hands back a record another path committed" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { create(:dispute_formalized, purchase:) }
+      let!(:concurrent_evidence) do
+        create(:dispute_evidence, dispute:, seller_contacted_at: nil, reason_for_winning: "Buyer downloaded the file twice.")
+      end
+
+      before do
+        # Formalization can commit its row in the gap between the sweep reading the association and
+        # the builder running, so the row handed back is one this run did not create even though the
+        # reads taken beforehand said there was none.
+        allow_any_instance_of(Dispute).to receive(:dispute_evidence).and_return(nil)
+        allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(concurrent_evidence)
+        allow_any_instance_of(ActiveRecord::Relation).to receive(:update_all).and_raise("boom")
+      end
+
+      it "keeps that record, along with the statement the seller had already put in it" do
+        expect(ErrorNotifier).to receive(:notify).with(/could not build evidence for dispute #{dispute.id}/)
+
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+
+        expect(concurrent_evidence.reload.reason_for_winning).to eq("Buyer downloaded the file twice.")
+        expect(concurrent_evidence.seller_contacted_at).to be_nil
+      end
+    end
+
     context "when the dispute already has an evidence record" do
       let!(:dispute_evidence) { create(:dispute_evidence) }
 

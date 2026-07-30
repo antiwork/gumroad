@@ -95,10 +95,6 @@ class CreateMissingDisputeEvidenceJob
 
       window_start = seller_window_start(deadline)
 
-      # Only a row this run created may be undone on failure. A row that was already there is
-      # the never-announced shape, and destroying it would throw away evidence — including any
-      # statement or file the seller uploaded — that a later run could still submit.
-      created_here = dispute.dispute_evidence.nil?
       dispute_evidence = nil
       claimed = false
       begin
@@ -124,10 +120,12 @@ class CreateMissingDisputeEvidenceJob
           end
         end
       rescue => e
-        # Nothing half-done may be left behind. The sweep re-finds a dispute by a NULL
-        # seller_contacted_at, so an unstamped row would still be picked up next run, but a row
-        # this run created and could not stamp is better removed than left as a partial record.
-        dispute_evidence.destroy if created_here && dispute_evidence&.persisted?
+        # No cleanup here, deliberately. Both the row's creation and its claim run inside the
+        # transaction above, so a failure in either rolls the row back on its own. Anything still
+        # present once we reach this rescue therefore predates this run — either the
+        # never-announced shape, or a row another path committed while we were working — and
+        # destroying it would throw away evidence, including any statement or file the seller
+        # uploaded, that a later run could still submit. An unstamped row is re-found next sweep.
         ErrorNotifier.notify("CreateMissingDisputeEvidenceJob: could not build evidence for dispute #{dispute.id}: #{e.class} #{e.message}")
         return
       end
