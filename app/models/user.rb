@@ -836,6 +836,15 @@ class User < ApplicationRecord
     super || build_seller_profile
   end
 
+  # seller_profiles predates a uniqueness constraint. Lock the seller before reading the association
+  # so two first saves cannot both observe a missing row and insert duplicates.
+  def with_locked_seller_profile
+    with_lock do
+      association(:seller_profile).reset
+      yield seller_profile
+    end
+  end
+
   # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
   # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
   # they take this lock and re-read the sections inside it to avoid clobbering each other. The

@@ -60,6 +60,7 @@ class ProfilePresenter
         # can reject a stale pages/sections write. Nil for a not-yet-saved profile.
         profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
+        seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
         # Custom-HTML profile landing page (#5553). Authored solely via the seller's agent + the
         # `gumroad user page` CLI (no inline editor) - these props drive the "Build with your agent"
         # affordance: the live-status banner, the copy-prompt block, and the reset button. The

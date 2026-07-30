@@ -67,6 +67,7 @@ type ProfilePageProps = {
   profile_version: string | null;
   custom_html_pages_enabled: boolean;
   has_custom_landing_page: boolean;
+  seller_fonts_css_source: string;
   username: string;
 } & ProfileProps;
 
@@ -78,6 +79,7 @@ export default function SettingsPage() {
     profile_version,
     custom_html_pages_enabled,
     has_custom_landing_page,
+    seller_fonts_css_source,
     username,
   } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
@@ -244,11 +246,6 @@ export default function SettingsPage() {
   // the dashboard's colour scheme. The preview must match the buyer-facing stylesheet.
   const profileColors = profileThemeColors(profileSettings.background_color, profileSettings.highlight_color);
 
-  const fontUrl =
-    profileSettings.font !== DEFAULT_PROFILE_FONT
-      ? `https://fonts.googleapis.com/css2?family=${profileSettings.font}:wght@400;600&display=swap`
-      : null;
-
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
       await unlinkTwitter();
@@ -352,13 +349,9 @@ export default function SettingsPage() {
               color: "rgb(var(--color))",
             }}
           >
-            {fontUrl ? (
-              <>
-                <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                <link rel="stylesheet" href={fontUrl} />
-              </>
-            ) : null}
+            <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+            <link rel="stylesheet" href={seller_fonts_css_source} />
             <div inert>
               <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
                 <EditProfile
