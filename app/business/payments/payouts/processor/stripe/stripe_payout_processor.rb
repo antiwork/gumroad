@@ -537,6 +537,12 @@ class StripePayoutProcessor
     author_name = User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
     marker = "payout #{payment.external_id} could not be accounted for"
 
+    # This is the last line of defence for money already returned to `unpaid`, and it is reached from
+    # three call sites, so it must not depend on each of them handing over a clean record: `lock!`
+    # raises outright on unpersisted changes. Discarding them is right here — the hold needs the row
+    # as the database has it.
+    user.reload if user.has_changes_to_save?
+
     # Flag and comment land together, as they do in Payment#pause_payouts_after_repeated_failures:
     # a window where the flag is set but the comment is not is exactly what misattributes the hold.
     user.with_lock do

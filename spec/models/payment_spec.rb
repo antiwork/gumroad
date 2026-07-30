@@ -417,6 +417,40 @@ describe Payment do
         expect(ErrorNotifier).to have_received(:notify)
       end
 
+      it "still pauses payouts end to end when the failure email's real save raises" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_save_fail", stripe_connect_account_id: "acct_save_fail",
+                                   stripe_internal_transfer_id: "tr_save_fail", created_at: 3.days.ago)
+        # Fail only the notification's own `save!` — the one persisting
+        # `payout_date_of_last_payment_failure_email` — and let the hold's writes run for real.
+        # Stubbed on the class because `payment.with_lock` above clears the association cache, so the
+        # `User` object the notification dirties, and the hold then locks, does not exist yet here.
+        notified_key = "payout_date_of_last_payment_failure_email"
+        allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+          before, after = original.receiver.json_data_change || []
+          if after&.key?(notified_key) && before&.dig(notified_key) != after[notified_key]
+            raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock"
+          end
+
+          original.call(*args)
+        end
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_save_fail", { stripe_account: "acct_save_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!).and_raise(Stripe::APIConnectionError.new("Connection refused"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        payment.send(:sync_with_stripe)
+
+        # A dirty seller used to crash the hold itself, which is the part that matters: the balances
+        # are already back to `unpaid`, so an unpaused seller gets paid the same money again.
+        seller = payment.user.reload
+        expect(seller.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(seller.comments.with_type_on_probation.last.content).to include("could not be accounted for")
+        expect(payment.errors[:base]).to include("Connection refused")
+      end
+
       it "uses a default failure reason when no failure_code is present" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
                                    stripe_transfer_id: "po_no_code", stripe_connect_account_id: "acct_no_code",
