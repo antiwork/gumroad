@@ -272,8 +272,9 @@ module RendersCustomHtmlPages
           if (!flatRootPaint(rootStyle)) return null;
           var root = rootStyle.backgroundColor;
           var rootAlpha = colorAlpha(root);
+          if (rootStyle.backgroundImage !== "none") return null;
           if (rootAlpha === 1) return root;
-          if (rootAlpha !== 0 || rootStyle.backgroundImage !== "none" || !document.body) return null;
+          if (rootAlpha !== 0 || !document.body) return null;
           var bodyStyle = window.getComputedStyle(document.body);
           if (
             bodyStyle.display === "none" ||
@@ -281,8 +282,9 @@ module RendersCustomHtmlPages
             establishesContainment(bodyStyle)
           ) return schemeBackplate(rootStyle);
           var body = bodyStyle.backgroundColor;
+          if (bodyStyle.backgroundImage !== "none") return null;
           if (opaque(body)) return body;
-          if (colorAlpha(body) !== 0 || bodyStyle.backgroundImage !== "none") return null;
+          if (colorAlpha(body) !== 0) return null;
           return schemeBackplate(rootStyle);
         }
         var reported = null;

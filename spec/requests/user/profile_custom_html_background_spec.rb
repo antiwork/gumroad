@@ -81,6 +81,23 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
+  [
+    ["<html>", "html{background:#fff linear-gradient(#123,#456)}body{margin:0}"],
+    ["<body>", "body{margin:0;background:#fff linear-gradient(#123,#456)}"],
+  ].each do |element, styles|
+    context "when #{element} has an opaque color beneath a background image" do
+      before do
+        seller.update!(custom_html: "<style>#{styles}</style><main><h1>BG Studio</h1></main>")
+      end
+
+      it "does not mistake the base color for flat canvas paint" do
+        visit seller.subdomain_with_protocol
+        expect(page).to have_css("iframe#gumroad-landing-frame")
+        expect_wrapper_never_set
+      end
+    end
+  end
+
   context "when <html> composites an opaque color through opacity" do
     before do
       seller.update!(custom_html: <<~HTML)
