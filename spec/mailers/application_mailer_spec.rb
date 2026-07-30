@@ -26,6 +26,20 @@ describe ApplicationMailer do
             format.text { render plain: "Test email content" }
           end
         end
+
+        # Stands in for mailers that address one person and copy another.
+        def test_email_to_with_cc(recipient, cc_recipient)
+          mail(to: recipient, cc: cc_recipient, subject: "Test") do |format|
+            format.text { render plain: "Test email content" }
+          end
+        end
+
+        # No mailer bcc's today, but bcc is an envelope recipient like cc, so pin it.
+        def test_email_to_with_bcc(recipient, bcc_recipient)
+          mail(to: recipient, bcc: bcc_recipient, subject: "Test") do |format|
+            format.text { render plain: "Test email content" }
+          end
+        end
       end
 
       ActionMailer::Base.delivery_method = :test
@@ -117,6 +131,27 @@ describe ApplicationMailer do
 
       it "redirects when only one recipient of several is at a blocked domain" do
         mail = described_class.test_email_to(["buyer@gmail.com", "buyer@gmx.de"]).message
+
+        expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
+      end
+
+      # AffiliateMailer is the live case: it addresses the affiliate, cc's the seller,
+      # and passes no recipient of its own to random_delivery_method_options.
+      it "redirects when the blocked recipient is in cc rather than to" do
+        mail = described_class.test_email_to_with_cc("seller@gmail.com", "boss@web.de").message
+
+        expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
+        expect(mail.header[MailerInfo.header_name(:email_provider)].value).to eq(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      end
+
+      it "leaves a message alone when neither the to nor the cc recipient is blocked" do
+        mail = described_class.test_email_to_with_cc("seller@gmail.com", "boss@gmail.com").message
+
+        expect(mail.delivery_method.settings[:address]).to eq(RESEND_SMTP_ADDRESS)
+      end
+
+      it "redirects when the blocked recipient is in bcc" do
+        mail = described_class.test_email_to_with_bcc("seller@gmail.com", "archive@gmx.de").message
 
         expect(mail.delivery_method.settings[:address]).to eq(SENDGRID_SMTP_ADDRESS)
       end

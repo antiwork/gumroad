@@ -177,6 +177,12 @@ describe Ai::StoreAgentApiCatalog do
   end
 
   describe "profile custom HTML endpoints" do
+    it "requires the full profile-page read before either profile-page write" do
+      %w[update_user_custom_html edit_user_custom_html].each do |id|
+        expect(described_class.find(id).requires_read).to eq("get_user_custom_html")
+      end
+    end
+
     it "exposes a targeted-edit write so an existing page never has to be fully regenerated" do
       endpoint = described_class.find("edit_user_custom_html")
 
@@ -224,6 +230,12 @@ describe Ai::StoreAgentApiCatalog do
   end
 
   describe "product custom HTML endpoints" do
+    it "requires the full targeted product-page read before either product-page write" do
+      %w[update_product_custom_html edit_product_custom_html].each do |id|
+        expect(described_class.find(id).requires_read).to eq("get_product_custom_html")
+      end
+    end
+
     it "exposes a read so the agent can inspect a product's current landing page" do
       endpoint = described_class.find("get_product_custom_html")
 
@@ -285,6 +297,13 @@ describe Ai::StoreAgentApiCatalog do
     # offer a second, warning-free path to the same write.
     it "keeps custom_html out of the generic update_product params" do
       expect(described_class.find("update_product").params).not_to include("custom_html")
+    end
+
+    it "includes the declared read precondition in the generated write manifest" do
+      manifest = described_class.manifest(:write)
+
+      expect(manifest).to include("update_product_custom_html")
+      expect(manifest).to include("requires a successful get_product_custom_html for the same target in this turn")
     end
   end
 
