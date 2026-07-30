@@ -489,9 +489,7 @@ class SettingsPresenter
       # REQUIRES a live Stripe account, so every note recorded on the sync path belongs to a seller
       # who has one. Gating this the same way would suppress the banner for exactly the population
       # a bank-change rejection hits, whose payouts silently keep going to the external account
-      # Stripe still has on file. Staleness is handled by the created_at anchor instead: the note is
-      # soft-deleted once a bank sync succeeds, and current_bank_sync_failure_note ignores notes
-      # older than the currently saved bank account.
+      # Stripe still has on file. Staleness is current_bank_sync_failure_note's job.
       if (bank_note = current_bank_sync_failure_note)
         bank_message = if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
           "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
