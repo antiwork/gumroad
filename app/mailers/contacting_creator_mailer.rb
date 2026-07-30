@@ -96,12 +96,14 @@ class ContactingCreatorMailer < ApplicationMailer
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
     # none, and the seller may have answered or the row been resolved in between. Asking through the
     # same predicate the submission endpoint enforces keeps the ask from outliving the page it links to.
-    asking_for_evidence = dispute_evidence&.seller_contacted? && dispute_evidence.accepting_evidence?
+    asking_for_evidence = dispute_evidence&.accepting_evidence?
+    # Read once, so the sentence cannot quote a different window than the gate just allowed.
+    hours_left = dispute_evidence&.hours_left_to_submit_evidence
     @dispute_evidence_content = \
       if asking_for_evidence
         safe_join(
           [
-            tag.p(tag.b("Any additional information you can provide in the next #{pluralize(dispute_evidence.hours_left_to_submit_evidence, "hour")} will help us win on your behalf.")),
+            tag.p(tag.b("Any additional information you can provide in the next #{pluralize(hours_left, "hour")} will help us win on your behalf.")),
             tag.p(
               link_to(
                 "Submit additional information",

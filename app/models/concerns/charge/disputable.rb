@@ -364,7 +364,7 @@ module Charge::Disputable
       stamped_at, submitted_at, resolved_at =
         dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
                                            .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
-      accepting_evidence = DisputeEvidence.accepting_evidence?(
+      accepting_evidence = DisputeEvidence.notice_worth_sending?(
         seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
       )
 
