@@ -36,7 +36,9 @@ class Pages::ProductPrices
   end
 
   def build
-    products.each_with_object({}) do |product, prices|
+    loaded = products.to_a
+    warm_offer_code_uses(loaded)
+    loaded.each_with_object({}) do |product, prices|
       prices[product.general_permalink] = entry_for(product)
     end
   end
@@ -58,6 +60,21 @@ class Pages::ProductPrices
                       tiers: :alive_prices, default_tier: :alive_prices,
                       variant_categories_alive: :alive_variants)
             .order(created_at: :desc).limit(Pages::ProfileData::MAX_ITEMS)
+    end
+
+    # Seeds the per-request memo discounted_price_cents reads with one grouped aggregate for
+    # every capped default code on the page. Without this, each DISTINCT capped code costs its
+    # own purchases SUM — up to MAX_ITEMS of them on this uncached path when every product
+    # carries its own code.
+    def warm_offer_code_uses(products)
+      cache = (Current.default_offer_code_uses_left ||= {})
+      capped = products.filter_map(&:default_offer_code)
+                       .select { |code| code.max_purchase_count.present? }
+                       .uniq(&:id)
+                       .reject { |code| cache.key?(code.id) }
+      return if capped.empty?
+
+      cache.merge!(OfferCode.uses_left_by_id(capped))
     end
 
     def entry_for(product)

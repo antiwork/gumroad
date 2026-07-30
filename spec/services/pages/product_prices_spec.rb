@@ -186,13 +186,17 @@ describe Pages::ProductPrices do
       expect(entry).not_to have_key(:original_price)
     end
 
-    # One purchases aggregate per distinct capped code per render, however many products carry
-    # it — the memo on Current is what keeps this affordable on a 100-product embed.
-    it "checks a capped code's remaining uses once per code, not once per product" do
+    # One grouped purchases aggregate for ALL capped default codes on the page — distinct or
+    # shared — is what keeps the uses check affordable when every product on a 100-item embed
+    # carries its own code.
+    it "resolves every capped default code's remaining uses in one query" do
       extras = create_list(:product, 2, user: seller, price_cents: 1000)
-      offer_code = seller.offer_codes.create!(code: "cap", amount_percentage: 10,
-                                              products: [product, *extras], max_purchase_count: 5)
-      ([product] + extras).each { _1.update!(default_offer_code: offer_code) }
+      shared = seller.offer_codes.create!(code: "cap", amount_percentage: 10,
+                                          products: [product, extras.first], max_purchase_count: 5)
+      distinct = seller.offer_codes.create!(code: "cap2", amount_percentage: 10,
+                                            products: [extras.last], max_purchase_count: 5)
+      [product, extras.first].each { _1.update!(default_offer_code: shared) }
+      extras.last.update!(default_offer_code: distinct)
 
       sums = 0
       subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
@@ -210,7 +214,7 @@ describe Pages::ProductPrices do
       offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product],
                                               max_purchase_count: 2)
       product.update!(default_offer_code: offer_code)
-      allow_any_instance_of(OfferCode).to receive(:times_used).and_return(2)
+      create_list(:purchase, 2, link: product, offer_code:, seller:)
 
       entry = described_class.build(seller, ip: nil)[product.general_permalink]
 
