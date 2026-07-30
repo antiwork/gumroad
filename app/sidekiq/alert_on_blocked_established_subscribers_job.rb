@@ -101,11 +101,13 @@ class AlertOnBlockedEstablishedSubscribersJob
 
         # One over the cap, so hitting it stays distinguishable from a window holding exactly the cap.
         if stranded.size > MAX_ESTABLISHED_FOUND
-          # Recency has to be re-established before slicing. Candidates arrive newest-first, but
+          # Ranking has to be re-established before slicing. Candidates arrive newest-first, but
           # only BETWEEN batches: within one, latest_block_failures returns rows keyed by id, so
           # taking the first N off the raw accumulator would keep an arbitrary subset of the batch
-          # that tripped the cap and drop newer stranded subscribers for older ones.
-          stranded = stranded.sort_by { |entry| -entry[:failed_at].to_i }.first(MAX_ESTABLISHED_FOUND)
+          # that tripped the cap. It has to be the REPORT's ranking and not recency alone, or the
+          # last slot goes to a newer subscriber already terminated instead of an older one
+          # unblocking could still save.
+          stranded = report_order(stranded).first(MAX_ESTABLISHED_FOUND)
           truncated = true
           break
         end
@@ -219,11 +221,7 @@ class AlertOnBlockedEstablishedSubscribersJob
 
     def message_for(scan)
       stranded = scan[:stranded]
-      # A block outlives the membership it broke: UnsubscribeAndFailWorker terminates a subscription
-      # ~5 days after the failed renewal, so most entries name a membership that is already dead and
-      # that clearing the block will not bring back. Sorting the reachable ones first keeps the
-      # actionable window at the top instead of buried under months of aftermath.
-      ordered = stranded.sort_by { |entry| [entry[:live] ? 0 : 1, -entry[:failed_at].to_i] }
+      ordered = report_order(stranded)
       lines = ordered.first(MAX_REPORTED).map { |entry| line_for(entry) }
       omitted = stranded.size - lines.size
       live_count = stranded.count { |entry| entry[:live] }
@@ -237,6 +235,16 @@ class AlertOnBlockedEstablishedSubscribersJob
         "",
         "Platform blocks do not expire, so these can predate the renewal by years. Review with `Onetime::ClearMistakenBuyerBlocks` or unblock individually; see gumroad-private#1480.",
       ].compact.join("\n")
+    end
+
+    # A block outlives the membership it broke: UnsubscribeAndFailWorker terminates a subscription
+    # ~5 days after the failed renewal, so most entries name a membership that is already dead and
+    # that clearing the block will not bring back. Sorting the reachable ones first keeps the
+    # actionable window at the top instead of buried under months of aftermath.
+    #
+    # The cap slices on this too, so what a truncated scan keeps is what the report would have shown.
+    def report_order(stranded)
+      stranded.sort_by { |entry| [entry[:live] ? 0 : 1, -entry[:failed_at].to_i] }
     end
 
     def line_for(entry)

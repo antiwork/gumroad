@@ -700,6 +700,31 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # Recency alone is not the report's ranking: message_for prints still-renewing subscribers first,
+  # because those are the only ones unblocking can still save. A cap that ranks by recency only can
+  # therefore spend its last slot on a newer subscriber whose membership is already terminated and
+  # drop the older one who is still saveable — the row the alert exists to surface.
+  it "keeps the subscriber who can still be saved over a newer one already terminated" do
+    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+    live = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: live, guid: "guid-live",
+                   buyer_email: "live@example.com", created_at: 20.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-live")
+
+    dead = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: dead, guid: "guid-dead",
+                   buyer_email: "dead@example.com", created_at: 1.hour.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-dead")
+    dead.update!(failed_at: 1.minute.ago)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{live.id}")
+      expect(message).not_to include("subscription #{dead.id}")
+    end
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
     expect(schedule.values.map { |entry| entry["class"] }).to include(described_class.name)
