@@ -435,7 +435,7 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
-    account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:)
+    account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
     updated_stripe_account = account_update.stripe_account
 
     person_address_submitted = false
@@ -457,25 +457,25 @@ module StripeMerchantAccountManager
     raise
   end
 
-  # The agreement and the legal-entity address are derived from the legal-entity country but
-  # validated against the account's, which is immutable — so while those disagree neither can ever
-  # be accepted, and since the API is all-or-nothing they'd take the whole payload down with them.
-  # Excluded up front rather than peeled off one rejection at a time, which never terminates.
-  #
-  # Dropping `tos_acceptance` whole rather than just `service_agreement` is deliberate: Stripe reads
-  # an acceptance without an agreement as the full one, and which agreement these sellers belong
-  # under is a compliance decision. Any other rejection still raises.
-  #
   # `stripe_account` is nil when nothing was sent, which is also the signal to the owners_provided
   # attestation that there is no fresh requirements payload to judge.
   AccountUpdate = Struct.new(:stripe_account, :sent_attributes)
   private_constant :AccountUpdate
 
+  # `legal_entity_country` must come from the same compliance record the caller built
+  # `diff_attributes` from — re-reading it here would filter one snapshot's payload against
+  # another's country.
   private_class_method
-  def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true)
+  def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true, legal_entity_country: nil)
     account_country = stripe_account_country(stripe_account)
     attributes = diff_attributes
-    if account_country_conflicts_with_legal_entity?(user, account_country)
+    # The agreement and the legal-entity address are derived from the legal-entity country but
+    # validated against the account's, which is immutable — so while those disagree neither can
+    # ever be accepted, and the all-or-nothing API takes the whole payload down with them.
+    # `tos_acceptance` goes whole rather than just `service_agreement` because Stripe reads an
+    # acceptance without an agreement as the full one, and which agreement these sellers belong
+    # under is a compliance decision.
+    if account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
       attributes = without_account_country_validated_fields(diff_attributes)
       if attributes != diff_attributes
         record_service_agreement_failure_note(user, nil) if notify
@@ -536,11 +536,8 @@ module StripeMerchantAccountManager
   # we build them from. The account's country is authoritative and immutable after creation, so
   # this cannot be reconciled from our side.
   private_class_method
-  def self.account_country_conflicts_with_legal_entity?(user, account_country)
-    return false if account_country.blank?
-
-    legal_entity_country = user&.alive_user_compliance_info&.legal_entity_country_code
-    return false if legal_entity_country.blank?
+  def self.account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
+    return false if account_country.blank? || legal_entity_country.blank?
 
     account_country.to_s.upcase != legal_entity_country.to_s.upcase
   end

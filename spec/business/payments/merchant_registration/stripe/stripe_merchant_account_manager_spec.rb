@@ -9408,6 +9408,22 @@ describe StripeMerchantAccountManager, :vcr do
           end
         end
       end
+
+      # The payload and the country it is judged against have to come from the same compliance
+      # record. If a newer record goes alive mid-call, re-reading it here would compare the new
+      # country against a payload built from the old one and send the address after all.
+      it "judges the payload against the compliance record it was built from" do
+        allow(Stripe::Account).to receive(:update)
+        newly_alive = build(:user_compliance_info, user:, country: "United States")
+        allow(user).to receive(:alive_user_compliance_info).and_return(user_compliance_info_2, newly_alive)
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+          expect(attributes).not_to have_key(:tos_acceptance)
+          expect(attributes.fetch(:individual, {})).not_to have_key(:address)
+        end
+      end
     end
 
     describe "updating business type" do
