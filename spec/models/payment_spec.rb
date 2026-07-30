@@ -149,6 +149,25 @@ describe Payment do
     end
   end
 
+  describe "send_payout_failure_email_best_effort" do
+    let(:compliant_creator) { create(:user, user_risk_state: "compliant") }
+    let(:payment) { create(:payment, state: "processing", processor: PayoutProcessorType::STRIPE, processor_fee_cents: 0, failure_reason: "account_closed", user: compliant_creator) }
+
+    it "leaves the user lockable after a real save failure so the reversal can still run" do
+      # A genuine validation failure, not a stubbed raise: `send_payout_failure_email` assigns
+      # `payout_date_of_last_payment_failure_email` and then calls `user.save!`, so the record is
+      # left dirty when the save is what raised.
+      allow(compliant_creator).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(compliant_creator))
+      allow(payment).to receive(:user).and_return(compliant_creator)
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect { payment.send_payout_failure_email_best_effort }.to_not raise_error
+
+      expect(compliant_creator.has_changes_to_save?).to be(false)
+      expect { compliant_creator.with_lock { nil } }.to_not raise_error
+    end
+  end
+
   describe ".failed scope" do
     it "responds" do
       expect(Payment).to respond_to(:failed)

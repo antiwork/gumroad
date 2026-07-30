@@ -175,6 +175,11 @@ class Payment < ApplicationRecord
   def send_payout_failure_email_best_effort
     send_payout_failure_email
   rescue => e
+    # Discard the unpersisted `payout_date_of_last_payment_failure_email` assignment. The reversal
+    # and the payout hold both take `user.with_lock`, and `lock!` raises outright on a record with
+    # unsaved changes — so leaving `user` dirty here turns a mail failure back into the stranded
+    # transfer this method exists to prevent.
+    user.reload
     ErrorNotifier.notify(e, payment_id: id, user_id:,
                             action_required: "Payout failure email did not send. The payout reversal and any hold still ran.")
   end
