@@ -292,6 +292,44 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_nil @payment.failure_reason
   end
 
+  test "prepare_payment_and_set_amount error handling when Stripe rate limits the request records the rate-limit failure reason so monitoring can see it" do
+    setup_prepare_payment_error_handling
+    rate_limit_error = Stripe::RateLimitError.new("Request rate limit exceeded.")
+    StripeTransferInternallyToCreator.stubs(:transfer_funds_to_account).raises(rate_limit_error)
+    ErrorNotifier.expects(:notify).with(rate_limit_error)
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
+
+    assert_includes errors.first, "rate limit exceeded"
+    assert_equal "failed", @payment.reload.state
+    assert_equal Payment::FailureReason::PROCESSOR_RATE_LIMITED, @payment.failure_reason
+  end
+
+  test "prepare_payment_and_set_amount error handling a rate-limited payout posts no seller-visible payout note" do
+    setup_prepare_payment_error_handling
+    StripeTransferInternallyToCreator.stubs(:transfer_funds_to_account).raises(Stripe::RateLimitError.new("Request rate limit exceeded."))
+    ErrorNotifier.stubs(:notify)
+
+    StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
+
+    # Nothing is wrong with the seller's bank account, so telling them to fix it would be wrong.
+    assert_empty @user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE)
+  end
+
+  test "prepare_payment_and_set_amount error handling when Stripe is unreachable records the transient failure reason" do
+    setup_prepare_payment_error_handling
+    StripeTransferInternallyToCreator.stubs(:transfer_funds_to_account).raises(Stripe::APIConnectionError.new("Connection refused"))
+
+    assert_raises(Stripe::APIConnectionError) do
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
+    end
+
+    # This rescue re-raises, but the ensure still marks the payment failed on the way out, so the
+    # reason has to be set here or the row lands unexplained and counts against the seller.
+    assert_equal "failed", @payment.reload.state
+    assert_equal Payment::FailureReason::PROCESSOR_UNAVAILABLE, @payment.failure_reason
+  end
+
   # ---------------------------------------------------------------------------
   # destination_balance_drift_error
   # ---------------------------------------------------------------------------
@@ -846,6 +884,24 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
       StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
       errors = StripePayoutProcessor.perform_payment(@payment)
       assert errors.present?
+    end
+  end
+
+  test "perform_payment when Stripe rate limits the payout records the rate-limit failure reason and keeps the bank account" do
+    with_cassette("perform_payment/the_payment_includes_funds_not_held_by_stripe_which_don_t_sum_to_a_positive_amount/the_external_transfer_is_rate_limited/records_the_failure_reason") do
+      setup_perform_payment_us
+      add_gumroad_held_balances_negative
+      Stripe::Payout.stubs(:create).raises(Stripe::RateLimitError.new("Request rate limit exceeded."))
+      ErrorNotifier.stubs(:notify)
+      StripePayoutProcessor.prepare_payment_and_set_amount(@payment, @payment.balances.to_a)
+
+      errors = StripePayoutProcessor.perform_payment(@payment)
+
+      assert_includes errors.first, "rate limit exceeded"
+      assert_equal "failed", @payment.reload.state
+      assert_equal Payment::FailureReason::PROCESSOR_RATE_LIMITED, @payment.failure_reason
+      # A rate limit is not a dead bank reference, so the account must survive for the next run.
+      assert_not @payment.bank_account.reload.deleted?
     end
   end
 

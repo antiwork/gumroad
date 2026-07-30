@@ -129,7 +129,7 @@ describe UrlRedirect do
       it "returns the right url when there is a provided url redirect for an installment" do
         @installment = create(:installment, link: @product, installment_type: "product")
         url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4"
-        @installment.product_files << create(:product_file, url:)
+        @installment.product_files << create(:product_file, link: nil, installment: @installment, url:)
         @installment_url_redirect = create(:url_redirect, installment: @installment, imported_customer: @imported_customer, link: @product)
         @product.product_files << create(:product_file, url:)
         url = "https://d3t5lixau6dhwk.cloudfront.net/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4?response-content-disposition="
@@ -455,7 +455,11 @@ describe UrlRedirect do
 
     it "returns the video files playlist with files ordered by their position for an installment" do
       installment = create(:installment)
-      installment.product_files = [file2, file4, file1, file3]
+      files = [file2, file4, file1, file3]
+      # These shapes are declared product-owned for the product examples above, and a
+      # file belongs to exactly one parent — so hand ownership to the post.
+      files.each { |file| file.update!(link: nil, installment:) }
+      installment.product_files = files
       url_redirect = create(:installment_url_redirect, installment:)
       url_redirect_id = url_redirect.id
 
@@ -618,7 +622,7 @@ describe UrlRedirect do
       product = create(:product_with_files)
       purchase = create(:purchase, link: product)
       installment = create(:installment, link: product, installment_type: "product")
-      installment.product_files << product.product_files.first
+      installment.product_files << create(:product_file, link: nil, installment:)
       installment.save!
       url_redirect = create(:url_redirect, link: product, purchase:, installment:)
       expect(url_redirect.with_product_files).to eq installment
@@ -683,7 +687,7 @@ describe UrlRedirect do
       create(:product_rich_content, entity: product)
       purchase = create(:purchase, link: product)
       installment = create(:installment, link: product, installment_type: "product")
-      installment.product_files << product.product_files.first
+      installment.product_files << create(:product_file, link: nil, installment:)
       installment.save!
       url_redirect = create(:url_redirect, link: product, purchase:, installment:)
 
@@ -936,9 +940,10 @@ describe UrlRedirect do
       end
 
       it "returns the installment files if the installment has files" do
-        @installment.product_files << @product.product_files.first
+        post_file = create(:product_file, link: nil, installment: @installment)
+        @installment.product_files << post_file
 
-        expect(@url_redirect.reload.alive_product_files).to eq [@product.product_files.first]
+        expect(@url_redirect.reload.alive_product_files).to eq [post_file]
       end
 
       it "returns all product files if the installment has no files" do

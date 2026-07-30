@@ -51,6 +51,7 @@ describe CheckoutController, type: :controller, inertia: true do
                                                us_states: STATES,
                                              })
       expect(inertia.props[:recommended_products]).to be_nil
+      expect(inertia.props[:stripe_fonts_css_source]).to eq(SellerProfile.seller_fonts_css_source)
       meta_by_property = inertia.props[:_inertia_meta].filter_map { |t| [t[:property], t[:content]] if t[:property] }.to_h
       expect(meta_by_property).to include(
         "gr:google_analytics:enabled" => "true",
@@ -65,6 +66,217 @@ describe CheckoutController, type: :controller, inertia: true do
       get :show, params: { product: { foo: "bar" }, username: { baz: "qux" }, wishlist: { id: "1" } }
 
       expect(response).to be_successful
+    end
+
+    describe "checkout_style prop" do
+      let(:browser_guid) { SecureRandom.uuid }
+      let(:branded_seller) do
+        create(:user).tap do |seller|
+          seller.seller_profile.update!(highlight_color: "#009a49", background_color: "#f8efe3", font: "Roboto Mono")
+        end
+      end
+
+      before { cookies[:_gumroad_guid] = browser_guid }
+
+      def cart_with(*products)
+        create(:cart, :guest, browser_guid:).tap do |cart|
+          products.each { create(:cart_product, cart:, product: _1) }
+        end
+      end
+
+      it "carries the seller's palette when every product in the cart is theirs" do
+        cart_with(create(:product, user: branded_seller), create(:product, user: branded_seller))
+
+        get :show
+
+        checkout_style = inertia.props[:checkout_style]
+        expect(checkout_style[:css]).to eq(branded_seller.seller_profile.custom_styles)
+        expect(checkout_style[:seller_id]).to eq(branded_seller.external_id)
+      end
+
+      it "sends the whole palette, not just the accent" do
+        cart_with(create(:product, user: branded_seller))
+
+        get :show
+
+        checkout_style = inertia.props[:checkout_style]
+        styles = checkout_style[:css]
+        # SassC keeps a space inside compressed custom-property values.
+        expect(styles).to include("--accent: 0 154 73")
+        expect(styles).to include("--body-bg: #f8efe3")
+        expect(styles).to include(%(--font-family: "Roboto Mono"))
+        expect(styles).to include("body{background-color:#f8efe3")
+        expect(checkout_style[:theme]).to eq({
+                                               accent_color: "#009a49",
+                                               indicator_color: "#009a49",
+                                               background_color: "#f8efe3",
+                                               text_color: "#000000",
+                                               danger_color: "#9b1c12",
+                                               font_family: %("Roboto Mono", "ABC Favorit", monospace),
+                                             })
+      end
+
+      it "floors the indicator colour when the seller's accent is invisible on their background" do
+        seller = create(:user).tap { _1.seller_profile.update!(highlight_color: "#ffffff", background_color: "#ffffff") }
+        cart_with(create(:product, user: seller))
+
+        get :show
+
+        theme = inertia.props.dig(:checkout_style, :theme)
+        expect(theme[:accent_color]).to eq("#ffffff")
+        expect(ContrastColor.ratio_between(theme[:indicator_color], "#ffffff"))
+          .to be >= ContrastColor::WCAG_AA_NON_TEXT
+      end
+
+      it "sends no styles for a cart spanning two sellers" do
+        cart_with(create(:product, user: branded_seller), create(:product, user: create(:user)))
+
+        get :show
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "sends no styles when there is no cart and no product parameter" do
+        get :show
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "sends no styles for an empty cart" do
+        cart_with
+
+        get :show
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "carries the seller's palette for a direct product arrival with no saved cart" do
+        product = create(:product, user: branded_seller)
+
+        get :show, params: { product: product.unique_permalink }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when the arriving product's seller differs from the saved cart's" do
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: create(:user))
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "still carries the palette when the arriving product's seller matches the saved cart's" do
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: branded_seller)
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "ignores an arriving product when the existing cart already fills the product limit" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        cart_with(create(:product, user: branded_seller))
+        arriving = create(:product, user: create(:user))
+
+        get :show, params: { product: arriving.unique_permalink }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "carries the seller's palette for products added from a wishlist" do
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "follows the wishlist, not the product parameter, when both are present" do
+        arriving = create(:product, user: create(:user))
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { product: arriving.unique_permalink, wishlist: wishlist.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "ignores the product parameter's seller when a wishlist replaces it" do
+        arriving = create(:product, user: branded_seller)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
+
+        get :show, params: { product: arriving.unique_permalink, wishlist: wishlist.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).not_to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when wishlist products differ from the saved cart's seller" do
+        cart_with(create(:product, user: branded_seller))
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "sends no styles when an oversized wishlist leaves the checkout empty" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+        create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "ignores the saved cart when a gift-wishlist arrival clears it" do
+        cart_with(create(:product, user: create(:user)))
+        wishlist_product = create(
+          :wishlist_product,
+          wishlist: create(:wishlist),
+          product: create(:product, user: branded_seller)
+        )
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(inertia.props.dig(:checkout_style, :css)).to eq(branded_seller.seller_profile.custom_styles)
+      end
+
+      it "sends no styles when the stored colour contains injected SCSS" do
+        seller = create(:user)
+        # seller_profile is built but unsaved until its first write.
+        seller.seller_profile.tap(&:save!).update_column(
+          :highlight_color,
+          "#ffffff\n)}; } body { display:none !important; } :root { --x: \#{split-color(#ffffff"
+        )
+        cart_with(create(:product, user: seller))
+
+        get :show
+
+        expect(response).to be_successful
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "recomputes the palette on the partial request the frontend makes when the cart changes" do
+        # The inertia matcher captures only full renders, so inspect the partial response body.
+        cart_with(create(:product, user: branded_seller))
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,checkout_style"
+
+        get :show
+
+        expect(response.parsed_body["props"]).to include("checkout_style")
+        expect(response.parsed_body.dig("props", "checkout_style", "css")).to include("--accent: 0 154 73")
+      end
     end
 
     describe "process_cart_id_param check" do

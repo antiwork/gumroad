@@ -2,6 +2,7 @@ import { Copy, Share } from "@boxicons/react";
 import * as React from "react";
 
 import {
+  AgentActionError,
   type AgentStreamHandlers,
   AgentStreamInterruptedError,
   type AgentTurnStatus,
@@ -10,6 +11,7 @@ import {
   type DisplayObject,
   type ProposedAction,
   executeAgentAction,
+  fetchAgentActionStatus,
   fetchCustomHtmlProposalPreview,
   fetchAgentTurnStatus,
   fetchLatestAgentConversation,
@@ -31,6 +33,13 @@ import { Textarea } from "$app/components/ui/Textarea";
 // arrives; if they scroll further up to read earlier messages we leave them there. (Mirrors the
 // near-bottom threshold the Communities chat uses.)
 const STICK_TO_BOTTOM_THRESHOLD_PX = 200;
+const ACTION_STATUS_RECONCILIATION_BASE_INTERVAL_MS = 500;
+const ACTION_STATUS_RECONCILIATION_MAX_INTERVAL_MS = 8000;
+const ACTION_STATUS_RECONCILIATION_ATTEMPTS = 20;
+// A winning action can legitimately run through the server's 120-second Rack request horizon.
+// Back off after the first quick reads, but keep the whole reconciliation abortable and bounded
+// if a status request itself never settles.
+const ACTION_STATUS_RECONCILIATION_DEADLINE_MS = 130_000;
 
 // After a stream breaks, how often to ask the server what became of the turn (identified by the
 // client-generated turn id sent with the stream request), and how long to keep asking. The server
@@ -117,7 +126,8 @@ type DisplayMessage = ChatMessage & {
   // A proposed change attached to an assistant turn. Once the seller acts on it, we record the
   // outcome so the confirmation card collapses into a status line and can't be triggered twice.
   proposedAction?: ProposedAction;
-  actionStatus?: "applied" | "dismissed";
+  proposalMessageId?: string;
+  actionStatus?: "executing" | "applied" | "unknown" | "rejected" | "dismissed";
   // A rate-limited confirmation leaves the proposal pending. Keep the reason next to the action so
   // it remains clear after the global toast disappears.
   actionWarning?: string | null;
@@ -138,6 +148,7 @@ const toDisplayMessage = (
   role: message.role,
   content: message.content,
   ...(message.proposed_action ? { proposedAction: message.proposed_action } : {}),
+  ...(message.proposal_message_id ? { proposalMessageId: message.proposal_message_id } : {}),
   ...(message.objects?.length ? { objects: message.objects } : {}),
   ...(message.action_status
     ? { actionStatus: message.action_status }
@@ -326,7 +337,7 @@ const ProposedActionCard = ({
   onDismiss,
 }: {
   action: ProposedAction;
-  status?: "applied" | "dismissed";
+  status?: "executing" | "applied" | "unknown" | "rejected" | "dismissed" | undefined;
   warning: string | null;
   isPending: boolean;
   isApplying: boolean;
@@ -378,7 +389,15 @@ const ProposedActionCard = ({
           <div className="min-w-0">
             <strong className="block break-words">{action.title ?? "Proposed change"}</strong>
             <span role="status" className={status === "applied" ? "text-sm text-green" : "text-sm text-muted"}>
-              {status === "applied" ? "Applied" : "Dismissed"}
+              {status === "applied"
+                ? "Applied"
+                : status === "executing"
+                  ? "Applying…"
+                  : status === "unknown"
+                    ? "Outcome unknown"
+                    : status === "rejected"
+                      ? "Not applied"
+                      : "Dismissed"}
             </span>
           </div>
           <Button className="shrink-0" aria-expanded={isReviewOpen} onClick={() => setIsReviewOpen((open) => !open)}>
@@ -466,6 +485,8 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
   const [pendingActionIndex, setPendingActionIndex] = React.useState<number | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const mountedRef = React.useRef(true);
+  const actionStatusAbortControllersRef = React.useRef(new Map<string, AbortController>());
   // Whether to follow new content to the bottom. Stays true while the seller is near the bottom and
   // flips off if they scroll up to read earlier messages, so streaming/suggestions don't yank them back.
   const stickToBottom = React.useRef(true);
@@ -474,6 +495,105 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     const el = scrollRef.current;
     if (el) stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_THRESHOLD_PX;
   };
+
+  React.useEffect(() => {
+    // React StrictMode runs setup → cleanup → setup in development. Reset the flag in setup so the
+    // second, live mount can still apply reconciliation results.
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const abortController of actionStatusAbortControllersRef.current.values()) abortController.abort();
+      actionStatusAbortControllersRef.current.clear();
+    };
+  }, []);
+
+  const reconcileAgentAction = React.useCallback(
+    async (proposalMessageId: string, fallbackActionStatus: "applied" | "unknown" = "unknown") => {
+      if (actionStatusAbortControllersRef.current.has(proposalMessageId)) return;
+      const abortController = new AbortController();
+      actionStatusAbortControllersRef.current.set(proposalMessageId, abortController);
+      const deadline = setTimeout(() => abortController.abort(), ACTION_STATUS_RECONCILIATION_DEADLINE_MS);
+      const aborted = new Promise<never>((_resolve, reject) => {
+        abortController.signal.addEventListener(
+          "abort",
+          () => reject(new Error("Action status reconciliation stopped.")),
+          {
+            once: true,
+          },
+        );
+      });
+
+      const updateStatus = (actionStatus: "pending" | "applied" | "unknown", persistedObjects?: DisplayObject[]) => {
+        if (!mountedRef.current) return;
+        setMessages((prev) =>
+          prev.map((message) => {
+            if (message.proposalMessageId !== proposalMessageId) return message;
+
+            const nextMessage = { ...message };
+            if (actionStatus === "pending") delete nextMessage.actionStatus;
+            else nextMessage.actionStatus = actionStatus;
+            if (persistedObjects) nextMessage.objects = persistedObjects;
+            return nextMessage;
+          }),
+        );
+      };
+
+      try {
+        for (let attempt = 0; attempt < ACTION_STATUS_RECONCILIATION_ATTEMPTS; attempt++) {
+          if (!mountedRef.current) return;
+          try {
+            const { actionStatus, objects } = await Promise.race([
+              fetchAgentActionStatus(proposalMessageId, abortController.signal),
+              aborted,
+            ]);
+            if (abortController.signal.aborted) return;
+            // The execute response's applied state is authoritative and monotonic. This follow-up
+            // read exists to recover objects, so a stale pending/unknown read cannot downgrade it.
+            const canSettle =
+              actionStatus !== "executing" && (fallbackActionStatus !== "applied" || actionStatus === "applied");
+            if (canSettle) {
+              updateStatus(actionStatus, objects);
+              return;
+            }
+          } catch {
+            // A single failed read says nothing about the persisted claim. Retry it within the same
+            // bounded attempt/deadline budget instead of treating one network error as the outcome.
+            if (abortController.signal.aborted) {
+              updateStatus(fallbackActionStatus);
+              return;
+            }
+          }
+
+          if (attempt + 1 < ACTION_STATUS_RECONCILIATION_ATTEMPTS) {
+            const delay = Math.min(
+              ACTION_STATUS_RECONCILIATION_BASE_INTERVAL_MS * 2 ** attempt,
+              ACTION_STATUS_RECONCILIATION_MAX_INTERVAL_MS,
+            );
+            await Promise.race([new Promise((resolve) => setTimeout(resolve, delay)), aborted]);
+          }
+        }
+        // A crashed winner can leave the conservative one-shot claim behind. Stop active polling
+        // after a bounded window and describe what this tab actually knows.
+        updateStatus(fallbackActionStatus);
+      } catch {
+        updateStatus(fallbackActionStatus);
+      } finally {
+        clearTimeout(deadline);
+        if (actionStatusAbortControllersRef.current.get(proposalMessageId) === abortController) {
+          actionStatusAbortControllersRef.current.delete(proposalMessageId);
+        }
+      }
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    for (const message of messages) {
+      if (message.actionStatus === "executing" && message.proposalMessageId) {
+        void reconcileAgentAction(message.proposalMessageId);
+      }
+    }
+  }, [messages, reconcileAgentAction]);
 
   // Keep the latest content pinned to the bottom as the conversation grows (including each streamed
   // token), unless the seller has scrolled up. A direct scrollTop assignment is instant, so the newest
@@ -598,10 +718,12 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     stickToBottom.current = true;
 
     // Only the plain role/content pairs go to the server; UI-only fields stay local.
-    const history: ChatMessage[] = [...messages, { role: "user", content: trimmed }].map(({ role, content }) => ({
-      role,
-      content,
-    }));
+    const history: ChatMessage[] = [...messages, { role: "user" as const, content: trimmed }].map(
+      ({ role, content }) => ({
+        role,
+        content,
+      }),
+    );
     // The index the streamed assistant reply will occupy: right after the user message we add.
     const assistantIndex = messages.length + 1;
     // Tag the turn with a unique id before sending so, if the stream breaks, recovery can ask the
@@ -694,6 +816,7 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
           role: "assistant",
           content: result.reply || prior.content || "",
           ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+          ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
           ...(result.objects.length > 0 ? { objects: result.objects } : {}),
         };
         return next;
@@ -765,11 +888,11 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     }
   };
 
-  const confirmAction = async (index: number, action: ProposedAction) => {
+  const confirmAction = async (index: number, action: ProposedAction, proposalMessageId?: string) => {
     setPendingActionIndex(index);
     setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: null } : msg)));
     try {
-      const { message, object } = await executeAgentAction(action, conversationIdRef.current);
+      const { message, object } = await executeAgentAction(action, proposalMessageId, conversationIdRef.current);
       showAlert(message, "success");
       // Mark the proposal applied and attach the created/edited object so it renders as a card.
       setMessages((prev) =>
@@ -782,10 +905,48 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
       // refusal here is a limit the seller waits out, not a change that failed to apply. Showing it
       // as an error (and with our own wording) is what sent sellers looking for a broken store.
       const isRateLimited = e instanceof RateLimitError;
+      const isAcknowledgedActionError = e instanceof AgentActionError;
+      const persistedActionStatus = isAcknowledgedActionError ? e.actionStatus : null;
       const message = e instanceof Error && e.message ? e.message : "That change couldn't be applied.";
       showAlert(message, isRateLimited ? "warning" : "error");
       if (isRateLimited) {
         setMessages((prev) => prev.map((msg, i) => (i === index ? { ...msg, actionWarning: message } : msg)));
+      } else if (isAcknowledgedActionError && e.retryable) {
+        // The server answered and deliberately released its pre-dispatch claim, so this proposal
+        // is still safe to retry. Keep the fixed rejection in the error toast: these failures can
+        // be permanent (permission or payload errors), while the inline warning is reserved for a
+        // rate limit that will clear. Removing any transient status restores the confirmable card.
+        setMessages((prev) =>
+          prev.map((msg, i) => {
+            if (i !== index) return msg;
+            const nextMessage = { ...msg, actionWarning: null };
+            delete nextMessage.actionStatus;
+            return nextMessage;
+          }),
+        );
+      } else if (isAcknowledgedActionError && persistedActionStatus === null) {
+        // Binding failures are acknowledged before dispatch but cannot succeed on the same card.
+        // Keep the proposal as a non-confirmable record instead of treating it like a released claim.
+        setMessages((prev) =>
+          prev.map((msg, i) => (i === index ? { ...msg, actionStatus: "rejected", actionWarning: null } : msg)),
+        );
+      } else if (proposalMessageId) {
+        // A transport/parsing failure can hide a response from a request the server already
+        // applied, and a duplicate applied response does not carry the persisted result objects.
+        // Preserve a stable server status immediately; only an executing/unknown response needs
+        // the conservative transient/final state while applied reconciliation refreshes objects.
+        const nextStatus = persistedActionStatus ?? "executing";
+        setMessages((prev) =>
+          prev.map((msg, i) => (i === index ? { ...msg, actionStatus: nextStatus, actionWarning: null } : msg)),
+        );
+        if (nextStatus === "applied") void reconcileAgentAction(proposalMessageId, "applied");
+      } else {
+        // An old server may omit the proposal id, leaving no status endpoint to reconcile after a
+        // lost response. Keep that ambiguous action non-confirmable instead of enabling a replay.
+        const nextStatus = persistedActionStatus ?? "unknown";
+        setMessages((prev) =>
+          prev.map((msg, i) => (i === index ? { ...msg, actionStatus: nextStatus, actionWarning: null } : msg)),
+        );
       }
     } finally {
       setPendingActionIndex(null);
@@ -848,7 +1009,10 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
                       // exists, so it could never be marked applied in the saved history.
                       isPending={pendingActionIndex !== null || isSending}
                       isApplying={pendingActionIndex === index}
-                      onConfirm={() => message.proposedAction && void confirmAction(index, message.proposedAction)}
+                      onConfirm={() =>
+                        message.proposedAction &&
+                        void confirmAction(index, message.proposedAction, message.proposalMessageId)
+                      }
                       onDismiss={() => dismissAction(index)}
                     />
                   ) : null}

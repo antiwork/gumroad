@@ -320,7 +320,10 @@ class Installment < ApplicationRecord
   end
 
   def member_cancellation_trigger?
-    workflow_trigger == MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    return true if workflow_trigger == MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+    # `workflow_trigger` is copied down at save time, so it goes stale when the workflow's own
+    # trigger changes afterwards. The workflow is the source of truth.
+    workflow.present? && workflow.member_cancellation_trigger?
   end
 
   def displayed_name
@@ -423,6 +426,9 @@ class Installment < ApplicationRecord
   def send_installment_from_workflow_for_purchase(purchase_id)
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
+    # Cancellation posts are delivered on the subscription path, which rechecks the membership
+    # is still ended. This path can't, so stale enqueued jobs bail out here.
+    return if member_cancellation_trigger?
 
     sale = sale.original_purchase
     return unless sale.can_contact?

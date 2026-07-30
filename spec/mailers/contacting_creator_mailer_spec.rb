@@ -2085,6 +2085,37 @@ describe ContactingCreatorMailer do
       end
     end
 
+    context "when Stripe refused the account itself" do
+      let(:unusable_message) do
+        "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
+      end
+      let(:mail) do
+        ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL,
+          unusable_message
+        )
+      end
+
+      it "asks for a different bank account rather than a corrected code" do
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("We need a different bank account for your payouts.")
+        expect(mail.body.encoded).to include("add a different bank account")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "does not promise a re-check and does not blame a typo" do
+        expect(mail.body.encoded).not_to include("automatically re-check")
+        expect(mail.body.encoded).not_to include("you don't need to do anything")
+        expect(mail.body.encoded).not_to include("format banks in your country use")
+        expect(mail.body.encoded).to include("won't clear on its own")
+      end
+
+      it "offers a way out for a seller who has no other account" do
+        expect(mail.body.encoded).to include("reply to this email")
+      end
+    end
+
     context "when the bank simply isn't in the partner's records yet" do
       it "keeps the wait-and-we-will-re-check wording" do
         mail = ContactingCreatorMailer.invalid_bank_account(seller.id)
@@ -2092,6 +2123,48 @@ describe ContactingCreatorMailer do
         expect(mail.subject).to eq("We couldn't verify your bank account yet.")
         expect(mail.body.encoded).to include("automatically re-check")
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+    end
+
+    context "when Stripe has block-listed the specific external account" do
+      let(:mail) do
+        ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED,
+          "You cannot use this external account because it is on your block list. Please contact us via https://support.stripe.com/contact if you think this is an error."
+        )
+      end
+
+      it "asks the seller for a different account" do
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("Please add a different bank account for payouts.")
+        expect(mail.body.encoded).to include("won't accept that particular account")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "does not tell the seller to check for typos or to wait" do
+        # These are the two wrong instructions we used to send. A seller followed the second one
+        # for three months, re-saving a perfectly valid account against a refusal that would
+        # never lift (gumroad-private#1476), so both are pinned as absent rather than assumed.
+        expect(mail.body.encoded).not_to include("automatically re-check")
+        expect(mail.body.encoded).not_to include("you don't need to do anything")
+        expect(mail.body.encoded).not_to include("have a typo")
+        expect(mail.body.encoded).to include("re-entering them won't help")
+      end
+
+      it "does not promise that payouts will resume, since other payout holds can outlive this one" do
+        # Adding a different account clears THIS destination only. A seller can still be held by
+        # compliance, a missing tax form, or the minimum balance, so promising resumption sets up
+        # a second round of "you said I'd get paid".
+        expect(mail.body.encoded).not_to include("payouts will resume")
+        expect(mail.body.encoded).to include("clears this particular hold")
+      end
+
+      it "does not leak Stripe's own message, which tells the seller to contact Stripe" do
+        # Stripe's text points the seller at support.stripe.com, which cannot help them: the
+        # block is on OUR connected account, not theirs.
+        expect(mail.body.encoded).not_to include("support.stripe.com")
+        expect(mail.body.encoded).not_to include("block list")
       end
     end
   end

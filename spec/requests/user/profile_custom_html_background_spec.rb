@@ -2,17 +2,9 @@
 
 require "spec_helper"
 
-# A custom-HTML page renders inside a sandboxed, opaque-origin iframe, so the
-# seller's CSS reaches only the document INSIDE the frame. The wrapper around
-# it stays transparent and paints white wherever the iframe doesn't cover:
-# iOS Safari's status-bar/toolbar strips, and the overscroll gutter everywhere
-# else. The seller cannot fix it themselves — Ai::PageSanitizer strips <meta>,
-# so a theme-color tag never survives (gumroad-private#1530).
-#
-# The gumroad:background bridge closes that gap: the sandboxed page reports its
-# own computed canvas color, and the trusted wrapper mirrors it onto the
-# wrapper canvas plus a theme-color meta tag. These specs drive it in a real
-# browser, because the value only exists after the browser has computed styles.
+# The bridge mirrors the opaque-origin iframe's computed canvas color onto its
+# trusted wrapper and theme-color metadata. These specs need a real browser
+# because the value exists only after style computation.
 describe "Profile custom HTML page background bridge", type: :system, js: true do
   let(:seller) { create(:user, username: "bgstudio", name: "BG Studio") }
 
@@ -108,23 +100,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # The reported value is untrusted, and a value that merely PARSES is not
-  # enough: `var()` and the CSS-wide keywords parse for any property regardless
-  # of what they contain, so the wrapper resolves to a computed color and
-  # rejects anything landing on transparent.
-  #
-  # The zero-alpha rows are here for a different reason: they resolve to a
-  # perfectly real color that simply paints nothing. `getComputedStyle` echoes
-  # modern color functions back in their own syntax rather than normalizing to
-  # rgba(), so a wrapper-local check that only understood `rgba(…)` accepted
-  # `oklch(… / 0)` and painted a transparent canvas — while the child, which
-  # locates alpha by token, refused the same value. Both halves share one
-  # implementation now, and these rows fail if that sharing is undone.
-  #
-  # The page declares NO background of its own, so the hostile message is the
-  # only candidate the wrapper ever sees. That is what makes these load-bearing:
-  # with a parse-only check the value is accepted and shows up in the canvas and
-  # the meta tag, and the polling refusal assertion fails.
+  # These parse as colors but do not resolve to opaque paint. With no legitimate
+  # page background, any wrapper color proves the guard accepted the report.
   context "when the page reports values that parse but resolve to nothing" do
     [
       "var(--x)",
@@ -191,6 +168,27 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       visit seller.subdomain_with_protocol
 
       expect_wrapper_background("rgb(235, 235, 235)")
+    end
+  end
+
+  [
+    ["on <body>", "html,body{margin:0}body{background:rgba(0,0,0,.5)}"],
+    ["on <html> above an opaque <body>", "html{background:rgba(0,0,0,.5)}body{margin:0;background:#EBEBEB}"],
+  ].each do |placement, styles|
+    context "when the page canvas is translucent #{placement}" do
+      before do
+        seller.update!(custom_html: <<~HTML)
+          <style>#{styles}</style>
+          <main><h1>BG Studio</h1></main>
+        HTML
+      end
+
+      it "leaves the wrapper untouched instead of compositing the color twice" do
+        visit seller.subdomain_with_protocol
+        expect(page).to have_css("iframe#gumroad-landing-frame")
+
+        expect_wrapper_never_set
+      end
     end
   end
 
@@ -635,36 +633,30 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # Every color a browser actually computes is reachable by the specs above, so
-  # opaque()'s behavior on the shapes it REFUSES has no other coverage — and
-  # this function is where a positional alpha match once read plain black as
-  # transparent, stranding the white bands on the darkest pages. Drive the
-  # shipped source directly so a rewrite that gets any row wrong fails here
-  # rather than on whichever seller's page happens to use that syntax.
   describe "the canvas opacity check" do
-    # rgb(0, 0, 0) is the row that matters most: black is the common dark-theme
-    # canvas AND the value a positional match misreads, because its blue
-    # channel sits exactly where the alpha would be.
     let(:opaque_colors) do
       [
         "rgb(0, 0, 0)",
         "rgb(235, 235, 235)",
-        "rgba(18, 52, 86, 0.5)",
+        "rgba(18, 52, 86, 1)",
+        "rgba(18, 52, 86, 100%)",
         "color(srgb 0 0 0)",
+        "oklch(0.5 0.1 200 / 1)",
         "oklch(0.5 0.1 200)",
         "black",
       ]
     end
 
-    let(:transparent_colors) do
+    let(:unpaintable_colors) do
       [
         "transparent",
         "",
         "rgba(0, 0, 0, 0)",
+        "rgba(18, 52, 86, 0.5)",
+        "rgba(18, 52, 86, 50%)",
         "oklch(0.5 0.1 200 / 0)",
+        "oklch(0.5 0.1 200 / 0.5)",
         "color(srgb 0 0 0 / 0)",
-        # Parens present but unreadable: guessing "opaque" here is what would
-        # paint a zero-alpha color, so it has to default the other way.
         "light-dark(rgb(0,0,0), rgb(255,255,255))",
       ]
     end
@@ -688,7 +680,7 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
 
     it "refuses a color it cannot read as fully opaque" do
-      expect(transparent_colors.select { opaque?(_1) }).to eq([])
+      expect(unpaintable_colors.select { opaque?(_1) }).to eq([])
     end
   end
 end

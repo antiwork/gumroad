@@ -34,6 +34,18 @@ module ContrastColor
   # render is ever allowed below it.
   WCAG_AA_NORMAL_TEXT = 4.5
 
+  # WCAG 2.2 SC 1.4.11 requires 3:1 for non-text state indicators.
+  WCAG_AA_NON_TEXT = 3.0
+
+  # visible_indicator rescues only colours below this ratio — ones that have vanished into their
+  # background. This knowingly accepts indicators under WCAG 1.4.11's 3:1: recolouring an accent a
+  # buyer can already see made focus states harder to spot, and shipping that was rejected on
+  # review (#6588, decided in #6581). At or above this, the seller's colour renders untouched.
+  INDICATOR_VISIBILITY_FLOOR = 1.5
+
+  # Relative luminance of #808080, used to choose the direction of the brightness shift.
+  BACKGROUND_LUMINANCE_MIDPOINT = 0.2159
+
   # If APCA rates black and white within 10 Lc of each other, neither has a strong perceptual lead.
   # In that narrow case, prefer the one that changes the creator's colour less.
   APCA_TIE_BAND = 10.0
@@ -110,6 +122,32 @@ module ContrastColor
     }
   end
 
+  # Returns the seller's colour untouched whenever a buyer can perceive it against the background
+  # (INDICATOR_VISIBILITY_FLOOR). A colour below that has disappeared entirely, so it is shifted in
+  # brightness — hue preserved — until it clears the non-text floor: once we replace a colour, the
+  # replacement should be plainly visible, not the least-visible legal one.
+  def self.visible_indicator(hex_color, background_hex)
+    rgb = parse(hex_color)
+    background = parse(background_hex)
+    return BLACK if rgb.nil? || background.nil?
+    return to_hex(rgb) unless indicator_imperceptible?(rgb, background)
+
+    # Moving away from the background keeps contrast monotonic for the binary search.
+    white_text = relative_luminance(background) > BACKGROUND_LUMINANCE_MIDPOINT
+    low = 0
+    high = 255
+    while low < high
+      middle = (low + high) / 2
+      if indicator_contrast_ok?(shift_brightness(rgb, white_text:, step: middle), background)
+        high = middle
+      else
+        low = middle + 1
+      end
+    end
+
+    to_hex(shift_brightness(rgb, white_text:, step: low))
+  end
+
   # WCAG contrast ratio between two #rrggbb colours, e.g. 15.36 for black on bright green.
   def self.ratio_between(hex_color, other_hex_color)
     a = parse(hex_color)
@@ -169,6 +207,16 @@ module ContrastColor
 
     y < 0.022 ? y + ((0.022 - y)**1.414) : y
   end
+
+  def self.indicator_contrast_ok?(rgb, background)
+    contrast_ratio(relative_luminance(rgb), relative_luminance(background)) >= WCAG_AA_NON_TEXT
+  end
+  private_class_method :indicator_contrast_ok?
+
+  def self.indicator_imperceptible?(rgb, background)
+    contrast_ratio(relative_luminance(rgb), relative_luminance(background)) < INDICATOR_VISIBILITY_FLOOR
+  end
+  private_class_method :indicator_imperceptible?
 
   # True when APCA rates white text on this colour as more readable than black text.
   def self.prefers_white_text?(rgb)

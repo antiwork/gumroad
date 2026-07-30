@@ -202,35 +202,28 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
-  # Shared by both halves of the background bridge: the child uses it to decide
-  # whether a candidate canvas color is worth reporting, and the wrapper to
-  # decide whether a reported color is worth painting. Both are asking the same
-  # question, so they get the same answer from one implementation — a second
-  # copy drifted from this one once already (the wrapper's rgba()-only check
-  # painted a fully transparent `oklch(… / 0)`, gumroad-private#1530).
-  #
-  # Alpha is the token after the slash in every modern color function, or the
-  # fourth comma-separated value in legacy rgba()/hsla(). It has to be located
-  # that way and not matched positionally: a trailing zero in ANY channel looks
-  # identical at the end of the string, so `rgb(0, 0, 0)` — plain black, the
-  # most common dark-theme canvas there is — reads as transparent to a pattern
-  # that only checks what precedes the closing paren.
+  # Shared by both halves so they cannot disagree about modern color syntax.
+  # Alpha follows the slash in modern functions or is the fourth legacy
+  # comma-separated channel; a positional match mistakes black's last channel
+  # for transparency.
   CANVAS_OPAQUE_FN = <<~JS
-    function opaque(color) {
-      if (!color || color === "transparent") return false;
+    function colorAlpha(color) {
+      if (!color || color === "transparent") return 0;
       var body = color.match(/\\(([^)]*)\\)\\s*$/);
-      // A keyword serialization has no parens and no alpha to find, so it is
-      // opaque. Anything that DOES carry parens and still fails to match is a
-      // shape this cannot read — default it to transparent, because guessing
-      // "opaque" on an unreadable value is how a zero-alpha color gets painted.
-      if (!body) return color.indexOf("(") === -1;
+      if (!body) return color.indexOf("(") === -1 ? 1 : null;
       var parts = body[1].split("/");
       var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
       if (alpha === null) {
         var channels = body[1].split(",");
         if (channels.length > 3) alpha = channels[3];
       }
-      return alpha === null || parseFloat(alpha) > 0;
+      if (alpha === null) return 1;
+      var value = parseFloat(alpha);
+      if (!isFinite(value)) return null;
+      return alpha.indexOf("%") === -1 ? value : value / 100;
+    }
+    function opaque(color) {
+      return colorAlpha(color) === 1;
     }
   JS
 
@@ -240,51 +233,26 @@ module RendersCustomHtmlPages
   # with, and long enough that the cost stays immeasurable on a quiet page.
   BACKGROUND_POLL_INTERVAL_MS = 1000
 
-  # Injected into the sandboxed landing document at serve time (never authored
-  # by the seller). The seller's CSS can only style the document *inside* the
-  # iframe, so the wrapper around it stays transparent — which paints white in
-  # the areas the iframe doesn't cover: iOS Safari's status-bar and bottom-bar
-  # strips, and the overscroll gutter on every browser. A page with a
-  # non-white background therefore renders with white bands above and below it
-  # (gumroad-private#1530).
+  # Seller CSS cannot reach the trusted wrapper around this opaque-origin
+  # iframe. Report the computed canvas color so the wrapper can tint browser
+  # chrome and overscroll; re-report after DOM, CSSOM, or color-scheme changes.
   #
-  # The wrapper can't read the color itself (opaque origin), and the seller
-  # can't declare one (Ai::PageSanitizer strips <meta>, so theme-color never
-  # survives). So the child reports its own canvas color up and the wrapper
-  # mirrors it — no seller HTML changes, and existing pages are fixed on next
-  # load.
-  #
-  # Reported again whenever something that could repaint the canvas changes —
-  # an attribute, a stylesheet arriving, loading or being edited, a color-scheme
-  # switch — so a theme toggle re-colors the bands instead of stranding the first
-  # value, including a toggle that lands on no color at all, which reports null
-  # so the wrapper drops the tint rather than holding the previous theme. A
-  # retheme can also happen with the DOM untouched (a CSSOM write), which nothing
-  # can observe, so a low-frequency re-read backs the observer up.
-  #
-  # Solid html/body colors only. A gradient or image-only background leaves
-  # background-color transparent, and a color on a full-page wrapper div is not
-  # the canvas — both report nothing and keep the status-quo white bands, which
-  # is the safe direction (never a wrong color).
+  # Only fully opaque html/body colors are safe. Mirroring translucent paint
+  # underneath the transparent iframe composites it twice and darkens the page.
   BACKGROUND_BRIDGE_SCRIPT = <<~HTML
     <script data-cfasync="false" data-gumroad-background-bridge>
       (function () {
         // Viewed directly (not framed) there is no wrapper to color.
         if (window.parent === window) return;
-        // A fully transparent canvas is the same as none, so fall through to
-        // the next candidate rather than reporting it.
         #{CANVAS_OPAQUE_FN}
-        // CSS propagates body's background to the canvas only when html has
-        // none of its own, so html has to be consulted first or a page that
-        // sets both would report the wrong band color.
         function canvasColor() {
-          var candidates = [document.documentElement, document.body];
-          for (var i = 0; i < candidates.length; i++) {
-            if (!candidates[i]) continue;
-            var color = window.getComputedStyle(candidates[i]).backgroundColor;
-            if (opaque(color)) return color;
-          }
-          return null;
+          var root = window.getComputedStyle(document.documentElement).backgroundColor;
+          var rootAlpha = colorAlpha(root);
+          if (rootAlpha === 1) return root;
+          // Body propagates to the canvas only when the root is fully transparent.
+          if (rootAlpha !== 0 || !document.body) return null;
+          var body = window.getComputedStyle(document.body).backgroundColor;
+          return opaque(body) ? body : null;
         }
         var reported = null;
         function report() {
@@ -303,34 +271,16 @@ module RendersCustomHtmlPages
           queued = true;
           requestAnimationFrame(function () { queued = false; report(); });
         }
-        // Only html/body's computed background can be the canvas, so the
-        // mutations that can change it are: any attribute (class for Tailwind's
-        // dark mode, data-theme for most hand-rolled togglers, style for inline
-        // writes, and arbitrary names because CSS can select on them), a
-        // <style>/<link> node appearing or leaving, and a rewrite of the text
-        // inside a <style>. Everything else — the seller's own DOM churn, a
-        // ticking countdown — is skipped, because reading the canvas forces a
-        // style recalc and this observer covers the whole document.
+        // Ignore ordinary DOM churn; only selectors and stylesheets can move
+        // the canvas color.
         function stylesheetNode(node) {
-          // localName, not nodeName: an SVG <style> styles the whole document
-          // and its nodeName is lowercase, so an uppercase compare misses it.
-          // Undefined on text and comment nodes, which is the right answer.
           var name = node && node.localName;
           return name === "style" || name === "link";
         }
-        // A <link> only repaints the canvas once the stylesheet it points at has
-        // loaded, which is after the mutation that inserted it — so the report
-        // that mutation queues reads the pre-stylesheet color. The load event
-        // has to be caught on the element: a resource's load event never
-        // reaches the window, in either phase, so a listener there sees nothing.
-        // Re-adding the same function is a no-op per spec, so a <link> touched
-        // twice needs no bookkeeping.
+        // A link repaints after insertion, when its own load event fires.
         function watchStylesheetLoad(node) {
           if (node && node.localName === "link") node.addEventListener("load", queueReport);
         }
-        // A record names only the node that moved, so a seller script appending
-        // or dropping a container carries its <style>/<link> descendants past
-        // any check that looks at the container alone. Walk into it.
         function eachStylesheet(node, fn) {
           if (!node) return;
           if (stylesheetNode(node)) fn(node);
@@ -348,10 +298,6 @@ module RendersCustomHtmlPages
               // new sheet lands late too.
               watchStylesheetLoad(record.target);
             }
-            // A rewrite arrives as characterData when the text node is edited
-            // in place, but as childList on the <style> itself when the text is
-            // swapped wholesale — which is what `textContent = ...` does, the
-            // common way to retheme. Both look at the target, not the node.
             if (stylesheetNode(record.target)) affects = true;
             if (stylesheetNode(record.target.parentNode)) affects = true;
             for (var j = 0; j < record.addedNodes.length; j++) {
@@ -383,26 +329,11 @@ module RendersCustomHtmlPages
         try {
           window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", queueReport);
         } catch (_err) {}
-        // A retheme done through the CSSOM rather than the DOM — insertRule, an
-        // edit to a cssRules declaration, replaceSync on an adopted sheet,
-        // flipping sheet.disabled — repaints the canvas while the document tree
-        // is byte-for-byte unchanged. Nothing observes the CSSOM, so the only
-        // way to notice is to look, which is what this does.
-        //
-        // It does not weaken the recalc argument behind affectsCanvas. That
-        // filter is there to avoid sampling on the seller's own DOM churn, where
-        // style is already dirty and the read forces the recalc. A tick on a
-        // quiet page reads a clean tree and is a cached lookup instead
-        // (measured: 0.0005 ms, three thousandths of one frame). The observer
-        // stays the fast path; this bounds how long a tint can be wrong when
-        // there is no mutation to see.
+        // CSSOM writes emit no mutation, so poll a clean style tree as a backstop.
         try {
           setInterval(function () {
             if (!document.hidden) queueReport();
           }, #{BACKGROUND_POLL_INTERVAL_MS});
-          // Ticks are skipped while hidden and rAF does not run there either, so
-          // a page that rethemed in a background tab has produced no reading at
-          // all. Take one the moment it comes back.
           document.addEventListener("visibilitychange", queueReport);
         } catch (_err) {}
       })();
@@ -456,7 +387,9 @@ module RendersCustomHtmlPages
         if (!d || d.type !== "gumroad:profile-fields") return;
         ["name", "bio"].forEach(function (field) {
           var value = d[field] == null ? "" : String(d[field]);
-          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]');
+          // Product-scoped elements belong to the prices payload; the server-side interpolator
+          // never answers them with profile fields, so the preview must not either.
+          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]:not([data-gumroad-product])');
           for (var i = 0; i < nodes.length; i++) nodes[i].textContent = value;
         });
       });
@@ -673,19 +606,9 @@ module RendersCustomHtmlPages
       HTML
     end
 
-    # The trusted-wrapper half of the background bridge. Applies the color the
-    # sandboxed page reports (see BACKGROUND_BRIDGE_SCRIPT) to the wrapper
-    # canvas and to <meta name="theme-color">, so iOS Safari tints its
-    # status/toolbar strips to match instead of leaving white bands, and the
-    # overscroll gutter matches on every browser.
-    #
-    # The reported value is untrusted, so it is resolved to an absolute color
-    # before use: a detached probe would only prove the string PARSES, which
-    # `var()`/`attr()`/`inherit` all do for any property regardless of content.
-    # Setting it on a probe in this document and reading the COMPUTED value
-    # collapses those to a real color or to transparent, which is rejected.
-    # Neither sink parses HTML or URLs, so this is defense in depth rather than
-    # the only thing standing between the page and an injection.
+    # Resolve the untrusted report in this document before painting the wrapper
+    # and theme-color. A detached probe would accept unresolved var()/keywords;
+    # backgroundColor cannot fetch a URL.
     def custom_html_background_wrapper_script(nonce:)
       <<~HTML
         <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-background-wrapper>
@@ -713,11 +636,6 @@ module RendersCustomHtmlPages
               // The `background` shorthand or `backgroundImage` would fire it.
               probe.style.backgroundColor = value;
               var computed = window.getComputedStyle(probe).backgroundColor;
-              // Zero alpha is what an unresolvable var()/keyword collapses to,
-              // and painting it would leave the bands white anyway. Uses the
-              // same check as the child so the two cannot disagree about which
-              // colors count — a wrapper-local rgba()-only version painted a
-              // transparent oklch(… / 0) that the child would have refused.
               if (!opaque(computed)) return null;
               return computed;
             }
@@ -765,7 +683,7 @@ module RendersCustomHtmlPages
     # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
     # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
     # comment, so an edit further down the page opens in view instead of hiding below the fold.
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
+    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -778,6 +696,7 @@ module RendersCustomHtmlPages
           </head>
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>
+            #{prices_json.present? ? %(<script id="gumroad-prices" type="application/json">#{prices_json}</script>) : ""}
             #{custom_html}
             #{navigation_bridge}
             #{follow_bridge}

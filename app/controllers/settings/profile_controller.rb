@@ -42,15 +42,22 @@ class Settings::ProfileController < Settings::BaseController
       current_seller.avatar.purge
     end
 
+    # Validate the pending avatar here, before the lock below. #with_locked_seller_profile locks the
+    # seller, and lock! reloads it - which marks the attachment above as persisted. User#avatar_is_valid
+    # only inspects a new_record? attachment, so after that reload the dimension and format checks
+    # silently pass and an undersized avatar saves. Checked only when an attachment is actually
+    # pending, to keep unrelated seller validation state out of this path.
+    if current_seller.attachment_changes.any? && !current_seller.valid?
+      return respond_error(current_seller.errors.full_messages.to_sentence)
+    end
+
     begin
-      ActiveRecord::Base.transaction do
-        seller_profile = current_seller.seller_profile
-        # Optimistic concurrency: lock the profile and reject the save if its pages/sections were
-        # changed elsewhere since this editor loaded. Otherwise this request would overwrite the
-        # layout with a stale snapshot and drop or orphan sections another session added. A brand
-        # new profile has nothing to conflict with, and settings-only saves don't touch the layout.
+      current_seller.with_locked_seller_profile do |seller_profile|
+        # Optimistic concurrency: the helper loaded this profile with a locking/current read. Reject
+        # the save if its pages/sections changed elsewhere since this editor loaded. Otherwise this
+        # request would overwrite the layout with a stale snapshot and drop or orphan sections
+        # another session added. A new profile cannot conflict, and design-only saves skip the check.
         if (permitted_params[:tabs] || permitted_params[:sections]) && seller_profile.persisted?
-          seller_profile.lock!
           # A persisted profile must be saved against a matching version. A missing/blank version
           # means the editor loaded before this profile row existed (another session has created it
           # since), so the submitted layout is stale too. Re-checked here under the lock in case the
@@ -112,7 +119,7 @@ class Settings::ProfileController < Settings::BaseController
     end
 
     def submitted_version_stale?(seller_profile)
-      permitted_params[:profile_version].blank? || seller_profile.layout_version.iso8601(6) != permitted_params[:profile_version]
+      permitted_params[:profile_version].blank? || seller_profile.layout_version != permitted_params[:profile_version]
     end
 
     def authorize

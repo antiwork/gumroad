@@ -99,6 +99,7 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to be_present
         expect(result[:failure_reason]).to eq("unsupported_action")
+        expect(result[:retry_safe]).to be(true)
       end
 
       it "rejects an unknown endpoint id" do
@@ -107,6 +108,7 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to be_present
         expect(result[:failure_reason]).to eq("unsupported_action")
+        expect(result[:retry_safe]).to be(true)
       end
 
       it "rejects a READ endpoint sent as a write (reads never mutate, so never execute here)" do
@@ -121,6 +123,7 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/missing path parameter/i)
         expect(result[:failure_reason]).to eq("invalid_path_parameters")
+        expect(result[:retry_safe]).to be(true)
       end
 
       it "rejects a body key the endpoint does not declare before dispatching (no product is created)" do
@@ -138,6 +141,7 @@ describe Ai::StoreAgentActionExecutor do
           expect(result[:message]).to include("price_cents")
           expect(result[:message]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
           expect(result[:failure_reason]).to eq("unknown_parameters")
+          expect(result[:retry_safe]).to be(true)
         end.not_to change { seller.links.count }
       end
 
@@ -156,6 +160,25 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:failure_reason]).to eq("api_failure")
         # The public v2 endpoint reports validation failure in a 200 envelope with success: false.
         expect(result[:failure_status]).to eq(200)
+        expect(result).not_to have_key(:retry_safe)
+      end
+
+      it "does not classify an authorization response received after dispatch as retry-safe" do
+        api_client = instance_double(Ai::StoreAgentApiClient)
+        allow(executor).to receive(:api_client).and_return(api_client)
+        allow(api_client).to receive(:write).and_return(
+          "success" => false,
+          "http_status" => 403,
+        )
+
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "update_product", path_params: { "id" => "product-id" }, params: { "price" => 2500 }),
+        )
+
+        expect(result[:message]).to match(/permission/i)
+        expect(result[:failure_reason]).to eq("permission_denied")
+        expect(result).not_to have_key(:retry_safe)
       end
     end
 
@@ -189,6 +212,7 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:success]).to be(false)
         expect(result[:message]).to match(/permission/i)
         expect(result[:failure_reason]).to eq("permission_denied")
+        expect(result[:retry_safe]).to be(true)
       end
 
       it "refuses resend_receipt for a marketing member (edit_sales, which marketing lacks)" do
