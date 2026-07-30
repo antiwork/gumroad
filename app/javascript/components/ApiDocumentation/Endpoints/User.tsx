@@ -100,11 +100,16 @@ const ProfileCustomHtmlDocumentation = () => (
     </p>
     <h5>Your catalogue as JSON</h5>
     <p>
-      Every served page also carries a <code>&lt;script type="application/json" id="gumroad-data"&gt;</code> blob with
-      your products, posts and profile section names, so a page can render its own cards instead of hardcoding them.
-      Read it with <code>JSON.parse(document.getElementById("gumroad-data").textContent)</code>. The page's{" "}
-      <code>connect-src 'none'</code> policy means this blob is the only catalogue source available to it — it can't
-      fetch one.
+      Your profile page is served with a <code>&lt;script type="application/json" id="gumroad-data"&gt;</code> blob
+      carrying your products, posts and profile section names, so the page can render its own cards instead of
+      hardcoding them. Read it with <code>JSON.parse(document.getElementById("gumroad-data").textContent)</code>. The
+      page's <code>connect-src 'none'</code> policy means this blob is the only catalogue source available to it — it
+      can't fetch one.
+    </p>
+    <p>
+      Only the profile page gets it. Product landing pages and your slug pages are served without the element, so guard
+      the lookup (<code>const el = document.getElementById("gumroad-data")</code>) if you share one script across pages
+      — reading <code>.textContent</code> off a missing element throws and leaves the page blank.
     </p>
     <p>
       Each entry in <code>products</code> has:
