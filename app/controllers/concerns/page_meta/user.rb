@@ -22,6 +22,8 @@ module PageMeta::User
       set_meta_tag(property: "og:description", content: description)
 
       if user.subscribe_preview_url.present?
+        set_meta_tag(property: "og:image", content: user.subscribe_preview_url)
+        set_meta_tag(property: "og:image:alt", content: user.name_or_username)
         set_meta_tag(property: "twitter:card", content: "summary_large_image")
         set_meta_tag(property: "twitter:image", content: user.subscribe_preview_url)
         set_meta_tag(property: "twitter:image:alt", content: user.name_or_username)

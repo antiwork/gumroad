@@ -396,6 +396,47 @@ describe UsersController do
       get :show, params: { username: seller.username }
       expect(response.body).to have_selector("meta[name='description'][content='#{"f" * 300}']", visible: false)
     end
+
+    describe "share card meta tags" do
+      def meta_content(property)
+        Nokogiri::HTML.parse(response.body).xpath("//meta[@property='#{property}']/@content").text
+      end
+
+      context "when the seller has a subscribe preview" do
+        let!(:preview_seller) { create(:named_seller, :with_subscribe_preview, username: "previewseller") }
+
+        # Non-Twitter scrapers only read og:image, so serving the card on twitter:image alone left
+        # them on Gumroad's global default (gumroad-private#1548).
+        it "serves the branded card on og:image as well as twitter:image" do
+          @request.host = preview_seller.subdomain
+          get :show, params: { username: preview_seller.username }
+
+          expect(preview_seller.subscribe_preview_url).to be_present
+          expect(meta_content("og:image")).to eq(preview_seller.subscribe_preview_url)
+          expect(meta_content("twitter:image")).to eq(preview_seller.subscribe_preview_url)
+          expect(meta_content("og:image")).to_not include("opengraph_image")
+        end
+
+        it "describes the card with the seller's name on both og and twitter alts" do
+          @request.host = preview_seller.subdomain
+          get :show, params: { username: preview_seller.username }
+
+          expect(meta_content("og:image:alt")).to eq(preview_seller.name_or_username)
+          expect(meta_content("twitter:image:alt")).to eq(preview_seller.name_or_username)
+        end
+      end
+
+      context "when the seller has no subscribe preview" do
+        it "keeps the avatar fallback on og:image" do
+          @request.host = seller.subdomain
+          get :show, params: { username: seller.username }
+
+          expect(seller.subscribe_preview_url).to be_nil
+          expect(meta_content("og:image")).to eq(seller.avatar_url)
+          expect(meta_content("og:image:alt")).to eq("#{seller.name_or_username}'s profile picture")
+        end
+      end
+    end
   end
 
   describe "#edit" do
