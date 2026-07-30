@@ -259,9 +259,10 @@ class AssetPreview < ApplicationRecord
   # an ActiveStorage preview_image attachment on the blob, and that survives
   # deploys. We were only throwing away the pointer to it. So the read order is:
   #
-  #   1. the blob's persisted preview_image, if ActiveStorage has one;
-  #   2. otherwise Rails.cache, which is now just a cheap memo for the URL
-  #      string so we don't rebuild it on every render;
+  #   1. Rails.cache, a memo for the URL string of a poster we have already
+  #      confirmed, so the common render costs no queries;
+  #   2. otherwise the blob's persisted preview_image, if ActiveStorage has one —
+  #      a cache miss must never hide a poster we demonstrably have;
   #   3. otherwise nil, and enqueue a generation so the poster appears on later
   #      views (the player shows its plain idle state this time).
   #
@@ -273,29 +274,30 @@ class AssetPreview < ApplicationRecord
   def video_poster_url
     return nil unless file.attached? && file.video? && file.previewable?
 
-    # Read through to the persisted preview first. This is what makes a poster
-    # survive a deploy: unlike the cache, the preview_image attachment is a real
-    # database record pointing at a real object in storage. We're on a web
-    # request, so this only reports a poster whose resized copy already exists —
-    # it never stops to make one (see persisted_video_poster_url).
+    cached = Rails.cache.read(video_poster_cache_key)
+    return cached if cached.present?
+
+    # Cache miss, or the failure sentinel: read through to the persisted preview.
+    # This is what makes a poster survive a deploy — unlike the cache, the
+    # preview_image attachment is a real database record pointing at a real
+    # object in storage. We're on a web request, so this only reports a poster
+    # whose resized copy already exists; it never stops to make one (see
+    # persisted_video_poster_url).
     persisted = persisted_video_poster_url
     if persisted.present?
-      # Keep the memo warm so subsequent renders skip the URL construction, but
-      # never let a cache miss hide a poster we demonstrably have.
       Rails.cache.write(video_poster_cache_key, persisted)
       return persisted
     end
 
-    cached = Rails.cache.read(video_poster_cache_key)
-    if cached.nil?
-      # Nothing generated yet — covers created before poster support existed
-      # land here. Kick off a background generation so the poster shows up on
-      # subsequent views; this view renders without one.
-      GenerateVideoPosterWorker.perform_async(id)
-      return nil
-    end
+    # The sentinel means generation already tried and ffmpeg couldn't preview
+    # this blob, so don't queue another attempt until it expires.
+    return nil unless cached.nil?
 
-    cached == FAILED_POSTER_SENTINEL ? nil : cached
+    # Nothing generated yet — covers created before poster support existed land
+    # here. Kick off a background generation so the poster shows up on
+    # subsequent views; this view renders without one.
+    GenerateVideoPosterWorker.perform_async(id)
+    nil
   end
 
   # The URL of the poster frame ActiveStorage has already persisted for this

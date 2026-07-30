@@ -32,6 +32,26 @@ describe AssetPreview do
       expect(asset_preview.video_poster_url).to eq("https://files.example.com/cached.jpg")
     end
 
+    # The memo only earns its keep if a warm hit costs nothing: the durable
+    # lookup is a query against active_storage_variant_records plus a URL build,
+    # and running it before the cache would mean every render pays for it.
+    it "skips the durable lookup entirely on a warm cache hit" do
+      Rails.cache.write(asset_preview.send(:video_poster_cache_key), "https://files.example.com/cached.jpg")
+      expect(asset_preview).not_to receive(:persisted_video_poster_url)
+
+      expect(asset_preview.video_poster_url).to eq("https://files.example.com/cached.jpg")
+    end
+
+    # The sentinel is an empty string, so it is not a usable URL — it must fall
+    # through to the durable lookup like any other miss. Otherwise an hour of
+    # sentinel would hide a poster a concurrent worker had just persisted.
+    it "still consults the durable preview when the cache holds the failure sentinel" do
+      Rails.cache.write(asset_preview.send(:video_poster_cache_key), described_class::FAILED_POSTER_SENTINEL)
+      allow(asset_preview).to receive(:persisted_video_poster_url).and_return("https://files.example.com/persisted.jpg")
+
+      expect(asset_preview.video_poster_url).to eq("https://files.example.com/persisted.jpg")
+    end
+
     # The bug this file exists for: in production the cache store is namespaced by
     # the deploy revision, so every deploy is equivalent to a full cache clear.
     # When the poster URL lived only in the cache, that made every video cover go
@@ -49,8 +69,27 @@ describe AssetPreview do
       end.not_to change { GenerateVideoPosterWorker.jobs.size }
     end
 
-    it "prefers the persisted preview over a stale cached URL" do
-      Rails.cache.write(asset_preview.send(:video_poster_cache_key), "https://files.example.com/stale.jpg")
+    # The same deploy, with nothing stubbed: a real preview_image attachment and
+    # a real resized variant record, so the poster that survives the clear is the
+    # one ActiveStorage actually holds rather than one the test asserted into
+    # existence. This is the example that would have caught the original bug on
+    # its own.
+    it "keeps returning the real persisted poster across a cache clear, with no regeneration" do
+      attach_poster_image(asset_preview)
+      # Stands in for the worker run that made the resized copy of the poster.
+      asset_preview.generate_video_poster!
+      expect(asset_preview.video_poster_url).to be_present
+
+      Rails.cache.clear
+      asset_preview.file.blob.reload
+      expect_any_instance_of(ActiveStorage::VariantWithRecord).not_to receive(:process)
+
+      expect do
+        expect(asset_preview.video_poster_url).to be_present
+      end.not_to change { GenerateVideoPosterWorker.jobs.size }
+    end
+
+    it "prefers a persisted preview over a cache miss rather than reporting no poster" do
       allow(asset_preview).to receive(:persisted_video_poster_url).and_return("https://files.example.com/persisted.jpg")
 
       expect(asset_preview.video_poster_url).to eq("https://files.example.com/persisted.jpg")
