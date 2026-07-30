@@ -146,6 +146,13 @@ const ProfileCustomHtmlDocumentation = () => (
         <code>native_type</code>.
       </li>
       <li>
+        <code>url</code> is absolute and already on the host visitors should stay on: your custom domain when that exact
+        hostname points at Gumroad and has a certificate, otherwise your <code>gumroad.com</code> subdomain, which
+        serves the same product. Because a certificate covering <code>example.com</code> may not cover{" "}
+        <code>www.example.com</code>, the counterpart of your domain isn't assumed to work. Use these URLs as given
+        rather than rebuilding them from a name or a permalink.
+      </li>
+      <li>
         <code>price</code> — the price you set, formatted in the product's own currency, e.g. <code>$14</code> or{" "}
         <code>$0+</code>. This blob is cached per seller rather than per visitor, so the figure is identical for every
         visitor and is not converted to their local currency. To display a price, prefer the <code>gumroad-prices</code>{" "}
@@ -158,9 +165,9 @@ const ProfileCustomHtmlDocumentation = () => (
       </li>
     </ul>
     <p>
-      <code>posts</code> entries carry <code>name</code>, <code>url</code> and <code>published_at</code>, and{" "}
-      <code>pages</code> entries carry a <code>name</code> — the pages of your profile, the ones visitors switch
-      between, not the sections inside them. At most 100 products and 100 posts are included;{" "}
+      <code>posts</code> entries carry <code>name</code>, <code>url</code> (built on the same host as product URLs) and{" "}
+      <code>published_at</code>, and <code>pages</code> entries carry a <code>name</code> — the pages of your profile,
+      the ones visitors switch between, not the sections inside them. At most 100 products and 100 posts are included;{" "}
       <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 100 of
       114" rather than implying the catalogue is complete.
     </p>
