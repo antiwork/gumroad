@@ -2938,6 +2938,27 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal "account_closed", payment.reload.failure_reason
   end
 
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment when the failure-reason write raises still reverses the internal transfer" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678")
+    object = payout_event_object(payment_external_id: payment.external_id, failure_code: "account_closed")
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+    # A write on the payment AFTER the terminal transition is what used to strand the reversal: the
+    # balances were already `unpaid`, and a redelivered webhook then hit the `else return` guard
+    # because the payment was terminal, so nothing retried the reversal. Reversal + hold must be
+    # reachable even if a later save on this record blows up.
+    Payment.any_instance.stubs(:save!).raises(ActiveRecord::StatementInvalid.new("Lock wait timeout exceeded"))
+    ErrorNotifier.stubs(:notify)
+    StripePayoutProcessor.expects(:reverse_internal_transfer_or_hold_payouts!).once
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    assert_equal "failed", payment.reload.state
+    assert_equal "account_closed", payment.failure_reason
+  end
+
   test "hold_payouts_for_unaccounted_money! writes one comment per payout no matter how many times a failure re-enters" do
     user = create_user
     payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678", state: "failed",

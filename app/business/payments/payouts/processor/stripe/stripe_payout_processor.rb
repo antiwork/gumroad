@@ -743,23 +743,22 @@ class StripePayoutProcessor
     payment.with_lock do
       case payment.state
       when "processing"
-        payment.mark_failed!
+        payment.mark_failed!(failure_reason)
       when "completed"
+        # `mark_returned!` takes no transition args, so the reason is assigned first and the
+        # transition's own write persists it.
+        payment.failure_reason = failure_reason
         payment.mark_returned!
       else
         return
       end
     end
 
-    # Record why before the reversal, not after. `mark_failed!` has already returned the balances to
-    # `unpaid`, and a reversal that raises used to abandon the method here — leaving the seller with
-    # no failure reason, no email, and Gumroad's funds still on their connected account. A webhook
-    # redelivery then hit the `else return` above, so nothing ever retried the reversal.
-    if failure_reason
-      payment.failure_reason = failure_reason
-      payment.save!
-      payment.send_payout_failure_email_best_effort
-    end
+    # The reason rides along with the state transition rather than a separate write afterwards.
+    # `mark_failed!` has already returned the balances to `unpaid`, so a second write that raises
+    # left the seller terminal with no reason and Gumroad's funds still on their connected account —
+    # and a webhook redelivery then hit the `else return` above, so nothing retried the reversal.
+    payment.send_payout_failure_email_best_effort if failure_reason
 
     reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: true)
 
