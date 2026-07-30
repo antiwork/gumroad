@@ -39,6 +39,20 @@ describe Onetime::BackfillVideoPosterImages do
     expect(GenerateVideoPosterWorker.jobs).to be_empty
   end
 
+  # The batch is selected by id, then read again to eager-load the blobs. That
+  # second read has to stay inside the eligibility scope: ReplicaLagWatcher.watch
+  # runs between the two, so a cover deleted in that window would otherwise still
+  # get a generation job.
+  it "does not enqueue a cover that stopped being eligible after its batch was selected" do
+    asset_preview = create(:asset_preview_mov)
+    GenerateVideoPosterWorker.jobs.clear
+
+    allow(ReplicaLagWatcher).to receive(:watch) { asset_preview.mark_deleted! }
+
+    expect(described_class.process).to eq(enqueued: 0, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs).to be_empty
+  end
+
   it "leaves image covers and deleted video covers alone" do
     create(:asset_preview_jpg)
     create(:asset_preview_mov).mark_deleted!

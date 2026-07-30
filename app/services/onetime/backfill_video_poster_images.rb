@@ -45,15 +45,19 @@ module Onetime
       # yielded relation loads it again. Batch over ids only and do the
       # eager-load inside the block, so each batch is read once.
       scope.in_batches(of: batch_size) do |batch|
+        ids = batch.ids
+
         # Generation is a download plus an ffmpeg run per cover. Pace the enqueues
         # against replica lag so the backfill can't outrun the database the way a
         # tight loop over a large table would.
         ReplicaLagWatcher.watch
 
-        ids = batch.ids
-        AssetPreview.where(id: ids)
-                    .includes(file_attachment: { blob: { preview_image_attachment: :blob } })
-                    .each do |asset_preview|
+        # Load through `batch` (still the eligibility scope, narrowed to these
+        # ids), not a bare AssetPreview lookup: a cover can be deleted, detached,
+        # or swapped to a non-video while we wait on replica lag above, and only
+        # the scope's predicates still exclude it.
+        batch.includes(file_attachment: { blob: { preview_image_attachment: :blob } })
+             .each do |asset_preview|
           blob = asset_preview.file.blob
           if blob&.preview_image&.attached?
             skipped += 1
