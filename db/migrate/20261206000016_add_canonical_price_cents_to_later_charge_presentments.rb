@@ -9,10 +9,10 @@
 # dollars when they disagree. Without it a reader cannot tell a still-valid fixing from one that
 # silently under- or over-charges after a price change.
 #
-# This lives in its own migration rather than in CreateLaterChargePresentments (20261206000013)
+# This lives in its own migration rather than in CreateLaterChargePresentments (20261206000015)
 # because that migration had already run on environments built earlier in this branch's life —
 # preview apps and developer databases. Rails records a migration by version number, so editing an
-# already-applied migration adds nothing: db:migrate sees 20261206000013 in schema_migrations,
+# already-applied migration adds nothing: db:migrate sees that version in schema_migrations,
 # skips it, and the column never appears. Those databases then have a table the model cannot write
 # to, failing with an unknown-attribute error on every attempt to store a fixing. A new version
 # number is the only thing db:migrate will actually run.

@@ -165,6 +165,41 @@ describe SslCertificates::Generate do
         end
 
         expect(@custom_domain.reload.ssl_certificate_issued_at.to_i).to eq time.to_i
+        expect(@custom_domain).to be_routable
+        expect(@custom_domain.routability_checked_at).to be_present
+      end
+
+      it "does not activate results generated for a domain that changed" do
+        allow(@custom_domain)
+          .to receive(:activate_with_routability!)
+          .with(true, checked_domain: @custom_domain.domain, observed_at: kind_of(Time))
+          .and_return(false)
+
+        @resolving_domains.each do |domain|
+          expect(@obj).not_to receive(:log_message).with(domain, "Issued SSL certificate.")
+        end
+        expect(@obj)
+          .to receive(:log_message)
+          .with(@custom_domain.domain, "Domain changed before SSL certificate activation.")
+
+        @obj.process
+      end
+    end
+
+    context "when only the configured hostname's counterpart receives a certificate" do
+      before do
+        allow(@obj).to receive(:can_order_certificates?).and_return(true)
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com"])
+        allow(@obj).to receive(:generate_certificate).with("example.com").and_return(true)
+      end
+
+      it "caches the configured hostname as unroutable" do
+        @obj.process
+
+        expect(@custom_domain.reload).not_to be_routable
+        expect(@custom_domain.routability_checked_at).to be_present
       end
     end
 

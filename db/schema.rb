@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000014) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000016) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -785,6 +785,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000014) do
     t.string "state", default: "unverified", null: false
     t.integer "failed_verification_attempts_count", default: 0, null: false
     t.bigint "product_id"
+    t.boolean "routable"
+    t.datetime "routability_checked_at"
     t.index ["domain"], name: "index_custom_domains_on_domain"
     t.index ["product_id"], name: "index_custom_domains_on_product_id"
     t.index ["ssl_certificate_issued_at"], name: "index_custom_domains_on_ssl_certificate_issued_at"

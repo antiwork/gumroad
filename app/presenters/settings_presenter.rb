@@ -347,17 +347,28 @@ class SettingsPresenter
       bank_account = seller.active_bank_account
       return nil if bank_account.nil?
 
-      note = seller.comments
+      # A Connect seller is paid through their own account, so a rejected Gumroad-managed bank
+      # account blocks nothing — and the banner would never clear, since bank notes are only
+      # soft-deleted by a managed-account sync that cannot run while Connect is active.
+      return nil if seller.has_stripe_account_connected?
+
+      notes = seller.comments
             .with_type_payout_note
             .alive
             .where(author_id: GUMROAD_ADMIN_ID)
             .where("content LIKE ?", "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%")
             .order(created_at: :desc, id: :desc)
-            .first
-      return nil if note.nil?
 
-      # An equal timestamp still counts: the note is always written after the row it describes.
-      note.created_at >= bank_account.created_at ? note : nil
+      # Prefer a note that names this bank row. Newest-first alone is not enough: the sync makes
+      # network calls, so a rejection for a replaced row can be written AFTER the seller saved
+      # the replacement, and that stale note would otherwise win on timestamp and show the wrong
+      # account's guidance.
+      notes.find { |note| note.json_data["bank_account_id"] == bank_account.id } ||
+        # Notes recorded before we stamped the row fall back to the timestamp cutoff. An equal
+        # timestamp still counts: the note is always written after the row it describes.
+        notes.find do |note|
+          note.json_data["bank_account_id"].nil? && note.created_at >= bank_account.created_at
+        end
     end
 
     def country_code_for_compliance_field(field, user_compliance_info)
@@ -472,19 +483,43 @@ class SettingsPresenter
         }
       end
 
-      # Deliberately not gated on a missing Stripe account like the postal banner above:
-      # update_bank_account requires a live account, so gating it would hide the banner from
-      # exactly the sellers a bank rejection hits.
-      if (bank_note = current_bank_sync_failure_note)
-        bank_message = if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
+      # Same asynchronous rejection as the postal code above, for the bank details. Stripe can
+      # refuse the account the seller saved while the settings page still reports a clean save, so
+      # without this the only notice is an email — and on a paid product the publish button stays
+      # blocked with a "connect a payment method" error that reads as unrelated.
+      #
+      # Not gated on a missing Stripe account like the postal banner: update_bank_account requires
+      # a live account, so gating it would hide the banner from exactly the sellers a bank
+      # rejection hits. The terminal-rejection banner does take precedence, since it already tells
+      # that seller their whole account is finished.
+      #
+      # Ordering matches bank_rejection_kind_for: narrowest claim first. A block names one specific
+      # account, terminal covers the account, format only covers how it was typed. Each branch says
+      # the same thing as the email sent on that same path, because the retry job owns the
+      # terminality decision and a second opinion here would contradict the mail the seller just
+      # received. An abandoned_reason we have no copy for means the retries stopped for something
+      # that is not the seller's bank details to act on, so say nothing.
+      if !stripe_rejected && (bank_note = current_bank_sync_failure_note)
+        abandoned_reason = bank_note.json_data["abandoned_reason"]
+        bank_message = if StripeMerchantAccountManager.bank_account_blocked_note?(bank_note)
+          # Both this and the terminal branch below ask for a different account, but only this copy
+          # states the details were fine — the gumroad-private#1476 seller re-saved a valid account
+          # for three months because nothing ever said so.
+          "Our payment partner won't accept the bank account you added, and there's nothing wrong with the details you entered — re-entering them or waiting won't help. Please add a different bank account. If it's the only account you have, contact support and we'll look into it with you."
+        elsif StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
           "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
         elsif StripeMerchantAccountManager.bank_details_format_rejection_note?(bank_note)
           "Our payment partner couldn't accept your bank details as entered. Please double-check your account and bank code and re-save them. Waiting won't clear this one."
+        elsif bank_note.json_data["abandoned_at"].present?
+          # give_up! abandons without a reason, and it counts transient failures toward the retry
+          # cap too, so exhaustion is not evidence the details are wrong. Mirrors
+          # ContactingCreatorMailer#payout_setup_retry_exhausted, sent from that same method.
+          "We've been re-checking the bank account you added, but our payment partner still hasn't been able to verify it. Please double-check your details and re-save them. If everything looks correct, contact support and we'll look into it." if abandoned_reason.blank?
         else
           # Cadence wording must match ContactingCreatorMailer#invalid_bank_account.
           "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
         end
-        compliance_actions << { message: bank_message, href: nil }
+        compliance_actions << { message: bank_message, href: nil } if bank_message.present?
       end
 
       gumroad_status = if is_under_review && !is_suspended
