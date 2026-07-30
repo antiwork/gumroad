@@ -120,6 +120,19 @@ describe LicensesController do
         expect(license.reload.uses).to eq 4
       end
 
+      # Integer() accepts Ruby's underscore digit grouping, which would land this as 1000.
+      it "rejects an underscore-grouped literal" do
+        put :update, format: :json, params: { id: secure_id, uses: "1_000" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects a whitespace-padded value" do
+        put :update, format: :json, params: { id: secure_id, uses: " 42 " }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
       it "rejects the plain external id that leaks via the license API" do
         put :update, format: :json, params: { id: license.external_id, uses: 9 }
         expect(response).to have_http_status(:not_found)
@@ -164,6 +177,19 @@ describe LicensesController do
         put :update, format: :json, params: { id: secure_id, adjust_uses: "abc" }
         expect(response).to have_http_status(:unprocessable_entity)
         expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects an underscore-grouped delta" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: "1_0" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      # The shape gate has to keep passing a signed delta, which is the normal decrement payload.
+      it "accepts a negative delta sent as a string" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: "-2" }
+        expect(response).to be_successful
+        expect(license.reload.uses).to eq 2
       end
 
       it "rejects a delta beyond the ceiling" do

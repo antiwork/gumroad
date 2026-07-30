@@ -36,10 +36,15 @@ class LicensesController < Sellers::BaseController
 
   private
     # nil means "reject" — the count is written from the value the client sends, so anything that
-    # isn't a plain in-range integer has to fail loudly rather than land as a coerced 0. Base 10
-    # is explicit because bare Integer() reads a leading zero as octal, turning "010" into 8.
+    # isn't a plain in-range integer has to fail loudly rather than land as a coerced 0. The shape
+    # check comes first because Integer() accepts Ruby literal grammar the endpoint does not:
+    # "1_000" would land as 1000 and " 42 " as 42. Base 10 is explicit because bare Integer() reads
+    # a leading zero as octal, turning "010" into 8.
     def cast_integer(value, min:)
-      number = Integer(value.to_s, 10, exception: false)
+      string = value.to_s
+      return unless string.match?(/\A-?\d+\z/)
+
+      number = Integer(string, 10, exception: false)
       return if number.nil? || !number.between?(min, License::MAX_SELLER_SETTABLE_USES)
 
       number
