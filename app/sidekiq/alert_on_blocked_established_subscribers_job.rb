@@ -37,29 +37,24 @@ class AlertOnBlockedEstablishedSubscribersJob
   # population with.
   MIN_SUCCESSFUL_CHARGES = 6
 
-  # Report at most this many, newest failure first. The alert exists to be read.
+  # Report at most this many, still-renewing memberships first. The alert exists to be read.
   MAX_REPORTED = 25
 
-  # Counted in subscribers who are actually reportable — enough charge history AND a block that is
-  # still active — never in candidates or failure rows. Both filters have to run before the cap:
-  # candidates arrive newest-failure-first, and the bulk-block regression this cap exists for is
-  # precisely what fills those newest pages with one- and two-charge subscribers and with blocks
-  # that have since been cleared. A cap spent any earlier goes to rows that were never going to be
-  # reported and drops the stranded subscribers behind them — the only rows worth reporting.
+  # The bound on the work: how many subscriptions with a blocked renewal get their charge history
+  # counted. Everything past it is unscanned, and the report says so rather than presenting its
+  # count as the total. Nothing is dropped inside the window — candidates arrive newest-failure
+  # first, so ranking a prefix of them is not ranking the window, and the rows the report exists to
+  # surface (memberships still renewing, whatever their failure date) can sit anywhere in it.
   # Measured headroom: 157 candidates over 30 days, 242 in the worst 30-day stretch of the last 90.
-  MAX_ESTABLISHED_FOUND = 2_000
-
-  # Bounds the opposite shape: a window holding far more candidates than qualify, where the
-  # established cap above would never trip and the walk would count charges for all of them.
   MAX_CANDIDATES_SCANNED = 10_000
 
-  # Candidates are counted in batches so the walk can stop as soon as either budget is spent.
+  # Candidates are counted in batches to keep each grouped query's IN list bounded.
   CHARGE_COUNT_BATCH = 500
 
   def perform
     scan = scan_for_stranded_subscriptions
-    # Truncation with nothing qualifying still has to go out: it means the cap, not the platform,
-    # decided the report was empty.
+    # Truncation with nothing qualifying still has to go out: it means the scan bound, not the
+    # platform, decided the report was empty.
     return if scan[:stranded].empty? && !scan[:truncated]
 
     InternalNotificationWorker.perform_async("risk", "Blocked established subscribers", message_for(scan))
@@ -67,11 +62,13 @@ class AlertOnBlockedEstablishedSubscribersJob
 
   private
     # One entry per subscription whose holder has real payment history and whose renewal-declining
-    # block is still active, newest failure first. `truncated` means the counts below are floors.
+    # block is still active, in the report's own ranking. `truncated` means the candidate window was
+    # cut short, so the counts are floors.
     #
-    # Walks candidates newest-failure-first in batches and applies both filters — charge history and
-    # the block still being active — inside the walk, so MAX_ESTABLISHED_FOUND is only ever spent on
-    # subscribers that reach the report.
+    # The whole window is walked before anything is ranked. Candidates arrive newest-failure-first,
+    # so ranking a prefix of them is not ranking the window: a still-renewing membership whose
+    # renewal failed weeks ago sits behind any number of newer terminated ones, and it is exactly
+    # the row the report exists to surface.
     def scan_for_stranded_subscriptions
       candidates = candidate_subscription_ids
       truncated = candidates.size > MAX_CANDIDATES_SCANNED
@@ -98,22 +95,9 @@ class AlertOnBlockedEstablishedSubscribersJob
             live: live_subscription_ids.include?(purchase.subscription_id),
           }
         end
-
-        # One over the cap, so hitting it stays distinguishable from a window holding exactly the cap.
-        if stranded.size > MAX_ESTABLISHED_FOUND
-          # Ranking has to be re-established before slicing. Candidates arrive newest-first, but
-          # only BETWEEN batches: within one, latest_block_failures returns rows keyed by id, so
-          # taking the first N off the raw accumulator would keep an arbitrary subset of the batch
-          # that tripped the cap. It has to be the REPORT's ranking and not recency alone, or the
-          # last slot goes to a newer subscriber already terminated instead of an older one
-          # unblocking could still save.
-          stranded = report_order(stranded).first(MAX_ESTABLISHED_FOUND)
-          truncated = true
-          break
-        end
       end
 
-      { stranded:, truncated: }
+      { stranded: report_order(stranded), truncated: }
     end
 
     # Subscription id => successful charge count, for the given candidates clearing
@@ -221,14 +205,13 @@ class AlertOnBlockedEstablishedSubscribersJob
 
     def message_for(scan)
       stranded = scan[:stranded]
-      ordered = report_order(stranded)
-      lines = ordered.first(MAX_REPORTED).map { |entry| line_for(entry) }
+      lines = stranded.first(MAX_REPORTED).map { |entry| line_for(entry) }
       omitted = stranded.size - lines.size
       live_count = stranded.count { |entry| entry[:live] }
 
       [
         headline(stranded.size, live_count, scan[:truncated]),
-        (scan[:truncated] ? "The scan stopped early, at #{MAX_ESTABLISHED_FOUND} established subscribers or #{MAX_CANDIDATES_SCANNED} subscriptions with a blocked renewal, so others in this window are not counted here." : nil),
+        (scan[:truncated] ? "The scan stopped at #{MAX_CANDIDATES_SCANNED} subscriptions with a blocked renewal, so others in this window are not counted here." : nil),
         "",
         *lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),
@@ -241,8 +224,6 @@ class AlertOnBlockedEstablishedSubscribersJob
     # ~5 days after the failed renewal, so most entries name a membership that is already dead and
     # that clearing the block will not bring back. Sorting the reachable ones first keeps the
     # actionable window at the top instead of buried under months of aftermath.
-    #
-    # The cap slices on this too, so what a truncated scan keeps is what the report would have shown.
     def report_order(stranded)
       stranded.sort_by { |entry| [entry[:live] ? 0 : 1, -entry[:failed_at].to_i] }
     end

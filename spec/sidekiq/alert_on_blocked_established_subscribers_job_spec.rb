@@ -340,21 +340,21 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
 
     it "says so instead of reporting the partial count as the total" do
-      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+      stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
       2.times { |i| blocked_established_subscriber(i) }
 
       described_class.new.perform
 
       expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
         expect(message).to include("At least 1 subscription with")
-        expect(message).to include("The scan stopped early, at 1 established subscribers")
+        expect(message).to include("The scan stopped at 1 subscriptions with a blocked renewal")
       end
     end
 
-    # The cap used to be spent on failure rows, so one subscriber's retries could consume it and
-    # hide everybody behind them. Counting subscriptions is what makes the cap mean what it says.
+    # The bound used to be spent on failure rows, so one subscriber's retries could consume it and
+    # hide everybody behind them. Counting subscriptions is what makes it mean what it says.
     it "does not let one subscriber's repeated failures consume the cap" do
-      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 2)
+      stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 2)
       noisy = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
       3.times { |i| failed_renewal(subscription: noisy, created_at: (i + 1).minutes.ago) }
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
@@ -386,12 +386,9 @@ describe AlertOnBlockedEstablishedSubscribersJob do
       end
     end
 
-    # The cap is spent on subscribers who QUALIFY, so newcomers ahead of an established subscriber
-    # cost a batch of counting rather than the budget itself. Capping candidates instead dropped
-    # exactly these rows: the bulk-block regression the cap exists for is what fills the newest
-    # pages with one- and two-charge subscribers.
+    # The bulk-block regression this bound exists for is what fills the newest pages with one- and
+    # two-charge subscribers, so the walk has to keep going through batches that yield nothing.
     it "reports an established subscriber sitting behind a page of newcomers" do
-      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
       stub_const("#{described_class}::CHARGE_COUNT_BATCH", 1)
       3.times do |i|
         newcomer = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES - 1)
@@ -409,7 +406,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
 
     it "does not claim truncation when the window held exactly the cap" do
-      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+      stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
       blocked_established_subscriber(0)
 
       described_class.new.perform
@@ -635,7 +632,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
   end
 
   it "reports both truncations at once without contradicting itself" do
-    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 2)
+    stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 2)
     stub_const("#{described_class}::MAX_REPORTED", 1)
     3.times do |i|
       subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
@@ -648,18 +645,16 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include("At least 2 subscriptions with")
-      expect(message).to include("The scan stopped early, at 2 established subscribers")
+      expect(message).to include("The scan stopped at 2 subscriptions with a blocked renewal")
       expect(message).to include("…and 1 more.")
     end
   end
 
-  # The established budget must not be spent on subscribers whose block is already gone. They are
-  # not reportable at all, so letting one hold a slot drops a subscriber who IS still stranded.
-  # The unblocked subscription is created FIRST so it holds the lower id: the budget is applied to
-  # a hash keyed by subscription_id, so id order — not failure recency — decides who survives, and
-  # the surviving row is then discarded anyway for having no active block.
-  it "does not let a subscriber whose block was cleared consume the established budget" do
-    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+  # A subscriber whose block is already gone is not reportable at all, so letting one hold a line of
+  # a limited report would hide a subscriber who IS still stranded. The unblocked subscription has
+  # the newer failure, which is what would otherwise win the slot.
+  it "does not let a subscriber whose block was cleared take a line of the report" do
+    stub_const("#{described_class}::MAX_REPORTED", 1)
     unblocked = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription: unblocked, guid: "guid-unblocked",
                    buyer_email: "unblocked@example.com", created_at: 1.hour.ago)
@@ -673,15 +668,15 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include("subscription #{still_blocked.id}")
+      expect(message).not_to include("subscription #{unblocked.id}")
     end
   end
 
-  # Slicing the accumulator raw keeps an arbitrary subset of the batch that tripped the cap, because
-  # latest_block_failures returns rows keyed by id rather than by recency. The OLDER failure is
-  # created first so it holds the lower id: without the sort it wins the only slot on id order and
-  # the newer stranded subscriber — the one the cap is supposed to keep — is dropped.
-  it "keeps the newest stranded subscribers when the budget cuts a batch short" do
-    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+  # latest_block_failures returns rows keyed by id rather than by recency, so a report that sliced
+  # the raw accumulator would keep an arbitrary subset. The OLDER failure is created first so it
+  # holds the lower id: without the sort it wins the only line on id order.
+  it "keeps the newest stranded subscriber when the report has one line" do
+    stub_const("#{described_class}::MAX_REPORTED", 1)
     older = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription: older, guid: "guid-older",
                    buyer_email: "older@example.com", created_at: 20.days.ago)
@@ -701,11 +696,11 @@ describe AlertOnBlockedEstablishedSubscribersJob do
   end
 
   # Recency alone is not the report's ranking: message_for prints still-renewing subscribers first,
-  # because those are the only ones unblocking can still save. A cap that ranks by recency only can
-  # therefore spend its last slot on a newer subscriber whose membership is already terminated and
+  # because those are the only ones unblocking can still save. A report that ranks by recency only
+  # spends its last line on a newer subscriber whose membership is already terminated and
   # drop the older one who is still saveable — the row the alert exists to surface.
   it "keeps the subscriber who can still be saved over a newer one already terminated" do
-    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+    stub_const("#{described_class}::MAX_REPORTED", 1)
     live = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription: live, guid: "guid-live",
                    buyer_email: "live@example.com", created_at: 20.days.ago)
@@ -722,6 +717,36 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include("subscription #{live.id}")
       expect(message).not_to include("subscription #{dead.id}")
+    end
+  end
+
+  # The live-first ranking has to hold across the whole window, not within whatever the scan reached
+  # first. Candidates arrive newest-failure-first, so terminated memberships with fresher failures
+  # occupy the leading batches; a scan that stopped once it had enough rows ranked only those and
+  # never saw the older membership that is still renewing — the one row unblocking can still save.
+  it "keeps a saveable subscriber sitting behind whole batches of newer terminated ones" do
+    stub_const("#{described_class}::MAX_REPORTED", 1)
+    stub_const("#{described_class}::CHARGE_COUNT_BATCH", 1)
+    dead = 2.times.map do |i|
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:, guid: "guid-dead-#{i}", buyer_email: "dead#{i}@example.com",
+                     created_at: (i + 1).hours.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-dead-#{i}")
+      subscription.update!(failed_at: 1.minute.ago)
+      subscription
+    end
+
+    live = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: live, guid: "guid-live", buyer_email: "live@example.com",
+                   created_at: 20.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-live")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{live.id}")
+      dead.each { |subscription| expect(message).not_to include("subscription #{subscription.id}") }
+      expect(message).to include("…and 2 more.")
     end
   end
 
