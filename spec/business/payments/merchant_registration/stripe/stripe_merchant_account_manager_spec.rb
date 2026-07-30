@@ -13681,6 +13681,58 @@ describe StripeMerchantAccountManager, :vcr do
     end
   end
 
+  # The whole heal turns on Stripe distinguishing "no share was ever recorded" from "the share is
+  # zero". Every other example here constructs the person locally, which cannot prove that: if Stripe
+  # normalised an explicit zero to null, a seller who deliberately unchecked Owner would read as a
+  # never-seeded representative and get 100% written over their own choice. These examples pin the
+  # round trip against Stripe itself, recorded, so the distinction is a fact about the API rather than
+  # an assumption in a stub.
+  describe "how Stripe stores a representative's percent_ownership" do
+    let(:account_id) do
+      Stripe::Account.create(
+        type: "custom",
+        country: "US",
+        business_type: "company",
+        capabilities: { transfers: { requested: true }, card_payments: { requested: true } }
+      ).id
+    end
+
+    def representative_on(account_id)
+      Stripe::Account.create_person(
+        account_id,
+        first_name: "Rep",
+        last_name: "Resentative",
+        relationship: { representative: true, title: "CEO" }
+      )
+    end
+
+    it "leaves percent_ownership absent on a representative created without one" do
+      person = representative_on(account_id)
+
+      expect(Stripe::Account.retrieve_person(account_id, person.id).relationship.percent_ownership).to be_nil
+    end
+
+    it "keeps an explicit zero as zero rather than normalising it to null" do
+      person = representative_on(account_id)
+
+      # What the beneficial-owners form sends when the seller unchecks Owner on their representative.
+      Stripe::Account.update_person(account_id, person.id, relationship: { owner: false, percent_ownership: 0 })
+
+      expect(Stripe::Account.retrieve_person(account_id, person.id).relationship.percent_ownership).to eq(0)
+    end
+
+    it "keeps a seeded share when owner is later unset" do
+      person = representative_on(account_id)
+      Stripe::Account.update_person(account_id, person.id, relationship: { owner: true, percent_ownership: 100 })
+
+      Stripe::Account.update_person(account_id, person.id, relationship: { owner: false })
+
+      relationship = Stripe::Account.retrieve_person(account_id, person.id).relationship
+      expect(relationship.owner).to be(false)
+      expect(relationship.percent_ownership).to eq(100)
+    end
+  end
+
   describe "company.owners_provided attestation" do
     let(:account_id) { "acct_owners_provided_123" }
 
