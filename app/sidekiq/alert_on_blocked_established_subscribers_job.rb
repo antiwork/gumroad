@@ -101,6 +101,10 @@ class AlertOnBlockedEstablishedSubscribersJob
 
         # One over the cap, so hitting it stays distinguishable from a window holding exactly the cap.
         if stranded.size > MAX_ESTABLISHED_FOUND
+          # Recency has to be re-established before slicing. Candidates arrive newest-first, but
+          # only BETWEEN batches: within one, latest_block_failures returns rows keyed by id, so
+          # taking the first N off the raw accumulator would keep an arbitrary subset of the batch
+          # that tripped the cap and drop newer stranded subscribers for older ones.
           stranded = stranded.first(MAX_ESTABLISHED_FOUND)
           truncated = true
           break

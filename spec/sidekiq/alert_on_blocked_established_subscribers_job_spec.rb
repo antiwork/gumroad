@@ -676,6 +676,30 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # Slicing the accumulator raw keeps an arbitrary subset of the batch that tripped the cap, because
+  # latest_block_failures returns rows keyed by id rather than by recency. The OLDER failure is
+  # created first so it holds the lower id: without the sort it wins the only slot on id order and
+  # the newer stranded subscriber — the one the cap is supposed to keep — is dropped.
+  it "keeps the newest stranded subscribers when the budget cuts a batch short" do
+    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+    older = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: older, guid: "guid-older",
+                   buyer_email: "older@example.com", created_at: 20.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-older")
+
+    newer = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: newer, guid: "guid-newer",
+                   buyer_email: "newer@example.com", created_at: 1.hour.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-newer")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{newer.id}")
+      expect(message).not_to include("subscription #{older.id}")
+    end
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
     expect(schedule.values.map { |entry| entry["class"] }).to include(described_class.name)
