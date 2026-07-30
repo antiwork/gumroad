@@ -1,36 +1,23 @@
 # frozen_string_literal: true
 
-# Charges a membership renewal the fixed buyer-currency amount stored at signup.
+# Charges a delayed purchase the fixed buyer-currency amount stored at checkout.
 #
-# Wired in at Purchase#create_charge_intent (purchase.rb), which is where renewals actually
-# charge: RecurringChargeWorker -> Subscription#charge! -> #process_purchase! -> Purchase#process!
-# -> #create_charge_intent -> ChargeProcessor.
+# Wired in at Purchase#create_charge_intent, where subscription renewals, installments,
+# preorder releases, and commission completions all charge their saved payment method.
 #
-# Charge::CreateService also carries a hook, and it runs: Order::ChargeService sets off_session for
-# any multi-seller cart. It can never produce a fixing though, because a checkout purchase is
-# always the original subscription purchase, which #stored_presentment refuses. Treat that hook as
-# defensive, and this one as the path that bills real renewals.
-#
-# The lane this fills. A card checkout presents in the buyer's currency by
-# verifying a signed quote the buyer confirmed in the browser
-# (Charge::PresentmentOrchestrator). A renewal has no browser and no quote token, so there is
-# nothing for the buyer to confirm and nothing to verify against.
+# Charge::CreateService carries a defensive hook for off-session combined charges. The direct
+# Purchase path is load-bearing for the delayed product types above.
 #
 # What is fixed and what is not (gumroad-private#1322, ruled 2026-07-28):
 #
-#   * FIXED — the PRICE. Read from the stored fixing, never re-derived from a current
-#     rate. A EUR 9.99 member pays EUR 9.99 every month, exactly as a USD member pays $10.
-#     Gumroad absorbs the FX drift; #usd_drift_cents makes it attributable per subscription
-#     rather than emergent in the margin.
-#   * NOT FIXED — tax and shipping. Both are recomputed per renewal (VAT rates change, the
-#     member can move), so they are converted at TODAY's rate via a fresh quote. Freezing
-#     them would charge stale tax, which is a compliance problem, not a kindness.
+#   * FIXED — the price. Read from the stored fixing, never re-derived at today's rate.
+#   * NOT FIXED — tip, tax, and shipping. They are converted at today's rate when present.
 #
-# A FRESH quote is minted per renewal even though the price does not move. The quote is what
+# A fresh quote is minted per charge even though the price does not move. The quote is what
 # makes Stripe settle the intent at a rate we know rather than at whatever rate applies when
 # the charge lands, and Stripe's quotes expire in 24 hours, so a stored one could never be
 # reused. The stored amount is what the quote CONVERTS, not a substitute for having one.
-class Subscription::PresentmentRenewal
+class Purchase::LaterChargePresentmentService
   Result = Struct.new(:processor_amount_cents,
                       :processor_currency,
                       :processor_gumroad_amount_cents,
@@ -49,16 +36,13 @@ class Subscription::PresentmentRenewal
     @gumroad_amount_cents = gumroad_amount_cents
   end
 
-  # Returns a Result to present the renewal in the member's currency, or nil to leave the
-  # caller charging canonical USD.
+  # Returns a Result in the stored currency, or nil to leave the caller charging canonical USD.
   #
   # Every refusal here is a FALLBACK, not a failure. This differs deliberately from the card
   # lane, which fails closed: there, a buyer is watching a confirmed local total and charging
   # anything else would break the amount they agreed to. Here there is no browser and no
-  # confirmed total for THIS charge — the alternative is the canonical USD charge that every
-  # renewal made before this feature existed. Failing the renewal outright would dun a paying
-  # member and risk cancelling a live subscription over an FX-quote hiccup, which is strictly
-  # worse than billing them the USD equivalent for one period.
+  # confirmed total for this charge. Failing it outright over an FX-quote hiccup is worse than
+  # the canonical USD behavior these paths used before the fixing existed.
   def perform
     presentment = stored_presentment
     return fallback(:no_stored_presentment) if presentment.blank?
@@ -99,24 +83,15 @@ class Subscription::PresentmentRenewal
     presentment_total_cents = fixed_price_cents + variable_presentment_cents
     return fallback(:non_positive_total) unless presentment_total_cents.positive?
 
-    # Gumroad's share converts at today's rate like any other renewal: the fee is a
-    # percentage of the canonical USD amount, and holding it fixed would let Gumroad's cut
-    # drift away from the fee schedule the seller agreed to.
-    #
-    # WHICH SIDE THIS LEAVES THE DRIFT ON IS STILL OPEN, and today it is not the side the header
-    # above claims. Stripe takes this as the application fee or the transfer deduction, so the
-    # seller receives the fixed total minus a share converted at today's rate: a $10 canonical
-    # charge with a $1 fee, fixed at EUR 9.00, pays the seller EUR 7.75 at 0.8 (worth $6.20)
-    # against $9.00 of canonical proceeds, while Gumroad still collects its $1.00. Settling this
-    # is a prerequisite for the ramp, and whichever way it goes the header and
-    # LaterChargePresentment's class comment have to move with it.
+    # Gumroad's share converts at today's rate. Because the buyer's price stays fixed, the
+    # resulting FX drift remains in the seller's proceeds.
     presentment_gumroad_amount_cents =
       presentment_cents_for(gumroad_amount_cents, quote.fx_rate, currency).clamp(0, presentment_total_cents)
 
     allocation = Charge::PresentmentAllocator::Allocation.new(
       purchase:,
       presentment_price_cents: fixed_price_cents,
-      presentment_tip_cents: 0,
+      presentment_tip_cents: presentment_cents_for(purchase.tip&.value_usd_cents.to_i, quote.fx_rate, currency),
       presentment_seller_tax_cents: presentment_cents_for(purchase.tax_cents.to_i, quote.fx_rate, currency),
       presentment_gumroad_tax_cents: presentment_cents_for(purchase.gumroad_tax_cents.to_i, quote.fx_rate, currency),
       presentment_shipping_cents: presentment_cents_for(purchase.shipping_cents.to_i, quote.fx_rate, currency),
@@ -148,34 +123,34 @@ class Subscription::PresentmentRenewal
       stripe_fx_quote_id: quote.id
     )
   rescue StandardError => e
-    # An unexpected failure must not cost the seller a renewal, so notify and let the caller
-    # charge canonical USD.
+    # An unexpected failure must not cost the seller a delayed charge.
     ErrorNotifier.notify(e, context: { charge_id: charge&.id, purchase_id: purchases.first&.id })
     fallback(:"#{e.class}")
   end
 
   private
-    # Only a single-purchase renewal is in this lane. A renewal charge carries exactly one
-    # purchase (RecurringChargeWorker charges one subscription), so anything else is a shape
-    # this service has not reasoned about and must not guess at.
-    #
-    # Reads current_later_charge_presentment, not the whole collection: fixings are immutable
-    # and effective-dated, so the newest one that has taken effect is the amount to charge. A
-    # future-dated fixing (a scheduled price change) deliberately does not apply yet.
+    # These delayed paths each charge one purchase. Anything else is a shape this service has
+    # not reasoned about and must not guess at.
     def stored_presentment
       return if purchases.blank? || !purchases.one?
 
-      purchase = purchases.first
-      return if purchase.subscription.blank?
-      return if purchase.is_original_subscription_purchase?
-
-      purchase.subscription.current_later_charge_presentment
+      later_charge_owner(purchases.first)&.current_later_charge_presentment
     end
 
-    # Everything on the renewal except the price: tax and shipping, which are recomputed each
-    # period and therefore convert at today's rate.
+    def later_charge_owner(purchase)
+      if purchase.subscription.present?
+        purchase.subscription unless purchase.is_original_subscription_purchase?
+      elsif purchase.preorder.present?
+        purchase.preorder unless purchase.is_preorder_authorization?
+      elsif purchase.is_commission_completion_purchase?
+        purchase.commission
+      end
+    end
+
+    # Everything except the fixed price converts at today's rate.
     def variable_component_canonical_cents(purchase)
-      purchase.tax_cents.to_i + purchase.gumroad_tax_cents.to_i + purchase.shipping_cents.to_i
+      purchase.tip&.value_usd_cents.to_i + purchase.tax_cents.to_i +
+        purchase.gumroad_tax_cents.to_i + purchase.shipping_cents.to_i
     end
 
     def reconcile_price_component!(allocation)
@@ -200,7 +175,7 @@ class Subscription::PresentmentRenewal
     # Stripe rejects an intent whose `transfer_data.destination` does not match the quote's
     # declared destination. When these two branches meet, this call must adopt the same
     # resolver (Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account /
-    # .fx_quote_destination_account_id) or destination-charge renewals will fail the pairing
+    # .fx_quote_destination_account_id) or destination charges will fail the pairing
     # check and fall back to USD.
     def mint_quote(currency)
       StripeFxQuote.create(
@@ -219,7 +194,7 @@ class Subscription::PresentmentRenewal
 
     def fallback(reason)
       @fallback_reason = reason
-      Rails.logger.info("Subscription renewal presentment fallback for #{charge.present? ? "charge #{charge.external_id}" : "purchase #{purchases.first&.id}"}: #{reason}")
+      Rails.logger.info("Later-charge presentment fallback for #{charge.present? ? "charge #{charge.external_id}" : "purchase #{purchases.first&.id}"}: #{reason}")
       nil
     end
 end

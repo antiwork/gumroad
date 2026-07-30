@@ -354,7 +354,7 @@ class Charge::CreateService
     return {} unless merchant_account&.stripe_charge_processor?
     return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
 
-    renewal = Subscription::PresentmentRenewal.new(
+    renewal = Purchase::LaterChargePresentmentService.new(
       charge:,
       merchant_account:,
       purchases:,

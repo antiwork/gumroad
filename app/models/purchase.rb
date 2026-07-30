@@ -4230,33 +4230,15 @@ class Purchase < ApplicationRecord
       end
     end
 
-    # Processor args billing this renewal the buyer-currency amount fixed at signup, or {} to let
-    # the caller charge canonical US dollars.
-    #
-    # Only a genuine off-session renewal of a subscription that already stored a fixing takes this
-    # path. Deliberately does NOT consult the subscription ramp flag: a member whose amount was
-    # already fixed must keep being billed it even after the flag is pulled, because the
-    # alternative is silently switching their currency mid-subscription. The parent lane gates
-    # (seller_enabled?) still apply — a seller who turns buyer-local currency off entirely is
-    # asking for dollars.
-    #
-    # `off_session` is what makes "genuine renewal" true rather than aspirational. A buyer-present
-    # charge on a subscription — Subscription::UpdaterService#charge_user! for an upgrade, a
-    # restart at checkout — reaches this same method with a non-original purchase and a stored
-    # fixing, and it is looking at a total the buyer can see. Billing the amount fixed months ago
-    # would charge something other than what is on their screen. A restart at the unchanged plan
-    # price is the case that bites: the staleness anchor matches, so nothing else here would stop
-    # it. Mirrors Charge::CreateService#subscription_renewal_presentment_processor_args, which
-    # gates on off_session for the same reason.
+    # Processor args for an off-session purchase whose buyer-currency price was fixed earlier.
+    # Buyer-present charges stay on the verified checkout quote path.
     def later_charge_presentment_processor_args(off_session:)
       return {} unless off_session
       return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
       return {} unless merchant_account&.stripe_charge_processor?
-      return {} if subscription.blank?
-      return {} if is_original_subscription_purchase?
       return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
 
-      result = Subscription::PresentmentRenewal.new(
+      result = Purchase::LaterChargePresentmentService.new(
         merchant_account:,
         purchases: [self],
         amount_cents: total_transaction_cents,
@@ -4310,16 +4292,9 @@ class Purchase < ApplicationRecord
         # off-session (multi-seller carts) but must not be treated that way.
         mandate_expected = is_a_saved_card_rebill?
 
-        # A membership renewal bills the buyer-currency amount fixed at signup rather than
-        # canonical dollars (gumroad-private#1322). This is the renewal charge site: renewals
-        # reach here via RecurringChargeWorker -> Subscription#charge! -> #process!. The twin in
-        # Charge::CreateService serves checkout, where a purchase is always the original
-        # subscription purchase, so its renewal branch runs but can never produce a fixing.
+        # Delayed product charges reuse the buyer-currency price fixed at checkout.
         #
-        # Empty hash means "no fixing applies": the subscription predates the ramp, its plan
-        # moved since the fixing, the currency is no longer chargeable, or the quote could not be
-        # minted. In every one of those cases this charge proceeds in canonical US dollars, which
-        # is exactly what it billed before this feature existed.
+        # Empty hash means no valid fixing applies, so the charge keeps its canonical behavior.
         presentment_args = later_charge_presentment_processor_args(off_session:)
         # The RBI e-mandate cap is registered in US dollars, but Stripe reads mandate_options
         # amounts in the mandate's own currency and the mandate inherits the intent's currency.

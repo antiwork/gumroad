@@ -78,7 +78,7 @@ class LaterChargePresentment < ApplicationRecord
   # excluded seller tax and shipping into it before the charge, so anchoring on it made a member
   # moving house or a VAT rate change look identical to a plan change, and every renewal after
   # that quietly reverted to US dollars. The components removed here are the same ones a renewal
-  # re-converts at today's rate (Subscription::PresentmentRenewal), so what is left is precisely
+  # re-converts at today's rate (Purchase::LaterChargePresentmentService), so what is left is precisely
   # the part that is supposed to stay fixed.
   def self.canonical_price_cents_for(purchase)
     purchase.total_transaction_cents.to_i -

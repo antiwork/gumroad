@@ -117,7 +117,7 @@ class Checkout::BuyerCurrencyEligibility
   # buyer-currency amount outlives the checkout that agreed it. Both halves are now wired:
   # Purchase::BaseService#fix_later_charge_presentment stores the fixed amount once the signup
   # charge has succeeded and the Subscription exists, and Purchase#create_charge_intent bills it
-  # on every renewal via Subscription::PresentmentRenewal.
+  # on every renewal via Purchase::LaterChargePresentmentService.
   #
   # Pulling this flag stops NEW memberships entering the lane. It deliberately does not orphan
   # existing ones: the renewal path checks only processor + stored-row facts, so a member whose

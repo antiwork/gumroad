@@ -2,8 +2,8 @@
 
 require "spec_helper"
 
-describe Subscription::PresentmentRenewal do
-  let(:seller) { create(:user) }
+describe Purchase::LaterChargePresentmentService do
+  let(:seller) { create(:user, :eligible_for_service_products) }
   let(:merchant_account) { create(:merchant_account_stripe_connect, user: seller) }
   let(:product) { create(:membership_product, user: seller, price_cents: 1000) }
   let(:subscription) { create(:subscription, link: product, user: create(:user)) }
@@ -197,6 +197,49 @@ describe Subscription::PresentmentRenewal do
                                          is_original_subscription_purchase: false)
 
     expect(service(purchases: [renewal_purchase, other]).perform).to be_nil
+  end
+
+  it "reads an installment plan fixing from its subscription" do
+    installment_product = create(:product, :with_installment_plan, user: seller)
+    signup = create(:installment_plan_purchase, link: installment_product, seller:)
+    plan = signup.subscription
+    installment = create(:recurring_installment_plan_purchase, link: installment_product, seller:,
+                                                               subscription: plan)
+    create(:later_charge_presentment, owner: plan, presentment_currency: "eur",
+                                      presentment_price_cents: 899, canonical_price_cents: 1000)
+
+    expect(service(purchases: [installment]).perform.processor_amount_cents).to eq(899)
+  end
+
+  it "reads a preorder fixing on release" do
+    preorder = create(:preorder, preorder_link: create(:preorder_link, link: product), seller:)
+    authorization = create(:preorder_authorization_purchase, link: product, seller:,
+                                                             displayed_price_cents: 1000, price_cents: 1000)
+    authorization.update!(preorder:)
+    release = create(:purchase, link: product, seller:, preorder:, price_cents: 1000,
+                                total_transaction_cents: 1000)
+    create(:later_charge_presentment, owner: preorder, presentment_currency: "eur",
+                                      presentment_price_cents: 899, canonical_price_cents: 1000)
+
+    expect(service(purchases: [release]).perform.processor_amount_cents).to eq(899)
+  end
+
+  it "reads a commission fixing and converts its tip at today's rate" do
+    commission_product = create(:commission_product, user: seller, price_cents: 2000)
+    deposit = create(:purchase, link: commission_product, seller:, price_cents: 1000,
+                                total_transaction_cents: 1000, is_commission_deposit_purchase: true)
+    completion = create(:purchase, link: commission_product, seller:, price_cents: 1000,
+                                   total_transaction_cents: 1100)
+    completion.update!(is_commission_completion_purchase: true)
+    completion.create_tip!(value_cents: 100, value_usd_cents: 100)
+    commission = create(:commission, deposit_purchase: deposit, completion_purchase: completion)
+    create(:later_charge_presentment, owner: commission, presentment_currency: "eur",
+                                      presentment_price_cents: 899, canonical_price_cents: 1000)
+
+    result = service(purchases: [completion], amount_cents: 1100).perform
+
+    expect(result.processor_amount_cents).to eq(1024)
+    expect(completion.reload.purchase_presentment.presentment_tip_cents).to eq(125)
   end
 
   it "keeps the persisted components summing to the total when conversion rounds" do
