@@ -280,7 +280,7 @@ module StripeMerchantAccountManager
       ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e) || postal_code_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
-    record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
+    record_bank_sync_failure_note(user, e, bank_account:) if notify && bank_account_invalid_error?(e)
     # A seller who has no connected account yet fails here, not in update_account: the settings
     # page calls create_account once the bank account exists, and every rejection used to leave
     # nothing behind except a merchant-account row created and soft-deleted in the same second.
@@ -923,7 +923,7 @@ module StripeMerchantAccountManager
       ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
     end
-    failure_note = record_bank_sync_failure_note(user, e) if notify
+    failure_note = record_bank_sync_failure_note(user, e, bank_account:) if notify
     # bank_account_invalid_error? recognizes rejections of the seller's bank details themselves
     # (unknown bank for a BIC or routing code, invalid account number). Stripe marks these via
     # the error's code or param (for example param "bank_account[routing_number]" on "We
@@ -943,7 +943,7 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
     :stripe_invalid_request
   rescue Stripe::CardError => e
-    record_bank_sync_failure_note(user, e) if notify
+    record_bank_sync_failure_note(user, e, bank_account:) if notify
     # A CardError here means the debit card used for payouts was declined by the network, not
     # that a bank code was mistyped, so this is never a format rejection.
     ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
@@ -958,7 +958,7 @@ module StripeMerchantAccountManager
   # Returns the note so callers that go on to email the seller can mark it — see
   # mark_bank_sync_note_seller_notified!. The structured json_data fields are what the
   # classifiers read; the human-readable content is for support staff reading the account.
-  def self.record_bank_sync_failure_note(user, error)
+  def self.record_bank_sync_failure_note(user, error, bank_account: nil)
     code = error.respond_to?(:code) ? error.code : nil
     message = error.message.to_s
     note = user.add_payout_note(
@@ -967,6 +967,11 @@ module StripeMerchantAccountManager
     )
     note.json_data["stripe_error_code"] = code
     note.json_data["stripe_error_message"] = message
+    # Which bank row Stripe actually rejected. The sync makes network calls, so the seller can
+    # save replacement details before the rejection lands; callers pass the row they submitted
+    # rather than re-reading, since by now the active row may already be the replacement.
+    # Read by SettingsPresenter#current_bank_sync_failure_note.
+    note.json_data["bank_account_id"] = bank_account&.id
     note.save!
     note
   rescue => e

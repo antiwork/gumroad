@@ -1058,6 +1058,11 @@ class User < ApplicationRecord
     hostnames.compact.uniq
   end
 
+  # Exact-host DNS is refreshed by the verification worker, never while rendering a profile.
+  def store_host_with_protocol
+    custom_domain&.strictly_routable? ? "#{PROTOCOL}://#{custom_domain.domain}" : subdomain_with_protocol
+  end
+
   def auto_transcode_videos?
     tier >= TIER_3
   end
