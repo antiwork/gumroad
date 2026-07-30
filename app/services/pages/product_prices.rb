@@ -69,7 +69,7 @@ class Pages::ProductPrices
     def warm_offer_code_uses(products)
       cache = (Current.default_offer_code_uses_left ||= {})
       capped = products.filter_map(&:default_offer_code)
-                       .select { |code| code.max_purchase_count.present? }
+                       .select(&:cap_exhaustible_for_quoting?)
                        .uniq(&:id)
                        .reject { |code| cache.key?(code.id) }
       return if capped.empty?

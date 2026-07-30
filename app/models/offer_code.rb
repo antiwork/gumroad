@@ -165,6 +165,16 @@ class OfferCode < ApplicationRecord
     json
   end
 
+  # Quote surfaces (cards, storefront payloads) check exhaustion only for caps this small.
+  # The check SUMs up to `max_purchase_count` purchase rows, so a huge cap — sellers use
+  # millions to mean "unlimited" — would have every card that carries the code scan that many
+  # rows to prove a state it never reaches. Checkout still enforces the cap exactly.
+  QUOTE_EXHAUSTION_CHECK_MAX_CAP = 10_000
+
+  def cap_exhaustible_for_quoting?
+    max_purchase_count.present? && max_purchase_count <= QUOTE_EXHAUSTION_CHECK_MAX_CAP
+  end
+
   # Batched uses-left for capped codes, for surfaces that price many products in one request:
   # one grouped aggregate where per-code times_used would issue one SUM each. Returns
   # id => whether one more purchase still fits under the cap.

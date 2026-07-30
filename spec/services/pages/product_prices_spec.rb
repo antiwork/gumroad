@@ -240,6 +240,25 @@ describe Pages::ProductPrices do
       expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(1400)
     end
 
+    # A cap in the millions is marketing-unlimited: it never exhausts, and proving that would
+    # scan up to that many purchase rows per render. Above the quoting threshold the discount
+    # applies with no purchases read at all.
+    it "skips the uses read entirely for a marketing-unlimited cap" do
+      offer_code = seller.offer_codes.create!(code: "big", amount_percentage: 50, products: [product],
+                                              max_purchase_count: OfferCode::QUOTE_EXHAUSTION_CHECK_MAX_CAP + 1)
+      product.update!(default_offer_code: offer_code)
+
+      sums = 0
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        sums += 1 if payload[:sql].include?("SUM") && payload[:sql].include?("purchases")
+      end
+      entry = described_class.build(seller, ip: nil)[product.general_permalink]
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      expect(entry[:price_cents]).to eq(700)
+      expect(sums).to eq(0)
+    end
+
     # Checkout rejects a code whose use cap is spent, so subtracting it here would advertise a
     # sale price and strikethrough the buyer is never charged.
     it "leaves an exhausted default offer code on the shelf" do

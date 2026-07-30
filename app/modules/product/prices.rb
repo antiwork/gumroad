@@ -374,7 +374,7 @@ module Product::Prices
     # every grid call site is not worth the coupling. Pages::ProductPrices, which prices up to
     # 100 products uncached, seeds this memo in one grouped query (OfferCode.uses_left_by_id).
     def default_offer_code_uses_left?(offer_code)
-      return true if offer_code.max_purchase_count.nil?
+      return true unless offer_code.cap_exhaustible_for_quoting?
 
       cache = (Current.default_offer_code_uses_left ||= {})
       return cache[offer_code.id] if cache.key?(offer_code.id)
