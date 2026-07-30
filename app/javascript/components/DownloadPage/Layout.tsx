@@ -47,6 +47,7 @@ export type LayoutProps = {
     id: string;
     receipt_purchase_id: string | null;
     email: string | null;
+    receipt_purchase_email: string | null;
     email_digest: string;
     is_archived: boolean;
     has_invoice: boolean;
@@ -106,6 +107,7 @@ export const Layout = ({
   });
 
   const receiptPurchaseId = purchase?.receipt_purchase_id ?? purchase?.id;
+  const receiptPurchaseEmail = purchase?.receipt_purchase_email ?? purchase?.email;
 
   const disabledStatus =
     purchase && !purchase.product_available
@@ -192,8 +194,8 @@ export const Layout = ({
                     <div className="flex flex-col gap-4">
                       <NavigationButton
                         href={
-                          purchase.email
-                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
+                          receiptPurchaseEmail
+                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: receiptPurchaseEmail })
                             : Routes.receipt_purchase_url(receiptPurchaseId)
                         }
                       >
@@ -215,8 +217,8 @@ export const Layout = ({
                       {purchase.has_invoice ? (
                         <NavigationButton
                           href={
-                            purchase.email
-                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: purchase.email })
+                            receiptPurchaseEmail
+                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: receiptPurchaseEmail })
                               : Routes.new_purchase_invoice_url(receiptPurchaseId)
                           }
                         >

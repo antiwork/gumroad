@@ -204,6 +204,7 @@ describe UrlRedirectPresenter do
           receipt_purchase_id: @purchase.bundle_purchase.external_id,
           created_at: @purchase.created_at,
           email: @purchase.email,
+          receipt_purchase_email: @purchase.bundle_purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
           has_invoice: true,
@@ -307,6 +308,35 @@ describe UrlRedirectPresenter do
 
         expect(props[:id]).to eq(original.external_id)
         expect(props[:receipt_purchase_id]).to eq(recurring.external_id)
+      end
+
+      it "sends the charge's own email so the receipt and invoice pages accept it" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, email: "new@example.com")
+        recurring = create(:membership_purchase, link: product, subscription:, created_at: 1.month.from_now, email: "old@example.com")
+        url_redirect = create(:url_redirect, purchase: original, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(recurring.external_id)
+        expect(props[:email]).to eq("new@example.com")
+        expect(props[:receipt_purchase_email]).to eq("old@example.com")
+      end
+
+      it "omits the charge's email while email confirmation is pending" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true)
+        create(:membership_purchase, link: product, subscription:, created_at: 1.month.from_now)
+        url_redirect = create(:url_redirect, purchase: original, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_without_content_props(
+          content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]
+        )[:purchase]
+
+        expect(props[:email]).to be_nil
+        expect(props[:receipt_purchase_email]).to be_nil
       end
 
       it "falls back to the purchase itself when the membership has no successful charge yet" do
@@ -723,6 +753,7 @@ describe UrlRedirectPresenter do
           receipt_purchase_id: @purchase.external_id,
           created_at: @purchase.created_at,
           email: @purchase.email,
+          receipt_purchase_email: @purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
           has_invoice: true,
