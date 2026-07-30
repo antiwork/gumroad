@@ -1468,15 +1468,15 @@ class Link < ApplicationRecord
     # edit can both commit. Whichever commits second re-checks fresh state here
     # and clears the pointer, compare-and-set so a newer assignment survives.
     # OfferCode#repair_detached_default_discounts covers the other commit order.
+    # Checks a fresh instance so this instance's association cache stays intact.
     def repair_detached_default_offer_code
       forget_default_offer_code_assignment
-      detached_id = default_offer_code_id
-      return if detached_id.nil?
+      return if default_offer_code_id.nil?
 
-      reload_default_offer_code
-      return unless default_offer_code_detached?
+      fresh = Link.includes(:default_offer_code).find_by(id:)
+      return if fresh.nil? || !fresh.default_offer_code_detached?
 
-      updated = Link.where(id:, default_offer_code_id: detached_id).update_all(default_offer_code_id: nil)
+      updated = Link.where(id:, default_offer_code_id: fresh.default_offer_code_id).update_all(default_offer_code_id: nil)
       invalidate_cache if updated > 0
     end
 
