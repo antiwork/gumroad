@@ -951,6 +951,18 @@ describe "Sales page", type: :system, js: true do
         end
         expect(purchase2.license.reload.uses).to eq 4
 
+        # The steppers send a delta, so an activation that lands after the page rendered survives
+        # the seller's click instead of being overwritten by the browser's stale count.
+        purchase2.license.increment!(:uses)
+        within_section "License key", section_element: :section do
+          click_on "Increase uses"
+          wait_for_ajax
+        end
+        expect(purchase2.license.reload.uses).to eq 6
+        within_section "License key", section_element: :section do
+          expect(page).to have_text("Uses 6", normalize_ws: true)
+        end
+
         within_section "License key", section_element: :section do
           click_on "Edit"
           fill_in "Uses", with: 12
