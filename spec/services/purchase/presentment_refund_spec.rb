@@ -247,6 +247,75 @@ describe Purchase::PresentmentRefund do
     end
   end
 
+  # The Connect charge model decides how Stripe splits the money, not how much of the
+  # buyer's presentment total is still refundable. Both entry points read only the
+  # purchase_presentment snapshot and the purchase's own effective refunds, so a
+  # destination charge, a direct charge and a platform charge must all derive the same
+  # numbers from the same snapshot. These specs pin that: if someone later reaches for
+  # the charge model here, one of them fails.
+  describe "charge-model independence" do
+    let(:direct_charge_account) { create(:merchant_account_stripe_connect) }
+    let(:destination_charge_account) { create(:merchant_account) }
+
+    # The purchase is built with `save!(validate: false)` above, so re-saving it through
+    # validations would trip the charge-state validators; only the association matters here.
+    def use_charge_model(merchant_account)
+      purchase.merchant_account = merchant_account
+      purchase.save!(validate: false)
+      purchase.reload
+    end
+
+    def snapshot_for(merchant_account)
+      use_charge_model(merchant_account)
+
+      full = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 135)
+      partial = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 54)
+      tax_only = described_class.new(purchase:, canonical_gross_refund_cents: 100).tax_only_result
+
+      {
+        full: [full.canonical_gross_refund_cents, full.presentment_refund.json_data],
+        partial: [partial.canonical_gross_refund_cents, partial.presentment_refund.json_data],
+        tax_only: tax_only.json_data,
+      }
+    end
+
+    it "derives identical refunds for direct, destination and platform charges" do
+      expect(direct_charge_account.is_a_stripe_connect_account?).to eq(true)
+      expect(destination_charge_account.is_a_stripe_connect_account?).to eq(false)
+      expect(destination_charge_account.user).to be_present
+
+      direct = snapshot_for(direct_charge_account)
+      destination = snapshot_for(destination_charge_account)
+      platform = snapshot_for(nil)
+
+      expect(direct).to eq(destination)
+      expect(direct).to eq(platform)
+      expect(direct[:full].first).to eq(100)
+      expect(direct[:full].last[:presentment_amount_cents]).to eq(135)
+      expect(direct[:partial].first).to eq(40)
+      expect(direct[:tax_only][:presentment_gumroad_tax_cents]).to eq(20)
+    end
+
+    it "consumes presentment balance from prior refunds regardless of the charge model" do
+      use_charge_model(direct_charge_account)
+      refund = build(:refund, purchase:, total_transaction_cents: 40, amount_cents: 40)
+      refund.presentment_currency = Currency::CAD
+      refund.presentment_amount_cents = 54
+      refund.presentment_price_cents = 54
+      purchase.refunds << refund
+      purchase.reload
+
+      # 135 - 54 already refunded, so only 81 presentment cents remain on either shape.
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 82)).to be_nil
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 81)).to be_present
+
+      use_charge_model(destination_charge_account)
+
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 82)).to be_nil
+      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 81)).to be_present
+    end
+  end
+
   describe "failed EUR refunds and re-refunds" do
     # Direct proof for the local-methods launch shape (iDEAL/Bancontact charge in
     # EUR): a refund the buyer's bank returned consumes NO refundable presentment
