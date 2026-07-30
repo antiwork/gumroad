@@ -127,7 +127,8 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
   # object_value collates case-insensitively, so a row stored in another casing is enforcing in
   # production and has to be found here too — a case-sensitive lookup would drop the subscriber
-  # rather than merely lose the date.
+  # rather than merely lose the date. The casing can differ on either side: block rows are stored
+  # verbatim, and User#email is not downcased on write the way Purchase#email is.
   it "finds a domain block stored in a different casing" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
@@ -145,6 +146,38 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription:, guid: "guid-mixed-case")
     block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "GUID-Mixed-Case")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+    end
+  end
+
+  # The mirror of the two above, pinning the lookup side rather than the stored side: the value read
+  # off the purchase is what carries the casing here. Purchase#email is downcased on write, so the
+  # domain that can arrive mixed-case is the purchaser's — User#email has no such callback.
+  it "finds a domain block when the purchaser's account domain is the mixed-case side" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    purchaser = create(:user, email: "member@Account-Domain.com")
+    renewal = failed_renewal(subscription:, buyer_email: "member@purchase-domain.com",
+                             error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    renewal.update!(purchaser:)
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "account-domain.com")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+    end
+  end
+
+  it "finds a guid block when the purchase's guid is the mixed-case side" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, guid: "GUID-Mixed-Case")
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-mixed-case")
 
     described_class.new.perform
 

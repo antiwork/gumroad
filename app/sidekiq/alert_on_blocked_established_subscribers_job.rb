@@ -152,7 +152,6 @@ class AlertOnBlockedEstablishedSubscribersJob
     # Keyed on the downcased value, because the lookup is case-insensitive but the hash is not: the
     # column collates utf8mb4_unicode_ci, so a row stored as `Example.COM` enforces against
     # `buyer@example.com` yet comes back under its own casing and would miss a case-sensitive key.
-    # Several rows can then collapse into one key; the oldest wins, as it does per row.
     def normalized_block_dates(object_type, values)
       PlatformBlock.active
                    .where(object_type:, object_value: values)
