@@ -958,22 +958,25 @@ module StripeMerchantAccountManager
   # Returns the note so callers that go on to email the seller can mark it — see
   # mark_bank_sync_note_seller_notified!. The structured json_data fields are what the
   # classifiers read; the human-readable content is for support staff reading the account.
-  def self.record_bank_sync_failure_note(user, error, bank_account: nil)
+  def self.record_bank_sync_failure_note(user, error, bank_account:)
     code = error.respond_to?(:code) ? error.code : nil
     message = error.message.to_s
-    note = user.add_payout_note(
+    user.add_payout_note(
       content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{message.truncate(200)}",
-      seller_visible: false
+      seller_visible: false,
+      # Written in the same insert as the note, not a follow-up save: SettingsPresenter reads
+      # bank_account_id to decide which bank row a rejection names, and a note that exists for
+      # even a moment without it is read as an unattributed legacy note — which is how the
+      # banner would blame the wrong account.
+      #
+      # bank_account is the row the caller submitted rather than a re-read: the sync makes
+      # network calls, so by now the seller's active row may already be the replacement.
+      json_data: {
+        "stripe_error_code" => code,
+        "stripe_error_message" => message,
+        "bank_account_id" => bank_account&.id
+      }
     )
-    note.json_data["stripe_error_code"] = code
-    note.json_data["stripe_error_message"] = message
-    # Which bank row Stripe actually rejected. The sync makes network calls, so the seller can
-    # save replacement details before the rejection lands; callers pass the row they submitted
-    # rather than re-reading, since by now the active row may already be the replacement.
-    # Read by SettingsPresenter#current_bank_sync_failure_note.
-    note.json_data["bank_account_id"] = bank_account&.id
-    note.save!
-    note
   rescue => e
     Rails.logger.error "Failed to record payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
