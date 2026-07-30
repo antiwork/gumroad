@@ -11,16 +11,14 @@ class FinalizeBuyerPresentmentPurchaseJob
   def perform(purchase_id, attempt = 0)
     purchase = Purchase.find(purchase_id)
     return unless purchase.pending_buyer_presentment_settlement?
+    # Deliberately syncs with mark_as_failed false: this job only runs after a succeeded
+    # PaymentIntent, so failing here would turn a transient Stripe lookup error into a false
+    # payment failure. SyncStuckPurchasesJob resolves genuinely stuck rows with mark_as_failed true.
+    return if Purchase::SyncStatusWithChargeProcessorService.new(purchase).perform
 
-    delay = RETRY_DELAYS[attempt]
-    # Only the last attempt may fail the purchase: a charge still not succeeding after the full
-    # retry window is terminal, and leaving it `in_progress` strands it until the 6-hourly
-    # SyncStuckPurchasesJob sweep. Earlier on, a decline is indistinguishable from a processor blip.
-    return if Purchase::SyncStatusWithChargeProcessorService.new(purchase, mark_as_failed: delay.nil?).perform
-
-    if delay
+    if (delay = RETRY_DELAYS[attempt])
       self.class.perform_in(delay, purchase_id, attempt + 1)
-    elsif purchase.reload.in_progress?
+    else
       ErrorNotifier.notify(
         "Buyer-presentment purchase is still missing Stripe settlement data after retries",
         context: { purchase_id: purchase.id, purchase_external_id: purchase.external_id }
