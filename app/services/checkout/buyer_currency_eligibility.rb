@@ -580,7 +580,8 @@ class Checkout::BuyerCurrencyEligibility
     def unquotable_purchase?(purchase)
       product = purchase.link
       return true if product.free_trial_enabled?
-      if purchase.is_preorder_authorization? || purchase.is_commission_deposit_purchase? || purchase.is_installment_payment?
+      if product.is_in_preorder_state? || purchase.is_preorder_authorization? ||
+         purchase.is_commission_deposit_purchase? || purchase.is_installment_payment?
         return !self.class.subscriptions_enabled?(product.user)
       end
       return false unless product.is_recurring_billing?
