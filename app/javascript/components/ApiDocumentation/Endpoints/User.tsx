@@ -136,8 +136,8 @@ const ProfileCustomHtmlDocumentation = () => (
       say "showing 100 of 114" rather than implying the catalogue is complete.
     </p>
     <p>
-      The blob is cached per seller and rebuilt when a product, post or profile section changes. A price edit alone does
-      not currently rebuild it, so a price shown from this blob can lag until something else about the product changes.
+      The blob is cached per seller and rebuilt when a product, post or profile section changes — including a price
+      edit, whether you change the base price or a version's.
     </p>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/user/custom_html \\
