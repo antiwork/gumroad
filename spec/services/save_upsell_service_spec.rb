@@ -129,5 +129,14 @@ describe SaveUpsellService do
       expect(upsell.offer_code.products).to eq([product])
       expect(upsell.offer_code.amount_cents).to eq(100)
     end
+
+    it "reports an error when the save fails without adding one" do
+      allow_any_instance_of(Upsell).to receive(:save).and_return(false)
+
+      described_class.new(seller:, params: params(product_id: product.external_id, name: "Renamed"), upsell:).perform
+
+      expect(upsell.errors).to be_present
+      expect(upsell.reload.name).to eq("Original")
+    end
   end
 end

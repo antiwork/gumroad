@@ -31,7 +31,13 @@ class SaveUpsellService
 
       set_offer_code
 
-      raise ActiveRecord::Rollback unless upsell.save
+      unless upsell.save
+        # Callers read `errors` to decide success, so a save that fails without
+        # populating them (an aborted callback) would render success for a write
+        # that never happened.
+        upsell.errors.add(:base, "Sorry, something went wrong.") if upsell.errors.empty?
+        raise ActiveRecord::Rollback
+      end
     end
 
     upsell
