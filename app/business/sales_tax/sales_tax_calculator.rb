@@ -3,6 +3,11 @@
 require_relative "../../../lib/utilities/geo_ip"
 
 class SalesTaxCalculator
+  # EU_VAT_APPLICABLE_COUNTRY_CODES still carries the UK for rate-lookup purposes, but the UK left
+  # the customs union: a UK parcel into Germany is an import. Anything reasoning about EU borders
+  # needs the EU-27 set, not that one.
+  EU_VAT_DESTINATION_COUNTRY_CODES = (Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES - [Compliance::Countries::GBR.alpha2]).freeze
+
   attr_accessor :tax_rate, :product, :price_cents, :shipping_cents, :quantity, :buyer_location, :buyer_vat_id, :state, :is_us_taxable_state, :is_ca_taxable, :is_quebec
 
   def initialize(product:, price_cents:, shipping_cents: 0, quantity: 1, buyer_location:, buyer_vat_id: nil, from_discover: false)
@@ -230,21 +235,28 @@ class SalesTaxCalculator
       end
     end
 
-    # A physical parcel entering the EU is an import, and Gumroad has no IOSS registration to
-    # remit under or to stamp on the customs declaration — so destination customs assesses VAT
-    # again on arrival and the buyer pays it twice. The EU number we hold
-    # (GUMROAD_VAT_REGISTRATION_NUMBER) is OSS, which covers electronically supplied services
-    # rather than imported goods.
+    # A physical parcel entering the EU from outside it is an import, and Gumroad has no IOSS
+    # registration to remit under or to stamp on the customs declaration — so destination customs
+    # assesses VAT again on arrival and the buyer pays it twice. The EU number we hold
+    # (GUMROAD_VAT_REGISTRATION_NUMBER) is OSS, which covers electronically supplied services and
+    # intra-EU distance sales, but not imported goods.
     #
-    # The UK is in EU_VAT_APPLICABLE_COUNTRY_CODES but is carved out: it has its own registration
-    # (GUMROAD_UK_VAT_REGISTRATION), and for consignments at or under £135 the marketplace
-    # collects at checkout and the border does not charge again.
+    # Origin is what makes it an import. An EU-27 seller shipping within the union is an intra-EU
+    # distance sale, which OSS does cover and no border assesses again, so that VAT is still
+    # collected. We have no ship-from field, so the seller's legal entity country stands in for the
+    # parcel's origin — and an unknown origin keeps collecting, because an unprovable import is not
+    # worth opening a non-collection gap over.
+    #
+    # The UK is excluded on both sides via EU_VAT_DESTINATION_COUNTRY_CODES: as a destination it has
+    # its own registration (GUMROAD_UK_VAT_REGISTRATION) and the marketplace collects at checkout
+    # for consignments at or under £135, and as an origin it is outside the customs union.
     def eu_import_vat_unremittable?
       return false unless product.is_physical
       return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
-      return false if tax_rate.country == Compliance::Countries::GBR.alpha2
+      return false unless EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
 
-      Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+      shipment_origin = seller&.alive_user_compliance_info&.legal_entity_country_code
+      shipment_origin.present? && !EU_VAT_DESTINATION_COUNTRY_CODES.include?(shipment_origin)
     end
 
     def tax_eligible?

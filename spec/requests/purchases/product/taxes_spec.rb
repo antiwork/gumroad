@@ -404,8 +404,9 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "does not charge VAT for a physical product" do
+    it "does not charge VAT for a physical product imported into the EU" do
       product = create(:physical_product, price_cents: 100_00)
+      create(:user_compliance_info, user: product.user, country: "United States")
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
 
