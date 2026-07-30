@@ -148,27 +148,44 @@ class PagesController < Sellers::BaseController
     end
 
     apply_custom_html_response_headers
-    interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller)
-    render html: <<~HTML.html_safe, layout: false
-      <!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          #{SANDBOX_COMPAT_SCRIPT}
-          #{self.class.pages_tailwind_head}
-          #{self.class.tailwind_v3_gradient_compat_head(interpolated)}
-        </head>
-        <body>
-          #{interpolated}
-          <!-- The editor preview has no trusted wrapper listening, so a follow
-               can't complete here — but without the bridge a data-gumroad-follow
-               form would native-submit and navigate the preview frame away,
-               which reads as "the form is broken" while iterating. -->
-          #{FOLLOW_BRIDGE_SCRIPT}
-        </body>
-      </html>
-    HTML
+    # The profile page's live embed serves the gumroad-data catalog and (when referenced) the
+    # per-request gumroad-prices payload, so its editor preview must too — without them a page
+    # that builds its cards from those scripts previews as an empty storefront. Slugged pages
+    # are served without either payload, so their preview stays payload-free to match.
+    # No navigation bridge in either branch: the editor pane has no trusted wrapper listening.
+    # The follow bridge IS included — without it a data-gumroad-follow form would
+    # native-submit and navigate the preview frame away, which reads as "the form is broken".
+    if @profile_page
+      # The prices are derived from the requester's IP, so this response must never be shared.
+      response.cache_control.replace(private: true, no_store: true)
+      prices_referenced = Pages::ProductPrices.referenced_in?(custom_html)
+      prices = prices_referenced ? Pages::ProductPrices.build(current_seller, ip: request.remote_ip) : {}
+      interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller, prices:)
+      render html: profile_custom_html_document(
+        interpolated,
+        data_json: ERB::Util.json_escape(Pages::ProfileData.build(current_seller).to_json),
+        prices_json: prices_referenced ? ERB::Util.json_escape(prices.to_json) : nil,
+        follow_bridge: FOLLOW_BRIDGE_SCRIPT,
+      ).html_safe, layout: false
+    else
+      interpolated = Pages::Interpolator.interpolate_profile(custom_html, profile: current_seller)
+      render html: <<~HTML.html_safe, layout: false
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            #{SANDBOX_COMPAT_SCRIPT}
+            #{self.class.pages_tailwind_head}
+            #{self.class.tailwind_v3_gradient_compat_head(interpolated)}
+          </head>
+          <body>
+            #{interpolated}
+            #{FOLLOW_BRIDGE_SCRIPT}
+          </body>
+        </html>
+      HTML
+    end
   end
 
   private

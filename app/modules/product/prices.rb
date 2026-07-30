@@ -94,16 +94,18 @@ module Product::Prices
     format_price(rental_display_price)
   end
 
-  # `for_default_duration` moves BOTH the amount and the recurrence wording to the default
-  # duration — passing the flag to display_price_cents alone pairs a default-duration amount
-  # with the cheapest tier's wording, quoting a price no buyer is charged. `discounted` takes
-  # the default offer code off, which is what checkout actually charges a first-time buyer.
+  # `for_default_duration` quotes the product the way the native card does: amount AND
+  # recurrence wording from the default duration (passing the flag to display_price_cents alone
+  # pairs a default-duration amount with the cheapest tier's wording), plus the finite-term
+  # forms ("once", "a month x 6") for fixed-length memberships. `discounted` takes the default
+  # offer code off, which is what checkout actually charges a first-time buyer.
   def price_formatted_verbose(for_default_duration: false, discounted: false)
     price_cents = display_price_cents(for_default_duration:)
     price_cents = discounted_price_cents(price_cents) if discounted
     price_formatted_verbose_for_price_cents(
       price_cents,
-      recurrence: for_default_duration ? subscription_duration : display_recurrence
+      recurrence: for_default_duration ? subscription_duration : display_recurrence,
+      duration_in_months: for_default_duration ? duration_in_months : nil
     )
   end
 
@@ -114,9 +116,12 @@ module Product::Prices
   # Pass `recurrence:` when the amount came from a specific duration rather than from
   # display_price_cents: the default display_recurrence is the *cheapest* tier's recurrence, so
   # labelling a default-duration amount with it quotes a monthly price as a yearly one.
-  def price_formatted_verbose_for_price_cents(price_cents, recurrence: display_recurrence)
+  # Pass `duration_in_months:` to engage the finite-term wording the native card renders
+  # ("once" for a single-charge term, "a month x 6" for a longer fixed one); nil keeps the
+  # open-ended label every existing caller shows today.
+  def price_formatted_verbose_for_price_cents(price_cents, recurrence: display_recurrence, duration_in_months: nil)
     formatted = format_price(display_price_for_price_cents(price_cents))
-    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_long_indicator(recurrence)}" : ''}"
+    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_label(recurrence, duration_in_months)}" : ''}"
   end
 
   def price_formatted_including_rental_verbose
@@ -199,6 +204,11 @@ module Product::Prices
   # A surface showing the undiscounted number quotes a price checkout will not honour, so every
   # buyer-facing price goes through here. Existing-customers-only codes are left on because a
   # first-time visitor does not get them.
+  #
+  # Deliberately the same light validity check card surfaces have always used (time bounds
+  # only): the full checkout evaluation (max uses, quantity minimums, PPP) needs per-cart
+  # context and per-product queries no card grid can afford, and the binding amount is minted
+  # at checkout either way.
   def discounted_price_cents(base_price_cents)
     offer_code = default_offer_code
     return base_price_cents if offer_code.blank? || offer_code.inactive? || offer_code.existing_customers_only?

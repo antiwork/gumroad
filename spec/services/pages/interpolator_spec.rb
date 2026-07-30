@@ -53,6 +53,16 @@ describe Pages::Interpolator do
       expect(result).to include(">$40+ a year<")
     end
 
+    it "labels a fixed-length membership's term like the native page" do
+      membership = create(:membership_product, price_cents: 500)
+      membership.update!(duration_in_months: 1)
+      html = %(<span data-gumroad-field="price"></span>)
+
+      result = described_class.interpolate(html, product: membership)
+
+      expect(result).to include(">$5 once<")
+    end
+
     it "replaces data-gumroad-field='description' with plain-text description" do
       html = %(<p data-gumroad-field="description">placeholder</p>)
 

@@ -100,7 +100,7 @@ class Pages::ProductPrices
     def own_currency_entry(product, base_price_cents:, price_cents:)
       entry = {
         price: product.price_formatted_verbose_for_price_cents(
-          price_cents, recurrence: product.subscription_duration
+          price_cents, recurrence: product.subscription_duration, duration_in_months: product.duration_in_months
         ),
         price_cents:,
         currency_code: product.price_currency_type.to_s.downcase,

@@ -103,6 +103,21 @@ describe Pages::ProductPrices do
       expect(entry[:price]).to eq(membership.price_formatted_verbose)
     end
 
+    # A membership lasting exactly one recurrence period charges once, and a longer fixed term
+    # renews a known number of times; the native card says "once" / "a month x 6" for these,
+    # and an open-ended "a month" here would misstate the buyer's commitment.
+    it "labels fixed-length memberships the way the native card does" do
+      once = create(:membership_product, user: seller, price_cents: 500)
+      once.update!(duration_in_months: 1)
+      fixed = create(:membership_product, user: seller, price_cents: 700)
+      fixed.update!(duration_in_months: 6)
+
+      prices = described_class.build(seller, ip: nil)
+
+      expect(prices[once.general_permalink][:price]).to eq("$5 once")
+      expect(prices[fixed.general_permalink][:price]).to eq("$7 a month x 6")
+    end
+
     # display_price_cents defaults to the cheapest amount across every enabled recurrence, while
     # the wording comes from the default recurrence. On a yearly-default membership that pairs a
     # monthly amount with "a year", so the storefront quotes a price no buyer is charged and
