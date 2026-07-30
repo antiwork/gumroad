@@ -230,16 +230,28 @@ class SalesTaxCalculator
       end
     end
 
-    def tax_eligible?
-      # Physical goods are only taxed where Gumroad is the marketplace facilitator on a domestic
-      # sale (US states, and Canada via TaxJar) or where the seller supplied their own rate.
-      # Anywhere else the parcel crosses a border as an import: destination customs assesses VAT
-      # on arrival, and Gumroad has no import registration (no IOSS in the EU, and the OSS/VOEC
-      # numbers we do hold cover electronically supplied services, not goods) to remit what it
-      # collected. Collecting here charged the buyer the same VAT twice.
-      return is_us_taxable_state || is_ca_taxable || tax_rate.user_id.present? if product.is_physical
+    # A physical parcel entering the EU is an import, and Gumroad has no IOSS registration to
+    # remit under or to stamp on the customs declaration — so destination customs assesses VAT
+    # again on arrival and the buyer pays it twice. The EU number we hold (GUMROAD_VAT_REGISTRATION_NUMBER)
+    # is OSS, which covers electronically supplied services, not imported goods.
+    #
+    # The UK is in EU_VAT_APPLICABLE_COUNTRY_CODES but is excluded here: it has its own
+    # registration (GUMROAD_UK_VAT_REGISTRATION) and its low-value-consignment rules require the
+    # marketplace to collect at checkout, with the border not charging again. Australia,
+    # Singapore and Norway are outside this guard for the same reason.
+    def eu_import_vat_unremittable?
+      return false unless product.is_physical
+      return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
+      return false if tax_rate.country == Compliance::Countries::GBR.alpha2
 
-      product_tax_eligible = Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+      Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+    end
+
+    def tax_eligible?
+      return false if eu_import_vat_unremittable?
+
+      product_tax_eligible = product.is_physical && tax_rate.country == Compliance::Countries::USA.alpha2
+      product_tax_eligible ||= Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::AUS.alpha2
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::SGP.alpha2
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::NOR.alpha2
