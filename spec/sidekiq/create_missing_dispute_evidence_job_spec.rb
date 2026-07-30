@@ -102,6 +102,41 @@ describe CreateMissingDisputeEvidenceJob do
 
           expect(dispute.reload.dispute_evidence.seller_contacted_at).to eq(formalization_stamped_at)
         end
+
+        it "leaves alone a window opened between the comparison and the clear" do
+          allow(ErrorNotifier).to receive(:notify)
+          formalization_stamped_at = 30.minutes.ago.change(usec: 0)
+
+          # The interleaving the previous example cannot reach: formalization lands after this job
+          # has read the stamp it is about to clear. A read-then-write guard would compare the old
+          # value, pass, and then wipe a window the seller has already been told about; the
+          # compare-and-clear carries the value into the WHERE, so the write matches no row.
+          # Raw SQL, because the stub below wraps every relation's update_all.
+          allow_any_instance_of(ActiveRecord::Relation).to receive(:update_all).and_wrap_original do |method, *args|
+            DisputeEvidence.connection.update(
+              DisputeEvidence.sanitize_sql_array(
+                ["UPDATE dispute_evidences SET seller_contacted_at = ? WHERE id = ?", formalization_stamped_at, DisputeEvidence.last.id]
+              )
+            )
+            method.call(*args)
+          end
+
+          described_class.new.perform
+
+          expect(dispute.reload.dispute_evidence.seller_contacted_at).to eq(formalization_stamped_at)
+        end
+
+        it "reports that it left another path's window alone" do
+          formalization_stamped_at = 30.minutes.ago.change(usec: 0)
+          allow(ContactingCreatorMailer).to receive(:chargeback_notice) do
+            DisputeEvidence.last.update!(seller_contacted_at: formalization_stamped_at)
+            raise Redis::CannotConnectError
+          end
+
+          expect(ErrorNotifier).to receive(:notify).with(/stamped this evidence in the meantime/)
+
+          described_class.new.perform
+        end
       end
 
       it "is idempotent — a second run does not create a second record, re-open the window, or re-email" do
@@ -134,7 +169,7 @@ describe CreateMissingDisputeEvidenceJob do
 
       context "when the window cannot be opened" do
         before do
-          allow_any_instance_of(DisputeEvidence).to receive(:update_as_seller_contacted!).and_raise("boom")
+          allow_any_instance_of(DisputeEvidence).to receive(:update!).and_raise("boom")
         end
 
         it "keeps the record it did not create, so a later run can still submit what the seller uploaded" do
@@ -188,12 +223,98 @@ describe CreateMissingDisputeEvidenceJob do
 
       before { allow(Stripe::Dispute).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("boom")) }
 
-      it "still builds the evidence, because doing nothing is the worse default" do
+      it "defers the dispute rather than opening a window it cannot check against the cutoff" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+      end
+
+      it "retries on the following sweep once the deadline can be read again" do
+        allow(ErrorNotifier).to receive(:notify)
+        described_class.new.perform
+
+        stub_processor_deadline(30.days.from_now)
+
+        expect do
+          described_class.new.perform
+        end.to change { DisputeEvidence.count }.by(1)
+
+        expect(dispute.reload.dispute_evidence.seller_contacted_at).to be_present
+      end
+    end
+
+    context "when the deadline leaves the seller no usable time" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before { stub_processor_deadline(2.hours.from_now) }
+
+      it "submits straight away instead of waiting for the next hourly sweep" do
         allow(ErrorNotifier).to receive(:notify)
 
         expect do
           described_class.new.perform
         end.to change { DisputeEvidence.count }.by(1)
+
+        # Asking the seller here would promise them a window that ends after the cutoff, and
+        # FightDisputesJob's next tick can be an hour away — of two hours remaining.
+        expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
+        expect(ActionMailer::MailDeliveryJob).not_to have_been_enqueued
+        expect(dispute.reload.dispute_evidence.seller_contacted_at).to be_nil
+      end
+
+      it "reports that it is submitting without a seller statement" do
+        expect(ErrorNotifier).to receive(:notify).with(/deadline is too close to ask now/)
+
+        described_class.new.perform
+      end
+    end
+
+    context "when the evidence has already been submitted to the processor" do
+      let!(:dispute_evidence) do
+        create(:dispute_evidence, seller_contacted_at: nil, resolved_at: Time.current,
+                                  resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+      end
+
+      it "does not re-open a window on a dispute whose evidence is already gone" do
+        expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+
+        expect(dispute_evidence.reload.seller_contacted_at).to be_nil
+      end
+
+      it "does not even select it, so no processor call is spent on it" do
+        expect(Stripe::Dispute).not_to receive(:retrieve)
+        expect_any_instance_of(Purchase).not_to receive(:create_dispute_evidence_if_needed!)
+
+        described_class.new.perform
+      end
+    end
+
+    context "when the evidence is resolved after the sweep has selected it" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { create(:dispute_formalized, purchase:) }
+      let!(:dispute_evidence) { create(:dispute_evidence, dispute:, seller_contacted_at: nil) }
+
+      it "does not open a window on it" do
+        # find_each batches, so a row selected at the top of the sweep can be submitted and
+        # resolved by the time this dispute is reached. The query filter cannot see that; only
+        # the re-check inside the transaction can.
+        allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!) do
+          dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+          dispute_evidence
+        end
+        expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+        described_class.new.perform
+
+        expect(dispute_evidence.reload.seller_contacted_at).to be_nil
       end
     end
 
@@ -202,7 +323,7 @@ describe CreateMissingDisputeEvidenceJob do
       let!(:dispute) { create(:dispute_formalized, purchase:) }
 
       before do
-        allow_any_instance_of(DisputeEvidence).to receive(:update_as_seller_contacted!).and_raise("boom")
+        allow_any_instance_of(DisputeEvidence).to receive(:update!).and_raise("boom")
       end
 
       it "leaves no half-finished record behind, so the next run can try again" do
@@ -298,6 +419,46 @@ describe CreateMissingDisputeEvidenceJob do
         expect do
           described_class.new.perform
         end.not_to change { DisputeEvidence.count }
+      end
+    end
+
+    context "alongside the hourly FightDisputesJob" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { create(:dispute_formalized, purchase:) }
+      let!(:dispute_evidence) { create(:dispute_evidence, dispute:, seller_contacted_at: nil) }
+
+      it "owns unannounced evidence: the hourly job leaves it alone until the seller has been asked" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        # The order production runs them in: FightDisputesJob is hourly, this sweep is six-hourly,
+        # so the hourly job sees the unannounced row first. hours_left_to_submit_evidence is 0 while
+        # seller_contacted_at is NULL, which used to read as "window elapsed, submit it".
+        FightDisputesJob.new.perform
+        expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute.id)
+        expect(dispute_evidence.reload.seller_contacted_at).to be_nil
+
+        described_class.new.perform
+        expect(dispute_evidence.reload.seller_contacted_at).to be_present
+
+        # And once the window has elapsed the hourly job picks it up as normal.
+        dispute_evidence.update!(seller_contacted_at: 80.hours.ago)
+        FightDisputesJob.new.perform
+        expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
+      end
+
+      it "does not re-ask a seller whose evidence the hourly job has since submitted" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        # The failure this ordering used to produce: the hourly job submitted the unannounced row,
+        # resolving it, and the next sweep — selecting on a still-NULL seller_contacted_at — emailed
+        # the seller a submission window for evidence that had already gone to the processor.
+        dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+        expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+        described_class.new.perform
+
+        expect(dispute_evidence.reload.seller_contacted_at).to be_nil
       end
     end
 
