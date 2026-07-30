@@ -234,6 +234,9 @@ describe StripeMerchantAccountManager do
 
         expect(statements.grep(/\AINSERT INTO `comments`/).count).to eq(1)
         expect(statements.grep(/\AUPDATE `comments`/)).to be_empty
+        # Asserted here too, so this example pins atomic ATTRIBUTION rather than just "no comment
+        # updates happened".
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last.json_data["bank_account_id"]).to eq(bank_account.id)
       end
 
       it "does not record a payout note when notify is false" do
@@ -447,7 +450,9 @@ describe StripeMerchantAccountManager do
           described_class.create_account(user, passphrase:)
         end.to raise_error(Stripe::CardError)
 
-        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+        notes = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)
+        expect(notes.count).to eq(1)
+        expect(notes.last.json_data["bank_account_id"]).to eq(bank_account.id)
       end
     end
 
@@ -545,6 +550,24 @@ describe StripeMerchantAccountManager do
       expect(ErrorNotifier).not_to have_received(:notify)
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last.json_data["bank_account_id"]).to eq(bank_account.id)
+    end
+
+    it "names the row the sync submitted even when the seller replaces it mid-sync" do
+      # The reason the row is passed down rather than re-read. Stripe's call is over the network,
+      # so the seller can save replacement details before the rejection lands; a re-read would
+      # then stamp the note with the replacement and blame details Stripe never saw.
+      replacement = nil
+      allow(Stripe::Account).to receive(:update) do
+        bank_account.mark_deleted!
+        replacement = create(:ach_account, user: user.reload)
+        raise Stripe::InvalidRequestError.new("We couldn't find the bank for that BIC", "bank_account[routing_number]")
+      end
+
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["bank_account_id"]).to eq(bank_account.id)
+      expect(note.json_data["bank_account_id"]).to_not eq(replacement.id)
     end
   end
 

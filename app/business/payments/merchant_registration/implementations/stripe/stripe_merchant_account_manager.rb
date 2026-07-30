@@ -964,13 +964,9 @@ module StripeMerchantAccountManager
     user.add_payout_note(
       content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{message.truncate(200)}",
       seller_visible: false,
-      # Written in the same insert as the note, not a follow-up save: SettingsPresenter reads
-      # bank_account_id to decide which bank row a rejection names, and a note that exists for
-      # even a moment without it is read as an unattributed legacy note — which is how the
-      # banner would blame the wrong account.
-      #
-      # bank_account is the row the caller submitted rather than a re-read: the sync makes
-      # network calls, so by now the seller's active row may already be the replacement.
+      # In the insert, not a follow-up save — see add_payout_note. bank_account is the row the
+      # caller submitted rather than a re-read: the sync makes network calls, so by now the
+      # seller's active row may already be the replacement.
       json_data: {
         "stripe_error_code" => code,
         "stripe_error_message" => message,
