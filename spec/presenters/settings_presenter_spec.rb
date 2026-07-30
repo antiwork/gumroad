@@ -909,6 +909,20 @@ describe SettingsPresenter do
           )
         end
 
+        it "tells a block-listed seller to add a different account, not to re-check the details" do
+          # The reason #6523 makes terminal. Re-saving the same details can never succeed, so the
+          # copy must not repeat the typo/wait advice the other branches give.
+          create(:ach_account, user: seller)
+          note = seller.add_payout_note(content: bank_note_content)
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.json_data["abandoned_reason"] = RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_ACCOUNT_BLOCKED
+          note.save!
+
+          messages = presenter.payments_props[:account_status][:compliance_actions].map { _1[:message] }
+          expect(messages).to contain_exactly(a_string_matching(/add a different bank account/))
+          expect(messages.first).to_not match(/re-check it once a week|double-check your account and bank code/)
+        end
+
         it "stays silent for a seller paid through their own connected Stripe account" do
           # Connecting Stripe does not delete the bank row, and nothing clears the note either:
           # bank notes are only soft-deleted by a successful managed-account sync, which never

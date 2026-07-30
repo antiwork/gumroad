@@ -486,7 +486,9 @@ class SettingsPresenter
       # RetryStripeRejectedPayoutSetupForSellerJob owns the terminality decision and a second
       # opinion here would contradict the mail the seller just received. An abandoned_reason we
       # have no copy for means the retries stopped for something that is not the seller's bank
-      # details to fix (a platform-level block, or a move off Stripe payouts), so say nothing.
+      # details to act on (an account-level block, or a move off Stripe payouts), so say nothing —
+      # note that a BANK_ACCOUNT_BLOCKED note is the seller's to act on and does get copy, while
+      # ACCOUNT_BLOCKED (the whole connected account) does not.
       #
       # Unlike the postal code above, this is NOT gated on a missing Stripe account: the common
       # rejection path is update_bank_account on an existing managed account, which leaves the
@@ -495,7 +497,13 @@ class SettingsPresenter
       if !stripe_rejected && (bank_note = current_bank_sync_failure_note)
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
         abandoned_reason = bank_note.json_data["abandoned_reason"]
-        bank_message = if abandoned_reason == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
+        bank_message = if abandoned_reason == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_ACCOUNT_BLOCKED
+          # The one rejection where re-saving the SAME details cannot ever succeed: the details are
+          # valid and our payment partner refuses this particular account. Mirrors the blocked
+          # branch of ContactingCreatorMailer#invalid_bank_account, so it must not suggest a typo
+          # or waiting — a different account is the only action that clears it.
+          "Our payment partner won't accept the bank account you added, and there's nothing wrong with the details you entered — re-entering them or waiting won't help. Please add a different bank account. If it's the only account you have, contact support and we'll look into it with you."
+        elsif abandoned_reason == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
           "Our payment partner couldn't accept your bank details as entered, and re-checking won't clear it. Please double-check your account and bank code and re-save them."
         elsif bank_note.json_data["abandoned_at"].present?
           # give_up! abandons without a reason, and it counts transient failures toward the retry
