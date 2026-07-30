@@ -467,6 +467,10 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  def create_purchase_custom_field(purchase: nil, **attrs)
+    build_purchase_custom_field(purchase:, **attrs).tap(&:save!)
+  end
+
   # A subscription payment option (mirrors :payment_option): priced at the
   # product's default price unless overridden.
   def create_payment_option(subscription: nil, price: nil, **attrs)
@@ -932,6 +936,141 @@ module ModelFactories
       charge_processor_id: StripeChargeProcessor.charge_processor_id,
       charge_processor_merchant_id: "acct_#{unique_suffix}",
       charge_processor_alive_at: Time.current,
+    }.merge(attrs))
+  end
+
+  # Mirrors the :order factory: a bare order owned by a fresh purchaser.
+  def create_order(purchaser: nil, **attrs)
+    Order.create!({ purchaser: purchaser || create_user }.merge(attrs))
+  end
+
+  # Mirrors the :charge factory — a $10 Stripe charge on its own order. Each
+  # charge gets its OWN merchant account: the factory shares one, which trips
+  # the Gumroad-managed-account uniqueness validation the moment a test needs
+  # two charges.
+  def create_charge(order: nil, seller: nil, merchant_account: nil, **attrs)
+    Charge.create!({
+      order: order || create_order,
+      seller: seller || create_user,
+      merchant_account: merchant_account || create_merchant_account,
+      processor: "stripe",
+      processor_transaction_id: "ch_#{unique_suffix}",
+      payment_method_fingerprint: "pm_#{unique_suffix}",
+      amount_cents: 10_00,
+      gumroad_amount_cents: 1_00,
+      processor_fee_cents: 20,
+      processor_fee_currency: "usd",
+      stripe_payment_intent_id: "pi_#{unique_suffix}",
+      stripe_setup_intent_id: "seti_#{unique_suffix}",
+    }.merge(attrs))
+  end
+
+  # Mirrors the :charge_presentment factory: the buyer-currency snapshot taken
+  # on a charge at quote time.
+  def create_charge_presentment(charge: nil, **attrs)
+    ChargePresentment.create!({
+      charge: charge || create_charge,
+      processor: StripeChargeProcessor.charge_processor_id,
+      presentment_currency: Currency::CAD,
+      presentment_total_cents: 13_50,
+      presentment_gumroad_amount_cents: 1_35,
+      stripe_fx_quote_id: "fxq_#{unique_suffix}",
+      stripe_fx_quote_expires_at: 30.minutes.from_now,
+      fx_rate: BigDecimal("0.740000000000000"),
+    }.merge(attrs))
+  end
+
+  # Mirrors the :purchase_presentment factory: the per-purchase slice of a
+  # charge's buyer-currency snapshot.
+  def create_purchase_presentment(purchase:, charge_presentment: nil, **attrs)
+    PurchasePresentment.create!({
+      purchase:,
+      charge_presentment: charge_presentment || create_charge_presentment,
+      processor: StripeChargeProcessor.charge_processor_id,
+      presentment_currency: Currency::CAD,
+      presentment_price_cents: 12_00,
+      presentment_tip_cents: 0,
+      presentment_seller_tax_cents: 0,
+      presentment_gumroad_tax_cents: 1_50,
+      presentment_shipping_cents: 0,
+      presentment_total_cents: 13_50,
+      presentment_gumroad_amount_cents: 1_35,
+    }.merge(attrs))
+  end
+
+  # Mirrors the :refund factory: a full refund of the purchase, issued by a
+  # fresh admin-ish user.
+  def create_refund(purchase:, **attrs)
+    Refund.create!({
+      purchase:,
+      refunding_user_id: create_user.id,
+      total_transaction_cents: purchase.total_transaction_cents,
+      amount_cents: purchase.price_cents,
+      creator_tax_cents: purchase.tax_cents,
+      gumroad_tax_cents: purchase.gumroad_tax_cents,
+    }.merge(attrs))
+  end
+
+  # Mirrors the :tip factory.
+  def create_tip(purchase:, **attrs)
+    Tip.create!({ purchase:, value_cents: 100 }.merge(attrs))
+  end
+
+  # Mirrors the :utm_link factory: a profile-page link with unique campaign copy
+  # (utm_campaign and permalink are both unique-validated).
+  def create_utm_link(seller: nil, **attrs)
+    UtmLink.create!({
+      seller: seller || create_user,
+      title: "UTM Link #{unique_suffix}",
+      target_resource_type: :profile_page,
+      utm_campaign: "summer-sale-#{unique_suffix}",
+      utm_medium: "social",
+      utm_source: "twitter",
+    }.merge(attrs))
+  end
+
+  def create_utm_link_visit(utm_link: nil, **attrs)
+    UtmLinkVisit.create!({
+      utm_link: utm_link || create_utm_link,
+      browser_guid: SecureRandom.uuid,
+      ip_address: unique_ip,
+    }.merge(attrs))
+  end
+
+  # Mirrors the :utm_link_driven_sale factory: the join row attributing a
+  # purchase to a UTM link visit.
+  def create_utm_link_driven_sale(purchase:, utm_link: nil, utm_link_visit: nil, **attrs)
+    utm_link ||= create_utm_link
+    UtmLinkDrivenSale.create!({
+      utm_link:,
+      utm_link_visit: utm_link_visit || create_utm_link_visit(utm_link:),
+      purchase:,
+    }.merge(attrs))
+  end
+
+  # Mirrors the :upsell_purchase factory.
+  def create_upsell_purchase(purchase: nil, upsell: nil, selected_product: nil, **attrs)
+    upsell ||= create_upsell(seller: create_user, cross_sell: true)
+    UpsellPurchase.create!({
+      upsell:,
+      selected_product: selected_product || upsell.product,
+      purchase: purchase || create_purchase(link: upsell.product, offer_code: upsell.offer_code),
+    }.merge(attrs))
+  end
+
+  # Mirrors the :sent_abandoned_cart_email factory.
+  def create_sent_abandoned_cart_email(cart: nil, installment: nil, **attrs)
+    installment ||= create_abandoned_cart_workflow(seller: create_user, published_at: 1.day.ago).installments.first
+    SentAbandonedCartEmail.create!({ cart: cart || create_cart, installment: }.merge(attrs))
+  end
+
+  # Mirrors the :preorder factory.
+  def create_preorder(preorder_link: nil, seller: nil, **attrs)
+    preorder_link ||= create_preorder_link
+    Preorder.create!({
+      preorder_link:,
+      seller: seller || preorder_link.link.user,
+      state: "in_progress",
     }.merge(attrs))
   end
 
