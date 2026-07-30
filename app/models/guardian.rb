@@ -23,6 +23,18 @@ class Guardian < ApplicationRecord
   # Stripe's own floor for a person who can take responsibility for an account.
   MINIMUM_AGE = 18
 
+  # The columns anonymize! deliberately leaves alone, so that a column added to this table later has
+  # to be classified as erased or retained rather than silently surviving erasure.
+  RETAINED_ON_ANONYMIZE = %w[
+    id
+    stripe_person_id
+    stripe_tos_accepted
+    stripe_tos_accepted_at
+    deleted_at
+    created_at
+    updated_at
+  ].freeze
+
   # Compliance revisions are immutable, so a seller who edits their details leaves several rows
   # pointing at the same guardian. restrict_with_error rather than nullify: silently clearing
   # guardian_id would turn historical revisions incomplete with nothing recording why, and it would
@@ -64,6 +76,7 @@ class Guardian < ApplicationRecord
       date_of_birth.present? &&
       street_address.present? &&
       city.present? &&
+      state.present? &&
       zip_code.present? &&
       country.present? &&
       has_individual_tax_id? &&
@@ -74,6 +87,11 @@ class Guardian < ApplicationRecord
   # revisions that reference it stay intact and auditable. The guardian is a third party who never
   # agreed to anything beyond taking responsibility for one seller's account, so their details go
   # when the seller's do.
+  #
+  # stripe_person_id stays: it is the handle for the copy Stripe holds, and nulling it here would
+  # orphan that copy rather than erase it. The acceptance flag and timestamp stay with it as the
+  # record that an adult did once take responsibility; the IP address does not, being personal data
+  # about them and nothing else.
   def anonymize!
     update_columns(
       first_name: nil,
@@ -85,8 +103,11 @@ class Guardian < ApplicationRecord
       city: nil,
       state: nil,
       zip_code: nil,
+      country: nil,
+      country_code: nil,
       nationality: nil,
       individual_tax_id: nil,
+      stripe_tos_ip: nil,
       updated_at: Time.current
     )
   end

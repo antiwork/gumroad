@@ -69,7 +69,7 @@ describe Guardian do
       expect(build(:guardian)).to have_attributes(has_completed_info?: true)
     end
 
-    %i[first_name last_name email date_of_birth street_address city zip_code country individual_tax_id].each do |field|
+    %i[first_name last_name email date_of_birth street_address city state zip_code country individual_tax_id].each do |field|
       it "is false without #{field}" do
         expect(build(:guardian, field => nil).has_completed_info?).to be(false)
       end
@@ -103,10 +103,38 @@ describe Guardian do
         street_address: nil,
         city: nil,
         state: nil,
-        zip_code: nil
+        zip_code: nil,
+        country: nil,
+        country_code: nil,
+        nationality: nil,
+        stripe_tos_ip: nil
       )
       # Strongbox always hands back a Lock, so ask the predicate rather than comparing to nil.
       expect(guardian.has_individual_tax_id?).to be(false)
+    end
+
+    # Erasure is a column-for-column obligation, so a column added to this table later must be
+    # classified rather than quietly surviving. This fails on the migration that adds one.
+    it "leaves nothing populated except the columns it deliberately retains" do
+      guardian = create(:guardian, nationality: "US", stripe_person_id: "person_1", stripe_tos_ip: "1.2.3.4",
+                                   stripe_tos_accepted_at: Time.current)
+
+      guardian.anonymize!
+
+      populated = guardian.reload.attributes.reject { |_, value| value.nil? }.keys
+      expect(populated).to match_array(Guardian::RETAINED_ON_ANONYMIZE - ["deleted_at"])
+    end
+
+    it "keeps the Stripe handle and the record that an adult accepted the terms" do
+      guardian = create(:guardian, stripe_person_id: "person_1", stripe_tos_accepted_at: Time.current)
+
+      guardian.anonymize!
+
+      expect(guardian.reload).to have_attributes(
+        stripe_person_id: "person_1",
+        stripe_tos_accepted: true
+      )
+      expect(guardian.stripe_tos_accepted_at).to be_present
     end
 
     it "keeps the row so the compliance revisions referencing it stay intact" do
