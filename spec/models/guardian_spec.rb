@@ -8,6 +8,10 @@ describe Guardian do
       expect(build(:guardian)).to be_valid
     end
 
+    it "requires the seller it belongs to, which is the boundary erasure is scoped by" do
+      expect(build(:guardian, user: nil)).not_to be_valid
+    end
+
     it "rejects a guardian who is under 18" do
       guardian = build(:guardian, date_of_birth: 17.years.ago.to_date)
 
@@ -156,7 +160,7 @@ describe Guardian do
     end
 
     it "keeps the row so the compliance revisions referencing it stay intact" do
-      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
+      user_compliance_info = create(:user_compliance_info, user: guardian.user, birthday: 15.years.ago.to_date, guardian:)
 
       guardian.anonymize!
 
@@ -174,7 +178,7 @@ describe Guardian do
   describe "destroying a guardian" do
     it "is refused while compliance revisions still reference it, rather than silently rewriting them" do
       guardian = create(:guardian)
-      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
+      user_compliance_info = create(:user_compliance_info, user: guardian.user, birthday: 15.years.ago.to_date, guardian:)
 
       expect(guardian.destroy).to be(false)
       expect(user_compliance_info.reload.guardian_id).to eq(guardian.id)

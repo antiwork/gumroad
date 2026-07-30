@@ -56,7 +56,7 @@ describe GdprDataErasureService do
     end
 
     it "clears the legal guardian's own details, since an adult's PII would otherwise survive on a separate row" do
-      guardian = create(:guardian, first_name: "Ellie", last_name: "Doe", email: "ellie@example.com")
+      guardian = create(:guardian, user:, first_name: "Ellie", last_name: "Doe", email: "ellie@example.com")
       replaced_info = create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
       replaced_info.mark_deleted!
 
@@ -76,8 +76,9 @@ describe GdprDataErasureService do
     end
 
     it "leaves other sellers' guardians alone" do
-      other_guardian = create(:guardian, first_name: "Someone")
-      create(:user_compliance_info, user: create(:user), birthday: 15.years.ago.to_date, guardian: other_guardian)
+      other_seller = create(:user)
+      other_guardian = create(:guardian, user: other_seller, first_name: "Someone")
+      create(:user_compliance_info, user: other_seller, birthday: 15.years.ago.to_date, guardian: other_guardian)
       create(:user_compliance_info, user:)
 
       described_class.new(user, performed_by: admin).perform!

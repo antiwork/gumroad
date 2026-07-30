@@ -89,9 +89,10 @@ describe UserComplianceInfo do
 
     describe "under 18 (payout readiness)" do
       let(:birthday) { 15.years.ago.to_date }
+      let(:seller) { create(:user) }
 
       describe "no guardian attached" do
-        let(:user_compliance_info) { create(:user_compliance_info, birthday:) }
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:) }
 
         it "returns false" do
           expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
@@ -99,7 +100,7 @@ describe UserComplianceInfo do
       end
 
       describe "guardian attached but their own details are incomplete" do
-        let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian, street_address: nil)) }
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:, guardian: create(:guardian, user: seller, street_address: nil)) }
 
         it "returns false" do
           expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
@@ -107,8 +108,8 @@ describe UserComplianceInfo do
       end
 
       describe "guardian has been removed" do
-        let(:guardian) { create(:guardian) }
-        let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian:) }
+        let(:guardian) { create(:guardian, user: seller) }
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:, guardian:) }
 
         it "returns false" do
           user_compliance_info
@@ -119,7 +120,7 @@ describe UserComplianceInfo do
       end
 
       describe "guardian attached with complete details" do
-        let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian)) }
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:, guardian: create(:guardian, user: seller)) }
 
         it "returns true" do
           expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(true)
@@ -186,9 +187,11 @@ describe UserComplianceInfo do
   end
 
   describe "the guardian association" do
+    let(:seller) { create(:user) }
+
     it "can be attached after the record is created, unlike the rest of this immutable record" do
-      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date)
-      guardian = create(:guardian)
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date)
+      guardian = create(:guardian, user: seller)
 
       expect { user_compliance_info.update!(guardian:) }.not_to raise_error
       expect(user_compliance_info.reload.guardian).to eq(guardian)
@@ -200,24 +203,34 @@ describe UserComplianceInfo do
       expect { user_compliance_info.update!(first_name: "Someone else") }.to raise_error(Immutable::RecordImmutable)
     end
 
-    it "refuses to swap one guardian for another in place, so compliance history is not rewritten" do
-      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian: create(:guardian))
+    # A guardian's details are erased with the seller they belong to, so a revision pointing at
+    # another seller's guardian would let one erasure blank out the other's payout compliance.
+    it "refuses a guardian belonging to another seller" do
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date)
 
-      expect(user_compliance_info.update(guardian: create(:guardian))).to be(false)
+      expect(user_compliance_info.update(guardian: create(:guardian, user: create(:user)))).to be(false)
+      expect(user_compliance_info.errors.full_messages).to include("The legal guardian must belong to the same account.")
+      expect(user_compliance_info.reload.guardian_id).to be_nil
+    end
+
+    it "refuses to swap one guardian for another in place, so compliance history is not rewritten" do
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian: create(:guardian, user: seller))
+
+      expect(user_compliance_info.update(guardian: create(:guardian, user: seller))).to be(false)
       expect(user_compliance_info.errors.full_messages).to include("The legal guardian cannot be changed once set.")
     end
 
     it "refuses to attach a guardian to a superseded revision" do
-      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date)
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date)
       user_compliance_info.mark_deleted!
 
-      expect(user_compliance_info.update(guardian: create(:guardian))).to be(false)
+      expect(user_compliance_info.update(guardian: create(:guardian, user: seller))).to be(false)
       expect(user_compliance_info.errors.full_messages).to include("The legal guardian can only be set on the current compliance details.")
     end
 
     it "keeps the reference when the guardian's details are erased, so the audit trail survives" do
-      guardian = create(:guardian)
-      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
+      guardian = create(:guardian, user: seller)
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
 
       guardian.anonymize!
 

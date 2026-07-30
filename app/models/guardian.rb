@@ -49,6 +49,7 @@ class Guardian < ApplicationRecord
   # responsibility; their IP address is in the erased list above, being personal data and nothing else.
   RETAINED_ON_ANONYMIZE = %w[
     id
+    user_id
     stripe_person_id
     stripe_tos_accepted
     stripe_tos_accepted_at
@@ -62,6 +63,11 @@ class Guardian < ApplicationRecord
   # write straight past the Immutable guard. A guardian who must go away is anonymized in place by
   # the erasure path below, which keeps the link intact.
   has_many :user_compliance_infos, dependent: :restrict_with_error
+
+  # One guardian belongs to exactly one seller, so erasing that seller can never reach into another
+  # seller's compliance details. Without this the schema would let two sellers share a row and one
+  # erasure would anonymize the other's guardian, leaving them silently unverifiable.
+  belongs_to :user
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,

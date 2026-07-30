@@ -138,7 +138,11 @@ class GdprDataErasureService
       # this account, so they go too. The row itself is kept, and so is the reference to it, because
       # the compliance revisions above are an audit trail and clearing the link would silently
       # rewrite it. Read across every revision, not just alive ones, for the same reason.
-      Guardian.where(id: @user.user_compliance_infos.select(:guardian_id)).each(&:anonymize!)
+      #
+      # Scoped by owner rather than by the revisions that reference it: a guardian belongs to one
+      # seller, so this also reaches a guardian whose details were entered before any revision
+      # pointed at them, and can never reach another seller's.
+      @user.guardians.each(&:anonymize!)
     end
 
     def anonymize_carts!(anonymized_email)

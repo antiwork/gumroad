@@ -1058,6 +1058,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000014) do
   end
 
   create_table "guardians", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
     t.string "first_name"
     t.string "last_name"
     t.string "email"
@@ -1079,6 +1080,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000014) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["stripe_person_id"], name: "index_guardians_on_stripe_person_id", unique: true
+    t.index ["user_id"], name: "index_guardians_on_user_id"
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

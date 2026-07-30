@@ -2,6 +2,7 @@
 
 FactoryBot.define do
   factory :guardian do
+    user
     first_name { "Ellie" }
     last_name { "Bartowski" }
     email { "guardian@example.com" }

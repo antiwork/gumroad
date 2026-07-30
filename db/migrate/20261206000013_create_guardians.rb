@@ -3,6 +3,8 @@
 class CreateGuardians < ActiveRecord::Migration[7.1]
   def change
     create_table :guardians do |t|
+      t.bigint :user_id, null: false, index: true
+
       t.string :first_name
       t.string :last_name
       t.string :email
@@ -19,7 +21,7 @@ class CreateGuardians < ActiveRecord::Migration[7.1]
 
       t.binary :individual_tax_id
 
-      t.string :stripe_person_id
+      t.string :stripe_person_id, index: { unique: true }
       t.boolean :stripe_tos_accepted, default: false, null: false
       t.string :stripe_tos_ip
       t.datetime :stripe_tos_accepted_at
@@ -28,7 +30,5 @@ class CreateGuardians < ActiveRecord::Migration[7.1]
 
       t.timestamps
     end
-
-    add_index :guardians, :stripe_person_id, unique: true
   end
 end

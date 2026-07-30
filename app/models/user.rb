@@ -102,6 +102,7 @@ class User < ApplicationRecord
   has_many :invites, foreign_key: :sender_id
   has_many :offer_codes
   has_many :user_compliance_infos
+  has_many :guardians
   has_many :user_compliance_info_requests
   has_many :user_tax_forms
   has_many :scheduled_payouts

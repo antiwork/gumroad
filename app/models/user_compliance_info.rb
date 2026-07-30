@@ -33,6 +33,7 @@ class UserComplianceInfo < ApplicationRecord
 
   validates_presence_of :user
   validate :guardian_is_only_attached_once_to_a_live_revision, on: :update
+  validate :guardian_belongs_to_the_same_seller
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -307,5 +308,15 @@ class UserComplianceInfo < ApplicationRecord
       previous_guardian_id = guardian_id_was
       errors.add :base, "The legal guardian cannot be changed once set." if previous_guardian_id.present?
       errors.add :base, "The legal guardian can only be set on the current compliance details." if deleted?
+    end
+
+    # The guardian's PII is erased along with the seller it belongs to, so a revision pointing at
+    # another seller's guardian would make one seller's erasure blank out the other's payout
+    # compliance. Guardian#user_id is the boundary; this is what stops a revision crossing it.
+    def guardian_belongs_to_the_same_seller
+      return if guardian.nil?
+      return if guardian.user_id == user_id
+
+      errors.add :base, "The legal guardian must belong to the same account."
     end
 end
