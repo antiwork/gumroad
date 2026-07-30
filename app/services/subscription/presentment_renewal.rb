@@ -66,6 +66,7 @@ class Subscription::PresentmentRenewal
     purchase = purchases.first
     currency = presentment.presentment_currency
     return fallback(:unsupported_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    return fallback(:unsupported_charge_model) unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
     return fallback(:settlement_currency_mismatch) unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: currency)
 
     quote = mint_quote(currency)

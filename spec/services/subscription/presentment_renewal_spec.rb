@@ -31,7 +31,8 @@ describe Subscription::PresentmentRenewal do
 
   let(:quote) { double(id: "fxq_test_1", fx_rate: 0.8, expires_at: 1.day.from_now) }
 
-  def service(purchases: [renewal_purchase], amount_cents: 1000, gumroad_amount_cents: 100, charge: self.charge)
+  def service(purchases: [renewal_purchase], amount_cents: 1000, gumroad_amount_cents: 100, charge: self.charge,
+              merchant_account: self.merchant_account)
     described_class.new(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:)
   end
 
@@ -165,6 +166,16 @@ describe Subscription::PresentmentRenewal do
 
     expect(renewal.perform).to be_nil
     expect(renewal.fallback_reason).to eq(:quote_unavailable)
+  end
+
+  it "keeps destination charges in canonical dollars until their quote path is supported" do
+    destination_account = create(:merchant_account, user: seller)
+    expect(StripeFxQuote).not_to receive(:create)
+    renewal = service(merchant_account: destination_account)
+
+    expect(renewal.perform).to be_nil
+    expect(renewal.fallback_reason).to eq(:unsupported_charge_model)
+    expect(renewal_purchase.reload.purchase_presentment).to be_nil
   end
 
   it "falls back rather than raising when the processor errors" do
