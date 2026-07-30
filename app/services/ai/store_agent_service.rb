@@ -40,6 +40,7 @@ class Ai::StoreAgentService
   # below when the normal budget no longer has room for them.
   MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
+  MISSING_REQUIRED_READ_MESSAGE = "Store agent write proposal blocked by missing required full read"
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
   # long description's full HTML) inside the tool call's JSON arguments. A cap sized only for text
@@ -495,6 +496,25 @@ class Ai::StoreAgentService
       "legacy setting", an "older per-product option"). Say you can't see that from here, look it up
       in the help center, and if it's outside what you can read or change, offer to hand it to
       Gumroad support with the details.
+    - The creator's storefront has THREE separate content surfaces, and you must not confuse them or
+      deny the ones you have fewer tools for:
+        1. The profile page itself. Either the creator's own tabs and sections (Gumroad's normal
+           profile — read it with get_user_profile_layout) or a custom HTML takeover
+           (get_user_custom_html), never both at once. get_user_custom_html coming back empty means
+           only "no custom HTML" — it does NOT mean the storefront is Gumroad's untouched default.
+           Headings the creator sees on their storefront are their own section headers, so read
+           get_user_profile_layout before you say anything about a heading, and never claim the
+           default profile ships a heading of its own.
+        2. Standalone pages under the creator's store url, listed with list_pages. These are real:
+           the creator manages them under "Pages" in the dashboard, and Gumroad's CLI drives them
+           with `gumroad pages pull/preview/push`. You can list them with list_pages and read one
+           with get_page, but you cannot create, update, or delete them. NEVER tell a creator that
+           standalone pages don't exist on Gumroad, or that those CLI commands aren't real features.
+        3. Each product's own landing page (get_product_custom_html), separate from both of the
+           above.
+      When a creator describes content you cannot find, first read the surface they named. If the
+      surface is unclear, inspect the profile layout and compact standalone-page list before fetching
+      a full page body. Do not claim content is missing until you have checked the relevant surfaces.
     - Store colors and fonts come from the creator's store theme: a background color, a highlight
       (accent) color, and a font. Read them with get_user_theme, which also lists the surfaces they
       cover. They apply to the storefront AND to every product page — product pages ARE themed, so
@@ -622,6 +642,8 @@ class Ai::StoreAgentService
     proposed_action = nil
     # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
     @objects = []
+    @completed_read_targets = {}
+    @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
 
     remaining_iterations = MAX_TOOL_ITERATIONS
@@ -686,6 +708,8 @@ class Ai::StoreAgentService
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
     @objects = []
+    @completed_read_targets = {}
+    @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
 
     remaining_iterations = MAX_TOOL_ITERATIONS
@@ -906,6 +930,10 @@ class Ai::StoreAgentService
       end
       conversation << { role: "assistant", content: assistant_content }
 
+      # A read only satisfies a write precondition after its result has gone back to the model.
+      # Otherwise the model could request a read and a speculative write in the same tool-use batch,
+      # before it had seen the page it was supposed to preserve.
+      @reads_completed_in_tool_batch = {}
       tool_results = tool_uses.map do |tool_use|
         arguments = sanitize_param_hash(tool_use[:input])
         result, action = run_tool(name: tool_use[:name], arguments:)
@@ -921,6 +949,8 @@ class Ai::StoreAgentService
         end
         { type: "tool_result", tool_use_id: tool_use[:id], content: result.to_json }
       end
+      @completed_read_targets.merge!(@reads_completed_in_tool_batch)
+      @reads_completed_in_tool_batch = nil
       conversation << { role: "user", content: tool_results }
 
       proposed_action
@@ -1099,7 +1129,16 @@ class Ai::StoreAgentService
       end
 
       path = endpoint.expand_path(arguments["path_params"])
-      result = api_client.get(path, sanitize_param_hash(arguments["params"]))
+      params = sanitize_param_hash(arguments["params"])
+      if (error = endpoint.unknown_param_keys_error(params))
+        return [{ error: }, nil]
+      end
+
+      # Catalog-owned values win over model input, so a specialized read can share a controller
+      # route without exposing its fixed query contract to the model or adding endpoint-id branches.
+      params.merge!(endpoint.forced_params)
+      result = api_client.get(path, params)
+      record_successful_read(endpoint:, expanded_path: path, result:)
       # Collect any renderable objects from the response so the chat can show them inline as cards.
       @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result)) if @objects
       [result, nil]
@@ -1136,6 +1175,42 @@ class Ai::StoreAgentService
         return [{ error: e.message }, nil]
       end
 
+      if endpoint.requires_read.present?
+        required_read = Ai::StoreAgentApiCatalog.find(endpoint.requires_read)
+        unless required_read&.read?
+          raise Error, "Catalog endpoint #{endpoint.id} requires invalid read endpoint #{endpoint.requires_read}"
+        end
+
+        required_path = required_read.expand_path(path_params)
+        required_target = [required_read.id, required_path]
+        unless @completed_read_targets&.key?(required_target)
+          log_missing_required_read(endpoint:, required_read:)
+          return [
+            {
+              error: "#{endpoint.id} requires a successful full read of this exact target first. Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count.",
+              corrective_action: {
+                condition: "The seller explicitly requested this custom-page work.",
+                if_requested: {
+                  tool: "api_read",
+                  endpoint: required_read.id,
+                  path_params: path_params.slice(*required_read.path_params),
+                  after_success: {
+                    action: "retry_write",
+                    endpoint: endpoint.id,
+                    timing: "this_turn",
+                  },
+                },
+                otherwise: {
+                  action: "do_not_read_or_retry",
+                  instruction: "Do not read the page body and do not retry the write.",
+                },
+              },
+            },
+            nil,
+          ]
+        end
+      end
+
       # Refuse to stage a body carrying keys the endpoint doesn't declare. The v2 API silently
       # ignores unknown body keys, so without this check a write like create_product with
       # "price_cents" (instead of the declared "price") sails through to the API missing its real
@@ -1145,6 +1220,7 @@ class Ai::StoreAgentService
       if (error = unknown_body_keys_error(endpoint, body))
         return [{ error: }, nil]
       end
+      normalize_product_currency_param!(endpoint, body)
 
       summary = write_summary(endpoint, path_params, body)
       action = ProposedAction.new(
@@ -1157,6 +1233,38 @@ class Ai::StoreAgentService
         fields: write_fields(endpoint, path_params, body),
       )
       [{ proposed: true, summary: }, action]
+    end
+
+    # A read precondition is satisfied only by a successful response from the exact catalog endpoint
+    # and expanded target path the write names. A status endpoint may share the same HTTP route, but
+    # its distinct catalog id cannot unlock a body-changing write.
+    def record_successful_read(endpoint:, expanded_path:, result:)
+      return unless successful_api_read?(result)
+
+      (@reads_completed_in_tool_batch || @completed_read_targets)[[endpoint.id, expanded_path]] = true
+    end
+
+    def successful_api_read?(result)
+      return false unless result.is_a?(Hash)
+      return false if result["success"] == false || result[:success] == false
+
+      status = result["http_status"] || result[:http_status]
+      status.blank? || status.to_i.between?(200, 299)
+    end
+
+    # Keep the message fixed in both logs and Sentry so every blocked proposal groups together.
+    # Endpoint ids and the catalog path template are safe structured context. Never report the
+    # expanded path because its model-supplied target id could contain seller text. The notifier
+    # also strips ambient request data from this event.
+    def log_missing_required_read(endpoint:, required_read:)
+      Rails.logger.warn(MISSING_REQUIRED_READ_MESSAGE)
+      ErrorNotifier.notify(
+        MISSING_REQUIRED_READ_MESSAGE,
+        exclude_request_context: true,
+        write_endpoint: endpoint.id,
+        required_read_endpoint: required_read.id,
+        required_read_path: required_read.path,
+      )
     end
 
     # A human-readable description of the pending change for the confirmation card. Built from the
@@ -1280,6 +1388,12 @@ class Ai::StoreAgentService
     def requested_currency(body)
       requested = body["price_currency_type"].to_s.downcase.presence
       requested if CURRENCY_CHOICES.key?(requested)
+    end
+
+    def normalize_product_currency_param!(endpoint, body)
+      return unless endpoint.id.in?(%w[create_product update_product]) && body.key?("price_currency_type")
+
+      body["price_currency_type"] = body["price_currency_type"].to_s.strip.downcase
     end
 
     def preview_field(label, value)

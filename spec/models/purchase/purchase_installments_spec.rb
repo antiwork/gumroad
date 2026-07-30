@@ -622,7 +622,7 @@ describe "PurchaseInstallments", :vcr do
 
         5.times do |i|
           post = create(:installment, link: product, published_at: (i + 1).days.ago)
-          create(:product_file, installment: post, link: product)
+          create(:product_file, installment: post, link: nil)
           create(:url_redirect, installment: post, purchase:)
           create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
         end
@@ -648,7 +648,7 @@ describe "PurchaseInstallments", :vcr do
 
         5.times do |i|
           post = create(:installment, link: product, published_at: (i + 1).days.ago)
-          create(:product_file, installment: post, link: product)
+          create(:product_file, installment: post, link: nil)
           create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
         end
 
@@ -671,7 +671,7 @@ describe "PurchaseInstallments", :vcr do
 
         5.times do |i|
           post = create(:installment, link: product, published_at: (i + 1).days.ago)
-          create(:product_file, installment: post, link: product)
+          create(:product_file, installment: post, link: nil)
           create(:url_redirect, installment: post, purchase:)
           create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: i.hours.ago)
         end
@@ -705,7 +705,7 @@ describe "PurchaseInstallments", :vcr do
         subscription.reload
 
         post = create(:installment, link: product, published_at: 1.day.ago)
-        create(:product_file, installment: post, link: product)
+        create(:product_file, installment: post, link: nil)
         # EmailInfo is keyed on the original purchase, not the renewal — the batch path must
         # find it via original_purchase.id. A regression that keys on the renewal's own id
         # would return no email_info for the renewal and diverge from the single-purchase path.
@@ -733,7 +733,7 @@ describe "PurchaseInstallments", :vcr do
         subscription.reload
 
         post = create(:installment, link: product, published_at: 1.day.ago)
-        create(:product_file, installment: post, link: product)
+        create(:product_file, installment: post, link: nil)
         # email_info qualifies the post in product_installments lookup
         create(:creator_contacting_customers_email_info_sent, purchase:, installment: post, sent_at: 1.hour.ago)
 
@@ -986,6 +986,25 @@ describe "PurchaseInstallments", :vcr do
           expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@past_installment_2.id, 1, @purchase.id, nil)
           expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(@future_installment.id, 1, @purchase.id, nil)
           expect(SendWorkflowInstallmentWorker).to_not have_enqueued_sidekiq_job(abandoned_cart_workflow_installment.id, abandoned_cart_workflow_installment_rule.version, @purchase.id, nil)
+        end
+      end
+
+      it "does not reschedule member-cancellation workflow installments" do
+        unsubscribed_interval = 4.days
+
+        cancellation_workflow = create(:workflow, seller: @purchase.seller, link: @purchase.link,
+                                                  workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER,
+                                                  published_at: Time.current)
+        cancellation_installment = create(:installment, link: @purchase.link, workflow: cancellation_workflow, published_at: Time.current)
+        create(:installment_rule, installment: cancellation_installment, delayed_delivery_time: 2.days)
+
+        travel_to(@purchase.created_at + unsubscribed_interval) do
+          @purchase.reschedule_workflow_installments(send_delay: unsubscribed_interval)
+
+          expect(SendWorkflowInstallmentWorker.jobs.size).to eq(3)
+          enqueued_installment_ids = SendWorkflowInstallmentWorker.jobs.map { _1["args"].first }
+          expect(enqueued_installment_ids).to match_array([@past_installment_1.id, @past_installment_2.id, @future_installment.id])
+          expect(enqueued_installment_ids).to_not include(cancellation_installment.id)
         end
       end
     end

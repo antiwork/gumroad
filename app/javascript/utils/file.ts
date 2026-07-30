@@ -1,7 +1,3 @@
-import typia from "typia";
-
-import { last } from "$app/utils/array";
-
 export const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "webp"];
 
 const FileUtils = {
@@ -56,12 +52,6 @@ const FileUtils = {
     }
     return encodeURIComponent(url);
   },
-  determineS3BucketForForm: ($form: JQuery) => {
-    const s3Url: string = typia.assert<string>($form[0]?.dataset.s3Url);
-    return last(s3Url.split("/"));
-  },
-  determineAWSAccessKeyIdForForm: ($form: JQuery) => typia.assert<string>($form[0]?.dataset.awsAccessKeyId),
-  determineUserExternalIdForForm: ($form: JQuery) => typia.assert<string>($form[0]?.dataset.userExternalId),
   isFileExtensionStreamable: (extension: string) => {
     const streamableExtensions = ["mp4", "m4v", "mov", "mpeg", "mpeg4", "wmv", "movie", "ogv", "avi", "webm"];
     return streamableExtensions.includes(extension.toLowerCase());

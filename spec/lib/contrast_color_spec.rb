@@ -334,8 +334,19 @@ describe ContrastColor do
       expect(described_class.visible_indicator("#ff90e8", "#1a1a1a")).to eq("#ff90e8")
     end
 
-    it "darkens on a light background and lightens on a dark one, keeping the hue" do
-      expect(described_class.visible_indicator("#ff90e8", "#ffffff")).to eq("#d075bd")
+    it "keeps a perceptible colour even when it sits below the non-text floor" do
+      # The stock pink on white measures 2.02:1 — short of 3:1, but plainly visible.
+      expect(described_class.visible_indicator("#ff90e8", "#ffffff")).to eq("#ff90e8")
+      expect(described_class.visible_indicator("#333333", "#000000")).to eq("#333333")
+    end
+
+    it "adjusts only at the visibility boundary" do
+      expect(described_class.visible_indicator("#d2d2d2", "#ffffff")).to eq("#d2d2d2") # 1.51:1
+      expect(described_class.visible_indicator("#d3d3d3", "#ffffff")).not_to eq("#d3d3d3") # 1.50:1
+    end
+
+    it "darkens on a light background and lightens on a dark one when it rescues" do
+      expect(described_class.visible_indicator("#f0f0f0", "#ffffff")).to eq("#949494")
       expect(described_class.visible_indicator("#111111", "#000000")).to eq("#5a5a5a")
     end
 
@@ -346,18 +357,23 @@ describe ContrastColor do
       end
     end
 
-    it "shifts by the smallest amount that clears the floor" do
-      indicator = described_class.visible_indicator("#ff90e8", "#ffffff")
-      expect(described_class.ratio_between(indicator, "#ffffff")).to be_within(0.05).of(ContrastColor::WCAG_AA_NON_TEXT)
+    it "rescues with the smallest shift that clears the non-text floor" do
+      indicator = described_class.visible_indicator("#111111", "#000000")
+      expect(described_class.ratio_between(indicator, "#000000")).to be_within(0.05).of(ContrastColor::WCAG_AA_NON_TEXT)
     end
 
-    it "clears the floor for every accent/background pair" do
+    it "returns perceptible pairs unchanged and rescues imperceptible ones, for every pair" do
       random = Random.new(7)
       1_000.times do
         accent = format("#%06x", random.rand(0x1000000))
         background = format("#%06x", random.rand(0x1000000))
-        ratio = described_class.ratio_between(described_class.visible_indicator(accent, background), background)
-        expect(ratio).to be >= ContrastColor::WCAG_AA_NON_TEXT - 0.001, "#{accent} on #{background} stayed below the floor"
+        result = described_class.visible_indicator(accent, background)
+        if described_class.ratio_between(accent, background) < ContrastColor::INDICATOR_VISIBILITY_FLOOR
+          expect(described_class.ratio_between(result, background))
+            .to be >= ContrastColor::WCAG_AA_NON_TEXT - 0.001, "#{accent} on #{background} stayed below the rescue floor"
+        else
+          expect(result).to eq(accent), "#{accent} on #{background} was perceptible but altered to #{result}"
+        end
       end
     end
 

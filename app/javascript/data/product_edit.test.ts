@@ -46,20 +46,19 @@ describe("filesForSave", () => {
 
 describe("copyRichContentPages", () => {
   it("keeps stored source ids while assigning new page ids and clearing copied upsell ids", () => {
-    const pages = [
-      {
-        id: "source-page",
-        title: "Source",
-        updated_at: "2026-07-28T00:00:00.000Z",
-        description: {
-          type: "doc",
-          content: [
-            { type: "upsellCard", attrs: { id: "stored-upsell" } },
-            { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
-          ],
-        },
+    const sourcePage = {
+      id: "source-page",
+      title: "Source",
+      updated_at: "2026-07-28T00:00:00.000Z",
+      description: {
+        type: "doc",
+        content: [
+          { type: "upsellCard", attrs: { id: "stored-upsell" } },
+          { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
+        ],
       },
-    ];
+    };
+    const pages = [sourcePage];
 
     expect(copyRichContentPages(pages, () => "new-page", "2026-07-28T01:00:00.000Z")).toEqual([
       {
@@ -85,7 +84,7 @@ describe("copyRichContentPages", () => {
     expect(secondCopy.source_id).toBe("source-page");
     expect(secondCopy.copy_parent_id).toBe("first-copy");
 
-    const unsavedCopy = copyRichContentPages([{ ...pages[0], id: "unsaved", newlyAdded: true }], () => "copy");
+    const unsavedCopy = copyRichContentPages([{ ...sourcePage, id: "unsaved", newlyAdded: true }], () => "copy");
     expect(unsavedCopy[0]?.source_id).toBeUndefined();
     expect(unsavedCopy[0]?.copy_parent_id).toBe("unsaved");
   });

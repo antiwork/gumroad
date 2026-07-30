@@ -78,10 +78,32 @@ EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale k
 
 `prod_query.sh` self-heals: after picking a working host it routes `ssh-keygen -R` through that host (they share the bastion's `known_hosts`), in a single hop for all the addresses it needs to clear. Three things to know:
 
-- **Only genuinely outdated keys are removed.** A candidate is cleared only when SSH's own error names that address and says the identification changed. A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — throwing away a correct host key would give up real protection against someone impersonating that address.
+- **Only genuinely outdated keys are removed.** A candidate is cleared only when SSH's own error names that address and says the identification changed. A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — throwing away a correct host key would give up real protection against someone impersonating that address. Note the bastion's onward hop usually just *warns* about a changed key and connects anyway — recycled IPs make that the steady state — so a warn-and-proceed failure stays on the patient-retry list too (the key gets cleared, but it isn't why the probe failed). Only an outright `Host key verification failed` refusal disqualifies a candidate from the retry.
 
 - **You cannot run a command on the bastion itself.** It auto-jumps to whatever `LC_PAPER` names; omitting `LC_PAPER` fails with `ssh: Could not resolve hostname`. Always route through a working instance IP.
 - **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner.
+
+- **The self-heal needs one working hop, so it cannot rescue a fully-rejected pool.** `ssh-keygen -R` is routed through the instance that answered. If every candidate is rejected there is no hop to route through, the keys stay stale, and the next run is rejected identically — the pool stops decaying only while something still answers.
+
+### "No instance passed the health probe" usually means slow, not down
+
+The candidate probe is deliberately impatient (20s) so one hung host cannot eat the caller's budget, but that also rejects hosts which are merely slow under load. When *every* candidate fails, a fleet-wide outage is the less likely reading.
+
+`prod_query.sh` now retries the non-stale-key rejections with a patient probe before giving up, and says so (`answered on the patient retry (slow, not unhealthy)`). Only the all-rejected path pays for this.
+
+Both passes draw down one shared **90s selection budget** (`PROD_SELECT_BUDGET`), so picking a host can never consume the caller's whole ~120s Bash-tool window before the query starts — a large pool shortens each probe rather than adding to the total. A third of the budget is held back for the patient pass, so a pool of slow hosts cannot drain everything in the fast pass and starve the retry. Running out gives a distinct message that says the pool may just be slow, instead of the misleading "no instance passed the health probe". Raise the budget when you have more wall clock than the Bash tool allows:
+
+```bash
+PROD_SELECT_BUDGET=240 timeout 560 bash .agents/skills/gumroad-prod-console/scripts/prod_query.sh q.rb
+```
+
+If you still get the hard error, force a host rather than assuming production is down:
+
+```bash
+PROD_INSTANCE_IP=10.1.34.180 bash .agents/skills/gumroad-prod-console/scripts/prod_query.sh q.rb
+```
+
+This matters for **watchers**, not just interactive use: a cron that treats an unreadable console as "nothing to report" goes silent indefinitely and looks healthy. On 2026-07-29 all 8 candidates were rejected while a forced host answered the same query in 13s.
 
 ### Grepping only for `^MARK` can hide a total failure
 

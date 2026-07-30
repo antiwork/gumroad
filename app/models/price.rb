@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class Price < BasePrice
-  belongs_to :link, optional: true
+  # touch: true so a price change moves links.updated_at, which is what
+  # Pages::ProfileData keys its cached storefront payload on. Matches AssetPreview and
+  # Thumbnail; see TouchesProductForPriceCache for the variant-side equivalent.
+  belongs_to :link, touch: true, optional: true
 
   validates :link, presence: true
   validate :recurrence_validation

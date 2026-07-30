@@ -292,14 +292,14 @@ RSpec.configure do |config|
     RSpec::Mocks.space.proxy_for(SsrfFilter).reset if example.metadata[:skip_ssrf_stub]
   end
 
-  config.before(:suite) do
-    if StripeBalanceEnforcer.needed_for?(RSpec.world.filtered_examples.values.flatten)
-      begin
-        StripeBalanceEnforcer.ensure_sufficient_balance
-      rescue StandardError => e
-        warn "Stripe balance check failed: #{e.class} #{e.message}"
-      end
-    end
+  # Top up the shared Stripe test account only for the examples that actually
+  # spend it, and only once per process. This deliberately runs per example
+  # rather than in `before(:suite)`: in CI the suite runs through knapsack_pro's
+  # queue mode, which loads spec files in batches from inside the suite hooks, so
+  # nothing is loaded yet when a suite hook fires and a suite-level check would
+  # never see the tagged examples. See StripeBalanceEnforcer for the full story.
+  config.before(:each, :spend_stripe_balance) do
+    StripeBalanceEnforcer.ensure_sufficient_balance_once
   end
 
   config.before(:suite) do

@@ -80,7 +80,7 @@ class ProfilePresenter
       # can't reference real sections here - there are none.
       if include_default_products_section &&
          sections_props[:sections].any? { _1[:id] == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID }
-        tabs = [{ name: "Products", sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
+        tabs = [{ name: ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME, sections: [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID] }]
       end
       {
         **sections_props,
