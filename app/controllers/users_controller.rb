@@ -259,9 +259,25 @@ class UsersController < ApplicationController
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
+      # Same share-card chain as the standard profile (PageMeta::User): the
+      # branded subscribe-preview card wins, then a real uploaded avatar.
       # avatar_url always returns a value (it falls back to the default avatar),
-      # so only advertise og:image when the seller uploaded a real one.
-      og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
+      # so only advertise it when the seller uploaded one.
+      share_image = user.subscribe_preview_url.presence || (user.avatar.attached? ? user.avatar_url : nil)
+      share_image_tags = if share_image.present?
+        escaped_share_image = ERB::Util.h(share_image)
+        alt = user.subscribe_preview_url.present? ? title : "#{title}'s profile picture"
+        tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
+                %(<meta property="og:image:alt" content="#{alt}">)]
+        if user.subscribe_preview_url.present?
+          tags << %(<meta property="twitter:card" content="summary_large_image">)
+          tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
+          tags << %(<meta property="twitter:image:alt" content="#{alt}">)
+        end
+        tags.join("\n    ")
+      else
+        ""
+      end
       live_reload = if current_seller_owns_profile?
         custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce:)
       else
@@ -278,7 +294,7 @@ class UsersController < ApplicationController
             <meta property="og:title" content="#{title}">
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">
-            #{og_image_tag}
+            #{share_image_tags}
             #{profile_custom_html_analytics_head(user)}
             <meta name="csrf-token" content="#{CsrfTokenInjector::TOKEN_PLACEHOLDER}">
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
