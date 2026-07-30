@@ -89,9 +89,18 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
                                         effective_from: 30.days.ago)
     end
     let(:renewal) do
-      create(:membership_purchase, link: product, seller:, subscription:, price_cents: 1000,
-                                   is_original_subscription_purchase: false,
-                                   purchase_state: "in_progress")
+      create(:membership_purchase,
+             link: product,
+             seller:,
+             subscription:,
+             merchant_account:,
+             price_cents: 1000,
+             is_original_subscription_purchase: false,
+             purchase_state: "in_progress",
+             succeeded_at: nil,
+             stripe_transaction_id: nil,
+             charge_processor_id: StripeChargeProcessor.charge_processor_id,
+             flow_of_funds: nil)
     end
 
     before do
@@ -101,6 +110,29 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       allow(StripeChargeProcessor).to receive(:charge_minor_units_compatible?).and_return(true)
       allow(renewal).to receive(:merchant_account).and_return(merchant_account)
       allow(renewal).to receive(:charge_processor_id).and_return(StripeChargeProcessor.charge_processor_id)
+    end
+
+    def processor_charge(flow_of_funds:)
+      BaseProcessorCharge.new.tap do |charge|
+        charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        charge.id = "ch_renewal"
+        charge.status = "succeeded"
+        charge.refunded = false
+        charge.fee = 59
+        charge.fee_currency = Currency::USD
+        charge.card_fingerprint = "card_fp"
+        charge.card_expiry_month = 12
+        charge.card_expiry_year = 2030
+        charge.zip_check_result = "pass"
+        charge.flow_of_funds = flow_of_funds
+      end
+    end
+
+    def charge_intent(processor_charge)
+      ChargeIntent.new.tap do |intent|
+        intent.id = "pi_renewal"
+        intent.charge = processor_charge
+      end
     end
 
     # THE test whose absence hid the dead renewal read. Asserts on the args handed to the
@@ -114,6 +146,44 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       end
 
       renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+
+    it "defers a settled renewal until Stripe exposes its flow of funds" do
+      renewal.chargeable = double(get_chargeable_for: double, requires_mandate?: false, fingerprint: "card_fp")
+      allow(renewal).to receive(:process!) { |off_session: true| renewal.charge!(off_session:) }
+      create(
+        :purchase_presentment,
+        purchase: renewal,
+        charge_presentment: nil,
+        presentment_currency: "eur",
+        presentment_price_cents: 899,
+        presentment_gumroad_tax_cents: 0,
+        presentment_total_cents: 899
+      )
+      renewal.association(:purchase_presentment).reset
+      allow(renewal).to receive(:create_charge_intent).and_return(charge_intent(processor_charge(flow_of_funds: nil)))
+
+      subscription.process_purchase!(renewal)
+
+      expect(renewal.reload).to be_in_progress
+      expect(renewal.purchase_presentment).to be_present
+      expect(FinalizeBuyerPresentmentPurchaseJob.jobs.last["args"]).to eq([renewal.id])
+
+      presentment = renewal.purchase_presentment
+      settled_flow = FlowOfFunds.new(
+        issued_amount: FlowOfFunds::Amount.new(currency: presentment.presentment_currency, cents: presentment.presentment_total_cents),
+        settled_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: renewal.total_transaction_cents),
+        gumroad_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: renewal.total_transaction_amount_for_gumroad_cents),
+        merchant_account_gross_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: renewal.total_transaction_cents),
+        merchant_account_net_amount: FlowOfFunds::Amount.new(currency: Currency::USD, cents: renewal.payment_cents)
+      )
+      allow(ChargeProcessor).to receive(:get_or_search_charge).and_return(processor_charge(flow_of_funds: settled_flow))
+      FinalizeBuyerPresentmentPurchaseJob.jobs.clear
+
+      FinalizeBuyerPresentmentPurchaseJob.new.perform(renewal.id)
+
+      expect(renewal.reload).to be_successful
+      expect(FinalizeBuyerPresentmentPurchaseJob.jobs.size).to eq(0)
     end
 
     it "falls back to canonical dollars when the plan moved since the fixing" do

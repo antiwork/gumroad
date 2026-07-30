@@ -1418,10 +1418,11 @@ class Purchase < ApplicationRecord
       end
       if link.is_tiered_membership?
         first_tier_name = purchase.variant_attributes.first&.name
+        subscription_external_id = purchase.subscription&.external_id
         json[:membership] = {
           tier_name: first_tier_name == "Untitled" ? purchase.link.name : first_tier_name,
           tier_description: purchase.variant_attributes.first&.description,
-          manage_url: Rails.application.routes.url_helpers.manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"),
+          manage_url: subscription_external_id.present? ? Rails.application.routes.url_helpers.manage_subscription_url(subscription_external_id, host: "#{PROTOCOL}://#{DOMAIN}") : nil,
         }
       end
       json[:enabled_integrations] = Integration.enabled_integrations_for(purchase)
@@ -1577,9 +1578,9 @@ class Purchase < ApplicationRecord
   end
 
   # True while a presentment purchase has been charged but Stripe settlement data has not
-  # arrived yet; FinalizeBuyerPresentmentChargeJob completes the purchase once it does.
+  # arrived yet; a finalization job completes the purchase once it does.
   def pending_buyer_presentment_settlement?
-    in_progress? && stripe_transaction_id.present? && charge&.charge_presentment.present?
+    in_progress? && stripe_transaction_id.present? && (buyer_presentment? || charge&.charge_presentment.present?) && flow_of_funds.blank?
   end
 
   def buyer_presentment_currency
@@ -2223,7 +2224,12 @@ class Purchase < ApplicationRecord
     self.charge_intent = create_charge_intent(chargeable, off_session:)
     return if errors.present?
 
-    save_charge_data(charge_intent.charge, chargeable:) if charge_intent.succeeded?
+    if charge_intent.succeeded?
+      charge_data_saved = save_charge_data(charge_intent.charge, chargeable:, allow_missing_flow_of_funds: buyer_presentment?)
+      unless charge_data_saved
+        FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, id)
+      end
+    end
 
     unless charge_intent.succeeded? || charge_intent.requires_action? || (charge_intent.is_a?(StripeChargeIntent) && charge_intent.processing?)
       errors.add :base, "Sorry, something went wrong."

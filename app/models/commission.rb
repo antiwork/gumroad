@@ -65,9 +65,11 @@ class Commission < ApplicationRecord
         raise ActiveRecord::RecordInvalid.new(completion_purchase)
       end
 
-      completion_purchase.update_balance_and_mark_successful!
-      self.status = STATUS_COMPLETED
       self.completion_purchase = completion_purchase
+      unless completion_purchase.pending_buyer_presentment_settlement?
+        completion_purchase.update_balance_and_mark_successful!
+        self.status = STATUS_COMPLETED
+      end
       save!
     end
   end

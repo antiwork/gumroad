@@ -151,7 +151,7 @@ class Preorder < ApplicationRecord
         rescue StateMachines::InvalidTransition => e
           logger.error "Purchase for preorder error: Could not create purchase for preorder ID #{id} because #{e}"
         end
-      else
+      elsif !purchase.pending_buyer_presentment_settlement?
         purchase.update_balance_and_mark_successful!
         after_commit do
           ActivateIntegrationsWorker.perform_async(purchase.id)
