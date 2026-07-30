@@ -2085,6 +2085,37 @@ describe ContactingCreatorMailer do
       end
     end
 
+    context "when Stripe refused the account itself" do
+      let(:unusable_message) do
+        "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
+      end
+      let(:mail) do
+        ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL,
+          unusable_message
+        )
+      end
+
+      it "asks for a different bank account rather than a corrected code" do
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("We need a different bank account for your payouts.")
+        expect(mail.body.encoded).to include("add a different bank account")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "does not promise a re-check and does not blame a typo" do
+        expect(mail.body.encoded).not_to include("automatically re-check")
+        expect(mail.body.encoded).not_to include("you don't need to do anything")
+        expect(mail.body.encoded).not_to include("format banks in your country use")
+        expect(mail.body.encoded).to include("won't clear on its own")
+      end
+
+      it "offers a way out for a seller who has no other account" do
+        expect(mail.body.encoded).to include("reply to this email")
+      end
+    end
+
     context "when the bank simply isn't in the partner's records yet" do
       it "keeps the wait-and-we-will-re-check wording" do
         mail = ContactingCreatorMailer.invalid_bank_account(seller.id)

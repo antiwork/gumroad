@@ -329,6 +329,37 @@ class SettingsPresenter
       compliance_info.nil? || note.created_at >= compliance_info.created_at
     end
 
+    # The bank-account counterpart of postal_code_rejected_by_stripe?. Returns the newest payout
+    # note describing a rejection of the bank details the seller currently has saved, or nil.
+    #
+    # Freshness is anchored on the active bank account's own created_at: entering different bank
+    # details creates a NEW BankAccount row (UpdatePayoutMethod replaces rather than edits, even
+    # for identical digits), so a note older than that row is about details the seller has already
+    # replaced and must not be blamed.
+    #
+    # No alive bank account means no rejected details to complain about, so the banner stays hidden.
+    # Every path that records one of these notes has a bank row saved at the time, so nil really
+    # means the seller LEFT bank payouts: switching to PayPal deletes the bank row and nothing ever
+    # soft-deletes the note, since notes are only cleared on a SUCCESSFUL sync. Defaulting to "show"
+    # would give a seller with working PayPal payouts a permanent banner demanding they fix a bank
+    # account they deliberately removed.
+    def current_bank_sync_failure_note
+      bank_account = seller.active_bank_account
+      return nil if bank_account.nil?
+
+      note = seller.comments
+            .with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .where("content LIKE ?", "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%")
+            .order(created_at: :desc, id: :desc)
+            .first
+      return nil if note.nil?
+
+      # An equal timestamp still counts: the note is always written after the row it describes.
+      note.created_at >= bank_account.created_at ? note : nil
+    end
+
     def country_code_for_compliance_field(field, user_compliance_info)
       case field
       when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
@@ -429,23 +460,31 @@ class SettingsPresenter
         end
       end
 
-      # Our payment partner (Stripe) rejected the postal code the seller entered, so their
-      # payout account couldn't be created. That rejection happens asynchronously after the
-      # settings save, so without this banner the seller sees a successful save and then
-      # retries blindly (observed sellers re-submitting the same code 4-13 times). The
-      # rejection leaves a "Stripe postal code rejected" payout note on the account, so the
-      # banner self-heals: the note is soft-deleted once an account creation succeeds, and
-      # postal_code_rejected_by_stripe? ignores notes older than the seller's latest
-      # compliance-info save (i.e. a corrected address hides the banner even before the
-      # retry runs). Only shown while there is no live Stripe account (i.e. the rejection
-      # is still what's blocking setup).
+      # Stripe rejects the postal code asynchronously, after the settings page has already
+      # reported a clean save. Gated on a missing account because a rejection only blocks a
+      # seller who has no payout account yet; freshness is postal_code_rejected_by_stripe?'s job.
       if stripe_account.blank? && postal_code_rejected_by_stripe?
         country = seller.alive_user_compliance_info&.legal_entity_country
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
         compliance_actions << {
-          message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it every few days for up to #{weeks} weeks.",
+          message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it once a week for up to #{weeks} weeks.",
           href: nil,
         }
+      end
+
+      # Deliberately not gated on a missing Stripe account like the postal banner above:
+      # update_bank_account requires a live account, so gating it would hide the banner from
+      # exactly the sellers a bank rejection hits.
+      if (bank_note = current_bank_sync_failure_note)
+        bank_message = if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
+          "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
+        elsif StripeMerchantAccountManager.bank_details_format_rejection_note?(bank_note)
+          "Our payment partner couldn't accept your bank details as entered. Please double-check your account and bank code and re-save them. Waiting won't clear this one."
+        else
+          # Cadence wording must match ContactingCreatorMailer#invalid_bank_account.
+          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
+        end
+        compliance_actions << { message: bank_message, href: nil }
       end
 
       gumroad_status = if is_under_review && !is_suspended

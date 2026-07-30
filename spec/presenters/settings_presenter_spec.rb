@@ -869,6 +869,83 @@ describe SettingsPresenter do
         expect(account_status[:show_section]).to eq(false)
       end
 
+      it "surfaces a terminal bank rejection and tells the seller to use a different account" do
+        # Stripe can refuse the account the seller saved (payouts to it have failed before) after
+        # the settings page has already reported a clean save, so without this banner the seller
+        # has no way to learn that waiting and re-entering the same account are both dead ends.
+        create(:ach_account, user: seller)
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:show_section]).to eq(true)
+        expect(account_status[:compliance_actions]).to contain_exactly(
+          hash_including(message: a_string_matching(/add a different bank account/), href: nil)
+        )
+        expect(account_status[:compliance_actions].first[:message]).not_to match(/re-check/)
+      end
+
+      it "tells a seller whose bank code was mistyped to correct it rather than wait" do
+        create(:ach_account, user: seller)
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: routing_number_invalid — Invalid routing number for PK.")
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:compliance_actions]).to contain_exactly(
+          hash_including(message: a_string_matching(/re-save them\. Waiting won't clear this one/), href: nil)
+        )
+      end
+
+      it "keeps the wait-and-re-check wording for a bank the partner simply doesn't know yet" do
+        create(:ach_account, user: seller)
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: unknown — We couldn't find the bank for that BIC")
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:compliance_actions]).to contain_exactly(
+          hash_including(message: a_string_matching(/automatically re-check/), href: nil)
+        )
+      end
+
+      it "surfaces a bank rejection recorded against a seller who already has a Stripe account" do
+        # update_bank_account requires a live Stripe account, so a rejection hit while CHANGING
+        # banks always lands on a seller who has one. Suppressing the banner here (as the postal
+        # one is suppressed) would hide it from exactly that population, whose payouts keep going
+        # to the external account Stripe still holds.
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_bank_note_test")
+        create(:ach_account, user: seller)
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+
+        expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
+          hash_including(message: a_string_matching(/add a different bank account/), href: nil)
+        )
+      end
+
+      it "does not surface a bank rejection that predates the bank account the seller now has saved" do
+        # Entering different bank details creates a NEW BankAccount row, so a note older than that
+        # row describes details the seller has already replaced and must not be blamed.
+        note = seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+        note.update!(created_at: 1.day.ago)
+        create(:ach_account, user: seller)
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:compliance_actions]).to eq([])
+        expect(account_status[:show_section]).to eq(false)
+      end
+
+      it "does not demand a bank fix from a seller who has moved to PayPal payouts" do
+        # Switching to PayPal soft-deletes the bank row, and bank-sync notes are only cleared on a
+        # SUCCESSFUL sync, so the note stays alive forever. Without the no-bank-account guard this
+        # seller (whose payouts work fine) would see a permanent banner telling them to fix a bank
+        # account they deliberately removed. That is precisely the seller the terminal-rejection
+        # email steers to PayPal when they have no second bank account to offer.
+        bank_account = create(:ach_account, user: seller)
+        seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+        bank_account.mark_deleted!
+        seller.update!(payment_address: "payouts@example.com")
+
+        account_status = presenter.payments_props[:account_status]
+        expect(account_status[:compliance_actions]).to eq([])
+        expect(account_status[:show_section]).to eq(false)
+      end
+
       it "flags the Stripe account as rejected and hides the remediation link when the rejection is terminal" do
         merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
         create(:balance, user: seller, merchant_account:, amount_cents: 50)
