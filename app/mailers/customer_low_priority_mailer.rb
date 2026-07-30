@@ -373,8 +373,16 @@ class CustomerLowPriorityMailer < ApplicationMailer
     return if purchaser&.opted_out_of_review_reminders?
     first_purchase = order.purchases.first
 
+    # Re-checked at render time, not just at enqueue: the :low queue can lag behind a
+    # buyer unsubscribing, and for a guest the purchaser opt-out above is always nil.
+    reviewable = order.purchases.select { _1.eligible_for_review_reminder? }
+    return if reviewable.empty?
+
     @title = "Liked your order? Leave some reviews!"
-    @unsub_link = review_reminder_unsubscribe_url(purchaser, purchase: first_purchase)
+    # Token comes from a purchase the email is actually about. `purchases.first` can be an
+    # excluded row (already unsubscribed, refunded, reviewed), which would point the guest's
+    # only unsubscribe link at a seller who is not one of the senders.
+    @unsub_link = review_reminder_unsubscribe_url(purchaser, purchase: reviewable.first)
     @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
     email = purchaser&.email || first_purchase.email
@@ -421,16 +429,10 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
-    # Account holders get the per-feature opt-out (review reminders only). Guests have no
-    # `User` row to hold that flag, so they fall back to the purchase-scoped unsubscribe the
-    # receipt footer already uses — a broader opt-out (it clears `can_contact` for this
-    # seller), but a real one, and `eligible_for_review_reminder?` now honours it. Without
-    # this fallback the reminder shipped with no Unsubscribe link at all, since the email
-    # layout only renders the link when `@unsub_link` is set.
-    #
-    # On an order-level reminder spanning several sellers this unsubscribes from the first
-    # purchase's seller only; the alternative is no link whatsoever, and a review reminder
-    # has to carry one.
+    # Guests have no User row to hold `opted_out_of_review_reminders`, so they fall back to
+    # the receipt footer's purchase-scoped unsubscribe. That is broader (it clears
+    # `can_contact` for that purchase's seller) and on a multi-seller order covers only that
+    # one seller.
     def review_reminder_unsubscribe_url(purchaser, purchase:)
       if purchaser.present?
         return user_unsubscribe_review_reminders_by_token_url(

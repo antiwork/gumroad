@@ -714,6 +714,28 @@ describe CustomerLowPriorityMailer do
         expect(token).to be_present
         expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
       end
+
+      it "mints the token from a purchase the email is about, skipping excluded ones" do
+        # `excluded` is first in the order, so it is what `order.purchases.first` returns —
+        # the row the token used to come from even though it gets no reminder.
+        excluded = create(:purchase, full_name: "Buyer", can_contact: false)
+        multi_seller_order = create(:order, purchaser: nil, purchases: [excluded, purchase])
+        expect(multi_seller_order.purchases.first).to eq(excluded)
+
+        body = CustomerLowPriorityMailer.order_review_reminder(multi_seller_order.id).body.encoded
+
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
+      end
+
+      it "does not send when no purchase in the order is still eligible" do
+        order.update!(purchaser: nil)
+        purchase.update!(can_contact: false)
+
+        expect do
+          CustomerLowPriorityMailer.order_review_reminder(order.id).deliver_now
+        end.to_not change { ActionMailer::Base.deliveries.count }
+      end
     end
 
     context "purchase does not have name" do
