@@ -231,8 +231,15 @@ class SalesTaxCalculator
     end
 
     def tax_eligible?
-      product_tax_eligible = product.is_physical && tax_rate.country == Compliance::Countries::USA.alpha2
-      product_tax_eligible ||= Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+      # Physical goods are only taxed where Gumroad is the marketplace facilitator on a domestic
+      # sale (US states, and Canada via TaxJar) or where the seller supplied their own rate.
+      # Anywhere else the parcel crosses a border as an import: destination customs assesses VAT
+      # on arrival, and Gumroad has no import registration (no IOSS in the EU, and the OSS/VOEC
+      # numbers we do hold cover electronically supplied services, not goods) to remit what it
+      # collected. Collecting here charged the buyer the same VAT twice.
+      return is_us_taxable_state || is_ca_taxable || tax_rate.user_id.present? if product.is_physical
+
+      product_tax_eligible = Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::AUS.alpha2
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::SGP.alpha2
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::NOR.alpha2
