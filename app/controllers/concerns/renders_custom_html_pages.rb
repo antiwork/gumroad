@@ -260,8 +260,11 @@ module RendersCustomHtmlPages
         function schemeBackplate(style) {
           if (!style.colorScheme || style.colorScheme === "normal" || !document.body) return null;
           var probe = document.createElement("span");
-          probe.style.backgroundColor = "Canvas";
-          probe.style.colorScheme = style.colorScheme;
+          probe.style.setProperty("all", "initial", "important");
+          probe.style.setProperty("background-color", "Canvas", "important");
+          probe.style.setProperty("color-scheme", style.colorScheme, "important");
+          probe.style.setProperty("transition", "none", "important");
+          probe.style.setProperty("animation", "none", "important");
           document.body.appendChild(probe);
           var color = window.getComputedStyle(probe).backgroundColor;
           probe.parentNode.removeChild(probe);

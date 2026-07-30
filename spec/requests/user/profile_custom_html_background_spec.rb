@@ -242,6 +242,49 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
+  context "when seller CSS tries to override the color-scheme backplate probe" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>
+          html{color-scheme:dark}
+          html,body{margin:0}
+          span{
+            all:unset !important;
+            background-color:red !important;
+            color-scheme:light !important;
+            transition:all 10s !important;
+            animation:probe 10s infinite !important
+          }
+          @keyframes probe{to{background-color:red}}
+        </style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "mirrors the browser backplate instead of the hostile rule" do
+      visit seller.subdomain_with_protocol
+      canvas = within_frame(find("iframe#gumroad-landing-frame")) do
+        page.evaluate_script(<<~JS)
+          (function () {
+            var host = document.createElement("div");
+            var shadow = host.attachShadow({ mode: "open" });
+            var probe = document.createElement("span");
+            probe.style.backgroundColor = "Canvas";
+            probe.style.colorScheme = "dark";
+            shadow.appendChild(probe);
+            document.body.appendChild(host);
+            var color = getComputedStyle(probe).backgroundColor;
+            host.remove();
+            return color;
+          })();
+        JS
+      end
+      expect(canvas).not_to eq("rgb(255, 0, 0)")
+      expect_wrapper_background(canvas)
+      expect(theme_color).to eq(canvas)
+    end
+  end
+
   context "when the page reports values that parse but resolve to nothing" do
     [
       "var(--x)",
