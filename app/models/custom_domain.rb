@@ -89,15 +89,29 @@ class CustomDomain < ApplicationRecord
   end
 
   def set_routability!(routable, checked_domain: domain, observed_at: Time.current)
-    persist_routability!(routable:, checked_domain:, observed_at:, certificate_action: :keep)
+    persist_routability!(routable:, checked_domain:, observed_at:, clear_certificate: false)
   end
 
   def activate_with_routability!(routable, checked_domain: domain, observed_at: Time.current)
-    persist_routability!(routable:, checked_domain:, observed_at:, certificate_action: :activate)
+    activated = self.class.transaction do
+      locked_domain = self.class.alive.lock.find_by(id:, domain: checked_domain)
+      next false unless locked_domain
+
+      locked_domain.ssl_certificate_issued_at = Time.current
+      if locked_domain.routability_checked_at.nil? || locked_domain.routability_checked_at < observed_at
+        locked_domain.routable = routable
+        locked_domain.routability_checked_at = observed_at
+      end
+      locked_domain.save!
+      true
+    end
+
+    reload if activated
+    activated
   end
 
   def require_certificate_for_routability!(checked_domain: domain, observed_at: Time.current)
-    persist_routability!(routable: false, checked_domain:, observed_at:, certificate_action: :clear)
+    persist_routability!(routable: false, checked_domain:, observed_at:, clear_certificate: true)
   end
 
   def routability_refresh_due?
@@ -150,14 +164,13 @@ class CustomDomain < ApplicationRecord
       self.routability_checked_at = nil
     end
 
-    def persist_routability!(routable:, checked_domain:, observed_at:, certificate_action:)
+    def persist_routability!(routable:, checked_domain:, observed_at:, clear_certificate:)
       attributes = {
         routable:,
         routability_checked_at: observed_at,
         updated_at: Time.current,
       }
-      attributes[:ssl_certificate_issued_at] = observed_at if certificate_action == :activate
-      attributes[:ssl_certificate_issued_at] = nil if certificate_action == :clear
+      attributes[:ssl_certificate_issued_at] = nil if clear_certificate
 
       matching_row = self.class.alive
         .where(id:, domain: checked_domain)

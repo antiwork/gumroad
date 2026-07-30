@@ -329,6 +329,18 @@ describe CustomDomain do
       expect(custom_domain.reload).not_to be_routable
       expect(custom_domain.routability_checked_at).to eq(newer_observation)
     end
+
+    it "records successful certificate issuance without overwriting a newer routability result" do
+      newer_observation = Time.current
+      older_observation = 1.minute.ago
+      custom_domain.set_routability!(false, observed_at: newer_observation)
+      custom_domain.update_column(:ssl_certificate_issued_at, nil)
+
+      expect(custom_domain.activate_with_routability!(true, observed_at: older_observation)).to be(true)
+      expect(custom_domain.reload.ssl_certificate_issued_at).to be_present
+      expect(custom_domain).not_to be_routable
+      expect(custom_domain.routability_checked_at).to eq(newer_observation)
+    end
   end
 
   describe "scopes" do
