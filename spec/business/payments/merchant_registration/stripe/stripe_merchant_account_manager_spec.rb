@@ -9161,6 +9161,142 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "when Stripe rejects the service agreement we derived from the legal-entity country" do
+      let(:user_compliance_info_1) { create(:user_compliance_info, user:, country: "Korea, Republic of") }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:merchant_account) { subject.create_account(user, passphrase: "1234") }
+      let(:user_compliance_info_2) { create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul") }
+      let(:rejection) do
+        Stripe::InvalidRequestError.new(
+          "The recipient ToS agreement is not supported for platforms in US creating accounts in US.",
+          nil
+        )
+      end
+
+      before do
+        user_compliance_info_1
+        create(:korea_bank_account, user:)
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+        merchant_account
+        user_compliance_info_2
+
+        original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
+          stripe_account = original_stripe_account_retrieve.call(*args)
+          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
+          stripe_account
+        end
+      end
+
+      it "retries without the agreement so the fields Gumroad already holds still land" do
+        merchant_id = user.stripe_account.charge_processor_merchant_id
+
+        expect(Stripe::Account).to receive(:update)
+          .with(merchant_id, hash_including(:tos_acceptance))
+          .and_raise(rejection)
+        expect(Stripe::Account).to receive(:update)
+          .with(merchant_id, hash_excluding(:tos_acceptance)) do |_id, attributes|
+            expect(attributes[:business_profile]).to be_present
+            expect(attributes[:individual][:address][:city]).to eq("Seoul")
+          end
+
+        expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+      end
+
+      it "leaves one private payout-note breadcrumb naming the rejection" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect do
+          2.times { subject.update_account(user, passphrase: "1234") }
+        end.to change {
+          user.comments.with_type_payout_note.alive
+              .where("content LIKE ?", "#{StripeMerchantAccountManager::SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
+              .count
+        }.by(1)
+
+        note = user.comments.with_type_payout_note.alive.last
+        expect(note.content).to include("recipient ToS agreement is not supported")
+      end
+
+      # Two resyncs for the same seller can both see no note before either writes one, so the
+      # look-then-write has to run under the user row lock for the once-per-account rule to hold.
+      it "takes the user row lock around the breadcrumb check and write" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        locked = false
+        allow(user).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          original.call(*args) do
+            locked = true
+            block.call
+          end
+        end
+        allow(user).to receive(:add_payout_note).and_wrap_original do |original, **kwargs|
+          expect(locked).to be(true)
+          original.call(**kwargs)
+        end
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(user).to have_received(:add_payout_note)
+      end
+
+      it "still raises for any other invalid-request rejection" do
+        other = Stripe::InvalidRequestError.new("Invalid Tax ID.", nil)
+        allow(Stripe::Account).to receive(:update).and_raise(other)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
+      end
+
+      # The guard is the whole safety argument: a rejection of some OTHER part of tos_acceptance
+      # must not make us drop the seller's acceptance and report success.
+      it "does not retry when a different tos_acceptance field is rejected" do
+        other = Stripe::InvalidRequestError.new("Invalid timestamp.", "tos_acceptance[date]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(other)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(other)
+        expect(Stripe::Account).not_to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
+      end
+
+      it "lets a rejection of the retry itself surface" do
+        postal = Stripe::InvalidRequestError.new("Invalid postal code.", "individual[address][postal_code]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance)).and_raise(postal)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(postal)
+      end
+
+      # Stripe's live rejection carries no `code` and names the field in `param`, so the param is
+      # what the predicate has to key off. Probed against the test API.
+      it "recognises the rejection from the param alone" do
+        by_param = Stripe::InvalidRequestError.new("Some other wording", "tos_acceptance[service_agreement]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(by_param)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+        expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
+      end
+
+      # The agreement id is Stripe's marker that the acceptance is on file. Stripe rejected the
+      # acceptance, so the retry must not move it — measured against the test API: it otherwise
+      # lands on an account whose tos_acceptance is empty.
+      it "does not move the ToS agreement marker on the retry" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance)) do |_id, attributes|
+          expect(attributes[:metadata]).not_to have_key(:tos_agreement_id)
+          expect(attributes[:metadata][:user_compliance_info_id]).to eq(user_compliance_info_2.external_id)
+        end
+      end
+    end
+
     describe "updating business type" do
       let(:user_compliance_info_1) { create(:user_compliance_info, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
