@@ -242,10 +242,26 @@ class SalesTaxCalculator
     # The UK is excluded: it has its own registration, and under £135 the marketplace collects at
     # checkout and the border does not charge again.
     def eu_import_vat_unremittable?
-      return false unless product.is_physical
       return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
+      return false unless EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
 
-      EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
+      entirely_physical_shipment? # queries for a bundle, so ask it last
+    end
+
+    # A bundle built as a bundle is not is_physical, so a bundle of physical goods arrives here
+    # looking digital and the carve-out above never fires.
+    #
+    # For a bundle the components decide, never the bundle row's own is_physical: converting a
+    # variant-less physical product into a bundle leaves that flag set (Bundles::*Controller#update
+    # only sets is_bundle), so trusting it would drop VAT on digital components sold inside it.
+    #
+    # A mixed bundle keeps collecting: excluding it would drop VAT we do owe on the digital half, and
+    # taxing only that half needs an apportionment rule we do not have anywhere yet.
+    def entirely_physical_shipment?
+      return product.is_physical? unless product.is_bundle
+
+      components = product.bundle_products.alive.includes(:product).to_a
+      components.any? && components.all? { |bundle_product| bundle_product.product.is_physical? }
     end
 
     def tax_eligible?
