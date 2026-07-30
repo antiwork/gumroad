@@ -2,16 +2,7 @@
 
 class GenerateSslCertificate
   include Sidekiq::Job
-
-  # ACME's challenge expires after an hour; bounding the lock lets a hard-killed job recover.
-  CERTIFICATE_LOCK_TTL = 1.hour.to_i
-
-  sidekiq_options retry: 5, queue: :low, lock: :while_executing, lock_ttl: CERTIFICATE_LOCK_TTL, on_conflict: :reschedule
-
-  # The retry counter is transient; all certificate work for a domain must share one runtime lock.
-  def self.lock_args(args)
-    [args.first]
-  end
+  sidekiq_options retry: 5, queue: :low
 
   # Fallback delay when the rate-limit error doesn't tell us when to retry.
   RATE_LIMIT_FALLBACK_DELAY = 1.hour
@@ -49,7 +40,16 @@ class GenerateSslCertificate
   end
 
   def perform(id, rate_limit_reschedules = 0)
-    if SslCertificates::Generate.supported_environment?
+    return unless SslCertificates::Generate.supported_environment?
+
+    certificate_semaphore = SuoSemaphore.custom_domain_certificate(id)
+    certificate_lock_token = certificate_semaphore.lock
+    unless certificate_lock_token
+      self.class.perform_in(SuoSemaphore::CUSTOM_DOMAIN_CERTIFICATE_LOCK_EXPIRATION, id, rate_limit_reschedules)
+      return
+    end
+
+    begin
       custom_domain = CustomDomain.find(id)
       return if custom_domain.deleted? # The domain was deleted after this job was enqueued
 
@@ -76,6 +76,8 @@ class GenerateSslCertificate
         )
         self.class.perform_in(delay, id, rate_limit_reschedules + 1)
       end
+    ensure
+      certificate_semaphore.unlock(certificate_lock_token)
     end
   end
 

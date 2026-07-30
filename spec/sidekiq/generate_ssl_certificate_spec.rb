@@ -1,16 +1,6 @@
 # frozen_string_literal: true
 
 describe GenerateSslCertificate do
-  describe "job uniqueness" do
-    it "serializes certificate generation by custom domain across rate-limit reschedules" do
-      expect(described_class.sidekiq_options["lock"]).to eq(:while_executing)
-      expect(described_class.sidekiq_options["lock_ttl"]).to eq(1.hour.to_i)
-      expect(described_class.sidekiq_options["on_conflict"]).to eq(:reschedule)
-      expect(described_class.lock_args([123])).to eq([123])
-      expect(described_class.lock_args([123, 4])).to eq([123])
-    end
-  end
-
   describe "#perform" do
     before do
       @custom_domain = create(:custom_domain, domain: "www.example.com")
@@ -30,6 +20,19 @@ describe GenerateSslCertificate do
           expect(@obj_double).to receive(:process)
 
           described_class.new.perform(@custom_domain.id)
+        end
+
+        it "retries after a stale lock can expire instead of generating concurrently" do
+          semaphore = instance_double(Suo::Client::Redis, lock: nil)
+          allow(SuoSemaphore).to receive(:custom_domain_certificate).with(@custom_domain.id).and_return(semaphore)
+          expect(SslCertificates::Generate).not_to receive(:new)
+          described_class.clear
+
+          described_class.new.perform(@custom_domain.id, 3)
+
+          job = described_class.jobs.sole
+          expect(job["args"]).to eq([@custom_domain.id, 3])
+          expect(job["at"] - Time.current.to_f).to be_within(1.second).of(SuoSemaphore::CUSTOM_DOMAIN_CERTIFICATE_LOCK_EXPIRATION.to_i)
         end
       end
 
