@@ -724,19 +724,21 @@ describe UpdateUserComplianceInfo do
         expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
       end
 
-      it "warns against zero-padding, which is the workaround sellers reach for" do
+      it "cannot detect a zero-padded number, so the message is what warns against it" do
         user = create_colombian_individual_user(individual_tax_id: "1234567")
 
-        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "482913")
+        # Padding a 6-digit number to seven satisfies Stripe's length rule, so no guard can catch
+        # it: the number simply stops matching the document and fails id_number_match verification
+        # later, once the seller has a balance. Pinned as passing so the limitation is visible
+        # rather than assumed, and so the warning in the message stays load-bearing.
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "0482913")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
 
         result = described_class.new(compliance_params: params, user:).process
 
-        expect(result[:success]).to be false
-        # Padding a short number to seven digits does satisfy Stripe's length rule, so we cannot
-        # detect it here — the stored number would simply stop matching the document, and the
-        # account would fail id_number_match verification later, after the seller has a balance.
-        # The message is the only place we can head that off.
-        expect(result[:error_message]).to include("do not add leading zeros")
+        expect(result[:success]).to be true
+        expect(expected_error).to include("do not add leading zeros")
       end
 
       it "rejects a number longer than Stripe's upper bound" do
@@ -775,6 +777,22 @@ describe UpdateUserComplianceInfo do
         result = described_class.new(compliance_params: params, user:).process
 
         expect(result[:success]).to be true
+      end
+
+      it "stores a separator-formatted number as digits only, matching what the guard counted" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "1.123.456.789")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        described_class.new(compliance_params: params, user:).process
+
+        # The guard measures digits, and StripeMerchantAccountManager sends this value to Stripe
+        # verbatim. Storing "1.123.456.789" would hand Stripe a 13-character string the guard had
+        # judged as 10 digits, so what is stored has to be what was counted.
+        stored = user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")
+        expect(stored).to eq("1123456789")
       end
 
       it "leaves other countries' individual tax IDs alone" do

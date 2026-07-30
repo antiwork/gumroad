@@ -39,12 +39,11 @@ class UpdateUserComplianceInfo
   # seller gets an actionable error at save time instead. Case-insensitive: Stripe accepts
   # lowercase, so we don't reject it.
   SINGAPORE_NRIC_FIN_PATTERN = /\A[STFGM]\d{7}[A-Z]\z/i
-  # Stripe enforces 7-10 digits on individual.id_number for Colombia — confirmed by Stripe support
-  # on case sco_UyXAayCkurHzCd. Colombia's own document spec (Anexo Técnico 1, Resolución 2011)
-  # allows 6-digit numbers, so the floor excludes Cédula de Extranjería numbers that legitimately
-  # exist; Stripe has that with their product team. Until it moves, reject here rather than let the
-  # save through: a rejected create rolls back with nothing the seller can act on, which is how one
-  # seller reached eight silent failed attempts.
+  # Stripe enforces 7-10 digits on individual.id_number for Colombia (support case
+  # sco_UyXAayCkurHzCd). Colombia's own document spec allows 6 digits, so the floor excludes
+  # Cédula de Extranjería numbers that legitimately exist — Stripe have raised that with their
+  # product team, and this bound should be widened if they change it. Rationale and the
+  # test-mode caveat: app/javascript/utils/colombiaIdNumbers.ts.
   COLOMBIA_ID_DIGIT_RANGE = (7..10)
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
@@ -193,8 +192,8 @@ class UpdateUserComplianceInfo
       new_compliance_info.business_zip_code =       compliance_params[:business_zip_code]       if compliance_params[:business_zip_code].present?
       new_compliance_info.business_type =           compliance_params[:business_type]           if compliance_params[:business_type].present?
       new_compliance_info.is_business =             compliance_params[:is_business]             unless compliance_params[:is_business].nil?
-      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four))     if submitted_tax_id_for(:ssn_last_four).present?
-      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id)) if submitted_tax_id_for(:individual_tax_id).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four), country_code: new_compliance_info.legal_entity_country_code)     if submitted_tax_id_for(:ssn_last_four).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id), country_code: new_compliance_info.legal_entity_country_code) if submitted_tax_id_for(:individual_tax_id).present?
       if submitted_tax_id_for(:business_tax_id).present?
         new_compliance_info.business_tax_id = normalize_business_tax_id(
           submitted_tax_id_for(:business_tax_id),
@@ -278,7 +277,8 @@ class UpdateUserComplianceInfo
 
     def encrypted_compliance_info_changed?(old_compliance_info)
       submitted_individual_tax_id = normalize_individual_tax_id(
-        submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+        submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence,
+        country_code: old_compliance_info.legal_entity_country_code,
       )
       return true if submitted_individual_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id) != submitted_individual_tax_id
 
@@ -311,12 +311,17 @@ class UpdateUserComplianceInfo
       value.gsub(/[[:space:]-]+/, "")
     end
 
-    def normalize_individual_tax_id(value)
+    def normalize_individual_tax_id(value, country_code: nil)
       return nil if value.blank?
       # Same Unicode-whitespace hazard as normalize_business_tax_id above. Only strip
       # whitespace here — dashes can be a meaningful part of individual IDs (for example
       # Peru DNIs are entered with the verification digit as "12345678-9").
-      value.gsub(/[[:space:]]+/, "")
+      stripped = value.gsub(/[[:space:]]+/, "")
+      # Colombia is the exception: the number is digits-only, sellers paste it with thousands
+      # separators, and the length guard counts digits. Storing the separators would send Stripe a
+      # longer string than the guard measured, so strip them and keep the two in agreement.
+      return stripped.gsub(/\D/, "") if country_code == Compliance::Countries::COL.alpha2
+      stripped
     end
 
     def peru_individual_dni_error(old_compliance_info)
