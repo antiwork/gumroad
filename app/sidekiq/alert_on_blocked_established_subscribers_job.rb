@@ -40,11 +40,20 @@ class AlertOnBlockedEstablishedSubscribersJob
   # Report at most this many, newest failure first. The alert exists to be read.
   MAX_REPORTED = 25
 
-  # Counted in distinct subscriptions, not failure rows, so one subscriber's retries cannot fill the
-  # cap and hide everybody behind them. Measured headroom: 157 candidates over 30 days, and 242 rows
-  # in the worst 30-day stretch of the last 90 days. The cap is for a rule regression writing blocks
-  # in bulk, and hitting it makes the report say so rather than reading as the whole incident.
-  MAX_SUBSCRIPTIONS_SCANNED = 2_000
+  # Counted in subscriptions that already clear MIN_SUCCESSFUL_CHARGES, never in candidates or in
+  # failure rows. Candidates arrive newest-failure-first, and the bulk-block regression this cap
+  # exists for is precisely what fills those newest pages with one- and two-charge subscribers, so a
+  # cap applied any earlier gets spent on rows that were never going to qualify and drops the
+  # established subscribers behind them — the only rows worth reporting. Measured headroom: 157
+  # candidates over 30 days, 242 in the worst 30-day stretch of the last 90 days.
+  MAX_ESTABLISHED_FOUND = 2_000
+
+  # Bounds the opposite shape: a window holding far more candidates than qualify, where the
+  # established cap above would never trip and the walk would count charges for all of them.
+  MAX_CANDIDATES_SCANNED = 10_000
+
+  # Candidates are counted in batches so the walk can stop as soon as either budget is spent.
+  CHARGE_COUNT_BATCH = 500
 
   def perform
     scan = scan_for_stranded_subscriptions
@@ -59,15 +68,7 @@ class AlertOnBlockedEstablishedSubscribersJob
     # One entry per subscription whose holder has real payment history and whose renewal-declining
     # block is still active, newest failure first. `truncated` means the counts below are floors.
     def scan_for_stranded_subscriptions
-      candidates = candidate_subscription_ids
-      truncated = candidates.size > MAX_SUBSCRIPTIONS_SCANNED
-      candidates = candidates.first(MAX_SUBSCRIPTIONS_SCANNED)
-
-      charge_counts = Purchase.successful
-                              .where(subscription_id: candidates)
-                              .group(:subscription_id)
-                              .count
-                              .select { |_, count| count >= MIN_SUCCESSFUL_CHARGES }
+      charge_counts, truncated = established_charge_counts
 
       failures = latest_block_failures(charge_counts.keys)
       block_dates = active_block_dates(failures)
@@ -89,15 +90,45 @@ class AlertOnBlockedEstablishedSubscribersJob
       { stranded:, truncated: }
     end
 
-    # Distinct subscriptions, most recent failure first, one over the cap so that hitting it is
-    # distinguishable from a window holding exactly the cap.
+    # Subscription id => successful charge count, for candidates clearing MIN_SUCCESSFUL_CHARGES.
+    # Walks candidates newest-failure-first in batches and stops once either budget is spent, so the
+    # established budget is spent on subscribers who qualify rather than on whoever failed most
+    # recently. Returns the counts and whether a budget cut the walk short.
+    def established_charge_counts
+      candidates = candidate_subscription_ids
+      truncated = candidates.size > MAX_CANDIDATES_SCANNED
+      candidates = candidates.first(MAX_CANDIDATES_SCANNED)
+
+      counts = {}
+      candidates.each_slice(CHARGE_COUNT_BATCH) do |batch|
+        counts.merge!(
+          Purchase.successful
+                  .where(subscription_id: batch)
+                  .group(:subscription_id)
+                  .count
+                  .select { |_, count| count >= MIN_SUCCESSFUL_CHARGES }
+        )
+
+        # One over the cap, so hitting it stays distinguishable from a window holding exactly the cap.
+        if counts.size > MAX_ESTABLISHED_FOUND
+          counts = counts.first(MAX_ESTABLISHED_FOUND).to_h
+          truncated = true
+          break
+        end
+      end
+
+      [counts, truncated]
+    end
+
+    # Distinct subscriptions, most recent failure first, one over the candidate budget so that
+    # exhausting it is distinguishable from a window holding exactly that many.
     def candidate_subscription_ids
       Purchase.failed
               .where(error_code: BLOCK_ERROR_CODES, created_at: FAILURE_LOOKBACK.ago..)
               .where.not(subscription_id: nil)
               .group(:subscription_id)
               .order(Arel.sql("MAX(purchases.created_at) DESC"))
-              .limit(MAX_SUBSCRIPTIONS_SCANNED + 1)
+              .limit(MAX_CANDIDATES_SCANNED + 1)
               .pluck(:subscription_id)
     end
 
@@ -195,7 +226,7 @@ class AlertOnBlockedEstablishedSubscribersJob
 
       [
         headline(stranded.size, live_count, scan[:truncated]),
-        (scan[:truncated] ? "The scan stopped at the newest #{MAX_SUBSCRIPTIONS_SCANNED} subscriptions with a blocked renewal, so others in this window are not counted here." : nil),
+        (scan[:truncated] ? "The scan stopped early, at #{MAX_ESTABLISHED_FOUND} established subscribers or #{MAX_CANDIDATES_SCANNED} subscriptions with a blocked renewal, so others in this window are not counted here." : nil),
         "",
         *lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),

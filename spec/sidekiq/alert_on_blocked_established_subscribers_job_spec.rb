@@ -340,21 +340,21 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
 
     it "says so instead of reporting the partial count as the total" do
-      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 1)
+      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
       2.times { |i| blocked_established_subscriber(i) }
 
       described_class.new.perform
 
       expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
         expect(message).to include("At least 1 subscription with")
-        expect(message).to include("The scan stopped at the newest 1 subscriptions")
+        expect(message).to include("The scan stopped early, at 1 established subscribers")
       end
     end
 
     # The cap used to be spent on failure rows, so one subscriber's retries could consume it and
     # hide everybody behind them. Counting subscriptions is what makes the cap mean what it says.
     it "does not let one subscriber's repeated failures consume the cap" do
-      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 2)
+      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 2)
       noisy = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
       3.times { |i| failed_renewal(subscription: noisy, created_at: (i + 1).minutes.ago) }
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
@@ -372,7 +372,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     # Truncation plus an unqualifying page is the one shape that used to send nothing at all: the
     # report would go quiet because of its own cap, which reads as "nobody is stranded".
     it "still alerts when the scanned page held nothing qualifying" do
-      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 1)
+      stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
       newcomer = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES - 1)
       failed_renewal(subscription: newcomer, created_at: 1.minute.ago)
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
@@ -386,8 +386,30 @@ describe AlertOnBlockedEstablishedSubscribersJob do
       end
     end
 
+    # The cap is spent on subscribers who QUALIFY, so newcomers ahead of an established subscriber
+    # cost a batch of counting rather than the budget itself. Capping candidates instead dropped
+    # exactly these rows: the bulk-block regression the cap exists for is what fills the newest
+    # pages with one- and two-charge subscribers.
+    it "reports an established subscriber sitting behind a page of newcomers" do
+      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+      stub_const("#{described_class}::CHARGE_COUNT_BATCH", 1)
+      3.times do |i|
+        newcomer = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES - 1)
+        failed_renewal(subscription: newcomer, guid: "new-#{i}", buyer_email: "new#{i}@example.com",
+                       created_at: (i + 1).minutes.ago)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "new-#{i}")
+      end
+      established = blocked_established_subscriber(9)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("subscription #{established.id}")
+      end
+    end
+
     it "does not claim truncation when the window held exactly the cap" do
-      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 1)
+      stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
       blocked_established_subscriber(0)
 
       described_class.new.perform
@@ -613,7 +635,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
   end
 
   it "reports both truncations at once without contradicting itself" do
-    stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 2)
+    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 2)
     stub_const("#{described_class}::MAX_REPORTED", 1)
     3.times do |i|
       subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
@@ -626,7 +648,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include("At least 2 subscriptions with")
-      expect(message).to include("The scan stopped at the newest 2 subscriptions")
+      expect(message).to include("The scan stopped early, at 2 established subscribers")
       expect(message).to include("…and 1 more.")
     end
   end
