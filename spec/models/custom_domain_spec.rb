@@ -265,6 +265,8 @@ describe CustomDomain do
 
   describe "#strictly_routable?" do
     let(:custom_domain) { create(:custom_domain, :verified_with_certificate) }
+    let(:newer_observation) { Time.current.change(usec: 123_456) }
+    let(:older_observation) { newer_observation - 1.minute }
 
     it "returns a current positive result without scheduling DNS verification" do
       custom_domain.set_routability!(true)
@@ -321,8 +323,6 @@ describe CustomDomain do
     end
 
     it "does not let an older observation overwrite a newer result" do
-      newer_observation = Time.current
-      older_observation = 1.minute.ago
       custom_domain.set_routability!(false, observed_at: newer_observation)
 
       expect(custom_domain.set_routability!(true, observed_at: older_observation)).to be(false)
@@ -331,8 +331,6 @@ describe CustomDomain do
     end
 
     it "records successful certificate issuance without overwriting a newer routability result" do
-      newer_observation = Time.current
-      older_observation = 1.minute.ago
       custom_domain.set_routability!(false, observed_at: newer_observation)
       custom_domain.update_column(:ssl_certificate_issued_at, nil)
 
