@@ -403,24 +403,41 @@ module StripeMerchantAccountManager
     raise
   end
 
-  # Push the account diff, and if Stripe refuses only the service agreement, push everything else.
+  # Push the account diff, holding back the fields Stripe validates against the account's own
+  # country when that country disagrees with the seller's legal-entity country.
   #
-  # We derive `tos_acceptance[:service_agreement]` from the seller's legal-entity country, but
-  # Stripe validates it against the country the connected account was created in. When those
-  # disagree (a cross-border legal entity on an account created in the platform's own country)
-  # Stripe rejects the whole call, so fields we already hold — business profile URL, phone,
-  # contact details — never land and the seller is asked for data we have. The agreement value
-  # is never diffed out either: `update_account` builds the "before" side with a nil agreement,
-  # so every retry re-sends it and fails identically, forever.
+  # We derive both `tos_acceptance[:service_agreement]` and the legal-entity address from the
+  # seller's legal-entity country, but Stripe validates them against the country the connected
+  # account was created in. When those disagree (a cross-border legal entity on an account created
+  # in the platform's own country) Stripe rejects the whole call, and because the API is
+  # all-or-nothing per request, the fields we already hold — business profile URL, phone, contact
+  # details — go down with it and the seller is asked for data we have.
   #
-  # Which agreement those sellers should sit under is a compliance decision, not something to
-  # settle here — dropping the whole hash rather than just `service_agreement` is deliberate,
-  # because stripping only the agreement would implicitly move them onto the full one. This only
-  # stops one rejected field from blocking the rest: retry without `tos_acceptance` and leave a
-  # private breadcrumb naming the mismatch.
+  # Rejection-driven retry is not enough on its own here: peeling the agreement only exposes the
+  # address as the next rejection (measured: `account_country_invalid_address` on
+  # `company[address][country]`), so nothing lands on any attempt. Neither value can ever be
+  # accepted while the countries disagree, so both are excluded up front rather than discovered
+  # one rejection at a time.
+  #
+  # Which agreement these sellers should sit under, and whether to migrate the accounts so the
+  # countries match, are compliance decisions and are deliberately not settled here — dropping
+  # `tos_acceptance` whole rather than just `service_agreement` keeps us from implicitly moving
+  # them onto the full agreement. Anything else Stripe refuses still raises: a rejection we have
+  # not established as structural is a real problem and must not be swallowed.
   private_class_method
   def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true)
-    Stripe::Account.update(stripe_account.id, force_utf8_encoding(diff_attributes))
+    attributes = diff_attributes
+    if account_country_conflicts_with_legal_entity?(user, stripe_account)
+      attributes = without_account_country_validated_fields(diff_attributes)
+      if attributes != diff_attributes
+        record_service_agreement_failure_note(user, nil) if notify
+        Rails.logger.warn "Holding back country-validated fields for user #{user&.id}: Stripe account country " \
+                          "#{stripe_account.country.inspect} disagrees with the legal-entity country"
+      end
+      return if attributes.values.all?(&:blank?)
+    end
+
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
   rescue Stripe::InvalidRequestError => e
     raise unless service_agreement_unsupported_error?(e) && diff_attributes.key?(:tos_acceptance)
 
@@ -457,12 +474,64 @@ module StripeMerchantAccountManager
     error.message.to_s.match?(SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE)
   end
 
+  # True when Stripe would validate country-derived fields against a different country than the one
+  # we build them from. The account's country is authoritative and immutable after creation, so
+  # this cannot be reconciled from our side.
+  private_class_method
+  def self.account_country_conflicts_with_legal_entity?(user, stripe_account)
+    account_country = stripe_account.respond_to?(:country) ? stripe_account.country : stripe_account["country"]
+    return false if account_country.blank?
+
+    legal_entity_country = user&.alive_user_compliance_info&.legal_entity_country_code
+    return false if legal_entity_country.blank?
+
+    account_country.to_s.upcase != legal_entity_country.to_s.upcase
+  end
+
+  # Fields Stripe validates against the connected account's own country, keyed by the entity hash
+  # they live under. Removing the address wholesale rather than just its `country` is deliberate:
+  # Stripe validates the address as a unit, so a legal-entity street and postal code under a
+  # different country's account is the same rejection.
+  ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS = %i[individual company].freeze
+  private_constant :ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS
+
+  private_class_method
+  def self.without_account_country_validated_fields(diff_attributes)
+    attributes = diff_attributes.except(:tos_acceptance)
+
+    ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.each do |entity_key|
+      entity = attributes[entity_key]
+      next unless entity.is_a?(Hash)
+
+      remaining = entity.except(*ADDRESS_SUBHASH_KEYS)
+      if remaining.empty?
+        attributes = attributes.except(entity_key)
+      else
+        attributes = attributes.merge(entity_key => remaining)
+      end
+    end
+
+    # The agreement id marks a ToS acceptance as on file at Stripe. We are not sending the
+    # acceptance, so advancing it would claim an agreement that does not exist. The
+    # compliance-info marker still moves, because the fields under it really do land.
+    if attributes[:metadata].is_a?(Hash)
+      attributes = attributes.merge(metadata: attributes[:metadata].except(:tos_agreement_id))
+    end
+
+    attributes
+  end
+
   # One breadcrumb per account, not per attempt: the resync runs on every compliance change and
   # the mismatch does not resolve on its own, so re-noting it would bury the payout notes. Two
   # resyncs can be in flight for the same seller, so the look-then-write has to hold the user row.
   private_class_method
   def self.record_service_agreement_failure_note(user, error)
     return if user.blank?
+
+    detail = error.respond_to?(:message) && error&.message.present? ?
+      error.message.to_s.truncate(300) :
+      "the Stripe account's country does not match the seller's legal-entity country, " \
+      "so the service agreement and legal-entity address cannot be accepted on it"
 
     user.with_lock do
       next if user.comments
@@ -473,7 +542,7 @@ module StripeMerchantAccountManager
                   .exists?
 
       user.add_payout_note(
-        content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{error.message.to_s.truncate(300)}",
+        content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{detail}",
         seller_visible: false
       )
     end

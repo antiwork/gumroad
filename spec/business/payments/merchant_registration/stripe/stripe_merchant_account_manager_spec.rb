@@ -9297,6 +9297,100 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    # Measured on a real mismatched account: peeling `tos_acceptance` off after the rejection only
+    # exposes the legal-entity address as the next one (`account_country_invalid_address` on
+    # `company[address][country]`), so nothing ever landed. Both are excluded up front instead.
+    describe "when the Stripe account's country disagrees with the legal-entity country" do
+      let(:user_compliance_info_1) { create(:user_compliance_info, user:, country: "Korea, Republic of") }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:merchant_account) { subject.create_account(user, passphrase: "1234") }
+      let(:user_compliance_info_2) { create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul") }
+      # The account was created in the platform's own country, which is the whole cohort.
+      let(:stripe_account_country) { "US" }
+
+      before do
+        user_compliance_info_1
+        create(:korea_bank_account, user:)
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+        merchant_account
+        user_compliance_info_2
+
+        original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
+          stripe_account = original_stripe_account_retrieve.call(*args)
+          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
+          stripe_account["country"] = stripe_account_country
+          stripe_account
+        end
+      end
+
+      it "sends the fields Gumroad already holds without the agreement or the legal-entity address" do
+        allow(Stripe::Account).to receive(:update)
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+          expect(attributes).not_to have_key(:tos_acceptance)
+          expect(attributes[:individual]).not_to have_key(:address) if attributes[:individual]
+          expect(attributes[:business_profile]).to be_present
+        end
+      end
+
+      it "does not claim a ToS agreement Stripe never accepted" do
+        allow(Stripe::Account).to receive(:update)
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update) do |_id, attributes|
+          expect(attributes[:metadata]).not_to have_key(:tos_agreement_id)
+          expect(attributes[:metadata][:user_compliance_info_id]).to eq(user_compliance_info_2.external_id)
+        end
+      end
+
+      it "leaves one private payout-note breadcrumb naming the mismatch" do
+        allow(Stripe::Account).to receive(:update)
+
+        expect do
+          2.times { subject.update_account(user, passphrase: "1234") }
+        end.to change {
+          user.comments.with_type_payout_note.alive
+              .where("content LIKE ?", "#{StripeMerchantAccountManager::SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
+              .count
+        }.by(1)
+
+        note = user.comments.with_type_payout_note.alive.last
+        expect(note.content).to include("does not match")
+        expect(note.json_data[PayoutNoteVisibility::SELLER_VISIBLE_FLAG]).to be(false)
+      end
+
+      # The phone on these accounts is often not E.164, and that is a real problem the seller has
+      # to fix. Holding back the country-validated fields must not start swallowing it.
+      it "still raises for a rejection of any other field" do
+        phone = Stripe::InvalidRequestError.new(%("0094776448826" is not a valid phone number), "company[phone]")
+        allow(Stripe::Account).to receive(:update).and_raise(phone)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(phone)
+      end
+
+      # The guard has to be load-bearing: when the countries agree there is nothing structural to
+      # hold back, and the address must still be sent.
+      context "when the countries agree" do
+        let(:stripe_account_country) { "KR" }
+
+        it "sends the legal-entity address" do
+          allow(Stripe::Account).to receive(:update)
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(Stripe::Account).to have_received(:update) do |_id, attributes|
+            expect(attributes[:individual][:address][:city]).to eq("Seoul")
+          end
+        end
+      end
+    end
+
     describe "updating business type" do
       let(:user_compliance_info_1) { create(:user_compliance_info, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
