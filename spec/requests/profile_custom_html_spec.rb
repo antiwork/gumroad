@@ -111,10 +111,16 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
     end
 
-    it "omits the image tags entirely when the seller has neither" do
+    # This hand-built <head> gets none of PageMeta::Base's defaults, so without an
+    # explicit fallback the wrapper advertised no image at all while the standard
+    # profile advertised the generic banner — the two surfaces disagreeing.
+    it "falls back to Gumroad's generic banner when the seller has neither" do
       get "http://seller.example.com/"
 
-      expect(response.body).not_to include(%(property="og:image"))
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(ActionController::Base.helpers.image_url("opengraph_image.png"))}">))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Gumroad">))
+      expect(response.body).not_to include("gumroad-default-avatar")
+      expect(response.body).not_to include(%(property="twitter:image"))
     end
   end
 

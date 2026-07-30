@@ -260,28 +260,33 @@ class UsersController < ApplicationController
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
       # Share-card chain mirroring the standard profile (PageMeta::User): the
-      # branded subscribe-preview card wins, then a real uploaded avatar.
-      # avatar_url always returns a value (it falls back to the default avatar),
-      # so only advertise it when the seller uploaded one — unlike PageMeta::User,
-      # whose avatar_url.present? guard lets the default through. Resolve the preview
-      # once — it rescues to nil internally, so re-reading it could mix the two
-      # branches' tags.
+      # branded subscribe-preview card wins, then a real uploaded avatar, then
+      # Gumroad's generic banner. avatar_url always returns a value (it falls back
+      # to the default avatar), so only advertise it when the seller uploaded one.
+      # Resolve the preview once — it rescues to nil internally, so re-reading it
+      # could mix the two branches' tags. This <head> is hand-built and gets none
+      # of PageMeta::Base's defaults, so the generic fallback is spelled out here;
+      # it must be absolute, since a relative path would resolve against the
+      # seller's custom domain, which does not serve Gumroad's assets.
       preview_url = user.subscribe_preview_url.presence
-      share_image = preview_url || (user.avatar.attached? ? user.avatar_url : nil)
-      share_image_tags = if share_image.present?
-        escaped_share_image = ERB::Util.h(share_image)
-        alt = preview_url ? title : "#{title}'s profile picture"
-        tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
-                %(<meta property="og:image:alt" content="#{alt}">)]
-        if preview_url
-          tags << %(<meta property="twitter:card" content="summary_large_image">)
-          tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
-          tags << %(<meta property="twitter:image:alt" content="#{alt}">)
-        end
-        tags.join("\n    ")
+      avatar_url = user.avatar_url if user.avatar.attached?
+      share_image = preview_url || avatar_url || ActionController::Base.helpers.image_url("opengraph_image.png")
+      escaped_share_image = ERB::Util.h(share_image)
+      alt = if preview_url
+        title
+      elsif avatar_url
+        "#{title}'s profile picture"
       else
-        ""
+        "Gumroad"
       end
+      share_image_tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
+                          %(<meta property="og:image:alt" content="#{alt}">)]
+      if preview_url
+        share_image_tags << %(<meta property="twitter:card" content="summary_large_image">)
+        share_image_tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
+        share_image_tags << %(<meta property="twitter:image:alt" content="#{alt}">)
+      end
+      share_image_tags = share_image_tags.join("\n    ")
       live_reload = if current_seller_owns_profile?
         custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce:)
       else

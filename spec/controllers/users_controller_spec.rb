@@ -442,13 +442,31 @@ describe UsersController do
       end
 
       context "when the seller has no subscribe preview" do
-        it "keeps the avatar fallback on og:image" do
+        it "keeps the avatar fallback on og:image when the seller uploaded one" do
+          avatar_seller = create(:named_seller, :with_avatar, username: "avatarseller")
+          @request.host = avatar_seller.subdomain
+          get :show, params: { username: avatar_seller.username }
+
+          expect(avatar_seller.subscribe_preview_url).to be_nil
+          expect(avatar_seller.avatar).to be_attached
+          expect(meta_content("og:image")).to eq(avatar_seller.avatar_url)
+          expect(meta_content("og:image:alt")).to eq("#{avatar_seller.name_or_username}'s profile picture")
+        end
+
+        # avatar_url falls back to the default avatar, so a presence check here would
+        # advertise Gumroad's grey placeholder as this seller's share image. Falling
+        # through to PageMeta::Base's generic banner is the honest answer instead.
+        it "falls back to Gumroad's generic banner when the seller has neither a card nor an avatar" do
           @request.host = seller.subdomain
           get :show, params: { username: seller.username }
 
           expect(seller.subscribe_preview_url).to be_nil
-          expect(meta_content("og:image")).to eq(seller.avatar_url)
-          expect(meta_content("og:image:alt")).to eq("#{seller.name_or_username}'s profile picture")
+          expect(seller.avatar).to_not be_attached
+          expect(meta_content("og:image")).to eq(ActionController::Base.helpers.image_path("opengraph_image.png"))
+          expect(meta_content("og:image:alt")).to eq("Gumroad")
+          # The page still renders a default avatar visually; what must not happen is
+          # advertising that placeholder as the share image.
+          expect(meta_content("og:image")).to_not include("gumroad-default-avatar")
         end
       end
     end
