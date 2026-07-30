@@ -245,15 +245,37 @@ module RendersCustomHtmlPages
         // Viewed directly (not framed) there is no wrapper to color.
         if (window.parent === window) return;
         #{CANVAS_OPAQUE_FN}
+        function flatRootPaint(style) {
+          return style.opacity === "1" &&
+            style.filter === "none" &&
+            style.clipPath === "none" &&
+            style.maskImage === "none" &&
+            (!style.webkitMaskImage || style.webkitMaskImage === "none") &&
+            style.mixBlendMode === "normal" &&
+            style.transform === "none";
+        }
+        function schemeBackplate(style) {
+          if (!style.colorScheme || style.colorScheme === "normal" || !document.body) return null;
+          var probe = document.createElement("span");
+          probe.style.backgroundColor = "Canvas";
+          probe.style.colorScheme = style.colorScheme;
+          document.body.appendChild(probe);
+          var color = window.getComputedStyle(probe).backgroundColor;
+          probe.parentNode.removeChild(probe);
+          return opaque(color) ? color : null;
+        }
         function canvasColor() {
           var rootStyle = window.getComputedStyle(document.documentElement);
+          if (!flatRootPaint(rootStyle)) return null;
           var root = rootStyle.backgroundColor;
           var rootAlpha = colorAlpha(root);
           if (rootAlpha === 1) return root;
-          // Body propagates to the canvas only when the root is fully transparent.
           if (rootAlpha !== 0 || rootStyle.backgroundImage !== "none" || !document.body) return null;
-          var body = window.getComputedStyle(document.body).backgroundColor;
-          return opaque(body) ? body : null;
+          var bodyStyle = window.getComputedStyle(document.body);
+          var body = bodyStyle.backgroundColor;
+          if (opaque(body)) return body;
+          if (colorAlpha(body) !== 0 || bodyStyle.backgroundImage !== "none") return null;
+          return schemeBackplate(rootStyle);
         }
         var reported = null;
         var hasReported = false;

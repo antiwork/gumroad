@@ -2,9 +2,6 @@
 
 require "spec_helper"
 
-# The bridge mirrors the opaque-origin iframe's computed canvas color onto its
-# trusted wrapper and theme-color metadata. These specs need a real browser
-# because the value exists only after style computation.
 describe "Profile custom HTML page background bridge", type: :system, js: true do
   let(:seller) { create(:user, username: "bgstudio", name: "BG Studio") }
 
@@ -12,8 +9,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     page.evaluate_script("document.documentElement.style.backgroundColor")
   end
 
-  # The color arrives over postMessage after the browser has computed styles,
-  # so every assertion on it has to poll rather than read once.
   def expect_wrapper_background(color)
     wait_until_true(sleep_interval: 0.1) { wrapper_background == color }
     expect(wrapper_background).to eq(color)
@@ -28,10 +23,7 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     JS
   end
 
-  # For refusal cases the expected outcome is "nothing was ever applied", and a
-  # single read would pass simply by running before the message landed. Poll for
-  # the whole window instead: a guard that accepts the value applies it within
-  # a frame, so any non-empty reading inside this window is a failure.
+  # Poll refusal cases long enough for a wrongly accepted report to arrive.
   def expect_wrapper_never_set(window: 3.0)
     deadline = Time.current + window
     while Time.current < deadline
@@ -61,9 +53,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # CSS only propagates body's background to the canvas when html has none of
-  # its own. A page that sets both must report html's color, or the bands would
-  # be tinted with a color the visitor never sees.
   context "when the page sets a background on both <html> and <body>" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -95,9 +84,22 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # A page that declares nothing leaves both elements transparent. Writing that
-  # through would be a no-op at best, so the bridge stays silent and the
-  # wrapper keeps its default rendering.
+  context "when <html> composites an opaque color through opacity" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html{background:#000;opacity:.5}body{margin:0}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "does not paint the color underneath and composite it twice" do
+      visit seller.subdomain_with_protocol
+
+      expect(page).to have_css("iframe#gumroad-landing-frame")
+      expect_wrapper_never_set
+    end
+  end
+
   context "when the page declares no background" do
     before do
       seller.update!(custom_html: "<main><h1>BG Studio</h1></main>")
@@ -116,8 +118,32 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # These parse as colors but do not resolve to opaque paint. With no legitimate
-  # page background, any wrapper color proves the guard accepted the report.
+  context "when a transparent page requests a dark color scheme" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html{color-scheme:dark}html,body{margin:0}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "mirrors the browser's opaque iframe backplate" do
+      visit seller.subdomain_with_protocol
+
+      canvas = within_frame(find("iframe#gumroad-landing-frame")) do
+        page.evaluate_script(<<~JS)
+          (function () {
+            var probe = document.createElement("span");
+            probe.style.backgroundColor = "Canvas";
+            document.body.appendChild(probe);
+            return getComputedStyle(probe).backgroundColor;
+          })();
+        JS
+      end
+      expect_wrapper_background(canvas)
+      expect(theme_color).to eq(canvas)
+    end
+  end
+
   context "when the page reports values that parse but resolve to nothing" do
     [
       "var(--x)",
@@ -149,8 +175,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # An over-long value is refused before it is ever parsed. Same construction:
-  # a syntactically VALID color, so only the length cap can reject it.
   context "when the page reports an absurdly long value" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -169,9 +193,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # A zero-alpha canvas is the same as no canvas, so html must fall through to
-  # body instead of reporting a color that paints nothing. Modern color
-  # functions carry alpha after a slash, which an rgb()-only check misses.
   context "when <html> is fully transparent in a modern color function" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -208,11 +229,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # Every existing example uses a color with a non-zero last channel, so the
-  # alpha check could read a trailing channel as alpha and the file stayed
-  # green. Black is the case that matters most in practice — it is what a dark
-  # theme sets, and it is exactly the value a positional check mistakes for
-  # transparent.
   context "when the page's background is a color whose last channel is zero" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -229,8 +245,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # Theme toggles re-color the page after load. Reporting only once would
-  # strand the bands on the first theme the visitor saw.
   context "when the page changes its background after load" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -259,9 +273,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # Going the other way — a page that drops its background — has to clear the
-  # tint too. Reporting only non-empty colors would strand the wrapper on the
-  # last opaque theme while the page itself renders transparent.
   context "when the page drops its background after load" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -315,10 +326,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # A clear and a REFUSAL are different messages, and only the comment in
-  # custom_html_background_wrapper_script said so — flipping `if (!color)
-  # return` to also clear left every other example green. That would hand a
-  # child the power to strip its own theme by posting junk.
   context "when a hostile value arrives after a legitimate color" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -354,9 +361,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # Not every theme toggle touches an attribute. Rewriting a <style>'s text or
-  # inserting a new one repaints the canvas with html and body untouched, so an
-  # attribute-only observer sees nothing and the bands keep the old theme.
   context "when the page changes its background by rewriting a stylesheet" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -385,9 +389,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # The seller's HTML renders inside <body>, so a stylesheet they add later goes
-  # in there too — appending to <head> would land BEFORE their own style and lose
-  # the cascade, leaving the canvas unchanged and proving nothing.
   context "when the page changes its background by inserting a stylesheet" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -418,20 +419,11 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # An inserted <link> repaints the canvas only once its stylesheet has loaded,
-  # which is strictly after the mutation that inserted it — so the report that
-  # mutation queues still reads the OLD color. Nothing observes the DOM again,
-  # so without a load listener on the element itself this is the one retheme
-  # route that reports a color the page no longer has. A window-level listener
-  # does not cover it: a resource's load event never reaches the window, in
-  # either phase.
   context "when the page changes its background by loading an external stylesheet" do
     let(:stylesheet_path) { Rails.root.join("public", "spec-late-theme.css") }
 
     before do
       File.write(stylesheet_path, "body{background:#101010}")
-      # Same-origin would be simplest, but this document's CSP has no 'self' in
-      # style-src, so the sheet has to come from the allowed asset host.
       seller.update!(custom_html: <<~HTML)
         <style>html,body{margin:0}body{background:#EBEBEB}</style>
         <main>
@@ -463,10 +455,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # A mutation record names only the node that moved. Templating a chunk of
-  # markup in — innerHTML, a cloned <template>, a framework mount — hands the
-  # observer one container element, and the stylesheet that repaints the canvas
-  # rides inside it. Checking the container alone sees an ordinary <div>.
   context "when the page changes its background by inserting a nested stylesheet" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -497,17 +485,11 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # The nested case compounds with the late-load one: the container's insertion
-  # is the only mutation, and the sheet it carries applies after it. So the
-  # descendant walk has to hand that <link> its load listener too, or the one
-  # report this ever queues reads the pre-stylesheet color.
   context "when the page changes its background by inserting a nested external stylesheet" do
     let(:stylesheet_path) { Rails.root.join("public", "spec-nested-late-theme.css") }
 
     before do
       File.write(stylesheet_path, "body{background:#101010}")
-      # Same-origin would be simplest, but this document's CSP has no 'self' in
-      # style-src, so the sheet has to come from the allowed asset host.
       seller.update!(custom_html: <<~HTML)
         <style>html,body{margin:0}body{background:#EBEBEB}</style>
         <main>
@@ -543,8 +525,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # CSSOM rethemes emit no DOM mutation, so the periodic read is the only signal.
-  # Keep each write shape separate because they fail independently.
   {
     "editing a rule through cssRules" => <<~JS,
       var sheet = document.getElementById("theme").sheet;
@@ -589,7 +569,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # sheet.disabled leaves the DOM unchanged; insert the sheet before the test.
   context "when the page changes its background by disabling a stylesheet" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -628,7 +607,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # The timer must not post an unchanged color forever.
   context "when nothing about the page changes" do
     before do
       seller.update!(custom_html: <<~HTML)
