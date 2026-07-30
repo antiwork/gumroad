@@ -247,8 +247,15 @@ module RendersCustomHtmlPages
             style.clipPath === "none" &&
             style.maskImage === "none" &&
             (!style.webkitMaskImage || style.webkitMaskImage === "none") &&
+            (!style.maskBorderSource || style.maskBorderSource === "none") &&
+            (!style.webkitMaskBoxImage || style.webkitMaskBoxImage === "none") &&
             style.mixBlendMode === "normal" &&
             style.display !== "none";
+        }
+        function establishesContainment(style) {
+          return style.contain !== "none" ||
+            (style.contentVisibility && style.contentVisibility !== "visible") ||
+            (style.containerType && style.containerType !== "normal");
         }
         function schemeBackplate(style) {
           if (!style.colorScheme || style.colorScheme === "normal" || !document.body) return null;
@@ -270,8 +277,8 @@ module RendersCustomHtmlPages
           var bodyStyle = window.getComputedStyle(document.body);
           if (
             bodyStyle.display === "none" ||
-            rootStyle.contain !== "none" ||
-            bodyStyle.contain !== "none"
+            establishesContainment(rootStyle) ||
+            establishesContainment(bodyStyle)
           ) return schemeBackplate(rootStyle);
           var body = bodyStyle.backgroundColor;
           if (opaque(body)) return body;

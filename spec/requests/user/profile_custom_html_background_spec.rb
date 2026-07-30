@@ -96,6 +96,23 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
+  context "when <html> masks an opaque color through a mask border" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html{background:#000;-webkit-mask-box-image:linear-gradient(transparent,transparent) 1}body{margin:0}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "does not paint the color underneath the masked canvas" do
+      visit seller.subdomain_with_protocol
+      within_frame(find("iframe#gumroad-landing-frame")) do
+        expect(page.evaluate_script("getComputedStyle(document.documentElement).webkitMaskBoxImage")).not_to eq("none")
+      end
+      expect_wrapper_never_set
+    end
+  end
+
   [
     ["on <html>", "html{background:#000;transform:translateZ(0)}body{margin:0}"],
     ["from <body>", "html{transform:translateZ(0)}body{margin:0;background:#000}"],
@@ -148,6 +165,10 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
   [
     ["<html>", "html{contain:paint}body{background:#000}"],
     ["<body>", "body{contain:paint;background:#000}"],
+    ["<html> through content-visibility", "html{content-visibility:auto}body{background:#000}"],
+    ["<body> through content-visibility", "body{content-visibility:auto;background:#000}"],
+    ["<html> through container-type", "html{container-type:inline-size}body{background:#000}"],
+    ["<body> through container-type", "body{container-type:inline-size;background:#000}"],
   ].each do |element, styles|
     context "when #{element} contains the body's background paint" do
       before do
