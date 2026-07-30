@@ -12,7 +12,7 @@ describe SaveUpsellService do
   end
 
   describe "creating an upsell" do
-    it "builds a version-change upsell with its upsell variants" do
+    it "creates a version-change upsell with its upsell variants" do
       upsell = described_class.new(
         seller:,
         params: params(
@@ -25,7 +25,7 @@ describe SaveUpsellService do
         )
       ).perform
 
-      expect(upsell.save).to be(true)
+      expect(upsell).to be_persisted
       expect(upsell.name).to eq("Upgrade")
       expect(upsell.cross_sell).to be(false)
       expect(upsell.product).to eq(product)
@@ -35,7 +35,7 @@ describe SaveUpsellService do
       expect(upsell.upsell_variants.first.offered_variant).to eq(product.alive_variants.second)
     end
 
-    it "builds a cross-sell with a discounted offer code and selected products" do
+    it "creates a cross-sell with a discounted offer code and selected products" do
       upsell = described_class.new(
         seller:,
         params: params(
@@ -49,7 +49,7 @@ describe SaveUpsellService do
         )
       ).perform
 
-      expect(upsell.save).to be(true)
+      expect(upsell).to be_persisted
       expect(upsell.cross_sell).to be(true)
       expect(upsell.replace_selected_products).to be(true)
       expect(upsell.variant).to eq(product.alive_variants.first)
@@ -71,7 +71,7 @@ describe SaveUpsellService do
         )
       ).perform
 
-      expect(upsell.save).to be(false)
+      expect(upsell).not_to be_persisted
       expect(upsell.errors.full_messages).to include("The offered variant must belong to the offered product.")
     end
   end
@@ -81,11 +81,9 @@ describe SaveUpsellService do
 
     it "updates the offer code and replaces it with a percentage discount" do
       described_class.new(seller:, params: params(product_id: product.external_id, offer_code: { amount_cents: 200 }), upsell:).perform
-      expect(upsell.save).to be(true)
       expect(upsell.reload.offer_code.amount_cents).to eq(200)
 
       described_class.new(seller:, params: params(product_id: product.external_id, offer_code: { amount_percentage: 10 }), upsell:).perform
-      expect(upsell.save).to be(true)
       expect(upsell.reload.offer_code.amount_cents).to be_nil
       expect(upsell.offer_code.amount_percentage).to eq(10)
     end
@@ -94,13 +92,11 @@ describe SaveUpsellService do
       upsell.update!(offer_code: create(:offer_code, products: [product], user: seller))
 
       described_class.new(seller:, params: params(product_id: product.external_id), upsell:).perform
-      expect(upsell.save).to be(true)
       expect(upsell.reload.offer_code).to be_nil
     end
 
     it "keeps scalar attributes that are not in the params" do
       described_class.new(seller:, params: params(product_id: product.external_id, name: "Renamed"), upsell:).perform
-      expect(upsell.save).to be(true)
       expect(upsell.reload.name).to eq("Renamed")
       expect(upsell.text).to eq("Take advantage of this excellent offer!")
     end
@@ -112,13 +108,26 @@ describe SaveUpsellService do
       create(:upsell_variant, upsell: versioned, selected_variant: first, offered_variant: second)
 
       described_class.new(seller:, params: params(product_id: product.external_id, upsell_variants: [{ selected_variant_id: second.external_id, offered_variant_id: first.external_id }]), upsell: versioned).perform
-      expect(versioned.save).to be(true)
       expect(versioned.reload.upsell_variants.alive.map(&:selected_variant)).to eq([second])
 
       described_class.new(seller:, params: params(product_id: product.external_id, upsell_variants: [{ selected_variant_id: first.external_id, offered_variant_id: second.external_id }]), upsell: versioned).perform
-      expect(versioned.save).to be(true)
       expect(versioned.reload.upsell_variants.alive.map(&:selected_variant)).to eq([first])
       expect(versioned.upsell_variants.alive.first.offered_variant).to eq(second)
+    end
+
+    it "rolls back the offer code's product reassignment when the save fails" do
+      upsell.update!(offer_code: create(:offer_code, products: [product], user: seller, amount_cents: 100))
+
+      described_class.new(
+        seller:,
+        params: params(product_id: other_product.external_id, offer_code: { amount_cents: 450 }),
+        upsell:
+      ).perform
+
+      expect(upsell.errors).to be_present
+      expect(upsell.reload.product).to eq(product)
+      expect(upsell.offer_code.products).to eq([product])
+      expect(upsell.offer_code.amount_cents).to eq(100)
     end
   end
 end
