@@ -276,10 +276,15 @@ class UpdateUserComplianceInfo
     end
 
     def encrypted_compliance_info_changed?(old_compliance_info)
+      raw_individual_tax_id = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
       submitted_individual_tax_id = normalize_individual_tax_id(
-        submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence,
+        raw_individual_tax_id,
         country_code: old_compliance_info.legal_entity_country_code,
       )
+      # A value the seller typed that normalizes away entirely ("n/a", "-") counts as a change so
+      # the country guards below get to reject it. Treating it as "nothing changed" would return
+      # success for a save that stored nothing.
+      return true if raw_individual_tax_id.present? && submitted_individual_tax_id.blank?
       return true if submitted_individual_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id) != submitted_individual_tax_id
 
       submitted_business_tax_id = normalize_business_tax_id(

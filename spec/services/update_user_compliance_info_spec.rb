@@ -795,6 +795,23 @@ describe UpdateUserComplianceInfo do
         expect(stored).to eq("1123456789")
       end
 
+      it "refuses a value that is not a number at all, rather than reporting success" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+        original = user.alive_user_compliance_info
+
+        # "n/a" normalizes to an empty string, which would otherwise read as "nothing changed" and
+        # early-return success for a save that stored nothing.
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "n/a")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(expected_error)
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
       it "leaves other countries' individual tax IDs alone" do
         user = create(:user).tap do |u|
           create(:user_compliance_info, user: u, country: "Uruguay", individual_tax_id: "482913")
