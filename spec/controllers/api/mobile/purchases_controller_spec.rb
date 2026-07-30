@@ -148,8 +148,8 @@ describe Api::Mobile::PurchasesController do
       freeze_time do
         get :index, params: @params
         expect(response.parsed_body).to include({ success: true,
-                                                 products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
-                                                 user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+                                                  products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
+                                                  user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
       end
     end
 
