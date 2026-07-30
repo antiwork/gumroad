@@ -25,17 +25,20 @@ type ReusableCCVariation<CardParams extends CardPaymentMethodParams | PaymentReq
 type CardData = {
   cardElement: StripeCardElement | { token: string };
   email: string;
-  zipCode?: string;
+  zipCode?: string | null | undefined;
 };
 export const prepareCardPaymentMethodData = async (
   cardData: CardData,
 ): Promise<CardPaymentMethodParams | StripeErrorParams> => {
   const stripe = await getStripeInstance();
 
+  // `postal_code: null` omits the field; `""` asserts a blank one, which Stripe forwards to the
+  // issuer and AVS then checks against — so an absent ZIP must be null or every card without one
+  // is verified against a value the buyer never gave. Mirrors paymentElementBillingDetails.
   const paymentMethodResult = await stripe.createPaymentMethod({
     type: "card",
     card: cardData.cardElement,
-    billing_details: { address: { postal_code: cardData.zipCode ?? "" }, email: cardData.email },
+    billing_details: { address: { postal_code: cardData.zipCode || null }, email: cardData.email },
   });
 
   if (paymentMethodResult.error) {
