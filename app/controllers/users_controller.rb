@@ -262,14 +262,17 @@ class UsersController < ApplicationController
       # Same share-card chain as the standard profile (PageMeta::User): the
       # branded subscribe-preview card wins, then a real uploaded avatar.
       # avatar_url always returns a value (it falls back to the default avatar),
-      # so only advertise it when the seller uploaded one.
-      share_image = user.subscribe_preview_url.presence || (user.avatar.attached? ? user.avatar_url : nil)
+      # so only advertise it when the seller uploaded one. Resolve the preview
+      # once — it rescues to nil internally, so re-reading it could mix the two
+      # branches' tags.
+      preview_url = user.subscribe_preview_url.presence
+      share_image = preview_url || (user.avatar.attached? ? user.avatar_url : nil)
       share_image_tags = if share_image.present?
         escaped_share_image = ERB::Util.h(share_image)
-        alt = user.subscribe_preview_url.present? ? title : "#{title}'s profile picture"
+        alt = preview_url ? title : "#{title}'s profile picture"
         tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
                 %(<meta property="og:image:alt" content="#{alt}">)]
-        if user.subscribe_preview_url.present?
+        if preview_url
           tags << %(<meta property="twitter:card" content="summary_large_image">)
           tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
           tags << %(<meta property="twitter:image:alt" content="#{alt}">)

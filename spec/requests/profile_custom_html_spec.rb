@@ -87,6 +87,28 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.avatar_url)}">))
       expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe's profile picture">))
       expect(response.body).not_to include(%(property="twitter:image"))
+      expect(response.body).not_to include(%(property="twitter:card"))
+    end
+
+    # The common case for an established seller, and the one that pins the chain's
+    # ORDER: with only one asset attached either precedence passes.
+    it "prefers the branded card over an uploaded avatar when the seller has both" do
+      seller.avatar.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+      seller.subscribe_preview.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "subscribe_preview.png")),
+        filename: "subscribe_preview.png",
+        content_type: "image/png"
+      )
+
+      get "http://seller.example.com/"
+
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+      expect(response.body).not_to include(ERB::Util.h(seller.avatar_url))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
     end
 
     it "omits the image tags entirely when the seller has neither" do

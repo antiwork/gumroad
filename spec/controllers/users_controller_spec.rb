@@ -424,6 +424,21 @@ describe UsersController do
           expect(meta_content("og:image:alt")).to eq(preview_seller.name_or_username)
           expect(meta_content("twitter:image:alt")).to eq(preview_seller.name_or_username)
         end
+
+        # With only a preview attached either precedence order passes, so this is the
+        # example that actually pins the card ahead of the avatar.
+        it "prefers the card over an uploaded avatar when the seller has both" do
+          preview_seller.avatar.attach(
+            io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+            filename: "smilie.png",
+            content_type: "image/png"
+          )
+          @request.host = preview_seller.subdomain
+          get :show, params: { username: preview_seller.username }
+
+          expect(meta_content("og:image")).to eq(preview_seller.subscribe_preview_url)
+          expect(meta_content("og:image")).to_not eq(preview_seller.avatar_url)
+        end
       end
 
       context "when the seller has no subscribe preview" do
