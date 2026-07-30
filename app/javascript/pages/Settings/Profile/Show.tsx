@@ -1,17 +1,22 @@
-import { TwitterX } from "@boxicons/react";
+import { FontFamily, TwitterX } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
 import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
+import {
+  ProfileSettingsForm,
+  changedProfileSettings,
+  profileThemeColors,
+  rebaseProfileSettings,
+} from "$app/pages/Settings/Profile/profileSettingsForm";
 import { CreatorProfile } from "$app/parsers/profile";
-import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
+import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
-import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -27,6 +32,7 @@ import { ShareButtons } from "$app/components/ShareButtons";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
+import { ColorPicker } from "$app/components/ui/ColorPicker";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -35,25 +41,33 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
-type ProfileSettingsTab = "about" | "pages" | "share";
+type ProfileSettingsTab = "about" | "design" | "pages" | "share";
 
 // How long the user's most recent answer to the unsaved-changes prompt stays reusable for a
 // retry of the same navigation. Long enough to absorb a burst of repeated attempts (the bug
 // this guards against), short enough that a deliberate second click a few seconds later asks again.
 const LEAVE_ANSWER_REUSE_WINDOW_MS = 2000;
 
-type ProfileSettingsForm = {
-  name: string | null;
-  bio: string | null;
-  profile_picture_blob_id: string | null;
+// Mirrors SellerProfile::FONT_CHOICES and the after_initialize defaults in app/models/seller_profile.rb.
+// The model validates inclusion, so adding a font here without adding it there fails the save.
+const DEFAULT_PROFILE_FONT = "ABC Favorit";
+const FONT_CHOICES = [DEFAULT_PROFILE_FONT, "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"];
+const FONT_DESCRIPTIONS: Record<string, string> = {
+  "ABC Favorit": "Quirky and unique sans-serif",
+  Inter: "Simple and modern sans-serif",
+  Domine: "Modern and bold serif",
+  Merriweather: "Sturdy and pleasant serif",
+  "Roboto Slab": "Personable and fun serif",
+  "Roboto Mono": "Technical and monospace",
 };
 
 type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
-  profile_version: string | null;
+  profile_version: string;
   custom_html_pages_enabled: boolean;
   has_custom_landing_page: boolean;
+  seller_fonts_css_source: string;
   username: string;
 } & ProfileProps;
 
@@ -65,10 +79,10 @@ export default function SettingsPage() {
     profile_version,
     custom_html_pages_enabled,
     has_custom_landing_page,
+    seller_fonts_css_source,
     username,
   } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
-  const currentSeller = useCurrentSeller();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
   React.useEffect(() => setCreatorProfile(creator_profile), [creator_profile]);
   const updateCreatorProfile = (newProfile: Partial<CreatorProfile>) =>
@@ -112,7 +126,7 @@ export default function SettingsPage() {
   React.useEffect(() => {
     const previousBaseline = lastSavedSettings.current;
     lastSavedSettings.current = profile_settings;
-    setProfileSettings((prevSettings) => (isEqual(prevSettings, previousBaseline) ? profile_settings : prevSettings));
+    setProfileSettings((current) => rebaseProfileSettings(current, previousBaseline, profile_settings));
   }, [profile_settings]);
   const updateProfileSettings = (newSettings: Partial<ProfileSettingsForm>) =>
     setProfileSettings((prevSettings) => ({ ...prevSettings, ...newSettings }));
@@ -188,6 +202,8 @@ export default function SettingsPage() {
     if (isSaving) return false;
     setIsSaving(true);
     const settings = profileSettings;
+    const previousSettings = lastSavedSettings.current;
+    const changedSettings = changedProfileSettings(settings, previousSettings);
     const { sections, tabs } = editableProfile;
     // Only submit pages/sections when they actually changed. A save that left them untouched
     // (e.g. editing just the name or bio) must not resend a now-stale list, or the server would
@@ -197,7 +213,7 @@ export default function SettingsPage() {
       !isEqual(sections, lastSavedProfile.current.sections) || !isEqual(tabs, lastSavedProfile.current.tabs);
     try {
       await saveProfileSettings({
-        ...settings,
+        ...changedSettings,
         ...(profileChanged ? { tabs, sections, profileVersion: profile_version } : {}),
       });
       lastSavedSettings.current = settings;
@@ -226,24 +242,9 @@ export default function SettingsPage() {
     postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
-  // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the saved
-  // colour so its text clears 4.5:1. Every other accent use keeps the saved colour.
-  const accentColors = getAccessibleAccent(currentSeller?.profileHighlightColor ?? "#000000");
-
-  const profileColors = currentSeller
-    ? {
-        "--accent": hexToRgb(currentSeller.profileHighlightColor),
-        "--accent-with-text": hexToRgb(accentColors.accent),
-        "--contrast-accent": hexToRgb(accentColors.text),
-        "--filled": hexToRgb(currentSeller.profileBackgroundColor),
-        "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
-      }
-    : {};
-
-  const fontUrl =
-    currentSeller?.profileFont && currentSeller.profileFont !== "ABC Favorit"
-      ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
-      : null;
+  // Pin the chosen background too: #ffffff is a saved theme value, not an instruction to inherit
+  // the dashboard's colour scheme. The preview must match the buyer-facing stylesheet.
+  const profileColors = profileThemeColors(profileSettings.background_color, profileSettings.highlight_color);
 
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
@@ -255,7 +256,10 @@ export default function SettingsPage() {
     }
   });
 
-  const showPagesTab = !has_custom_landing_page;
+  const customLandingPageActive = custom_html_pages_enabled && has_custom_landing_page;
+  const showPagesTab = !customLandingPageActive;
+  const showCustomLandingPagePreview = customLandingPageActive && tab !== "design";
+  const showThemeWithoutPublicUrl = customLandingPageActive && tab === "design";
 
   const renderTab = (key: ProfileSettingsTab, label: string) => (
     <Tab
@@ -277,6 +281,7 @@ export default function SettingsPage() {
   const tabBar = (
     <Tabs aria-label="Profile settings sections">
       {renderTab("about", "About")}
+      {renderTab("design", "Design")}
       {showPagesTab ? renderTab("pages", "Pages") : null}
       {renderTab("share", "Share")}
     </Tabs>
@@ -286,49 +291,52 @@ export default function SettingsPage() {
     <PreviewSidebar>
       <PreviewChrome
         title={profileSettings.name || username}
-        url={profileUrl}
-        link={(props) => (
-          <NavigationButton
-            {...props}
-            disabled={isSaving}
-            href={profileUrl}
-            onClick={(evt) => {
-              evt.preventDefault();
-              // Persist pending edits before previewing, but only when there's something to save -
-              // settings (name/bio/avatar) are sent on every save with no freshness check, so an
-              // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
-              if (canSave) {
-                // Open the tab NOW, while we still have the user's click activation, then point it
-                // at the profile once the save finishes. Calling window.open after the await instead
-                // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
-                // which matters because the mobile preview pane is this button's main audience.
-                // On a failed save, close the reserved tab so we don't surface a stale preview.
-                const previewWindow = window.open("about:blank", "_blank");
-                void save().then((saved) => {
-                  if (!saved) previewWindow?.close();
-                  else if (previewWindow) previewWindow.location.href = profileUrl;
-                  else window.open(profileUrl, "_blank");
-                });
-              } else window.open(profileUrl, "_blank");
-            }}
-          />
-        )}
+        url={showThemeWithoutPublicUrl ? undefined : profileUrl}
+        link={
+          showThemeWithoutPublicUrl
+            ? undefined
+            : (props) => (
+                <NavigationButton
+                  {...props}
+                  disabled={isSaving}
+                  href={profileUrl}
+                  onClick={(evt) => {
+                    evt.preventDefault();
+                    // Persist pending edits before previewing, but only when there's something to save -
+                    // an unconditional save from a stale, locally-clean tab creates needless writes.
+                    if (canSave) {
+                      // Open the tab NOW, while we still have the user's click activation, then point it
+                      // at the profile once the save finishes. Calling window.open after the await instead
+                      // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
+                      // which matters because the mobile preview pane is this button's main audience.
+                      // On a failed save, close the reserved tab so we don't surface a stale preview.
+                      const previewWindow = window.open("about:blank", "_blank");
+                      void save().then((saved) => {
+                        if (!saved) previewWindow?.close();
+                        else if (previewWindow) previewWindow.location.href = profileUrl;
+                        else window.open(profileUrl, "_blank");
+                      });
+                    } else window.open(profileUrl, "_blank");
+                  }}
+                />
+              )
+        }
       >
-        {custom_html_pages_enabled && has_custom_landing_page ? (
+        {showCustomLandingPagePreview ? (
           <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
         ) : (
           <Preview
             scaleFactor={0.4}
             style={{
-              fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
+              fontFamily: profileSettings.font === DEFAULT_PROFILE_FONT ? undefined : profileSettings.font,
               ...profileColors,
               "--primary": "var(--color)",
               "--body-bg": "rgb(var(--filled))",
-              "--contrast-primary": "var(--filled)",
               "--contrast-filled": "var(--color)",
               "--color-body": "var(--body-bg)",
               "--color-background": "rgb(var(--filled))",
               "--color-foreground": "rgb(var(--color))",
+              "--border-alpha": "1",
               "--color-border": "rgb(var(--color) / var(--border-alpha))",
               "--color-accent": "rgb(var(--accent))",
               "--color-accent-foreground": "rgb(var(--contrast-accent))",
@@ -341,13 +349,9 @@ export default function SettingsPage() {
               color: "rgb(var(--color))",
             }}
           >
-            {fontUrl ? (
-              <>
-                <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-                <link rel="stylesheet" href={fontUrl} />
-              </>
-            ) : null}
+            <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+            <link rel="stylesheet" href={seller_fonts_css_source} />
             <div inert>
               <ProfileLayout creatorProfile={previewCreatorProfile} hideFollowForm={!previewSectionCount}>
                 <EditProfile
@@ -447,6 +451,66 @@ export default function SettingsPage() {
                   )}
                 </Fieldset>
               ) : null}
+            </section>
+          ) : tab === "design" ? (
+            <section className="grid gap-8 p-4! md:p-8!">
+              {customLandingPageActive ? (
+                <Alert role="status" variant="info">
+                  Your custom profile page uses its own design. This preview shows the theme used on your product pages
+                  and other Gumroad surfaces.
+                </Alert>
+              ) : null}
+              <Fieldset>
+                <FieldsetTitle>Font</FieldsetTitle>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" role="radiogroup">
+                  {FONT_CHOICES.map((font) => {
+                    const isSelected = font === profileSettings.font;
+                    return (
+                      <Button
+                        role="radio"
+                        key={font}
+                        aria-checked={isSelected}
+                        onClick={() => updateProfileSettings({ font })}
+                        style={{ fontFamily: font === DEFAULT_PROFILE_FONT ? undefined : font }}
+                        disabled={!canUpdate}
+                        className={classNames(
+                          "items-start! justify-start! gap-3! text-left",
+                          // Accent outline only for the selected state — no lift or drop shadow
+                          // (Sahil, #6233). These cards sit in the dashboard, not the preview, so
+                          // --accent here is the fixed dashboard pink and cannot match the border.
+                          isSelected && "border-accent! ring-1 ring-accent",
+                        )}
+                      >
+                        <FontFamily className="size-5 shrink-0" />
+                        <div>
+                          <h4 className="font-bold">{font}</h4>
+                          {FONT_DESCRIPTIONS[font]}
+                        </div>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </Fieldset>
+              <div className="grid w-fit grid-cols-[max-content_max-content] gap-y-4">
+                <Label className="col-span-2 grid! grid-cols-subgrid items-center" htmlFor={`${uid}-backgroundColor`}>
+                  Background color
+                  <ColorPicker
+                    id={`${uid}-backgroundColor`}
+                    value={profileSettings.background_color}
+                    onChange={(evt) => updateProfileSettings({ background_color: evt.target.value })}
+                    disabled={!canUpdate}
+                  />
+                </Label>
+                <Label className="col-span-2 grid! grid-cols-subgrid items-center" htmlFor={`${uid}-highlightColor`}>
+                  Highlight color
+                  <ColorPicker
+                    id={`${uid}-highlightColor`}
+                    value={profileSettings.highlight_color}
+                    onChange={(evt) => updateProfileSettings({ highlight_color: evt.target.value })}
+                    disabled={!canUpdate}
+                  />
+                </Label>
+              </div>
             </section>
           ) : tab === "pages" && showPagesTab ? (
             <>
