@@ -2676,7 +2676,9 @@ describe OrdersController, :vcr do
       # it involved one, and a plain issuer decline does not — so on the overwhelming majority of
       # card declines payment_method_type arrives BLANK and only the selected row identifies them.
       # Without this the denylist above never matched in production (gumroad-private#1514).
-      %w[card link].each do |selected_payment_method_type|
+      # apple_pay/google_pay are wallet ROW names the Payment Element reports; the PaymentMethod
+      # behind them is a card, so the decline is recorded server-side exactly like a typed card.
+      %w[card link apple_pay google_pay].each do |selected_payment_method_type|
         it "logs but does not notify for #{selected_payment_method_type} when Stripe named no method" do
           params = { line_items: line_items.map(&:dup) }.merge(common_params)
           order, = Order::CreateService.new(params:).perform

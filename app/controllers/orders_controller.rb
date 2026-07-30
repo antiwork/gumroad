@@ -137,7 +137,11 @@ class OrdersController < ApplicationController
     # Methods that confirm in-page: a failed attempt transitions the intent, so
     # `payment_intent.payment_failed` fires and `Purchase::ChargeEventsHandler#handle_event_failed!`
     # writes the code to `purchases.stripe_error_code`.
-    CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link].freeze
+    #
+    # `apple_pay`/`google_pay` are here because they are how the Payment Element names a wallet ROW
+    # (see `isWalletPaymentElementType`), and only the selected-row fallback below ever carries
+    # them — the resulting PaymentMethod is a card, so Stripe's own value says `card`.
+    CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link apple_pay google_pay].freeze
 
     # The error type that proves a charge was actually attempted, and therefore that
     # `payment_intent.payment_failed` fired at all.
