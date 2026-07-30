@@ -61,6 +61,24 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # The domain check reads four addresses, not just the purchase's own. A subscriber blocked on
+  # their account's domain is stranded exactly as hard, and reading fewer domains than production
+  # does would drop them silently now that an active block is what makes an entry eligible.
+  it "alerts when the blocked domain is the purchaser's account domain rather than the purchase's" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    purchaser = create(:user, email: "member@blocked-domain.com")
+    renewal = failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    renewal.update!(purchaser:)
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "blocked-domain.com")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+    end
+  end
+
   # A seller blocking their own buyer is a decision, not staleness.
   it "ignores a renewal blocked by the seller's own customer block" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
@@ -92,7 +110,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
   it "ignores a failure older than the lookback window" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
-    failed_renewal(subscription:, created_at: described_class::LOOKBACK.ago - 1.hour)
+    failed_renewal(subscription:, created_at: described_class::FAILURE_LOOKBACK.ago - 1.day)
     PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
 
     described_class.new.perform
@@ -114,15 +132,52 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
-  it "still reports when the block row has since been cleared, without inventing a date" do
-    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
-    failed_renewal(subscription:)
+  # The two halves of "currently stranded", which is the state this alert is about — not "failed
+  # recently", which drifts away from it in both directions.
+  describe "eligibility is the block being active now" do
+    # A block is not a retryable error, so a blocked subscriber fails once and then goes quiet until
+    # their next billing date. Anchoring on recent failures dropped them the following day while the
+    # block still stood, which is the case gumroad-private#1480 documented.
+    it "still reports an active block whose last failed attempt was days ago" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:, created_at: 10.days.ago)
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
 
-    described_class.new.perform
+      described_class.new.perform
 
-    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("subscription #{subscription.id}")
-      expect(message).to include("blocked since unknown")
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("subscription #{subscription.id}")
+        expect(message).to include("blocked since #{block.blocked_at.to_date}")
+      end
+    end
+
+    it "drops a subscriber whose block has since been cleared" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid).unblock!
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "drops a subscriber whose renewal failed on a block that never existed any more" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "drops a subscriber whose block has expired" do
+      subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      failed_renewal(subscription:)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid, expires_in: 1.day)
+
+      travel_to(2.days.from_now) { described_class.new.perform }
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
     end
   end
 
@@ -150,26 +205,79 @@ describe AlertOnBlockedEstablishedSubscribersJob do
 
   # A count taken after a truncated scan is a floor, and reading it as the total understates the
   # incident exactly when the incident is large.
-  it "says so when the scan hit its cap, instead of reporting the partial count as the total" do
-    stub_const("#{described_class}::MAX_FAILURES_SCANNED", 1)
-    2.times do |i|
+  describe "when the scan hits its cap" do
+    def blocked_established_subscriber(index)
       subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
-      failed_renewal(subscription:, guid: "guid-#{i}", buyer_email: "buyer#{i}@example.com",
-                     created_at: (i + 1).hours.ago)
-      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-#{i}")
+      failed_renewal(subscription:, guid: "guid-#{index}", buyer_email: "buyer#{index}@example.com",
+                     created_at: (index + 1).hours.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-#{index}")
+      subscription
     end
 
-    described_class.new.perform
+    it "says so instead of reporting the partial count as the total" do
+      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 1)
+      2.times { |i| blocked_established_subscriber(i) }
 
-    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("At least 1 subscription with")
-      expect(message).to include("The scan stopped at the newest 1 blocked renewals")
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("At least 1 subscription with")
+        expect(message).to include("The scan stopped at the newest 1 subscriptions")
+      end
+    end
+
+    # The cap used to be spent on failure rows, so one subscriber's retries could consume it and
+    # hide everybody behind them. Counting subscriptions is what makes the cap mean what it says.
+    it "does not let one subscriber's repeated failures consume the cap" do
+      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 2)
+      noisy = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+      3.times { |i| failed_renewal(subscription: noisy, created_at: (i + 1).minutes.ago) }
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+      quiet = blocked_established_subscriber(9)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("subscription #{noisy.id}")
+        expect(message).to include("subscription #{quiet.id}")
+        expect(message).not_to include("The scan stopped")
+      end
+    end
+
+    # Truncation plus an unqualifying page is the one shape that used to send nothing at all: the
+    # report would go quiet because of its own cap, which reads as "nobody is stranded".
+    it "still alerts when the scanned page held nothing qualifying" do
+      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 1)
+      newcomer = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES - 1)
+      failed_renewal(subscription: newcomer, created_at: 1.minute.ago)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+      blocked_established_subscriber(9)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to include("the scan was truncated")
+        expect(message).not_to include("• subscription")
+      end
+    end
+
+    it "does not claim truncation when the window held exactly the cap" do
+      stub_const("#{described_class}::MAX_SUBSCRIPTIONS_SCANNED", 1)
+      blocked_established_subscriber(0)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+        expect(message).to start_with("1 subscription with")
+        expect(message).not_to include("The scan stopped")
+      end
     end
   end
 
   it "does not claim truncation when the whole window fit in the scan" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription:)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
 
     described_class.new.perform
 
