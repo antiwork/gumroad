@@ -74,4 +74,15 @@ describe("isValidHost", () => {
     expect(valid("example.com")).toBe(false);
     expect(valid("example.com", "")).toBe(false);
   });
+
+  // An empty customDomain is reachable in production: it is `new URL(script.src).host`, which is
+  // "" for a host-less scheme such as a seller page saved to `file:`. Without an explicit empty
+  // check the comparison degenerates to `host.endsWith(".")`, which is true for any host written
+  // in fully-qualified trailing-dot form — and browsers treat `https://evil.example./` as a real
+  // origin whose `url.host` is `"evil.example."`. So this is the same hole in a corner, and the
+  // plain `valid("example.com", "")` case above cannot see it: that host has no trailing dot.
+  it("rejects a trailing-dot FQDN when the custom domain is empty", () => {
+    expect(valid("evil.example.", "")).toBe(false);
+    expect(valid("evil.example.")).toBe(false);
+  });
 });
