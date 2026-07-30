@@ -257,13 +257,11 @@ export class PaymentConfirmedError extends Error {
 export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
+  // The Payment Element row the buyer had selected. Stripe's confirm error only carries
+  // `payment_method` when it attached one, so a plain decline names no method at all and this is
+  // the only signal identifying it (gumroad-private#1514).
+  selectedMethodType: string,
 ): Promise<CartPurchaseResult> => {
-  // Read off the payload rather than taking a parameter: the caller already narrowed
-  // paymentMethod to the client-confirm variant to reach this function at all.
-  const selectedMethodType =
-    requestData.paymentMethod.type === "payment-element-client-confirm"
-      ? requestData.paymentMethod.selectedMethodType
-      : "";
   let confirmedReturnUrl: string | null = null;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
