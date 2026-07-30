@@ -49,6 +49,10 @@ class Cart < ApplicationRecord
     alive? && updated_at >= ABANDONED_IF_UPDATED_AFTER_AGO.ago.beginning_of_day && updated_at <= ABANDONED_IF_UPDATED_BEFORE_AGO.ago && sent_abandoned_cart_emails.none? && alive_cart_products.exists?
   end
 
+  def visible_cart_products
+    alive_cart_products.joins(:product).merge(Link.not_archived).order(created_at: :desc)
+  end
+
   def self.fetch_by(user:, browser_guid:)
     return user.carts.alive.first if user.present?
     alive.find_by(browser_guid:, user: nil) if browser_guid.present?

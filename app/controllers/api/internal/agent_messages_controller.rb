@@ -48,25 +48,31 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
 
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond(messages: history)
 
-      # Persistence must not mask a reply the model already produced. If recording the turn fails
-      # (e.g. a DB hiccup after a long LLM call), log + report it but still return the reply —
-      # otherwise the seller would see an error, retry, and burn another quota slot for an answer
-      # that already succeeded. The only cost of a persistence failure is that this turn isn't
-      # stored; `conversation_id` comes back nil when creating the conversation itself failed, so
-      # the client's next turn starts fresh. This mirrors the streaming path's handling.
+      # A persistence failure does not erase a completed read reply. A proposed write is different:
+      # without a stored message it cannot be confirmed, so its confirmation wording is replaced.
+      assistant_message = nil
       begin
-        conversation = persist_agent_turn!(conversation, new_user_message, result, fallback_first_message: messages.last[:content])
+        conversation, assistant_message = persist_agent_turn!(
+          conversation,
+          new_user_message,
+          result,
+          fallback_first_message: messages.last[:content],
+        )
       rescue => e
         Rails.logger.error("Store agent turn persistence failed: #{e.full_message}")
         ErrorNotifier.notify(e)
       end
-      render json: {
+      replace_unpersisted_proposal_reply!(result) unless assistant_message
+      response_payload = {
         success: true,
         reply: result[:reply],
-        proposed_action: result[:proposed_action],
+        # A proposal can only be confirmed through its persisted message.
+        proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
         conversation_id: conversation&.external_id,
       }
+      response_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
+      render json: response_payload
     rescue ::Ai::StoreAgentService::Error => e
       render json: { success: false, error: e.message }, status: :unprocessable_entity
     rescue => e
@@ -77,10 +83,10 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
   end
 
   # POST /internal/agent/actions
-  # params: { type:, params: {...}, conversation_id: <optional external id> } — the confirmed
-  # proposed action. With a conversation_id, a successful execution is also recorded on the stored
-  # conversation (the proposing message is marked applied) so reloaded history shows the collapsed
-  # "Applied" card instead of a still-confirmable one.
+  # params: { type:, params: {...}, conversation_id:, proposal_message_id: } — the confirmed
+  # proposed action. Both ids bind the replay to the exact persisted proposal the seller saw; a
+  # successful execution finalizes that message as applied so reloaded history shows the collapsed
+  # audit card instead of a still-confirmable one.
   def execute
     type = params[:type].to_s
     unless ::Ai::StoreAgentActionExecutor::SUPPORTED_TYPES.include?(type)
@@ -92,44 +98,74 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
 
     # Look up before executing so a bad conversation id 404s without mutating the store.
     conversation = find_agent_conversation!
-
-    result = ::Ai::StoreAgentActionExecutor.new(seller: current_seller, pundit_user:)
-      .execute(type:, params: action_params)
-
-    unless result[:success]
-      # About a quarter of confirmed actions come back 422, but the status alone is a bucket —
-      # permission denials, unknown-key rejections, and API validation failures all land here.
-      # Stash only the executor's fixed category, numeric upstream status, and catalog-resolved
-      # endpoint. The API message can contain reflected seller input such as a callback URL with
-      # credentials, so it must remain in the response and never reach long-lived logs.
-      @agent_action_failure_reason = result[:failure_reason]
-      @agent_action_failure_status = result[:failure_status]
-      @agent_action_endpoint = ::Ai::StoreAgentApiCatalog.find(action_params["endpoint"])&.id
+    proposal_message, confirmation_error, confirmation_status, confirmation_retryable = claim_agent_action(
+      conversation,
+      proposal_message_id: params[:proposal_message_id],
+      type:,
+      action_params:,
+    )
+    if confirmation_error
+      render json: agent_action_confirmation_error(
+        confirmation_error,
+        confirmation_status,
+        retryable: confirmation_retryable,
+      ), status: :unprocessable_entity
+      return
     end
+    persisted_action = stored_action_payload(proposal_message)
+    persisted_type = persisted_action.fetch("type")
+    persisted_action_params = persisted_action.fetch("params")
 
-    # Recording the applied status must not mask a store change that already committed: if the
-    # bookkeeping write fails after `execute` succeeded, returning an error would prompt the seller
-    # to retry the confirmation — running the action a second time (a duplicate discount, refund,
-    # etc.). Log + report the failure and return the successful result; the only cost is that
-    # reloaded history shows a still-confirmable card instead of the collapsed "Applied" one.
     begin
-      record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
-    rescue => e
-      Rails.logger.error("Store agent action persistence failed: #{e.full_message}")
-      ErrorNotifier.notify(e)
-    end
+      result = ::Ai::StoreAgentActionExecutor.new(seller: current_seller, pundit_user:)
+        .execute(type: persisted_type, params: persisted_action_params)
 
-    render json: public_action_result(result), status: result[:success] ? :ok : :unprocessable_entity
-  rescue ActiveRecord::RecordNotFound
-    # Re-raise so the controller-level rescue_from renders the JSON 404 — without this the generic
-    # rescue below would report an unknown conversation id as a 500.
-    raise
-  rescue => e
-    # The executor only rescues expected validation failures; log + report anything unexpected from a
-    # real store mutation (e.g. ActiveRecord::StatementInvalid) instead of leaking a 500 with no trail.
-    Rails.logger.error("Store agent action failed: #{e.full_message}")
-    ErrorNotifier.notify(e)
-    render json: { success: false, message: "Something went wrong. Please try again." }, status: :internal_server_error
+      action_status = nil
+      retryable = false
+      if result[:success]
+        # Recording the applied status must not mask a store change that already committed. If the
+        # audit write fails, settle the claim as "unknown" and return success: releasing it or
+        # returning an error would invite a retry that runs the action twice.
+        begin
+          record_agent_action_applied!(proposal_message, result)
+        rescue => e
+          Rails.logger.error("Store agent action persistence failed: #{e.full_message}")
+          ErrorNotifier.notify(e)
+          record_agent_action_outcome_unknown!(proposal_message)
+        end
+      else
+        # Only release when the executor proves it rejected the action before dispatch. A nested API
+        # can return failure after an external side effect (a processor refund followed by a local
+        # persistence failure, for example), so every post-dispatch outcome remains claimed.
+        if result[:retry_safe]
+          action_status, retryable = release_retry_safe_agent_action_claim!(proposal_message)
+        else
+          action_status = record_agent_action_outcome_unknown!(proposal_message)
+        end
+        # About a quarter of confirmed actions come back 422, but the status alone is a bucket —
+        # permission denials, unknown-key rejections, and API validation failures all land here.
+        # Stash only the executor's fixed category, numeric upstream status, and catalog-resolved
+        # endpoint. The API message can contain reflected seller input such as a callback URL with
+        # credentials, so it must remain in the response and never reach long-lived logs.
+        @agent_action_failure_reason = result[:failure_reason]
+        @agent_action_failure_status = result[:failure_status]
+        @agent_action_endpoint = ::Ai::StoreAgentApiCatalog.find(persisted_action_params["endpoint"])&.id
+      end
+
+      render json: public_action_result(result, action_status:, retryable:), status: result[:success] ? :ok : :unprocessable_entity
+    rescue => e
+      # An unexpected exception does not prove the nested API failed before mutating the store.
+      # Keep the claim and expose that stable state to the client; 409 lets the client read the
+      # response instead of the shared request wrapper replacing a 5xx body with a generic error.
+      Rails.logger.error("Store agent action failed: #{e.full_message}")
+      ErrorNotifier.notify(e)
+      action_status = record_agent_action_outcome_unknown!(proposal_message)
+      render json: {
+        success: false,
+        message: "The action may have completed, so it can't be retried automatically.",
+        action_status:,
+      }, status: :conflict
+    end
   end
 
   private
@@ -143,10 +179,12 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
       payload[:agent_action_endpoint] = @agent_action_endpoint if @agent_action_endpoint
     end
 
-    # failure_reason and failure_status are server-only telemetry. Keeping them out of the response
-    # preserves the existing web/mobile contract and avoids exposing logging details to clients.
-    def public_action_result(result)
-      result.except(:failure_reason, :failure_status)
+    # Convert server-only execution metadata to the narrow client retry/status contract.
+    def public_action_result(result, action_status:, retryable:)
+      public_result = result.except(:failure_reason, :failure_status, :retry_safe)
+      public_result[:action_status] = action_status if action_status
+      public_result[:retryable] = true if retryable
+      public_result
     end
 
     # Runs before throttling so a team member denied the Agent tab can't burn the seller-scoped

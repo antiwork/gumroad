@@ -39,6 +39,7 @@
   --color-border: rgb(var(--color) / var(--border-alpha));
   --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
+  --color-indicator: rgb(var(--indicator, var(--accent)));
   --color-accent-foreground: rgb(var(--contrast-accent));
   /*
    * A slightly brightness-adjusted accent for surfaces that put text or a meaningful icon on the

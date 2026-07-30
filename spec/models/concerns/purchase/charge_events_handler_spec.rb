@@ -421,6 +421,62 @@ describe Purchase::ChargeEventsHandler, :vcr do
           Purchase.handle_charge_event(build(:charge_event_settlement_declined, charge_id: purchase.stripe_transaction_id, flow_of_funds: settlement_decline_flow_of_funds))
         end
       end
+
+      describe "for a subscription purchase" do
+        let(:event) { build(:charge_event_settlement_declined, charge_id: transaction_id, flow_of_funds: settlement_decline_flow_of_funds) }
+        let(:product) { create(:subscription_product, user: seller) }
+        let(:subscription) { create(:subscription, link: product, cancelled_at: nil) }
+        let!(:purchase) do
+          create(:purchase, stripe_transaction_id: transaction_id, link: product,
+                            is_original_subscription_purchase: true, subscription:)
+        end
+
+        it "cancels the subscription" do
+          Purchase.handle_charge_event(event)
+
+          expect(subscription.reload.cancelled_at).to be_present
+        end
+
+        context "when the seller has since converted the product away from a membership" do
+          before do
+            product.is_recurring_billing = false
+            product.native_type = Link::NATIVE_TYPE_COURSE
+            product.save!(validate: false)
+          end
+
+          it "still cancels the subscription" do
+            Purchase.handle_charge_event(event)
+
+            expect(subscription.reload.cancelled_at).to be_present
+          end
+        end
+
+        context "when the subscription is already deactivated" do
+          before do
+            subscription.update!(cancelled_at: 2.days.ago, deactivated_at: 2.days.ago)
+          end
+
+          it "does not cancel it again" do
+            expect_any_instance_of(Subscription).to_not receive(:cancel_effective_immediately!)
+
+            Purchase.handle_charge_event(event)
+          end
+        end
+
+        context "when the purchase is an installment plan" do
+          let(:product) { create(:product, :with_installment_plan, user: seller) }
+          let(:subscription) { create(:subscription, link: product, is_installment_plan: true, cancelled_at: nil) }
+
+          # The model rejects a by_buyer cancel on an installment plan, so cancelling here would
+          # raise before the giftee and product-purchase bookkeeping below it.
+          it "leaves the plan alone and still refunds the purchase" do
+            expect { Purchase.handle_charge_event(event) }.to_not raise_error
+
+            expect(subscription.reload.cancelled_at).to be_nil
+            expect(purchase.reload.refunds.count).to eq(1)
+          end
+        end
+      end
     end
   end
 

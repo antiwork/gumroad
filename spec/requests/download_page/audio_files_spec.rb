@@ -204,7 +204,7 @@ describe("Download Page Audio files", type: :system, js: true) do
       it "does not record media_location if purchase is nil" do
         listenable_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3"
         installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: @product.user)
-        create(:product_file, :analyze, installment:, url: listenable_url)
+        create(:product_file, :analyze, installment:, link: nil, url: listenable_url)
         no_purchase_url_redirect = installment.generate_url_redirect_for_follower
         visit("/d/#{no_purchase_url_redirect.token}")
         click_button("Play")
