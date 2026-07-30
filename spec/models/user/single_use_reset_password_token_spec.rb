@@ -14,7 +14,10 @@ describe User::SingleUseResetPasswordToken do
   end
 
   after do
-    # No transaction rollback here, so remove what the examples created.
+    # No transaction rollback here, so remove what the examples created. `destroy!` does not reach
+    # the user's global affiliate (`has_one` with no `dependent:`), and an orphaned one breaks any
+    # later example that asserts against all GlobalAffiliate rows.
+    Affiliate.where(affiliate_user_id: @user.id).delete_all
     PaperTrail::Version.where(item_type: "User", item_id: @user.id).delete_all
     @user.reload.destroy!
   end
