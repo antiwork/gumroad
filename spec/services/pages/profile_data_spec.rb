@@ -177,6 +177,17 @@ describe Pages::ProfileData do
         expect(payload.to_json).not_to include(seller.subdomain)
       end
 
+      it "caches exact-host DNS verification across profile-data cache reads" do
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        expect(CustomDomainVerificationService)
+          .to receive(:new)
+          .with(domain: "shop.example.com")
+          .once
+          .and_return(double(domains_pointed_to_gumroad: ["shop.example.com"]))
+
+        2.times { Pages::ProfileData.build(seller.reload) }
+      end
+
       it "stays on the subdomain when only the configured domain's apex points to Gumroad" do
         create(:custom_domain, :verified_with_certificate, user: seller, domain: "www.example.com")
         allow(CustomDomainVerificationService)

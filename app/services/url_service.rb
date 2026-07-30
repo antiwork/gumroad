@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class UrlService
+  CUSTOM_DOMAIN_ROUTABILITY_CACHE_TTL = 5.minutes
+
   class << self
     def domain_with_protocol
       "#{PROTOCOL}://#{DOMAIN}"
@@ -46,7 +48,12 @@ class UrlService
       return unless seller.present? && seller.custom_domain&.active?
 
       domain = seller.custom_domain.domain
-      is_strictly_pointing_to_gumroad = CustomDomainVerificationService.new(domain:).domains_pointed_to_gumroad.include?(domain)
+      is_strictly_pointing_to_gumroad = Rails.cache.fetch(
+        ["custom_domain_routability", seller.custom_domain.cache_key_with_version].join("/"),
+        expires_in: CUSTOM_DOMAIN_ROUTABILITY_CACHE_TTL
+      ) do
+        CustomDomainVerificationService.new(domain:).domains_pointed_to_gumroad.include?(domain)
+      end
 
       "#{PROTOCOL}://#{domain}" if is_strictly_pointing_to_gumroad
     end
