@@ -55,7 +55,6 @@ type ProfileSettingsForm = {
 // Mirrors SellerProfile::FONT_CHOICES and the after_initialize defaults in app/models/seller_profile.rb.
 // The model validates inclusion, so adding a font here without adding it there fails the save.
 const DEFAULT_PROFILE_FONT = "ABC Favorit";
-const DEFAULT_PROFILE_BACKGROUND_COLOR = "#ffffff";
 const FONT_CHOICES = [DEFAULT_PROFILE_FONT, "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"];
 const FONT_DESCRIPTIONS: Record<string, string> = {
   "ABC Favorit": "Quirky and unique sans-serif",
@@ -249,20 +248,14 @@ export default function SettingsPage() {
   // colour so its text clears 4.5:1. Every other accent use keeps the chosen colour.
   const accentColors = getAccessibleAccent(profileSettings.highlight_color);
 
-  // The accent is always pinned — it's the branding worth previewing and it reads on either scheme.
-  // The background/foreground pair is pinned only when the seller moved off the default white, so a
-  // default-theme preview follows the dashboard's own colour scheme instead of glaring white in dark
-  // mode (Sahil, #5888 → #5992).
+  // Pin the chosen background too: #ffffff is a saved theme value, not an instruction to inherit
+  // the dashboard's colour scheme. The preview must match the buyer-facing stylesheet.
   const profileColors = {
     "--accent": hexToRgb(profileSettings.highlight_color),
     "--accent-with-text": hexToRgb(accentColors.accent),
     "--contrast-accent": hexToRgb(accentColors.text),
-    ...(profileSettings.background_color.toLowerCase() !== DEFAULT_PROFILE_BACKGROUND_COLOR
-      ? {
-          "--filled": hexToRgb(profileSettings.background_color),
-          "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
-        }
-      : {}),
+    "--filled": hexToRgb(profileSettings.background_color),
+    "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
   };
 
   const fontUrl =
@@ -507,29 +500,25 @@ export default function SettingsPage() {
                   })}
                 </div>
               </Fieldset>
-              <div className="flex flex-wrap gap-4">
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}-backgroundColor`}>Background color</Label>
-                  </FieldsetTitle>
+              <div className="flex flex-wrap gap-x-8 gap-y-4">
+                <Label className="items-center" htmlFor={`${uid}-backgroundColor`}>
+                  Background color
                   <ColorPicker
                     id={`${uid}-backgroundColor`}
                     value={profileSettings.background_color}
                     onChange={(evt) => updateProfileSettings({ background_color: evt.target.value })}
                     disabled={!canUpdate}
                   />
-                </Fieldset>
-                <Fieldset>
-                  <FieldsetTitle>
-                    <Label htmlFor={`${uid}-highlightColor`}>Highlight color</Label>
-                  </FieldsetTitle>
+                </Label>
+                <Label className="items-center" htmlFor={`${uid}-highlightColor`}>
+                  Highlight color
                   <ColorPicker
                     id={`${uid}-highlightColor`}
                     value={profileSettings.highlight_color}
                     onChange={(evt) => updateProfileSettings({ highlight_color: evt.target.value })}
                     disabled={!canUpdate}
                   />
-                </Fieldset>
+                </Label>
               </div>
             </section>
           ) : tab === "pages" && showPagesTab ? (

@@ -392,6 +392,7 @@ describe Ai::StoreAgentService do
         # Route the ask to the settings screen rather than reaching for a custom page as a colour
         # workaround.
         expect(captured[:system]).to match(/Settings > Profile > Design/)
+        expect(captured[:system]).not_to match(/support applies/)
         # ...and the authoring rule further down must not contradict that by sending an appearance
         # request into a full-page rewrite, which is how gumroad-private#984 happened.
         expect(captured[:system]).to match(/NO custom HTML page yet and wants a custom page/)

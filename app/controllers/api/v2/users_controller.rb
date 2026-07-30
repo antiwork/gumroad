@@ -153,7 +153,7 @@ class Api::V2::UsersController < Api::V2::BaseController
 
   # The seller's store theme: the background colour, highlight (accent) colour, and font stored on
   # their SellerProfile. Read-only here: sellers edit these directly in Settings > Profile > Design,
-  # and the agent changes them through the profile settings surface rather than this endpoint.
+  # while the agent can read them and point the seller to that screen.
   # The theme is not profile-page-only: the same values render into the stylesheet served with the
   # storefront, every product page, checkout when the cart is all one seller's, the pages buyers see
   # for what they bought, posts, and the emails a seller sends to their own audience — see

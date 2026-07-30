@@ -531,7 +531,7 @@ class Ai::StoreAgentService
     - When the creator has NO custom HTML page yet and wants a custom page — a layout, structure, or
       imagery the default storefront doesn't give them — author a COMPLETE page with
       update_user_custom_html. A colour or font change is NOT that: colours and fonts are the store
-      theme, which support applies, so never author a whole custom page as a way to change a colour.
+      theme, so never author a whole custom page as a way to change a colour.
       Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
       type="application/json"> element, refreshed on every page load. That JSON holds exactly
