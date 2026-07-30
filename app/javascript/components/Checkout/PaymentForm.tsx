@@ -7,6 +7,7 @@ import {
   PaymentRequestShippingAddress,
   PaymentRequestShippingAddressEvent,
   StripeCardElement,
+  StripeElements,
 } from "@stripe/stripe-js";
 import { DataCollector, PayPal } from "braintree-web";
 import * as BraintreeClient from "braintree-web/client";
@@ -39,6 +40,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { Button } from "$app/components/Button";
 import { persistAcknowledgedEmail } from "$app/components/Checkout/acknowledgedEmails";
 import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/applePayRecurringPaymentRequest";
+import { useShouldInvertNativePayPalButton } from "$app/components/Checkout/checkoutTheme";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
 import { resolveHeldWalletPayment, type HeldWalletPayment } from "$app/components/Checkout/heldWalletPayment";
@@ -78,7 +80,6 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
 import { Select } from "$app/components/ui/Select";
-import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
 import { useOnChangeSync } from "$app/components/useOnChange";
 import {
   RECAPTCHA_UNAVAILABLE_MESSAGE,
@@ -694,10 +695,7 @@ const CreditCardContent = ({
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
-  const stripePaymentElementConfig =
-    usesPaymentElement && state.checkoutPayment.integration !== "card_element"
-      ? state.checkoutPayment.elements_options
-      : null;
+  const stripePaymentElementConfig = usesPaymentElement ? state.checkoutPayment.elements_options : null;
 
   // When the Payment Element renders Apple Pay, describe the cart's recurring agreement on the
   // sheet so Apple issues a device-independent merchant token (MPAN) — the exact same declaration
@@ -884,7 +882,10 @@ const CreditCardContent = ({
           confirmationTokenId: tokenResult.confirmationTokenId,
           cardCountry: tokenResult.cardCountry,
           walletType: tokenResult.wallet?.type ?? null,
-          mountCurrency: stripePaymentElementConfig.currency,
+          mountCurrency: assertDefined(
+            stripePaymentElementConfig,
+            "`stripePaymentElementConfig` should be defined when confirming via the Payment Element",
+          ).currency,
         };
         if (tokenResult.wallet && !hasShipping(state)) {
           const taxLocationChanged = applyWalletBillingAddressToCheckout(
@@ -1264,7 +1265,7 @@ const BraintreePayPal = ({ token }: { token: string }) => {
 const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) => {
   const [state, dispatch] = useState();
   const fail = useFail();
-  const isDarkTheme = useIsDarkTheme();
+  const shouldInvert = useShouldInvertNativePayPalButton();
 
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -1348,7 +1349,7 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
       <div
         ref={ref}
         className={classNames(isProcessing(state) && "hidden")}
-        style={isDarkTheme ? { filter: "invert(1) grayscale(1)" } : undefined}
+        style={shouldInvert ? { filter: "invert(1) grayscale(1)" } : undefined}
       />
       {isProcessing(state) ? <LoadingSpinner /> : null}
     </>

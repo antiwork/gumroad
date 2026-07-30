@@ -40,3 +40,34 @@ describe "InstallmentFilters"  do
     end
   end
 end
+
+describe "#member_cancellation_trigger?" do
+  let(:seller) { create(:user) }
+  let(:product) { create(:product, user: seller) }
+
+  it "is true when the installment carries the trigger itself" do
+    workflow = create(:workflow, seller:, link: product, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+    installment = create(:installment, link: product, workflow:)
+    installment.workflow_trigger = Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+
+    expect(installment.member_cancellation_trigger?).to eq(true)
+  end
+
+  it "is true from the workflow when the installment's own copy is stale" do
+    workflow = create(:workflow, seller:, link: product, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+    installment = create(:installment, link: product, workflow:)
+
+    expect(installment.workflow_trigger).to be_nil
+    expect(installment.member_cancellation_trigger?).to eq(true)
+  end
+
+  it "is false for a new-customer workflow post" do
+    workflow = create(:workflow, seller:, link: product)
+
+    expect(create(:installment, link: product, workflow:).member_cancellation_trigger?).to eq(false)
+  end
+
+  it "is false for a post with no workflow" do
+    expect(create(:installment).member_cancellation_trigger?).to eq(false)
+  end
+end

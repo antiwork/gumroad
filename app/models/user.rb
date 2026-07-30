@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo, EmailNormalization
+          AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -718,6 +718,12 @@ class User < ApplicationRecord
     custom_html.present?
   end
 
+  # Saved custom HTML only replaces the public profile while the feature is active. Keep this
+  # separate from has_custom_landing_page?, which reports saved content for editing and recovery.
+  def custom_landing_page_visible?
+    Feature.active?(:custom_html_pages, self) && has_custom_landing_page?
+  end
+
   def valid_password?(password)
     super(password)
   rescue BCrypt::Errors::InvalidHash
@@ -830,10 +836,22 @@ class User < ApplicationRecord
     super || build_seller_profile
   end
 
+  # seller_profiles predates a uniqueness constraint. Lock the seller before a locking/current
+  # profile read so first saves serialize without establishing a stale repeatable-read snapshot.
+  def with_locked_seller_profile
+    with_lock do
+      profile_association = association(:seller_profile)
+      profile_association.reset
+      profile = SellerProfile.lock.find_by(seller_id: id) || build_seller_profile
+      profile_association.target = profile
+      yield profile
+    end
+  end
+
   # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
   # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
   # they take this lock and re-read the sections inside it to avoid clobbering each other. The
-  # profile editor holds the same row via seller_profile.lock!, so all writers serialize on it.
+  # profile editor holds the same row via #with_locked_seller_profile, so all writers serialize on it.
   # Looked up directly (not via #seller_profile, which builds a record) so callers like product
   # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
   # saved profile has nothing to serialize against, so it just runs the block.

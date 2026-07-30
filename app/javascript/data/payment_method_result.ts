@@ -187,6 +187,7 @@ export async function getPaymentMethodResult(
       const paymentMethodData = await prepareCardPaymentMethodData({
         cardElement: selected.element,
         email: selected.email,
+        zipCode: selected.zipCode,
       });
       if (paymentMethodData.status === "success") {
         return {

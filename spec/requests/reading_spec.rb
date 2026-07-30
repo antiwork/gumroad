@@ -168,7 +168,7 @@ describe "Reading Scenario", type: :system, js: true do
     it "does not record media_location if purchase is nil" do
       readable_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/billion-dollar-company-chapter-0.pdf"
       installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: @product.user)
-      installment_product_file = create(:product_file, :analyze, installment:, url: readable_url)
+      installment_product_file = create(:product_file, :analyze, installment:, link: nil, url: readable_url)
       no_purchase_url_redirect = installment.generate_url_redirect_for_follower
       expect_any_instance_of(SignedUrlHelper).to receive(:signed_download_url_for_s3_key_and_filename).and_return(readable_url)
       visit("/read/#{no_purchase_url_redirect.token}/#{installment_product_file.external_id}")

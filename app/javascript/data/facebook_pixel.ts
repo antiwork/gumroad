@@ -1,13 +1,22 @@
 import loadFacebookPixelScript from "$vendor/facebook_pixel";
 
-import { AnalyticsConfig, BeginCheckoutEvent, GumroadEvents, ProductAnalyticsEvent } from "$app/utils/user_analytics";
+import {
+  AnalyticsConfig,
+  BeginCheckoutEvent,
+  BuyerCurrencyDisplayViewedEvent,
+  GumroadEvents,
+  ProductAnalyticsEvent,
+} from "$app/utils/user_analytics";
 
 export type FacebookPixelConfig = { facebookPixelId: string | null };
 
-type FacebookProductAnalyticsEvent = Exclude<ProductAnalyticsEvent, BeginCheckoutEvent>;
+type FacebookProductAnalyticsEvent = Exclude<
+  ProductAnalyticsEvent,
+  BeginCheckoutEvent | BuyerCurrencyDisplayViewedEvent
+>;
 
 // Facebook only has one `"InitiateCheckout"` event that we fire when a product is added to the cart
-const FacebookEvents: Record<Exclude<GumroadEvents, "begin_checkout">, string> = {
+const FacebookEvents: Record<Exclude<GumroadEvents, "begin_checkout" | "buyer_currency_display_viewed">, string> = {
   viewed: "ViewContent",
   iwantthis: "InitiateCheckout",
   purchased: "Purchase",

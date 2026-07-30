@@ -647,6 +647,13 @@ class Subscription < ApplicationRecord
     successful_purchases.last
   end
 
+  # A purchase stays in `successful_purchases` after being fully refunded or charged back, so
+  # anything showing the buyer "the charge you last paid for" has to filter those out. Ordered by
+  # `succeeded_at` rather than relying on the association's insertion order.
+  def last_successful_not_reversed_or_refunded_charge
+    successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first
+  end
+
   def last_successful_charge_at
     last_successful_charge&.succeeded_at
   end
@@ -883,6 +890,31 @@ class Subscription < ApplicationRecord
 
   def remaining_charges_count
     has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
+  end
+
+  # Installment plans have no cancellation exit after a chargeback: the
+  # `installment_plans_cannot_be_cancelled_by_buyer` validation rejects
+  # `cancel_effective_immediately!(by_buyer: true)`, and the resulting RecordInvalid would raise
+  # after the seller-balance decrement and before dispute-evidence creation. So the plan stays
+  # alive and keeps its place in the charge schedule.
+  #
+  # Stopping the charge rather than cancelling the plan is deliberate. The reason to stop is that
+  # we should not charge a card whose holder disputed every prior charge on it — a charging
+  # concern, not a cancellation one. Cancelling would also have to invent an actor, and
+  # `cancel_effective_immediately!` with `by_buyer: false` emails the buyer about a product
+  # deletion that never happened.
+  #
+  # Every installment must be disputed, not just one: a single disputed installment on an
+  # otherwise-paid plan can be a reversible mistake, and blocking those would strand plans whose
+  # buyer still intends to pay. Reversed chargebacks do not count, so a won dispute lets the plan
+  # resume on its own.
+  def all_charges_disputed?
+    return false unless is_installment_plan?
+
+    charges = successful_purchases.to_a
+    return false if charges.empty?
+
+    charges.all?(&:chargedback_not_reversed?)
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
@@ -1188,7 +1220,7 @@ class Subscription < ApplicationRecord
     end
 
     def last_successful_not_reversed_or_refunded_charge_at
-      successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first&.succeeded_at
+      last_successful_not_reversed_or_refunded_charge&.succeeded_at
     end
 
     def tier_price

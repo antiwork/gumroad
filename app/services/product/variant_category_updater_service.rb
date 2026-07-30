@@ -339,6 +339,10 @@ class Product::VariantCategoryUpdaterService
       end
 
       product.invalidate_cache
+      # `update_all` above skips callbacks, so TouchesProductForPriceCache never fires and
+      # `invalidate_cache` does not write `links`. Deleting the cheapest tier would otherwise
+      # leave the storefront advertising its price (Pages::ProfileData keys on links.updated_at).
+      product.touch if newly_deleted.any?
 
       newly_deleted.map(&:external_id)
     end

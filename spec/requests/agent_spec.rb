@@ -30,18 +30,19 @@ describe "Agent tab", type: :system, js: true do
   # Stub one turn of the agent: the next user message yields `reply` (+ optional proposed_action /
   # objects rendered inline as cards, and follow-up `suggestions`). The Agent tab streams its reply
   # over Server-Sent Events, so we stub the streaming entrypoint (respond_streaming): it emits the
-  # reply as a single token, then the objects / proposed action / suggestions, mirroring what the
-  # real service streams, and returns the same hash shape the controller's `done` event uses.
+  # reply as a single token, persists the completed turn, then emits objects / proposed action /
+  # suggestions and returns the same hash shape the controller's `done` event uses.
   def stub_agent_turn(reply:, proposed_action: nil, objects: [], suggestions: [])
     allow_any_instance_of(Ai::StoreAgentService).to receive(:respond_streaming) do |_service, **kwargs, &emit|
       emit.call(:token, { text: reply })
+      outcome = proposed_action ? Ai::StoreAgentService::TURN_OUTCOME_PROPOSAL_READY : Ai::StoreAgentService::TURN_OUTCOME_REPLY_ONLY
+      turn = { outcome:, reply:, proposed_action:, objects:, suggestions: }
+      # Production finish_stream persists before every trailing event. That ordering lets the
+      # controller bind a proposal event to its stored assistant message and suppress it when
+      # persistence fails.
+      kwargs[:on_reply_complete]&.call(turn)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: }) if proposed_action
-      turn = { reply:, proposed_action:, objects:, suggestions: }
-      # The real service persists the turn via on_reply_complete the moment the reply is final,
-      # before emitting suggestions — mirror that here so the controller has a conversation id
-      # to put in the terminal `done` frame, exactly like production.
-      kwargs[:on_reply_complete]&.call(turn)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
       turn
     end
@@ -130,7 +131,7 @@ describe "Agent tab", type: :system, js: true do
     it "proposes a discount and applies it on confirmation (write round-trip)" do
       # The proposed action is the real catalog api_write the executor will replay against the API.
       stub_agent_turn(
-        reply: "I've prepared that discount for your confirmation.",
+        reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
         proposed_action: {
           type: "api_write",
           params: {
@@ -195,7 +196,7 @@ describe "Agent tab", type: :system, js: true do
 
     it "lets the seller dismiss a proposed change without applying it" do
       stub_agent_turn(
-        reply: "I've prepared the price change for your confirmation.",
+        reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
         proposed_action: {
           type: "api_write",
           params: {
@@ -219,7 +220,7 @@ describe "Agent tab", type: :system, js: true do
 
     it "proposes refunding a sale (sensitive write gated by confirmation)" do
       stub_agent_turn(
-        reply: "I found that order and prepared the refund for your confirmation.",
+        reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
         proposed_action: {
           type: "api_write",
           params: {
@@ -241,7 +242,7 @@ describe "Agent tab", type: :system, js: true do
 
     it "proposes an email campaign to customers" do
       stub_agent_turn(
-        reply: "I've drafted an announcement to your customers. Review it before it sends.",
+        reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
         proposed_action: {
           type: "api_write",
           params: {
@@ -264,7 +265,7 @@ describe "Agent tab", type: :system, js: true do
   it "surfaces a friendly error if a change can't be applied" do
     open_agent
     stub_agent_turn(
-      reply: "I've prepared that for your confirmation.",
+      reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
       proposed_action: {
         type: "api_write",
         # A blank required path param makes the executor fail cleanly (no mutation, friendly message).

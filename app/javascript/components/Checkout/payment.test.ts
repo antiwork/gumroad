@@ -38,6 +38,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
     buyer_currency_presentment: false,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
+    stripe_link_enabled: false,
   },
 };
 
@@ -159,10 +160,12 @@ const state = (overrides: Partial<State> = {}): State => ({
   paymentMethod: "card",
   paymentElementType: "card",
   willSaveCard: false,
+  usingSavedCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
+  recaptchaScoreBased: false,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,
@@ -458,6 +461,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: stripePaymentElementMinimumCharge - 1,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -559,6 +563,7 @@ describe("getStripePaymentElementAmount", () => {
               tax_cents: 100,
               tax_included_cents: 0,
               subtotal: 1_000,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -1061,7 +1066,7 @@ describe("reduceCheckoutState", () => {
       for (const action of [
         { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
         { type: "set-value", gift: { type: "normal", email: "friend@example.com", note: "" } } as const,
-        { type: "update-products", products: [product({ price: 2_000 })] } as const,
+        { type: "update-products" as const, products: [product({ price: 2_000 })] },
       ]) {
         const next = reduceCheckoutState(state({ status: finished }), action);
         expect(next.surcharges).toEqual({ type: "pending" });

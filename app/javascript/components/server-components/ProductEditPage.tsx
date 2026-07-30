@@ -12,6 +12,7 @@ import {
   richContentMoveSourceIds,
   SaveProductResponse,
   StaleContentConflictError,
+  StaleDeletionConflictError,
   saveProduct,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
@@ -347,6 +348,14 @@ const ProductEditPage = (props: Props) => {
   const [staleContentConflict, setStaleContentConflict] = React.useState<
     { type: "page" | "variant"; id: string; name: string | null }[] | null
   >(null);
+  // The save contract refused this session's deletions because its snapshot
+  // token is stale. Distinct from staleContentConflict above: that one is "your
+  // write would clobber newer content", this one is "your deletion was not
+  // applied". Nothing was written either way, so the recovery is the same
+  // reload — the seller has to re-confirm the deletion against current content,
+  // because this session cannot tell which of its own field values are also
+  // stale.
+  const [staleDeletionConflict, setStaleDeletionConflict] = React.useState<string | null>(null);
   // Client-generated id → canonical server id, accumulated separately because
   // variant and page external ids are not distinct namespaces.
   const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
@@ -475,6 +484,14 @@ const ProductEditPage = (props: Props) => {
         setHiddenContentConflict(e.hiddenPages);
       } else if (e instanceof StaleContentConflictError) {
         setStaleContentConflict(e.staleRecords);
+      } else if (e instanceof StaleDeletionConflictError) {
+        // Nothing was written, so this is not a partially-applied save. But the
+        // session cannot recover on its own: resending this snapshot with a
+        // fresh token would delete what the seller asked for AND revert every
+        // field a co-editor changed in between, because the payload is the
+        // whole product and the write path is not gated on the token. So say
+        // plainly that the deletion did not happen and send them to a reload.
+        setStaleDeletionConflict(e.message);
       } else {
         assertResponseError(e);
         showAlert(e.message, "error");
@@ -712,6 +729,32 @@ const ProductEditPage = (props: Props) => {
               <p>
                 Nothing was saved. Reload the page to get the latest content — your unsaved edits in this session will
                 be lost, so copy anything you need first.
+              </p>
+            </div>
+          </Modal>
+        ) : null}
+        {staleDeletionConflict ? (
+          <Modal
+            open
+            onClose={() => setStaleDeletionConflict(null)}
+            title="Your deletion was not applied"
+            footer={
+              <>
+                <Button onClick={() => setStaleDeletionConflict(null)}>Keep editing</Button>
+                <Button color="accent" onClick={() => window.location.reload()}>
+                  Reload page
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <p>
+                This product changed after you opened it, so nothing was saved — including the items you asked to
+                delete. Deleting from an outdated view could remove the wrong thing.
+              </p>
+              <p>
+                Reload the page to get the latest content, then delete again. Your unsaved edits in this session will be
+                lost, so copy anything you need first.
               </p>
             </div>
           </Modal>

@@ -3,6 +3,66 @@
 require "spec_helper"
 
 describe ProductFile do
+  describe "parent presence" do
+    # A file's parent is what gives it a delivery path and an owner: a product
+    # file is downloaded from the product, an installment file is delivered with
+    # the post. With no parent it can be reached from neither, and with both it
+    # is ambiguous which surface governs access. The check used to be declared
+    # with `on: :save`, which is not a Rails context, so it never ran.
+    it "rejects a file that belongs to neither a product nor an installment" do
+      file = build(:product_file, link: nil, installment: nil)
+
+      expect(file).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    it "rejects a file that belongs to both a product and an installment" do
+      file = build(:product_file, link: create(:product), installment: create(:installment))
+
+      expect(file).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    it "accepts a file that belongs to a product" do
+      expect(build(:product_file, link: create(:product))).to be_valid
+    end
+
+    it "accepts a file that belongs to an installment" do
+      expect(build(:product_file, link: nil, installment: create(:installment))).to be_valid
+    end
+
+    it "keeps rejecting a parentless file on update, not just on create" do
+      file = create(:product_file, link: create(:product))
+
+      expect(file.update(link: nil)).to be(false)
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+      expect(file.reload.link).to be_present
+    end
+
+    it "rejects a saved file that a direct column write left without a parent" do
+      file = create(:product_file, link: create(:product))
+      file.update_columns(link_id: nil, installment_id: nil)
+
+      expect(file.reload).to be_invalid
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+    end
+
+    it "keeps rejecting a file left with no parent when its installment is stripped" do
+      file = create(:product_file, link: nil, installment: create(:installment))
+
+      expect(file.update(installment: nil)).to be(false)
+      expect(file.errors.full_messages).to include("A file needs to either belong to a product or an installment")
+      expect(file.reload.installment).to be_present
+    end
+
+    it "accepts a write that gives a parentless file a single parent" do
+      file = create(:product_file, link: create(:product))
+      file.update_columns(link_id: nil, installment_id: nil)
+
+      expect(file.reload.update(link: create(:product))).to eq(true)
+    end
+  end
+
   describe ".archivable" do
     it "only includes archivable files" do
       create(:streamable_video)
@@ -1086,7 +1146,7 @@ describe ProductFile do
 
     it "returns nil if product file belongs to an installment" do
       installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: create(:user))
-      installment_product_file = create(:product_file, installment:, link: installment.link)
+      installment_product_file = create(:product_file, installment:, link: nil)
       installment_purchase = create(:purchase, link: installment.link)
       installment_url_redirect = installment.generate_url_redirect_for_purchase(installment_purchase)
       create(:media_location, url_redirect_id: installment_url_redirect.id, purchase_id: installment_purchase.id, platform: Platform::WEB,

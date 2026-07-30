@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RateLimitError } from "$app/utils/request";
+import { RateLimitError, ResponseError } from "$app/utils/request";
 
 vi.mock("$app/data/agent", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$app/data/agent")>();
@@ -11,6 +11,7 @@ vi.mock("$app/data/agent", async (importOriginal) => {
     ...actual,
     streamAgentMessage: vi.fn(),
     fetchLatestAgentConversation: vi.fn(),
+    fetchAgentActionStatus: vi.fn(),
     fetchAgentTurnStatus: vi.fn(),
     fetchCustomHtmlProposalPreview: vi.fn(),
     executeAgentAction: vi.fn(),
@@ -20,8 +21,10 @@ vi.mock("$app/data/agent", async (importOriginal) => {
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
 const {
+  AgentActionError,
   AgentStreamInterruptedError,
   executeAgentAction,
+  fetchAgentActionStatus,
   fetchAgentTurnStatus,
   fetchCustomHtmlProposalPreview,
   fetchLatestAgentConversation,
@@ -31,6 +34,10 @@ const { showAlert } = vi.mocked(await import("$app/components/server-components/
 const { AgentChat } = await import("$app/components/Agent/AgentChat");
 
 const PERSISTED_REPLY = "Your bio currently has three lines. Want me to pull up what you have there now?";
+const ACTION_STATUS_RECONCILIATION_INTERVAL_MS = 500;
+const ACTION_STATUS_RACK_HORIZON_MS = 120_000;
+const ACTION_STATUS_FINAL_POLL_DELAY_MS = 7500;
+const ACTION_STATUS_RECONCILIATION_DEADLINE_MS = 130_000;
 
 const sendMessage = async (text: string) => {
   fireEvent.change(screen.getByLabelText("Message"), { target: { value: text } });
@@ -104,6 +111,7 @@ describe("AgentChat streamed reply reconciliation", () => {
     streamAgentMessage.mockResolvedValue({
       reply: "ok",
       proposedAction: null,
+      proposalMessageId: null,
       objects: [],
       suggestions: [],
       conversationId: "conv1",
@@ -134,6 +142,7 @@ describe("AgentChat streamed reply reconciliation", () => {
         role: "assistant",
         content: "I've prepared the bio edit for you to confirm.",
         proposed_action: { type: "api_write", params: {}, summary: "Update the bio." },
+        proposal_message_id: "message1",
       },
     });
 
@@ -307,6 +316,7 @@ describe("AgentChat streamed reply reconciliation", () => {
       return {
         reply: "That change wasn't prepared.",
         proposedAction: null,
+        proposalMessageId: null,
         objects: [],
         suggestions: [],
         conversationId: "conv1",
@@ -381,6 +391,7 @@ describe("AgentChat streamed reply reconciliation", () => {
     streamAgentMessage.mockResolvedValue({
       reply: "ok",
       proposedAction: null,
+      proposalMessageId: null,
       objects: [],
       suggestions: [],
       conversationId: "conv1",
@@ -415,10 +426,14 @@ describe("AgentChat custom-html proposal cards", () => {
     ],
   };
 
-  const streamTurnWithAction = (proposedAction: typeof customHtmlAction) => {
+  const streamTurnWithAction = (
+    proposedAction: import("$app/data/agent").ProposedAction,
+    proposalMessageId: string | null = "message1",
+  ) => {
     streamAgentMessage.mockResolvedValue({
       reply: "I've prepared the page edit.",
       proposedAction,
+      proposalMessageId,
       objects: [],
       suggestions: [],
       conversationId: "conv1",
@@ -510,6 +525,7 @@ describe("AgentChat custom-html proposal cards", () => {
 
     // The full card (Confirm/Dismiss) collapses to a one-line applied record.
     await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(executeAgentAction).toHaveBeenCalledWith(customHtmlAction, "message1", "conv1");
     expect(screen.getByText("Edit your page")).toBeTruthy();
     expect(screen.queryByTitle("Preview of your page after this change")).toBeNull();
     expect(screen.queryByText("Confirm")).toBeNull();
@@ -569,6 +585,236 @@ describe("AgentChat custom-html proposal cards", () => {
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith("That change couldn't be applied.", "error"));
   });
 
+  it("keeps a server-acknowledged retry-safe rejection confirmable", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new AgentActionError("You don't have permission to do that.", null, true));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith("You don't have permission to do that.", "error"));
+    expect(screen.getByText("Confirm")).toBeTruthy();
+    expect(screen.getByText("Dismiss")).toBeTruthy();
+    expect(screen.queryByText("Applying…")).toBeNull();
+    expect(screen.queryByText("Applied")).toBeNull();
+    expect(screen.queryByText("Outcome unknown")).toBeNull();
+    expect(screen.queryByText("You don't have permission to do that.")).toBeNull();
+    expect(fetchAgentActionStatus).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Confirm"));
+    await waitFor(() => expect(executeAgentAction).toHaveBeenCalledTimes(2));
+  });
+
+  it("keeps a binding mismatch non-confirmable", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(
+      new AgentActionError(
+        "That confirmation doesn't match a pending proposal. Ask the agent to prepare it again.",
+        null,
+      ),
+    );
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Not applied")).toBeTruthy());
+    expect(showAlert).toHaveBeenCalledWith(
+      "That confirmation doesn't match a pending proposal. Ask the agent to prepare it again.",
+      "error",
+    );
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(screen.queryByText("Dismiss")).toBeNull();
+    expect(fetchAgentActionStatus).not.toHaveBeenCalled();
+  });
+
+  it("makes an unknown confirmation outcome non-confirmable without waiting for reload", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new AgentActionError("The refund result could not be confirmed.", "unknown"));
+    fetchAgentActionStatus.mockResolvedValue({ actionStatus: "unknown", objects: [] });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Outcome unknown")).toBeTruthy());
+    expect(showAlert).toHaveBeenCalledWith("The refund result could not be confirmed.", "error");
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(screen.queryByText("Dismiss")).toBeNull();
+  });
+
+  it("reconciles an executing confirmation another tab applies", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(
+      new AgentActionError("That proposal has already been confirmed.", "executing"),
+    );
+    fetchAgentActionStatus.mockResolvedValue({
+      actionStatus: "applied",
+      objects: [{ type: "product", title: "Updated product", fields: [] }],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(screen.getByText("Updated product")).toBeTruthy();
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
+    expect(showAlert).toHaveBeenCalledWith("That proposal has already been confirmed.", "error");
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(screen.queryByText("Dismiss")).toBeNull();
+  });
+
+  it("reconciles the exact proposal when the execute response is lost", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new ResponseError());
+    fetchAgentActionStatus.mockResolvedValue({
+      actionStatus: "applied",
+      objects: [{ type: "product", title: "Updated after lost response", fields: [] }],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(screen.getByText("Updated after lost response")).toBeTruthy();
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
+    expect(screen.queryByText("Confirm")).toBeNull();
+  });
+
+  it("reconciles the exact proposal when the execute response is unparseable", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new SyntaxError("Unexpected end of JSON input"));
+    fetchAgentActionStatus.mockResolvedValue({
+      actionStatus: "applied",
+      objects: [{ type: "product", title: "Updated after malformed response", fields: [] }],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(screen.getByText("Updated after malformed response")).toBeTruthy();
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
+    expect(showAlert).toHaveBeenCalledWith("Unexpected end of JSON input", "error");
+    expect(screen.queryByText("Confirm")).toBeNull();
+  });
+
+  it("keeps an id-less ambiguous confirmation non-confirmable", async () => {
+    streamTurnWithAction(customHtmlAction, null);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new SyntaxError("Unexpected end of JSON input"));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Outcome unknown")).toBeTruthy());
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(screen.queryByText("Dismiss")).toBeNull();
+    expect(fetchAgentActionStatus).not.toHaveBeenCalled();
+  });
+
+  it("refreshes result objects when the server reports an already-applied proposal", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new AgentActionError("That proposal was already applied.", "applied"));
+    fetchAgentActionStatus.mockResolvedValue({
+      actionStatus: "applied",
+      objects: [{ type: "product", title: "Persisted result object", fields: [] }],
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+
+    await screen.findByTitle("Preview of your page after this change");
+    fireEvent.click(screen.getByText("Confirm"));
+
+    await waitFor(() => expect(screen.getByText("Persisted result object")).toBeTruthy());
+    expect(screen.getByText("Applied")).toBeTruthy();
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
+  });
+
+  it("does not downgrade an applied response when its result-object refresh never settles", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new AgentActionError("That proposal was already applied.", "applied"));
+    fetchAgentActionStatus.mockReturnValue(new Promise(() => {}));
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+    await screen.findByTitle("Preview of your page after this change");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText("Confirm"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(screen.getByText("Applied")).toBeTruthy();
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RECONCILIATION_DEADLINE_MS);
+      });
+
+      expect(screen.getByText("Applied")).toBeTruthy();
+      expect(screen.queryByText("Outcome unknown")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not downgrade an applied response when its result-object refresh reports a non-applied state", async () => {
+    streamTurnWithAction(customHtmlAction);
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+    executeAgentAction.mockRejectedValue(new AgentActionError("That proposal was already applied.", "applied"));
+    fetchAgentActionStatus.mockResolvedValue({ actionStatus: "unknown", objects: [] });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("change my headline");
+    await screen.findByTitle("Preview of your page after this change");
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByText("Confirm"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RECONCILIATION_DEADLINE_MS);
+      });
+
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(20);
+      expect(screen.getByText("Applied")).toBeTruthy();
+      expect(screen.queryByText("Outcome unknown")).toBeNull();
+      expect(screen.queryByText("Confirm")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("refetches a dismissed page proposal's preview on Review when no snapshot is loaded", async () => {
     // Hydrate a conversation whose custom-HTML proposal was already dismissed in a previous
     // session — the card mounts compact, so no preview was ever fetched in this session.
@@ -596,6 +842,271 @@ describe("AgentChat custom-html proposal cards", () => {
     fireEvent.click(screen.getByText("Review"));
     await screen.findByTitle("Preview of your page after this change");
     expect(fetchCustomHtmlProposalPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconciles a hydrated executing proposal to its stable unknown outcome", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Applying your page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus.mockResolvedValue({ actionStatus: "unknown", objects: [] });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+
+    await waitFor(() => expect(screen.getByText("Outcome unknown")).toBeTruthy());
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(screen.queryByText("Dismiss")).toBeNull();
+  });
+
+  it("retries a transient action-status read before using the persisted state", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus
+      .mockRejectedValueOnce(new ResponseError())
+      .mockResolvedValue({ actionStatus: "pending", objects: [] });
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+
+    vi.useFakeTimers();
+    try {
+      render(<AgentChat greeting="Hi" suggestions={[]} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RECONCILIATION_INTERVAL_MS);
+      });
+
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Confirm")).toBeTruthy();
+      expect(screen.queryByText("Outcome unknown")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconciles an executing proposal through React StrictMode's setup cycle", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus.mockResolvedValue({ actionStatus: "applied", objects: [] });
+
+    render(
+      <React.StrictMode>
+        <AgentChat greeting="Hi" suggestions={[]} />
+      </React.StrictMode>,
+    );
+
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
+  });
+
+  it("settles locally when an action-status request never resolves", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus.mockReturnValue(new Promise(() => {}));
+
+    vi.useFakeTimers();
+    try {
+      render(<AgentChat greeting="Hi" suggestions={[]} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(1);
+      const abortSignal = fetchAgentActionStatus.mock.calls[0]?.[1];
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RECONCILIATION_DEADLINE_MS);
+      });
+
+      expect(abortSignal?.aborted).toBe(true);
+      expect(screen.getByText("Outcome unknown")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts an in-flight action-status request when unmounted", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus.mockReturnValue(new Promise(() => {}));
+
+    vi.useFakeTimers();
+    try {
+      const view = render(<AgentChat greeting="Hi" suggestions={[]} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(1);
+      const abortSignal = fetchAgentActionStatus.mock.calls[0]?.[1];
+
+      view.unmount();
+
+      expect(abortSignal?.aborted).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RECONCILIATION_DEADLINE_MS);
+      });
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles after twenty executing responses", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus.mockResolvedValue({ actionStatus: "executing", objects: [] });
+
+    vi.useFakeTimers();
+    try {
+      render(<AgentChat greeting="Hi" suggestions={[]} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RECONCILIATION_DEADLINE_MS);
+      });
+
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(20);
+      expect(screen.getByText("Outcome unknown")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps polling through the Rack horizon when the twentieth response is applied", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    for (let attempt = 0; attempt < 19; attempt++) {
+      fetchAgentActionStatus.mockResolvedValueOnce({ actionStatus: "executing", objects: [] });
+    }
+    fetchAgentActionStatus.mockResolvedValue({
+      actionStatus: "applied",
+      objects: [{ type: "product", title: "Applied at the request horizon", fields: [] }],
+    });
+
+    vi.useFakeTimers();
+    try {
+      render(<AgentChat greeting="Hi" suggestions={[]} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_RACK_HORIZON_MS);
+      });
+
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(19);
+      expect(screen.getByText("Applying…")).toBeTruthy();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ACTION_STATUS_FINAL_POLL_DELAY_MS);
+      });
+
+      expect(fetchAgentActionStatus).toHaveBeenCalledTimes(20);
+      expect(screen.getByText("Applied")).toBeTruthy();
+      expect(screen.getByText("Applied at the request horizon")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("makes a proposal confirmable again when the winning request releases its claim", async () => {
+    fetchLatestAgentConversation.mockReset().mockResolvedValue({
+      id: "conv1",
+      title: null,
+      messages: [
+        {
+          role: "assistant",
+          content: "Confirm this page edit.",
+          proposed_action: customHtmlAction,
+          proposal_message_id: "message1",
+          action_status: "executing",
+        },
+      ],
+    });
+    fetchAgentActionStatus.mockResolvedValue({ actionStatus: "pending", objects: [] });
+    fetchCustomHtmlProposalPreview.mockResolvedValue("/internal/agent/custom_html_previews/token123");
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+
+    await waitFor(() => expect(screen.getByText("Confirm")).toBeTruthy());
+    expect(fetchAgentActionStatus).toHaveBeenCalledWith("message1", expect.any(AbortSignal));
   });
 
   it("collapses a dismissed non-page proposal and reviews its field rows", async () => {

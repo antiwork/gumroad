@@ -144,7 +144,7 @@ export const formatBuyerLocalOrSetPrice = (
   {
     symbolFormat = "long",
     fallbackLocalCents,
-  }: { symbolFormat?: "long" | "short"; fallbackLocalCents?: number | null } = {},
+  }: { symbolFormat?: "long" | "short"; fallbackLocalCents?: number | null | undefined } = {},
 ): string => {
   const localCents =
     buyerLocalCurrencyRate != null ? Math.round(amountCents * buyerLocalCurrencyRate) : fallbackLocalCents;

@@ -3241,6 +3241,11 @@ class Purchase < ApplicationRecord
     all_workflows.each do |workflow|
       next unless workflow.applies_to_purchase?(self)
 
+      # Cancellation posts belong to the subscription — Subscription#schedule_member_cancellation_workflow_jobs
+      # schedules them on the next cancellation. Enqueueing them here sends them down the
+      # purchase path, which never rechecks whether the membership is still cancelled.
+      next if workflow.member_cancellation_trigger?
+
       active_workflow_installments = workflow.installments.includes(:installment_rule).alive.published
       has_any_past_workflow_installments = active_workflow_installments.any? do |installment|
         installment.installment_rule.present? && (original_purchase.created_at + installment.installment_rule.delayed_delivery_time < Time.current)

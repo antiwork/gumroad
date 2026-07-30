@@ -83,6 +83,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     streamable: product.files.some((file) => file.is_streamable),
     is_quantity_enabled: product.quantity_enabled,
     is_multiseat_license: false,
+    is_licensed: false,
     hide_sold_out_variants: product.hide_sold_out_variants,
     sales_count: product.should_show_sales_count ? successfulSalesCount : null,
     custom_button_text_option: product.custom_button_text_option,
@@ -168,6 +169,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
           subdomain: currentSeller.subdomain,
           twitter_handle: "",
           is_verified: seller.is_verified,
+          can_edit: false,
         }}
         hideFollowForm
       >
