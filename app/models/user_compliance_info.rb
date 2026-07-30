@@ -120,6 +120,11 @@ class UserComplianceInfo < ApplicationRecord
   # Whether we hold everything our payment partner needs before it will verify the account. Adds
   # the legal guardian to the checks above, because a seller under 18 cannot be verified on their
   # own.
+  #
+  # Deliberately has no payout-eligibility caller yet, and must not gain one before the guardian
+  # form ships: 187 US under-18 sellers hold a balance today and 65 have already been paid, so
+  # wiring this into Payouts.is_user_payable now would strand them with no surface on which to
+  # supply the guardian it demands. Wire it in the same change that gives them one.
   def has_completed_payout_compliance_info?
     has_completed_compliance_info? &&
       (!requires_legal_guardian? || guardian&.has_completed_info?.present?)
