@@ -113,6 +113,27 @@ describe Users::ReviewRemindersController, type: :controller, inertia: true do
       expect(user.reload.opted_out_of_review_reminders?).to be(true)
       expect(signed_in_user.reload.opted_out_of_review_reminders?).to be(false)
     end
+
+    # Deliberately hardcoded, not read from TOKEN_SCOPE: tokens minted under this exact
+    # string are already sitting in inboxes with no expiry, so renaming the constant has to
+    # fail here rather than silently dead-link every one of them.
+    it "honors a token minted under the literal published scope string" do
+      delivered_token = user.secure_external_id(scope: "unsubscribe_review_reminders")
+
+      expect do
+        get :unsubscribe_by_token, params: { id: delivered_token }
+      end.to change { user.reload.opted_out_of_review_reminders? }.from(false).to(true)
+      expect(response).to be_successful
+    end
+
+    it "still opts out a user whose row no longer passes validation" do
+      user.update_columns(name: "x" * 200)
+
+      expect do
+        get :unsubscribe_by_token, params: { id: token }
+      end.to change { user.reload.opted_out_of_review_reminders? }.from(false).to(true)
+      expect(response).to be_successful
+    end
   end
 
   describe "GET subscribe_by_token" do

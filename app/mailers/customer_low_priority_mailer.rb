@@ -421,9 +421,6 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
-    # The unsubscribe link must work from an email client with no session. Recipients of a
-    # review reminder are often free-download buyers who cannot sign in, so a login-gated
-    # link is a dead end for exactly the people most likely to click it.
     def review_reminder_unsubscribe_url(purchaser)
       return if purchaser.nil?
 

@@ -3,9 +3,10 @@
 class Users::ReviewRemindersController < ApplicationController
   layout "inertia"
 
-  # The token-carrying actions are the ones linked from review reminder emails, so they
-  # cannot require a session. Recipients of a review reminder are frequently free-download
-  # buyers with no usable login, which is what made the login-gated link a dead end.
+  # Recipients of a review reminder are frequently free-download buyers with no usable
+  # login, so the emailed links resolve the user from a token instead of a session.
+  # ⚠️ This value is baked into every token already sitting in an inbox — renaming it
+  # silently kills those links. spec pins the literal.
   TOKEN_SCOPE = "unsubscribe_review_reminders"
   PUBLIC_ACTIONS = %i[subscribe_by_token unsubscribe_by_token].freeze
 
@@ -23,17 +24,17 @@ class Users::ReviewRemindersController < ApplicationController
   end
 
   def subscribe_by_token
-    @user.update!(opted_out_of_review_reminders: false)
+    set_review_reminder_opt_out(false)
     render inertia: "Users/ReviewReminders/Subscribe"
   end
 
   def unsubscribe_by_token
-    @user.update!(opted_out_of_review_reminders: true)
+    set_review_reminder_opt_out(true)
 
-    # Hand the page a tokenized resubscribe URL: someone who got here from an email has no
-    # session, so the logged-in resubscribe path would send them to a login wall.
+    # The visitor has no session, so the resubscribe link has to carry a token too. Reuse
+    # the one from the URL rather than minting a second: same scope, same capability.
     render inertia: "Users/ReviewReminders/Unsubscribe", props: {
-      subscribe_url: user_subscribe_review_reminders_by_token_path(@user.secure_external_id(scope: TOKEN_SCOPE))
+      subscribe_url: user_subscribe_review_reminders_by_token_path(params[:id])
     }
   end
 
@@ -41,5 +42,16 @@ class Users::ReviewRemindersController < ApplicationController
     def set_user_from_token
       @user = User.find_by_secure_external_id(params[:id], scope: TOKEN_SCOPE)
       redirect_to root_path if @user.nil?
+    end
+
+    # These links land on exactly the dormant accounts least likely to satisfy current
+    # User validations, and failing to honour an unsubscribe is worse than saving a row
+    # that was already invalid. Mirrors Purchase#unsubscribe_buyer.
+    def set_review_reminder_opt_out(opted_out)
+      @user.update!(opted_out_of_review_reminders: opted_out)
+    rescue ActiveRecord::RecordInvalid
+      Rails.logger.info("[ReviewReminders] User #{@user.id} failed validation; opting out without validations.")
+      @user.opted_out_of_review_reminders = opted_out
+      @user.save(validate: false)
     end
 end

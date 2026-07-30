@@ -3,8 +3,7 @@ import * as React from "react";
 
 import { Layout } from "$app/components/EmailAction/Layout";
 
-// subscribe_url is the tokenized resubscribe path, present when the visitor arrived from an
-// email link rather than from a logged-in session.
+// Absent when the visitor arrived with a session rather than from an email link.
 function UnsubscribeReviewRemindersPage({ subscribe_url }: { subscribe_url?: string }) {
   return (
     <Layout heading="You will no longer receive review reminder emails.">
