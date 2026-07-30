@@ -417,7 +417,7 @@ describe UrlRedirectPresenter do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
         gifter = create(:membership_purchase, link: product, subscription:,
-                                              is_original_subscription_purchase: true,
+                                              is_original_subscription_purchase: true, is_gift_sender_purchase: true,
                                               email: "gifter@example.com", succeeded_at: 1.month.ago)
         giftee = create(:purchase, :gift_receiver, link: product, subscription:, email: "giftee@example.com", price_cents: 0)
         url_redirect = create(:url_redirect, purchase: giftee, link: product)
@@ -426,6 +426,39 @@ describe UrlRedirectPresenter do
 
         expect(gifter.purchase_state).to eq("successful")
         expect(props[:receipt_purchase_id]).to eq(giftee.external_id)
+        expect(props[:email]).to eq("giftee@example.com")
+      end
+
+      it "never resolves to the gifter's purchase, even when it carries the giftee's email" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        gifter = create(:membership_purchase, link: product, subscription:,
+                                              is_original_subscription_purchase: true, is_gift_sender_purchase: true,
+                                              email: "giftee@example.com", succeeded_at: 1.month.ago)
+        giftee = create(:purchase, :gift_receiver, link: product, subscription:, email: "giftee@example.com", price_cents: 0)
+        url_redirect = create(:url_redirect, purchase: giftee, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(giftee.external_id)
+        expect(props[:receipt_purchase_id]).not_to eq(gifter.external_id)
+      end
+
+      it "points a renewed gifted membership at the giftee's own renewal charge" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        create(:membership_purchase, link: product, subscription:,
+                                     is_original_subscription_purchase: true, is_gift_sender_purchase: true,
+                                     email: "gifter@example.com", succeeded_at: 2.months.ago)
+        giftee = create(:purchase, :gift_receiver, link: product, subscription:, email: "giftee@example.com", price_cents: 0)
+        renewal = create(:membership_purchase, link: product, subscription:,
+                                               is_original_subscription_purchase: false,
+                                               email: "giftee@example.com", succeeded_at: 1.day.ago)
+        url_redirect = create(:url_redirect, purchase: giftee, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(renewal.external_id)
         expect(props[:email]).to eq("giftee@example.com")
       end
     end

@@ -52,9 +52,12 @@ module Purchase::Receipt
   # - membership: `Purchase.for_library` excludes recurring charges, so this is the sign-up —
   #   potentially years and several cards before the period the buyer wants invoiced.
   #
-  # A gift receiver purchase is deliberately excluded: it shares a subscription with the GIFTER's
-  # paid purchase, which is the only `successful` row on that subscription, so resolving through
-  # the subscription would serve the giftee the gifter's email, amount, and card.
+  # The GIFTER's purchase is rejected as a candidate rather than the giftee's row being excluded
+  # from the subscription branch: it shares a subscription with the giftee's row, so resolving to
+  # it would serve the giftee the gifter's email, amount, and card. Once the giftee adds a card
+  # and the membership renews, those renewals carry the giftee's own email (`Subscription#email`
+  # via `#build_purchase`), and excluding the giftee's row wholesale would have pinned them to the
+  # original $0 gift forever.
   #
   # Resolving away from `self` requires the two rows to agree on the email exactly, because the
   # email is the only thing the receipt and invoice endpoints check. A membership reassigned by
@@ -65,10 +68,11 @@ module Purchase::Receipt
     candidate =
       if is_bundle_product_purchase?
         bundle_purchase
-      elsif subscription.present? && !is_gift_receiver_purchase?
+      elsif subscription.present?
         subscription.last_successful_not_reversed_or_refunded_charge
       end
     return self if candidate.nil? || candidate.id == id
+    return self if candidate.is_gift_sender_purchase?
     return self unless candidate.email == email
 
     candidate
