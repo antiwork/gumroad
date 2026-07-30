@@ -185,8 +185,9 @@ class Payment < ApplicationRecord
   end
 
   def send_payout_failure_email
-    # This would already be done from callback/ We dont't to clean that up rn
-    return if failure_reason === FailureReason::CANNOT_PAY
+    # Both of these are already mailed by the `processing => failed` transition callbacks, which now
+    # see the reason because it is written by the transition itself rather than a later save.
+    return if failure_reason.in?([FailureReason::CANNOT_PAY, FailureReason::DEBIT_CARD_LIMIT])
 
     ContactingCreatorMailer.cannot_pay(id).deliver_later(queue: "critical")
 
@@ -396,11 +397,12 @@ class Payment < ApplicationRecord
             mark_cancelled!
             needs_reverse_transfer = true
           when "failed"
-            mark_failed!
-            if stripe_payout["failure_code"].present?
-              self.failure_reason = stripe_payout["failure_code"]
-              save!
-            end
+            # The reason rides along with the transition's own write, same as the webhook path. A
+            # `save!` of its own ran after the balances were already back to `unpaid`, so a raise
+            # from it skipped the reversal below and left Gumroad's funds on the seller's connected
+            # account with the payment already terminal — and this caller swallows the exception into
+            # `errors`, which SyncStuckPayoutsJob discards, so it was silent.
+            mark_failed!(stripe_payout["failure_code"].presence)
             needs_reverse_transfer = true
             send_failure_email = true
           end

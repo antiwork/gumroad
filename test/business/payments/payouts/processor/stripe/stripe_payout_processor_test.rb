@@ -2959,6 +2959,49 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal "account_closed", payment.failure_reason
   end
 
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment the failure reason reaches the transition callbacks" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment(user:)
+    object = payout_event_object(payment_external_id: payment.external_id, failure_code: "account_closed")
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    # `add_payment_failure_reason_comment` runs inside the transition and returns early on a blank
+    # reason, so this note exists only when the reason is part of the transition's own write. With a
+    # separate save afterwards the seller got no explanation on their Payouts page at all.
+    assert_equal "account_closed", payment.reload.failure_reason
+    note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+    assert_not_nil note
+    assert_match(/the bank account has been closed/, note.content)
+  end
+
+  test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.failed payout does match a payment a transient failure does not count toward the payout pause" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    bank_account = create_ach_account(user:)
+    Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.pred.times do |index|
+      create_stripe_payout_payment(user:, bank_account:, state: "failed",
+                                   stripe_transfer_id: "po_earlier_#{index}",
+                                   failure_reason: "account_closed")
+    end
+    payment = create_stripe_payout_payment(user:, bank_account:)
+    object = payout_event_object(payment_external_id: payment.external_id,
+                                 failure_code: Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+    event = build_stripe_event(type: "payout.failed", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    # `pause_payouts_after_repeated_failures` also runs inside the transition and filters on
+    # `failure_reason`. With the reason saved afterwards it read NULL for this payout, so a rate limit
+    # of ours counted toward the seller's threshold — the two earlier failures here are genuine bank
+    # failures, and this transient third must not be the one that trips the pause.
+    assert_not user.reload.payouts_paused_internally?
+  end
+
   test "hold_payouts_for_unaccounted_money! writes one comment per payout no matter how many times a failure re-enters" do
     user = create_user
     payment = create_stripe_payout_payment(user:, stripe_internal_transfer_id: "tr_5678", state: "failed",
