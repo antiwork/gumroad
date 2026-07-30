@@ -2,7 +2,7 @@
   <%= header_section("Please add a different bank account for payouts.") %>
   <div>
     <p>Hi there. You recently added a bank account for Gumroad payouts, and our payment partner won't accept that particular account. There's nothing wrong with the details you entered — re-entering them won't help, and neither will waiting. We need you to add a <strong>different</strong> bank account.</p>
-    <p>Please add another account you hold in <%= link_to "your payout settings", settings_payments_url %> — a different account at the same bank is fine. Once it's added we'll verify it and your payouts will resume, including anything currently waiting.</p>
+    <p>Please add another account you hold in <%= link_to "your payout settings", settings_payments_url %> — a different account at the same bank is fine. Once it's added we'll verify it, which clears this particular hold. Your payout settings will tell you if anything else still needs sorting out before we can pay you.</p>
     <p>If the account you tried is the only one you have, reply to this email and we'll look into it with you.</p>
   </div>
 <% elsif @format_rejected %>

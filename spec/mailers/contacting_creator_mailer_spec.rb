@@ -2121,6 +2121,14 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include("re-entering them won't help")
       end
 
+      it "does not promise that payouts will resume, since other payout holds can outlive this one" do
+        # Adding a different account clears THIS destination only. A seller can still be held by
+        # compliance, a missing tax form, or the minimum balance, so promising resumption sets up
+        # a second round of "you said I'd get paid".
+        expect(mail.body.encoded).not_to include("payouts will resume")
+        expect(mail.body.encoded).to include("clears this particular hold")
+      end
+
       it "does not leak Stripe's own message, which tells the seller to contact Stripe" do
         # Stripe's text points the seller at support.stripe.com, which cannot help them: the
         # block is on OUR connected account, not theirs.
