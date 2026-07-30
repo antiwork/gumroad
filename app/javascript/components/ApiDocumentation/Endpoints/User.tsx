@@ -101,10 +101,11 @@ const ProfileCustomHtmlDocumentation = () => (
     <h5>Your catalogue as JSON</h5>
     <p>
       Your profile page is served with a <code>&lt;script type="application/json" id="gumroad-data"&gt;</code> blob
-      carrying your products, posts and profile section names, so the page can render its own cards instead of
-      hardcoding them. Read it with <code>JSON.parse(document.getElementById("gumroad-data").textContent)</code>. The
-      page's <code>connect-src 'none'</code> policy means this blob is the only catalogue source available to it — it
-      can't fetch one.
+      carrying your products, posts and the names of the pages on your profile, so the page can render its own cards
+      instead of hardcoding them. Read it with{" "}
+      <code>JSON.parse(document.getElementById("gumroad-data").textContent)</code>. The page's{" "}
+      <code>connect-src 'none'</code> policy means this blob is the only catalogue source available to it — it can't
+      fetch one.
     </p>
     <p>
       Only the profile page gets it. Product landing pages and your slug pages are served without the element, so guard
@@ -131,13 +132,15 @@ const ProfileCustomHtmlDocumentation = () => (
     </ul>
     <p>
       <code>posts</code> entries carry <code>name</code>, <code>url</code> and <code>published_at</code>, and{" "}
-      <code>pages</code> entries carry a <code>name</code> — your profile section names. At most 100 products and 100
-      posts are included; <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can
-      say "showing 100 of 114" rather than implying the catalogue is complete.
+      <code>pages</code> entries carry a <code>name</code> — the pages of your profile, the ones visitors switch
+      between, not the sections inside them. At most 100 products and 100 posts are included;{" "}
+      <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 100 of
+      114" rather than implying the catalogue is complete.
     </p>
     <p>
-      The blob is cached per seller and rebuilt when a product, post or profile section changes — including a price
-      edit, whether you change the base price or a version's.
+      The blob is cached per seller and rebuilt when a product, a post or your page layout changes — including a price
+      edit, whether you change the base price or a version's. Editing what's inside a section doesn't rebuild it, since
+      no section content is carried here.
     </p>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/user/custom_html \\
