@@ -2192,6 +2192,24 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include("automatically re-check")
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
       end
+
+      it "quotes back the values it sent and names the branch code as the half to check" do
+        create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id)
+
+        expect(mail.body.encoded).to include("bank code JSCLUZ22XXX and branch code 00401")
+        expect(mail.body.encoded).to include("branch code is the half")
+      end
+
+      it "omits the branch-code advice for a country that collects one routing value" do
+        create(:ach_account, user: seller, routing_number: "110000000")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id)
+
+        expect(mail.body.encoded).to include("routing number 110000000")
+        expect(mail.body.encoded).not_to include("branch code is the half")
+      end
     end
 
     context "when Stripe has block-listed the specific external account" do

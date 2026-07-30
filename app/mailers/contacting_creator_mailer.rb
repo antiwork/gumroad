@@ -162,6 +162,12 @@ class ContactingCreatorMailer < ApplicationMailer
     @account_blocked = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED
     @terminal_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL
     @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
+    # The default branch below is the directory-miss case, whose Stripe message names neither the
+    # value it refused nor which box it came from. Quote the values back so the seller can check
+    # the right one (gumroad-private#1550).
+    if !@account_blocked && !@format_rejected && !@terminal_rejected
+      @directory_miss_detail = StripeMerchantAccountManager.bank_directory_miss_detail(@seller.active_bank_account)
+    end
     @subject = if @account_blocked
       "Please add a different bank account for payouts."
     elsif @format_rejected

@@ -146,7 +146,9 @@ class UpdateUserComplianceInfo
         # code and param first so the next person looking at the account can see the actual
         # cause instead of reproducing the failure to find it.
         StripeMerchantAccountManager.record_account_rejection_note(new_compliance_info.user, e)
-        return { success: false, error_message: e.message.split("Please contact us").first.strip }
+        seller_message = StripeMerchantAccountManager.bank_directory_miss_seller_message(e, user.active_bank_account) ||
+                         e.message.split("Please contact us").first.strip
+        return { success: false, error_message: seller_message }
       end
     end
 

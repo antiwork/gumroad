@@ -86,6 +86,57 @@ class BankAccount < ApplicationRecord
     save!
   end
 
+  # The routing fields with the labels the payout form puts next to them, so a rejection can quote
+  # back the value that was refused instead of leaving the seller to guess which box was wrong.
+  #
+  # Ordered aliases before the raw columns they alias: a country that calls branch_code its
+  # "transit number" must be described that way once, not twice under both names.
+  ROUTING_FIELD_LABELS = {
+    transit_number: "transit number",
+    institution_number: "institution number",
+    bsb_number: "BSB",
+    sort_code: "sort code",
+    ifsc: "IFSC",
+    clearing_code: "clearing code",
+    bank_code: "bank code",
+    branch_code: "branch code",
+  }.freeze
+  private_constant :ROUTING_FIELD_LABELS
+
+  # ["bank code JSCLUZ22XXX", "branch code 00401"], or the bare routing number for the countries
+  # that collect a single unlabelled value. Empty when there is nothing to name.
+  def routing_field_descriptions
+    described_columns = []
+    descriptions = ROUTING_FIELD_LABELS.filter_map do |attribute, label|
+      next unless respond_to?(attribute)
+
+      value = public_send(attribute)
+      next if value.blank?
+
+      column = self.class.attribute_aliases[attribute.to_s] || attribute.to_s
+      next unless described_columns.exclude?(column)
+
+      described_columns << column
+      "#{label} #{value}"
+    end
+    return descriptions if descriptions.any?
+
+    routing_number.present? ? ["routing number #{routing_number}"] : []
+  end
+
+  # "bank code JSCLUZ22XXX and branch code 00401". Blank when nothing can be named, so callers can
+  # append it to a rejection message without checking first.
+  def routing_fields_sentence
+    routing_field_descriptions.to_sentence
+  end
+
+  # True when the seller filled in a bank code AND a separate branch code, which is the shape that
+  # makes "we couldn't find the bank" ambiguous: the bank code is usually right and the branch code
+  # is the half that is refused, but nothing in the rejection says so.
+  def has_separate_branch_code?
+    respond_to?(:bank_code) && bank_code.present? && branch_code.present?
+  end
+
   def supports_instant_payouts?
     return false unless stripe_connect_account_id.present? && stripe_external_account_id.present?
 

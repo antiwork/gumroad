@@ -87,4 +87,41 @@ describe BankAccount do
       end
     end
   end
+
+  describe "#routing_field_descriptions" do
+    it "names both halves for a country that collects a bank code and a branch code" do
+      bank_account = build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+      expect(bank_account.routing_field_descriptions).to eq(["bank code JSCLUZ22XXX", "branch code 00401"])
+    end
+
+    it "uses the label the form shows rather than the underlying column name" do
+      bank_account = build(:canadian_bank_account, institution_number: "003", transit_number: "12345")
+
+      expect(bank_account.routing_field_descriptions).to eq(["transit number 12345", "institution number 003"])
+    end
+
+    it "describes an aliased column once, not under both names" do
+      bank_account = build(:australian_bank_account, bsb_number: "062-111")
+
+      expect(bank_account.routing_field_descriptions).to eq(["BSB 062-111"])
+      expect(bank_account.routing_field_descriptions.count { |d| d.include?("062-111") }).to eq(1)
+    end
+
+    it "falls back to the routing number for a country that collects a single unlabelled value" do
+      bank_account = build(:ach_account, routing_number: "110000000")
+
+      expect(bank_account.routing_field_descriptions).to eq(["routing number 110000000"])
+    end
+  end
+
+  describe "#has_separate_branch_code?" do
+    it "is true when the seller filled in a bank code and a branch code" do
+      expect(build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401")).to have_separate_branch_code
+    end
+
+    it "is false when the country collects one value" do
+      expect(build(:ach_account)).not_to have_separate_branch_code
+    end
+  end
 end

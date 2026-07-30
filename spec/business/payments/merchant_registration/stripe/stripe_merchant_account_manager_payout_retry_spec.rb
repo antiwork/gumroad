@@ -664,6 +664,64 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "naming the value a directory miss refused" do
+    let(:zip_code) { "94107" }
+
+    def error_for(message, code: nil)
+      Stripe::InvalidRequestError.new(message, "bank_account[routing_number]", code:)
+    end
+
+    let(:uz_bank_account) { build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401") }
+
+    it "recognises a directory miss separately from format and terminal rejections" do
+      error = error_for("We couldn't find the bank for that bank/branch code")
+
+      expect(described_class.bank_details_directory_miss?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+    end
+
+    it "does not call a mistyped code a directory miss" do
+      expect(described_class.bank_details_directory_miss?(error_for("Invalid routing number for PK.", code: "routing_number_invalid"))).to be(false)
+    end
+
+    it "quotes back both halves and points at the branch code when the country collects two" do
+      detail = described_class.bank_directory_miss_detail(uz_bank_account)
+
+      expect(detail).to include("bank code JSCLUZ22XXX and branch code 00401")
+      expect(detail).to include("branch code is the half")
+      expect(detail).to include("head-office code")
+    end
+
+    it "quotes back the single value without the branch-code advice when there is only one" do
+      detail = described_class.bank_directory_miss_detail(build(:ach_account, routing_number: "110000000"))
+
+      expect(detail).to eq("The details we sent were routing number 110000000.")
+    end
+
+    it "returns nothing when there is no bank account to describe" do
+      expect(described_class.bank_directory_miss_detail(nil)).to be_nil
+    end
+
+    it "builds a seller message that names the value, the field and what to do" do
+      message = described_class.bank_directory_miss_seller_message(
+        error_for("We couldn't find the bank for that bank/branch code"), uz_bank_account
+      )
+
+      expect(message).to start_with("Our payment partner couldn't match your bank details against its records.")
+      expect(message).to include("bank code JSCLUZ22XXX and branch code 00401")
+      expect(message).to include("up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks")
+    end
+
+    it "declines to speak for a rejection that is not a directory miss, so Stripe's own message survives" do
+      expect(
+        described_class.bank_directory_miss_seller_message(
+          error_for("Invalid routing number for PK.", code: "routing_number_invalid"), uz_bank_account
+        )
+      ).to be_nil
+    end
+  end
+
   describe "bank code rejected on format during a bank account sync" do
     let(:zip_code) { "94107" }
     let(:error_message) do
