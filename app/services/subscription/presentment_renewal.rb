@@ -4,9 +4,12 @@
 #
 # Wired in at Purchase#create_charge_intent (purchase.rb), which is where renewals actually
 # charge: RecurringChargeWorker -> Subscription#charge! -> #process_purchase! -> Purchase#process!
-# -> #create_charge_intent -> ChargeProcessor. Renewals never pass through Charge::CreateService,
-# whose only caller is Order::ChargeService (checkout) — an earlier version of this service hooked
-# there and was unreachable dead code as a result.
+# -> #create_charge_intent -> ChargeProcessor.
+#
+# Charge::CreateService also carries a hook, and it runs: Order::ChargeService sets off_session for
+# any multi-seller cart. It can never produce a fixing though, because a checkout purchase is
+# always the original subscription purchase, which #stored_presentment refuses. Treat that hook as
+# defensive, and this one as the path that bills real renewals.
 #
 # The lane this fills. A card checkout presents in the buyer's currency by
 # verifying a signed quote the buyer confirmed in the browser
@@ -117,10 +120,17 @@ class Subscription::PresentmentRenewal
     # about — rather than on a tax figure that has to stay truthful.
     reconcile_price_component!(allocation)
 
-    # Snapshot rows hang off a Charge, which only exists for a checkout combined charge. A
-    # standalone renewal (RecurringChargeWorker -> Purchase#create_charge_intent) has no Charge:
-    # the amounts are returned to the caller and recorded on the purchase once the charge
-    # succeeds, so there is nothing to persist here and nothing to roll back if Stripe declines.
+    # Snapshot rows hang off a Charge, which a standalone renewal
+    # (RecurringChargeWorker -> Purchase#create_charge_intent) does not have, so this is skipped
+    # and NOTHING records the amounts afterwards: persist! is the only writer of
+    # PurchasePresentment, and #save_charge_data stores the fee and transaction id instead.
+    #
+    # So a renewal Stripe charges in the member's currency leaves #buyer_presentment? false, and
+    # its consumers then read it as canonical: the balance books from the processor's flow of funds
+    # rather than the canonical override, and a refund sends canonical cents against a
+    # foreign-currency charge. That is what keeps :buyer_currency_subscriptions unramped. Closing
+    # it needs a snapshot a renewal can own (PurchasePresentment validates charge_presentment
+    # presence) or this lane held in dollars until one exists.
     if charge.present?
       Charge::PresentmentOrchestrator.persist!(
         charge:,
