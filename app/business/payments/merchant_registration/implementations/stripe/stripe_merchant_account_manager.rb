@@ -414,8 +414,10 @@ module StripeMerchantAccountManager
   # so every retry re-sends it and fails identically, forever.
   #
   # Which agreement those sellers should sit under is a compliance decision, not something to
-  # settle here. This only stops one rejected field from blocking the rest: retry without
-  # `tos_acceptance` and leave a private breadcrumb naming the mismatch.
+  # settle here — dropping the whole hash rather than just `service_agreement` is deliberate,
+  # because stripping only the agreement would implicitly move them onto the full one. This only
+  # stops one rejected field from blocking the rest: retry without `tos_acceptance` and leave a
+  # private breadcrumb naming the mismatch.
   private_class_method
   def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true)
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(diff_attributes))
@@ -433,6 +435,9 @@ module StripeMerchantAccountManager
       )
     end
     record_service_agreement_failure_note(user, e) if notify
+    # The note is written once per account, and the weekly retry job passes notify: false, so this
+    # log line is the only per-occurrence signal that the affected cohort is growing.
+    Rails.logger.warn "Stripe rejected the derived service agreement for user #{user&.id}: #{e.message}"
     # Only the agreement was on the wire, so there is nothing left to push — but the rejection
     # is recorded now, which is the part that was missing.
     return if remaining_attributes.values.all?(&:blank?)
@@ -445,8 +450,10 @@ module StripeMerchantAccountManager
     return false unless error.is_a?(Stripe::InvalidRequestError)
 
     param = error.respond_to?(:param) ? error.param.to_s : ""
-    return true if param == SERVICE_AGREEMENT_REJECTION_PARAM
+    return param == SERVICE_AGREEMENT_REJECTION_PARAM if param.present?
 
+    # Only reachable on an error shape that names no field: other rejections mention the agreement
+    # in passing (capability interactions) and must keep raising.
     error.message.to_s.match?(SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE)
   end
 

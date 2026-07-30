@@ -9228,6 +9228,25 @@ describe StripeMerchantAccountManager, :vcr do
         expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
       end
 
+      # The guard is the whole safety argument: a rejection of some OTHER part of tos_acceptance
+      # must not make us drop the seller's acceptance and report success.
+      it "does not retry when a different tos_acceptance field is rejected" do
+        other = Stripe::InvalidRequestError.new("Invalid timestamp.", "tos_acceptance[date]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(other)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(other)
+        expect(Stripe::Account).not_to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
+      end
+
+      it "lets a rejection of the retry itself surface" do
+        postal = Stripe::InvalidRequestError.new("Invalid postal code.", "individual[address][postal_code]")
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance)).and_raise(postal)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(postal)
+      end
+
       # Stripe's live rejection carries no `code` and names the field in `param`, so the param is
       # what the predicate has to key off. Probed against the test API.
       it "recognises the rejection from the param alone" do
