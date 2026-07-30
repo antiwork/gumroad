@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 describe RequeueTransientlyFailedPayoutsJob do
-  let(:payout_period_end_date) { User::PayoutSchedule.next_scheduled_payout_end_date }
+  let(:payout_period_end_date) { User::PayoutSchedule.manual_payout_end_date }
 
   def create_transient_failure(user:, failure_reason: Payment::FailureReason::PROCESSOR_RATE_LIMITED, **attrs)
     create(
@@ -88,6 +88,83 @@ describe RequeueTransientlyFailedPayoutsJob do
     described_class.new.perform
   end
 
+  it "does nothing when the kill switch is on" do
+    create_transient_failure(user: create(:user))
+    Feature.activate(:disable_transient_payout_failure_requeue)
+
+    expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:disable_transient_payout_failure_requeue)
+  end
+
+  # The examples above stub the payout path to assert routing. These drive the real one, because
+  # what matters on a money path is what the requeue actually does to the seller's balance.
+  describe "end to end" do
+    let(:seller) do
+      seller = create(:user_with_compliance_info)
+      create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_requeuetest")
+      create(:ach_account, user: seller, stripe_bank_account_id: "ba_bankaccountid")
+      seller.update!(user_risk_state: "compliant")
+      seller
+    end
+
+    before do
+      create(:balance, user: seller, date: payout_period_end_date - 3, amount_cents: 500_00)
+    end
+
+    it "creates a new payout for the failed seller and moves their balance out of unpaid" do
+      create_transient_failure(user: seller, bank_account: seller.active_bank_account)
+
+      expect do
+        described_class.new.perform
+        PayoutUsersWorker.drain
+      end.to change { seller.payments.count }.by(1)
+
+      expect(seller.reload.unpaid_balance_cents).to eq(0)
+    end
+
+    it "creates a new payout for a monthly-cadence seller whose next cycle is weeks away" do
+      # The incident shape: a monthly seller's next cadence Friday is a month out, so the
+      # payout-cycle gate would reject them and their balance would sit unpaid until then.
+      travel_to Time.utc(2026, 8, 4, 14, 0, 0) do
+        period = User::PayoutSchedule.manual_payout_end_date
+        seller.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
+        create_transient_failure(user: seller, bank_account: seller.active_bank_account, payout_period_end_date: period)
+        expect(period + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
+
+        expect do
+          described_class.new.perform
+          PayoutUsersWorker.drain
+        end.to change { seller.payments.count }.by(1)
+
+        expect(seller.reload.unpaid_balance_cents).to eq(0)
+      end
+    end
+
+    it "does not create a second payout while one is still processing" do
+      create_transient_failure(user: seller, bank_account: seller.active_bank_account)
+      create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "processing",
+                       bank_account: seller.active_bank_account, payout_period_end_date:)
+
+      expect do
+        described_class.new.perform
+        PayoutUsersWorker.drain
+      end.to_not change { seller.payments.count }
+    end
+
+    it "does not pay a seller whose payouts have since been paused" do
+      create_transient_failure(user: seller, bank_account: seller.active_bank_account)
+      seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+      expect do
+        described_class.new.perform
+        PayoutUsersWorker.drain
+      end.to_not change { seller.payments.count }
+    end
+  end
+
   context "when a seller is past the requeue cap" do
     it "reports them instead of requeueing, and still requeues everyone else" do
       exhausted = create(:user)
@@ -111,6 +188,18 @@ describe RequeueTransientlyFailedPayoutsJob do
       (described_class::MAX_REQUEUE_ATTEMPTS + 1).times { create_transient_failure(user: exhausted) }
 
       expect(ErrorNotifier).to receive(:notify)
+      expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
+
+      described_class.new.perform
+    end
+
+    it "reports a seller only on the run they cross the cap, not on every later run" do
+      # The job runs daily against a week-long period, so re-reporting the same cohort would
+      # bury whoever newly needs attention.
+      exhausted = create(:user)
+      (described_class::MAX_REQUEUE_ATTEMPTS + 2).times { create_transient_failure(user: exhausted) }
+
+      expect(ErrorNotifier).to_not receive(:notify)
       expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
 
       described_class.new.perform

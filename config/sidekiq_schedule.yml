@@ -286,7 +286,7 @@ retry_failed_paypal_payouts:
   cron: "0 14 * * 5" # UTC 14:00 FRI
   class: RetryFailedPaypalPayoutsWorker
 requeue_transiently_failed_payouts:
-  cron: "0 14 * * 2,3,4,5" # UTC 14:00 TUE-FRI
+  cron: "0 14 * * *" # UTC 14:00 daily
   class: RequeueTransientlyFailedPayoutsJob
   description: Re-issue payouts that failed on a processor rate limit or an unreachable processor
 

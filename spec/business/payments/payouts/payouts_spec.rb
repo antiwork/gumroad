@@ -747,6 +747,7 @@ describe Payouts do
 
       before do
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
+        create(:user_compliance_info, user: seller)
       end
 
       it "does not create payments if next_payout_date does not match payout date" do
@@ -758,10 +759,11 @@ describe Payouts do
       end
 
       it "creates payments when retrying even though the cycle has moved past this payout date" do
-        # A failed payout pushes the seller's next cycle forward, which is exactly the state a
-        # requeue runs in — so the gate must not reject them.
-        allow(Payouts).to receive(:is_user_payable).and_return(true)
-        allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 1.month)
+        # The real requeue shape: a payment row already exists for today, which advances
+        # #next_payout_cycle_date whether or not that payment succeeded.
+        create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
+                .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+        expect(payout_date + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
 
         expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([seller.id], payout_date.to_s)
 
@@ -769,8 +771,8 @@ describe Payouts do
       end
 
       it "skips the seller when not retrying and the cycle has moved past this payout date" do
-        allow(Payouts).to receive(:is_user_payable).and_return(true)
-        allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 1.month)
+        create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
+                .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
 
         expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([], payout_date.to_s)
 

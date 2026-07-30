@@ -13,7 +13,10 @@
 # check applies again.
 class RequeueTransientlyFailedPayoutsJob
   include Sidekiq::Job
-  sidekiq_options retry: 0, queue: :critical, lock: :until_executed
+  # :default, not :critical — this only reads failed rows and enqueues PayoutUsersWorker (itself
+  # on :default). Nothing here is latency-sensitive, and :critical is where buyer-facing receipts
+  # live.
+  sidekiq_options retry: 0, queue: :default, lock: :until_executed
 
   # Two requeues per payout period. A seller who keeps hitting transient failures is no longer
   # looking like a burst we can wait out, and reissuing all week only produces more failed rows;
@@ -21,7 +24,17 @@ class RequeueTransientlyFailedPayoutsJob
   MAX_REQUEUE_ATTEMPTS = 2
 
   def perform
-    payout_period_end_date = User::PayoutSchedule.next_scheduled_payout_end_date
+    # Kill switch: this job moves money, and the failure mode it fixes (a delayed payout) is far
+    # less bad than the one a bug here could cause. Flipping the flag stops requeues without a
+    # deploy; sellers fall back to waiting for their next scheduled slot, which is today's behaviour.
+    return if Feature.active?(:disable_transient_payout_failure_requeue)
+
+    # This runs daily rather than only on the batch weekdays, because a cross-border payout
+    # executes CROSS_BORDER_PAYOUT_DELAY after it is created — a Thursday requeue of a Tuesday
+    # failure fails on Friday afternoon, past the last batch of the week. `manual_payout_end_date`
+    # is what makes the weekend runs land on the closing period rather than the next one, which
+    # nothing has failed on yet.
+    payout_period_end_date = User::PayoutSchedule.manual_payout_end_date
 
     failures_by_user = Payment.failed
                               .reorder(nil)
@@ -33,21 +46,26 @@ class RequeueTransientlyFailedPayoutsJob
 
     user_ids, exhausted_user_ids = failures_by_user.keys.partition { |user_id| failures_by_user[user_id] <= MAX_REQUEUE_ATTEMPTS }
 
-    if exhausted_user_ids.present?
+    # Only report a seller the run they cross the cap. This job runs daily against a period that
+    # lasts a week, so reporting everyone over the cap every run would send the same cohort to
+    # Sentry up to seven times and bury the sellers who newly need attention.
+    newly_exhausted = exhausted_user_ids.select { |user_id| failures_by_user[user_id] == MAX_REQUEUE_ATTEMPTS + 1 }
+    if newly_exhausted.present?
       ErrorNotifier.notify(
-        "Payouts: #{exhausted_user_ids.size} seller(s) hit #{MAX_REQUEUE_ATTEMPTS} transient payout failures for #{payout_period_end_date} and were not requeued",
+        "Payouts: #{newly_exhausted.size} seller(s) hit #{MAX_REQUEUE_ATTEMPTS} transient payout failures for #{payout_period_end_date} and will wait for their next scheduled payout",
         payout_period_end_date: payout_period_end_date.to_s,
-        user_ids: exhausted_user_ids
+        user_ids: newly_exhausted
       )
     end
     return if user_ids.empty?
 
     Rails.logger.info("REQUEUE TRANSIENTLY FAILED PAYOUTS: #{payout_period_end_date}, #{user_ids.size} seller(s) (Started)")
 
-    # `retrying: true` skips the payout-cycle gate. A failed payout moves the seller's next cycle
-    # forward, so the gate would reject the very sellers this job exists for. Re-issuing is
-    # otherwise safe: Payouts.create_payment no-ops once the balances have left `unpaid`, so a
-    # seller already paid since the failure is not paid twice.
+    # `retrying: true` skips the payout-cycle gate, which would otherwise reject these sellers:
+    # today's payment row (failed or not) and a monthly/quarterly cadence both push
+    # #next_payout_cycle_date past this batch's period. Re-issuing is otherwise safe — every
+    # payability check still runs, `is_user_payable` refuses while any payment is `processing`,
+    # and Payouts.create_payment no-ops once the balances have left `unpaid`.
     Payouts.create_payments_for_balances_up_to_date_for_users(
       payout_period_end_date,
       PayoutProcessorType::STRIPE,

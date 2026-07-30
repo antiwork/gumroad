@@ -217,6 +217,12 @@ class StripePayoutProcessor
                                                          # 1 key (`payment`) already added above so allow max - 1 more keys
                                                          max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 1))
       )
+      # Record the transfer before doing anything else that can fail. Everything below here —
+      # the destination-charge retrieve, its 429s, the balance-transaction wait — runs AFTER the
+      # money has left Gumroad, and `reverse_internal_transfer!` keys off this field. Assigning
+      # it later meant a failure in that window left the funds on the seller's connected account
+      # with nothing recording them, so they could be neither reversed nor reconciled.
+      payment.stripe_internal_transfer_id = internal_transfer.id
       destination_payment = nil
       3.times do |attempt|
         destination_payment = Stripe::Charge.retrieve(
@@ -231,7 +237,6 @@ class StripePayoutProcessor
         sleep(2)
       end
       payment.amount_cents += destination_payment.balance_transaction.amount
-      payment.stripe_internal_transfer_id = internal_transfer.id
     end
     # For HUF and TWD, Stripe only supports payout amount cents that are divisible by 100 (Ref: https://stripe.com/docs/currencies#special-cases)
     # So we discard the mod hundred amount when making the payout, but mark the entire amount as paid on our end.
@@ -280,7 +285,21 @@ class StripePayoutProcessor
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
   ensure
-    payment.mark_failed!(failure_reason) if failed
+    if failed
+      payment.mark_failed!(failure_reason)
+      # A failure anywhere after the internal transfer leaves Gumroad's funds sitting on the
+      # seller's connected account while the balances go back to `unpaid` — so the next payout
+      # would transfer the same money again. Send it back. No-ops unless the transfer happened.
+      #
+      # Rescued because this runs in an `ensure`: a reversal that fails must not replace the
+      # original error (which is what tells us why the payout failed) with its own. The
+      # unreversed transfer is recorded on the payment either way, so it stays reconcilable.
+      begin
+        reverse_internal_transfer!(payment)
+      rescue => e
+        ErrorNotifier.notify(e, payment_id: payment.id, stripe_internal_transfer_id: payment.stripe_internal_transfer_id)
+      end
+    end
   end
 
   # Aborts the payout cycle when Gumroad's recorded view of `balances_held_by_stripe` exceeds the
