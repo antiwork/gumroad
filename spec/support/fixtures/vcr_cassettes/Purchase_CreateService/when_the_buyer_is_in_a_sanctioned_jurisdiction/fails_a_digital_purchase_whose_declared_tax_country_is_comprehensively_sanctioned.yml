@@ -14,9 +14,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_YQoA8sDzMomLDT","request_duration_ms":239}}'
+      - '{"last_request_metrics":{"request_id":"req_YQoA8sDzMomLDT","request_duration_ms":6}}'
       Idempotency-Key:
-      - c5bf835e-f283-415a-a69c-5d7563fc93c0
+      - 3af7a35b-dae5-42e8-8464-24d3f4f6b19f
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -33,7 +33,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 30 Jul 2026 17:56:47 GMT
+      - Thu, 30 Jul 2026 18:29:24 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -56,18 +56,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63;
         report-to csp
       Idempotency-Key:
-      - c5bf835e-f283-415a-a69c-5d7563fc93c0
+      - 3af7a35b-dae5-42e8-8464-24d3f4f6b19f
       Original-Request:
-      - req_uVkng2sFsIOhvJ
+      - req_zKdQE7X8SrSHRB
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"
       Request-Id:
-      - req_uVkng2sFsIOhvJ
+      - req_zKdQE7X8SrSHRB
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-06-24.dahlia. See https://docs.stripe.com/upgrades
@@ -89,7 +89,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1TyyCJIBOqvOFDrfch7nWcyZ",
+          "id": "pm_1TyyhrIBOqvOFDrf3zlEuxkx",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -133,7 +133,7 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1785434207,
+          "created": 1785436164,
           "customer": null,
           "customer_account": null,
           "livemode": false,
@@ -141,5 +141,5 @@ http_interactions:
           "shared_payment_granted_token": null,
           "type": "card"
         }
-  recorded_at: Thu, 30 Jul 2026 17:56:47 GMT
+  recorded_at: Thu, 30 Jul 2026 18:29:24 GMT
 recorded_with: VCR 6.2.0

@@ -4674,7 +4674,9 @@ class Purchase < ApplicationRecord
     # was only protected by the buy button being hidden at render time (`Link#compliance_blocked`),
     # which a buyer reaching /checkout directly — or whose page was rendered from a different IP —
     # never sees. Physical products keep failing in `validate_shipping` with their own error code, so
-    # we return early when it already objected.
+    # we return early when it already objected. This also runs on subscription renewals, which is
+    # deliberate: continuing to bill an existing subscriber in a sanctioned jurisdiction is the same
+    # prohibited transaction as the first charge.
     def validate_sanctioned_location
       return if errors.present?
       return if is_test_purchase?

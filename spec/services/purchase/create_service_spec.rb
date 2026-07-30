@@ -1590,6 +1590,30 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.failed?).to be true
       expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
       expect(error).to eq "Sorry, this item is not available in your location."
+      expect(purchase.stripe_transaction_id).to be_nil
+    end
+
+    it "fails a digital purchase whose stored IP country is comprehensively sanctioned" do
+      # The column `Order::CreateService` fills in, which is a separate signal from a live lookup.
+      params[:purchase][:ip_country] = "Cuba"
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase.failed?).to be true
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      expect(error).to eq "Sorry, this item is not available in your location."
+      expect(purchase.stripe_transaction_id).to be_nil
+    end
+
+    it "fails a digital purchase whose stored IP region is a sanctioned region" do
+      params[:purchase][:ip_country] = "Ukraine"
+      params[:purchase][:ip_state] = "14" # Donetsk
+
+      purchase, _ = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase.failed?).to be true
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      expect(purchase.stripe_transaction_id).to be_nil
     end
 
     it "fails a digital purchase geolocated to a comprehensively sanctioned country" do
@@ -1603,6 +1627,7 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.failed?).to be true
       expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
       expect(error).to eq "Sorry, this item is not available in your location."
+      expect(purchase.stripe_transaction_id).to be_nil
     end
 
     it "fails a digital purchase geolocated to a sanctioned region of a country we sell to" do
@@ -1616,6 +1641,7 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.failed?).to be true
       expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
       expect(error).to eq "Sorry, this item is not available in your location."
+      expect(purchase.stripe_transaction_id).to be_nil
     end
 
     it "allows a digital purchase from an unsanctioned region of the same country" do

@@ -14,9 +14,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_Fae7yUjowBAeRa","request_duration_ms":359}}'
+      - '{"last_request_metrics":{"request_id":"req_8zw3FoX6ioq0CR","request_duration_ms":182}}'
       Idempotency-Key:
-      - a08e991f-e03e-46b6-acc9-e7d17c1c628e
+      - 445f7a7e-273a-4f60-b47d-b70e592ae933
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -33,7 +33,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 30 Jul 2026 17:56:52 GMT
+      - Thu, 30 Jul 2026 18:29:25 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -56,18 +56,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63;
         report-to csp
       Idempotency-Key:
-      - a08e991f-e03e-46b6-acc9-e7d17c1c628e
+      - 445f7a7e-273a-4f60-b47d-b70e592ae933
       Original-Request:
-      - req_oOLq43Cl9Dshz5
+      - req_n9Yzanau3xmFX0
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"
       Request-Id:
-      - req_oOLq43Cl9Dshz5
+      - req_n9Yzanau3xmFX0
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-06-24.dahlia. See https://docs.stripe.com/upgrades
@@ -89,7 +89,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1TyyCNIBOqvOFDrfVBGaMCZe",
+          "id": "pm_1TyyhtIBOqvOFDrfID0Tofce",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -133,7 +133,7 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1785434212,
+          "created": 1785436165,
           "customer": null,
           "customer_account": null,
           "livemode": false,
@@ -141,10 +141,10 @@ http_interactions:
           "shared_payment_granted_token": null,
           "type": "card"
         }
-  recorded_at: Thu, 30 Jul 2026 17:56:52 GMT
+  recorded_at: Thu, 30 Jul 2026 18:29:25 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/payment_methods/pm_1TyyCNIBOqvOFDrfVBGaMCZe
+    uri: https://api.stripe.com/v1/payment_methods/pm_1TyyhtIBOqvOFDrfID0Tofce
     body:
       encoding: US-ASCII
       string: ''
@@ -156,7 +156,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_oOLq43Cl9Dshz5","request_duration_ms":227}}'
+      - '{"last_request_metrics":{"request_id":"req_n9Yzanau3xmFX0","request_duration_ms":238}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -173,7 +173,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 30 Jul 2026 17:56:52 GMT
+      - Thu, 30 Jul 2026 18:29:25 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -196,14 +196,14 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"
       Request-Id:
-      - req_FXNcWtUqc6U4F1
+      - req_kfAjHB6UY7lz1K
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-06-24.dahlia. See https://docs.stripe.com/upgrades
@@ -223,7 +223,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pm_1TyyCNIBOqvOFDrfVBGaMCZe",
+          "id": "pm_1TyyhtIBOqvOFDrfID0Tofce",
           "object": "payment_method",
           "allow_redisplay": "unspecified",
           "billing_details": {
@@ -267,7 +267,7 @@ http_interactions:
             },
             "wallet": null
           },
-          "created": 1785434212,
+          "created": 1785436165,
           "customer": null,
           "customer_account": null,
           "livemode": false,
@@ -275,13 +275,13 @@ http_interactions:
           "shared_payment_granted_token": null,
           "type": "card"
         }
-  recorded_at: Thu, 30 Jul 2026 17:56:52 GMT
+  recorded_at: Thu, 30 Jul 2026 18:29:25 GMT
 - request:
     method: post
     uri: https://api.stripe.com/v1/payment_intents
     body:
       encoding: UTF-8
-      string: amount=600&currency=usd&description=You+bought+http%3A%2F%2Fedgar349fb86c8.test.gumroad.com%3A31337%2Fl%2Ft%21&metadata[purchase]=b-5YW3et2gb5Qm_RBaHuRw%3D%3D&transfer_group=375539815&payment_method_types[0]=card&payment_method=pm_1TyyCNIBOqvOFDrfVBGaMCZe&statement_descriptor_suffix=edgar349fb86c8
+      string: amount=600&currency=usd&description=You+bought+http%3A%2F%2Fedgarf40bfbd97.test.gumroad.com%3A31337%2Fl%2Fh%21&metadata[purchase]=4MR76UMeIeNyzGJyJHjhWw%3D%3D&transfer_group=375556703&payment_method_types[0]=card&payment_method=pm_1TyyhtIBOqvOFDrfID0Tofce&statement_descriptor_suffix=edgarf40bfbd97
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -290,9 +290,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_FXNcWtUqc6U4F1","request_duration_ms":147}}'
+      - '{"last_request_metrics":{"request_id":"req_kfAjHB6UY7lz1K","request_duration_ms":158}}'
       Idempotency-Key:
-      - 0a240a90-d3be-4e4a-9772-0317af636c93
+      - 1522ac10-79b6-4c24-b70a-74175f571950
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -309,7 +309,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 30 Jul 2026 17:56:52 GMT
+      - Thu, 30 Jul 2026 18:29:26 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -332,18 +332,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63;
         report-to csp
       Idempotency-Key:
-      - 0a240a90-d3be-4e4a-9772-0317af636c93
+      - 1522ac10-79b6-4c24-b70a-74175f571950
       Original-Request:
-      - req_iuNb1SxFMbYQGa
+      - req_zEqL3DZN61fRJW
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"
       Request-Id:
-      - req_iuNb1SxFMbYQGa
+      - req_zEqL3DZN61fRJW
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-06-24.dahlia. See https://docs.stripe.com/upgrades
@@ -365,7 +365,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pi_3TyyCOIBOqvOFDrf1SNhRJLT",
+          "id": "pi_3TyyhtIBOqvOFDrf1gQNsdup",
           "object": "payment_intent",
           "allowed_payment_method_types": null,
           "amount": 600,
@@ -380,13 +380,13 @@ http_interactions:
           "canceled_at": null,
           "cancellation_reason": null,
           "capture_method": "automatic",
-          "client_secret": "pi_3TyyCOIBOqvOFDrf1SNhRJLT_secret_cosScBri9oLv8RjrPlkjtsQ7s",
+          "client_secret": "pi_3TyyhtIBOqvOFDrf1gQNsdup_secret_dFyFPlIL3RaTB0AalYdDsuIbo",
           "confirmation_method": "automatic",
-          "created": 1785434212,
+          "created": 1785436165,
           "currency": "usd",
           "customer": null,
           "customer_account": null,
-          "description": "You bought http://edgar349fb86c8.test.gumroad.com:31337/l/t!",
+          "description": "You bought http://edgarf40bfbd97.test.gumroad.com:31337/l/h!",
           "excluded_payment_method_types": null,
           "invoice": null,
           "last_payment_error": null,
@@ -396,11 +396,11 @@ http_interactions:
             "enabled": false
           },
           "metadata": {
-            "purchase": "b-5YW3et2gb5Qm_RBaHuRw=="
+            "purchase": "4MR76UMeIeNyzGJyJHjhWw=="
           },
           "next_action": null,
           "on_behalf_of": null,
-          "payment_method": "pm_1TyyCNIBOqvOFDrfVBGaMCZe",
+          "payment_method": "pm_1TyyhtIBOqvOFDrfID0Tofce",
           "payment_method_configuration_details": null,
           "payment_method_options": {
             "card": {
@@ -421,15 +421,15 @@ http_interactions:
           "shipping": null,
           "source": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar349fb86c8",
+          "statement_descriptor_suffix": "edgarf40bfbd97",
           "status": "requires_confirmation",
           "transfer_data": null,
-          "transfer_group": "375539815"
+          "transfer_group": "375556703"
         }
-  recorded_at: Thu, 30 Jul 2026 17:56:52 GMT
+  recorded_at: Thu, 30 Jul 2026 18:29:26 GMT
 - request:
     method: post
-    uri: https://api.stripe.com/v1/payment_intents/pi_3TyyCOIBOqvOFDrf1SNhRJLT/confirm
+    uri: https://api.stripe.com/v1/payment_intents/pi_3TyyhtIBOqvOFDrf1gQNsdup/confirm
     body:
       encoding: US-ASCII
       string: ''
@@ -441,9 +441,9 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_iuNb1SxFMbYQGa","request_duration_ms":209}}'
+      - '{"last_request_metrics":{"request_id":"req_zEqL3DZN61fRJW","request_duration_ms":223}}'
       Idempotency-Key:
-      - e11f4160-5394-46fc-bd38-afbe912993be
+      - 95f7e4e5-d511-40f2-b112-470b07fabee0
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -460,7 +460,7 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 30 Jul 2026 17:56:53 GMT
+      - Thu, 30 Jul 2026 18:29:27 GMT
       Content-Type:
       - application/json
       Content-Length:
@@ -483,18 +483,18 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63;
         report-to csp
       Idempotency-Key:
-      - e11f4160-5394-46fc-bd38-afbe912993be
+      - 95f7e4e5-d511-40f2-b112-470b07fabee0
       Original-Request:
-      - req_LA2ZbiWFt8gVsE
+      - req_OzfhHnPvtvNupC
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"
       Request-Id:
-      - req_LA2ZbiWFt8gVsE
+      - req_OzfhHnPvtvNupC
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-06-24.dahlia. See https://docs.stripe.com/upgrades
@@ -516,7 +516,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "pi_3TyyCOIBOqvOFDrf1SNhRJLT",
+          "id": "pi_3TyyhtIBOqvOFDrf1gQNsdup",
           "object": "payment_intent",
           "allowed_payment_method_types": null,
           "amount": 600,
@@ -531,27 +531,27 @@ http_interactions:
           "canceled_at": null,
           "cancellation_reason": null,
           "capture_method": "automatic",
-          "client_secret": "pi_3TyyCOIBOqvOFDrf1SNhRJLT_secret_cosScBri9oLv8RjrPlkjtsQ7s",
+          "client_secret": "pi_3TyyhtIBOqvOFDrf1gQNsdup_secret_dFyFPlIL3RaTB0AalYdDsuIbo",
           "confirmation_method": "automatic",
-          "created": 1785434212,
+          "created": 1785436165,
           "currency": "usd",
           "customer": null,
           "customer_account": null,
-          "description": "You bought http://edgar349fb86c8.test.gumroad.com:31337/l/t!",
+          "description": "You bought http://edgarf40bfbd97.test.gumroad.com:31337/l/h!",
           "excluded_payment_method_types": null,
           "invoice": null,
           "last_payment_error": null,
-          "latest_charge": "ch_3TyyCOIBOqvOFDrf1NzFxxrf",
+          "latest_charge": "ch_3TyyhtIBOqvOFDrf1QMVKW2E",
           "livemode": false,
           "managed_payments": {
             "enabled": false
           },
           "metadata": {
-            "purchase": "b-5YW3et2gb5Qm_RBaHuRw=="
+            "purchase": "4MR76UMeIeNyzGJyJHjhWw=="
           },
           "next_action": null,
           "on_behalf_of": null,
-          "payment_method": "pm_1TyyCNIBOqvOFDrfVBGaMCZe",
+          "payment_method": "pm_1TyyhtIBOqvOFDrfID0Tofce",
           "payment_method_configuration_details": null,
           "payment_method_options": {
             "card": {
@@ -572,15 +572,15 @@ http_interactions:
           "shipping": null,
           "source": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar349fb86c8",
+          "statement_descriptor_suffix": "edgarf40bfbd97",
           "status": "succeeded",
           "transfer_data": null,
-          "transfer_group": "375539815"
+          "transfer_group": "375556703"
         }
-  recorded_at: Thu, 30 Jul 2026 17:56:53 GMT
+  recorded_at: Thu, 30 Jul 2026 18:29:27 GMT
 - request:
     method: get
-    uri: https://api.stripe.com/v1/charges/ch_3TyyCOIBOqvOFDrf1NzFxxrf?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
+    uri: https://api.stripe.com/v1/charges/ch_3TyyhtIBOqvOFDrf1QMVKW2E?expand%5B%5D=application_fee.balance_transaction&expand%5B%5D=balance_transaction
     body:
       encoding: US-ASCII
       string: ''
@@ -592,7 +592,7 @@ http_interactions:
       Content-Type:
       - application/x-www-form-urlencoded
       X-Stripe-Client-Telemetry:
-      - '{"last_request_metrics":{"request_id":"req_LA2ZbiWFt8gVsE","request_duration_ms":860}}'
+      - '{"last_request_metrics":{"request_id":"req_OzfhHnPvtvNupC","request_duration_ms":1089}}'
       Stripe-Version:
       - '2023-10-16'
       X-Stripe-Client-User-Agent:
@@ -609,11 +609,11 @@ http_interactions:
       Server:
       - nginx
       Date:
-      - Thu, 30 Jul 2026 17:56:53 GMT
+      - Thu, 30 Jul 2026 18:29:27 GMT
       Content-Type:
       - application/json
       Content-Length:
-      - '3769'
+      - '3768'
       Connection:
       - keep-alive
       Access-Control-Allow-Credentials:
@@ -632,14 +632,14 @@ http_interactions:
       Content-Security-Policy:
       - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
         img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
-        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76;
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63;
         report-to csp
       Report-To:
-      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"}],"include_subdomains":true}'
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"}],"include_subdomains":true}'
       Reporting-Endpoints:
-      - csp="https://q.stripe.com/csp-report-v2?q=Q1FlqiuNiSZJlGx4l-WfvY5_b7mNY3to4OSPHE_RCC4BhChamNxFqpRr52iNTbF4lsoTi3biFnBnII76&t=1"
+      - csp="https://q.stripe.com/csp-report-v2?q=WWSOE2EZBqsE3ZgnClKLFJuY33oDwmau9GKXvujYbwc0V4tkghE7p5DpbdQ3s-gjNTkyiAAc8B-jKJ63&t=1"
       Request-Id:
-      - req_mjIOWsQIS3K3Iz
+      - req_dFUbssVmTVu5uy
       Stripe-Notice:
       - You are using an outdated API version (2023-10-16). We recommend upgrading
         to the latest API version, 2026-06-24.dahlia. See https://docs.stripe.com/upgrades
@@ -659,7 +659,7 @@ http_interactions:
       encoding: UTF-8
       string: |-
         {
-          "id": "ch_3TyyCOIBOqvOFDrf1NzFxxrf",
+          "id": "ch_3TyyhtIBOqvOFDrf1QMVKW2E",
           "object": "charge",
           "amount": 600,
           "amount_captured": 600,
@@ -668,14 +668,14 @@ http_interactions:
           "application_fee": null,
           "application_fee_amount": null,
           "balance_transaction": {
-            "id": "txn_3TyyCOIBOqvOFDrf1t8D4C8S",
+            "id": "txn_3TyyhtIBOqvOFDrf1VPwMBjY",
             "object": "balance_transaction",
             "amount": 600,
             "available_on": 1785974400,
             "balance_type": "payments",
-            "created": 1785434212,
+            "created": 1785436166,
             "currency": "usd",
-            "description": "You bought http://edgar349fb86c8.test.gumroad.com:31337/l/t!",
+            "description": "You bought http://edgarf40bfbd97.test.gumroad.com:31337/l/h!",
             "exchange_rate": null,
             "fee": 47,
             "fee_details": [
@@ -689,7 +689,7 @@ http_interactions:
             ],
             "net": 553,
             "reporting_category": "charge",
-            "source": "ch_3TyyCOIBOqvOFDrf1NzFxxrf",
+            "source": "ch_3TyyhtIBOqvOFDrf1QMVKW2E",
             "status": "pending",
             "type": "charge"
           },
@@ -707,12 +707,12 @@ http_interactions:
             "phone": null,
             "tax_id": null
           },
-          "calculated_statement_descriptor": "STRIPE* EDGAR349FB86C8",
+          "calculated_statement_descriptor": "STRIPE* EDGARF40BFBD97",
           "captured": true,
-          "created": 1785434212,
+          "created": 1785436166,
           "currency": "usd",
           "customer": null,
-          "description": "You bought http://edgar349fb86c8.test.gumroad.com:31337/l/t!",
+          "description": "You bought http://edgarf40bfbd97.test.gumroad.com:31337/l/h!",
           "destination": null,
           "dispute": null,
           "disputed": false,
@@ -723,7 +723,7 @@ http_interactions:
           "invoice": null,
           "livemode": false,
           "metadata": {
-            "purchase": "b-5YW3et2gb5Qm_RBaHuRw=="
+            "purchase": "4MR76UMeIeNyzGJyJHjhWw=="
           },
           "on_behalf_of": null,
           "order": null,
@@ -734,17 +734,17 @@ http_interactions:
             "network_status": "approved_by_network",
             "reason": null,
             "risk_level": "normal",
-            "risk_score": 34,
+            "risk_score": 9,
             "seller_message": "Payment complete.",
             "type": "authorized"
           },
           "paid": true,
-          "payment_intent": "pi_3TyyCOIBOqvOFDrf1SNhRJLT",
-          "payment_method": "pm_1TyyCNIBOqvOFDrfVBGaMCZe",
+          "payment_intent": "pi_3TyyhtIBOqvOFDrf1gQNsdup",
+          "payment_method": "pm_1TyyhtIBOqvOFDrfID0Tofce",
           "payment_method_details": {
             "card": {
               "amount_authorized": 600,
-              "authorization_code": "035908",
+              "authorization_code": "716975",
               "brand": "visa",
               "checks": {
                 "address_line1_check": null,
@@ -787,17 +787,17 @@ http_interactions:
           "radar_options": {},
           "receipt_email": null,
           "receipt_number": null,
-          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xU05FZ3NJQk9xdk9GRHJmKOWgrtMGMgYv4X_fqMI6LBbU9c4tNAQKQH67WLeNnDaboDQYX0Jqu1KeoSaLFcShAjr_5GylNDDrBt4H",
+          "receipt_url": "https://pay.stripe.com/receipts/payment/CAcaFwoVYWNjdF8xU05FZ3NJQk9xdk9GRHJmKIewrtMGMgb8S7k9ZEs6LBbhMKjzd0egG4-9Your9WaAQf4scaj7qJPtxDTU3eTPUi8a2RK3ea4oWccs",
           "refunded": false,
           "review": null,
           "shipping": null,
           "source": null,
           "source_transfer": null,
           "statement_descriptor": null,
-          "statement_descriptor_suffix": "edgar349fb86c8",
+          "statement_descriptor_suffix": "edgarf40bfbd97",
           "status": "succeeded",
           "transfer_data": null,
-          "transfer_group": "375539815"
+          "transfer_group": "375556703"
         }
-  recorded_at: Thu, 30 Jul 2026 17:56:53 GMT
+  recorded_at: Thu, 30 Jul 2026 18:29:27 GMT
 recorded_with: VCR 6.2.0
