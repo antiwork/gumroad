@@ -596,8 +596,21 @@ describe CustomerLowPriorityMailer do
       context "purchaser has an account" do
         before { purchase.update!(purchaser: create(:user, name: "Purchaser")) }
 
-        it "includes unsubscribe link" do
-          expect(CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded).to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
+        it "includes a token-scoped unsubscribe link that resolves without a session" do
+          body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
+
+          # Tokens are non-deterministic (AES-GCM, random IV), so assert on what the emitted
+          # token resolves to rather than comparing against a freshly minted one.
+          token = body[%r{/users/unsubscribe_review_reminders/([A-Za-z0-9_-]+)}, 1]
+          expect(token).to be_present
+          expect(User.find_by_secure_external_id(token, scope: Users::ReviewRemindersController::TOKEN_SCOPE)).to eq(purchase.purchaser)
+        end
+
+        it "no longer points at the login-gated route" do
+          body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
+
+          expect(body).to have_link("Unsubscribe")
+          expect(body).not_to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
         end
       end
     end
@@ -668,7 +681,8 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to have_text("We'd love to hear your thoughts on it. When you have a moment, could you drop us some reviews?")
       expect(mail.body.encoded).to have_text("Thank you for your contribution!")
       expect(mail.body.encoded).to have_link("Leave reviews", href: reviews_url)
-      expect(mail.body.encoded).to have_link("Unsubscribe")
+      unsubscribe_token = mail.body.encoded[%r{/users/unsubscribe_review_reminders/([A-Za-z0-9_-]+)}, 1]
+      expect(User.find_by_secure_external_id(unsubscribe_token, scope: Users::ReviewRemindersController::TOKEN_SCOPE)).to eq(order.purchaser)
     end
 
     context "purchase does not have name" do

@@ -345,7 +345,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
     @product_name = @purchase.link.name
     @title = "Liked #{@product_name}? Give it a review!"
-    @unsub_link = user_unsubscribe_review_reminders_url if @purchase.purchaser
+    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser)
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
     # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
@@ -374,7 +374,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     first_purchase = order.purchases.first
 
     @title = "Liked your order? Leave some reviews!"
-    @unsub_link = user_unsubscribe_review_reminders_url if purchaser
+    @unsub_link = review_reminder_unsubscribe_url(purchaser)
     @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
     email = purchaser&.email || first_purchase.email
@@ -421,6 +421,17 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
+    # The unsubscribe link must work from an email client with no session. Recipients of a
+    # review reminder are often free-download buyers who cannot sign in, so a login-gated
+    # link is a dead end for exactly the people most likely to click it.
+    def review_reminder_unsubscribe_url(purchaser)
+      return if purchaser.nil?
+
+      user_unsubscribe_review_reminders_by_token_url(
+        purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
+      )
+    end
+
     def deliver_subscription_email
       if @subject.nil?
         Rails.logger.warn("[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=#{action_name}; subscription_id=#{@subscription&.id}")
