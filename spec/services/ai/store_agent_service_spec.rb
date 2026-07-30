@@ -333,7 +333,7 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "hi" }])
 
         expect(captured[:system]).to include("cannot see the creator's dashboard")
-        expect(captured[:system]).to match(/no self-serve\s+fonts-and-colors screen/)
+        expect(captured[:system]).to match(/Settings > Profile > Design/)
         expect(captured[:system]).to include("never send the creator to a screen you are not certain exists")
         expect(captured[:system]).to include(%(<script id="gumroad-data"))
         expect(captured[:system]).to match(/never hard-code the product list/)
@@ -389,8 +389,10 @@ describe Ai::StoreAgentService do
         # Don't argue with the seller, and don't invent an explanation for what you can't see.
         expect(captured[:system]).to match(/Never\s+argue with an observation about their own pages/)
         expect(captured[:system]).to match(/legacy setting/)
-        # Route the ask to support rather than reaching for a custom page as a colour workaround.
-        expect(captured[:system]).to match(/Gumroad support applies those/)
+        # Route the ask to the settings screen rather than reaching for a custom page as a colour
+        # workaround.
+        expect(captured[:system]).to match(/Settings > Profile > Design/)
+        expect(captured[:system]).not_to match(/support applies/)
         # ...and the authoring rule further down must not contradict that by sending an appearance
         # request into a full-page rewrite, which is how gumroad-private#984 happened.
         expect(captured[:system]).to match(/NO custom HTML page yet and wants a custom page/)

@@ -9849,11 +9849,11 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "invalid_account_number"))
         end
 
-        it "emails the creator without flagging it as a format rejection" do
+        it "asks for a different account rather than a corrected code" do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-            .with(user.id, nil, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
         end
       end
 
@@ -9868,7 +9868,8 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end
@@ -9884,7 +9885,8 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, nil, error_message)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
           expect(result).to eq(:invalid_bank_account)
         end
       end

@@ -67,12 +67,12 @@ describe Api::V2::UsersController, "GET 'theme'" do
       expect(applies_to).not_to include("the checkout page")
     end
 
-    it "says the seller cannot change the theme themselves and points at support" do
+    it "says the seller changes the theme themselves and points at the settings screen" do
       get :theme, params: { access_token: token.token }
 
       theme = response.parsed_body["theme"]
-      expect(theme["editable_by_seller"]).to be(false)
-      expect(theme["how_to_change"]).to include("support")
+      expect(theme["editable_by_seller"]).to be(true)
+      expect(theme["how_to_change"]).to include("Settings > Profile > Design")
     end
   end
 end
