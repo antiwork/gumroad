@@ -10,7 +10,7 @@ describe CustomDomainRoutabilityService do
       has_valid_ssl_certificate_for?: has_valid_certificate
     )
   end
-  let(:observed_at) { Time.current }
+  let(:observed_at) { Time.current.change(usec: 123_456) }
   let(:service) { described_class.new(custom_domain, verification_service:, observed_at:) }
 
   before do
