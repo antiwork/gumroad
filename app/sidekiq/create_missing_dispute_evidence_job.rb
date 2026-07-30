@@ -19,9 +19,9 @@
 # costs a delay rather than the whole dispute.
 #
 # This job is the sole owner of evidence with no seller window: it either opens the window and
-# notifies the seller, or — when the processor's cutoff leaves no usable time — submits straight
-# away itself. FightDisputesJob deliberately skips unannounced rows so the two cannot both act
-# on one dispute.
+# notifies the seller, or — when the cutoff leaves no usable time — backdates it and submits
+# without asking. FightDisputesJob deliberately skips unannounced rows so the two cannot both act
+# on one dispute; stamping is what hands ownership back to it.
 class CreateMissingDisputeEvidenceJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low, lock: :until_executed
@@ -40,30 +40,19 @@ class CreateMissingDisputeEvidenceJob
   # indexed column, and it is the timestamp the deadline actually hangs off.
   LOOKBACK = 60.days
 
-  # Leave the seller's window a little short of the processor's real cutoff, so the submission
-  # that follows it still lands with time to spare. Below this much time to the cutoff there is
-  # no point asking the seller at all.
+  # Leave the seller's window short of the processor's real cutoff, so the submission that follows
+  # it still lands with time to spare — and so the hourly submitter's tick fits inside the margin.
   DEADLINE_BUFFER = 6.hours
 
-  # Distinguishes "this processor has no deadline for us to read" from "we tried to read the
-  # deadline and could not". The second means we cannot tell whether a window we opened would
-  # end after the cutoff, so the dispute is deferred to the next sweep rather than given an
-  # unverified 72 hours.
+  # Distinguishes "this processor has no deadline for us to read" from "we tried and could not".
+  # The second defers the dispute rather than giving it an unverified 72 hours.
   DEADLINE_UNKNOWN = :unknown
 
   def perform
-    # Two shapes of the same gap are swept here, and the second one is why this matches on
-    # seller_contacted_at rather than on the evidence row being absent: a dispute with no row
-    # at all, and a dispute whose row exists but was never announced to the seller. The
-    # second shape happens when an earlier attempt (here or at formalization) created the row
-    # and then failed before the notice carrying the submission link went out. Matching on the
-    # missing row alone would make that dispute invisible from then on — the row exists, so it
-    # would be filtered out, and the 72-hour window would expire with the seller never asked.
-    # A LEFT JOIN with a NULL seller_contacted_at covers both: no row means the column is NULL
-    # too. Resolved rows are excluded because their evidence has already gone to the processor
-    # (or was rejected), so opening a window would ask the seller for a statement that can no
-    # longer change anything — and this job submits such rows itself, so it must not reselect
-    # what it already sent.
+    # A NULL seller_contacted_at covers both shapes of the gap — no evidence row at all, and a row
+    # whose notice never went out — because a LEFT JOIN reports a missing row as NULL too. Matching
+    # on the absent row alone would make the never-announced shape invisible forever. Resolved rows
+    # are excluded because this job submits them itself and must not reselect what it already sent.
     Dispute.where(state: OPEN_DISPUTE_STATES)
            .where(event_created_at: LOOKBACK.ago..)
            .left_joins(:dispute_evidence)
@@ -81,14 +70,14 @@ class CreateMissingDisputeEvidenceJob
       return unless disputable.respond_to?(:create_dispute_evidence_if_needed!)
 
       deadline = processor_deadline(dispute)
-      # Nothing is stamped in either of these cases, so the next sweep still selects the dispute.
-      # An unreadable deadline is retried rather than assumed away: any window we opened without
-      # it would be an unverified 72 hours that may end after the processor stops accepting
-      # evidence.
+      # Nothing is stamped, so the next sweep selects this dispute again and reads the cutoff
+      # afresh. Opening a window without it would be an unverified 72 hours that may end after the
+      # processor stops accepting evidence.
       return if deadline == DEADLINE_UNKNOWN
-      # Past the cutoff there is nothing left to submit, and asking the seller for a statement
-      # would be asking about a dispute that is already over.
-      return if deadline&.past?
+      # Past the cutoff the processor accepts nothing, so there is no submission left to make and
+      # no point asking the seller. Resolve the row instead of leaving it to be reselected every
+      # sweep until the lookback ages it out.
+      return retire_past_deadline(dispute, deadline) if deadline&.past?
 
       window_start = seller_window_start(deadline)
 
@@ -97,6 +86,7 @@ class CreateMissingDisputeEvidenceJob
       # statement or file the seller uploaded — that a later run could still submit.
       created_here = dispute.dispute_evidence.nil?
       dispute_evidence = nil
+      claimed = false
       begin
         ApplicationRecord.transaction do
           # This re-checks the same conditions the formalization path checks, and returns nil
@@ -105,16 +95,22 @@ class CreateMissingDisputeEvidenceJob
           # having no record is the correct state, not a gap to fill. When the row already
           # exists (the never-announced shape above) it is returned as is.
           dispute_evidence = disputable.create_dispute_evidence_if_needed!
-          return if dispute_evidence.blank?
-          # Another path reached this row between the query and here.
-          return if dispute_evidence.seller_contacted? || dispute_evidence.resolved?
 
-          # Stamping seller_contacted_at opens the window the seller has to add their own
-          # statement, and it is also what schedules the submission: FightDisputesJob submits
-          # once the window has elapsed. window_start is already backdated where the cutoff is
-          # nearer than a full window, so that submission lands before the deadline rather than
-          # after it, and the seller is quoted the hours they really have rather than 72.
-          dispute_evidence.update!(seller_contacted_at: window_start) if window_start
+          if dispute_evidence.present?
+            # Stamping seller_contacted_at opens the window the seller has to add their own statement,
+            # and it is also what hands the row to FightDisputesJob, which submits once the window has
+            # elapsed. window_start is backdated where the cutoff is nearer than a full window, so
+            # that submission lands before the deadline rather than after it.
+            #
+            # Claim the row in the WHERE rather than checking and then writing: formalization stamps
+            # the same column with its own check-then-stamp, so a read here could be stale by the time
+            # the write lands and would overwrite a live window the seller was already told about.
+            # Nothing may `return` out of this block — that rolls the transaction back, discarding a
+            # concurrent writer's committed work along with our own.
+            claimed = DisputeEvidence.where(id: dispute_evidence.id, seller_contacted_at: nil, resolved_at: nil)
+                                     .update_all(seller_contacted_at: window_start, updated_at: Time.current)
+                                     .positive?
+          end
         end
       rescue => e
         # Nothing half-done may be left behind. The sweep re-finds a dispute by a NULL
@@ -124,16 +120,18 @@ class CreateMissingDisputeEvidenceJob
         ErrorNotifier.notify("CreateMissingDisputeEvidenceJob: could not build evidence for dispute #{dispute.id}: #{e.class} #{e.message}")
         return
       end
+      return unless claimed
 
-      # Compare against the persisted value rather than the one we wrote: the column's precision
-      # decides what the compare-and-clear below can match on.
+      # Read the persisted value back: the column's precision decides what the compare-and-clear
+      # below can match on, and update_all left the in-memory object stale.
       dispute_evidence.reload
       stamped_at = dispute_evidence.seller_contacted_at
 
-      if stamped_at.nil? || !dispute_evidence.hours_left_to_submit_evidence.positive?
-        # No usable time is left for the seller to say anything, so submit what we already
-        # assembled now. Waiting for FightDisputesJob's next hourly tick can cost an hour of a
-        # cutoff measured in hours, and it no longer claims unannounced evidence at all.
+      unless dispute_evidence.hours_left_to_submit_evidence.positive?
+        # The backdated window has already elapsed, so the seller has no time to say anything and
+        # there is nothing to notify them about. Submit now rather than wait for FightDisputesJob's
+        # next tick, which can cost an hour of a cutoff measured in hours — but the window IS
+        # stamped, so that job owns the retries if this submission fails.
         FightDisputeJob.perform_async(dispute.id)
         ErrorNotifier.notify(
           "CreateMissingDisputeEvidenceJob: dispute #{dispute.id} was never asked for evidence and its " \
@@ -175,15 +173,32 @@ class CreateMissingDisputeEvidenceJob
       )
     end
 
-    # When the seller's window should be treated as having started, or nil when the cutoff leaves
-    # them no usable time. Backdating keeps the submission that follows the window inside the
-    # cutoff.
+    # When the seller's window should be treated as having started. Always a time, never nil: the
+    # stamp is what makes FightDisputesJob the row's owner, so a cutoff too close to give the seller
+    # any time backdates the window past its own end rather than leaving the row unclaimed.
     def seller_window_start(deadline)
       return Time.current if deadline.nil?
-      return nil if deadline <= Time.current + DEADLINE_BUFFER
 
       latest_start = deadline - DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours - DEADLINE_BUFFER
       [Time.current, latest_start].min
+    end
+
+    # A dispute the processor will no longer accept evidence for. Its evidence row would otherwise
+    # keep matching the sweep — costing a deadline lookup every six hours — and then sit unresolved
+    # forever once the lookback ages the dispute out, since nothing else resolves a row whose dispute
+    # never reached a terminal state.
+    def retire_past_deadline(dispute, deadline)
+      dispute_evidence = dispute.dispute_evidence
+      return if dispute_evidence.nil? || dispute_evidence.resolved?
+
+      dispute_evidence.update_as_resolved!(
+        resolution: DisputeEvidence::RESOLUTION_REJECTED,
+        error_message: "Deadline at the processor (#{deadline.iso8601}) passed before the seller was asked for evidence."
+      )
+      ErrorNotifier.notify(
+        "CreateMissingDisputeEvidenceJob: dispute #{dispute.id} reached its processor deadline with the seller " \
+        "never asked for evidence, so dispute_evidence #{dispute_evidence.id} was resolved as rejected."
+      )
     end
 
     # When the processor tells us when it stops accepting evidence, use it. Processors we hold no

@@ -42,7 +42,7 @@ describe FightDisputesJob do
         # unannounced row reads exactly like one whose window has elapsed.
         described_class.new.perform
 
-        expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute_evidence_never_announced.dispute.id)
+        expect(FightDisputeJob.jobs.map { _1["args"] }).not_to include([dispute_evidence_never_announced.dispute.id])
       end
     end
   end
