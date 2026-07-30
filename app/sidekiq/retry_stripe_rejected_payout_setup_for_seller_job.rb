@@ -53,19 +53,12 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     note = oldest_outstanding_note(user)
     return if note.nil?
 
-    # A format rejection means Stripe refused the bank code as typed (wrong length, spaces, a
-    # branch suffix the country's format doesn't allow); a terminal rejection means it refused
-    # the account itself (payouts to it failed before, or the bank cannot receive payouts); a
-    # block means Stripe refuses this one external account by name (gumroad-private#1476).
-    # Either way remediation would re-send the identical saved value, so every weekly attempt is
-    # guaranteed to fail the same way and the seller ends up waiting out the whole retry window
-    # for nothing. Stop the loop immediately instead — but only after making sure the seller has
-    # actually been told, because a note recorded during account creation (which re-raises rather
-    # than emailing) or before this field existed means nobody has told them what to change.
-    # Abandoning silently in that case would strand them worse than the retry loop did.
+    # Retrying any of these three re-sends the identical saved value, so the weekly sweep can only
+    # fail the same way for the whole window. Stop it — but not before the seller has been told what
+    # to change, since account creation re-raises instead of emailing and older notes predate the field.
     #
     # Narrowest claim first: a block names one account, terminal covers the account, format only
-    # covers how it was typed. Asking format first would send a seller whose account can never be
+    # covers how it was typed. Asking format first sends a seller whose account can never be
     # accepted back to re-type digits that were already correct.
     if bank_note?(note)
       if StripeMerchantAccountManager.bank_account_blocked_note?(note)
@@ -159,16 +152,12 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       end
     end
 
-    # Abandons EVERY outstanding bank note of one unfixable-by-retry class in a single pass, with
-    # a single audit note. A failing account creation retries (CreateStripeMerchantAccountWorker
-    # has retry: 5) and records a note each time, so a seller can accumulate several identical
-    # notes; doing them one per weekly run would append a duplicate audit note on each pass.
+    # Sweeps the whole class in one pass because CreateStripeMerchantAccountWorker's retries record
+    # a note each time; one-per-run would append a duplicate audit note on every pass. Notes of the
+    # other classes are left alone so each kind gets its own accurate note and email.
     #
-    # `matcher` selects the notes of this class, and `rejection_kind` is what the seller's email
-    # branches on — the two must describe the same failure, since abandonment is terminal and that
-    # email is the seller's only instruction for getting paid. Only notes of the SAME class are
-    # swept, so a seller holding more than one kind gets one abandonment and one email per kind
-    # rather than a single note that misdescribes half of them.
+    # `matcher` and `rejection_kind` must describe the same failure: abandonment is terminal, so
+    # that email is the seller's only remaining instruction for getting paid.
     def abandon_unfixable_bank_notes!(user, matcher:, rejection_kind:, reason:, note_content:)
       notes = payout_setup_failure_notes(user).select do |candidate|
         candidate.json_data["abandoned_at"].blank? &&

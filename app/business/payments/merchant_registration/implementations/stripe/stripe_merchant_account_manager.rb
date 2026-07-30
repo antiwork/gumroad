@@ -17,25 +17,11 @@ module StripeMerchantAccountManager
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
 
-  # Stripe rejects bank details for three very different reasons, and sellers need different
-  # advice for each:
-  #
-  # * FORMAT rejections — the bank/routing code cannot be accepted as typed (wrong length,
-  #   lowercase, spaces, a branch suffix the country's format doesn't allow). Nothing changes
-  #   over time, so re-sending the same stored value can never succeed: only the seller
-  #   re-entering the code fixes it.
-  # * TERMINAL rejections — the details are well-formed and the bank is known, but Stripe
-  #   refuses this particular account outright (payouts to it have failed before, or the bank
-  #   itself is outside payout coverage). Correcting a digit cannot help and neither can
-  #   waiting: the seller has to nominate a DIFFERENT account.
-  # * DIRECTORY misses — the code looks well-formed but the bank or branch isn't in Stripe's
-  #   records yet (common for newly opened accounts and recently added branches). These can
-  #   genuinely start working on their own, which is what the weekly automated re-check is for.
-  #
-  # Stripe signals format rejections with these error codes, and (on older error shapes that
-  # carry no code) with the messages matched by BANK_DETAILS_FORMAT_REJECTION_MESSAGE. Stripe
-  # sometimes reuses the same codes for a directory miss, so DIRECTORY_MISS_MESSAGE wins:
-  # "we don't know this bank yet" is a waiting problem, not a typo problem.
+  # Three reasons Stripe refuses bank details, each needing opposite advice: FORMAT (code
+  # unacceptable as typed — only re-entering fixes it), TERMINAL (account itself refused — only a
+  # different account will do), DIRECTORY miss (bank not in Stripe's records yet — waiting can fix
+  # it, which is what the weekly re-check is for). A directory miss reuses the format codes, so
+  # DIRECTORY_MISS_MESSAGE wins over them.
   BANK_DETAILS_FORMAT_REJECTION_CODES = %w[routing_number_invalid account_number_invalid].freeze
   BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
   BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
@@ -939,20 +925,15 @@ module StripeMerchantAccountManager
     nil
   end
 
-  # True when Stripe rejected the bank/routing code on FORMAT grounds, i.e. the value as typed
-  # can never be accepted (see BANK_DETAILS_FORMAT_REJECTION_CODES above). Waiting cannot fix
-  # these, so the seller must re-enter the code — the email and the automated retry loop both
-  # behave differently for them.
+  # Format grounds: the value as typed can never be accepted, so waiting cannot fix it and the
+  # seller must re-enter the code.
   def self.bank_details_format_rejection?(error)
     code = error.respond_to?(:code) ? error.code : nil
     format_rejection_signals?(code:, message: error.message.to_s)
   end
 
-  # True when Stripe refused the account itself rather than the way it was typed — payouts to it
-  # have failed before, or the bank cannot receive payouts at all. Re-entering the same details
-  # and waiting are both dead ends, so the seller has to supply a different account. Kept
-  # separate from bank_details_format_rejection? because the advice differs: "fix your code"
-  # would send the seller in circles on an account that can never be accepted.
+  # The account itself is refused, not the way it was typed. Separate from the format predicate
+  # because "fix your code" would loop the seller forever on an account that can never be accepted.
   def self.bank_details_terminal_rejection?(error)
     code = error.respond_to?(:code) ? error.code : nil
     terminal_rejection_signals?(code:, message: error.message.to_s)
@@ -965,12 +946,9 @@ module StripeMerchantAccountManager
     terminal_rejection_signals?(code:, message:)
   end
 
-  # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb
-  # rather than a live Stripe error. Notes recorded since this classifier existed carry the
-  # error code and full message in json_data; older notes only have the human-readable content
-  # ("Stripe bank sync failed: <code> — <message truncated to 200 chars>"), so fall back to
-  # sniffing that text. The fallback is why the truncation matters: a directory-miss phrase
-  # sitting past 200 chars would be invisible, which is another reason to prefer the fields.
+  # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb.
+  # Notes predating the structured json_data fields only have the truncated human-readable
+  # content, so a directory-miss phrase past 200 chars is invisible there — prefer the fields.
   def self.bank_details_format_rejection_note?(note)
     code, message = bank_sync_note_error_details(note)
     format_rejection_signals?(code:, message:)
@@ -1000,9 +978,8 @@ module StripeMerchantAccountManager
     if json_data.key?("stripe_error_message")
       [json_data["stripe_error_code"], json_data["stripe_error_message"].to_s]
     else
-      # Older notes carry no structured fields, so the only thing to read is the human-readable
-      # content, which embeds the code followed by a truncated message. Search every code either
-      # classifier cares about — searching only one list would make the other one blind to old notes.
+      # Search BOTH code lists against the legacy content string — scoping to one list would make
+      # the other classifier blind to notes predating the structured fields.
       known_codes = BANK_DETAILS_FORMAT_REJECTION_CODES + BANK_DETAILS_TERMINAL_REJECTION_CODES
       [known_codes.find { |code| content.include?(code) }, content]
     end
@@ -1025,10 +1002,9 @@ module StripeMerchantAccountManager
     code.to_s.in?(BANK_DETAILS_TERMINAL_REJECTION_CODES) || message.match?(BANK_DETAILS_TERMINAL_REJECTION_MESSAGE)
   end
 
-  # False when the note was recorded without the seller being emailed about it — account
-  # creation records a note and re-raises rather than emailing, and notes predating this
-  # field carry no answer either way. The retry loop must email before it abandons such a
-  # note, otherwise the seller is never told their bank code needs correcting.
+  # False when nobody emailed the seller about this note — account creation records one and
+  # re-raises instead of emailing, and older notes carry no answer. The retry loop must email
+  # before abandoning such a note or the seller is never told what to change.
   def self.bank_sync_note_seller_notified?(note)
     note.respond_to?(:json_data) && note.json_data["seller_notified"] == true
   end

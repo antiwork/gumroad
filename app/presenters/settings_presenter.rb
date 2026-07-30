@@ -460,16 +460,9 @@ class SettingsPresenter
         end
       end
 
-      # Our payment partner (Stripe) rejected the postal code the seller entered, so their
-      # payout account couldn't be created. That rejection happens asynchronously after the
-      # settings save, so without this banner the seller sees a successful save and then
-      # retries blindly (observed sellers re-submitting the same code 4-13 times). The
-      # rejection leaves a "Stripe postal code rejected" payout note on the account, so the
-      # banner self-heals: the note is soft-deleted once an account creation succeeds, and
-      # postal_code_rejected_by_stripe? ignores notes older than the seller's latest
-      # compliance-info save (i.e. a corrected address hides the banner even before the
-      # retry runs). Only shown while there is no live Stripe account (i.e. the rejection
-      # is still what's blocking setup).
+      # Stripe rejects the postal code asynchronously, after the settings page has already
+      # reported a clean save. Gated on a missing account because a rejection only blocks a
+      # seller who has no payout account yet; freshness is postal_code_rejected_by_stripe?'s job.
       if stripe_account.blank? && postal_code_rejected_by_stripe?
         country = seller.alive_user_compliance_info&.legal_entity_country
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
@@ -479,26 +472,16 @@ class SettingsPresenter
         }
       end
 
-      # Same asynchronous-rejection problem as the postal code above, for the bank details. Stripe
-      # can refuse the account the seller saved (payouts to it failed before, or the bank can't
-      # receive payouts) and the settings page still reports a clean save, so the seller has no way
-      # to learn that this account will never work — they wait, and on a paid product the publish
-      # button stays blocked with a "connect a payment method" error that looks unrelated.
-      #
-      # Not gated on a missing Stripe account, unlike the postal banner: update_bank_account
-      # REQUIRES a live Stripe account, so every note recorded on the sync path belongs to a seller
-      # who has one. Gating this the same way would suppress the banner for exactly the population
-      # a bank-change rejection hits, whose payouts silently keep going to the external account
-      # Stripe still has on file. Staleness is current_bank_sync_failure_note's job.
+      # Deliberately not gated on a missing Stripe account like the postal banner above:
+      # update_bank_account requires a live account, so gating it would hide the banner from
+      # exactly the sellers a bank rejection hits.
       if (bank_note = current_bank_sync_failure_note)
         bank_message = if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
           "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
         elsif StripeMerchantAccountManager.bank_details_format_rejection_note?(bank_note)
           "Our payment partner couldn't accept your bank details as entered. Please double-check your account and bank code and re-save them. Waiting won't clear this one."
         else
-          # Wording matches the email (ContactingCreatorMailer#invalid_bank_account): the sweep is
-          # weekly (RetryStripeRejectedPayoutSetupsJob, Mondays), so promising anything faster
-          # would be a promise we don't keep.
+          # Cadence wording must match ContactingCreatorMailer#invalid_bank_account.
           "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
         end
         compliance_actions << { message: bank_message, href: nil }
