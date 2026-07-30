@@ -131,12 +131,15 @@ class CreateMissingDisputeEvidenceJob
       end
       return unless claimed
 
-      # Read the persisted value back: the column's precision decides what the compare-and-clear
-      # below can match on, and update_all left the in-memory object stale.
-      dispute_evidence.reload
-      stamped_at = dispute_evidence.seller_contacted_at
-
-      unless dispute_evidence.hours_left_to_submit_evidence.positive?
+      # window_start is the persisted stamp: the claim above wrote it and returned that it won, so
+      # nothing needs reading back to learn it. It used to be read back, which put a database call
+      # in the one stretch that has no rescue — a failure between the commit and the enqueue below
+      # left the window stamped with nobody told about it, and a stamped window no longer matches
+      # the sweep that would have retried. Nothing here can raise now.
+      #
+      # Ask through hours_left_in_window rather than the record: update_all left this object stale,
+      # so it reports no window at all, and the gate has to be the same arithmetic the notice quotes.
+      unless DisputeEvidence.hours_left_in_window(window_start).positive?
         # The backdated window has already elapsed, so the seller has no time to say anything and
         # there is nothing to notify them about. Submit now rather than wait for FightDisputesJob's
         # next tick, which can cost an hour of a cutoff measured in hours — but the window IS
@@ -169,8 +172,8 @@ class CreateMissingDisputeEvidenceJob
         # exposure and no rollback at all; closing it means changing where mailers swallow 5xx.
         #
         # Only clear the window this run opened, and decide that in the write itself: carrying the
-        # value we wrote into the WHERE means a stamp belonging to anyone else matches no row.
-        # Clearing another path's stamp would erase a window the seller has already been told
+        # value we claimed with into the WHERE means a stamp belonging to anyone else matches no
+        # row. Clearing another path's stamp would erase a window the seller has already been told
         # about, and the next sweep would re-notify and restart it.
         #
         # Nothing can currently own that stamp but us, since both writers go through
@@ -178,7 +181,7 @@ class CreateMissingDisputeEvidenceJob
         # formalization landing first fails our claim above and we never reach here. The guard
         # stays because it is the cheap half of the invariant, and it does not rest on timestamps
         # being distinct: the column is datetime(6), so two stamps in one second differ anyway.
-        left_alone = DisputeEvidence.where(id: dispute_evidence.id, seller_contacted_at: stamped_at)
+        left_alone = DisputeEvidence.where(id: dispute_evidence.id, seller_contacted_at: window_start)
                                     .update_all(seller_contacted_at: nil, updated_at: Time.current)
                                     .zero?
         message = "CreateMissingDisputeEvidenceJob: could not notify the seller for dispute #{dispute.id}: #{e.class} #{e.message}"

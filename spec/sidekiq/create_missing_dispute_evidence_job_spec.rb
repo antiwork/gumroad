@@ -156,6 +156,20 @@ describe CreateMissingDisputeEvidenceJob do
         ).to eq(0)
       end
 
+      it "does not read the row back before notifying, so a failed read cannot strand the window" do
+        # Between the claim committing and the notice being enqueued there is no rescue, so any
+        # database call in that stretch strands a stamped window nobody was told about — and a
+        # stamped window no longer matches the sweep that would have retried it. The stamp the job
+        # needs is the value it claimed with, so nothing has to be read back.
+        allow_any_instance_of(DisputeEvidence).to receive(:reload).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+        expect do
+          described_class.new.perform
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice).with(dispute.id)
+
+        expect(dispute.reload.dispute_evidence.seller_contacted_at).to be_present
+      end
+
       it "is idempotent — a second run does not create a second record, re-open the window, or re-email" do
         described_class.new.perform
         dispute_evidence = dispute.reload.dispute_evidence
