@@ -257,9 +257,7 @@ export class PaymentConfirmedError extends Error {
 export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
-  // The Payment Element row the buyer had selected. Stripe's confirm error only carries
-  // `payment_method` when it attached one, so a plain decline names no method at all and this is
-  // the only signal identifying it (gumroad-private#1514).
+  // See PurchasePaymentMethod in ./purchase for why this is needed.
   selectedMethodType: string,
 ): Promise<CartPurchaseResult> => {
   let confirmedReturnUrl: string | null = null;
@@ -355,11 +353,8 @@ export const startClientConfirmOrderCreation = async (
 // call site above). Best-effort: swallow every failure — error reporting must never break the
 // checkout error path it instruments.
 //
-// selectedMethodType is what the buyer had selected in the Payment Element; Stripe's
-// error.payment_method is only set when it attached one, so on a plain decline it is absent
-// and the server cannot tell a card decline from a redirect-leg failure without this
-// (gumroad-private#1514). Stripe's own type is sent alongside when present so a mismatch
-// stays visible rather than being papered over.
+// Both method fields are sent: Stripe's own is authoritative but usually absent, so a mismatch
+// between the two stays visible instead of being papered over.
 const reportClientConfirmError = async (
   orderId: string,
   stage: string,
