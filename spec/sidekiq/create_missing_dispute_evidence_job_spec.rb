@@ -24,10 +24,11 @@ describe CreateMissingDisputeEvidenceJob do
   end
 
   # The deadline lookup only runs for a dispute we can actually identify at the processor.
-  def stripe_dispute_for(purchase)
+  def stripe_dispute_for(purchase, **attrs)
     create(:dispute_formalized, purchase:,
                                 charge_processor_id: StripeChargeProcessor.charge_processor_id,
-                                charge_processor_dispute_id: "du_#{SecureRandom.hex(8)}")
+                                charge_processor_dispute_id: "du_#{SecureRandom.hex(8)}",
+                                **attrs)
   end
 
   describe "#perform" do
@@ -495,6 +496,55 @@ describe CreateMissingDisputeEvidenceJob do
         expect do
           described_class.new.perform
         end.not_to change { DisputeEvidence.count }
+      end
+    end
+
+    context "while formalization is still running" do
+      let!(:purchase) { charged_back_purchase }
+      let!(:dispute) { stripe_dispute_for(purchase, formalized_side_effects_finished_at: nil) }
+
+      before { stub_processor_deadline(12.hours.from_now) }
+
+      it "leaves the dispute alone until the side effects finish" do
+        # An atomic claim cannot defend against formalization's own check-then-stamp in the reverse
+        # order: it reads a NULL stamp BEFORE this job claims, and writes AFTER. Its write is a
+        # fresh 72-hour window, replacing the backdated one — so evidence would be submitted after
+        # the processor's cutoff. Not selecting an in-flight formalization is what removes the race.
+        expect do
+          described_class.new.perform
+        end.not_to change { DisputeEvidence.count }
+      end
+
+      it "picks it up on the next sweep once the marker is written" do
+        described_class.new.perform
+        dispute.update!(formalized_side_effects_finished_at: Time.current)
+
+        expect do
+          described_class.new.perform
+        end.to change { DisputeEvidence.count }.by(1)
+
+        # And the window it opens is still the deadline-aware one, not a fresh 72 hours.
+        expect(dispute.reload.dispute_evidence.hours_left_to_submit_evidence).to eq(6)
+      end
+
+      it "does not let formalization's stale write replace a deadline-aware window" do
+        # The harm played out end to end. Formalization's stamp is a check-then-write
+        # (`update_as_seller_contacted! if !seller_contacted?`), so it reads NULL, and if this sweep
+        # claims in between, formalization's later write lands a FRESH 72 hours over our backdated
+        # 6 — pushing submission past the cutoff. Simulated by doing exactly that write after the
+        # sweep runs.
+        described_class.new.perform
+        expect(dispute.reload.dispute_evidence).to be_nil, "sweep must not touch an in-flight formalization"
+
+        # Formalization now completes for real, evidence and all.
+        dispute.update!(formalized_side_effects_finished_at: Time.current)
+        evidence = purchase.create_dispute_evidence_if_needed!
+        evidence.update_as_seller_contacted! unless evidence.seller_contacted?
+
+        # One window, written by one path. Had the sweep claimed first, this row would now carry
+        # formalization's 72 hours instead of the 6 the cutoff allows.
+        expect(evidence.reload.hours_left_to_submit_evidence).to eq(72)
+        expect(DisputeEvidence.where(dispute_id: dispute.id).count).to eq(1)
       end
     end
 

@@ -53,8 +53,16 @@ class CreateMissingDisputeEvidenceJob
     # whose notice never went out — because a LEFT JOIN reports a missing row as NULL too. Matching
     # on the absent row alone would make the never-announced shape invisible forever. Resolved rows
     # are excluded because this job submits them itself and must not reselect what it already sent.
+    #
+    # Only disputes whose formalization side effects finished. That path stamps the same column with
+    # its own check-then-stamp, and an atomic claim here cannot defend against it: if it reads a NULL
+    # stamp before this job's claim and writes after, its stale write replaces a deadline-aware
+    # window with a fresh 72-hour one — submitting after the cutoff. Waiting for the marker means the
+    # two never run against one dispute. Every dispute formalized before the marker existed was
+    # backfilled (20261204000000), so this excludes only formalizations still in flight.
     Dispute.where(state: OPEN_DISPUTE_STATES)
            .where(event_created_at: LOOKBACK.ago..)
+           .where.not(formalized_side_effects_finished_at: nil)
            .left_joins(:dispute_evidence)
            .where(dispute_evidences: { seller_contacted_at: nil, resolved_at: nil })
            .find_each do |dispute|
