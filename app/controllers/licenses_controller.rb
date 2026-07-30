@@ -30,9 +30,10 @@ class LicensesController < Sellers::BaseController
 
   private
     # nil means "reject" — the client sends the absolute count, so anything that isn't a plain
-    # in-range integer has to fail loudly rather than land as a coerced 0.
+    # in-range integer has to fail loudly rather than land as a coerced 0. Base 10 is explicit
+    # because bare Integer() reads a leading zero as octal, turning a typed "010" into 8.
     def cast_uses(value)
-      uses = Integer(value.to_s, exception: false)
+      uses = Integer(value.to_s, 10, exception: false)
       return if uses.nil? || !uses.between?(0, License::MAX_SELLER_SETTABLE_USES)
 
       uses

@@ -106,6 +106,19 @@ describe LicensesController do
         expect(license.reload.uses).to eq 4
       end
 
+      # Bare Integer() would read this as octal 8.
+      it "reads a leading-zero value as base ten" do
+        put :update, format: :json, params: { id: secure_id, uses: "010" }
+        expect(response).to be_successful
+        expect(license.reload.uses).to eq 10
+      end
+
+      it "rejects a hexadecimal literal" do
+        put :update, format: :json, params: { id: secure_id, uses: "0x10" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
       it "rejects the plain external id that leaks via the license API" do
         put :update, format: :json, params: { id: license.external_id, uses: 9 }
         expect(response).to have_http_status(:not_found)
