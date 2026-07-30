@@ -85,7 +85,8 @@ class CustomDomain < ApplicationRecord
     return false unless active?
     return routable? unless routability_refresh_due?
 
-    enqueue_routability_refresh && routable?
+    enqueue_routability_refresh
+    false
   end
 
   def set_routability!(routable, checked_domain: domain, observed_at: Time.current)

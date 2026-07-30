@@ -268,24 +268,26 @@ describe CustomDomain do
     let(:newer_observation) { Time.current.change(usec: 123_456) }
     let(:older_observation) { newer_observation - 1.minute }
 
+    before { RefreshCustomDomainRoutabilityWorker.clear }
+
     it "returns a current positive result without scheduling DNS verification" do
       custom_domain.set_routability!(true)
 
       expect(custom_domain.strictly_routable?).to be(true)
-      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+      expect(RefreshCustomDomainRoutabilityWorker.jobs.size).to eq(0)
     end
 
     it "returns a current negative result without scheduling DNS verification" do
       custom_domain.set_routability!(false)
 
       expect(custom_domain.strictly_routable?).to be(false)
-      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+      expect(RefreshCustomDomainRoutabilityWorker.jobs.size).to eq(0)
     end
 
     it "falls back and schedules one refresh when the result is unknown" do
       expect(custom_domain.strictly_routable?).to be(false)
 
-      expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+      expect(RefreshCustomDomainRoutabilityWorker.jobs.size).to eq(1)
     end
 
     it "falls back when the refresh cannot be enqueued" do
@@ -294,21 +296,21 @@ describe CustomDomain do
       expect(custom_domain.strictly_routable?).to be(false)
     end
 
-    it "serves a stale positive result while scheduling a refresh" do
+    it "falls back from a stale positive result while scheduling a refresh" do
       custom_domain.set_routability!(true)
       custom_domain.update_column(:routability_checked_at, 7.hours.ago)
 
-      expect(custom_domain.strictly_routable?).to be(true)
+      expect(custom_domain.strictly_routable?).to be(false)
 
-      expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+      expect(RefreshCustomDomainRoutabilityWorker.jobs.size).to eq(1)
     end
 
-    it "serves a stale positive result when the refresh is already deduplicated" do
+    it "falls back from a stale positive result when the refresh is already deduplicated" do
       custom_domain.set_routability!(true)
       custom_domain.update_column(:routability_checked_at, 7.hours.ago)
       expect(RefreshCustomDomainRoutabilityWorker).to receive(:perform_async).and_return(nil)
 
-      expect(custom_domain.strictly_routable?).to be(true)
+      expect(custom_domain.strictly_routable?).to be(false)
     end
 
     it "falls back from a stale positive result when the refresh cannot be enqueued" do
@@ -324,7 +326,7 @@ describe CustomDomain do
       custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
 
       expect(custom_domain.strictly_routable?).to be(false)
-      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+      expect(RefreshCustomDomainRoutabilityWorker.jobs.size).to eq(0)
     end
 
     it "does not apply a DNS result after the domain changes" do
