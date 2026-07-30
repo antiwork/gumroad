@@ -192,6 +192,11 @@ class ContactingCreatorMailer < ApplicationMailer
     # keeps being paid on schedule, and telling them otherwise would be false and would push them
     # to change accounts when they do not have to.
     @retries_stopped = @payment.terminal_paypal_failure?
+    # ...and never promise a retry that a pause is already stopping. Payouts.is_user_payable exits
+    # on the broader payouts_paused? long before any processor runs, so for a paused seller "we'll
+    # keep trying on your usual payout schedule" is false and contradicts the pause this same email
+    # goes on to describe. Covers both a hold we placed and the seller's own toggle.
+    @retries_paused_by_pause = !@retries_stopped && @seller.payouts_paused?
     # And when they can clear it on the account they already have, lead with that fix.
     @can_receive_us_dollars_on_same_account = @payment.repairable_in_place_paypal_failure?
     # Ask the seller to reply rather than promising the next payout date, because an admin or

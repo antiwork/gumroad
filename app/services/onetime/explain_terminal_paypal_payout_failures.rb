@@ -71,7 +71,7 @@ module Onetime
 
     private
       # One terminal failure per seller, to enumerate the population. No date bound on purpose: the
-      # live block (PaypalPayoutProcessor.terminal_failure_for_payout_email?) refuses a payout on a
+      # live block (PaypalPayoutProcessor.terminal_failure_blocking_payouts?) refuses a payout on a
       # terminal rejection of any age, so bounding the scan here would leave sellers blocked by the
       # live check but never told why — the same silence this task exists to end. Whether each
       # seller is still stuck is decided per seller below, against the live predicate itself.

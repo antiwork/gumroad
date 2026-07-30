@@ -71,6 +71,38 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
     end
 
+    # The payout gate exits on payouts_paused? before any processor runs, so a paused seller is not
+    # being retried on schedule whatever the rejection code says. Promising it contradicts the pause
+    # this same email describes further down. Reviewer finding on #6526.
+    it "does not promise schedule retries to a seller whose payouts we have paused" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("We&#39;ll keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("payouts on your account are paused right now")
+    end
+
+    it "does not promise schedule retries to a seller who paused their own payouts" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("We&#39;ll keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("payouts on your account are paused right now")
+    end
+
+    it "promises schedule retries for a retried rejection when nothing is paused" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to_not include("paused right now")
+    end
+
     it "does not promise a payout date when the account is also under a payout hold" do
       payment.user.update!(payouts_paused_internally: true)
 
