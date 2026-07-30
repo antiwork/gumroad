@@ -514,6 +514,98 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "bank account refused outright during a bank account sync" do
+    let(:zip_code) { "94107" }
+    let(:error_message) do
+      "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
+    end
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(error_message, "bank_account", code: "bank_account_unusable")
+      )
+    end
+
+    it "tells the mailer this is a terminal rejection so the seller is asked for a different account" do
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
+
+      expect(result).to eq(:invalid_bank_account)
+    end
+
+    it "records the error details and marks the note so the retry loop knows the seller was told" do
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["stripe_error_code"]).to eq("bank_account_unusable")
+      expect(described_class.bank_details_terminal_rejection_note?(note)).to be(true)
+      expect(described_class.bank_details_format_rejection_note?(note)).to be(false)
+      expect(note.json_data["seller_notified"]).to be(true)
+    end
+  end
+
+  describe "classifying a bank rejection" do
+    let(:zip_code) { "94107" }
+
+    def error_for(message, code: nil)
+      Stripe::InvalidRequestError.new(message, "bank_account", code:)
+    end
+
+    it "calls a previously-failed account terminal, not a format problem" do
+      error = error_for("This bank account can't be used because previous payments or payouts failed.", code: "bank_account_unusable")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
+    end
+
+    it "calls a bank outside payout coverage terminal even with no error code" do
+      error = error_for("Stripe is unable to support this bank at this time.")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
+    end
+
+    it "prefers terminal over format when Stripe reuses a format code for a refused account" do
+      error = error_for("Invalid account number: previous attempts to deliver payouts to this account failed.", code: "account_number_invalid")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
+    end
+
+    it "still calls a plain mistyped code a format rejection" do
+      error = error_for("Invalid routing number for PK.", code: "routing_number_invalid")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT)
+    end
+
+    it "leaves a directory miss unclassified so the wait-and-re-check copy is used" do
+      error = error_for("We couldn't find the bank for that BIC")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to be_nil
+    end
+
+    it "classifies an old note that carries only the human-readable content" do
+      note = double(json_data: {}, content: "Stripe bank sync failed: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+
+      expect(described_class.bank_details_terminal_rejection_note?(note)).to be(true)
+      expect(described_class.bank_details_format_rejection_note?(note)).to be(false)
+    end
+  end
+
   describe "bank code rejected on format during a bank account sync" do
     let(:zip_code) { "94107" }
     let(:error_message) do
