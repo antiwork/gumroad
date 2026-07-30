@@ -9238,6 +9238,21 @@ describe StripeMerchantAccountManager, :vcr do
         expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
         expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance))
       end
+
+      # The agreement id is Stripe's marker that the acceptance is on file. Stripe rejected the
+      # acceptance, so the retry must not move it — measured against the test API: it otherwise
+      # lands on an account whose tos_acceptance is empty.
+      it "does not move the ToS agreement marker on the retry" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(Stripe::Account).to have_received(:update).with(anything, hash_excluding(:tos_acceptance)) do |_id, attributes|
+          expect(attributes[:metadata]).not_to have_key(:tos_agreement_id)
+          expect(attributes[:metadata][:user_compliance_info_id]).to eq(user_compliance_info_2.external_id)
+        end
+      end
     end
 
     describe "updating business type" do

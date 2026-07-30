@@ -423,10 +423,19 @@ module StripeMerchantAccountManager
     raise unless service_agreement_unsupported_error?(e) && diff_attributes.key?(:tos_acceptance)
 
     remaining_attributes = diff_attributes.except(:tos_acceptance)
+    # The agreement id is the marker saying "this ToS acceptance is on file at Stripe". Stripe
+    # rejected the acceptance, so moving it would claim an agreement that does not exist —
+    # measured: the retry otherwise lands `tos_agreement_id` on an account whose tos_acceptance
+    # is empty. The compliance-info marker does move, because those fields really did land.
+    if remaining_attributes[:metadata].is_a?(Hash)
+      remaining_attributes = remaining_attributes.merge(
+        metadata: remaining_attributes[:metadata].except(:tos_agreement_id)
+      )
+    end
     record_service_agreement_failure_note(user, e) if notify
-    # Only `tos_acceptance` was on the wire, so there is nothing left to push — but the rejection
+    # Only the agreement was on the wire, so there is nothing left to push — but the rejection
     # is recorded now, which is the part that was missing.
-    return if remaining_attributes.blank?
+    return if remaining_attributes.values.all?(&:blank?)
 
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(remaining_attributes))
   end
