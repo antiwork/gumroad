@@ -489,6 +489,12 @@ module StripeMerchantAccountManager
     # `tos_acceptance` goes whole rather than just `service_agreement` because Stripe reads an
     # acceptance without an agreement as the full one, and which agreement these sellers belong
     # under is a compliance decision.
+    #
+    # Those two fields only. The identity fields Stripe validates the same way —
+    # `individual[id_number]`, `ssn_last_4`, `company[tax_id]`, and the identifiers `update_person`
+    # sends in its own call — are not filtered here, so a mismatched seller who CHANGES an
+    # identifier still fails whole. Withholding an identifier can stall a verification Stripe is
+    # waiting on, so the disposition is a decision, not a filter entry: gumroad-private#1575.
     if account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
       attributes = without_account_country_validated_fields(diff_attributes)
       if attributes != diff_attributes
@@ -556,10 +562,10 @@ module StripeMerchantAccountManager
     account_country.to_s.upcase != legal_entity_country.to_s.upcase
   end
 
-  # Fields Stripe validates against the connected account's own country, keyed by the entity hash
-  # they live under. Removing the address wholesale rather than just its `country` is deliberate:
-  # Stripe validates the address as a unit, so a legal-entity street and postal code under a
-  # different country's account is the same rejection.
+  # The entity hashes the legal-entity address lives under. Removing the address wholesale rather
+  # than just its `country` is deliberate: Stripe validates the address as a unit, so a
+  # legal-entity street and postal code under a different country's account is the same rejection.
+  # Identity fields under these same hashes are NOT removed — see gumroad-private#1575.
   ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS = %i[individual company].freeze
   private_constant :ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS
 
