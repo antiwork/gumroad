@@ -32,10 +32,31 @@ type SendMessageResponse =
       proposed_action: ProposedAction | null;
       objects?: DisplayObject[];
       conversation_id?: string;
+      proposal_message_id?: string;
     }
   | { success: false; error: string };
 
-type ExecuteActionResponse = { success: boolean; message: string; object?: DisplayObject | null };
+type ExecuteActionResponse =
+  | { success: true; message: string; object?: DisplayObject | null }
+  | {
+      success: false;
+      message: string;
+      action_status?: "executing" | "applied" | "unknown";
+      retryable?: boolean;
+    };
+
+// Carry the server's safe retry verdict separately from its persisted claim status. A binding
+// mismatch has neither, while only a released pre-dispatch claim is retryable.
+export class AgentActionError extends ResponseError {
+  actionStatus: "executing" | "applied" | "unknown" | null;
+  retryable: boolean;
+
+  constructor(message: string, actionStatus: "executing" | "applied" | "unknown" | null, retryable = false) {
+    super(message);
+    this.actionStatus = actionStatus;
+    this.retryable = retryable;
+  }
+}
 
 // A renderable object the agent looked up or changed (a product, discount, sale, payout, ...). The
 // server builds these from the real API response, so they only ever contain data the creator can
@@ -55,6 +76,7 @@ export const sendAgentMessage = async (
 ): Promise<{
   reply: string;
   proposedAction: ProposedAction | null;
+  proposalMessageId: string | null;
   objects: DisplayObject[];
   conversationId: string | null;
 }> => {
@@ -71,23 +93,31 @@ export const sendAgentMessage = async (
     proposedAction: json.proposed_action,
     objects: json.objects ?? [],
     conversationId: json.conversation_id ?? null,
+    proposalMessageId: json.proposal_message_id ?? null,
   };
 };
 
 export const executeAgentAction = async (
   action: ProposedAction,
+  proposalMessageId?: string | null,
   conversationId?: string | null,
 ): Promise<{ message: string; object: DisplayObject | null }> => {
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.internal_agent_actions_path(),
-    // The conversation id lets the server mark the stored proposal as applied, so reloaded history
-    // shows the collapsed "Applied" card instead of a still-confirmable one.
-    data: { type: action.type, params: action.params, ...(conversationId ? { conversation_id: conversationId } : {}) },
+    // The two persisted ids bind this replay to the exact proposal the seller confirmed. Both stay
+    // optional during deploy skew so an old server response can use the server's strict
+    // unique-payload compatibility match instead of breaking an already-open chat.
+    data: {
+      type: action.type,
+      params: action.params,
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(proposalMessageId ? { proposal_message_id: proposalMessageId } : {}),
+    },
   });
   const json = typia.assert<ExecuteActionResponse>(await response.json());
-  if (!json.success) throw new ResponseError(json.message);
+  if (!json.success) throw new AgentActionError(json.message, json.action_status ?? null, json.retryable === true);
   return { message: json.message, object: json.object ?? null };
 };
 
@@ -146,8 +176,9 @@ export type ConversationMessage = {
   role: ChatRole;
   content: string;
   proposed_action?: ProposedAction | null;
+  proposal_message_id?: string | null;
   objects?: DisplayObject[] | null;
-  action_status?: "applied" | "dismissed" | null;
+  action_status?: "executing" | "applied" | "unknown" | "dismissed" | null;
 };
 
 export type Conversation = {
@@ -169,6 +200,31 @@ export const fetchLatestAgentConversation = async (): Promise<Conversation | nul
   if (!response.ok) throw new ResponseError();
   const json = typia.assert<LatestConversationResponse>(await response.json());
   return json.conversation;
+};
+
+export type AgentActionStatus = "pending" | "executing" | "applied" | "unknown";
+export type AgentActionStatusResult = { actionStatus: AgentActionStatus; objects: DisplayObject[] };
+type AgentActionStatusResponse = {
+  success: true;
+  action_status: AgentActionStatus;
+  objects: DisplayObject[];
+};
+
+// Reconcile a concurrent confirmation against the exact stored proposal instead of guessing from
+// the latest conversation, which another tab can change while the winning request is in flight.
+export const fetchAgentActionStatus = async (
+  proposalMessageId: string,
+  abortSignal?: AbortSignal,
+): Promise<AgentActionStatusResult> => {
+  const response = await request({
+    method: "GET",
+    accept: "json",
+    url: Routes.internal_agent_action_status_path({ proposal_message_id: proposalMessageId }),
+    abortSignal,
+  });
+  if (!response.ok) throw new ResponseError();
+  const json = typia.assert<AgentActionStatusResponse>(await response.json());
+  return { actionStatus: json.action_status, objects: json.objects };
 };
 
 // What the server knows about one streamed turn, identified by the client-generated id sent with
@@ -216,6 +272,7 @@ export type AgentStreamHandlers = {
 type StreamResult = {
   reply: string;
   proposedAction: ProposedAction | null;
+  proposalMessageId: string | null;
   objects: DisplayObject[];
   suggestions: string[];
   // The id of the stored conversation this turn was persisted to; send it on the next turn (and on
@@ -233,6 +290,7 @@ type ErrorData = { message: string };
 type DoneData = {
   reply: string;
   proposed_action: ProposedAction | null;
+  proposal_message_id?: string;
   objects?: DisplayObject[];
   suggestions?: string[];
   conversation_id?: string;
@@ -389,6 +447,7 @@ export const streamAgentMessage = async (
           // the same way objects/suggestions fall back to their accumulated state. A done frame that
           // omits (or nulls) proposed_action must not erase a confirmation card already shown.
           proposedAction: data.proposed_action ?? proposedAction,
+          proposalMessageId: data.proposal_message_id ?? null,
           objects: data.objects ?? objects,
           suggestions: data.suggestions ?? suggestions,
           conversationId: data.conversation_id ?? conversationId ?? null,

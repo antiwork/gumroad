@@ -19,9 +19,21 @@ describe Ai::StoreAgentService do
     allow(Ai::StoreAgentApiClient).to receive(:new).and_return(api_client)
   end
 
-  # A model turn with plain assistant text and no tool use.
-  def text_result(text)
+  # A model turn with assistant text and the required typed terminal marker.
+  def text_result(text, outcome: "reply_only")
+    complete_turn_result(text, outcome:)
+  end
+
+  def untyped_text_result(text)
     Ai::AnthropicClient::Result.new(text:, tool_uses: [], stop_reason: "end_turn")
+  end
+
+  def complete_turn_result(text, outcome:)
+    Ai::AnthropicClient::Result.new(
+      text:,
+      tool_uses: [{ id: "toolu_complete", name: "complete_turn", input: { "outcome" => outcome } }],
+      stop_reason: "tool_use",
+    )
   end
 
   # A model turn that asks to use a tool (Anthropic tool_use block).
@@ -82,9 +94,118 @@ describe Ai::StoreAgentService do
       service.respond(messages: [{ role: "user", content: "hi" }])
 
       expect(captured[:system]).to include("Gumroad's store assistant")
-      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write")
+      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "complete_turn")
       # System prompt is NOT echoed into the messages array (it's Anthropic's top-level param).
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
+    end
+
+    context "when the model completes a turn" do
+      it "rejects an untyped staging claim that the prose backstop does not recognize" do
+        false_claim = "Your edit is waiting in the action panel. Use the button there."
+        expect(described_class::STAGED_CLAIM_PATTERNS.none? { |pattern| false_claim.match?(pattern) }).to be(true)
+        allow(client).to receive(:messages).and_return(
+          untyped_text_result(false_claim),
+          complete_turn_result("I couldn't prepare that change. Please ask me to try again.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).not_to eq(false_claim)
+        expect(result[:outcome]).to eq("reply_only")
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "uses server-owned confirmation copy for a typed proposal" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_offer_code",
+                        "path_params" => { "link_id" => "prod_1" },
+                        "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                      }),
+          complete_turn_result("The action panel is ready.", outcome: "proposal_ready"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(result[:reply]).to eq("I prepared that change. Review it below, then confirm it when you're ready.")
+        expect(result[:outcome]).to eq("proposal_ready")
+        expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "uses the honest no-proposal fallback when proposal_ready never has a proposal" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("The action panel is ready.", outcome: "proposal_ready"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result).to include(
+          outcome: "reply_only",
+          reply: described_class::NOTHING_STAGED_REPLY,
+          proposed_action: nil,
+        )
+      end
+
+      it "keeps a real proposal when the model reports reply_only twice" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_offer_code",
+                        "path_params" => { "link_id" => "prod_1" },
+                        "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                      }),
+          complete_turn_result("Nothing changed.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(client).to have_received(:messages).exactly(3).times
+        expect(result[:outcome]).to eq("proposal_ready")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+        expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "rejects complete_turn mixed with an API tool without running the API tool" do
+        mixed_turn = Ai::AnthropicClient::Result.new(
+          text: "Done.",
+          tool_uses: [
+            {
+              id: "toolu_write",
+              name: "api_write",
+              input: {
+                "endpoint" => "create_offer_code",
+                "path_params" => { "link_id" => "prod_1" },
+                "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+              },
+            },
+            { id: "toolu_complete", name: "complete_turn", input: { "outcome" => "proposal_ready" } },
+          ],
+          stop_reason: "tool_use",
+        )
+        allow(client).to receive(:messages).and_return(
+          mixed_turn,
+          complete_turn_result("I did not prepare that change.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(result[:outcome]).to eq("reply_only")
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "shares one retry budget across different terminal failures" do
+        allow(client).to receive(:messages).and_return(
+          untyped_text_result("I need to retry."),
+          complete_turn_result("Staged. Confirm that card.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+        expect(result[:proposed_action]).to be_nil
+      end
     end
 
     describe "api_read" do
@@ -138,6 +259,18 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "show the rest of my products" }])
 
         expect(captured).to include("next_page_key" => "key-2")
+      end
+
+      it "forces standalone page lists to stay metadata-only" do
+        expect(api_client).to receive(:get).with("/pages", { "metadata_only" => true }).and_return(
+          { "success" => true, "pages" => [{ "slug" => "about", "title" => "About" }], "http_status" => 200 },
+        )
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_read", { "endpoint" => "list_pages", "params" => { "metadata_only" => false } }),
+          text_result("You have an About page."),
+        )
+
+        service.respond(messages: [{ role: "user", content: "What standalone pages do I have?" }])
       end
 
       # Regression for the review finding on gumroad-private#1168's fix: the pagination prompt rule
@@ -200,7 +333,7 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "hi" }])
 
         expect(captured[:system]).to include("cannot see the creator's dashboard")
-        expect(captured[:system]).to match(/no self-serve\s+fonts-and-colors screen/)
+        expect(captured[:system]).to match(/Settings > Profile > Design/)
         expect(captured[:system]).to include("never send the creator to a screen you are not certain exists")
         expect(captured[:system]).to include(%(<script id="gumroad-data"))
         expect(captured[:system]).to match(/never hard-code the product list/)
@@ -208,6 +341,24 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
         expect(captured[:system]).to match(/Only call api_write again after they explicitly ask/)
         expect(captured[:system]).to match(/two copies of an action that is\s+unsafe to run twice/)
+      end
+
+      # The server replaces the model's final prose with PROPOSAL_READY_REPLY on every proposal
+      # turn, so the prompt must say so — otherwise the model authors answer text there that is
+      # always discarded, losing the informational half of a combined ask.
+      it "teaches the model that proposal-turn text is replaced by server copy, so answers go before api_write" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to match(/your final\s+text is replaced with fixed server copy/)
+        expect(captured[:system]).to match(/answer any informational part of their request BEFORE calling api_write/)
+        expect(captured[:system]).to match(/on a proposal turn that text is replaced with\s+fixed server copy and never shown/)
+        expect(captured[:system]).not_to match(/After api_write, tell the creator you've prepared it/)
       end
 
       # Regression for gumroad-private#1463: asked whether product pages could be styled like the
@@ -238,8 +389,10 @@ describe Ai::StoreAgentService do
         # Don't argue with the seller, and don't invent an explanation for what you can't see.
         expect(captured[:system]).to match(/Never\s+argue with an observation about their own pages/)
         expect(captured[:system]).to match(/legacy setting/)
-        # Route the ask to support rather than reaching for a custom page as a colour workaround.
-        expect(captured[:system]).to match(/Gumroad support applies those/)
+        # Route the ask to the settings screen rather than reaching for a custom page as a colour
+        # workaround.
+        expect(captured[:system]).to match(/Settings > Profile > Design/)
+        expect(captured[:system]).not_to match(/support applies/)
         # ...and the authoring rule further down must not contradict that by sending an appearance
         # request into a full-page rewrite, which is how gumroad-private#984 happened.
         expect(captured[:system]).to match(/NO custom HTML page yet and wants a custom page/)
@@ -273,6 +426,60 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to match(/Placeholder text you write inside\s+these elements is always overwritten/)
         expect(captured[:system]).to match(/Only include\s+an avatar, logo, or photo when you have a real Gumroad-hosted image url/)
         expect(captured[:system]).to match(/Never author an empty image slot/)
+      end
+
+      # Both payload arrays are capped at Pages::ProfileData::MAX_ITEMS, so a page that renders
+      # either one has to be told to disclose the cap. Products alone is not enough: a posts
+      # archive rendering the first 100 of 260 reads to the creator as posts having vanished,
+      # which is the same defect (gumroad-private#1522).
+      it "requires a visible count whenever either the product or the post list is capped" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        expect(captured[:system]).to include("products_total")
+        expect(captured[:system]).to include("posts_total")
+        expect(captured[:system]).to match(/posts_total\s+exceeds posts\.length/)
+        expect(captured[:system]).to match(/MUST show a visible count for that section/)
+        expect(captured[:system]).to match(/Showing 100 of 260 posts/)
+      end
+
+      # Regression for gumroad-private#1466: a seller asked about the `<h2>Albums</h2>` on his own
+      # live storefront and about the pages he had created. The agent could read only the profile's
+      # custom HTML, which was nil, so it concluded his profile was Gumroad's untouched default and
+      # spent 45 minutes telling him: the heading was "actually Products, not Albums", it was
+      # probably his browser cache, standalone pages don't exist on Gumroad, and the CLI's own
+      # `pages push`/`pages preview` commands "aren't real Gumroad features". Every one of those was
+      # false. The heading was his own section header; the pages feature and the CLI commands ship.
+      #
+      # The prompt now has to name all three storefront surfaces, and — the load-bearing part —
+      # state that an empty custom HTML read does NOT mean the profile is the default.
+      it "teaches the model that the storefront has three surfaces and that empty custom HTML is not an empty profile" do
+        captured = nil
+        allow(client).to receive(:messages) do |args|
+          captured = args
+          text_result("ok")
+        end
+
+        service.respond(messages: [{ role: "user", content: "hi" }])
+
+        # The inference that caused the whole incident.
+        expect(captured[:system]).to match(/get_user_custom_html coming back empty means\s+only "no custom HTML" — it does NOT mean the storefront is Gumroad's untouched default/)
+        # Headings on the default profile are the seller's own, and are readable.
+        expect(captured[:system]).to include("get_user_profile_layout")
+        expect(captured[:system]).to match(/never claim the\s+default profile ships a heading of its own/)
+        # Standalone pages, and the CLI that drives them, are real.
+        expect(captured[:system]).to include("list_pages")
+        expect(captured[:system]).to match(/gumroad pages pull\/preview\/push/)
+        expect(captured[:system]).to match(/NEVER tell a creator that\s+standalone\s+pages don't exist on Gumroad/)
+        # It can list and read pages but cannot mutate them, so it must not offer to.
+        expect(captured[:system]).to include("get_page")
+        expect(captured[:system]).not_to include("update_page")
+        expect(captured[:system]).to match(/you cannot create, update, or delete them/)
       end
 
       it "rejects an unknown endpoint id without calling the API" do
@@ -342,7 +549,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "link_id" => "prod_1" },
                         "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
                       }),
-          text_result("I've prepared a 20% off code called LAUNCH for your confirmation."),
+          text_result("I've prepared a 20% off code called LAUNCH for your confirmation.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "Make a 20% off code LAUNCH" }])
@@ -369,7 +576,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "id" => "prod_1" },
                         "params" => { "price" => { "unexpected" => "object" } },
                       }),
-          text_result("Prepared the change."),
+          text_result("Prepared the change.", outcome: "proposal_ready"),
         )
 
         result = nil
@@ -386,7 +593,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "id" => "prod_1" },
                         "params" => { "description" => long_description },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "update the description" }])
@@ -400,7 +607,7 @@ describe Ai::StoreAgentService do
                         "path_params" => {},
                         "params" => { "name" => "P", "price" => "" },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "make a product with no price yet" }])
@@ -414,7 +621,7 @@ describe Ai::StoreAgentService do
                         "path_params" => {},
                         "params" => { "name" => "P", "price" => "free" },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "make it free" }])
@@ -428,7 +635,7 @@ describe Ai::StoreAgentService do
                         "path_params" => {},
                         "params" => { "name" => "P", "price" => true },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = nil
@@ -443,7 +650,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "link_id" => "prod_1" },
                         "params" => { "name" => "X", "amount_off" => { "unexpected" => "object" } },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         expect { service.respond(messages: [{ role: "user", content: "make a code" }]) }.not_to raise_error
@@ -456,7 +663,7 @@ describe Ai::StoreAgentService do
                         "path_params" => { "id" => "prod_1" },
                         "params" => { "description" => "" },
                       }),
-          text_result("Prepared."),
+          text_result("Prepared.", outcome: "proposal_ready"),
         )
 
         result = service.respond(messages: [{ role: "user", content: "clear the description" }])
@@ -524,6 +731,482 @@ describe Ai::StoreAgentService do
         expect(captured["error"]).to include("price_cents")
         expect(captured["error"]).to include("name, price, description, custom_permalink, price_currency_type, max_purchase_count")
       end
+
+      it "normalizes proposed product currency code case and whitespace before storing the action" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", { "endpoint" => "create_product", "params" => { "name" => "Workbook", "price" => 21_999, "price_currency_type" => " ZAR " } }),
+          text_result("Prepared."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "make a ZAR product" }])
+
+        expect(result[:proposed_action]).to include(
+          type: "api_write",
+          params: include("params" => include("price_currency_type" => "zar")),
+        )
+        expect(result[:proposed_action][:fields]).to include({ label: "Price currency type", value: "zar" })
+      end
+
+      describe "custom-page read preconditions" do
+        page_write_cases = [
+          {
+            write_endpoint: "update_user_custom_html",
+            read_endpoint: "get_user_custom_html",
+            path_params: {},
+            read_path: "/user/custom_html",
+            observable_read_path: "/user/custom_html",
+            params: { "custom_html" => "<main>New profile</main>" },
+          },
+          {
+            write_endpoint: "edit_user_custom_html",
+            read_endpoint: "get_user_custom_html",
+            path_params: {},
+            read_path: "/user/custom_html",
+            observable_read_path: "/user/custom_html",
+            params: { "find" => "<h1>Old</h1>", "replace" => "<h1>New</h1>" },
+          },
+          {
+            write_endpoint: "update_product_custom_html",
+            read_endpoint: "get_product_custom_html",
+            path_params: { "id" => "product-a" },
+            read_path: "/products/product-a/custom_html",
+            observable_read_path: "/products/:id/custom_html",
+            params: { "custom_html" => %(<main><a data-gumroad-action="buy">Buy</a></main>) },
+          },
+          {
+            write_endpoint: "edit_product_custom_html",
+            read_endpoint: "get_product_custom_html",
+            path_params: { "id" => "product-a" },
+            read_path: "/products/product-a/custom_html",
+            observable_read_path: "/products/:id/custom_html",
+            params: { "find" => "<h1>Old</h1>", "replace" => "<h1>New</h1>" },
+          },
+        ].freeze
+
+        page_write_cases.each do |page_case|
+          it "blocks #{page_case[:write_endpoint]} until its declared full read succeeds" do
+            captured = nil
+            first = true
+            expect(Rails.logger).to receive(:warn).with(described_class::MISSING_REQUIRED_READ_MESSAGE)
+            expect(ErrorNotifier).to receive(:notify).with(
+              described_class::MISSING_REQUIRED_READ_MESSAGE,
+              exclude_request_context: true,
+              write_endpoint: page_case[:write_endpoint],
+              required_read_endpoint: page_case[:read_endpoint],
+              required_read_path: page_case[:observable_read_path],
+            )
+            allow(client).to receive(:messages) do |args|
+              if first
+                first = false
+                tool_result("api_write", {
+                              "endpoint" => page_case[:write_endpoint],
+                              "path_params" => page_case[:path_params],
+                              "params" => page_case[:params],
+                            })
+              else
+                captured = captured_tool_result(args)
+                text_result("I need to read the current page first.")
+              end
+            end
+
+            result = service.respond(messages: [{ role: "user", content: "Change my custom page" }])
+
+            expect(result[:proposed_action]).to be_nil
+            expect(captured["error"]).to include(
+              "successful full read",
+              "Only if the seller explicitly requested this custom-page work",
+              "Otherwise, do not read the page body and do not retry the write",
+              "Status or metadata-only reads do not count",
+            )
+            expect(captured["corrective_action"]).to eq(
+              "condition" => "The seller explicitly requested this custom-page work.",
+              "if_requested" => {
+                "tool" => "api_read",
+                "endpoint" => page_case[:read_endpoint],
+                "path_params" => page_case[:path_params],
+                "after_success" => {
+                  "action" => "retry_write",
+                  "endpoint" => page_case[:write_endpoint],
+                  "timing" => "this_turn",
+                },
+              },
+              "otherwise" => {
+                "action" => "do_not_read_or_retry",
+                "instruction" => "Do not read the page body and do not retry the write.",
+              },
+            )
+          end
+
+          it "allows #{page_case[:write_endpoint]} after its declared full read succeeds for the same target" do
+            expect(api_client).to receive(:get).with(page_case[:read_path], {}).and_return(
+              { "success" => true, "custom_html" => "<h1>Current</h1>", "http_status" => 200 },
+            )
+            allow(client).to receive(:messages).and_return(
+              tool_result("api_read", {
+                            "endpoint" => page_case[:read_endpoint],
+                            "path_params" => page_case[:path_params],
+                          }),
+              tool_result("api_write", {
+                            "endpoint" => page_case[:write_endpoint],
+                            "path_params" => page_case[:path_params],
+                            "params" => page_case[:params],
+                          }),
+              text_result("I read the current page and prepared the change.", outcome: "proposal_ready"),
+            )
+
+            result = service.respond(messages: [{ role: "user", content: "Change my custom page" }])
+
+            expect(result[:proposed_action]).to include(
+              type: "api_write",
+              params: include(
+                "endpoint" => page_case[:write_endpoint],
+                "path_params" => page_case[:path_params],
+              ),
+            )
+          end
+        end
+
+        it "does not let a full read of product A unlock a write to product B" do
+          captured = nil
+          expect(api_client).to receive(:get).with("/products/product-a/custom_html", {}).and_return(
+            { "success" => true, "custom_html" => "<h1>A</h1>", "http_status" => 200 },
+          )
+          expect(ErrorNotifier).to receive(:notify).with(
+            described_class::MISSING_REQUIRED_READ_MESSAGE,
+            exclude_request_context: true,
+            write_endpoint: "update_product_custom_html",
+            required_read_endpoint: "get_product_custom_html",
+            required_read_path: "/products/:id/custom_html",
+          )
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_read", {
+                          "endpoint" => "get_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                        }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_custom_html",
+                          "path_params" => { "id" => "product-b" },
+                          "params" => { "custom_html" => "<main>Product B</main>" },
+                        }),
+            text_result("I need to read product B first."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args) if replies.one?
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Replace product B's page" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured.dig("corrective_action", "if_requested", "path_params")).to eq("id" => "product-b")
+        end
+
+        it "does not let a full read from a prior turn unlock the current turn" do
+          captured_results = []
+          expect(api_client).to receive(:get).with("/products/product-a/custom_html", {}).and_return(
+            { "success" => true, "custom_html" => "<h1>A</h1>", "http_status" => 200 },
+          )
+          expect(ErrorNotifier).to receive(:notify).with(
+            described_class::MISSING_REQUIRED_READ_MESSAGE,
+            exclude_request_context: true,
+            write_endpoint: "edit_product_custom_html",
+            required_read_endpoint: "get_product_custom_html",
+            required_read_path: "/products/:id/custom_html",
+          )
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_read", {
+                          "endpoint" => "get_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                        }),
+            text_result("I found the current page."),
+            tool_result("api_write", {
+                          "endpoint" => "edit_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "find" => "<h1>A</h1>", "replace" => "<h1>Updated</h1>" },
+                        }),
+            text_result("I need to read it again in this turn."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args)
+            captured_results << captured if captured
+            replies.shift
+          end
+
+          service.respond(messages: [{ role: "user", content: "What is on product A's page?" }])
+          second_turn = service.respond(messages: [{ role: "user", content: "Change its heading" }])
+
+          expect(second_turn[:proposed_action]).to be_nil
+          expect(captured_results.last["error"]).to include("in this turn")
+        end
+
+        it "does not let a product metadata read unlock a custom-page write" do
+          captured = nil
+          expect(api_client).to receive(:get).with("/products/product-a", {}).and_return(
+            { "success" => true, "product" => { "id" => "product-a", "name" => "Product A" }, "http_status" => 200 },
+          )
+          expect(ErrorNotifier).to receive(:notify).with(
+            described_class::MISSING_REQUIRED_READ_MESSAGE,
+            exclude_request_context: true,
+            write_endpoint: "update_product_custom_html",
+            required_read_endpoint: "get_product_custom_html",
+            required_read_path: "/products/:id/custom_html",
+          )
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_read", {
+                          "endpoint" => "get_product",
+                          "path_params" => { "id" => "product-a" },
+                        }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "custom_html" => "<main>Replacement</main>" },
+                        }),
+            text_result("I need the full page, not its metadata."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args) if replies.one?
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Replace product A's page" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include("metadata-only reads do not count")
+        end
+
+        it "does not turn an unsolicited custom-page write into unconditional read and retry instructions" do
+          captured = nil
+          expect(api_client).not_to receive(:get)
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_write", {
+                          "endpoint" => "update_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "custom_html" => "<main>Blue theme</main>" },
+                        }),
+            text_result("That was not requested, so I will not inspect or change the custom page."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args) if replies.one?
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Why is my product page blue?" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include(
+            "Only if the seller explicitly requested this custom-page work",
+            "Otherwise, do not read the page body and do not retry the write",
+          )
+          expect(captured["corrective_action"]).not_to have_key("tool")
+          expect(captured.dig("corrective_action", "condition")).to eq(
+            "The seller explicitly requested this custom-page work.",
+          )
+          expect(captured.dig("corrective_action", "otherwise")).to eq(
+            "action" => "do_not_read_or_retry",
+            "instruction" => "Do not read the page body and do not retry the write.",
+          )
+        end
+
+        it "gives explicitly requested page work the exact read target and allows a retry after the read succeeds" do
+          captured_results = []
+          expect(api_client).to receive(:get).with("/products/product-a/custom_html", {}).and_return(
+            { "success" => true, "custom_html" => "<h1>Current</h1>", "http_status" => 200 },
+          )
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_write", {
+                          "endpoint" => "edit_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "find" => "<h1>Current</h1>", "replace" => "<h1>Updated</h1>" },
+                        }),
+            tool_result("api_read", {
+                          "endpoint" => "get_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                        }),
+            tool_result("api_write", {
+                          "endpoint" => "edit_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "find" => "<h1>Current</h1>", "replace" => "<h1>Updated</h1>" },
+                        }),
+            text_result("I read the current page and prepared the requested heading change.", outcome: "proposal_ready"),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args)
+            captured_results << captured if captured
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "On product A's custom page, change the heading to Updated" }])
+
+          correction = captured_results.first.fetch("corrective_action")
+          expect(correction.dig("if_requested", "endpoint")).to eq("get_product_custom_html")
+          expect(correction.dig("if_requested", "path_params")).to eq("id" => "product-a")
+          expect(correction.dig("if_requested", "after_success")).to eq(
+            "action" => "retry_write",
+            "endpoint" => "edit_product_custom_html",
+            "timing" => "this_turn",
+          )
+          expect(result[:proposed_action]).to include(
+            type: "api_write",
+            params: include(
+              "endpoint" => "edit_product_custom_html",
+              "path_params" => { "id" => "product-a" },
+            ),
+          )
+        end
+
+        it "does not send a model-supplied target id to guard observability" do
+          sentinel = "raw-seller-chat-DO-NOT-SEND"
+          expect(Rails.logger).to receive(:warn).with(described_class::MISSING_REQUIRED_READ_MESSAGE)
+          expect(ErrorNotifier).to receive(:notify).with(
+            described_class::MISSING_REQUIRED_READ_MESSAGE,
+            exclude_request_context: true,
+            write_endpoint: "update_product_custom_html",
+            required_read_endpoint: "get_product_custom_html",
+            required_read_path: "/products/:id/custom_html",
+          )
+          allow(client).to receive(:messages).and_return(
+            tool_result("api_write", {
+                          "endpoint" => "update_product_custom_html",
+                          "path_params" => { "id" => sentinel },
+                          "params" => { "custom_html" => "<main>Replacement</main>" },
+                        }),
+            text_result("I need to read the current page first."),
+          )
+
+          result = service.respond(messages: [{ role: "user", content: sentinel }])
+
+          expect(result[:proposed_action]).to be_nil
+        end
+
+        it "rejects a metadata-only param on the full-read endpoint and keeps the write locked" do
+          captured_results = []
+          expect(api_client).not_to receive(:get)
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_read", {
+                          "endpoint" => "get_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "metadata_only" => true },
+                        }),
+            tool_result("api_write", {
+                          "endpoint" => "update_product_custom_html",
+                          "path_params" => { "id" => "product-a" },
+                          "params" => { "custom_html" => "<main>Replacement</main>" },
+                        }),
+            text_result("I still need the declared full read."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args)
+            captured_results << captured if captured
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Replace product A's page" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured_results.first["error"]).to include("metadata_only")
+          expect(captured_results.last["error"]).to include("successful full read")
+        end
+
+        it "does not let a failed full read unlock a custom-page write" do
+          captured = nil
+          expect(api_client).to receive(:get).with("/user/custom_html", {}).and_return(
+            { "success" => false, "message" => "Unavailable", "http_status" => 200 },
+          )
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_read", { "endpoint" => "get_user_custom_html" }),
+            tool_result("api_write", {
+                          "endpoint" => "update_user_custom_html",
+                          "params" => { "custom_html" => "<main>Replacement</main>" },
+                        }),
+            text_result("The read failed, so I cannot prepare this yet."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args) if replies.one?
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Replace my profile page" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include("successful full read")
+        end
+
+        it "does not let a non-2xx full read unlock a custom-page write when success is omitted" do
+          captured = nil
+          expect(api_client).to receive(:get).with("/user/custom_html", {}).and_return(
+            { "message" => "Unavailable", "http_status" => 503 },
+          )
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:warn)
+          replies = [
+            tool_result("api_read", { "endpoint" => "get_user_custom_html" }),
+            tool_result("api_write", {
+                          "endpoint" => "update_user_custom_html",
+                          "params" => { "custom_html" => "<main>Replacement</main>" },
+                        }),
+            text_result("The read failed, so I cannot prepare this yet."),
+          ]
+          allow(client).to receive(:messages) do |args|
+            captured = captured_tool_result(args) if replies.one?
+            replies.shift
+          end
+
+          result = service.respond(messages: [{ role: "user", content: "Replace my profile page" }])
+
+          expect(result[:proposed_action]).to be_nil
+          expect(captured["error"]).to include("successful full read")
+        end
+
+        it "requires the model to receive the full-read result before it can propose the write" do
+          simultaneous_read_and_write = Ai::AnthropicClient::Result.new(
+            text: "",
+            tool_uses: [
+              {
+                id: "toolu_read",
+                name: "api_read",
+                input: {
+                  "endpoint" => "get_product_custom_html",
+                  "path_params" => { "id" => "product-a" },
+                },
+              },
+              {
+                id: "toolu_write",
+                name: "api_write",
+                input: {
+                  "endpoint" => "update_product_custom_html",
+                  "path_params" => { "id" => "product-a" },
+                  "params" => { "custom_html" => "<main>Speculative replacement</main>" },
+                },
+              },
+            ],
+            stop_reason: "tool_use",
+          )
+          expect(api_client).to receive(:get).with("/products/product-a/custom_html", {}).and_return(
+            { "success" => true, "custom_html" => "<h1>Current</h1>", "http_status" => 200 },
+          )
+          allow(ErrorNotifier).to receive(:notify)
+          allow(Rails.logger).to receive(:warn)
+          allow(client).to receive(:messages).and_return(
+            simultaneous_read_and_write,
+            text_result("I read the page, but I need to prepare the write in a new tool step."),
+          )
+
+          result = service.respond(messages: [{ role: "user", content: "Replace product A's page" }])
+
+          expect(result[:proposed_action]).to be_nil
+        end
+      end
     end
 
     context "when the model proposes more than one write in a single turn" do
@@ -548,7 +1231,7 @@ describe Ai::StoreAgentService do
             first = false
             two_write_uses
           else
-            text_result("I've prepared the FIRST code for your confirmation.")
+            text_result("I've prepared the FIRST code for your confirmation.", outcome: "proposal_ready")
           end
         end
 
@@ -573,13 +1256,17 @@ describe Ai::StoreAgentService do
       end
 
       it "re-asks the model to stage it for real and returns the recovered turn" do
-        replies = [text_result("Staged. Confirm that card and the discount goes live."), write_use, text_result("Staged now — confirm the card.")]
+        replies = [
+          text_result("Staged. Confirm that card and the discount goes live."),
+          write_use,
+          text_result("Staged now — confirm the card.", outcome: "proposal_ready"),
+        ]
         allow(client).to receive(:messages) { replies.shift }
 
         result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
         expect(result[:proposed_action]).to include(type: "api_write")
-        expect(result[:reply]).to eq("Staged now — confirm the card.")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
         expect(replies).to be_empty
       end
 
@@ -599,10 +1286,17 @@ describe Ai::StoreAgentService do
 
         expect(result[:reply]).to eq(correction_reply)
         expect(captured.last[:role]).to eq("user")
-        expect(captured.last[:content]).to eq(described_class::STAGED_CLAIM_CORRECTION)
-        # The model's own false claim is replayed as the assistant turn it is, so the correction
-        # reads as a response to it.
-        expect(captured[-2]).to eq(role: "assistant", content: "Staged. Confirm that card.")
+        correction_result = captured.last[:content].sole
+        expect(JSON.parse(correction_result[:content])).to eq("error" => described_class::STAGED_CLAIM_CORRECTION)
+        # Rejected terminal tools are replayed with a matching tool_result, which keeps the
+        # correction valid under Anthropic's tool-use message protocol.
+        expect(captured[-2][:role]).to eq("assistant")
+        expect(captured[-2][:content]).to include(
+          type: "tool_use",
+          id: "toolu_complete",
+          name: "complete_turn",
+          input: { "outcome" => "reply_only" },
+        )
       end
 
       it "does not ask for a correction the guard would reject" do
@@ -650,12 +1344,12 @@ describe Ai::StoreAgentService do
       end
 
       it "leaves a legitimate staging claim alone when the action really was proposed" do
-        replies = [write_use, text_result("Staged. Confirm that card and it's live.")]
+        replies = [write_use, text_result("Staged. Confirm that card and it's live.", outcome: "proposal_ready")]
         allow(client).to receive(:messages) { replies.shift }
 
         result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
-        expect(result[:reply]).to eq("Staged. Confirm that card and it's live.")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
         expect(result[:proposed_action]).to include(type: "api_write")
       end
 
@@ -839,15 +1533,15 @@ describe Ai::StoreAgentService do
       it "reserves enough recovery turns when the claim arrives at the normal iteration cap" do
         stub_const("#{described_class}::MAX_TOOL_ITERATIONS", 1)
         claim = "Staged. Confirm that card."
-        replies = [text_result(claim), write_use, text_result("Staged now — confirm the card.")]
+        replies = [text_result(claim), write_use, text_result("Staged now — confirm the card.", outcome: "proposal_ready")]
         allow(client).to receive(:messages) { replies.shift }
 
         result = service.respond(messages: [{ role: "user", content: "make a 20% code" }])
 
         expect(client).to have_received(:messages)
-          .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::STAGED_CLAIM_RECOVERY_ITERATIONS).times
+          .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::TURN_CONTRACT_RECOVERY_ITERATIONS).times
         expect(replies).to be_empty
-        expect(result[:reply]).to eq("Staged now — confirm the card.")
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
         expect(result[:proposed_action]).to include(type: "api_write")
       end
     end
@@ -931,6 +1625,30 @@ describe Ai::StoreAgentService do
       [events, result]
     end
 
+    it "clears unvalidated text when the model stream fails before the terminal outcome" do
+      allow(client).to receive(:stream_messages) do |**_args, &on_text|
+        on_text.call("I prepared that change.")
+        raise Ai::AnthropicClient::Error, "stream failed"
+      end
+      events = []
+      reply_completed = false
+
+      expect do
+        service.respond_streaming(
+          messages: [{ role: "user", content: "fix my header" }],
+          on_reply_complete: ->(_turn) { reply_completed = true },
+        ) { |event, payload| events << [event, payload] }
+      end.to raise_error(Ai::AnthropicClient::Error, "stream failed")
+
+      expect(events).to eq(
+        [
+          [:token, { text: "I prepared that change." }],
+          [:reset, {}],
+        ],
+      )
+      expect(reply_completed).to be(false)
+    end
+
     it "streams the reply token-by-token and then suggests follow-up prompts" do
       stub_stream_turns(stream: ["You have ", "3 products."], result: text_result("You have 3 products."))
       # The follow-up suggestions use the buffered (non-streaming) call.
@@ -969,14 +1687,22 @@ describe Ai::StoreAgentService do
       # suggestions LLM call and before any trailing event is written to the (possibly already
       # dead) client socket — so callers can persist it no matter what happens afterwards.
       expect(order).to eq([:reply_complete, :suggestions_call, :suggestions])
-      expect(completed_turn).to eq(reply: "Here are your numbers.", proposed_action: nil, objects: [])
+      expect(completed_turn).to eq(
+        outcome: "reply_only",
+        reply: "Here are your numbers.",
+        proposed_action: nil,
+        objects: [],
+      )
       expect(result[:suggestions]).to eq(["Show my sales"])
     end
 
     it "emits a proposed action over the stream without mutating" do
       stub_stream_turns(
         { stream: [], result: tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" } }) },
-        { stream: ["I've prepared that discount for your confirmation."], result: text_result("I've prepared that discount for your confirmation.") },
+        {
+          stream: ["I've prepared that discount for your confirmation."],
+          result: text_result("I've prepared that discount for your confirmation.", outcome: "proposal_ready"),
+        },
       )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
@@ -987,6 +1713,75 @@ describe Ai::StoreAgentService do
         expect(action_event.last[:proposed_action]).to include(type: "api_write")
         expect(result[:proposed_action]).to include(type: "api_write")
       end.not_to change { seller.offer_codes.count }
+    end
+
+    it "persists a proposal before streaming its server-owned confirmation" do
+      model_reply = "The action panel is ready."
+      stub_stream_turns(
+        { stream: [], result: tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => "p1" }, "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" } }) },
+        {
+          stream: [model_reply],
+          result: text_result(model_reply, outcome: "proposal_ready"),
+        },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+      order = []
+
+      result = service.respond_streaming(
+        messages: [{ role: "user", content: "make a 20% code" }],
+        on_reply_complete: ->(turn) { order << [:persist, turn.dup] },
+      ) do |event, payload|
+        order << [event, payload]
+      end
+
+      persisted_index = order.index { |event, _| event == :persist }
+      reply_index = order.index { |event, payload| event == :token && payload[:text] == described_class::PROPOSAL_READY_REPLY }
+      proposal_index = order.index { |event, _| event == :proposed_action }
+      expect(persisted_index).to be < reply_index
+      expect(reply_index).to be < proposal_index
+      expect(order).not_to include([:token, { text: model_reply }])
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+      expect(result[:outcome]).to eq("proposal_ready")
+    end
+
+    it "enforces custom-page reads while streaming and resets them between turns" do
+      turns = [
+        { result: tool_result("api_read", { "endpoint" => "get_product_custom_html", "path_params" => { "id" => "product-a" } }, id: "toolu_read") },
+        { result: tool_result("api_write", {
+                                "endpoint" => "update_product_custom_html",
+                                "path_params" => { "id" => "product-a" },
+                                "params" => { "custom_html" => "<main>First change</main>" },
+                              }, id: "toolu_first_write") },
+        { stream: ["The first change is ready."], result: text_result("The first change is ready.", outcome: "proposal_ready") },
+        { result: tool_result("api_write", {
+                                "endpoint" => "update_product_custom_html",
+                                "path_params" => { "id" => "product-a" },
+                                "params" => { "custom_html" => "<main>Second change</main>" },
+                              }, id: "toolu_second_write") },
+        { stream: ["I need to read it again."], result: text_result("I need to read it again.") },
+      ]
+      captured_results = []
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        captured = captured_tool_result(args)
+        captured_results << captured if captured
+        turn = turns.shift
+        Array(turn[:stream]).each { |piece| on_text&.call(piece) }
+        turn[:result]
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+      allow(ErrorNotifier).to receive(:notify)
+      allow(Rails.logger).to receive(:warn)
+      expect(api_client).to receive(:get).with("/products/product-a/custom_html", {}).once.and_return(
+        { "success" => true, "custom_html" => "<main>Current</main>", "http_status" => 200 },
+      )
+
+      _first_events, first_turn = collect_events([{ role: "user", content: "Make the first change" }])
+      _second_events, second_turn = collect_events([{ role: "user", content: "Make another change" }])
+
+      expect(first_turn[:proposed_action]).to include(type: "api_write")
+      expect(second_turn[:proposed_action]).to be_nil
+      expect(captured_results.last["error"]).to include("successful full read", "in this turn")
+      expect(turns).to be_empty
     end
 
     it "still returns a reply when the follow-up suggestion call fails" do
@@ -1077,6 +1872,26 @@ describe Ai::StoreAgentService do
       expect(events.any? { |event, _| event == :proposed_action }).to be(false)
     end
 
+    it "rejects untyped streamed text even when the prose backstop does not recognize it" do
+      false_claim = "Your edit is waiting in the action panel. Use the button there."
+      honest_reply = "I couldn't prepare that change. Please ask me to try again."
+      stub_stream_turns(
+        { stream: [false_claim], result: untyped_text_result(false_claim) },
+        { stream: [honest_reply], result: text_result(honest_reply) },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "fix my header" }])
+      visible_reply = events.each_with_object(+"") do |(event, payload), text|
+        text.clear if event == :reset
+        text << payload[:text] if event == :token
+      end
+
+      expect(visible_reply).to eq(honest_reply)
+      expect(result[:reply]).to eq(honest_reply)
+      expect(result[:proposed_action]).to be_nil
+    end
+
     it "finalizes the honest fallback before writing its terminal reset to the socket" do
       claim = "Staged. Confirm that card."
       stub_stream_turns(
@@ -1103,6 +1918,7 @@ describe Ai::StoreAgentService do
 
       expect(completed_turns).to contain_exactly(
         {
+          outcome: "reply_only",
           reply: described_class::NOTHING_STAGED_REPLY,
           proposed_action: nil,
           objects: [],
@@ -1120,13 +1936,16 @@ describe Ai::StoreAgentService do
       stub_stream_turns(
         { stream: [claim], result: text_result(claim) },
         { stream: [], result: write_turn },
-        { stream: ["Staged now — confirm the card."], result: text_result("Staged now — confirm the card.") },
+        {
+          stream: ["Staged now — confirm the card."],
+          result: text_result("Staged now — confirm the card.", outcome: "proposal_ready"),
+        },
       )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
       events, result = collect_events([{ role: "user", content: "make a 20% code" }])
 
-      expect(result[:reply]).to eq("Staged now — confirm the card.")
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:proposed_action]).to include(type: "api_write")
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end
@@ -1142,18 +1961,21 @@ describe Ai::StoreAgentService do
       stub_stream_turns(
         { stream: [claim], result: text_result(claim) },
         { stream: [], result: write_turn },
-        { stream: ["Staged now — confirm the card."], result: text_result("Staged now — confirm the card.") },
+        {
+          stream: ["Staged now — confirm the card."],
+          result: text_result("Staged now — confirm the card.", outcome: "proposal_ready"),
+        },
       )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
       events, result = collect_events([{ role: "user", content: "make a 20% code" }])
 
       expect(client).to have_received(:stream_messages)
-        .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::STAGED_CLAIM_RECOVERY_ITERATIONS).times
+        .exactly(described_class::MAX_TOOL_ITERATIONS + described_class::TURN_CONTRACT_RECOVERY_ITERATIONS).times
       reset_index = events.index { |event, _| event == :reset }
-      recovered_reply_index = events.index { |event, payload| event == :token && payload[:text] == "Staged now — confirm the card." }
+      recovered_reply_index = events.index { |event, payload| event == :token && payload[:text] == described_class::PROPOSAL_READY_REPLY }
       expect(reset_index).to be < recovered_reply_index
-      expect(result[:reply]).to eq("Staged now — confirm the card.")
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:proposed_action]).to include(type: "api_write")
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end

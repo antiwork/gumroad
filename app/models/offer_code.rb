@@ -165,6 +165,16 @@ class OfferCode < ApplicationRecord
     json
   end
 
+  # Batched uses-left for capped codes, for surfaces that price many products in one request:
+  # one grouped aggregate where per-code times_used would issue one SUM each. Returns
+  # id => whether one more purchase still fits under the cap.
+  def self.uses_left_by_id(codes)
+    used = Purchase.counts_towards_offer_code_uses
+                   .where(offer_code_id: codes.map(&:id))
+                   .group(:offer_code_id).sum(:quantity)
+    codes.to_h { |code| [code.id, (code.max_purchase_count - used.fetch(code.id, 0)) >= 1] }
+  end
+
   def times_used
     purchases.counts_towards_offer_code_uses.sum(:quantity)
   end

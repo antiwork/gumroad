@@ -1,12 +1,18 @@
 import loadTikTokPixelScript from "$vendor/tiktok_pixel";
 
-import { AnalyticsConfig, BeginCheckoutEvent, GumroadEvents, ProductAnalyticsEvent } from "$app/utils/user_analytics";
+import {
+  AnalyticsConfig,
+  BeginCheckoutEvent,
+  BuyerCurrencyDisplayViewedEvent,
+  GumroadEvents,
+  ProductAnalyticsEvent,
+} from "$app/utils/user_analytics";
 
 export type TikTokPixelConfig = { tiktokPixelId: string | null };
 
-type TikTokProductAnalyticsEvent = Exclude<ProductAnalyticsEvent, BeginCheckoutEvent>;
+type TikTokProductAnalyticsEvent = Exclude<ProductAnalyticsEvent, BeginCheckoutEvent | BuyerCurrencyDisplayViewedEvent>;
 
-const TikTokEvents: Record<Exclude<GumroadEvents, "begin_checkout">, string> = {
+const TikTokEvents: Record<Exclude<GumroadEvents, "begin_checkout" | "buyer_currency_display_viewed">, string> = {
   viewed: "ViewContent",
   iwantthis: "AddToCart",
   purchased: "CompletePayment",

@@ -55,4 +55,14 @@ describe "Profile settings custom page", type: :system, js: true do
       expect(page).to have_text("Sellerasdfasdfasdf") # live postMessage sync, no republish
     end
   end
+
+  it "uses the default profile editor when saved custom HTML is feature-disabled" do
+    Feature.deactivate_user(:custom_html_pages, seller)
+
+    visit "/profile"
+
+    expect(page).to have_selector("[role=tab]", text: "Pages")
+    find("[role=tab]", text: "Design").click
+    expect(page).to have_no_text("Your custom profile page uses its own design")
+  end
 end

@@ -72,6 +72,11 @@ Rails.application.routes.draw do
       # no self-serve editor, but a caller — the store agent especially — needs to be able to SEE
       # the theme that is already rendering on the seller's storefront and product pages.
       get "/user/theme", to: "users#theme"
+      # The seller's default (non-custom-HTML) profile layout: their tabs and the sections inside
+      # them, with each section's heading. Read-only — the seller edits these in the dashboard, and
+      # the store agent needs to be able to SEE them so it stops telling sellers that headings on
+      # their own storefront do not exist (gumroad-private#1466).
+      get "/user/profile_layout", to: "users#profile_layout"
       match "/user", to: "users#update", via: [:put, :patch]
       get "/user/custom_html", to: "users#custom_html"
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
@@ -1176,6 +1181,7 @@ Rails.application.routes.draw do
         post "/agent/messages", to: "agent_messages#create", as: :agent_messages
         post "/agent/messages/stream", to: "agent_message_streams#create", as: :agent_messages_stream
         post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
+        get "/agent/actions/status", to: "agent_conversations#action_status", as: :agent_action_status
         get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
         get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
         post "/agent/custom_html_preview", to: "agent_custom_html_previews#create", as: :agent_custom_html_preview

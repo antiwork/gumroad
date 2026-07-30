@@ -35,7 +35,8 @@ type FileEntry = {
 type FileGroupConfig = {
   productId: string;
   variantId: string | null;
-  prepareDownload: () => Promise<void>;
+  // Result intentionally ignored — awaited only for completion, so any async fn fits.
+  prepareDownload: () => Promise<unknown>;
   filesById: Map<string, FileEntry>;
 };
 type FileEmbedGroupStorage = { lastCreatedUid: string | null };
