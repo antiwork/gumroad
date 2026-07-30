@@ -126,25 +126,42 @@ class AlertOnBlockedEstablishedSubscribersJob
       domains_by_purchase = domain_purchases.index_with { |purchase| blocked_domain_candidates(purchase) }
 
       # Scoped to the check that declined this renewal, mirroring Purchase::Risk: the domain check
-      # runs first and short-circuits, and the guid check matches on object_value alone (so this
-      # does too). Widening to every block the subscriber has would date a recent block from an
-      # unrelated older one and send cleanup at the wrong row.
+      # runs first and short-circuits, and both checks are scoped to their own block type the way
+      # AttributeBlockable does. Matching on object_value alone would let an unrelated type carrying
+      # the same string stand in for a block that is not enforcing anything here, and widening to
+      # every block the subscriber has would date a recent block from an older one and send cleanup
+      # at the wrong row.
       #
       # Same reason the domain lookup below resolves by candidate order rather than by date:
       # blocked_by_email_domain_if_fraudulent_transaction? short-circuits on the first of the four
       # domains that is blocked, so that row is the one holding this renewal even when another
       # candidate carries an older block.
-      guid_dates = guids.any? ? PlatformBlock.active.where(object_value: guids).group(:object_value).minimum(:blocked_at) : {}
+      guid_dates = guids.any? ? normalized_block_dates(PlatformBlock::TYPES[:browser_guid], guids) : {}
       all_domains = domains_by_purchase.values.flatten.uniq
-      domain_dates = all_domains.any? ? PlatformBlock.active.where(object_type: PlatformBlock::TYPES[:email_domain], object_value: all_domains).group(:object_value).minimum(:blocked_at) : {}
+      domain_dates = all_domains.any? ? normalized_block_dates(PlatformBlock::TYPES[:email_domain], all_domains) : {}
 
       dates = {}
-      guid_purchases.each { |purchase| dates[purchase.id] = guid_dates[purchase.browser_guid] }
+      guid_purchases.each { |purchase| dates[purchase.id] = guid_dates[purchase.browser_guid&.downcase] }
       domain_purchases.each do |purchase|
-        declining_domain = domains_by_purchase[purchase].find { |domain| domain_dates.key?(domain) }
-        dates[purchase.id] = domain_dates[declining_domain] if declining_domain
+        declining_domain = domains_by_purchase[purchase].find { |domain| domain_dates.key?(domain.downcase) }
+        dates[purchase.id] = domain_dates[declining_domain.downcase] if declining_domain
       end
       dates
+    end
+
+    # Keyed on the downcased value, because the lookup is case-insensitive but the hash is not: the
+    # column collates utf8mb4_unicode_ci, so a row stored as `Example.COM` enforces against
+    # `buyer@example.com` yet comes back under its own casing and would miss a case-sensitive key.
+    # Several rows can then collapse into one key; the oldest wins, as it does per row.
+    def normalized_block_dates(object_type, values)
+      PlatformBlock.active
+                   .where(object_type:, object_value: values)
+                   .group(:object_value)
+                   .minimum(:blocked_at)
+                   .each_with_object({}) do |(value, blocked_at), dates|
+                     key = value.downcase
+                     dates[key] = blocked_at if dates[key].nil? || blocked_at < dates[key]
+                   end
     end
 
     # The same four domains Purchase::Blockable#blocked_by_email_domain_if_fraudulent_transaction?

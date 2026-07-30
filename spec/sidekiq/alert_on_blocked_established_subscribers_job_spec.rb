@@ -112,6 +112,48 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # Enforcement scopes every block check to its own type, so a row of another type that happens to
+  # carry the same string is not blocking anybody. Reporting it would name a subscriber whose
+  # renewal is failing on something else entirely.
+  it "does not treat another block type carrying the same value as the guid block" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  # object_value collates case-insensitively, so a row stored in another casing is enforcing in
+  # production and has to be found here too — a case-sensitive lookup would drop the subscriber
+  # rather than merely lose the date.
+  it "finds a domain block stored in a different casing" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "Example.COM")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+    end
+  end
+
+  it "finds a guid block stored in a different casing" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, guid: "guid-mixed-case")
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "GUID-Mixed-Case")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+    end
+  end
+
   # A seller blocking their own buyer is a decision, not staleness.
   it "ignores a renewal blocked by the seller's own customer block" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
