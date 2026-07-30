@@ -51,7 +51,11 @@ describe User::SingleUseResetPasswordToken do
       ActiveRecord::Base.connection_pool.with_connection { first = consume(@token, "winning-password-1") }
     end
 
-    lock_held.pop
+    if lock_held.pop(timeout: 20).nil?
+      # Surface whatever the winner raised instead of blocking on a signal that will never come.
+      winner.join(5)
+      raise "the first submission never reached the reset window"
+    end
 
     loser = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection { second = consume(@token, "losing-password-1") }
