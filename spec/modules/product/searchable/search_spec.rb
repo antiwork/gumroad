@@ -409,7 +409,7 @@ describe "Product::Searchable - Search scenarios" do
 
       it "ignores a spoofed is_alive_on_profile with no seller scope" do
         # /discover passes raw request params straight through, so this arrives as a public
-        # query string. Without a user_id there is no seller to bound the vocabulary.
+        # query string.
         options = Link.search_options({ is_alive_on_profile: "true" })
         buckets = Link.search(options).aggregations["tags.keyword"]["buckets"]
 

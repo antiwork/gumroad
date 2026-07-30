@@ -4,10 +4,9 @@ module Product::Searchable
   extend ActiveSupport::Concern
 
   MAX_NUMBER_OF_TAGS = 9
-  # A seller's own storefront shows their whole tag vocabulary; Discover aggregates over every
-  # seller, so it keeps the small cap. 200 covers any realistic catalogue but is not a guarantee:
-  # the 5-tags-per-product limit is enforced only in the editor UI, so a very large catalogue can
-  # still truncate here silently.
+  # Not a hard bound: the 5-tags-per-product limit is editor-only enforcement, so a huge
+  # catalogue can still silently truncate here. Discover keeps the small cap - it spans
+  # every seller.
   MAX_NUMBER_OF_PROFILE_TAGS = 200
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
