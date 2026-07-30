@@ -16,7 +16,7 @@
 # gumroad-private#1322): a buyer who subscribes at EUR 9.99/month pays EUR 9.99 every month,
 # exactly as a USD buyer pays USD 10 every month. Looking the rate up at charge time would move
 # their bill up and down with the market, which is not something a buyer consents to and not
-# something any other Gumroad buyer experiences. Gumroad absorbs the drift.
+# something any other Gumroad buyer experiences. The seller's proceeds absorb the drift.
 #
 # It is also the only answer the rails allow. A Stripe FX quote can be locked for at most 24
 # hours, so a charge weeks or months later cannot reuse the quote from checkout — the choice is
@@ -29,7 +29,7 @@
 # and quantity changes, and #current_subscription_price_cents moves when a fixed-duration
 # discount expires. Each of those re-fixes the buyer-currency amount at that day's rate.
 # Updating a single row in place would overwrite the rate the PREVIOUS amount was fixed at,
-# which is the baseline the absorbed drift is measured against, so a new row is written instead
+# which is the baseline the seller-side drift is measured against, so a new row is written instead
 # and the newest effective one is what a charge reads.
 class LaterChargePresentment < ApplicationRecord
   include CurrencyHelper
@@ -56,7 +56,7 @@ class LaterChargePresentment < ApplicationRecord
   validates :effective_from, presence: true
   validate :presentment_currency_is_chargeable
 
-  # Rows are the historical record the absorbed drift is measured against, so once written they
+  # Rows are the historical record the seller-side drift is measured against, so once written they
   # must not move. A re-fixing writes a new row; see the class comment.
   before_update { raise ActiveRecord::ReadOnlyRecord, "later charge presentments are immutable — write a new fixing instead" }
 
@@ -95,8 +95,8 @@ class LaterChargePresentment < ApplicationRecord
 
   # Drift between what the buyer's fixed amount was worth when it was fixed and what it is
   # worth at `current_units_per_usd`, in USD cents. Reporting only — it must never feed a
-  # charge. Positive means the fixed amount is worth more USD now (Gumroad gains); negative
-  # means it is worth less (Gumroad absorbs the shortfall).
+  # charge. Positive means the fixed amount is worth more USD now (the seller gains); negative
+  # means it is worth less (the seller absorbs the shortfall).
   #
   # `current_units_per_usd` must be in the same direction as the stored rate: units of the
   # presentment currency per 1 US dollar, which is what CurrencyHelper#get_rate returns. A
@@ -105,7 +105,7 @@ class LaterChargePresentment < ApplicationRecord
   # Returns nil, not 0, when the current rate is missing or unusable. A zero drift is a real
   # and common answer (the rate did not move), so returning 0 for "cannot tell" would make an
   # unanswerable row indistinguishable from a stable one in any report that sums or averages
-  # these, and would understate the absorbed drift this record exists to measure.
+  # these, and would understate the seller-side drift this record exists to measure.
   def usd_drift_cents(current_units_per_usd)
     usd_now = usd_cents_for(current_units_per_usd)
     return nil if usd_now.nil?

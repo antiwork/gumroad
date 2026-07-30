@@ -162,7 +162,7 @@ describe LaterChargePresentment do
       expect(subscription.fixed_later_charge_price_cents).to be_nil
     end
 
-    # Rows are the baseline the absorbed drift is measured against, so a re-fixing must add a row
+    # Rows are the baseline the seller-side drift is measured against, so a re-fixing must add a row
     # rather than move an existing one.
     it "refuses to be updated in place" do
       presentment = create(:later_charge_presentment, owner: subscription)
@@ -215,19 +215,19 @@ describe LaterChargePresentment do
     end
 
     it "is positive when the buyer's fixed amount is worth more USD than when it was fixed" do
-      # EUR strengthened: 1000 EUR-cents now buys more USD, so Gumroad gains.
+      # EUR strengthened: 1000 EUR-cents now buys more USD, so the seller gains.
       expect(presentment.usd_drift_cents(BigDecimal("0.80"))).to eq(250)
     end
 
     it "is negative when the buyer's fixed amount is worth less USD than when it was fixed" do
-      # EUR weakened: Gumroad absorbs the shortfall, which is the cost of the fixed-amount
+      # EUR weakened: the seller absorbs the shortfall, which is the cost of the fixed-amount
       # guarantee and the number worth watching once this ramps.
       expect(presentment.usd_drift_cents(BigDecimal("1.25"))).to eq(-200)
     end
 
     # nil, not 0: a zero drift is a real and common answer, so returning 0 for "cannot tell"
     # would let an unanswerable row average into a report as a stable one and understate the
-    # absorbed drift this record exists to measure.
+    # seller-side drift this record exists to measure.
     it "returns nil rather than zero when the current rate is missing or unusable" do
       expect(presentment.usd_drift_cents(nil)).to be_nil
       expect(presentment.usd_drift_cents(BigDecimal("0"))).to be_nil

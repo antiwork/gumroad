@@ -24,7 +24,7 @@ class CreateLaterChargePresentments < ActiveRecord::Migration[7.1]
       # inversion is not visible in the value; the column name carries the direction instead.
       #
       # Kept for reconciliation only, never to recompute a charge: it records what the buyer's
-      # fixed amount was worth when they agreed to it, so the drift Gumroad absorbs afterwards can
+      # fixed amount was worth when they agreed to it, so the drift in seller proceeds afterwards can
       # be measured per owner.
       t.decimal :signup_currency_units_per_usd, precision: 30, scale: 15, null: false
       # When this amount started applying. The newest row that has taken effect is the one a
