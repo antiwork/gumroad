@@ -338,13 +338,11 @@ class SettingsPresenter
     # replaced and must not be blamed.
     #
     # No alive bank account means no rejected details to complain about, so the banner stays hidden.
-    # Every path that records one of these notes has a bank row saved at the time, so the nil case
-    # is really the seller having LEFT bank payouts — switching to PayPal deletes the bank row
-    # (UpdatePayoutMethod#process_payment_address_params) and nothing ever soft-deletes the note,
-    # because notes are only cleared on a SUCCESSFUL sync. Defaulting to "show" there would give a
-    # seller with working PayPal payouts a permanent banner demanding they fix a bank account they
-    # deliberately removed, which is exactly where the terminal-rejection email sends people who
-    # have no second bank account to offer.
+    # Every path that records one of these notes has a bank row saved at the time, so nil really
+    # means the seller LEFT bank payouts: switching to PayPal deletes the bank row and nothing ever
+    # soft-deletes the note, since notes are only cleared on a SUCCESSFUL sync. Defaulting to "show"
+    # would give a seller with working PayPal payouts a permanent banner demanding they fix a bank
+    # account they deliberately removed.
     def current_bank_sync_failure_note
       bank_account = seller.active_bank_account
       return nil if bank_account.nil?
@@ -476,7 +474,7 @@ class SettingsPresenter
         country = seller.alive_user_compliance_info&.legal_entity_country
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
         compliance_actions << {
-          message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it every few days for up to #{weeks} weeks.",
+          message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it once a week for up to #{weeks} weeks.",
           href: nil,
         }
       end
@@ -485,10 +483,16 @@ class SettingsPresenter
       # can refuse the account the seller saved (payouts to it failed before, or the bank can't
       # receive payouts) and the settings page still reports a clean save, so the seller has no way
       # to learn that this account will never work — they wait, and on a paid product the publish
-      # button stays blocked with a "connect a payment method" error that looks unrelated. The note
-      # self-heals the same way: it is soft-deleted once a bank sync succeeds, and
-      # current_bank_sync_failure_note ignores notes older than the currently saved bank account.
-      if stripe_account.blank? && (bank_note = current_bank_sync_failure_note)
+      # button stays blocked with a "connect a payment method" error that looks unrelated.
+      #
+      # Not gated on a missing Stripe account, unlike the postal banner: update_bank_account
+      # REQUIRES a live Stripe account, so every note recorded on the sync path belongs to a seller
+      # who has one. Gating this the same way would suppress the banner for exactly the population
+      # a bank-change rejection hits, whose payouts silently keep going to the external account
+      # Stripe still has on file. Staleness is handled by the created_at anchor instead: the note is
+      # soft-deleted once a bank sync succeeds, and current_bank_sync_failure_note ignores notes
+      # older than the currently saved bank account.
+      if (bank_note = current_bank_sync_failure_note)
         bank_message = if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(bank_note)
           "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own, and re-entering the same account won't help. Please add a different bank account."
         elsif StripeMerchantAccountManager.bank_details_format_rejection_note?(bank_note)

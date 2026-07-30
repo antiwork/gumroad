@@ -959,7 +959,7 @@ module StripeMerchantAccountManager
   end
 
   # Same question as bank_details_terminal_rejection?, answered from the payout-note breadcrumb
-  # rather than a live Stripe error. Reads the note the same way the format classifier does.
+  # rather than a live Stripe error.
   def self.bank_details_terminal_rejection_note?(note)
     code, message = bank_sync_note_error_details(note)
     terminal_rejection_signals?(code:, message:)

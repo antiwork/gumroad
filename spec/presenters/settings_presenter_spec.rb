@@ -904,12 +904,18 @@ describe SettingsPresenter do
         )
       end
 
-      it "does not surface a bank rejection once a Stripe account exists" do
+      it "surfaces a bank rejection recorded against a seller who already has a Stripe account" do
+        # update_bank_account requires a live Stripe account, so a rejection hit while CHANGING
+        # banks always lands on a seller who has one. Suppressing the banner here (as the postal
+        # one is suppressed) would hide it from exactly that population, whose payouts keep going
+        # to the external account Stripe still holds.
         create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_bank_note_test")
         create(:ach_account, user: seller)
         seller.add_payout_note(content: "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
 
-        expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+        expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
+          hash_including(message: a_string_matching(/add a different bank account/), href: nil)
+        )
       end
 
       it "does not surface a bank rejection that predates the bank account the seller now has saved" do

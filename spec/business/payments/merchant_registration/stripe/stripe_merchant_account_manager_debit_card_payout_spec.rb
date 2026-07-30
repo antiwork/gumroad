@@ -28,7 +28,7 @@ describe StripeMerchantAccountManager do
 
       # A card Stripe won't pay out to is terminal, not a typo: re-entering the same card
       # gets the same refusal, so the seller must be asked for a different account rather
-      # than told to wait for the weekly re-check (gumroad-private#1476).
+      # than told to wait for the weekly re-check.
       it "emails the creator and returns invalid_bank_account without notifying ErrorNotifier" do
         expect(ErrorNotifier).not_to receive(:notify)
 
