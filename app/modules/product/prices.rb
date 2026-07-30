@@ -94,8 +94,17 @@ module Product::Prices
     format_price(rental_display_price)
   end
 
-  def price_formatted_verbose
-    price_formatted_verbose_for_price_cents(display_price_cents)
+  # `for_default_duration` moves BOTH the amount and the recurrence wording to the default
+  # duration — passing the flag to display_price_cents alone pairs a default-duration amount
+  # with the cheapest tier's wording, quoting a price no buyer is charged. `discounted` takes
+  # the default offer code off, which is what checkout actually charges a first-time buyer.
+  def price_formatted_verbose(for_default_duration: false, discounted: false)
+    price_cents = display_price_cents(for_default_duration:)
+    price_cents = discounted_price_cents(price_cents) if discounted
+    price_formatted_verbose_for_price_cents(
+      price_cents,
+      recurrence: for_default_duration ? subscription_duration : display_recurrence
+    )
   end
 
   # price_formatted_verbose over an arbitrary amount, for surfaces that show a price other than

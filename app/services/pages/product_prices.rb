@@ -22,6 +22,14 @@ class Pages::ProductPrices
     new(seller, ip:).build
   end
 
+  # Whether a page can consume this payload at all. Its only consumers live inside the page's
+  # own HTML — the interpolator answers data-gumroad-product elements, and a script can only
+  # find the blob by its literal id — so a page containing neither string cannot read a price,
+  # and the whole per-request build (queries, GeoIP, formatting) is skipped for it.
+  def self.referenced_in?(html)
+    html.to_s.match?(/data-gumroad-product|gumroad-prices/)
+  end
+
   def initialize(seller, ip:)
     @seller = seller
     @ip = ip
@@ -58,22 +66,51 @@ class Pages::ProductPrices
       display = localizable?(product) ? buyer_currency_display_props(product:, price_cents:, ip:) : nil
 
       if display && display[:display_mode] == "buyer_local" && display[:buyer_local_price_cents].present?
-        {
-          price: localized_price_formatted(product, display),
-          price_cents: display[:buyer_local_price_cents],
-          currency_code: display[:buyer_currency_shown],
-          localized: true,
-        }
+        localized_entry(product, display, base_price_cents:, price_cents:)
       else
-        {
-          price: product.price_formatted_verbose_for_price_cents(
-            price_cents, recurrence: product.subscription_duration
-          ),
-          price_cents:,
-          currency_code: product.price_currency_type.to_s.downcase,
-          localized: false,
-        }
+        own_currency_entry(product, base_price_cents:, price_cents:)
       end
+    end
+
+    def localized_entry(product, display, base_price_cents:, price_cents:)
+      entry = {
+        price: localized_price_formatted(product, display),
+        price_cents: display[:buyer_local_price_cents],
+        currency_code: display[:buyer_currency_shown],
+        localized: true,
+      }
+      # The pre-discount amount, converted with the same rate as the price so the pair can't
+      # drift — mirroring buyer_local_price_props, which is how the native card localizes its
+      # strikethrough. Amount only: the native card never suffixes the struck-through number.
+      if price_cents < base_price_cents
+        original_cents = buyer_local_price_cents(
+          price_cents: base_price_cents,
+          from_currency: product.price_currency_type,
+          to_currency: display[:buyer_currency_shown],
+          rate: BigDecimal(display[:rate].to_s)
+        )
+        if original_cents.present?
+          entry[:original_price] = format_in_buyer_currency(original_cents, display[:buyer_currency_shown])
+          entry[:original_price_cents] = original_cents
+        end
+      end
+      entry
+    end
+
+    def own_currency_entry(product, base_price_cents:, price_cents:)
+      entry = {
+        price: product.price_formatted_verbose_for_price_cents(
+          price_cents, recurrence: product.subscription_duration
+        ),
+        price_cents:,
+        currency_code: product.price_currency_type.to_s.downcase,
+        localized: false,
+      }
+      if price_cents < base_price_cents
+        entry[:original_price] = product.display_price_for_price_cents(base_price_cents)
+        entry[:original_price_cents] = base_price_cents
+      end
+      entry
     end
 
     # The product shapes checkout refuses to quote (memberships, preorders, free trials,
@@ -89,13 +126,12 @@ class Pages::ProductPrices
     # Mirrors Link#price_formatted_verbose, in the buyer's currency, minus the recurrence suffix
     # that method appends — localizable? above keeps every recurring shape out of this branch.
     def localized_price_formatted(product, display)
-      formatted = MoneyFormatter.format(
-        display[:buyer_local_price_cents],
-        display[:buyer_currency_shown].to_sym,
-        no_cents_if_whole: true,
-        symbol: true
-      )
+      formatted = format_in_buyer_currency(display[:buyer_local_price_cents], display[:buyer_currency_shown])
       "#{formatted}#{product.has_customizable_price_option? ? '+' : ''}"
+    end
+
+    def format_in_buyer_currency(cents, currency)
+      MoneyFormatter.format(cents, currency.to_sym, no_cents_if_whole: true, symbol: true)
     end
 
     # One GeoIP lookup per render rather than one per product: the visitor's country does not

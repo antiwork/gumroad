@@ -153,7 +153,8 @@ describe Pages::ProductPrices do
 
       entry = described_class.build(seller, ip: nil)[product.general_permalink]
 
-      expect(entry).to eq(price: "$7", price_cents: 700, currency_code: "usd", localized: false)
+      expect(entry).to eq(price: "$7", price_cents: 700, currency_code: "usd", localized: false,
+                          original_price: "$14", original_price_cents: 1400)
     end
 
     it "leaves an existing-customers-only code on, since a first-time visitor does not get it" do
@@ -165,9 +166,12 @@ describe Pages::ProductPrices do
       entry = described_class.build(seller, ip: nil)[product.general_permalink]
 
       expect(entry[:price_cents]).to eq(1400)
+      # An ignored code is not a sale: no original price, or a page would strike through the
+      # very number it is charging.
+      expect(entry).not_to have_key(:original_price)
     end
 
-    it "localizes the discounted price, not the list price" do
+    it "localizes the discounted price, and the original it is marked down from, through one rate" do
       offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
       product.update!(default_offer_code: offer_code)
       enable_buyer_local_currency
@@ -176,7 +180,8 @@ describe Pages::ProductPrices do
 
       entry = described_class.build(seller, ip: french_ip)[product.general_permalink]
 
-      expect(entry).to eq(price: "€5.60", price_cents: 560, currency_code: "eur", localized: true)
+      expect(entry).to eq(price: "€5.60", price_cents: 560, currency_code: "eur", localized: true,
+                          original_price: "€11.20", original_price_cents: 1120)
     end
 
     it "skips deleted, archived and draft products, matching the gumroad-data payload" do

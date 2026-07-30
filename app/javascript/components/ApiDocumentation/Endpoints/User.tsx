@@ -96,18 +96,26 @@ const ProfileCustomHtmlDocumentation = () => (
         <code>data-gumroad-field="price"</code> together with <code>data-gumroad-product="&lt;permalink&gt;"</code> —
         replaced with that product's current price, converted to the visitor's own currency when Gumroad can localize
         your checkout (the amount charged may still be in US dollars), otherwise your own currency. Use{" "}
-        <code>data-gumroad-field="currency"</code> the same way for the three-letter code that price is in. The
-        permalink is the last path segment of the product's URL. An unrecognized permalink leaves the element's own text
-        alone, so write your set price inside it as a fallback.
+        <code>data-gumroad-field="currency"</code> the same way for the three-letter code that price is in (rendered
+        uppercase, e.g. <code>EUR</code>), and <code>data-gumroad-field="original-price"</code> for the pre-discount
+        amount — filled only while a default offer code discounts the product, so leave that element empty and it stays
+        empty outside a sale. The permalink is the last path segment of the product's URL. An unrecognized permalink
+        leaves the element's own text alone, so write your set price inside it as a fallback.
       </li>
     </ul>
     <p>
       Every visitor's request is priced afresh, so these never go stale after a price edit and never show one visitor's
       currency to another. The same values are also served as a{" "}
       <code>&lt;script type="application/json" id="gumroad-prices"&gt;</code> blob keyed by permalink — each entry has{" "}
-      <code>price</code>, <code>price_cents</code>, <code>currency_code</code> and <code>localized</code> — for pages
-      that build their cards in JavaScript rather than marking up each price. Both are specific to your profile page;
-      your slug pages are served without them.
+      <code>price</code>, <code>price_cents</code>, <code>currency_code</code> (lowercase) and <code>localized</code>,
+      plus <code>original_price</code> and <code>original_price_cents</code> while a default offer code discounts the
+      product — for pages that build their cards in JavaScript rather than marking up each price. For pay-what-you-want
+      products, <code>price_cents</code> is the minimum. These are the prices checkout honors — your default offer code
+      applied, memberships quoted at their default recurrence — while the <code>price</code> in{" "}
+      <code>gumroad-data</code> is your raw set price, so prefer these whenever you display one. They're included only
+      when your page references them: use a <code>data-gumroad-product</code> attribute or the literal id{" "}
+      <code>gumroad-prices</code> in your HTML. Both are specific to your profile page; your slug pages are served
+      without them.
     </p>
     <p>
       Unlike a product landing page, a profile has no native checkout, so there are no buy buttons —{" "}

@@ -6,7 +6,11 @@
 class Pages::Interpolator
   FIELDS = {
     "name" => ->(product) { product.name.to_s },
-    "price" => ->(product) { product.price_formatted_verbose.to_s },
+    # The price a first-time buyer is charged: default offer code applied and, for memberships,
+    # amount and wording from the default recurrence — the native /l/ page auto-applies both
+    # (BestOfferCodeService, ProductPresenter::Card), so the plain set price here would disagree
+    # with the page this markup replaces.
+    "price" => ->(product) { product.price_formatted_verbose(for_default_duration: true, discounted: true).to_s },
     "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) }
   }.freeze
 
@@ -18,10 +22,15 @@ class Pages::Interpolator
   # Fields a profile page can ask for about ONE product, via data-gumroad-product="<permalink>"
   # alongside data-gumroad-field. Values come from the per-request Pages::ProductPrices payload,
   # so "price" is visitor-localized where checkout can settle in that currency and "currency"
-  # names the currency that price is in.
+  # names the currency that price is in. "original-price" is the pre-discount amount, present
+  # only while a default offer code discounts the product — write nothing inside that element
+  # and it stays empty when there is no sale.
   PRODUCT_PRICE_FIELDS = {
-    "price" => :price,
-    "currency" => :currency_code,
+    "price" => ->(entry) { entry[:price] },
+    "original-price" => ->(entry) { entry[:original_price] },
+    # Uppercased for markup: this surface is display text, where ISO codes read as "EUR". The
+    # JSON blob keeps the lowercase code for scripts, matching gumroad-data conventions.
+    "currency" => ->(entry) { entry[:currency_code].to_s.upcase.presence },
   }.freeze
 
   # Profiles have no buy affordance, so profile interpolation only fills in
@@ -42,7 +51,9 @@ class Pages::Interpolator
       # user-level fields must not answer it — otherwise <span data-gumroad-product="x"
       # data-gumroad-field="name"> would render the seller's name inside a product card.
       if permalink.present?
-        value = prices.dig(permalink, PRODUCT_PRICE_FIELDS[field])
+        entry = prices[permalink]
+        handler = PRODUCT_PRICE_FIELDS[field]
+        value = entry && handler ? handler.call(entry) : nil
         # An unknown permalink or field leaves the element untouched, so whatever the page wrote
         # inside it still shows. Blanking it would turn a typo into a card with no price at all.
         node.inner_html = ERB::Util.h(value.to_s) if value.present?

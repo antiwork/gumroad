@@ -249,7 +249,9 @@ module RendersCustomHtmlPages
         if (!d || d.type !== "gumroad:profile-fields") return;
         ["name", "bio"].forEach(function (field) {
           var value = d[field] == null ? "" : String(d[field]);
-          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]');
+          // Product-scoped elements belong to the prices payload; the server-side interpolator
+          // never answers them with profile fields, so the preview must not either.
+          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]:not([data-gumroad-product])');
           for (var i = 0; i < nodes.length; i++) nodes[i].textContent = value;
         });
       });

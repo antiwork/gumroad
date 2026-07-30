@@ -555,17 +555,25 @@ class Ai::StoreAgentService
       src, which shows a broken-image icon. If the products array is empty,
       render a visible empty state (like "No products yet") so the page still reads as a real
       storefront and not a broken or unfinished page.
-    - The price in the gumroad-data JSON is always the creator's own currency. To show a visitor
-      the price in THEIR currency, render the price from the gumroad-prices JSON instead — a
-      separate <script id="gumroad-prices" type="application/json"> element, rebuilt on every
-      request, keyed by the last path segment of each product's url. Each entry holds price (a
-      formatted string), price_cents, currency_code, and localized (true when it was converted for
-      this visitor). Equivalently, mark up one element per price with both data-gumroad-product
-      set to that permalink and data-gumroad-field="price", and the server fills it in server-side
-      — use that form when the price is static markup rather than built by a script, since it then
-      renders without JavaScript. Whichever you use, write the creator's own price as the element's
-      text so the page still reads correctly if a permalink stops matching. Both mechanisms exist
-      only on the profile page — a slugged page gets neither, so never put price markup there.
+    - Whenever a page displays a price, render it from the gumroad-prices JSON — a separate
+      <script id="gumroad-prices" type="application/json"> element, rebuilt on every request,
+      keyed by the last path segment of each product's url. The price in the gumroad-data JSON
+      is the creator's raw set price: always their own currency, never discounted, and for
+      memberships it can quote a recurrence no buyer selects — so treat it as a fallback string
+      only. Each gumroad-prices entry holds price (a formatted string, in the visitor's own
+      currency when Gumroad can localize this checkout), price_cents, currency_code, localized
+      (true when converted for this visitor), and — only while the creator's default offer code
+      discounts the product — original_price and original_price_cents, for rendering the
+      struck-through pre-sale price next to the live one. Equivalently, mark up one element per
+      price with both data-gumroad-product set to that permalink and data-gumroad-field="price"
+      (or "original-price", or "currency"), and the server fills it in server-side — use that
+      form when the price is static markup rather than built by a script, since it then renders
+      without JavaScript. Whichever you use, write the creator's own price as the element's text
+      so the page still reads correctly if a permalink stops matching (except original-price,
+      which must stay empty — it renders only during a sale). The prices are served only to
+      pages that reference them, so reference the blob by its literal id ("gumroad-prices"),
+      never a computed string. Both mechanisms exist only on the profile page — a slugged page
+      gets neither, so never put price markup there.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live
@@ -591,7 +599,8 @@ class Ai::StoreAgentService
       <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
       Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
       data-gumroad-field="name", "price", or "description" with the product's live values on every
-      render.
+      render. That price is the amount a first-time buyer pays — default offer code applied, and
+      memberships quoted at their default recurrence — matching the native page it replaces.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation

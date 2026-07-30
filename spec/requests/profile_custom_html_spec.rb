@@ -223,6 +223,7 @@ describe "Profile custom HTML rendering", type: :request do
 
     it "embeds a per-request price blob keyed by permalink alongside the cached catalog" do
       product = create(:product, user: seller, name: "Cool thing", price_cents: 1400)
+      seller.update!(custom_html: %(<main><script>document.getElementById("gumroad-prices")</script></main>))
 
       get "http://seller.example.com/landing/embed"
 
@@ -231,6 +232,17 @@ describe "Profile custom HTML rendering", type: :request do
       expect(prices[product.general_permalink]).to eq(
         "price" => "$14", "price_cents" => 1400, "currency_code" => "usd", "localized" => false
       )
+    end
+
+    # The build is per-request work for up to 100 products; a page that references neither the
+    # blob's id nor a product-scoped field cannot consume it, so it must not pay for it.
+    it "omits the price blob when the page references no price surface" do
+      create(:product, user: seller, price_cents: 1400)
+
+      get "http://seller.example.com/landing/embed"
+
+      expect(response.body).to include(%(id="gumroad-data"))
+      expect(response.body).not_to include(%(id="gumroad-prices"))
     end
 
     it "interpolates a product-scoped price into the seller's markup" do
@@ -248,6 +260,7 @@ describe "Profile custom HTML rendering", type: :request do
     # nothing else in the suite notices.
     it "localizes the blob to the visitor's own currency, from the request IP" do
       product = create(:product, user: seller, price_cents: 1400)
+      seller.update!(custom_html: %(<main><script>document.getElementById("gumroad-prices")</script></main>))
       allow(Feature).to receive(:active?).and_call_original
       allow(Feature).to receive(:active?).with(:buyer_local_currency, seller).and_return(true)
       allow(GeoIp).to receive(:lookup).and_return(
@@ -273,6 +286,14 @@ describe "Profile custom HTML rendering", type: :request do
       sign_in seller
       get "http://seller.example.com/landing/embed?preview=true"
       expect(response.body).to include("gumroad:profile-fields")
+    end
+
+    # The server-side interpolator never answers a product-scoped element with a profile field;
+    # the live preview must match, or editing the name would overwrite product cards on screen.
+    it "excludes product-scoped elements from the live sync" do
+      sign_in seller
+      get "http://seller.example.com/landing/embed?preview=true"
+      expect(response.body).to include(":not([data-gumroad-product])")
     end
 
     it "omits the listener on a ?preview embed for anyone other than the owner" do
