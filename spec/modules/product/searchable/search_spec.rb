@@ -415,6 +415,15 @@ describe "Product::Searchable - Search scenarios" do
 
         expect(buckets.length).to eq(Product::Searchable::MAX_NUMBER_OF_TAGS)
       end
+
+      it "keeps the Discover bucket limit when the flag arrives as the string \"false\"" do
+        # A string is truthy in Ruby, but the `term is_alive_on_profile:` filter coerces it to
+        # false, so the tag lane has to agree with the hits it is aggregating.
+        options = Link.search_options({ user_id: creator.id, is_alive_on_profile: "false" }).to_hash
+        size = options[:aggregations]["tags.keyword"][:terms][:size]
+
+        expect(size).to eq(Product::Searchable::MAX_NUMBER_OF_TAGS)
+      end
     end
 
     describe "on indexed products with `created_at` value" do
