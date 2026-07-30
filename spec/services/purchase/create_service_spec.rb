@@ -1593,6 +1593,20 @@ describe Purchase::CreateService, :vcr do
       expect(purchase.stripe_transaction_id).to be_nil
     end
 
+    it "fails a digital purchase declaring Crimea under Russian attribution" do
+      # The buyer declares both halves of this pair, so it is screened regardless of what the geo
+      # database attributes the occupied regions to.
+      params[:purchase][:sales_tax_country_code_election] = "RU"
+      params[:purchase][:state] = "CR"
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase.failed?).to be true
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      expect(error).to eq "Sorry, this item is not available in your location."
+      expect(purchase.stripe_transaction_id).to be_nil
+    end
+
     it "fails a digital purchase whose stored IP country is comprehensively sanctioned" do
       # The column `Order::CreateService` fills in, which is a separate signal from a live lookup.
       params[:purchase][:ip_country] = "Cuba"

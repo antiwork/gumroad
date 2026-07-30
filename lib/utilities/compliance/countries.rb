@@ -52,12 +52,15 @@ module Compliance
     private_constant :BLOCKED_COUNTRY_CODES
 
     # Comprehensively sanctioned regions that ISO 3166-1 has no country code for, so they cannot be
-    # expressed in BLOCKED_COUNTRY_CODES. Keyed by alpha2, values are ISO 3166-2 subdivision codes
-    # without the country prefix — the shape `GeoIp::Result#region_name` returns. Only UA is listed
-    # because our MaxMind database attributes all four regions to Ukraine; it emits no Crimea or
-    # Sevastopol subdivision under RU at all.
+    # expressed in BLOCKED_COUNTRY_CODES. Keyed by the alpha2 the location may be attributed to,
+    # values are ISO 3166-2 subdivision codes without the country prefix — the shape
+    # `GeoIp::Result#region_name` returns. The RU keys are deliberate belt-and-braces: the mmdb is
+    # replaced outside this repo, and the first pair `sanctioned_location_signals` screens is
+    # buyer-declared, not a lookup. ISO 3166-2:RU is all-alphabetic with no CR or SEV, so they
+    # cannot over-block a real Russian region.
     BLOCKED_SUBDIVISION_CODES = {
       "UA" => %w[43 40 14 09], # Crimea, Sevastopol, Donetsk, Luhansk
+      "RU" => %w[CR SEV], # Crimea, Sevastopol under Russian attribution
     }.transform_values(&:freeze).freeze
     private_constant :BLOCKED_SUBDIVISION_CODES
 

@@ -168,18 +168,25 @@ describe Compliance do
         expect(Compliance::Countries.blocked_subdivision?("UA", "09")).to be true # Luhansk
       end
 
+      it "blocks Crimea when a lookup attributes it to Russia instead of Ukraine" do
+        expect(Compliance::Countries.blocked_subdivision?("RU", "CR")).to be true
+        expect(Compliance::Countries.blocked_subdivision?("RU", "SEV")).to be true
+      end
+
       it "accepts the full ISO 3166-2 form as well as the bare code" do
         expect(Compliance::Countries.blocked_subdivision?("UA", "UA-43")).to be true
         expect(Compliance::Countries.blocked_subdivision?("ua", "ua-43")).to be true
       end
 
-      it "does not block the rest of Ukraine" do
+      it "does not block the rest of Ukraine or Russia" do
         expect(Compliance::Countries.blocked_subdivision?("UA", "30")).to be false # Kyiv
         expect(Compliance::Countries.blocked_subdivision?("UA", "63")).to be false # Kharkiv
+        expect(Compliance::Countries.blocked_subdivision?("RU", "MOW")).to be false # Moscow
       end
 
       it "does not read one country's subdivision codes as another's" do
-        # "43" is Crimea in Ukraine and Kurgan in Russia; the same string must not cross over.
+        # "43" is Crimea under UA and not an RU code at all (ISO 3166-2:RU is alphabetic), so the
+        # same string must not cross over.
         expect(Compliance::Countries.blocked_subdivision?("RU", "43")).to be false
         expect(Compliance::Countries.blocked_subdivision?("US", "14")).to be false
       end
