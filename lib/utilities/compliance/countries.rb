@@ -42,6 +42,8 @@ module Compliance
     # This list reflects countries under comprehensive OFAC sanctions.
     # Targeted SDN-list screening on individuals/entities is enforced
     # separately and is not based on country of residence.
+    # Syria is deliberately absent: E.O. 14312 revoked the Syria program effective 2025-07-01 and
+    # OFAC removed 31 CFR part 542 from the CFR. Secondary "sanctioned countries" lists still name it.
     BLOCKED_COUNTRY_CODES = [
       CUB, # Cuba
       IRN, # Iran
@@ -49,8 +51,36 @@ module Compliance
     ].map(&:alpha2).freeze
     private_constant :BLOCKED_COUNTRY_CODES
 
+    # Comprehensively sanctioned regions that ISO 3166-1 has no country code for, so they cannot be
+    # expressed in BLOCKED_COUNTRY_CODES. Keyed by the alpha2 a geo lookup may attribute them to,
+    # values are ISO 3166-2 subdivision codes without the country prefix — the shape
+    # `GeoIp::Result#region_name` returns. Russia is listed as well as Ukraine because a lookup may
+    # attribute the occupied regions to either side.
+    BLOCKED_SUBDIVISION_CODES = {
+      "UA" => %w[43 40 14 09], # Crimea, Sevastopol, Donetsk, Luhansk
+      "RU" => %w[CR SEV], # Crimea, Sevastopol under Russian attribution
+    }.transform_values(&:freeze).freeze
+    private_constant :BLOCKED_SUBDIVISION_CODES
+
     def self.blocked?(alpha2)
       BLOCKED_COUNTRY_CODES.include?(alpha2)
+    end
+
+    # `subdivision_code` accepts either the bare code ("43") or the full ISO 3166-2 form ("UA-43").
+    def self.blocked_subdivision?(alpha2, subdivision_code)
+      return false if alpha2.blank? || subdivision_code.blank?
+
+      country = alpha2.to_s.upcase
+      codes = BLOCKED_SUBDIVISION_CODES[country]
+      return false if codes.nil?
+
+      codes.include?(subdivision_code.to_s.upcase.delete_prefix("#{country}-"))
+    end
+
+    # Single entry point for sanctions screening on a location: a comprehensively sanctioned country,
+    # or a sanctioned region inside a country we otherwise sell to.
+    def self.blocked_location?(alpha2:, subdivision_code: nil)
+      blocked?(alpha2) || blocked_subdivision?(alpha2, subdivision_code)
     end
     # There are high levels of fraud originating in these countries.
     RISK_PHYSICAL_BLOCKED_COUNTRY_CODES = [

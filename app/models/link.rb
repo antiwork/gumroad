@@ -414,8 +414,10 @@ class Link < ApplicationRecord
   def compliance_blocked(ip)
     return false if ip.blank?
 
-    country_code = GeoIp.lookup(ip)&.country_code
-    country_code.present? && Compliance::Countries.blocked?(country_code)
+    location = GeoIp.lookup(ip)
+    return false if location.nil?
+
+    Compliance::Countries.blocked_location?(alpha2: location.country_code, subdivision_code: location.region_name)
   end
 
   def admins_can_generate_url_redirects?

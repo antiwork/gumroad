@@ -1567,6 +1567,67 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.failed?).to be true
         expect(error).to eq "The creator cannot ship the product to the country you have selected."
       end
+
+      it "returns an error message if the shipping address is in a sanctioned region of a country we sell to" do
+        shipping_params[:purchase][:country] = "UA"
+        shipping_params[:purchase][:state] = "43" # Crimea
+
+        _, error = Purchase::CreateService.new(product:, params: shipping_params).perform
+
+        expect(error).to eq "The creator cannot ship the product to the country you have selected."
+      end
+    end
+  end
+
+  context "when the buyer is in a sanctioned jurisdiction" do
+    it "fails a digital purchase whose declared tax country is comprehensively sanctioned" do
+      # For a digital product `build_purchase` discards the billing country and keeps only the tax
+      # country election, so that is the address signal this path actually has.
+      params[:purchase][:sales_tax_country_code_election] = "IR"
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase.failed?).to be true
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      expect(error).to eq "Sorry, this item is not available in your location."
+    end
+
+    it "fails a digital purchase geolocated to a comprehensively sanctioned country" do
+      allow(GeoIp).to receive(:lookup).and_return(
+        GeoIp::Result.new(country_name: "Cuba", country_code: "CU", region_name: "03",
+                          city_name: "Havana", postal_code: nil, latitude: nil, longitude: nil)
+      )
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase.failed?).to be true
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      expect(error).to eq "Sorry, this item is not available in your location."
+    end
+
+    it "fails a digital purchase geolocated to a sanctioned region of a country we sell to" do
+      allow(GeoIp).to receive(:lookup).and_return(
+        GeoIp::Result.new(country_name: "Ukraine", country_code: "UA", region_name: "14",
+                          city_name: "Donetsk", postal_code: nil, latitude: nil, longitude: nil)
+      )
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(purchase.failed?).to be true
+      expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      expect(error).to eq "Sorry, this item is not available in your location."
+    end
+
+    it "allows a digital purchase from an unsanctioned region of the same country" do
+      allow(GeoIp).to receive(:lookup).and_return(
+        GeoIp::Result.new(country_name: "Ukraine", country_code: "UA", region_name: "30",
+                          city_name: "Kyiv", postal_code: nil, latitude: nil, longitude: nil)
+      )
+
+      purchase, error = Purchase::CreateService.new(product:, params:).perform
+
+      expect(error).to be_nil
+      expect(purchase.purchase_state).to eq "successful"
     end
   end
 

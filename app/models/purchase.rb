@@ -373,6 +373,7 @@ class Purchase < ApplicationRecord
   before_create :perceived_price_cents_matches_price_cents
   before_create :validate_subscription
   before_create :validate_shipping
+  before_create :validate_sanctioned_location
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
@@ -4653,7 +4654,7 @@ class Purchase < ApplicationRecord
       return unless link.is_physical
       return if country.blank?
 
-      if Compliance::Countries.blocked?(Compliance::Countries.find_by_name(country)&.alpha2)
+      if Compliance::Countries.blocked_location?(alpha2: Compliance::Countries.find_by_name(country)&.alpha2, subdivision_code: state)
         self.error_code = PurchaseErrorCode::BLOCKED_SHIPPING_COUNTRY
         errors.add :base, "The creator cannot ship the product to the country you have selected."
       elsif ShippingDestination.for_product_and_country_code(product: link, country_code: Compliance::Countries.find_by_name(country)&.alpha2).nil?
@@ -4667,6 +4668,35 @@ class Purchase < ApplicationRecord
 
       self.error_code = PurchaseErrorCode::INVALID_QUANTITY
       errors.add :base, "Sorry, you've selected an invalid quantity."
+    end
+
+    # Sanctions screening for every purchase, not just physical ones. Before this, a digital product
+    # was only protected by the buy button being hidden at render time (`Link#compliance_blocked`),
+    # which a buyer reaching /checkout directly — or whose page was rendered from a different IP —
+    # never sees. Physical products keep failing in `validate_shipping` with their own error code, so
+    # we return early when it already objected.
+    def validate_sanctioned_location
+      return if errors.present?
+      return if is_test_purchase?
+
+      return unless sanctioned_location_signals.any? do |alpha2, subdivision_code|
+        Compliance::Countries.blocked_location?(alpha2:, subdivision_code:)
+      end
+
+      self.error_code = PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      errors.add :base, "Sorry, this item is not available in your location."
+    end
+
+    # [alpha2, subdivision] pairs we know about the buyer at create time. `card_country` is not here
+    # because it is only populated once the charge comes back, which is after this callback.
+    # `ip_country`/`ip_state` are only filled in by `Order::CreateService`, so we geolocate
+    # `ip_address` ourselves as well rather than trusting one caller to have done it.
+    def sanctioned_location_signals
+      [
+        [Compliance::Countries.find_by_name(country)&.alpha2, state],
+        [Compliance::Countries.find_by_name(ip_country)&.alpha2, ip_state],
+        [geo_info&.country_code, geo_info&.region_name],
+      ].reject { |alpha2, _subdivision| alpha2.blank? }
     end
 
     def validate_offer_code
