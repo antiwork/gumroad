@@ -341,8 +341,14 @@ class Charge::CreateService
   #
   # Gated on off_session so an on-session charge can never reach it: a buyer-present checkout
   # has a quote token and belongs in the verified-quote lane, and an upgrade/plan change
-  # charges a prorated amount that is not the stored price. The eligibility service applies
-  # the same shape tests (Checkout::BuyerCurrencyEligibility#subscription_renewal_with_stored_amount?).
+  # charges a prorated amount that is not the stored price.
+  #
+  # Defensive rather than load-bearing. Order::ChargeService sets off_session for any multi-seller
+  # cart, so this does run, but a checkout purchase is always the original subscription purchase
+  # and #stored_presentment refuses those, so it always returns {} here. Renewals bill through
+  # Purchase#later_charge_presentment_processor_args instead. The shape safety is
+  # #stored_presentment's own guards, not the eligibility service: returning early skips that
+  # service for the charge entirely.
   def subscription_renewal_presentment_processor_args
     return {} unless off_session
     return {} unless merchant_account&.stripe_charge_processor?
