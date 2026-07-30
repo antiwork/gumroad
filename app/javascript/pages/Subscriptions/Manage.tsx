@@ -77,6 +77,7 @@ type Props = {
     is_overdue_for_charge: boolean;
     is_gift: boolean;
     is_installment_plan: boolean;
+    current_recurrence_available: boolean;
   };
   contact_info: {
     email: string;
@@ -168,14 +169,20 @@ export default function SubscriptionsManage() {
     selection.optionId === subscription.option_id && !isRecurrenceChanged && !isQuantityChanged && !isResubscribing;
 
   let warning = null;
-  if (selection.optionId === subscription.option_id && hasPriceChanged) {
+  if (selection.optionId === subscription.option_id && (hasPriceChanged || isRecurrenceChanged)) {
     const price = `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, { symbolFormat: "long" })} ${recurrenceLabels[selection.recurrence ?? subscription.recurrence]}`;
+    // A retired recurrence is only in the dropdown because it is currently this buyer's. Once the
+    // plan change applies at renewal it stops being re-added, so they cannot switch back.
+    const irreversible = isRecurrenceChanged && !subscription.current_recurrence_available;
+    const oneWayNote = irreversible
+      ? ` Your current ${recurrenceLabels[subscription.recurrence]} billing is no longer offered on this ${subscriptionEntity}, so you will not be able to switch back.`
+      : "";
     if (isQuantityChanged && isRecurrenceChanged) {
-      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.`;
+      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.${oneWayNote}`;
     } else if (isQuantityChanged) {
       warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat.`;
     } else if (isRecurrenceChanged) {
-      warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat.`;
+      warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat, starting at your next renewal.${oneWayNote}`;
     } else if (isResubscribing) {
       warning = `Restarting will update your subscription to the current price of ${price} per seat.`;
     }

@@ -420,23 +420,50 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
     end
 
     context "when increasing the billing frequency" do
-      it "does not display a warning notice regarding the billing frequency" do
+      it "warns that the billing frequency change takes effect at renewal" do
         visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
 
         select("Monthly", from: "Recurrence")
 
-        expect(page).to_not have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of")
+        # A frequency change is a deferred plan change that collects nothing today, so the warning
+        # is the only signal it happened — it must not depend on the price also having moved
+        # (gumroad-private#1577).
+        expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $3 a month per seat, starting at your next renewal.")
+      end
+
+      it "does not warn that the change is irreversible while that frequency is still offered" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        select("Monthly", from: "Recurrence")
+
+        expect(page).to_not have_selector("[role='status']", text: "you will not be able to switch back")
+      end
+    end
+
+    context "when the buyer's current billing frequency has been retired by the seller" do
+      before do
+        @product.prices.alive.is_buy.find_by!(recurrence: "quarterly").mark_deleted!
+      end
+
+      it "warns that switching away is one-way" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        select("Monthly", from: "Recurrence")
+
+        expect(page).to have_selector("[role='status']", text: "Your current every 3 months billing is no longer offered on this membership, so you will not be able to switch back.")
       end
     end
 
     context "when decreasing the seat count and decreasing the billing frequency" do
-      it "does not display a warning notice regarding the seat and billing frequency change" do
+      it "displays a warning notice regarding the seat and billing frequency change" do
         visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
 
         select("Yearly", from: "Recurrence")
         fill_in "Seats", with: 1
 
-        expect(page).to_not have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of")
+        # The frequency half of this change is deferred and uncharged, so it is warned about even
+        # though the buyer is on current pricing (gumroad-private#1577).
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of $10 a year per seat.")
       end
     end
 
@@ -463,7 +490,7 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
           select("Yearly", from: "Recurrence")
 
-          expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $50 a year per seat.")
+          expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $50 a year per seat, starting at your next renewal.")
         end
       end
 
