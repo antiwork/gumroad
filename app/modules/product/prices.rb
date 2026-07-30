@@ -200,20 +200,19 @@ module Product::Prices
     end
   end
 
-  # The default offer code taken off a base price, which is what a buyer is actually charged.
-  # A surface showing the undiscounted number quotes a price checkout will not honour, so every
-  # buyer-facing price goes through here. Existing-customers-only codes are left on because a
-  # first-time visitor does not get them, and an exhausted use cap is skipped because checkout
-  # rejects the code once it's used up — the exhaustion read costs a purchases aggregate, so it
-  # runs only for capped codes (is_valid_for_purchase? short-circuits on a nil cap).
-  #
-  # Deliberately short of the full checkout evaluation beyond that: quantity minimums stay on
-  # (the native page quotes those discounts too, at the code's minimum quantity) and PPP needs
-  # per-cart context — the binding amount is minted at checkout either way.
+  # The default offer code taken off a base price, which is what a buyer would be charged
+  # buying one of this product right now. A surface showing a lower number quotes a price
+  # checkout will not honour, so every code the default checkout rejects is left on the shelf:
+  # existing-customers-only (a first-time visitor does not get it), a quantity minimum above
+  # one (the native page shows the quantity-1 price undiscounted for those, per
+  # ProductPresenter::ProductProps#discounted_price_cents), and a spent use cap. Erring the
+  # other way is safe — a buyer who qualifies later sees the price drop at checkout, where the
+  # binding amount is minted. PPP stays out entirely: it needs per-cart context.
   def discounted_price_cents(base_price_cents)
     offer_code = default_offer_code
     return base_price_cents if offer_code.blank? || offer_code.inactive? || offer_code.existing_customers_only?
-    return base_price_cents unless offer_code.is_valid_for_purchase?
+    return base_price_cents if offer_code.minimum_quantity.to_i > 1
+    return base_price_cents unless default_offer_code_uses_left?(offer_code)
 
     [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
   end
@@ -360,6 +359,18 @@ module Product::Prices
       number_of_months_in_recurrence = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
       suggested_price_cents = (default_price_cents / number_of_months_in_default_price_recurrence.to_f) * number_of_months_in_recurrence
       suggested_price_cents
+    end
+
+    # The uses-left read is a purchases aggregate, so it runs only for capped codes and its
+    # result is shared across every card on the page that carries the same default code
+    # (Current resets between requests, so a redemption is reflected on the next one).
+    def default_offer_code_uses_left?(offer_code)
+      return true if offer_code.max_purchase_count.nil?
+
+      cache = (Current.default_offer_code_uses_left ||= {})
+      return cache[offer_code.id] if cache.key?(offer_code.id)
+
+      cache[offer_code.id] = offer_code.is_valid_for_purchase?
     end
 
     def show_customizable_price_indicator?

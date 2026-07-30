@@ -172,6 +172,38 @@ describe Pages::ProductPrices do
                           original_price: "$14", original_price_cents: 1400)
     end
 
+    # The native page shows the quantity-one price undiscounted when the code needs a larger
+    # quantity (ProductProps#discounted_price_cents re-guards on the actual quantity), so a
+    # discounted card here would promise a price the default buy click does not get.
+    it "leaves a quantity-minimum code on, matching the native page's quantity-one price" do
+      offer_code = seller.offer_codes.create!(code: "bulk", amount_percentage: 50, products: [product],
+                                              minimum_quantity: 2)
+      product.update!(default_offer_code: offer_code)
+
+      entry = described_class.build(seller, ip: nil)[product.general_permalink]
+
+      expect(entry[:price_cents]).to eq(1400)
+      expect(entry).not_to have_key(:original_price)
+    end
+
+    # One purchases aggregate per distinct capped code per render, however many products carry
+    # it — the memo on Current is what keeps this affordable on a 100-product embed.
+    it "checks a capped code's remaining uses once per code, not once per product" do
+      extras = create_list(:product, 2, user: seller, price_cents: 1000)
+      offer_code = seller.offer_codes.create!(code: "cap", amount_percentage: 10,
+                                              products: [product, *extras], max_purchase_count: 5)
+      ([product] + extras).each { _1.update!(default_offer_code: offer_code) }
+
+      sums = 0
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        sums += 1 if payload[:sql].include?("SUM") && payload[:sql].include?("purchases")
+      end
+      described_class.build(seller, ip: nil)
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      expect(sums).to eq(1)
+    end
+
     # Checkout rejects a code whose use cap is spent, so subtracting it here would advertise a
     # sale price and strikethrough the buyer is never charged.
     it "leaves an exhausted default offer code on the shelf" do
