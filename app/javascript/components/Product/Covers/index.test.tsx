@@ -62,6 +62,30 @@ describe("Covers", () => {
     expect(frame(container)?.style.aspectRatio).toBe("1920 / 1080");
   });
 
+  // The cap on a LANDSCAPE frame is what shrank every cover on afetop.gumroad.com: the
+  // derived height of a 16:9 cover in the product column exceeds 80svh in any window
+  // shorter than ~800px, the frame goes shorter than its ratio, and `object-contain`
+  // then shrinks the cover in both axes — measured 142px of empty background either
+  // side of a 1280x720 cover at 1440x700. Nothing needs capping here: a landscape
+  // frame's height never exceeds the column width.
+  // See https://github.com/antiwork/gumroad-private/issues/1570
+  it("does not cap the height of a landscape frame, which would pillarbox the cover", () => {
+    const { container } = renderCovers([cover({ native_width: 1280, native_height: 720 })]);
+
+    expect(frame(container)?.style.aspectRatio).toBe("1280 / 720");
+    expect(frame(container)?.style.maxHeight).toBe("");
+  });
+
+  // A square cover derives a height equal to the column width, so it has the same
+  // no-runaway property as landscape and must not be capped either. It is called out
+  // separately because `height > width` is the boundary the cap turns on.
+  it("does not cap the height of a square frame", () => {
+    const { container } = renderCovers([cover({ native_width: 1000, native_height: 1000 })]);
+
+    expect(frame(container)?.style.aspectRatio).toBe("1000 / 1000");
+    expect(frame(container)?.style.maxHeight).toBe("");
+  });
+
   it("shapes the frame to a portrait cover and caps its height so the buy box stays in view", () => {
     const { container } = renderCovers([portrait()]);
 

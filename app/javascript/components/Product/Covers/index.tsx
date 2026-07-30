@@ -54,6 +54,17 @@ export const Covers = ({
   // frame that changed width with the active cover would move the panels out from under
   // that calculation and bounce a two-cover carousel back to the first cover.
   //
+  // The cap is portrait-only, and that restriction is the whole point of it. Applied to
+  // every shaped frame it fires on covers it was never meant for: a 16:9 cover in the
+  // 1138px product column derives a 640px frame, which exceeds 80svh in any window
+  // shorter than about 800px, so the frame goes shorter than the ratio and the
+  // `object-contain` below shrinks the cover in BOTH axes to fit — 142px of empty
+  // background either side of a 1280x720 cover at 1440x700. That is a regression against
+  // the pre-#6451 `w-full` behaviour for a shape that never had the problem the cap
+  // exists to solve. A landscape cover's derived height is at most the column width, so
+  // it cannot run away the way a 9:16 frame (~1.8x its width) does.
+  // See https://github.com/antiwork/gumroad-private/issues/1570
+  //
   // Covers with no recorded dimensions still get no ratio at all and fall back to the
   // CSS box exactly as before.
   // See https://github.com/antiwork/gumroad-private/issues/1437
@@ -67,7 +78,7 @@ export const Covers = ({
           // position the active-cover calculation reads.
           width: "100%",
           aspectRatio: `${activeCover.native_width} / ${activeCover.native_height}`,
-          maxHeight: MAX_PORTRAIT_FRAME_HEIGHT,
+          ...(activeCover.native_height > activeCover.native_width ? { maxHeight: MAX_PORTRAIT_FRAME_HEIGHT } : {}),
         };
   const prevCover = covers[activeCoverIndex - 1];
   const nextCover = covers[activeCoverIndex + 1];
