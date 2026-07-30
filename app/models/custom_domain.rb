@@ -5,7 +5,9 @@ require "ipaddr"
 class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
-  ROUTABILITY_REFRESH_INTERVAL = 6.hours
+  # Scheduled verification runs every six hours and fans out over one hour.
+  # The remaining hour absorbs queue delay before a healthy result expires.
+  ROUTABILITY_REFRESH_INTERVAL = 8.hours
 
   include Deletable
 
@@ -83,9 +85,10 @@ class CustomDomain < ApplicationRecord
 
   def strictly_routable?
     return false unless active?
+    return routable? unless routability_refresh_due?
 
-    RefreshCustomDomainRoutabilityWorker.perform_async(id) if routability_refresh_due?
-    routable?
+    enqueue_routability_refresh
+    false
   end
 
   def set_routability!(routable, checked_domain: domain, observed_at: Time.current)
@@ -180,6 +183,15 @@ class CustomDomain < ApplicationRecord
 
       reload
       true
+    end
+
+    # Refreshing future requests must not fail the current profile render.
+    def enqueue_routability_refresh
+      RefreshCustomDomainRoutabilityWorker.perform_async(id)
+      true
+    rescue => e
+      Rails.logger.error("Failed to enqueue custom domain routability refresh for #{id}: #{e.class} => #{e.message}")
+      false
     end
 
     def increment_failed_verification_attempts_count_and_notify_creator
