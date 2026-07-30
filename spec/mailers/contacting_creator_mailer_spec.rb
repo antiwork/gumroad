@@ -112,8 +112,26 @@ describe ContactingCreatorMailer do
             mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
             expect(dispute_evidence.hours_left_to_submit_evidence).to eq(0)
+            expect(mail.subject).to eq "A sale has been disputed"
             expect(mail.body.encoded).not_to include "Any additional information you can provide"
             expect(mail.body.encoded).not_to include "in the next 0 hours"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        # Reachable, not hypothetical: CreateMissingDisputeEvidenceJob clears the stamp it wrote when
+        # its own enqueue fails, leaving an evidence row nobody has been asked about. The predicate
+        # treats a nil stamp as acceptable so PayPal disputes still get the plain notice, so the
+        # mailer's seller_contacted? conjunct is what keeps this row out of the urgent path.
+        context "when the evidence exists but the seller was never contacted" do
+          before { dispute_evidence.update_as_not_seller_contacted! }
+
+          it "sends the plain notice rather than a link the form rejects" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
             expect(mail.body.encoded).not_to include "Submit additional information"
             expect(mail.body.encoded).to include "We fight every dispute."
           end
