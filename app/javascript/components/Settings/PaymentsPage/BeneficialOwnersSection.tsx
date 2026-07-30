@@ -1,7 +1,12 @@
 import * as React from "react";
 import typia from "typia";
 
-import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
+import {
+  COLOMBIA_ID_MAX_INPUT_LENGTH,
+  COLOMBIA_ID_MIN_DIGITS,
+  COLOMBIA_ID_NUMBER_ERROR_MESSAGE,
+  isValidColombiaIdNumber,
+} from "$app/utils/colombiaIdNumbers";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -518,12 +523,25 @@ const BeneficialOwnersSection = ({
     return null;
   };
 
+  const validateColombiaIdNumber = (): string | null => {
+    if (defaultCountry !== "CO") return null;
+    if (editState?.mode === "edit" && editState.owner.relationship.representative) return null;
+    // An edit that leaves the stored ID untouched submits a blank field; only judge what was typed.
+    if (!formState.id_number.trim()) return null;
+    return isValidColombiaIdNumber(formState.id_number) ? null : COLOMBIA_ID_NUMBER_ERROR_MESSAGE;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editState) return;
     const kanaError = validateJpKanaFields();
     if (kanaError) {
       setFormError(kanaError);
+      return;
+    }
+    const colombiaIdError = validateColombiaIdNumber();
+    if (colombiaIdError) {
+      setFormError(colombiaIdError);
       return;
     }
     setIsSaving(true);

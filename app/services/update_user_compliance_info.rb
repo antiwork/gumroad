@@ -39,12 +39,6 @@ class UpdateUserComplianceInfo
   # seller gets an actionable error at save time instead. Case-insensitive: Stripe accepts
   # lowercase, so we don't reject it.
   SINGAPORE_NRIC_FIN_PATTERN = /\A[STFGM]\d{7}[A-Z]\z/i
-  # Stripe enforces 7-10 digits on individual.id_number for Colombia (support case
-  # sco_UyXAayCkurHzCd). Colombia's own document spec allows 6 digits, so the floor excludes
-  # Cédula de Extranjería numbers that legitimately exist — Stripe have raised that with their
-  # product team, and this bound should be widened if they change it. Rationale and the
-  # test-mode caveat: app/javascript/utils/colombiaIdNumbers.ts.
-  COLOMBIA_ID_DIGIT_RANGE = (7..10)
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
     ssn_last_four: "Individual tax id",
@@ -325,7 +319,7 @@ class UpdateUserComplianceInfo
       # Colombia is the exception: the number is digits-only, sellers paste it with thousands
       # separators, and the length guard counts digits. Storing the separators would send Stripe a
       # longer string than the guard measured, so strip them and keep the two in agreement.
-      return stripped.gsub(/\D/, "") if country_code == Compliance::Countries::COL.alpha2
+      return Compliance::ColombiaIdNumber.normalize(stripped) if country_code == Compliance::Countries::COL.alpha2
       stripped
     end
 
@@ -354,8 +348,8 @@ class UpdateUserComplianceInfo
       submitted = submitted_tax_id_for(:individual_tax_id)
       return if submitted.blank?
       return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::COL.alpha2
-      return if COLOMBIA_ID_DIGIT_RANGE.cover?(submitted.gsub(/\D/, "").length)
-      "Your Cédula de Ciudadanía or Cédula de Extranjería must be #{COLOMBIA_ID_DIGIT_RANGE.first}-#{COLOMBIA_ID_DIGIT_RANGE.last} digits. Enter it exactly as it appears on your document — do not add leading zeros, as the number has to match the document you may later be asked to upload."
+      return if Compliance::ColombiaIdNumber.valid?(submitted)
+      Compliance::ColombiaIdNumber::ERROR_MESSAGE
     end
 
     def effective_legal_entity_country_code(old_compliance_info)

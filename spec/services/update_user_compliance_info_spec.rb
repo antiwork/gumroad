@@ -847,8 +847,8 @@ describe UpdateUserComplianceInfo do
         # value this service then refuses, or refuse one it would accept.
         helper = Rails.root.join("app/javascript/utils/colombiaIdNumbers.ts").read
 
-        expect(helper).to include("COLOMBIA_ID_MIN_DIGITS = #{described_class::COLOMBIA_ID_DIGIT_RANGE.first}")
-        expect(helper).to include("COLOMBIA_ID_MAX_DIGITS = #{described_class::COLOMBIA_ID_DIGIT_RANGE.last}")
+        expect(helper).to include("COLOMBIA_ID_MIN_DIGITS = #{Compliance::ColombiaIdNumber::DIGIT_RANGE.first}")
+        expect(helper).to include("COLOMBIA_ID_MAX_DIGITS = #{Compliance::ColombiaIdNumber::DIGIT_RANGE.last}")
 
         # The browser builds its copy by interpolating those two constants, so comparing the
         # invariant part of the sentence is what catches a reworded message on one side only.
