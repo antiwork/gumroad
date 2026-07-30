@@ -80,6 +80,74 @@ describe License do
     end
   end
 
+  describe "#set_uses!" do
+    let(:license) { create(:license, uses: 5) }
+
+    it "sets the uses count to the given value" do
+      expect(license.set_uses!(12)).to be(true)
+      expect(license.reload.uses).to eq 12
+    end
+
+    it "lowers the uses count" do
+      expect(license.set_uses!(2)).to be(true)
+      expect(license.reload.uses).to eq 2
+    end
+
+    it "rejects a negative value" do
+      expect { license.set_uses!(-1) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(license.reload.uses).to eq 5
+    end
+  end
+
+  describe "#adjust_uses!" do
+    let(:license) { create(:license, uses: 5) }
+
+    it "increments by a positive delta" do
+      expect(license.adjust_uses!(3)).to be(true)
+      expect(license.reload.uses).to eq 8
+    end
+
+    it "decrements by a negative delta" do
+      expect(license.adjust_uses!(-2)).to be(true)
+      expect(license.reload.uses).to eq 3
+    end
+
+    it "floors at zero" do
+      expect(license.adjust_uses!(-99)).to be(true)
+      expect(license.reload.uses).to eq 0
+    end
+
+    # The controller bounds the delta, not the count it lands on — verify calls move that without
+    # a ceiling — so the clamp has to live here.
+    it "clamps at the ceiling" do
+      license.update!(uses: License::MAX_SELLER_SETTABLE_USES)
+      expect(license.adjust_uses!(1)).to be(true)
+      expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES
+    end
+
+    # verify has no ceiling, so a count above it is legitimate — clamping down to the ceiling would
+    # lose real activations.
+    it "does not pull a count already above the ceiling back down to it" do
+      license.update!(uses: License::MAX_SELLER_SETTABLE_USES + 2)
+      expect(license.adjust_uses!(1)).to be(true)
+      expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES + 3
+    end
+
+    it "still lets a seller decrement a count above the ceiling" do
+      license.update!(uses: License::MAX_SELLER_SETTABLE_USES + 2)
+      expect(license.adjust_uses!(-1)).to be(true)
+      expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES + 1
+    end
+
+    # Reads the stored value under the lock, so a change made after this instance was loaded is
+    # preserved rather than overwritten.
+    it "applies the delta to the stored count rather than the loaded one" do
+      License.find(license.id).update!(uses: 20)
+      license.adjust_uses!(1)
+      expect(license.reload.uses).to eq 21
+    end
+  end
+
   describe "#reset_uses!" do
     let(:license) { create(:license, uses: 5) }
 
@@ -116,6 +184,20 @@ describe License do
         )
       )
       license.increment!(:uses)
+    end
+
+    it "enqueues a purchase re-index when uses is set directly" do
+      allow(ElasticsearchIndexerWorker).to receive(:perform_in)
+      expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
+        2.seconds,
+        "update",
+        hash_including(
+          "record_id" => purchase.id,
+          "class_name" => "Purchase",
+          "fields" => ["license_uses"]
+        )
+      )
+      license.set_uses!(7)
     end
 
     it "enqueues a purchase re-index when serial changes" do

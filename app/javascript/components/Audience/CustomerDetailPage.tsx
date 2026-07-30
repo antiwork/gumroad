@@ -18,6 +18,7 @@ import {
   Review,
   ReviewVideo,
   Tracking,
+  adjustLicenseUses,
   approveReviewVideo,
   cancelSubscription,
   changeCanContact,
@@ -30,8 +31,8 @@ import {
   resendPing,
   resendPost,
   resendReceipt,
-  resetLicenseUses,
   revokeAccess,
+  setLicenseUses,
   undoRevokeAccess,
   updateCallUrl,
   updateCommission,
@@ -578,11 +579,24 @@ const CustomerDetailPage = ({
                   },
                 )
               }
-              onReset={() =>
-                resetLicenseUses(license.id).then(
-                  () => {
-                    showAlert("License uses reset", "success");
-                    updateCustomer({ license: { ...license, uses: 0 } });
+              onSetUses={(uses) =>
+                setLicenseUses(license.id, uses).then(
+                  (updatedUses) => {
+                    showAlert("License uses updated", "success");
+                    updateCustomer({ license: { ...license, uses: updatedUses } });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                    throw e;
+                  },
+                )
+              }
+              onAdjustUses={(delta) =>
+                adjustLicenseUses(license.id, delta).then(
+                  (updatedUses) => {
+                    showAlert("License uses updated", "success");
+                    updateCustomer({ license: { ...license, uses: updatedUses } });
                   },
                   (e: unknown) => {
                     assertResponseError(e);
@@ -1506,14 +1520,18 @@ const OptionSection = ({
 const LicenseSection = ({
   license,
   onSave,
-  onReset,
+  onSetUses,
+  onAdjustUses,
 }: {
   license: License;
   onSave: (enabled: boolean) => Promise<void>;
-  onReset: () => Promise<void>;
+  onSetUses: (uses: number) => Promise<void>;
+  onAdjustUses: (delta: number) => Promise<void>;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [confirmingReset, setConfirmingReset] = React.useState(false);
+  const [isEditingUses, setIsEditingUses] = React.useState(false);
+  const [usesDraft, setUsesDraft] = React.useState<number | null>(license.uses);
 
   const handleSave = async (enabled: boolean) => {
     setIsLoading(true);
@@ -1521,11 +1539,42 @@ const LicenseSection = ({
     setIsLoading(false);
   };
 
-  const handleReset = async () => {
+  const handleSetUses = async (uses: number) => {
     setIsLoading(true);
-    await onReset();
-    setIsLoading(false);
-    setConfirmingReset(false);
+    try {
+      const succeeded = await onSetUses(uses).then(
+        () => true,
+        () => false,
+      );
+      return succeeded;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAdjustUses = async (delta: number) => {
+    setIsLoading(true);
+    try {
+      await onAdjustUses(delta);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    // A failed reset keeps the confirmation open so the seller can retry without reopening the flow.
+    if (await handleSetUses(0)) setConfirmingReset(false);
+  };
+
+  const handleSaveUses = async () => {
+    if (usesDraft === null) return;
+    // A rejected value stays in the open editor so the seller can correct it instead of retyping.
+    if (await handleSetUses(usesDraft)) setIsEditingUses(false);
+  };
+
+  const startEditingUses = () => {
+    setUsesDraft(license.uses);
+    setIsEditingUses(true);
   };
 
   return (
@@ -1551,38 +1600,82 @@ const LicenseSection = ({
             </CopyToClipboard>
           </span>
         </CardContent>
-        <CardContent>
-          <h5 className="grow font-bold">Uses</h5>
-          {license.uses}
-          {license.uses > 0 ? (
+        {isEditingUses ? (
+          <CardContent asChild>
+            <Fieldset>
+              <NumberInput value={usesDraft} onChange={setUsesDraft}>
+                {(props) => <Input type="number" {...props} min={0} aria-label="Uses" className="grow" />}
+              </NumberInput>
+              <div className="flex w-full gap-2">
+                <Button onClick={() => setIsEditingUses(false)} disabled={isLoading} className="flex-1">
+                  Cancel
+                </Button>
+                <Button
+                  color="primary"
+                  onClick={() => void handleSaveUses()}
+                  disabled={isLoading || usesDraft === null}
+                  className="flex-1"
+                >
+                  Save
+                </Button>
+              </div>
+            </Fieldset>
+          </CardContent>
+        ) : (
+          <CardContent>
+            <h5 className="grow font-bold">Uses</h5>
+            {license.uses}
+            <Button
+              outline
+              disabled={isLoading || license.uses === 0}
+              onClick={() => void handleAdjustUses(-1)}
+              aria-label="Decrease uses"
+              title="Decrease uses by 1"
+            >
+              −
+            </Button>
             <Button
               outline
               disabled={isLoading}
-              onClick={() => setConfirmingReset(true)}
-              aria-label="Reset uses"
-              title="Reset uses to 0"
+              onClick={() => void handleAdjustUses(1)}
+              aria-label="Increase uses"
+              title="Increase uses by 1"
             >
-              Reset
+              +
             </Button>
-          ) : null}
-          <Modal
-            open={confirmingReset}
-            onClose={() => setConfirmingReset(false)}
-            title="Reset license uses?"
-            footer={
-              <>
-                <Button disabled={isLoading} onClick={() => setConfirmingReset(false)}>
-                  Cancel
-                </Button>
-                <Button color="primary" disabled={isLoading} onClick={() => void handleReset()}>
-                  Reset
-                </Button>
-              </>
-            }
-          >
-            <p>This sets the usage count for this license back to 0.</p>
-          </Modal>
-        </CardContent>
+            <button className="cursor-pointer underline all-unset" onClick={startEditingUses}>
+              Edit
+            </button>
+            {license.uses > 0 ? (
+              <Button
+                outline
+                disabled={isLoading}
+                onClick={() => setConfirmingReset(true)}
+                aria-label="Reset uses"
+                title="Reset uses to 0"
+              >
+                Reset
+              </Button>
+            ) : null}
+          </CardContent>
+        )}
+        <Modal
+          open={confirmingReset}
+          onClose={() => setConfirmingReset(false)}
+          title="Reset license uses?"
+          footer={
+            <>
+              <Button disabled={isLoading} onClick={() => setConfirmingReset(false)}>
+                Cancel
+              </Button>
+              <Button color="primary" disabled={isLoading} onClick={() => void handleReset()}>
+                Reset
+              </Button>
+            </>
+          }
+        >
+          <p>This sets the usage count for this license back to 0.</p>
+        </Modal>
         <CardContent>
           {license.enabled ? (
             <Button color="danger" disabled={isLoading} onClick={() => void handleSave(false)} className="grow basis-0">

@@ -44,19 +44,24 @@ class ProfilePresenter
     # Sample the version before reading the editor payload below. If a concurrent save lands in
     # between, the payload may be newer than this token — which makes the next save a harmless
     # false-stale rejection rather than letting a stale token wave a lost update through.
-    profile_version = seller.seller_profile.layout_version&.iso8601(6)
+    profile_version = seller.seller_profile.layout_version
     shared_profile_props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.logged_out).merge(
       {
         profile_settings: {
           name: seller.name,
           bio: seller.bio,
+          font: seller.seller_profile.font,
+          background_color: HexColorValidator.normalize(seller.seller_profile.background_color),
+          highlight_color: HexColorValidator.normalize(seller.seller_profile.highlight_color),
           profile_picture_blob_id: seller.avatar.signed_id,
         },
         editable_profile: shared_profile_props(seller_custom_domain_url: nil, request:),
         # Version stamp for optimistic concurrency: the editor sends it back on save so the server
-        # can reject a stale pages/sections write. Nil for a not-yet-saved profile.
+        # can reject a stale pages/sections write. Unsaved empty profiles use the same fingerprint
+        # as a newly persisted profile whose layout is still empty.
         profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
+        seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
         # Custom-HTML profile landing page (#5553). Authored solely via the seller's agent + the
         # `gumroad user page` CLI (no inline editor) - these props drive the "Build with your agent"
         # affordance: the live-status banner, the copy-prompt block, and the reset button. The
