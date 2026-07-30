@@ -2768,7 +2768,7 @@ describe User, :vcr do
     it "returns alive product files that are unique by `url` even if there are no product files associated with the specified product" do
       product.product_files.alive.each(&:mark_deleted!)
       duplicate_file_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"
-      another_product_file = create(:product_file, link: @other_product, url: duplicate_file_url)
+      another_product_file = create(:product_file, link: another_product, url: duplicate_file_url)
       another_product.product_files << another_product_file
       create(:product_file, link: create(:product, user:), url: duplicate_file_url)
 
@@ -2778,7 +2778,7 @@ describe User, :vcr do
     it "returns alive product files associated with the specified product even if it not published" do
       product.update!(purchase_disabled_at: Time.current)
       product_file = product.product_files.alive.first
-      another_product_file = create(:product_file, link: @other_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
+      another_product_file = create(:product_file, link: another_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
       another_product.product_files << another_product_file
 
       expect(product.alive?).to eq(false)

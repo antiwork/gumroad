@@ -1944,12 +1944,12 @@ class LinkTest < ActiveSupport::TestCase
     product = create_product
     assert_equal false, product.has_stampable_pdfs?
 
-    product.product_files << create_non_readable_document
-    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    product.product_files << create_non_readable_document(link: product)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: false)
     # a fresh instance avoids the memoized alive_product_files cache poisoned by the earlier check
     assert_equal false, Link.find(product.id).has_stampable_pdfs?
 
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
     assert_equal true, Link.find(product.id).has_stampable_pdfs?
   end
 
@@ -1957,11 +1957,11 @@ class LinkTest < ActiveSupport::TestCase
     product = create_product
     assert_equal false, product.customize_file_per_purchase?
 
-    product.product_files << create_non_readable_document
-    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    product.product_files << create_non_readable_document(link: product)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: false)
     assert_equal false, Link.find(product.id).customize_file_per_purchase?
 
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
     assert_equal true, Link.find(product.id).customize_file_per_purchase?
   end
 
@@ -1986,31 +1986,31 @@ class LinkTest < ActiveSupport::TestCase
 
   test "is_downloadable? is false when files are stampable pdfs" do
     product = create_product
-    product.product_files << create_non_readable_document
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_non_readable_document(link: product)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
     assert_equal false, product.is_downloadable?
   end
 
   test "is_downloadable? is false for a rent-only product" do
     product = create_product
     product.update!(purchase_type: "rent_only", rental_price_cents: 1_00)
-    product.product_files << create_non_readable_document
-    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    product.product_files << create_non_readable_document(link: product)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: false)
     assert_equal false, product.is_downloadable?
   end
 
   test "is_downloadable? is false when all files are stream-only" do
     product = create_product
-    product.product_files << create_streamable_video(stream_only: true)
-    product.product_files << create_streamable_video(stream_only: true)
+    product.product_files << create_streamable_video(link: product, stream_only: true)
+    product.product_files << create_streamable_video(link: product, stream_only: true)
     assert_equal false, product.is_downloadable?
   end
 
   test "is_downloadable? is true with unstampable, non-stream-only files" do
     product = create_product
-    product.product_files << create_non_readable_document
-    product.product_files << create_streamable_video(stream_only: true)
-    product.product_files << create_readable_document(pdf_stamp_enabled: false)
+    product.product_files << create_non_readable_document(link: product)
+    product.product_files << create_streamable_video(link: product, stream_only: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: false)
     assert_equal true, product.is_downloadable?
   end
 
@@ -2104,8 +2104,8 @@ class LinkTest < ActiveSupport::TestCase
 
   test "delete! enqueues product file and archive deletion after a 10-minute delay" do
     product = create_product
-    product.product_files << create_readable_document
-    product.product_files << create_readable_document(is_linked_to_existing_file: true)
+    product.product_files << create_readable_document(link: product)
+    product.product_files << create_readable_document(link: product, is_linked_to_existing_file: true)
     create_purchase(link: product, purchase_state: "successful")
     assert_equal 2, product.reload.product_files.alive.size
 
@@ -2213,20 +2213,20 @@ class LinkTest < ActiveSupport::TestCase
 
   test "has_downloadable_content? is false for a preorder product" do
     product = create_product(is_in_preorder_state: true)
-    product.product_files << create_streamable_video(stream_only: true)
+    product.product_files << create_streamable_video(link: product, stream_only: true)
     assert_equal false, product.has_downloadable_content?
   end
 
   test "has_downloadable_content? is false when all files are stream-only" do
     product = create_product
-    product.product_files << create_streamable_video(stream_only: true)
+    product.product_files << create_streamable_video(link: product, stream_only: true)
     assert_equal false, product.has_downloadable_content?
   end
 
   test "has_downloadable_content? is true with a non-stream-only file" do
     product = create_product
-    product.product_files << create_readable_document
-    product.product_files << create_streamable_video(stream_only: true)
+    product.product_files << create_readable_document(link: product)
+    product.product_files << create_streamable_video(link: product, stream_only: true)
     assert_equal true, product.has_downloadable_content?
   end
 
@@ -3748,10 +3748,10 @@ class LinkTest < ActiveSupport::TestCase
     version1 = create_variant(variant_category: category, name: "V1")
     version2 = create_variant(variant_category: category, name: "V2")
 
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
-    file3 = create_product_file(display_name: "File 3")
-    file4 = create_product_file(display_name: "File 4")
+    file1 = create_product_file(link: product, display_name: "File 1")
+    file2 = create_product_file(link: product, display_name: "File 2")
+    file3 = create_product_file(link: product, display_name: "File 3")
+    file4 = create_product_file(link: product, display_name: "File 4")
     product.product_files = [file1, file2, file3, file4]
     version1.product_files = [file1, file2]
     version2.product_files = [file3, file4]
