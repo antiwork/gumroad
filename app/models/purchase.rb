@@ -4570,11 +4570,11 @@ class Purchase < ApplicationRecord
       customer_country = country_or_ip_country
       country_code = Compliance::Countries.find_by_name(customer_country)&.alpha2
 
-      in_eu_country = Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country_code)
-      in_australia = customer_country == Compliance::Countries::AUS.common_name
-      in_singapore = customer_country == Compliance::Countries::SGP.common_name
-      in_norway = customer_country == Compliance::Countries::NOR.common_name
-      in_other_taxable_country = (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS).include?(country_code)
+      in_eu_country = !link.is_physical? && Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(country_code)
+      in_australia = !link.is_physical? && customer_country == Compliance::Countries::AUS.common_name
+      in_singapore = !link.is_physical? && customer_country == Compliance::Countries::SGP.common_name
+      in_norway = !link.is_physical? && customer_country == Compliance::Countries::NOR.common_name
+      in_other_taxable_country = !link.is_physical? && (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS).include?(country_code)
       in_other_taxable_country ||= (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS).include?(country_code) && !link.is_physical?
       # Will return zip from shipping information if available before guessing from IP.
       # Shipping info is saved in Purchase during its creation the in the Purchases controller
