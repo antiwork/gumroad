@@ -83,7 +83,11 @@ class UserComplianceInfo < ApplicationRecord
   # Public: Returns if the UserComplianceInfo record has all it's critical compliance related fields completed, these are:
   # Individual: First Name, Last Name, Address, DOB
   # Business: First Name, Last Name, Address, DOB, Business Name, Business Type, Business Address
-  # Under 18: everything above, plus a legal guardian whose own details are complete
+  #
+  # Deliberately does NOT consider the legal guardian. This answers "do we know who this person
+  # is", which is what tax reporting needs, and a seller under 18 is no less reportable for having
+  # no guardian on file yet. The guardian is a payout-setup requirement — see
+  # has_completed_payout_compliance_info?.
   def has_completed_compliance_info?
     first_name.present? &&
       last_name.present? &&
@@ -105,7 +109,14 @@ class UserComplianceInfo < ApplicationRecord
           business_state.present? &&
           business_zip_code.present?
         )
-      ) &&
+      )
+  end
+
+  # Whether we hold everything our payment partner needs before it will verify the account. Adds
+  # the legal guardian to the checks above, because a seller under 18 cannot be verified on their
+  # own.
+  def has_completed_payout_compliance_info?
+    has_completed_compliance_info? &&
       (!requires_legal_guardian? || guardian&.has_completed_info?.present?)
   end
 

@@ -87,14 +87,14 @@ describe UserComplianceInfo do
       end
     end
 
-    describe "under 18" do
+    describe "under 18 (payout readiness)" do
       let(:birthday) { 15.years.ago.to_date }
 
       describe "no guardian attached" do
         let(:user_compliance_info) { create(:user_compliance_info, birthday:) }
 
         it "returns false" do
-          expect(user_compliance_info.has_completed_compliance_info?).to eq(false)
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
         end
       end
 
@@ -102,7 +102,7 @@ describe UserComplianceInfo do
         let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian, street_address: nil)) }
 
         it "returns false" do
-          expect(user_compliance_info.has_completed_compliance_info?).to eq(false)
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
         end
       end
 
@@ -114,7 +114,7 @@ describe UserComplianceInfo do
           user_compliance_info
           guardian.mark_deleted!
 
-          expect(user_compliance_info.reload.has_completed_compliance_info?).to eq(false)
+          expect(user_compliance_info.reload.has_completed_payout_compliance_info?).to eq(false)
         end
       end
 
@@ -122,7 +122,7 @@ describe UserComplianceInfo do
         let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian)) }
 
         it "returns true" do
-          expect(user_compliance_info.has_completed_compliance_info?).to eq(true)
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(true)
         end
       end
 
@@ -130,9 +130,28 @@ describe UserComplianceInfo do
         let(:user_compliance_info) { create(:user_compliance_info, birthday: 30.years.ago.to_date) }
 
         it "returns true with no guardian" do
-          expect(user_compliance_info.has_completed_compliance_info?).to eq(true)
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(true)
         end
       end
+    end
+  end
+
+  describe "#has_completed_compliance_info? for a seller under 18" do
+    # Tax reporting reads this predicate. There are ~16,000 live compliance records with an
+    # under-18 birthday, and folding the guardian requirement in here would have dropped every one
+    # of them from the tax-summary export silently, because the export just returns nil.
+    let(:user_compliance_info) { create(:user_compliance_info, birthday: 15.years.ago.to_date) }
+
+    it "is complete without a guardian, because knowing who the person is does not depend on one" do
+      expect(user_compliance_info.has_completed_compliance_info?).to eq(true)
+    end
+
+    it "is not payout-ready without one" do
+      expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
+    end
+
+    it "still exports a tax summary" do
+      expect(Exports::TaxSummary::Payable.new(user: user_compliance_info.user, year: Time.current.year).send(:compliance_info)&.has_completed_compliance_info?).to eq(true)
     end
   end
 
@@ -191,7 +210,7 @@ describe UserComplianceInfo do
       guardian.anonymize!
 
       expect(user_compliance_info.reload.guardian_id).to eq(guardian.id)
-      expect(user_compliance_info.has_completed_compliance_info?).to eq(false)
+      expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
     end
   end
 
