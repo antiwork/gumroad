@@ -67,6 +67,10 @@ describe("Nav", () => {
 
     const { nav, scrollRegion } = getScrollRegion();
 
+    setScrollMetrics(scrollRegion, { clientHeight: 100, scrollHeight: 100, scrollTop: 0 });
+    fireEvent.scroll(scrollRegion);
+    expect(nav.querySelector(".bg-gradient-to-t")).toBeNull();
+
     setScrollMetrics(scrollRegion, { clientHeight: 100, scrollHeight: 200, scrollTop: 0 });
     fireEvent.scroll(scrollRegion);
     expect(nav.querySelector(".bg-gradient-to-t")).not.toBeNull();
