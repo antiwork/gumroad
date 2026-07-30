@@ -79,6 +79,22 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
+  context "when <html> has a background image over a transparent color" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html{background:linear-gradient(#123,#456)}body{margin:0;background:#EBEBEB}</style>
+        <main><h1>BG Studio</h1></main>
+      HTML
+    end
+
+    it "does not mistake the body's color for the canvas" do
+      visit seller.subdomain_with_protocol
+
+      expect(page).to have_css("iframe#gumroad-landing-frame")
+      expect_wrapper_never_set
+    end
+  end
+
   # A page that declares nothing leaves both elements transparent. Writing that
   # through would be a no-op at best, so the bridge stays silent and the
   # wrapper keeps its default rendering.
@@ -270,6 +286,30 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Drop background" }
 
+      expect_wrapper_background("")
+      expect(theme_color).to be_nil
+    end
+  end
+
+  context "when a reloaded iframe starts without a background" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main><h1>Opaque page</h1></main>
+      HTML
+    end
+
+    it "clears the previous document's wrapper tint" do
+      visit seller.subdomain_with_protocol
+      expect_wrapper_background("rgb(235, 235, 235)")
+
+      seller.update!(custom_html: "<main><h1>Transparent page</h1></main>")
+      page.execute_script(<<~JS)
+        var frame = document.getElementById("gumroad-landing-frame");
+        frame.src = frame.src.split("?")[0] + "?reloaded";
+      JS
+
+      within_frame(find("iframe#gumroad-landing-frame")) { expect(page).to have_text("Transparent page") }
       expect_wrapper_background("")
       expect(theme_color).to be_nil
     end
@@ -503,17 +543,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # A retheme can bypass the DOM entirely: editing a rule through
-  # `sheet.cssRules`, `insertRule`, `replaceSync` on an adopted sheet, or
-  # flipping `sheet.disabled` all repaint the canvas while the document tree
-  # stays byte-for-byte identical. There is no mutation to observe and no load
-  # event to catch, so the observer cannot cover any of these — a periodic
-  # re-read is the only thing that can. Each shape below is its own example
-  # because they fail independently: a fix that only handled `insertRule` would
-  # leave the adopted-sheet case stale.
-  #
-  # The re-read is also what makes these load-bearing rather than incidental —
-  # removing the interval leaves every one of them stranded on the first color.
+  # CSSOM rethemes emit no DOM mutation, so the periodic read is the only signal.
+  # Keep each write shape separate because they fail independently.
   {
     "editing a rule through cssRules" => <<~JS,
       var sheet = document.getElementById("theme").sheet;
@@ -558,10 +589,7 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # Disabling a sheet is the shape with no DOM write at all — not even an
-  # attribute, since `sheet.disabled` lives on the CSSOM object and leaves the
-  # <style> element's attributes untouched. The element is inserted up front so
-  # its insertion is not the mutation under test.
+  # sheet.disabled leaves the DOM unchanged; insert the sheet before the test.
   context "when the page changes its background by disabling a stylesheet" do
     before do
       seller.update!(custom_html: <<~HTML)
@@ -600,11 +628,7 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
-  # The re-read fires on a timer, so it could report the same unchanged color
-  # over and over — a postMessage per second per open page, forever. `report`
-  # returns early on an unchanged value, and this is what holds it to that: the
-  # wrapper is instrumented to count what actually arrives across several
-  # intervals of a page that never changes.
+  # The timer must not post an unchanged color forever.
   context "when nothing about the page changes" do
     before do
       seller.update!(custom_html: <<~HTML)

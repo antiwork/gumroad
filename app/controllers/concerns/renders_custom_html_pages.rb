@@ -246,23 +246,24 @@ module RendersCustomHtmlPages
         if (window.parent === window) return;
         #{CANVAS_OPAQUE_FN}
         function canvasColor() {
-          var root = window.getComputedStyle(document.documentElement).backgroundColor;
+          var rootStyle = window.getComputedStyle(document.documentElement);
+          var root = rootStyle.backgroundColor;
           var rootAlpha = colorAlpha(root);
           if (rootAlpha === 1) return root;
           // Body propagates to the canvas only when the root is fully transparent.
-          if (rootAlpha !== 0 || !document.body) return null;
+          if (rootAlpha !== 0 || rootStyle.backgroundImage !== "none" || !document.body) return null;
           var body = window.getComputedStyle(document.body).backgroundColor;
           return opaque(body) ? body : null;
         }
         var reported = null;
+        var hasReported = false;
         function report() {
           var color = canvasColor();
-          if (color === reported) return;
+          if (hasReported && color === reported) return;
           reported = color;
-          // A page that drops its background after having one has to say so
-          // (null), or the wrapper keeps painting the old tint under a page
-          // that is now transparent. A page that never had one starts at null
-          // and so still reports nothing.
+          hasReported = true;
+          // The first null matters after an iframe reload: its wrapper may
+          // still hold the previous document's tint.
           parent.postMessage({ type: "gumroad:background", color: color }, "*");
         }
         var queued = false;
