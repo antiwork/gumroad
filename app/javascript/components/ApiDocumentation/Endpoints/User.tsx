@@ -98,6 +98,41 @@ const ProfileCustomHtmlDocumentation = () => (
       <code>data-gumroad-action="buy"</code> and the <code>gumroad:checkout</code> bridge don't apply. Link to your
       products or profile sections instead.
     </p>
+    <h5>Your catalogue as JSON</h5>
+    <p>
+      Every served page also carries a <code>&lt;script type="application/json" id="gumroad-data"&gt;</code> blob with
+      your products, posts and profile section names, so a page can render its own cards instead of hardcoding them.
+      Read it with <code>JSON.parse(document.getElementById("gumroad-data").textContent)</code>. The page's{" "}
+      <code>connect-src 'none'</code> policy means this blob is the only catalogue source available to it — it can't
+      fetch one.
+    </p>
+    <p>
+      Each entry in <code>products</code> has:
+    </p>
+    <ul>
+      <li>
+        <code>name</code>, <code>url</code>, <code>description</code> (plain text, truncated to 200 characters) and{" "}
+        <code>native_type</code>.
+      </li>
+      <li>
+        <code>price</code> — formatted in the product's own currency, e.g. <code>$14</code> or <code>$0+</code>. This is
+        the price you set, <strong>not</strong> a visitor-localized one: a page cannot currently render the local
+        currency a native product page would show.
+      </li>
+      <li>
+        <code>thumbnail_url</code> and <code>cover_url</code> — either may be null, so fall back from one to the other.
+      </li>
+    </ul>
+    <p>
+      <code>posts</code> entries carry <code>name</code>, <code>url</code> and <code>published_at</code>, and{" "}
+      <code>pages</code> carries your profile section names. At most 100 products and 100 posts are included;{" "}
+      <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 100 of
+      114" rather than implying the catalogue is complete.
+    </p>
+    <p>
+      The blob is cached per seller and rebuilt when a product, post or profile section changes. A price edit alone does
+      not currently rebuild it, so a price shown from this blob can lag until something else about the product changes.
+    </p>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/user/custom_html \\
   -X PUT \\
