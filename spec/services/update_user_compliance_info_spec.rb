@@ -687,6 +687,126 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "with a Colombian individual" do
+      def create_colombian_individual_user(individual_tax_id:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info,
+            user: u,
+            country: "Colombia",
+            state: nil,
+            city: "Medellin",
+            zip_code: "050022",
+            individual_tax_id:,
+          )
+        end
+      end
+
+      let(:expected_error) do
+        "Your Cédula de Ciudadanía or Cédula de Extranjería must be 7-10 digits. Enter it exactly as it appears on your document — do not add leading zeros, as the number has to match the document you may later be asked to upload."
+      end
+
+      it "rejects a six-digit Cédula de Extranjería, which Stripe refuses" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+        original = user.alive_user_compliance_info
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "482913")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(expected_error)
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
+      it "warns against zero-padding, which is the workaround sellers reach for" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "482913")
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        # Padding a short number to seven digits does satisfy Stripe's length rule, so we cannot
+        # detect it here — the stored number would simply stop matching the document, and the
+        # account would fail id_number_match verification later, after the seller has a balance.
+        # The message is the only place we can head that off.
+        expect(result[:error_message]).to include("do not add leading zeros")
+      end
+
+      it "rejects a number longer than Stripe's upper bound" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "12345678901")
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(expected_error)
+      end
+
+      it "accepts a seven-digit number and stores it exactly as entered" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "4829137")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("4829137")
+      end
+
+      it "accepts a ten-digit number entered with thousands separators" do
+        user = create_colombian_individual_user(individual_tax_id: "1234567")
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "1.123.456.789")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
+
+      it "leaves other countries' individual tax IDs alone" do
+        user = create(:user).tap do |u|
+          create(:user_compliance_info, user: u, country: "Uruguay", individual_tax_id: "482913")
+        end
+
+        params = ActionController::Parameters.new(is_business: false, individual_tax_id: "482914", city: "Montevideo")
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
+
+      it "ignores a masked resubmission while saving other edited fields" do
+        user = create_colombian_individual_user(individual_tax_id: "4829137")
+
+        # The city differs from the stored record so the save path actually runs — otherwise the
+        # service early-returns "nothing changed" before the guard executes.
+        params = ActionController::Parameters.new(
+          is_business: false,
+          individual_tax_id: "•••9137",
+          city: "Bogotá",
+        )
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.city).to eq("Bogotá")
+      end
+    end
+
     context "with a non-US business" do
       def create_ie_business_user(business_tax_id:)
         create(:user).tap do |u|
@@ -854,7 +974,9 @@ describe UpdateUserComplianceInfo do
 
     context "when Stripe rejects the account" do
       let(:user) { create(:user) }
-      let(:params) { ActionController::Parameters.new(is_business: false, individual_tax_id: "123456") }
+      # Seven digits so the submission clears our own Colombia length guard and actually reaches
+      # Stripe — these examples are about what we keep when Stripe rejects, not about the length.
+      let(:params) { ActionController::Parameters.new(is_business: false, individual_tax_id: "1234567") }
 
       before do
         create(:user_compliance_info, user:, country: "Colombia", individual_tax_id: "0000000000000")

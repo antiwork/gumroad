@@ -8,6 +8,7 @@ import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } fro
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
+import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
@@ -873,6 +874,17 @@ export default function PaymentsPage() {
         message:
           "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.",
       });
+    }
+    const colombiaIdRequired = form.data.user.is_business
+      ? form.data.user.business_country === "CO"
+      : form.data.user.country === "CO";
+    if (
+      colombiaIdRequired &&
+      form.data.user.individual_tax_id &&
+      !isValidColombiaIdNumber(form.data.user.individual_tax_id)
+    ) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({ message: COLOMBIA_ID_NUMBER_ERROR_MESSAGE });
     }
     if (form.data.user.is_business) {
       if (!form.data.user.business_type) {

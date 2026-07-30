@@ -39,6 +39,13 @@ class UpdateUserComplianceInfo
   # seller gets an actionable error at save time instead. Case-insensitive: Stripe accepts
   # lowercase, so we don't reject it.
   SINGAPORE_NRIC_FIN_PATTERN = /\A[STFGM]\d{7}[A-Z]\z/i
+  # Stripe enforces 7-10 digits on individual.id_number for Colombia — confirmed by Stripe support
+  # on case sco_UyXAayCkurHzCd. Colombia's own document spec (Anexo Técnico 1, Resolución 2011)
+  # allows 6-digit numbers, so the floor excludes Cédula de Extranjería numbers that legitimately
+  # exist; Stripe has that with their product team. Until it moves, reject here rather than let the
+  # save through: a rejected create rolls back with nothing the seller can act on, which is how one
+  # seller reached eight silent failed attempts.
+  COLOMBIA_ID_DIGIT_RANGE = (7..10)
   ENCRYPTED_FIELD_LABELS = {
     individual_tax_id: "Individual tax id",
     ssn_last_four: "Individual tax id",
@@ -110,6 +117,9 @@ class UpdateUserComplianceInfo
 
       singapore_nric_error = singapore_individual_nric_error(old_compliance_info)
       return { success: false, error_message: singapore_nric_error } if singapore_nric_error
+
+      colombia_id_error = colombia_individual_id_error(old_compliance_info)
+      return { success: false, error_message: colombia_id_error } if colombia_id_error
 
       saved, new_compliance_info = if encrypted_compliance_info_params_present?
         dup_and_save_compliance_info(old_compliance_info)
@@ -328,6 +338,14 @@ class UpdateUserComplianceInfo
       # matching what the browser-side check accepts.
       return if submitted.gsub(/[[:space:]-]/, "").match?(SINGAPORE_NRIC_FIN_PATTERN)
       "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID."
+    end
+
+    def colombia_individual_id_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id)
+      return if submitted.blank?
+      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::COL.alpha2
+      return if COLOMBIA_ID_DIGIT_RANGE.cover?(submitted.gsub(/\D/, "").length)
+      "Your Cédula de Ciudadanía or Cédula de Extranjería must be #{COLOMBIA_ID_DIGIT_RANGE.first}-#{COLOMBIA_ID_DIGIT_RANGE.last} digits. Enter it exactly as it appears on your document — do not add leading zeros, as the number has to match the document you may later be asked to upload."
     end
 
     def effective_legal_entity_country_code(old_compliance_info)

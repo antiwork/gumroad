@@ -1,6 +1,7 @@
 import * as React from "react";
 import typia from "typia";
 
+import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -217,13 +218,12 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
   },
   CO: {
     // Colombia issues two personal IDs: the Cédula de Ciudadanía to citizens and the Cédula de
-    // Extranjería to foreign residents. Both are valid here, and their numbers range from about six
-    // to ten digits, so the field accepts a loose range rather than one exact length. Kept in sync
-    // with the same entry in AccountDetailsSection.tsx.
+    // Extranjería to foreign residents. Both are valid here. Bounds and copy are shared with
+    // AccountDetailsSection via the colombiaIdNumbers helper.
     label: "Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)",
     placeholder: "1234567890",
-    minLength: 6,
-    maxLength: 13,
+    minLength: COLOMBIA_ID_MIN_DIGITS,
+    maxLength: COLOMBIA_ID_MAX_INPUT_LENGTH,
     idSuffix: "colombia-id-number",
   },
   UY: {
