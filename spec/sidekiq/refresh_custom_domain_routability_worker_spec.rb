@@ -4,6 +4,7 @@ require "spec_helper"
 
 describe RefreshCustomDomainRoutabilityWorker do
   let(:custom_domain) { create(:custom_domain, :verified_with_certificate, domain: "shop.example.com") }
+  let(:resolving_domains) { [] }
   let(:verification_service) { double(domains_resolving_to_gumroad: resolving_domains) }
 
   before do
@@ -11,6 +12,10 @@ describe RefreshCustomDomainRoutabilityWorker do
       .to receive(:new)
       .with(domain: custom_domain.domain)
       .and_return(verification_service)
+  end
+
+  it "deduplicates jobs until execution finishes" do
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
   end
 
   context "when the configured hostname resolves to Gumroad" do
@@ -41,6 +46,18 @@ describe RefreshCustomDomainRoutabilityWorker do
 
     it "does not perform DNS verification" do
       custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+
+      expect(CustomDomainVerificationService).not_to receive(:new)
+
+      described_class.new.perform(custom_domain.id)
+    end
+  end
+
+  context "when another refresh has already stored a current result" do
+    let(:resolving_domains) { [] }
+
+    it "does not perform DNS verification" do
+      custom_domain.set_routability!(true)
 
       expect(CustomDomainVerificationService).not_to receive(:new)
 

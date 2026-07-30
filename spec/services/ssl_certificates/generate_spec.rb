@@ -168,6 +168,22 @@ describe SslCertificates::Generate do
         expect(@custom_domain).to be_routable
         expect(@custom_domain.routability_checked_at).to be_present
       end
+
+      it "does not activate results generated for a domain that changed" do
+        allow(@custom_domain)
+          .to receive(:activate_with_routability!)
+          .with(true, checked_domain: @custom_domain.domain)
+          .and_return(false)
+
+        @resolving_domains.each do |domain|
+          expect(@obj).not_to receive(:log_message).with(domain, "Issued SSL certificate.")
+        end
+        expect(@obj)
+          .to receive(:log_message)
+          .with(@custom_domain.domain, "Domain changed before SSL certificate activation.")
+
+        @obj.process
+      end
     end
 
     context "when only the configured hostname's counterpart receives a certificate" do

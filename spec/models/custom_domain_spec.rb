@@ -196,10 +196,13 @@ describe CustomDomain do
     end
 
     it "resets ssl_certificate_issued_at on save if the domain is changed" do
+      @domain.set_routability!(true)
       @domain.domain = "example2.com"
       @domain.save!
 
       expect(@domain.reload.ssl_certificate_issued_at).to be_nil
+      expect(@domain.routable).to be_nil
+      expect(@domain.routability_checked_at).to be_nil
     end
 
     it "doesn't reset ssl_certificate_issued_at on save if the domain is not changed" do
@@ -278,16 +281,16 @@ describe CustomDomain do
     end
 
     it "falls back and schedules one refresh when the result is unknown" do
-      2.times { expect(custom_domain.strictly_routable?).to be(false) }
+      expect(custom_domain.strictly_routable?).to be(false)
 
       expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
     end
 
-    it "serves a stale positive result while scheduling one refresh" do
+    it "serves a stale positive result while scheduling a refresh" do
       custom_domain.set_routability!(true)
       custom_domain.update_column(:routability_checked_at, 7.hours.ago)
 
-      2.times { expect(custom_domain.strictly_routable?).to be(true) }
+      expect(custom_domain.strictly_routable?).to be(true)
 
       expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
     end
@@ -306,6 +309,15 @@ describe CustomDomain do
 
       expect(custom_domain.set_routability!(true, checked_domain:)).to be(false)
       expect(custom_domain.reload.routability_checked_at).to be_nil
+    end
+
+    it "does not activate a certificate generated for the previous domain" do
+      checked_domain = custom_domain.domain
+      custom_domain.update!(domain: "new.example.com")
+
+      expect(custom_domain.activate_with_routability!(true, checked_domain:)).to be(false)
+      expect(custom_domain.reload.ssl_certificate_issued_at).to be_nil
+      expect(custom_domain.routability_checked_at).to be_nil
     end
   end
 

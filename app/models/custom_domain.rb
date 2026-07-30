@@ -6,7 +6,6 @@ class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
   ROUTABILITY_REFRESH_INTERVAL = 6.hours
-  ROUTABILITY_REFRESH_LOCK_TTL = 5.minutes
 
   include Deletable
 
@@ -85,24 +84,20 @@ class CustomDomain < ApplicationRecord
   def strictly_routable?
     return false unless active?
 
-    refresh_routability_later if routability_checked_at.nil? || routability_checked_at < ROUTABILITY_REFRESH_INTERVAL.ago
+    RefreshCustomDomainRoutabilityWorker.perform_async(id) if routability_refresh_due?
     routable?
   end
 
   def set_routability!(routable, checked_domain: domain)
-    checked_at = Time.current
-    updated = self.class.alive.where(id:, domain: checked_domain).update_all(
-      routable:,
-      routability_checked_at: checked_at,
-      updated_at: checked_at
-    )
-    return false unless updated == 1
+    persist_routability!(routable:, checked_domain:, activate_certificate: false)
+  end
 
-    self.routable = routable
-    self.routability_checked_at = checked_at
-    self.updated_at = checked_at
-    Rails.cache.delete(routability_refresh_lock_key(checked_domain))
-    true
+  def activate_with_routability!(routable, checked_domain: domain)
+    persist_routability!(routable:, checked_domain:, activate_certificate: true)
+  end
+
+  def routability_refresh_due?
+    routability_checked_at.nil? || routability_checked_at < ROUTABILITY_REFRESH_INTERVAL.ago
   end
 
   def self.find_by_host(host)
@@ -147,21 +142,26 @@ class CustomDomain < ApplicationRecord
 
     def reset_ssl_certificate_issued_at
       self.ssl_certificate_issued_at = nil
+      self.routable = nil
+      self.routability_checked_at = nil
     end
 
-    def refresh_routability_later
-      return unless Rails.cache.write(
-        routability_refresh_lock_key(domain),
-        true,
-        expires_in: ROUTABILITY_REFRESH_LOCK_TTL,
-        unless_exist: true
+    def persist_routability!(routable:, checked_domain:, activate_certificate:)
+      checked_at = Time.current
+      attributes = {
+        routable:,
+        routability_checked_at: checked_at,
+        updated_at: checked_at,
+      }
+      attributes[:ssl_certificate_issued_at] = checked_at if activate_certificate
+
+      updated = self.class.alive.where(id:, domain: checked_domain).update_all(
+        attributes
       )
+      return false unless updated == 1
 
-      RefreshCustomDomainRoutabilityWorker.perform_async(id)
-    end
-
-    def routability_refresh_lock_key(checked_domain)
-      "custom_domain_routability_refresh/#{id}/#{checked_domain}"
+      reload
+      true
     end
 
     def increment_failed_verification_attempts_count_and_notify_creator
