@@ -257,6 +257,52 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # The report says a subscriber is blocked from RENEWING, so the failure it describes has to be a
+  # renewal. An original subscription purchase carries a subscription_id and still runs the fraud
+  # checks, and a plan change is the everyday way a long-tenured member acquires one — reporting it
+  # would tell risk a member cannot renew when their renewals are fine.
+  it "ignores a blocked purchase that is not a renewal" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    plan_change = failed_renewal(subscription:)
+    # The row a blocked plan change leaves behind: non-recurring, but carrying a subscription_id and
+    # a block code. Written directly because building it with the flag set sends the purchase down a
+    # different validation path that replaces error_code, so the block code never lands.
+    plan_change.update_columns(
+      flags: plan_change.flags | Purchase.flag_mapping["flags"][:is_original_subscription_purchase])
+    expect(plan_change.reload.is_recurring_subscription_charge).to be(false)
+    expect(plan_change.error_code).to eq(PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  # Row ids are not a clock. A backfill, an import or a retry that preserves timestamps can leave an
+  # older failure holding the higher id, and picking by MAX(id) then quoted that older row's guid,
+  # block date and "last tried" date while the message claimed to describe the newest renewal.
+  it "describes the newest failed renewal even when an older one has a higher id" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    newest = failed_renewal(subscription:, guid: "guid-newest", created_at: 1.hour.ago)
+    older = failed_renewal(subscription:, guid: "guid-older", created_at: 10.days.ago)
+    # The import case, made explicit: the older renewal was written last, so it holds the higher id.
+    expect(older.id).to be > newest.id
+
+    newest_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-newest")
+    older_block = travel_to(3.years.ago) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-older")
+    end
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("blocked since #{newest_block.blocked_at.to_date}")
+      expect(message).to include("last tried #{newest.created_at.to_date}")
+      expect(message).not_to include("blocked since #{older_block.blocked_at.to_date}")
+      expect(message).not_to include("last tried #{older.created_at.to_date}")
+    end
+  end
+
   # The two halves of "currently stranded", which is the state this alert is about — not "failed
   # recently", which drifts away from it in both directions.
   describe "eligibility is the block being active now" do

@@ -112,10 +112,15 @@ class AlertOnBlockedEstablishedSubscribersJob
 
     # Distinct subscriptions, most recent failure first, one over the candidate budget so that
     # exhausting it is distinguishable from a window holding exactly that many.
+    #
+    # Scoped to recurring_charge because the report claims the subscriber is blocked from RENEWING.
+    # An original subscription purchase carries a subscription_id, still runs the fraud checks and
+    # can take either block code — a plan change is the common way to get one — so without this
+    # every plan-change block on a long-tenured member became a false "blocked from renewing" row.
     def candidate_subscription_ids
       Purchase.failed
+              .recurring_charge
               .where(error_code: BLOCK_ERROR_CODES, created_at: FAILURE_LOOKBACK.ago..)
-              .where.not(subscription_id: nil)
               .group(:subscription_id)
               .order(Arel.sql("MAX(purchases.created_at) DESC"))
               .limit(MAX_CANDIDATES_SCANNED + 1)
@@ -123,15 +128,22 @@ class AlertOnBlockedEstablishedSubscribersJob
     end
 
     # The newest blocked renewal per subscription — its error code and identity attributes say which
-    # block did the declining. Unordered on purpose: message_for decides the report's order, so a
-    # second ordering here would only mask whether that one works.
+    # block did the declining. The returned set is unordered on purpose: message_for decides the
+    # report's order, so a second ordering here would only mask whether that one works.
+    #
+    # Newest is by created_at, NOT by MAX(id): a backfill, an import or a retry that preserves
+    # timestamps can give an older failure the higher id, and then the report would quote that
+    # older row's guid/domain, block date and "last tried" date while claiming to describe the
+    # newest renewal. id descending only breaks same-timestamp ties, so the pick is deterministic.
     def latest_block_failures(subscription_ids)
       return [] if subscription_ids.empty?
 
       newest_per_subscription = Purchase.failed
+                                        .recurring_charge
                                         .where(error_code: BLOCK_ERROR_CODES, created_at: FAILURE_LOOKBACK.ago.., subscription_id: subscription_ids)
-                                        .group(:subscription_id)
-                                        .maximum(:id)
+                                        .order(created_at: :desc, id: :desc)
+                                        .pluck(:subscription_id, :id)
+                                        .each_with_object({}) { |(subscription_id, id), newest| newest[subscription_id] ||= id }
 
       Purchase.where(id: newest_per_subscription.values)
               .includes(:purchaser, :gift_given, :gift_received)
