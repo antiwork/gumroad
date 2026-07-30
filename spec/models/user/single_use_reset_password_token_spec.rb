@@ -2,11 +2,8 @@
 
 require "spec_helper"
 
-# A password-reset token must be usable exactly once. Devise clears the token inside the same
-# save that writes the new password, so before this behaviour was locked, two requests holding
-# the same token could both read it as live and both save — the final password decided by the
-# later write. Transactional specs share one connection across threads and so cannot show it;
-# this file opts out and gives each worker its own connection, like two web processes.
+# `use_transactional_tests = false` because a shared connection cannot exhibit the race: each worker
+# needs its own connection, like two web processes.
 describe User::SingleUseResetPasswordToken do
   self.use_transactional_tests = false
 
@@ -17,6 +14,8 @@ describe User::SingleUseResetPasswordToken do
   end
 
   after do
+    # No transaction rollback here, so remove what the examples created.
+    PaperTrail::Version.where(item_type: "User", item_id: @user.id).delete_all
     @user.reload.destroy!
   end
 
@@ -29,10 +28,15 @@ describe User::SingleUseResetPasswordToken do
   end
 
   it "rejects the second of two concurrent submissions carrying the same token" do
-    # Hold the first request open between reading the token and saving the new password —
-    # exactly the window the race lived in — so the second request runs entirely inside it.
+    # Hold the first request open between taking the lock and saving the new password — exactly the
+    # window the race lived in — and only release the second request once the lock is held, so the
+    # ordering does not depend on thread scheduling.
+    lock_held = Queue.new
     allow_any_instance_of(User).to receive(:reset_password).and_wrap_original do |original, *args|
-      sleep 1 if Thread.current[:hold_open_reset_window]
+      if Thread.current[:hold_open_reset_window]
+        lock_held << true
+        sleep 1
+      end
       original.call(*args)
     end
 
@@ -44,14 +48,13 @@ describe User::SingleUseResetPasswordToken do
       ActiveRecord::Base.connection_pool.with_connection { first = consume(@token, "winning-password-1") }
     end
 
-    # Let the first request get past its read before the second one starts.
-    sleep 0.3
+    lock_held.pop
 
     loser = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection { second = consume(@token, "losing-password-1") }
     end
 
-    [winner, loser].each { _1.join(20) }
+    [winner, loser].each { expect(_1.join(20)).to be_present }
 
     expect([first, second].count { _1.errors.empty? }).to eq(1)
     rejected = [first, second].find { _1.errors.any? }
