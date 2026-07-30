@@ -92,12 +92,14 @@ class DisputeEvidence < ApplicationRecord
   # then writing: the sweep backdates the stamp to land its submission before the processor's cutoff,
   # so a stale check elsewhere would replace that with a fresh full-length window and submit too
   # late. The condition lives in the WHERE, so the loser writes nothing and keeps the winner's window.
+  #
+  # Deliberately does not reload: callers run this inside the transaction that creates the record and
+  # its attachments, and reloading there resets the attachment associations before ActiveStorage has
+  # uploaded the blobs. Reload after the commit if you need the persisted stamp.
   def claim_seller_contacted_window!(at: Time.current)
-    claimed = self.class.where(id:, seller_contacted_at: nil, resolved_at: nil)
-                  .update_all(seller_contacted_at: at, updated_at: Time.current)
-                  .positive?
-    reload if claimed
-    claimed
+    self.class.where(id:, seller_contacted_at: nil, resolved_at: nil)
+        .update_all(seller_contacted_at: at, updated_at: Time.current)
+        .positive?
   end
 
   def all_files_size_within_limit

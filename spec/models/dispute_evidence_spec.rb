@@ -180,7 +180,7 @@ describe DisputeEvidence do
       at = 30.hours.ago
 
       expect(dispute_evidence.claim_seller_contacted_window!(at:)).to be(true)
-      expect(dispute_evidence.seller_contacted_at).to be_within(1.second).of(at)
+      expect(dispute_evidence.reload.seller_contacted_at).to be_within(1.second).of(at)
     end
 
     it "leaves an already-open window alone" do
@@ -188,10 +188,17 @@ describe DisputeEvidence do
       # here, and the sweep's stamp is deliberately backdated to beat the processor's cutoff. A
       # later claim overwriting it with a fresh full-length window would submit evidence too late.
       dispute_evidence.claim_seller_contacted_window!(at: 30.hours.ago)
-      original = dispute_evidence.seller_contacted_at
+      original = dispute_evidence.reload.seller_contacted_at
 
       expect(dispute_evidence.claim_seller_contacted_window!).to be(false)
       expect(dispute_evidence.reload.seller_contacted_at).to eq(original)
+    end
+
+    it "does not touch the in-memory record, whose attachments may be mid-upload" do
+      # Callers claim inside the transaction that builds the record and attaches its images, so a
+      # reload here would reset those associations before ActiveStorage has uploaded the blobs.
+      expect(dispute_evidence.claim_seller_contacted_window!).to be(true)
+      expect(dispute_evidence.seller_contacted_at).to be_nil
     end
 
     it "does not open a window on resolved evidence" do
