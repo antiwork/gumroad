@@ -322,7 +322,7 @@
 - id: 200
   slug: "200-i-need-a-vat-refund"
   title: "I need a VAT refund"
-  description: "We are required by the EU and UK law to collect and remit VAT on all transactions made in the EU and UK respectively. If you are a business with a valid VAT num"
+  description: "We are required by the EU and UK law to collect and remit VAT on the transactions we are responsible for: every digital purchase in the EU and the UK, and physi"
   category_id: <%= HelpCenter::Category::RECEIPTS_AND_REFUNDS.id %>
 - id: 203
   slug: "203-why-did-my-payment-fail"

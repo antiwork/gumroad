@@ -1,12 +1,17 @@
 import { CreditCard } from "@boxicons/react";
 import { CardElement, Elements } from "@stripe/react-stripe-js";
-import { StripeCardElement, StripeCardElementChangeEvent, StripeElementStyleVariant } from "@stripe/stripe-js";
+import { StripeCardElement, StripeCardElementChangeEvent } from "@stripe/stripe-js";
 import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
 import { getStripeInstance } from "$app/utils/stripe_loader";
-import { getCssVariable } from "$app/utils/styles";
 
+import {
+  getCheckoutCardElementStyle,
+  useCheckoutTheme,
+  useCheckoutStripeFonts,
+  useNeutralCheckoutThemeColors,
+} from "$app/components/Checkout/checkoutTheme";
 import { useFont } from "$app/components/DesignSettings";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -31,9 +36,17 @@ export const CreditCardInput = ({
   onChange?: (evt: StripeCardElementChangeEvent) => void;
   enableLink?: boolean;
 }) => {
-  // Actually set font family, size, and color and determined on the first render based on a ghost div that is unmounted
-  // as soon as the measurement is performed.
-  const [baseStripeStyle, setBaseStripeStyle] = React.useState<null | StripeElementStyleVariant>(null);
+  const checkoutTheme = useCheckoutTheme();
+  const neutralColors = useNeutralCheckoutThemeColors();
+  const font = useFont();
+  const baseStripeStyle = checkoutTheme
+    ? getCheckoutCardElementStyle(checkoutTheme)
+    : {
+        fontFamily: `${font.name}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`,
+        color: neutralColors.text,
+        iconColor: neutralColors.placeholder,
+        "::placeholder": { color: neutralColors.placeholder },
+      };
 
   return (
     <Fieldset state={invalid ? "danger" : undefined}>
@@ -58,23 +71,6 @@ export const CreditCardInput = ({
         </InputGroup>
       ) : (
         <InputGroup disabled={disabled} aria-label="Card information" aria-invalid={invalid}>
-          {baseStripeStyle == null ? (
-            <input
-              ref={(el) => {
-                if (el == null) return;
-                const inputStyle = window.getComputedStyle(el);
-                const color = getCssVariable("color").split(" ").join(",");
-                const placeholderColor = `rgb(${color}, ${getCssVariable("gray-3")})`;
-                const sanitizedFontFamily = inputStyle.fontFamily.replace(/\\[0-9a-fA-F]+\s?/gu, "");
-                setBaseStripeStyle({
-                  fontFamily: sanitizedFontFamily || "sans-serif",
-                  color: inputStyle.color,
-                  iconColor: placeholderColor,
-                  "::placeholder": { color: placeholderColor },
-                });
-              }}
-            />
-          ) : null}
           <StripeElementsProvider>
             <CardElement
               className="flex-1"
@@ -100,7 +96,7 @@ export const StripeElementsProvider = ({ children }: { children: React.ReactNode
   const font = useFont();
 
   // Since Stripe Elements are rendered in iframes, we need to explicitly pass in the font source & input styles
-  const stripeFonts = [{ family: font.name, src: `url(${font.url})` }];
+  const stripeFonts = useCheckoutStripeFonts(font);
 
   return (
     <Elements stripe={stripePromise} options={{ fonts: stripeFonts }}>

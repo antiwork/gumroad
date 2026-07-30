@@ -45,7 +45,7 @@ export type LayoutProps = {
   add_to_library_option: AddToLibraryOption;
   purchase: {
     id: string;
-    bundle_purchase_id: string | null;
+    receipt_purchase_id: string | null;
     email: string | null;
     email_digest: string;
     is_archived: boolean;
@@ -105,7 +105,10 @@ export const Layout = ({
     setIsResendingReceipt(false);
   });
 
-  const receiptPurchaseId = purchase?.bundle_purchase_id ?? purchase?.id;
+  const receiptPurchaseId = purchase?.receipt_purchase_id ?? purchase?.id;
+  // `receipt_purchase_id` only ever names a purchase sharing this one's email (see
+  // Purchase#receipt_purchase), so the library row's address is the right one for both links.
+  const receiptPurchaseEmail = purchase?.email;
 
   const disabledStatus =
     purchase && !purchase.product_available
@@ -192,8 +195,8 @@ export const Layout = ({
                     <div className="flex flex-col gap-4">
                       <NavigationButton
                         href={
-                          purchase.email
-                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: purchase.email })
+                          receiptPurchaseEmail
+                            ? Routes.receipt_purchase_url(receiptPurchaseId, { email: receiptPurchaseEmail })
                             : Routes.receipt_purchase_url(receiptPurchaseId)
                         }
                       >
@@ -215,8 +218,8 @@ export const Layout = ({
                       {purchase.has_invoice ? (
                         <NavigationButton
                           href={
-                            purchase.email
-                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: purchase.email })
+                            receiptPurchaseEmail
+                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: receiptPurchaseEmail })
                               : Routes.new_purchase_invoice_url(receiptPurchaseId)
                           }
                         >

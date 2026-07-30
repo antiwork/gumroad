@@ -552,6 +552,53 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "block-listed external account during a bank account sync" do
+    let(:zip_code) { "94107" }
+    let(:error_message) do
+      "You cannot use this external account because it is on your block list. Please contact us via https://support.stripe.com/contact if you think this is an error."
+    end
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      # The real error carries neither a code nor a param, which is why the classification has
+      # to match on the message.
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(error_message, nil)
+      )
+    end
+
+    it "tells the mailer this is a block, not a format rejection, so the seller is asked for a different account" do
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, error_message)
+
+      expect(result).to eq(:invalid_bank_account)
+    end
+
+    it "treats the rejection as expected seller-input without paging Sentry" do
+      allow(ErrorNotifier).to receive(:notify)
+
+      described_class.update_bank_account(user, passphrase:)
+
+      expect(ErrorNotifier).not_to have_received(:notify)
+    end
+
+    it "records the error details and marks the note so the retry loop knows the seller was told" do
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["stripe_error_message"]).to eq(error_message)
+      expect(note.json_data["seller_notified"]).to be(true)
+    end
+  end
+
   describe "account holder name rejection stays out of the retry loop" do
     let(:zip_code) { "94107" }
 

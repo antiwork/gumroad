@@ -49,6 +49,7 @@ const requestData: StartCartPurchaseRequestPayload = {
   },
   recaptchaResponse: null,
   usedStripePaymentElement: true,
+  buyerCurrencyQuote: null,
   lineItems: [
     {
       uid: "product-a ",

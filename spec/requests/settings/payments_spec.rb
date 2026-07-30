@@ -4912,8 +4912,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("Account #", with: "MK49250120000058907")
-        fill_in("Confirm account #", with: "MK49250120000058907")
+        fill_in("IBAN", with: "MK49250120000058907")
+        fill_in("Confirm IBAN", with: "MK49250120000058907")
         fill_in("SWIFT / BIC Code", with: "AAAAMK2XXXX")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
@@ -5395,6 +5395,39 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("001234567890123456789")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAAMZMXXXX")
       end
+
+      # The account-number inputs carry a per-country `pattern`, but this page saves through Inertia
+      # rather than submitting the form, so the browser never enforces it — Show.tsx runs the same
+      # check itself. This is the only test that covers that wiring: delete the call and the field
+      # goes back to hinting a format nothing checks, which is the bug this all exists to fix.
+      it "refuses to save an account number its bank-account model would reject" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Mozambique")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "mz")
+        fill_in("Phone number", with: "811234567")
+        fill_in("Postal code", with: "43200")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Mozambique Taxpayer Single ID Number (NUIT)", with: "000000000")
+
+        fill_in("Pay to the order of", with: "Mozambique Creator")
+        fill_in("SWIFT / BIC Code", with: "AAAAMZMXXXX")
+        # The generic example the form used to show every non-IBAN country. MozambiqueBankAccount
+        # requires exactly 21 characters, so this can never save.
+        fill_in("Account #", with: "1234567890")
+        fill_in("Confirm account #", with: "1234567890")
+
+        click_on("Update settings")
+
+        expect(page).to have_status(text: "Enter your 21-character NIB, without the MZ IBAN prefix")
+        expect(@user.reload.active_bank_account).to be_nil
+      end
     end
 
     describe "El Salvadoran creator" do
@@ -5773,8 +5806,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "Qatar Creator")
         fill_in("SWIFT / BIC Code", with: "AAAAQAQAXXX")
-        fill_in("Account #", with: "QA87CITI123456789012345678901")
-        fill_in("Confirm account #", with: "QA87CITI123456789012345678901")
+        fill_in("IBAN", with: "QA87CITI123456789012345678901")
+        fill_in("Confirm IBAN", with: "QA87CITI123456789012345678901")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in QAR.")
@@ -6402,8 +6435,9 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(find(:select, "Country")).to have_selector(:option, "Cuba (not supported)", disabled: true)
           select "United States", from: "Country"
           check "I have a valid, government-issued photo ID"
-          check "I have proof of residence within this country"
-          check "I am signing up as an individual, or my business is registered in the country above"
+          expect(page).to have_button "Save", disabled: true
+          check "I can provide proof of residence in the country above, or my business is registered there"
+          expect(page).to have_button "Save", disabled: false
           click_on "Save"
           wait_for_ajax
         end

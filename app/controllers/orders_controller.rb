@@ -122,7 +122,10 @@ class OrdersController < ApplicationController
     # order token can emit — payload size caps alone don't bound the NUMBER of events, so a
     # scripted caller replaying a valid token could otherwise flood Sentry. The log line
     # above stays unconditional so full forensics are always in the logs.
-    if confirm_error_notify_allowed?(order)
+    #
+    # Splitting the issue per method would read better but must not key on this
+    # attacker-controlled param; a bounded split is tracked in gumroad-private#1514.
+    if confirm_error_reportable?(error_details) && confirm_error_notify_allowed?(order)
       ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
 
@@ -130,6 +133,30 @@ class OrdersController < ApplicationController
   end
 
   private
+    # Methods that confirm in-page: a failed attempt transitions the intent, so
+    # `payment_intent.payment_failed` fires and `Purchase::ChargeEventsHandler#handle_event_failed!`
+    # writes the code to `purchases.stripe_error_code`.
+    CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link].freeze
+
+    # The error type that proves a charge was actually attempted, and therefore that
+    # `payment_intent.payment_failed` fired at all.
+    CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE = "card_error"
+
+    # Report only failures nothing else records.
+    #
+    # Both conditions are required. Stripe attaches `payment_method` to any error involving one,
+    # not just to declines, so a card-typed `invalid_request_error` (consumed ConfirmationToken,
+    # intent in an unexpected state) never transitions the intent and never webhooks. Suppressing
+    # on the method alone would make those log-only.
+    #
+    # Denylist rather than allowlist so an unrecognised or blank type keeps reporting: a method
+    # added later must not go unmonitored because nobody updated this list.
+    def confirm_error_reportable?(error_details)
+      return true unless error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
+
+      !error_details[:payment_method_type].in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
+    end
+
     # Fail-open per-order throttle for confirm_error Sentry reports. Counts reports per order
     # in a short cache window; once the cap is hit we keep logging but stop notifying, so a
     # buyer (or script) replaying the same valid order token can't flood Sentry with events.
