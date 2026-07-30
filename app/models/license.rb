@@ -48,10 +48,18 @@ class License < ApplicationRecord
     save!
   end
 
-  # Takes the row lock because /v2/licenses/verify increments the same column concurrently, so a
-  # read-modify-write here would otherwise drop activations that happen mid-edit.
+  # Serializes concurrent writers of the column against each other. It does NOT make a caller's
+  # idea of the current count safe — the value here overwrites whatever /v2/licenses/verify has
+  # incremented in the meantime, which is what the seller asked for when they typed an exact
+  # number. Relative changes must go through #adjust_uses! instead.
   def set_uses!(value)
     with_lock { update!(uses: value) }
+  end
+
+  # Reads the count inside the lock so a concurrent /v2/licenses/verify increment is preserved
+  # rather than overwritten. Never goes below zero.
+  def adjust_uses!(delta)
+    with_lock { update!(uses: [uses + delta, 0].max) }
   end
 
   def reset_uses!

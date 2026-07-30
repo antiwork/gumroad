@@ -99,6 +99,33 @@ describe License do
     end
   end
 
+  describe "#adjust_uses!" do
+    let(:license) { create(:license, uses: 5) }
+
+    it "increments by a positive delta" do
+      expect(license.adjust_uses!(3)).to be(true)
+      expect(license.reload.uses).to eq 8
+    end
+
+    it "decrements by a negative delta" do
+      expect(license.adjust_uses!(-2)).to be(true)
+      expect(license.reload.uses).to eq 3
+    end
+
+    it "floors at zero" do
+      expect(license.adjust_uses!(-99)).to be(true)
+      expect(license.reload.uses).to eq 0
+    end
+
+    # Reads the stored value under the lock, so a change made after this instance was loaded is
+    # preserved rather than overwritten.
+    it "applies the delta to the stored count rather than the loaded one" do
+      License.find(license.id).update!(uses: 20)
+      license.adjust_uses!(1)
+      expect(license.reload.uses).to eq 21
+    end
+  end
+
   describe "#reset_uses!" do
     let(:license) { create(:license, uses: 5) }
 

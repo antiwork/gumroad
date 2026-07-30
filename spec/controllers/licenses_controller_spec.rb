@@ -55,6 +55,7 @@ describe LicensesController do
       it "sets the uses count to the given number" do
         put :update, format: :json, params: { id: secure_id, uses: 9 }
         expect(response).to be_successful
+        expect(response.parsed_body["uses"]).to eq 9
         expect(license.reload.uses).to eq 9
       end
 
@@ -121,6 +122,63 @@ describe LicensesController do
 
       it "rejects the plain external id that leaks via the license API" do
         put :update, format: :json, params: { id: license.external_id, uses: 9 }
+        expect(response).to have_http_status(:not_found)
+        expect(license.reload.uses).to eq 4
+      end
+    end
+
+    context "when adjust_uses is passed" do
+      before { license.update!(uses: 4) }
+
+      it "increments by the delta and returns the resulting count" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: 1 }
+        expect(response).to be_successful
+        expect(response.parsed_body["uses"]).to eq 5
+        expect(license.reload.uses).to eq 5
+      end
+
+      it "decrements by a negative delta" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: -2 }
+        expect(response).to be_successful
+        expect(response.parsed_body["uses"]).to eq 2
+        expect(license.reload.uses).to eq 2
+      end
+
+      # The whole point of the relative endpoint: the browser's count is stale by the time the
+      # click lands, and a verify call that arrived in between must survive the seller's edit.
+      it "applies the delta to the stored count, not the client's stale one" do
+        license.update!(uses: 6)
+        put :update, format: :json, params: { id: secure_id, adjust_uses: -1 }
+        expect(license.reload.uses).to eq 5
+      end
+
+      it "floors at zero rather than going negative" do
+        license.update!(uses: 1)
+        put :update, format: :json, params: { id: secure_id, adjust_uses: -5 }
+        expect(response).to be_successful
+        expect(response.parsed_body["uses"]).to eq 0
+        expect(license.reload.uses).to eq 0
+      end
+
+      it "rejects a non-numeric delta" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: "abc" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects a delta beyond the ceiling" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: License::MAX_SELLER_SETTABLE_USES + 1 }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "does not change the enabled status" do
+        put :update, format: :json, params: { id: secure_id, adjust_uses: 1 }
+        expect(license.reload.disabled_at).to be_nil
+      end
+
+      it "rejects the plain external id that leaks via the license API" do
+        put :update, format: :json, params: { id: license.external_id, adjust_uses: 1 }
         expect(response).to have_http_status(:not_found)
         expect(license.reload.uses).to eq 4
       end

@@ -18,6 +18,7 @@ import {
   Review,
   ReviewVideo,
   Tracking,
+  adjustLicenseUses,
   approveReviewVideo,
   cancelSubscription,
   changeCanContact,
@@ -580,9 +581,22 @@ const CustomerDetailPage = ({
               }
               onSetUses={(uses) =>
                 setLicenseUses(license.id, uses).then(
-                  () => {
+                  (updatedUses) => {
                     showAlert("License uses updated", "success");
-                    updateCustomer({ license: { ...license, uses } });
+                    updateCustomer({ license: { ...license, uses: updatedUses } });
+                  },
+                  (e: unknown) => {
+                    assertResponseError(e);
+                    showAlert(e.message, "error");
+                    throw e;
+                  },
+                )
+              }
+              onAdjustUses={(delta) =>
+                adjustLicenseUses(license.id, delta).then(
+                  (updatedUses) => {
+                    showAlert("License uses updated", "success");
+                    updateCustomer({ license: { ...license, uses: updatedUses } });
                   },
                   (e: unknown) => {
                     assertResponseError(e);
@@ -1507,10 +1521,12 @@ const LicenseSection = ({
   license,
   onSave,
   onSetUses,
+  onAdjustUses,
 }: {
   license: License;
   onSave: (enabled: boolean) => Promise<void>;
   onSetUses: (uses: number) => Promise<void>;
+  onAdjustUses: (delta: number) => Promise<void>;
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
   const [confirmingReset, setConfirmingReset] = React.useState(false);
@@ -1525,7 +1541,17 @@ const LicenseSection = ({
 
   const handleSetUses = async (uses: number) => {
     setIsLoading(true);
-    await onSetUses(uses);
+    const succeeded = await onSetUses(uses).then(
+      () => true,
+      () => false,
+    );
+    setIsLoading(false);
+    return succeeded;
+  };
+
+  const handleAdjustUses = async (delta: number) => {
+    setIsLoading(true);
+    await onAdjustUses(delta);
     setIsLoading(false);
   };
 
@@ -1536,8 +1562,8 @@ const LicenseSection = ({
 
   const handleSaveUses = async () => {
     if (usesDraft === null) return;
-    await handleSetUses(usesDraft);
-    setIsEditingUses(false);
+    // A rejected value stays in the open editor so the seller can correct it instead of retyping.
+    if (await handleSetUses(usesDraft)) setIsEditingUses(false);
   };
 
   const startEditingUses = () => {
@@ -1596,7 +1622,7 @@ const LicenseSection = ({
             <Button
               outline
               disabled={isLoading || license.uses === 0}
-              onClick={() => void handleSetUses(license.uses - 1)}
+              onClick={() => void handleAdjustUses(-1)}
               aria-label="Decrease uses"
               title="Decrease uses by 1"
             >
@@ -1605,7 +1631,7 @@ const LicenseSection = ({
             <Button
               outline
               disabled={isLoading}
-              onClick={() => void handleSetUses(license.uses + 1)}
+              onClick={() => void handleAdjustUses(1)}
               aria-label="Increase uses"
               title="Increase uses by 1"
             >

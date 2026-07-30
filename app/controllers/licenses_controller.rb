@@ -9,14 +9,20 @@ class LicensesController < Sellers::BaseController
     end
     authorize [:audience, license.purchase], :manage_license?
 
-    if params.key?(:uses)
-      uses = cast_uses(params[:uses])
-      if uses.nil?
-        return render json: { error: "Uses must be a whole number between 0 and #{License::MAX_SELLER_SETTABLE_USES}." },
-                      status: :unprocessable_entity
-      end
+    if params.key?(:adjust_uses)
+      delta = cast_integer(params[:adjust_uses], min: -License::MAX_SELLER_SETTABLE_USES)
+      return render_uses_error if delta.nil?
 
-      license.set_uses!(uses)
+      log_uses_change(license) { license.adjust_uses!(delta) }
+      # The seller's browser cannot know the count a relative change landed on, since verify calls
+      # move it too, so the resulting value is the response.
+      return render json: { uses: license.uses }
+    elsif params.key?(:uses)
+      uses = cast_integer(params[:uses], min: 0)
+      return render_uses_error if uses.nil?
+
+      log_uses_change(license) { license.set_uses!(uses) }
+      return render json: { uses: license.uses }
     elsif params.key?(:reset_uses)
       license.reset_uses!
     elsif ActiveModel::Type::Boolean.new.cast(params[:enabled])
@@ -29,13 +35,29 @@ class LicensesController < Sellers::BaseController
   end
 
   private
-    # nil means "reject" — the client sends the absolute count, so anything that isn't a plain
-    # in-range integer has to fail loudly rather than land as a coerced 0. Base 10 is explicit
-    # because bare Integer() reads a leading zero as octal, turning a typed "010" into 8.
-    def cast_uses(value)
-      uses = Integer(value.to_s, 10, exception: false)
-      return if uses.nil? || !uses.between?(0, License::MAX_SELLER_SETTABLE_USES)
+    # nil means "reject" — the count is written from the value the client sends, so anything that
+    # isn't a plain in-range integer has to fail loudly rather than land as a coerced 0. Base 10
+    # is explicit because bare Integer() reads a leading zero as octal, turning "010" into 8.
+    def cast_integer(value, min:)
+      number = Integer(value.to_s, 10, exception: false)
+      return if number.nil? || !number.between?(min, License::MAX_SELLER_SETTABLE_USES)
 
-      uses
+      number
+    end
+
+    def render_uses_error
+      render json: { error: "Uses must be a whole number between 0 and #{License::MAX_SELLER_SETTABLE_USES}." },
+             status: :unprocessable_entity
+    end
+
+    # A hand-edited count is indistinguishable from real activations afterwards, which matters when
+    # a buyer disputes how many activations they used. paper_trail is the wrong home for it: every
+    # /v2/licenses/verify would write a version row.
+    def log_uses_change(license)
+      before = license.uses
+      yield
+      Rails.logger.info(
+        "License uses edited by seller: license_id=#{license.id} user_id=#{logged_in_user.id} #{before} -> #{license.uses}"
+      )
     end
 end

@@ -323,6 +323,19 @@ export const setLicenseUses = async (licenseId: string, uses: number) => {
   // The server owns the accepted range, so pass its wording through instead of a generic failure
   // the seller can't act on.
   if (!response.ok) throw new ResponseError(await getErrorMessage(response));
+  return typia.assert<{ uses: number }>(await response.json()).uses;
+};
+
+// Relative change, so the server reads the current count under a row lock — sending an absolute
+// number here would overwrite any activation that landed since the page was rendered.
+export const adjustLicenseUses = async (licenseId: string, delta: number) => {
+  const response = await request({
+    method: "PUT",
+    accept: "json",
+    url: Routes.license_path(licenseId, { adjust_uses: delta }),
+  });
+  if (!response.ok) throw new ResponseError(await getErrorMessage(response));
+  return typia.assert<{ uses: number }>(await response.json()).uses;
 };
 
 export const markShipped = (purchaseId: string, trackingUrl: string) =>
