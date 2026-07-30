@@ -31,8 +31,6 @@ class Settings::ProfilePolicy < ApplicationPolicy
       :profile_version,
       {
         user: user_attributes,
-        # Font and colours are edited directly here with a live preview. The agent can also write
-        # them, so the two paths write the same three columns.
         seller_profile: [:font, :background_color, :highlight_color],
         tabs: [:name, { sections: [] }],
         sections: [:id, *ProfileSectionPolicy::CREATE_ATTRIBUTES]

@@ -274,6 +274,7 @@ export default function SettingsPage() {
   });
 
   const showPagesTab = !has_custom_landing_page;
+  const showCustomLandingPagePreview = custom_html_pages_enabled && has_custom_landing_page && tab !== "design";
 
   const renderTab = (key: ProfileSettingsTab, label: string) => (
     <Tab
@@ -333,7 +334,7 @@ export default function SettingsPage() {
           />
         )}
       >
-        {custom_html_pages_enabled && has_custom_landing_page ? (
+        {showCustomLandingPagePreview ? (
           <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
         ) : (
           <Preview
@@ -348,6 +349,7 @@ export default function SettingsPage() {
               "--color-body": "var(--body-bg)",
               "--color-background": "rgb(var(--filled))",
               "--color-foreground": "rgb(var(--color))",
+              "--border-alpha": "1",
               "--color-border": "rgb(var(--color) / var(--border-alpha))",
               "--color-accent": "rgb(var(--accent))",
               "--color-accent-foreground": "rgb(var(--contrast-accent))",
@@ -469,6 +471,12 @@ export default function SettingsPage() {
             </section>
           ) : tab === "design" ? (
             <section className="grid gap-8 p-4! md:p-8!">
+              {has_custom_landing_page ? (
+                <Alert role="status" variant="info">
+                  Your custom profile page uses its own design. This preview shows the theme used on your product pages
+                  and other Gumroad surfaces.
+                </Alert>
+              ) : null}
               <Fieldset>
                 <FieldsetTitle>Font</FieldsetTitle>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" role="radiogroup">
