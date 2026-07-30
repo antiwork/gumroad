@@ -41,6 +41,7 @@ class OfferCode < ApplicationRecord
   validate :validate_existing_customer_settings
   validate :validate_ownership_duration_tiers
   validate :validate_excluded_products
+  validate :validate_default_discount_remains_applicable
 
 
   after_save :invalidate_product_cache
@@ -487,6 +488,31 @@ class OfferCode < ApplicationRecord
 
       if Link.visible.where(default_offer_code_id: id, id: excluded_products.map(&:id)).exists?
         errors.add(:base, "This discount code is the default discount for one or more of the excluded products. Please remove it from those products before excluding them.")
+      end
+    end
+
+    # Blocks code edits that would detach a visible product's default discount:
+    # removing the product from a product-specific code, or moving a universal
+    # code to a currency the product doesn't use (exclusions are guarded by
+    # validate_excluded_products). State-based rather than diff-based: HABTM has
+    # no dirty tracking, and by the time validations run the join table already
+    # holds the new list (update's transaction rolls it back on failure).
+    # Pre-existing detached defaults would block unrelated edits here;
+    # Onetime::ClearDetachedDefaultOfferCodes clears them. Not atomic with the
+    # Link-side default assignment — a concurrent assignment can slip through,
+    # and the next edit of the code surfaces it.
+    def validate_default_discount_remains_applicable
+      return if deleted_at.present?
+      return unless persisted?
+
+      if universal?
+        return if currency_type.nil?
+
+        if Link.visible.where(default_offer_code_id: id).where.not(price_currency_type: currency_type).exists?
+          errors.add(:base, "This discount code is the default discount for one or more products that use a different currency. Please remove it from those products before changing the discount's currency.")
+        end
+      elsif Link.visible.where(default_offer_code_id: id).where.not(id: products.map(&:id)).exists?
+        errors.add(:base, "This discount code is the default discount for one or more of the removed products. Please remove it from those products before removing them from the discount.")
       end
     end
 

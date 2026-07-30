@@ -246,6 +246,10 @@ class Link < ApplicationRecord
 
   before_save :downcase_filetype
   before_save :remove_xml_tags
+  # The offer code guards only watch visible products, so a default discount can
+  # detach while a product is deleted; every undelete path (admin restore,
+  # publish!) repairs it here, in the same write that makes the product visible.
+  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
   after_update :create_licenses_for_existing_customers,
@@ -942,6 +946,16 @@ class Link < ApplicationRecord
     offer_codes.alive.find_by_code(code) || universal_offer_codes.find_by_code(code)
   end
 
+  # A default discount buyers can no longer redeem: the code was deleted,
+  # carries no code (checkout resolves defaults by code, and legacy rows could
+  # point at codeless upsell discounts), or stopped applying to this product.
+  # Checkout refuses such a discount while card surfaces still quote it.
+  def default_offer_code_detached?
+    return false if default_offer_code_id.nil?
+
+    default_offer_code.nil? || default_offer_code.deleted? || default_offer_code.code.blank? || !default_offer_code.applicable?(self)
+  end
+
   def find_offer_code_by_external_id(external_id)
     offer_codes.alive.find_by_external_id(external_id) ||
       user.offer_codes.universal_with_matching_currency(price_currency_type).alive.find_by_external_id(external_id)
@@ -1431,12 +1445,19 @@ class Link < ApplicationRecord
       errors.add(:custom_permalink, "is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.")
     end
 
+    def clear_detached_default_offer_code
+      self.default_offer_code = nil if default_offer_code_detached?
+    end
+
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
       return if being_marked_as_deleted?
       return unless new_record? || default_offer_code_id_changed?
 
-      if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
+      # Codeless discounts (upsells, cancellation offers) are excluded: their own
+      # flows rewrite their product lists outside the detachment guards, and the
+      # discounts dashboard never offers them as defaults.
+      if !user.offer_codes.alive.where.not(code: nil).where(id: default_offer_code.id).exists?
         errors.add(:default_offer_code, "must belong to your offer codes")
       elsif default_offer_code.inactive?
         errors.add(:default_offer_code, "cannot be expired")

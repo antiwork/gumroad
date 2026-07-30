@@ -257,6 +257,77 @@ describe OfferCode do
     end
   end
 
+  describe "default discount applicability validation" do
+    let(:other_product) { create(:product, user: @product.user) }
+    let(:offer_code) { create(:offer_code, user: @product.user, products: [@product, other_product]) }
+
+    it "disallows removing a product whose default discount is this offer code" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(products: [other_product])).to eq(false)
+      expect(offer_code.errors.full_messages).to include("This discount code is the default discount for one or more of the removed products. Please remove it from those products before removing them from the discount.")
+      expect(offer_code.reload.products).to match_array([@product, other_product])
+    end
+
+    it "disallows removing all products when one of them uses this offer code as its default discount" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(products: [])).to eq(false)
+      expect(offer_code.errors.full_messages).to include("This discount code is the default discount for one or more of the removed products. Please remove it from those products before removing them from the discount.")
+      expect(offer_code.reload.products).to match_array([@product, other_product])
+    end
+
+    it "allows removing a product that doesn't use this offer code as its default discount" do
+      @product.update!(default_offer_code_id: nil)
+
+      expect(offer_code.update(products: [other_product])).to eq(true)
+      expect(offer_code.reload.products).to eq([other_product])
+    end
+
+    it "allows removing a deleted product that uses this offer code as its default discount" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      @product.update!(deleted_at: Time.current)
+
+      expect(offer_code.update(products: [other_product])).to eq(true)
+      expect(offer_code.reload.products).to eq([other_product])
+    end
+
+    it "allows saving while an attached product uses this offer code as its default discount" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(name: "New name")).to eq(true)
+    end
+
+    it "allows updating a universal offer code that is a product's default discount" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(name: "New name")).to eq(true)
+    end
+
+    it "disallows moving a universal offer code to a currency a defaulting product doesn't use" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user, amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(amount_percentage: nil, amount_cents: 100, currency_type: "eur")).to eq(false)
+      expect(universal_offer_code.errors.full_messages).to include("This discount code is the default discount for one or more products that use a different currency. Please remove it from those products before changing the discount's currency.")
+      expect(universal_offer_code.reload.currency_type).to eq(nil)
+    end
+
+    it "allows updating a universal percentage offer code that is a product's default discount" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user, amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(name: "New name")).to eq(true)
+    end
+
+    it "doesn't prevent creating an offer code while products without a default discount exist" do
+      expect(@product.default_offer_code_id).to be_nil
+
+      expect { create(:offer_code, user: @product.user, products: [other_product]) }.to change { OfferCode.count }.by(1)
+    end
+  end
+
   describe "validity dates validation" do
     context "when the start date is before the expiration date" do
       let(:offer_code) { build(:offer_code, valid_at: 2.days.ago, expires_at: 1.day.ago) }

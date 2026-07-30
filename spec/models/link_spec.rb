@@ -1,0 +1,53 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe Link do
+  describe "default offer code validation" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 2000) }
+
+    it "allows a discount code that applies to the product" do
+      offer_code = create(:offer_code, user: seller, products: [product])
+
+      expect(product.update(default_offer_code_id: offer_code.id)).to eq(true)
+      expect(product.reload.default_offer_code_id).to eq(offer_code.id)
+    end
+
+    it "disallows an upsell's codeless discount" do
+      upsell = create(:upsell, seller:, product:)
+      upsell.build_offer_code(user: seller, products: [product], amount_percentage: 10, amount_cents: nil)
+      upsell.save!
+
+      expect(product.update(default_offer_code_id: upsell.offer_code.id)).to eq(false)
+      expect(product.errors.full_messages).to include("Default offer code must belong to your offer codes")
+      expect(product.reload.default_offer_code_id).to be_nil
+    end
+  end
+
+  describe "clearing detached default discounts on undelete" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 2000) }
+
+    it "clears a default discount that detached while the product was deleted" do
+      offer_code = create(:offer_code, user: seller, products: [product])
+      product.update!(default_offer_code_id: offer_code.id)
+      product.update!(deleted_at: Time.current)
+      offer_code.products.delete(product)
+
+      product.update!(deleted_at: nil)
+
+      expect(product.reload.default_offer_code_id).to be_nil
+    end
+
+    it "keeps a default discount that still applies" do
+      offer_code = create(:offer_code, user: seller, products: [product])
+      product.update!(default_offer_code_id: offer_code.id)
+      product.update!(deleted_at: Time.current)
+
+      product.update!(deleted_at: nil)
+
+      expect(product.reload.default_offer_code_id).to eq(offer_code.id)
+    end
+  end
+end
