@@ -89,7 +89,7 @@ describe WithProductFiles do
     context "when there is no rich content provider" do
       it "returns an empty hash" do
         entity = create(:installment)
-        entity.product_files = [create(:product_file), create(:product_file)]
+        entity.product_files = [create(:product_file, link: nil, installment: entity), create(:product_file, link: nil, installment: entity)]
 
         expect(entity.map_rich_content_files_and_folders).to eq({})
       end
@@ -651,18 +651,18 @@ describe WithProductFiles do
 
   describe "#generate_entity_archive!" do
     it "generates an entity archive" do
-      file1 = create(:product_file, display_name: "First file")
-      file2 = create(:product_file, display_name: "Second file")
-      installment = create(:installment, product_files: [file1, file2])
+      installment = create(:installment)
+      file1 = create(:product_file, display_name: "First file", link: nil, installment:)
+      file2 = create(:product_file, display_name: "Second file", link: nil, installment:)
 
       expect { installment.generate_entity_archive! }.to change { installment.product_files_archives.entity_archives.alive.count }.from(0).to(1)
       expect(installment.product_files_archives.entity_archives.alive.last.product_files).to eq([file1, file2])
     end
 
     it "deletes the previous archive" do
-      file1 = create(:product_file, display_name: "First file")
-      file2 = create(:product_file, display_name: "Second file")
-      installment = create(:installment, product_files: [file1, file2])
+      installment = create(:installment)
+      file1 = create(:product_file, display_name: "First file", link: nil, installment:)
+      file2 = create(:product_file, display_name: "Second file", link: nil, installment:)
 
       archive = installment.product_files_archives.create!(product_files: installment.product_files)
       archive.mark_in_progress!

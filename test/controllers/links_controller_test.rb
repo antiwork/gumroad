@@ -3816,8 +3816,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   # --- product_files_archive generation ---------------------------------------
 
   test "PUT update deletes all product-level archives when switching to variant-level archives" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     folder1_id = SecureRandom.uuid
     description = [
@@ -3870,8 +3870,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
     category = create_variant_category(link: @product, title: "Versions")
     version1 = create_variant(variant_category: category, name: "Version 1")
 
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     version1.product_files = [file1, file2]
     version1_rich_content_description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => SecureRandom.uuid }, "content" => [
@@ -3915,7 +3915,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does not generate a folder archive when there are no folders" do
-    file1 = create_product_file(display_name: "File 1")
+    file1 = create_product_file(link: @product, display_name: "File 1")
     @product.product_files = [file1]
     description = [{ "type" => "fileEmbed", "attrs" => { "id" => file1.external_id, "uid" => "file1" } }]
 
@@ -3929,7 +3929,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does not generate a folder archive when a folder only contains 1 file" do
-    file1 = create_product_file(display_name: "File 1")
+    file1 = create_product_file(link: @product, display_name: "File 1")
     @product.product_files = [file1]
     description = [
       { "type" => "fileEmbedGroup", "attrs" => { "name" => "", "uid" => SecureRandom.uuid }, "content" => [
@@ -3946,8 +3946,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does not generate an updated folder archive when the product name or page name is changed" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
 
     folder1_id = SecureRandom.uuid
@@ -3984,10 +3984,10 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update does not generate an updated folder archive when top-level files are modified" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
-    file3 = create_product_file(display_name: "File 2")
-    file4 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    file3 = create_product_file(link: @product, display_name: "File 2")
+    file4 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2, file3, file4]
     folder1_id = SecureRandom.uuid
     page1_description = [
@@ -4011,7 +4011,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     folder1_archive.mark_ready!
 
     file2.update!(display_name: "New file name")
-    file5 = create_product_file(display_name: "File 3")
+    file5 = create_product_file(link: @product, display_name: "File 3")
     @product.product_files << file5
     updated_description = [
       { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] },
@@ -4039,12 +4039,12 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update generates a folder archive for every valid folder on a page" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
-    file3 = create_product_file(display_name: "File 3")
-    file4 = create_product_file(display_name: "File 4")
-    file5 = create_product_file(display_name: "File 5")
-    file6 = create_product_file(display_name: "File 6")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    file3 = create_product_file(link: @product, display_name: "File 3")
+    file4 = create_product_file(link: @product, display_name: "File 4")
+    file5 = create_product_file(link: @product, display_name: "File 5")
+    file6 = create_product_file(link: @product, display_name: "File 6")
     @product.product_files = [file1, file2, file3, file4, file5, file6]
     folder1_id = SecureRandom.uuid
     folder2_id = SecureRandom.uuid
@@ -4102,8 +4102,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update generates a folder archive when a folder is added to an existing page" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     folder1_id = SecureRandom.uuid
     folder1 = { "type" => "fileEmbedGroup", "attrs" => { "name" => "", "uid" => folder1_id }, "content" => [
@@ -4138,7 +4138,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       post :update, params: {
         id: @product.unique_permalink,
         rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_page1_description } }],
-        files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }, { id: file3_id, display_name: "File 3", url: create_product_file(display_name: "File 3").url }, { id: file4_id, display_name: "File 4", url: create_product_file(display_name: "File 4").url }],
+        files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }, { id: file3_id, display_name: "File 3", url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf" }, { id: file4_id, display_name: "File 4", url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf" }],
       }, format: :json
     end
     assert_equal false, archive.needs_updating?(@product.product_files)
@@ -4156,8 +4156,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update generates a new folder archive and deletes the old archive for an existing folder that gets modified" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     folder1_id = SecureRandom.uuid
     folder1_name = "folder 1"
@@ -4204,11 +4204,11 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update generates new folder archives when a file is moved from one folder to another folder" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
-    file3 = create_product_file(display_name: "File 3")
-    file4 = create_product_file(display_name: "File 4")
-    file5 = create_product_file(display_name: "File 5")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    file3 = create_product_file(link: @product, display_name: "File 3")
+    file4 = create_product_file(link: @product, display_name: "File 4")
+    file5 = create_product_file(link: @product, display_name: "File 5")
     @product.product_files = [file1, file2, file3, file4, file5]
 
     folder1 = { "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => SecureRandom.uuid }, "content" => [
@@ -4273,8 +4273,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update deletes the corresponding folder archive when a folder gets deleted" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     folder_id = SecureRandom.uuid
     description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => folder_id }, "content" => [
@@ -4307,8 +4307,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update deletes a folder archive if the folder is updated to contain only 1 file" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     folder_id = SecureRandom.uuid
     description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => folder_id }, "content" => [
@@ -4344,10 +4344,10 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update updates all folder archives when multiple changes occur to a product's rich content across multiple pages" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
-    file3 = create_product_file(display_name: "File 3")
-    file4 = create_product_file(display_name: "File 4")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    file3 = create_product_file(link: @product, display_name: "File 3")
+    file4 = create_product_file(link: @product, display_name: "File 4")
     @product.product_files = [file1, file2, file3, file4]
 
     folder1_id = SecureRandom.uuid
@@ -4382,7 +4382,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       { "type" => "fileEmbed", "attrs" => { "id" => file1.external_id, "uid" => SecureRandom.uuid } },
     ] }]
 
-    file5 = create_product_file(display_name: "File 5")
+    file5 = create_product_file(link: @product, display_name: "File 5")
     @product.product_files << file5
     updated_page2_description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => folder2_name, "uid" => folder2_id }, "content" => [
       { "type" => "fileEmbed", "attrs" => { "id" => file3.external_id, "uid" => SecureRandom.uuid } },
@@ -4417,8 +4417,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
     category = create_variant_category(link: @product, title: "Versions")
     version1 = create_variant(variant_category: category, name: "Version 1")
 
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     version1.product_files = [file1, file2]
     version1_rich_content_description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => SecureRandom.uuid }, "content" => [
@@ -4439,8 +4439,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   end
 
   test "PUT update generates folder archives for the file embed groups in product-level content when has_same_rich_content_for_all_variants is true" do
-    file1 = create_product_file(display_name: "File 1")
-    file2 = create_product_file(display_name: "File 2")
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
     @product.product_files = [file1, file2]
     variant_category = create_variant_category(title: "versions", link: @product)
     variant = create_variant(variant_category:, name: "mac")
@@ -6932,6 +6932,53 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert other_category.reload.alive?
     assert sibling.reload.alive?
     assert kept.reload.alive?
+  end
+
+  # The mirror image of the test above, and the reason the version lookup is
+  # scoped to alive rows. A soft-deleted version can also collide with a
+  # grouping's id, and a dead version is never what the editor is naming — it is
+  # already gone. Reading the id as "a version" on the strength of that dead row
+  # would leave the grouping the seller did name alive, with everything in it,
+  # and report success.
+  test "flag on: a named grouping is still swept when a soft-deleted version shares its id" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    other_category = create_variant_category(link: @product, title: "Formats")
+    swept_version = create_variant(variant_category: other_category, name: "Goes with the grouping")
+
+    # A version that was deleted in some earlier save, sitting in a grouping that
+    # is still alive, whose primary key happens to equal the named grouping's.
+    # Move both rows to an id past the high-water mark of BOTH tables rather than
+    # reusing either one's existing id — the two auto-increment counters are
+    # independent, so any id one table has issued may already be taken in the
+    # other, and the collision this test needs must be the only one.
+    stale = create_variant(variant_category: @category, name: "Deleted earlier")
+    stale.mark_deleted!
+    collided_id = VariantCategory.maximum(:id).to_i + BaseVariant.maximum(:id).to_i + 1
+    stale.update_columns(id: collided_id)
+    other_category.update_columns(id: collided_id)
+    swept_version.update_columns(variant_category_id: collided_id)
+    other_category = VariantCategory.find(collided_id)
+    stale = Variant.find(collided_id)
+    assert_equal other_category.external_id, stale.external_id,
+                 "this test is only meaningful while the two ids collide"
+    assert_not stale.alive?
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [other_category.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not other_category.reload.alive?
+    assert kept.reload.alive?
+    # Sweeping a grouping does not cascade to its versions (VariantCategory's
+    # `has_many :variants` has no `dependent:` option), so aliveness alone cannot
+    # say WHICH route deleted the grouping. The audit row names it.
+    audit = ProductVariantDeletionAudit.where(route: ProductVariantDeletionAudit::EDITOR_CATEGORY_SWEPT).last
+    assert_not_nil audit, "the grouping should have been deleted by the named-grouping sweep"
+    assert_includes audit.deleted_variant_category_external_ids, other_category.external_id
   end
 
   test "flag on: a second grouping is left alone when the save names no deletions" do

@@ -884,6 +884,12 @@ describe Payment do
       payment
     end
 
+    def failed_payout_with_reason(reason)
+      payment = create(:payment, user:, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing")
+      payment.mark_failed!(reason)
+      payment
+    end
+
     it "pauses payouts and flags the account once the consecutive failure limit is reached" do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
       expect(user.reload.payouts_paused?).to be(false)
@@ -911,6 +917,43 @@ describe Payment do
 
       expect(user.reload.payouts_paused?).to be(false)
       expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a payout we failed ourselves via a processor rate limit" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      failed_payout_with_reason(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a payout that failed because Stripe was unreachable" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      failed_payout_with_reason(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "still pauses when the threshold is reached by non-transient failures alone" do
+      # The nil-reason rows are the point: most failures store nothing in failure_reason, and a
+      # `NOT IN` filter without the IS NULL arm drops them and disables this check entirely.
+      failed_payout_with_reason(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { failed_payout }
+
+      expect(user.reload.payouts_paused_internally).to be(true)
+    end
+
+    it "keeps counting failures whose reason is set but not transient" do
+      # The IS NULL arm covers reason-less rows; this covers the other side of the OR, so the
+      # filter cannot be widened into excluding every reasoned failure without reddening here.
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+        failed_payout_with_reason(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+      end
+
+      expect(user.reload.payouts_paused_internally).to be(true)
     end
 
     it "counts only failures after the most recent completed payout to the bank account" do
