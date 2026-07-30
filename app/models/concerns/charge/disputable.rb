@@ -345,11 +345,26 @@ module Charge::Disputable
       # that sweep cannot extend the seller's deadline past the point evidence is still accepted.
       dispute_evidence.claim_seller_contacted_window! if dispute_evidence.present?
 
+      # Ask for the seller's side only while the window that won the claim is still open. The
+      # notice reads "in the next #{hours_left} hours" and links a form check_if_needs_redirect
+      # refuses once the row is resolved, so sending it against a window
+      # CreateMissingDisputeEvidenceJob backdated past its own end promises a negative number of
+      # hours and a dead link. That sweep guards its own send the same way; this is the other
+      # caller. A dispute with no evidence surface at all (PayPal, Stripe Connect) still gets the
+      # plain notice, which is what it has always sent.
+      #
+      # Read the stamp with a column query rather than #reload: claim_seller_contacted_window!
+      # writes through update_all and leaves this object stale, and reloading it here would reset
+      # the attachment associations the evidence row was just built with.
+      stamped_at = dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id).pick(:seller_contacted_at)
+      window_open = stamped_at.nil? ||
+        (Time.current - stamped_at) < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
       # between these enqueues and the marker write — that degrades to at-least-once
       # email/webhook delivery, which is normal for crash-retry semantics.
-      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later
+      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later if window_open
       AdminMailer.chargeback_notify(dispute.id).deliver_later
       CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
 

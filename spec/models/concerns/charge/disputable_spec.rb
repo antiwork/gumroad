@@ -753,6 +753,50 @@ describe Charge::Disputable, :vcr do
           end
         end
 
+        context "when CreateMissingDisputeEvidenceJob already opened an elapsed window" do
+          # The sweep backdates seller_contacted_at past its own end when the processor's cutoff
+          # leaves no usable time, then submits without asking. A formalization arriving after that
+          # loses the claim and must not send a notice against the window it lost.
+          let(:elapsed_stamp) { (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 8).hours.ago }
+
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              DisputeEvidence.where(id: evidence.id).update_all(seller_contacted_at: elapsed_stamp) if evidence
+              evidence
+            end
+          end
+
+          it "does not ask the seller for information the window no longer accepts" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            evidence = purchase.reload.dispute.dispute_evidence
+            # The sweep's window is kept, not replaced with a fresh full-length one.
+            expect(evidence.seller_contacted_at).to be_within(1.second).of(elapsed_stamp)
+            expect(evidence.hours_left_to_submit_evidence).not_to be_positive
+          end
+
+          it "still notifies admin and hands the dispute to FightDisputeJob" do
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(AdminMailer, :chargeback_notify)
+
+            dispute = purchase.reload.dispute
+            expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
+            expect(dispute.formalized_side_effects_finished_at).to be_present
+          end
+        end
+
+        context "when the seller's window is still open" do
+          it "asks the seller for their side of the dispute" do
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
+
+            expect(purchase.reload.dispute.dispute_evidence.hours_left_to_submit_evidence).to be_positive
+          end
+        end
+
         context "for a charge" do
           let(:transaction_id) { "ch_charge_884" }
           let!(:charge_purchase) do
