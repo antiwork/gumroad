@@ -653,6 +653,29 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # The established budget must not be spent on subscribers whose block is already gone. They are
+  # not reportable at all, so letting one hold a slot drops a subscriber who IS still stranded.
+  # The unblocked subscription is created FIRST so it holds the lower id: the budget is applied to
+  # a hash keyed by subscription_id, so id order — not failure recency — decides who survives, and
+  # the surviving row is then discarded anyway for having no active block.
+  it "does not let a subscriber whose block was cleared consume the established budget" do
+    stub_const("#{described_class}::MAX_ESTABLISHED_FOUND", 1)
+    unblocked = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: unblocked, guid: "guid-unblocked",
+                   buyer_email: "unblocked@example.com", created_at: 1.hour.ago)
+
+    still_blocked = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription: still_blocked, guid: "guid-still-blocked",
+                   buyer_email: "still-blocked@example.com", created_at: 5.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "guid-still-blocked")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{still_blocked.id}")
+    end
+  end
+
   it "is registered on the schedule so it actually runs" do
     schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
     expect(schedule.values.map { |entry| entry["class"] }).to include(described_class.name)
