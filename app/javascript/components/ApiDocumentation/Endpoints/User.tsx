@@ -148,7 +148,9 @@ const ProfileCustomHtmlDocumentation = () => (
       <li>
         <code>price</code> — the price you set, formatted in the product's own currency, e.g. <code>$14</code> or{" "}
         <code>$0+</code>. This blob is cached per seller rather than per visitor, so the figure is identical for every
-        visitor and is not converted to their local currency.
+        visitor and is not converted to their local currency. To display a price, prefer the <code>gumroad-prices</code>{" "}
+        blob or <code>data-gumroad-field=&quot;price&quot;</code> described above: those are priced per request in the
+        visitor's currency, with your default offer code applied.
       </li>
       <li>
         <code>thumbnail_url</code> and <code>cover_url</code> — either or both may be null, so fall back from one to the
