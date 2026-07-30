@@ -527,6 +527,30 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(session[:inertia_errors][:base]).to include("You must use a test bank account number in test mode. Try 000123456789 or see more options at https://stripe.com/docs/connect/testing#account-numbers.")
           end
 
+          it "names the values Stripe refused when it can't match them against its bank directory" do
+            all_params.merge!(
+              bank_account: {
+                type: UzbekistanBankAccount.name,
+                account_number: "99934500012345670024",
+                account_number_confirmation: "99934500012345670024",
+                bank_code: "JSCLUZ22XXX",
+                branch_code: "00401",
+                account_holder_full_name: "gumbot"
+              }
+            )
+
+            expect(StripeMerchantAccountManager).to receive(:create_account).and_raise(
+              Stripe::InvalidRequestError.new("We couldn't find the bank for that bank/branch code", "bank_account[routing_number]")
+            )
+
+            put :update, params: all_params
+
+            expect(response).to redirect_to(settings_payments_path)
+            error = session[:inertia_errors][:base].first
+            expect(error).to include("bank code JSCLUZ22XXX and branch code 00401")
+            expect(error).to include("branch code is the half")
+          end
+
           it "handles Stripe::APIError gracefully instead of raising a 500" do
             all_params.merge!(
               bank_account: {

@@ -152,7 +152,11 @@ class ContactingCreatorMailer < ApplicationMailer
 
   # The three rejection kinds need opposite advice — correct the value, use a different account,
   # or wait — so the kind has to reach the template rather than being flattened to one message.
-  def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil)
+  #
+  # bank_account_id names the row Stripe actually refused. The mail renders asynchronously, and a
+  # seller who re-saves while the rejection is in flight would otherwise be shown their newest
+  # values under "the details we sent" — values that were never sent (gumroad-private#1550).
+  def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil, bank_account_id = nil)
     @seller = User.find(user_id)
     @format_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT
     # A block-listed account is the third case, and the only one where re-entering the SAME
@@ -162,11 +166,14 @@ class ContactingCreatorMailer < ApplicationMailer
     @account_blocked = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED
     @terminal_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL
     @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
-    # The default branch below is the directory-miss case, whose Stripe message names neither the
-    # value it refused nor which box it came from. Quote the values back so the seller can check
-    # the right one (gumroad-private#1550).
-    if !@account_blocked && !@format_rejected && !@terminal_rejected
-      @directory_miss_detail = StripeMerchantAccountManager.bank_directory_miss_detail(@seller.active_bank_account)
+    # Gated on the message rather than on "no kind was classified": an unclassified rejection is
+    # not necessarily a directory miss (a declined debit card and a bank-country mismatch both
+    # arrive here with no kind), and quoting routing values at those sellers points them at a
+    # field that had nothing to do with the failure.
+    if StripeMerchantAccountManager.bank_details_directory_miss_message?(stripe_error_message)
+      @directory_miss_detail = StripeMerchantAccountManager.bank_directory_miss_detail(
+        rejected_bank_account(bank_account_id)
+      )
     end
     @subject = if @account_blocked
       "Please add a different bank account for payouts."
@@ -612,6 +619,15 @@ class ContactingCreatorMailer < ApplicationMailer
     # seller as the format their bank expects. Anything implausibly long isn't the terse format
     # sentence we're after either, so drop it rather than pasting a wall of text into the email.
     MAX_FORMAT_HINT_LENGTH = 200
+
+    # The row Stripe refused, or the current one when the caller could not name it (legacy calls
+    # and the debit-card path). A missing id must not fall back silently to nothing: without a row
+    # there is nothing to quote, which is the correct outcome, not an error.
+    def rejected_bank_account(bank_account_id)
+      return @seller.active_bank_account if bank_account_id.blank?
+
+      @seller.bank_accounts.find_by(id: bank_account_id)
+    end
 
     def expected_bank_code_format_hint(stripe_error_message)
       message = stripe_error_message.to_s

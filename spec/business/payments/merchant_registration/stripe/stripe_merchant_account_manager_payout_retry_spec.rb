@@ -514,7 +514,7 @@ describe StripeMerchantAccountManager do
       expect do
         described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number", user.active_bank_account.id)
 
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
     end
@@ -544,7 +544,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, nil, "We couldn't find the bank for that BIC")
+        .with(user.id, nil, "We couldn't find the bank for that BIC", user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
       expect(ErrorNotifier).not_to have_received(:notify)
@@ -594,7 +594,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end
@@ -745,7 +745,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end
@@ -786,7 +786,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end

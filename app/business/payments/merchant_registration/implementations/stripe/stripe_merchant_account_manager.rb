@@ -934,7 +934,7 @@ module StripeMerchantAccountManager
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       if notify
         rejection_kind = bank_rejection_kind_for(e)
-        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s, bank_account.id).deliver_later(queue: "critical")
         mark_bank_sync_note_seller_notified!(failure_note)
       end
       return :invalid_bank_account
@@ -1039,13 +1039,19 @@ module StripeMerchantAccountManager
   # the format and terminal cases: the value may be perfectly real and simply absent from Stripe's
   # records, so the advice is to check it and wait, not to replace the account.
   def self.bank_details_directory_miss?(error)
-    error.message.to_s.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+    bank_details_directory_miss_message?(error.message)
   end
 
   # Same question answered from the payout-note breadcrumb, for the surfaces that read the note
   # rather than a live error.
   def self.bank_details_directory_miss_note?(note)
     _code, message = bank_sync_note_error_details(note)
+    bank_details_directory_miss_message?(message)
+  end
+
+  # Same question answered from the message string alone, for the mailer, which receives Stripe's
+  # message rather than the error object.
+  def self.bank_details_directory_miss_message?(message)
     message.to_s.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
   end
 

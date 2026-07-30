@@ -130,11 +130,15 @@ class BankAccount < ApplicationRecord
     routing_field_descriptions.to_sentence
   end
 
-  # True when the seller filled in a bank code AND a separate branch code, which is the shape that
-  # makes "we couldn't find the bank" ambiguous: the bank code is usually right and the branch code
-  # is the half that is refused, but nothing in the rejection says so.
+  # True when the seller filled in a first-half code AND a separate branch code, which is the shape
+  # that makes "we couldn't find the bank" ambiguous: the first half is usually right (it is the
+  # published BIC or clearing code) and the branch code is the half Stripe matches per branch, but
+  # nothing in the rejection says so. Hong Kong calls its first half a clearing code rather than a
+  # bank code, and has the same ambiguity.
   def has_separate_branch_code?
-    respond_to?(:bank_code) && bank_code.present? && branch_code.present?
+    return false if branch_code.blank?
+
+    %i[bank_code clearing_code].any? { |attribute| respond_to?(attribute) && public_send(attribute).present? }
   end
 
   def supports_instant_payouts?
