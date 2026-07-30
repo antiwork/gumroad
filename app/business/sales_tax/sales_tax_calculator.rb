@@ -230,7 +230,26 @@ class SalesTaxCalculator
       end
     end
 
+    # A physical parcel entering the EU is an import, and Gumroad has no IOSS registration to
+    # remit under or to stamp on the customs declaration — so destination customs assesses VAT
+    # again on arrival and the buyer pays it twice. The EU number we hold
+    # (GUMROAD_VAT_REGISTRATION_NUMBER) is OSS, which covers electronically supplied services
+    # rather than imported goods.
+    #
+    # The UK is in EU_VAT_APPLICABLE_COUNTRY_CODES but is carved out: it has its own registration
+    # (GUMROAD_UK_VAT_REGISTRATION), and for consignments at or under £135 the marketplace
+    # collects at checkout and the border does not charge again.
+    def eu_import_vat_unremittable?
+      return false unless product.is_physical
+      return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
+      return false if tax_rate.country == Compliance::Countries::GBR.alpha2
+
+      Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+    end
+
     def tax_eligible?
+      return false if eu_import_vat_unremittable?
+
       product_tax_eligible = product.is_physical && tax_rate.country == Compliance::Countries::USA.alpha2
       product_tax_eligible ||= Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
       product_tax_eligible ||= tax_rate.country == Compliance::Countries::AUS.alpha2
