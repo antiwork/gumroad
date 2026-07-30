@@ -603,7 +603,7 @@ describe CustomerLowPriorityMailer do
       end
 
       context "purchaser has an account" do
-        before { purchase.update!(purchaser: create(:user, name: "Purchaser")) }
+        before { purchase.update!(purchaser: create(:user, name: "Purchaser", email: purchase.email)) }
 
         it "includes a token-scoped unsubscribe link that resolves without a session" do
           body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
@@ -620,6 +620,21 @@ describe CustomerLowPriorityMailer do
 
           expect(body).to have_link("Unsubscribe")
           expect(body).not_to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
+        end
+      end
+
+      context "purchaser was reassigned but the purchase email still points at the previous recipient" do
+        before do
+          purchase.update!(purchaser: create(:user, email: "new-owner@example.com"))
+          purchase.update_column(:email, "previous-recipient@example.com")
+        end
+
+        it "falls back to the session-gated route so the recipient cannot opt the purchaser out unauthenticated" do
+          mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
+
+          expect(mail.to).to eq(["previous-recipient@example.com"])
+          expect(mail.body.encoded).not_to match(%r{/users/unsubscribe_review_reminders/})
+          expect(mail.body.encoded).to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
         end
       end
     end

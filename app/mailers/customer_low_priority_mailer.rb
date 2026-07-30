@@ -345,7 +345,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
     @product_name = @purchase.link.name
     @title = "Liked #{@product_name}? Give it a review!"
-    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser, purchase: @purchase)
+    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser, @purchase.email, purchase: @purchase)
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
     # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
@@ -381,12 +381,12 @@ class CustomerLowPriorityMailer < ApplicationMailer
     return if reviewable.empty?
 
     @title = "Liked your order? Leave some reviews!"
-    # `purchases.first` can be a row excluded from the reminder, which would point the guest's
-    # only unsubscribe link at a seller who is not one of the senders.
-    @unsub_link = review_reminder_unsubscribe_url(purchaser, purchase: reviewable.first)
     @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
     email = purchaser&.email || first_purchase.email
+    # `purchases.first` can be a row excluded from the reminder, which would point the guest's
+    # only unsubscribe link at a seller who is not one of the senders.
+    @unsub_link = review_reminder_unsubscribe_url(purchaser, email, purchase: reviewable.first)
 
     mail(
       to: email,
@@ -430,20 +430,31 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
-    # Guests have no User row to hold `opted_out_of_review_reminders`, so they fall back to
-    # the receipt footer's purchase-scoped unsubscribe. That is broader (it clears
-    # `can_contact` for that purchase's seller) and on a multi-seller order covers only that
-    # one seller.
-    def review_reminder_unsubscribe_url(purchaser, purchase:)
-      if purchaser.present?
-        return user_unsubscribe_review_reminders_by_token_url(
-          purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
-        )
+    # The token is a sessionless capability over the purchaser account's preference, so it may
+    # only travel to that account's own address. A purchase can be claimed into a different
+    # account (Users#add_purchase_to_library, UrlRedirects, support reassignment) while
+    # `purchase.email` keeps pointing at whoever bought it, and that recipient must not be
+    # handed the new owner's opt-out. When the two diverge, fall back to the session-gated
+    # route: the link still works, it just makes the visitor prove who they are first.
+    #
+    # Guests have no User row to hold the preference at all, so they get the receipt footer's
+    # purchase-scoped unsubscribe: broader (it clears `can_contact` for that purchase's seller,
+    # and on a multi-seller order only that one) but sessionless and honoured by
+    # `eligible_for_review_reminder?`.
+    def review_reminder_unsubscribe_url(purchaser, recipient_email, purchase:)
+      if purchaser.nil?
+        return if purchase.nil?
+
+        return unsubscribe_purchase_url(purchase.secure_external_id(scope: "unsubscribe"))
       end
 
-      return if purchase.nil?
-
-      unsubscribe_purchase_url(purchase.secure_external_id(scope: "unsubscribe"))
+      if purchaser.email.present? && recipient_email.present? && purchaser.email.casecmp?(recipient_email)
+        user_unsubscribe_review_reminders_by_token_url(
+          purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
+        )
+      else
+        user_unsubscribe_review_reminders_url
+      end
     end
 
     def deliver_subscription_email
