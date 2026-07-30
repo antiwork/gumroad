@@ -231,17 +231,20 @@ class SalesTaxCalculator
     end
 
     def tax_eligible?
+      # Destination VAT/GST on shipped goods is an import tax: it can only be remitted through an
+      # import scheme (IOSS in the EU) whose number has to travel with the parcel. Gumroad holds
+      # none, so anything collected here is billed to the buyer a second time at customs. Physical
+      # goods are therefore taxed only where Gumroad has real nexus (US, and Canada via TaxJar).
       product_tax_eligible = product.is_physical && tax_rate.country == Compliance::Countries::USA.alpha2
-      product_tax_eligible ||= Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
-      product_tax_eligible ||= tax_rate.country == Compliance::Countries::AUS.alpha2
-      product_tax_eligible ||= tax_rate.country == Compliance::Countries::SGP.alpha2
-      product_tax_eligible ||= tax_rate.country == Compliance::Countries::NOR.alpha2
+      product_tax_eligible ||= !product.is_physical && Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+      product_tax_eligible ||= !product.is_physical && tax_rate.country == Compliance::Countries::AUS.alpha2
+      product_tax_eligible ||= !product.is_physical && tax_rate.country == Compliance::Countries::SGP.alpha2
+      product_tax_eligible ||= !product.is_physical && tax_rate.country == Compliance::Countries::NOR.alpha2
 
-      Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS.each do |country_code|
-        product_tax_eligible ||= tax_rate.country == country_code && Feature.active?("collect_tax_#{country_code.downcase}")
-      end
-
-      Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS.each do |country_code|
+      # Both lists now behave the same way for goods: neither carries an import-scheme registration,
+      # so only digital products are eligible. The lists still differ in the lookup table, where the
+      # digital-only set drives tax-ID validation.
+      (Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_ALL_PRODUCTS + Compliance::Countries::COUNTRIES_THAT_COLLECT_TAX_ON_DIGITAL_PRODUCTS).each do |country_code|
         product_tax_eligible ||= tax_rate.country == country_code && !product.is_physical && Feature.active?("collect_tax_#{country_code.downcase}")
       end
 

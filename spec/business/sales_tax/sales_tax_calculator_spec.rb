@@ -43,13 +43,51 @@ describe SalesTaxCalculator do
     end
 
     it "returns zero tax if product is physical and in the EU" do
-      create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil)
+      create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil, combined_rate: 0.19, is_seller_responsible: false)
 
       sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
                                          price_cents: 100,
                                          buyer_location: { country: "DE" }).calculate
 
       compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+    end
+
+    it "returns zero tax if product is physical and in Norway" do
+      create(:zip_tax_rate, country: "NO", zip_code: nil, state: nil, combined_rate: 0.25, is_seller_responsible: false)
+
+      sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                         price_cents: 100,
+                                         buyer_location: { country: "NO" }).calculate
+
+      compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+    end
+
+    it "returns zero tax if product is physical and in a country that collects tax on all products" do
+      create(:zip_tax_rate, country: "JP", zip_code: nil, state: nil, combined_rate: 0.10, is_seller_responsible: false)
+      Feature.activate(:collect_tax_jp)
+
+      sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                         price_cents: 100,
+                                         buyer_location: { country: "JP" }).calculate
+
+      compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+    end
+
+    it "still assesses tax on physical products shipped within the US" do
+      expected_tax_rate = create(:zip_tax_rate, country: "US", state: "NY", zip_code: nil, combined_rate: 0.08, is_seller_responsible: false)
+
+      expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
+                                                   tax_cents: 8,
+                                                   zip_tax_rate: expected_tax_rate)
+
+      calculator = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                          price_cents: 100,
+                                          buyer_location: { country: "US", postal_code: "10087" })
+      # TaxJar answers first for US destinations; force the lookup-table path so this covers the
+      # physical-goods eligibility branch rather than TaxJar's own rate.
+      allow(calculator).to receive(:calculate_with_taxjar).and_return(nil)
+
+      compare_calculations(expected: expected_sales_tax, actual: calculator.calculate)
     end
 
     it "ignores seller taxable regions and overrides inclusive taxation when applicable (non-US)" do
@@ -339,19 +377,15 @@ describe SalesTaxCalculator do
         compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
       end
 
-      it "assesses GST for direct to customer sales in Australia" do
+      it "does not assess GST on physical products shipped to Australia" do
         product = create(:physical_product, user: @seller)
-        expected_tax_rate = create(:zip_tax_rate, country: "AU", state: nil, zip_code: nil, combined_rate: 0.10, is_seller_responsible: false)
-
-        expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                     tax_cents: 10,
-                                                     zip_tax_rate: expected_tax_rate)
+        create(:zip_tax_rate, country: "AU", state: nil, zip_code: nil, combined_rate: 0.10, is_seller_responsible: false)
 
         actual_sales_tax = SalesTaxCalculator.new(product:,
                                                   price_cents: 100,
                                                   buyer_location: { country: "AU" }).calculate
 
-        compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: actual_sales_tax)
       end
     end
 
@@ -409,18 +443,14 @@ describe SalesTaxCalculator do
         end
       end
 
-      it "assesses GST for direct to customer sales in Singapore" do
+      it "does not assess GST on physical products shipped to Singapore" do
         product = create(:physical_product, user: @seller)
 
-        expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                     tax_cents: 9,
-                                                     zip_tax_rate: @tax_rate_2024)
-
         actual_sales_tax = SalesTaxCalculator.new(product:,
-                                                  price_cents: 100,
-                                                  buyer_location: { country: "SG" }).calculate
+                                                 price_cents: 100,
+                                                 buyer_location: { country: "SG" }).calculate
 
-        compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: actual_sales_tax)
       end
     end
 
@@ -2063,19 +2093,15 @@ describe SalesTaxCalculator do
         compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
       end
 
-      it "assesses VAT for physical products in EU country" do
+      it "does not assess VAT for physical products in EU country" do
         product = create(:physical_product, user: @seller)
-        expected_tax_rate = create(:zip_tax_rate, country: "IT", state: nil, zip_code: nil, combined_rate: 0.22, is_seller_responsible: false)
-
-        expected_sales_tax = SalesTaxCalculation.new(price_cents: 100,
-                                                     tax_cents: 22,
-                                                     zip_tax_rate: expected_tax_rate)
+        create(:zip_tax_rate, country: "IT", state: nil, zip_code: nil, combined_rate: 0.22, is_seller_responsible: false)
 
         actual_sales_tax = SalesTaxCalculator.new(product:,
                                                   price_cents: 100,
                                                   buyer_location: { country: "IT" }).calculate
 
-        compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: actual_sales_tax)
       end
 
       it "uses the standard VAT rate for non e-publication products in the EU" do

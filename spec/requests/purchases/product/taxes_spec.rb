@@ -404,7 +404,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "charges VAT for a physical product" do
+    it "does not charge VAT for a physical product" do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -413,27 +413,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       check_out(product, address: { street: "Via del Governo Vecchio, 87", city: "Rome", state: "Latium", zip_code: "00186" })
 
       purchase = Purchase.last
-      expect(purchase.total_transaction_cents).to eq(122_00)
+      expect(purchase.total_transaction_cents).to eq(100_00)
       expect(purchase.price_cents).to eq(100_00)
       expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(22_00)
-      expect(purchase.was_purchase_taxable).to be(true)
-    end
-
-    it "displays the correct VAT and charges the right amount" do
-      product = create(:physical_product, price_cents: 100_00)
-      visit "/l/#{product.unique_permalink}"
-      expect(page).to have_text("$100")
-
-      add_to_cart(product)
-      check_out(product, address: { street: "Via del Governo Vecchio, 87", city: "Rome", state: "Latium", zip_code: "00186" })
-
-      purchase = Purchase.last
-      expect(purchase.total_transaction_cents).to eq(122_00)
-      expect(purchase.price_cents).to eq(100_00)
-      expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(22_00)
-      expect(purchase.was_purchase_taxable).to be(true)
+      expect(purchase.gumroad_tax_cents).to eq(0)
+      expect(purchase.was_purchase_taxable).to be(false)
     end
   end
 
@@ -491,7 +475,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(page).to(have_text("51824753556"))
     end
 
-    it "applies GST for physical products" do
+    it "does not apply GST for physical products" do
       @product = create(:physical_product, price_cents: 100_00)
 
       create(:user_compliance_info_empty, user: @product.user,
@@ -507,34 +491,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       check_out(@product, address: { street: "278 Rocky Point Rd", city: "Ramsgate", state: "NSW", zip_code: "2217" })
 
       purchase = Purchase.last
-      expect(purchase.total_transaction_cents).to eq(110_00)
+      expect(purchase.total_transaction_cents).to eq(100_00)
       expect(purchase.price_cents).to eq(100_00)
       expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(10_00)
-      expect(purchase.was_purchase_taxable).to be(true)
-    end
-
-    it "applies GST for physical products" do
-      product = create(:physical_product, price_cents: 100_00)
-
-      create(:user_compliance_info_empty, user: product.user,
-                                          first_name: "edgar", last_name: "gumstein", street_address: "123 main", city: "sf", state: "ca",
-                                          zip_code: "94107", country: Compliance::Countries::USA.common_name)
-
-      product.save!
-
-      visit "/l/#{product.unique_permalink}"
-      expect(page).to have_text("$100")
-      add_to_cart(product)
-
-      check_out(product, address: { street: "278 Rocky Point Rd", city: "Ramsgate", state: "NSW", zip_code: "2217" })
-
-      purchase = Purchase.last
-      expect(purchase.total_transaction_cents).to eq(110_00)
-      expect(purchase.price_cents).to eq(100_00)
-      expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(10_00)
-      expect(purchase.was_purchase_taxable).to be(true)
+      expect(purchase.gumroad_tax_cents).to eq(0)
+      expect(purchase.was_purchase_taxable).to be(false)
     end
   end
 
@@ -604,7 +565,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       end
     end
 
-    it "applies GST for physical products" do
+    it "does not apply GST for physical products" do
       travel_to(Time.find_zone("UTC").local(2023, 4, 1)) do
         @product = create(:physical_product, price_cents: 100_00)
 
@@ -621,36 +582,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
         check_out(@product, address: { street: "10 Bayfront Ave", city: "Singapore", state: "Singapore", zip_code: "018956" })
 
         purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(108_00)
+        expect(purchase.total_transaction_cents).to eq(100_00)
         expect(purchase.price_cents).to eq(100_00)
         expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(8_00)
-        expect(purchase.was_purchase_taxable).to be(true)
-      end
-    end
-
-    it "applies GST for physical products" do
-      travel_to(Time.find_zone("UTC").local(2023, 4, 1)) do
-        product = create(:physical_product, price_cents: 100_00)
-
-        create(:user_compliance_info_empty, user: product.user,
-                                            first_name: "edgar", last_name: "gumstein", street_address: "123 main", city: "sf", state: "ca",
-                                            zip_code: "94107", country: Compliance::Countries::USA.common_name)
-
-        product.save!
-
-        visit "/l/#{product.unique_permalink}"
-        expect(page).to have_text("$100")
-        add_to_cart(product)
-
-        check_out(product, address: { street: "10 Bayfront Ave", city: "Singapore", state: "Singapore", zip_code: "018956" })
-
-        purchase = Purchase.last
-        expect(purchase.total_transaction_cents).to eq(108_00)
-        expect(purchase.price_cents).to eq(100_00)
-        expect(purchase.tax_cents).to eq(0)
-        expect(purchase.gumroad_tax_cents).to eq(8_00)
-        expect(purchase.was_purchase_taxable).to be(true)
+        expect(purchase.gumroad_tax_cents).to eq(0)
+        expect(purchase.was_purchase_taxable).to be(false)
       end
     end
   end
