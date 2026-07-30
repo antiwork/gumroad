@@ -889,6 +889,31 @@ class Subscription < ApplicationRecord
     has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
   end
 
+  # Installment plans have no cancellation exit after a chargeback: the
+  # `installment_plans_cannot_be_cancelled_by_buyer` validation rejects
+  # `cancel_effective_immediately!(by_buyer: true)`, and the resulting RecordInvalid would raise
+  # after the seller-balance decrement and before dispute-evidence creation. So the plan stays
+  # alive and keeps its place in the charge schedule.
+  #
+  # Stopping the charge rather than cancelling the plan is deliberate. The reason to stop is that
+  # we should not charge a card whose holder disputed every prior charge on it — a charging
+  # concern, not a cancellation one. Cancelling would also have to invent an actor, and
+  # `cancel_effective_immediately!` with `by_buyer: false` emails the buyer about a product
+  # deletion that never happened.
+  #
+  # Every installment must be disputed, not just one: a single disputed installment on an
+  # otherwise-paid plan can be a reversible mistake, and blocking those would strand plans whose
+  # buyer still intends to pay. Reversed chargebacks do not count, so a won dispute lets the plan
+  # resume on its own.
+  def all_charges_disputed?
+    return false unless is_installment_plan?
+
+    charges = successful_purchases.to_a
+    return false if charges.empty?
+
+    charges.all?(&:chargedback_not_reversed?)
+  end
+
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
   def cancel_immediately_if_pending_cancellation!
     with_lock do

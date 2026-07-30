@@ -55,6 +55,75 @@ describe "Profile custom HTML rendering", type: :request do
     expect(response.body).not_to include("wanted=true")
   end
 
+  describe "share card meta tags" do
+    # The wrapper builds its own <head>, so it never saw PageMeta::User's
+    # subscribe-preview card (gumroad-private#1548).
+    it "serves the branded subscribe-preview card on og:image and twitter:image" do
+      seller.subscribe_preview.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "subscribe_preview.png")),
+        filename: "subscribe_preview.png",
+        content_type: "image/png"
+      )
+
+      get "http://seller.example.com/"
+
+      expect(seller.subscribe_preview_url).to be_present
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+      expect(response.body).to include(%(<meta property="twitter:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+      expect(response.body).to include(%(<meta property="twitter:card" content="summary_large_image">))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
+    end
+
+    it "falls back to an uploaded avatar with no twitter card" do
+      seller.avatar.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+
+      get "http://seller.example.com/"
+
+      expect(seller.subscribe_preview_url).to be_nil
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.avatar_url)}">))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe's profile picture">))
+      expect(response.body).not_to include(%(property="twitter:image"))
+      expect(response.body).not_to include(%(property="twitter:card"))
+    end
+
+    # The common case for an established seller, and the one that pins the chain's
+    # ORDER: with only one asset attached either precedence passes.
+    it "prefers the branded card over an uploaded avatar when the seller has both" do
+      seller.avatar.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+      seller.subscribe_preview.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "subscribe_preview.png")),
+        filename: "subscribe_preview.png",
+        content_type: "image/png"
+      )
+
+      get "http://seller.example.com/"
+
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(seller.subscribe_preview_url)}">))
+      expect(response.body).not_to include(ERB::Util.h(seller.avatar_url))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Jane Doe">))
+    end
+
+    # This hand-built <head> gets none of PageMeta::Base's defaults, so without an
+    # explicit fallback the wrapper advertised no image at all while the standard
+    # profile advertised the generic banner — the two surfaces disagreeing.
+    it "falls back to Gumroad's generic banner when the seller has neither" do
+      get "http://seller.example.com/"
+
+      expect(response.body).to include(%(<meta property="og:image" content="#{ERB::Util.h(ActionController::Base.helpers.image_url("opengraph_image.png"))}">))
+      expect(response.body).to include(%(<meta property="og:image:alt" content="Gumroad">))
+      expect(response.body).not_to include("gumroad-default-avatar")
+      expect(response.body).not_to include(%(property="twitter:image"))
+    end
+  end
+
   describe "navigation bridge" do
     it "injects the click-interception script into the embed with the seller's store hostnames" do
       get "http://seller.example.com/landing/embed"

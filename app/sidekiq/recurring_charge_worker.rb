@@ -13,6 +13,18 @@ class RecurringChargeWorker
       return unless subscription.alive?(include_pending_cancellation: false)
       return if subscription.is_test_subscription || subscription.current_subscription_price_cents == 0
       return if subscription.charges_completed?
+      # An installment plan whose every prior installment was charged back cannot be cancelled
+      # (see Subscription#all_charges_disputed?), so without this guard it keeps its schedule and
+      # charges the disputing buyer again. Placed before in_free_trial? so it applies regardless of
+      # trial state, and returns rather than failing the subscription: a reversed chargeback should
+      # let the plan resume by itself on the next tick.
+      if subscription.all_charges_disputed?
+        Rails.logger.info(
+          "RecurringChargeWorker#perform(#{subscription_id}): skipping charge, " \
+          "installment plan has a standing chargeback on every installment"
+        )
+        return
+      end
       return if subscription.in_free_trial?
       last_successful_purchase = subscription.purchases.successful.last
       return if last_successful_purchase && (last_successful_purchase.created_at + subscription.period) > Time.current

@@ -119,7 +119,70 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  # Regression for gumroad-private#1466. The agent could read the profile's custom HTML and nothing
+  # else, so a seller with no custom HTML looked to it like a seller with a bare default storefront —
+  # and it told him the heading on his own live page did not exist, and that standalone pages and the
+  # `gumroad pages` CLI commands were not real Gumroad features.
+  describe "default profile layout endpoint" do
+    it "exposes the seller's tabs and section headings as a read" do
+      endpoint = described_class.find("get_user_profile_layout")
+
+      expect(endpoint).to be_present
+      expect(endpoint.read?).to eq(true)
+      expect(endpoint.method).to eq(:get)
+      expect(endpoint.path).to eq("/user/profile_layout")
+      expect(endpoint.scope).to eq("view_profile")
+    end
+
+    # The section editor is a structured surface the seller owns, and the agent's only appearance
+    # write path is deliberately custom HTML (gumroad-private#984). Reading it must not grow a write.
+    it "has no write counterpart, since the seller edits sections in the dashboard" do
+      expect(described_class.write_ids.grep(/profile_layout/)).to be_empty
+    end
+
+    # The exact inference that produced the incident, stated in the manifest so the model reads it
+    # even when it never calls the endpoint.
+    it "states in the manifest that no custom HTML does not mean a default profile" do
+      manifest = described_class.manifest(:read)
+
+      expect(manifest).to include("get_user_profile_layout")
+      expect(manifest).to match(/does NOT mean the profile is Gumroad's untouched default/i)
+    end
+  end
+
+  describe "standalone storefront pages endpoints" do
+    it "exposes reads for the pages list and one page by slug" do
+      list = described_class.find("list_pages")
+      show = described_class.find("get_page")
+
+      expect(list.read?).to eq(true)
+      expect(list.path).to eq("/pages")
+      expect(list.params).to be_empty
+      expect(list.forced_params).to eq("metadata_only" => true)
+      expect(show.read?).to eq(true)
+      expect(show.path).to eq("/pages/:id")
+      expect(show.path_params).to eq(%w[id])
+      expect(show.forced_params).to eq("source_only" => true)
+    end
+
+    it "keeps standalone pages read-only until page writes have structural safeguards" do
+      expect(described_class.find("update_page")).to be_nil
+      expect(described_class.write_ids).not_to include("create_page", "update_page", "delete_page")
+    end
+
+    # The claim it made to the seller: that these pages are not a real feature.
+    it "states in the manifest that standalone pages are real" do
+      expect(described_class.manifest(:read)).to match(/never tell a creator standalone pages do not exist/i)
+    end
+  end
+
   describe "profile custom HTML endpoints" do
+    it "requires the full profile-page read before either profile-page write" do
+      %w[update_user_custom_html edit_user_custom_html].each do |id|
+        expect(described_class.find(id).requires_read).to eq("get_user_custom_html")
+      end
+    end
+
     it "exposes a targeted-edit write so an existing page never has to be fully regenerated" do
       endpoint = described_class.find("edit_user_custom_html")
 
@@ -167,6 +230,12 @@ describe Ai::StoreAgentApiCatalog do
   end
 
   describe "product custom HTML endpoints" do
+    it "requires the full targeted product-page read before either product-page write" do
+      %w[update_product_custom_html edit_product_custom_html].each do |id|
+        expect(described_class.find(id).requires_read).to eq("get_product_custom_html")
+      end
+    end
+
     it "exposes a read so the agent can inspect a product's current landing page" do
       endpoint = described_class.find("get_product_custom_html")
 
@@ -228,6 +297,13 @@ describe Ai::StoreAgentApiCatalog do
     # offer a second, warning-free path to the same write.
     it "keeps custom_html out of the generic update_product params" do
       expect(described_class.find("update_product").params).not_to include("custom_html")
+    end
+
+    it "includes the declared read precondition in the generated write manifest" do
+      manifest = described_class.manifest(:write)
+
+      expect(manifest).to include("update_product_custom_html")
+      expect(manifest).to include("requires a successful get_product_custom_html for the same target in this turn")
     end
   end
 

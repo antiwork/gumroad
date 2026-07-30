@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
 import type { FormFieldName, User } from "$app/types/payments";
+import { COUNTRY_ACCOUNT_NUMBER_HINTS } from "$app/utils/payoutAccountNumbers";
 
 import { Button } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
@@ -797,53 +798,24 @@ const BankAccountSection = ({
     "ZA",
   ];
 
+  // No `maxLength` on the account-number inputs, here or in the hints table — see
+  // COUNTRY_ACCOUNT_NUMBER_HINTS for why a length cap silently truncates a pasted number.
   type AccountNumberInputProps = Partial<
-    Pick<React.ComponentPropsWithoutRef<"input">, "placeholder" | "maxLength" | "pattern" | "inputMode" | "title">
+    Pick<React.ComponentPropsWithoutRef<"input">, "placeholder" | "pattern" | "inputMode" | "title">
   >;
 
-  // A handful of countries are not in `country_supports_iban?` (so they get the generic
-  // "Account #" box below rather than the dedicated IBAN box), yet their bank-account models
-  // still require a specific format the generic box does not hint at. Morocco, for example,
-  // wants an IBAN-shaped value (MoroccoBankAccount's /^MA[0-9]{20,26}$/) and Gambia wants a
-  // fixed 18-character number (GambiaBankAccount's /^[0-9A-Za-z]{18}$/). Showing the generic
-  // "1234567890" hint there tells sellers to enter their short local account number, which is
-  // always rejected on save. Give those countries a real example and the matching constraints
-  // so the browser catches a wrong-shaped value before the form is submitted.
-  const countrySpecificAccountNumberInputProps: Record<string, AccountNumberInputProps> = {
-    MA: { placeholder: "MA64011519000001205000534921", maxLength: 28, pattern: "MA[0-9]{20,26}" },
-    SN: { placeholder: "SN08SN0100152000048500003035", maxLength: 28, pattern: "SN[0-9SN]{20,26}" },
-    RS: { placeholder: "RS35260005601001611379", maxLength: 22, pattern: "RS[0-9]{18,20}" },
-    MD: { placeholder: "MD24AG000225100013104168", maxLength: 24, pattern: "MD[0-9]{2}[A-Z0-9]{20}" },
-    GM: {
-      placeholder: "000123000456000789",
-      maxLength: 18,
-      pattern: "[0-9A-Za-z]{18}",
-      title: "Enter your 18-character account number",
-    },
-  };
-
-  // Of the countries above, these are the ones whose expected value really is an IBAN, so the
+  // Of the countries in COUNTRY_ACCOUNT_NUMBER_HINTS, these are the ones whose expected value really is an IBAN, so the
   // field should be labelled "IBAN" rather than "Account #". Gambia is deliberately excluded:
   // it has a country-specific format but it is an 18-character local account number, not an IBAN.
-  const IBAN_SHAPED_COUNTRY_CODES = ["MA", "SN", "RS", "MD"];
+  // Mozambique is excluded for the same reason: Stripe wants the bare 21-character NIB, and the
+  // full MZ IBAN is rejected. Qatar and North Macedonia are included because Stripe rejects a
+  // bare local number for them with "must be an IBAN of the form ...".
+  const IBAN_SHAPED_COUNTRY_CODES = ["MA", "SN", "RS", "MD", "QA", "MK"];
 
-  const isGibraltar = user.country_code === "GI";
-  const isOman = user.country_code === "OM";
-  const countrySpecificProps = user.country_code
-    ? countrySpecificAccountNumberInputProps[user.country_code]
-    : undefined;
   const usesIbanShapedAccountNumber = !!user.country_code && IBAN_SHAPED_COUNTRY_CODES.includes(user.country_code);
-  const nonIbanAccountNumberInputProps: AccountNumberInputProps = isGibraltar
-    ? { placeholder: "01234567", maxLength: 8, pattern: "[0-9]{8}", inputMode: "numeric" }
-    : isOman
-      ? {
-          placeholder: "000123456789",
-          maxLength: 16,
-          pattern: "[0-9]{6,16}",
-          inputMode: "numeric",
-          title: "Enter your 6 to 16 digit account number, not your IBAN",
-        }
-      : (countrySpecificProps ?? { placeholder: "1234567890" });
+  const nonIbanAccountNumberInputProps: AccountNumberInputProps = (user.country_code
+    ? COUNTRY_ACCOUNT_NUMBER_HINTS[user.country_code]
+    : undefined) ?? { placeholder: "1234567890" };
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {
@@ -2484,7 +2456,6 @@ const BankAccountSection = ({
                           ? "MG4800005000011234567890123"
                           : `${user.country_code || ""}1234567890`
                       }
-                      maxLength={user.country_code === "MG" ? 27 : undefined}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number")}
@@ -2503,7 +2474,6 @@ const BankAccountSection = ({
                           ? "MG4800005000011234567890123"
                           : `${user.country_code || ""}1234567890`
                       }
-                      maxLength={user.country_code === "MG" ? 27 : undefined}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number_confirmation")}

@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo, EmailNormalization
+          AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -716,6 +716,12 @@ class User < ApplicationRecord
 
   def has_custom_landing_page?
     custom_html.present?
+  end
+
+  # Saved custom HTML only replaces the public profile while the feature is active. Keep this
+  # separate from has_custom_landing_page?, which reports saved content for editing and recovery.
+  def custom_landing_page_visible?
+    Feature.active?(:custom_html_pages, self) && has_custom_landing_page?
   end
 
   def valid_password?(password)

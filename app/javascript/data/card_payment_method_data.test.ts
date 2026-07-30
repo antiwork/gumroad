@@ -7,8 +7,12 @@ import {
   paymentElementBillingDetails,
   paymentElementBillingDetailsCollection,
   paymentElementRequiresFullName,
+  prepareCardPaymentMethodData,
   preparePaymentElementPaymentMethodData,
 } from "$app/data/card_payment_method_data";
+import { getStripeInstance } from "$app/utils/stripe_loader";
+
+vi.mock("$app/utils/stripe_loader", () => ({ getStripeInstance: vi.fn() }));
 
 // Shared fixture for the pendingSubmit tests below: a minimal Stripe + Elements pair (built the
 // same way as payment_element_client_confirm.test.ts — Object.create keeps eslint's no-type-
@@ -357,5 +361,52 @@ describe("element-collected billing details (wallets, UPI)", () => {
         },
       },
     });
+  });
+});
+
+describe("prepareCardPaymentMethodData billing_details.address.postal_code", () => {
+  // The CardElement lane tokenizes the buyer's ZIP so the issuer runs AVS on it. The membership
+  // manage page (Manage.tsx) and any checkout falling back to the card_element integration both
+  // go through here, and this is the only place their ZIP can reach Stripe.
+  const buildCardStripe = () => {
+    const createPaymentMethod = vi.fn().mockResolvedValue({
+      paymentMethod: { id: "pm_card", card: { country: "US" } },
+    });
+    const stripe: Stripe = Object.create(null);
+    stripe.createPaymentMethod = createPaymentMethod;
+    vi.mocked(getStripeInstance).mockResolvedValue(stripe);
+    return { createPaymentMethod };
+  };
+
+  const cardElement = { token: "tok_visa" };
+
+  it("sends the buyer's ZIP so the issuer can run AVS", async () => {
+    const { createPaymentMethod } = buildCardStripe();
+
+    await prepareCardPaymentMethodData({ cardElement, email: "buyer@example.com", zipCode: "92663" });
+
+    expect(createPaymentMethod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        billing_details: { address: { postal_code: "92663" }, email: "buyer@example.com" },
+      }),
+    );
+  });
+
+  // An empty string is a value Stripe forwards to the issuer, so AVS checks the card against a
+  // blank the buyer never gave; null omits the field and declines to assert one.
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["an empty string", ""],
+  ])("omits the postal code rather than asserting a blank one when the ZIP is %s", async (_label, zipCode) => {
+    const { createPaymentMethod } = buildCardStripe();
+
+    await prepareCardPaymentMethodData({ cardElement, email: "buyer@example.com", zipCode });
+
+    expect(createPaymentMethod).toHaveBeenCalledWith(
+      expect.objectContaining({
+        billing_details: { address: { postal_code: null }, email: "buyer@example.com" },
+      }),
+    );
   });
 });
