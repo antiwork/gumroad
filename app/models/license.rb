@@ -57,10 +57,16 @@ class License < ApplicationRecord
   end
 
   # Reads the count inside the lock so a concurrent /v2/licenses/verify increment is preserved
-  # rather than overwritten. Clamped, because the delta is bounded but the count it lands on is
-  # not — verify calls move it without a ceiling.
+  # rather than overwritten. The ceiling only applies while the count is inside the seller-editable
+  # range: verify increments without a ceiling, so a count already above it is real activation and
+  # clamping would silently delete some of it.
   def adjust_uses!(delta)
-    with_lock { update!(uses: (uses.to_i + delta).clamp(0, MAX_SELLER_SETTABLE_USES)) }
+    with_lock do
+      current = uses.to_i
+      target = current + delta
+      target = target.clamp(0, MAX_SELLER_SETTABLE_USES) if current <= MAX_SELLER_SETTABLE_USES
+      update!(uses: [target, 0].max)
+    end
   end
 
   def reset_uses!

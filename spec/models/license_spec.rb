@@ -125,6 +125,20 @@ describe License do
       expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES
     end
 
+    # verify has no ceiling, so a count above it is legitimate — clamping down to the ceiling would
+    # lose real activations.
+    it "does not pull a count already above the ceiling back down to it" do
+      license.update!(uses: License::MAX_SELLER_SETTABLE_USES + 2)
+      expect(license.adjust_uses!(1)).to be(true)
+      expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES + 3
+    end
+
+    it "still lets a seller decrement a count above the ceiling" do
+      license.update!(uses: License::MAX_SELLER_SETTABLE_USES + 2)
+      expect(license.adjust_uses!(-1)).to be(true)
+      expect(license.reload.uses).to eq License::MAX_SELLER_SETTABLE_USES + 1
+    end
+
     # Reads the stored value under the lock, so a change made after this instance was loaded is
     # preserved rather than overwritten.
     it "applies the delta to the stored count rather than the loaded one" do
