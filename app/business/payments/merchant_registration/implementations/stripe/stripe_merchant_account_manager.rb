@@ -57,6 +57,19 @@ module StripeMerchantAccountManager
   # for a reason we do not handle specifically. See record_account_rejection_note below.
   ACCOUNT_REJECTION_NOTE_PREFIX = "Stripe rejected payout setup"
 
+  # Prefix for the breadcrumb left when Stripe refuses the service agreement we derived from the
+  # seller's legal-entity country. See update_account_attributes below.
+  SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX = "Stripe rejected service agreement"
+
+  # Stripe validates `tos_acceptance[:service_agreement]` against the country the connected
+  # account was created in, not the legal-entity country we derive it from. Probed against the
+  # test API: `param` names the field and `code` is nil, so `param` is the discriminator and the
+  # message is the fallback for older error shapes.
+  SERVICE_AGREEMENT_REJECTION_PARAM = "tos_acceptance[service_agreement]"
+  private_constant :SERVICE_AGREEMENT_REJECTION_PARAM
+  SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE = /tos agreement is not supported/i
+  private_constant :SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE
+
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
   private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
@@ -388,7 +401,7 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
-    Stripe::Account.update(stripe_account.id, force_utf8_encoding(diff_attributes))
+    update_account_attributes(user, stripe_account, diff_attributes, notify:)
 
     person_address_submitted = false
     if user_compliance_info.is_business?
@@ -401,6 +414,85 @@ module StripeMerchantAccountManager
   rescue Stripe::InvalidRequestError => e
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
     raise
+  end
+
+  # Push the account diff, and if Stripe refuses only the service agreement, push everything else.
+  #
+  # We derive `tos_acceptance[:service_agreement]` from the seller's legal-entity country, but
+  # Stripe validates it against the country the connected account was created in. When those
+  # disagree (a cross-border legal entity on an account created in the platform's own country)
+  # Stripe rejects the whole call, so fields we already hold — business profile URL, phone,
+  # contact details — never land and the seller is asked for data we have. The agreement value
+  # is never diffed out either: `update_account` builds the "before" side with a nil agreement,
+  # so every retry re-sends it and fails identically, forever.
+  #
+  # Which agreement those sellers should sit under is a compliance decision, not something to
+  # settle here — dropping the whole hash rather than just `service_agreement` is deliberate,
+  # because stripping only the agreement would implicitly move them onto the full one. This only
+  # stops one rejected field from blocking the rest: retry without `tos_acceptance` and leave a
+  # private breadcrumb naming the mismatch.
+  private_class_method
+  def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true)
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(diff_attributes))
+  rescue Stripe::InvalidRequestError => e
+    raise unless service_agreement_unsupported_error?(e) && diff_attributes.key?(:tos_acceptance)
+
+    remaining_attributes = diff_attributes.except(:tos_acceptance)
+    # The agreement id is the marker saying "this ToS acceptance is on file at Stripe". Stripe
+    # rejected the acceptance, so moving it would claim an agreement that does not exist —
+    # measured: the retry otherwise lands `tos_agreement_id` on an account whose tos_acceptance
+    # is empty. The compliance-info marker does move, because those fields really did land.
+    if remaining_attributes[:metadata].is_a?(Hash)
+      remaining_attributes = remaining_attributes.merge(
+        metadata: remaining_attributes[:metadata].except(:tos_agreement_id)
+      )
+    end
+    record_service_agreement_failure_note(user, e) if notify
+    # The note is written once per account, and the weekly retry job passes notify: false, so this
+    # log line is the only per-occurrence signal that the affected cohort is growing.
+    Rails.logger.warn "Stripe rejected the derived service agreement for user #{user&.id}: #{e.message}"
+    # Only the agreement was on the wire, so there is nothing left to push — but the rejection
+    # is recorded now, which is the part that was missing.
+    return if remaining_attributes.values.all?(&:blank?)
+
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(remaining_attributes))
+  end
+
+  private_class_method
+  def self.service_agreement_unsupported_error?(error)
+    return false unless error.is_a?(Stripe::InvalidRequestError)
+
+    param = error.respond_to?(:param) ? error.param.to_s : ""
+    return param == SERVICE_AGREEMENT_REJECTION_PARAM if param.present?
+
+    # Only reachable on an error shape that names no field: other rejections mention the agreement
+    # in passing (capability interactions) and must keep raising.
+    error.message.to_s.match?(SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE)
+  end
+
+  # One breadcrumb per account, not per attempt: the resync runs on every compliance change and
+  # the mismatch does not resolve on its own, so re-noting it would bury the payout notes. Two
+  # resyncs can be in flight for the same seller, so the look-then-write has to hold the user row.
+  private_class_method
+  def self.record_service_agreement_failure_note(user, error)
+    return if user.blank?
+
+    user.with_lock do
+      next if user.comments
+                  .with_type_payout_note
+                  .alive
+                  .where(author_id: GUMROAD_ADMIN_ID)
+                  .where("content LIKE ?", "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
+                  .exists?
+
+      user.add_payout_note(
+        content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{error.message.to_s.truncate(300)}",
+        seller_visible: false
+      )
+    end
+  rescue => e
+    Rails.logger.error "Failed to record Stripe service-agreement payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
   end
 
   def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false, unclaimed_percent_ownership: nil)
