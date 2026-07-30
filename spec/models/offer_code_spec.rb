@@ -328,6 +328,38 @@ describe OfferCode do
     end
   end
 
+  describe "repairing detached defaults after concurrent edits" do
+    let(:other_product) { create(:product, user: @product.user) }
+    let(:offer_code) { create(:offer_code, user: @product.user, products: [@product, other_product]) }
+
+    it "clears a default assigned concurrently with the edit that detached it" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      # This edit's validation read the defaults before the concurrent
+      # assignment landed; skip it to reproduce that stale read.
+      allow_any_instance_of(OfferCode).to receive(:validate_default_discount_remains_applicable)
+
+      offer_code.update!(products: [other_product])
+
+      expect(@product.reload.default_offer_code_id).to be_nil
+    end
+
+    it "clears a default excluded concurrently from a universal code" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+      allow_any_instance_of(OfferCode).to receive(:validate_excluded_products)
+
+      universal_offer_code.update!(excluded_products: [@product])
+
+      expect(@product.reload.default_offer_code_id).to be_nil
+    end
+
+    it "skips the sweep for edits that can't affect applicability" do
+      expect(offer_code).not_to receive(:repair_detached_default_discounts)
+
+      offer_code.update!(max_purchase_count: 5)
+    end
+  end
+
   describe "validity dates validation" do
     context "when the start date is before the expiration date" do
       let(:offer_code) { build(:offer_code, valid_at: 2.days.ago, expires_at: 1.day.ago) }

@@ -18,9 +18,9 @@ class OfferCode < ApplicationRecord
 
   stripped_fields :code
 
-  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
+  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: :note_applicability_change, after_remove: :note_applicability_change
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
-  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: :invalidate_excluded_product_cache, after_remove: :invalidate_excluded_product_cache
+  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change]
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -46,6 +46,9 @@ class OfferCode < ApplicationRecord
 
   after_save :invalidate_product_cache
   after_save :reindex_associated_products
+  after_save :note_column_applicability_changes
+  after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
+  after_rollback :forget_applicability_changes
   before_destroy :capture_associated_product_ids
   after_destroy :reindex_captured_products
 
@@ -416,6 +419,45 @@ class OfferCode < ApplicationRecord
       products.each(&:invalidate_cache)
     end
 
+    def note_applicability_change(_product)
+      @applicability_changed = true unless new_record?
+    end
+
+    def note_column_applicability_changes
+      return if previously_new_record?
+
+      @applicability_changed ||= saved_changes.keys.intersect?(%w[universal currency_type deleted_at code])
+    end
+
+    def forget_applicability_changes
+      @applicability_changed = false
+    end
+
+    # Counterpart of Link#repair_detached_default_offer_code for the other
+    # commit order: an edit that validated before a concurrent default
+    # assignment landed sweeps its defaulting products after commit. Set-based
+    # so a code defaulting many products costs a couple of queries, not one per
+    # product; gated to edits that can change applicability.
+    def repair_detached_default_discounts
+      forget_applicability_changes
+
+      detached = Link.visible.where(default_offer_code_id: id)
+      if !deleted? && code.present?
+        detached = if universal?
+          excluded_scope = detached.where(id: excluded_products.select(:id))
+          currency_type.present? ? detached.where.not(price_currency_type: currency_type).or(excluded_scope) : excluded_scope
+        else
+          detached.where.not(id: products.select(:id))
+        end
+      end
+
+      product_ids = detached.pluck(:id)
+      return if product_ids.empty?
+
+      Link.where(id: product_ids, default_offer_code_id: id).update_all(default_offer_code_id: nil)
+      Link.where(id: product_ids).find_each(&:invalidate_cache)
+    end
+
     def invalidate_excluded_product_cache(product)
       product.invalidate_cache
     end
@@ -499,8 +541,8 @@ class OfferCode < ApplicationRecord
     # holds the new list (update's transaction rolls it back on failure).
     # Pre-existing detached defaults would block unrelated edits here;
     # Onetime::ClearDetachedDefaultOfferCodes clears them. Not atomic with the
-    # Link-side default assignment — a concurrent assignment can slip through,
-    # and the next edit of the code surfaces it.
+    # Link-side default assignment — a concurrent assignment can slip past both
+    # validations; repair_detached_default_discounts sweeps it up after commit.
     def validate_default_discount_remains_applicable
       return if deleted_at.present?
       return unless persisted?

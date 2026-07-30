@@ -25,6 +25,37 @@ describe Link do
     end
   end
 
+  describe "repairing detached defaults after concurrent edits" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 2000) }
+    let(:other_product) { create(:product, user: seller) }
+
+    it "clears a default whose code was detached before the assignment committed" do
+      offer_code = create(:offer_code, user: seller, products: [product, other_product])
+      offer_code.products.delete(product)
+      # The assignment's validation read the join table before the concurrent
+      # edit landed; skip it to reproduce that stale read.
+      allow_any_instance_of(Link).to receive(:default_offer_code_must_be_valid)
+
+      product.update!(default_offer_code_id: offer_code.id)
+
+      expect(product.reload.default_offer_code_id).to be_nil
+    end
+
+    it "repairs even when a later save in the same transaction overwrites saved_changes" do
+      offer_code = create(:offer_code, user: seller, products: [product, other_product])
+      offer_code.products.delete(product)
+      allow_any_instance_of(Link).to receive(:default_offer_code_must_be_valid)
+
+      Link.transaction do
+        product.update!(default_offer_code_id: offer_code.id)
+        product.update!(name: "Renamed")
+      end
+
+      expect(product.reload.default_offer_code_id).to be_nil
+    end
+  end
+
   describe "clearing detached default discounts on undelete" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }

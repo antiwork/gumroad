@@ -252,6 +252,9 @@ class Link < ApplicationRecord
   before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
+  after_save :note_default_offer_code_assignment
+  after_commit :repair_detached_default_offer_code, if: -> { @default_offer_code_assignment_pending }
+  after_rollback :forget_default_offer_code_assignment
   after_update :create_licenses_for_existing_customers,
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
@@ -1447,6 +1450,34 @@ class Link < ApplicationRecord
 
     def clear_detached_default_offer_code
       self.default_offer_code = nil if default_offer_code_detached?
+    end
+
+    # saved_changes only reflects the last save in a transaction, and flows like
+    # LinksController#update save the product more than once; accumulate the
+    # assignment signal until commit.
+    def note_default_offer_code_assignment
+      @default_offer_code_assignment_pending ||= saved_change_to_default_offer_code_id? && default_offer_code_id.present?
+    end
+
+    def forget_default_offer_code_assignment
+      @default_offer_code_assignment_pending = false
+    end
+
+    # Closes the write-skew race with a concurrent discount edit: each side
+    # validates against its own snapshot, so an assignment and a detaching code
+    # edit can both commit. Whichever commits second re-checks fresh state here
+    # and clears the pointer, compare-and-set so a newer assignment survives.
+    # OfferCode#repair_detached_default_discounts covers the other commit order.
+    def repair_detached_default_offer_code
+      forget_default_offer_code_assignment
+      detached_id = default_offer_code_id
+      return if detached_id.nil?
+
+      reload_default_offer_code
+      return unless default_offer_code_detached?
+
+      updated = Link.where(id:, default_offer_code_id: detached_id).update_all(default_offer_code_id: nil)
+      invalidate_cache if updated > 0
     end
 
     def default_offer_code_must_be_valid
