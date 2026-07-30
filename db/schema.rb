@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000012) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000014) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1055,6 +1055,30 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000012) do
     t.index ["giftee_purchase_id"], name: "index_gifts_on_giftee_purchase_id"
     t.index ["gifter_email"], name: "index_gifts_on_gifter_email"
     t.index ["gifter_purchase_id"], name: "index_gifts_on_gifter_purchase_id"
+  end
+
+  create_table "guardians", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "first_name"
+    t.string "last_name"
+    t.string "email"
+    t.string "phone"
+    t.date "date_of_birth"
+    t.string "street_address"
+    t.string "city"
+    t.string "state"
+    t.string "zip_code"
+    t.string "country"
+    t.string "country_code"
+    t.string "nationality"
+    t.binary "individual_tax_id"
+    t.string "stripe_person_id"
+    t.boolean "stripe_tos_accepted", default: false, null: false
+    t.string "stripe_tos_ip"
+    t.datetime "stripe_tos_accepted_at"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["stripe_person_id"], name: "index_guardians_on_stripe_person_id", unique: true
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2783,6 +2807,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000012) do
     t.string "first_name"
     t.string "last_name"
     t.string "stripe_identity_document_id"
+    t.bigint "guardian_id"
+    t.index ["guardian_id"], name: "index_user_compliance_info_on_guardian_id"
     t.index ["user_id"], name: "index_user_compliance_info_on_user_id"
   end
 

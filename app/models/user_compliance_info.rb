@@ -11,12 +11,23 @@ class UserComplianceInfo < ApplicationRecord
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
+  # Below this, our payment partner will not verify the account holder on their own and requires a
+  # legal guardian on the account instead. See Guardian.
+  GUARDIAN_REQUIRED_BELOW_AGE = 18
   KANA_NAME_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\s\u3000\-.]*\z/
   KANA_ADDRESS_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\p{Latin}\d\s\u3000\-.]*\z/
   HAS_KATAKANA = /[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F]/
   ROMAJI_REGEX = /\A[^\p{Han}\p{Hiragana}\p{Katakana}]*\z/
 
   belongs_to :user, optional: true
+  # Held on the compliance record rather than the user so that the guardian travels with the
+  # legal-entity details Stripe verifies them against. Mutable, unlike the rest of this record:
+  # the guardian is usually attached after the seller's own details exist, because Stripe only
+  # raises the requirement once it sees the minor's date of birth, and it maps onto a single Stripe
+  # Person we update in place rather than a new revision.
+  belongs_to :guardian, optional: true
+  attr_mutable :guardian_id
+
   validates_presence_of :user
 
   encrypt_with_public_key :individual_tax_id,
@@ -72,6 +83,7 @@ class UserComplianceInfo < ApplicationRecord
   # Public: Returns if the UserComplianceInfo record has all it's critical compliance related fields completed, these are:
   # Individual: First Name, Last Name, Address, DOB
   # Business: First Name, Last Name, Address, DOB, Business Name, Business Type, Business Address
+  # Under 18: everything above, plus a legal guardian whose own details are complete
   def has_completed_compliance_info?
     first_name.present? &&
       last_name.present? &&
@@ -93,7 +105,17 @@ class UserComplianceInfo < ApplicationRecord
           business_state.present? &&
           business_zip_code.present?
         )
-      )
+      ) &&
+      (!requires_legal_guardian? || guardian&.has_completed_info?.present?)
+  end
+
+  # Whether the seller is old enough to hold an account but too young for our payment partner to
+  # verify them alone. Answers false when the birthday is missing rather than assuming the worse
+  # case: an incomplete record is already incomplete by the checks above, and treating an unknown
+  # birthday as under-18 would demand a guardian from every seller who has not filled in their date
+  # of birth yet.
+  def requires_legal_guardian?
+    birthday.present? && birthday > GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date
   end
 
   # Public: Returns the ISO_3166-1 Alpha-2 country code for the country stored in this compliance info.

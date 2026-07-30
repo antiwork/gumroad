@@ -86,6 +86,85 @@ describe UserComplianceInfo do
         end
       end
     end
+
+    describe "under 18" do
+      let(:birthday) { 15.years.ago.to_date }
+
+      describe "no guardian attached" do
+        let(:user_compliance_info) { create(:user_compliance_info, birthday:) }
+
+        it "returns false" do
+          expect(user_compliance_info.has_completed_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "guardian attached but their own details are incomplete" do
+        let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian, street_address: nil)) }
+
+        it "returns false" do
+          expect(user_compliance_info.has_completed_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "guardian attached with complete details" do
+        let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian)) }
+
+        it "returns true" do
+          expect(user_compliance_info.has_completed_compliance_info?).to eq(true)
+        end
+      end
+
+      describe "an adult seller" do
+        let(:user_compliance_info) { create(:user_compliance_info, birthday: 30.years.ago.to_date) }
+
+        it "returns true with no guardian" do
+          expect(user_compliance_info.has_completed_compliance_info?).to eq(true)
+        end
+      end
+    end
+  end
+
+  describe "#requires_legal_guardian?" do
+    it "is true for a seller who is 13" do
+      expect(build(:user_compliance_info, birthday: 13.years.ago.to_date).requires_legal_guardian?).to be(true)
+    end
+
+    it "is true for a seller who is 17" do
+      expect(build(:user_compliance_info, birthday: 17.years.ago.to_date).requires_legal_guardian?).to be(true)
+    end
+
+    it "is false for a seller who turned 18 today" do
+      expect(build(:user_compliance_info, birthday: 18.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false when the birthday is unknown, so we do not demand a guardian from sellers who have not filled it in" do
+      expect(build(:user_compliance_info, birthday: nil).requires_legal_guardian?).to be(false)
+    end
+  end
+
+  describe "the guardian association" do
+    it "can be attached after the record is created, unlike the rest of this immutable record" do
+      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date)
+      guardian = create(:guardian)
+
+      expect { user_compliance_info.update!(guardian:) }.not_to raise_error
+      expect(user_compliance_info.reload.guardian).to eq(guardian)
+    end
+
+    it "still refuses edits to the seller's own details" do
+      user_compliance_info = create(:user_compliance_info)
+
+      expect { user_compliance_info.update!(first_name: "Someone else") }.to raise_error(Immutable::RecordImmutable)
+    end
+
+    it "is cleared rather than destroying compliance history when the guardian is destroyed" do
+      guardian = create(:guardian)
+      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
+
+      guardian.destroy!
+
+      expect(user_compliance_info.reload.guardian_id).to be_nil
+    end
   end
 
   describe "legal entity fields" do
