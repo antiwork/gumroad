@@ -19,6 +19,7 @@ class LibraryPresenter
         :url_redirect,
         :variant_attributes,
         :bundle_purchase,
+        :product_purchases,
         link: {
           alive_third_party_analytics: [],
           display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
@@ -37,8 +38,18 @@ class LibraryPresenter
     creators = creators_infos.values.map do |creator|
       { id: creator.external_id, name: creator.name || creator.username || creator.external_id }
     end
+    # `is_bundle_purchase` tells the page "my member rows render instead of me", so it must be
+    # false whenever none of those member rows survived into this result set — otherwise the
+    # buyer's only row for that purchase is filtered out and the product vanishes from their
+    # library entirely (gumroad-private#1585). A bundle saved with no members carries its files
+    # directly on the Link, so rendering the bundle row itself serves them.
+    library_purchase_ids = purchases.map(&:id).to_set
+    replaced_by_members = purchases.filter_map do |purchase|
+      next unless purchase.is_bundle_purchase?
+      purchase.id if purchase.product_purchases.any? { |member| library_purchase_ids.include?(member.id) }
+    end.to_set
     bundles = purchases.filter_map do |purchase|
-      { id: purchase.link.external_id, label: purchase.link.name } if purchase.is_bundle_purchase?
+      { id: purchase.link.external_id, label: purchase.link.name } if replaced_by_members.include?(purchase.id)
     end.uniq { _1[:id] }
     product_seller_data = {}
 
@@ -70,7 +81,7 @@ class LibraryPresenter
           download_url: purchase.url_redirect&.download_page_url,
           variants: purchase.variant_attributes&.map(&:name)&.join(", "),
           bundle_id: purchase.bundle_purchase&.link&.external_id,
-          is_bundle_purchase: purchase.is_bundle_purchase?,
+          is_bundle_purchase: replaced_by_members.include?(purchase.id),
         }
       }
     end.compact
