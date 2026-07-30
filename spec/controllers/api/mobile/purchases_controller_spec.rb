@@ -142,10 +142,15 @@ describe Api::Mobile::PurchasesController do
 
       # Both subscriptions should appear in the response
 
-      get :index, params: @params
-      expect(response.parsed_body).to include({ success: true,
-                                                products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
-                                                user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+      # The expectation re-renders json_data_for_mobile after the request, and the
+      # payload carries updated_at. Since prices touch their link (#6573), a write
+      # between the two renders can move it — freeze the clock so they agree.
+      freeze_time do
+        get :index, params: @params
+        expect(response.parsed_body).to include({ success: true,
+                                                 products: [dead_subscription_purchase.json_data_for_mobile, subscription_purchase.json_data_for_mobile],
+                                                 user_id: @purchaser.external_id }.as_json(api_scopes: ["mobile_api"]))
+      end
     end
 
     it "does not return unsuccessful purchases" do
