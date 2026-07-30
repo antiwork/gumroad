@@ -260,6 +260,38 @@ describe CustomDomain do
     end
   end
 
+  describe "#strictly_routable?" do
+    let(:custom_domain) { create(:custom_domain, :verified_with_certificate) }
+
+    it "returns a cached positive result without scheduling DNS verification" do
+      custom_domain.cache_routability!(true)
+
+      expect(custom_domain.strictly_routable?).to be(true)
+      expect(CustomDomainVerificationWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+
+    it "returns a cached negative result without scheduling DNS verification" do
+      custom_domain.cache_routability!(false)
+
+      expect(custom_domain.strictly_routable?).to be(false)
+      expect(CustomDomainVerificationWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+
+    it "falls back and schedules one refresh when the result is not cached" do
+      2.times { expect(custom_domain.strictly_routable?).to be(false) }
+
+      expect(CustomDomainVerificationWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+    end
+
+    it "does not use a cached positive result after the certificate expires" do
+      custom_domain.cache_routability!(true)
+      custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+
+      expect(custom_domain.strictly_routable?).to be(false)
+      expect(CustomDomainVerificationWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+  end
+
   describe "scopes" do
     before do
       @domain1 = create(:custom_domain, domain: "www.example1.com")

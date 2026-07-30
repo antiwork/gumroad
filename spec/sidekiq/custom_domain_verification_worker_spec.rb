@@ -6,17 +6,19 @@ describe CustomDomainVerificationWorker do
   let!(:valid_custom_domain) { create(:custom_domain) }
   let!(:invalid_custom_domain) { create(:custom_domain, state: "unverified", failed_verification_attempts_count: 2) }
   let!(:deleted_custom_domain) { create(:custom_domain, deleted_at: 2.days.ago) }
+  let(:valid_verification_service) { double(process: true, domains_resolving_to_gumroad: [valid_custom_domain.domain]) }
+  let(:invalid_verification_service) { double(process: false, domains_resolving_to_gumroad: []) }
 
   before do
     allow(CustomDomainVerificationService)
       .to receive(:new)
       .with(domain: valid_custom_domain.domain)
-      .and_return(double(process: true))
+      .and_return(valid_verification_service)
 
     allow(CustomDomainVerificationService)
       .to receive(:new)
       .with(domain: invalid_custom_domain.domain)
-      .and_return(double(process: false))
+      .and_return(invalid_verification_service)
   end
 
   it "marks a valid custom domain as verified" do
@@ -31,6 +33,22 @@ describe CustomDomainVerificationWorker do
         described_class.new.perform(invalid_custom_domain.id)
       end.to_not change { invalid_custom_domain.reload.verified? }
     end.to change { invalid_custom_domain.failed_verification_attempts_count }.from(2).to(3)
+  end
+
+  it "caches whether the configured hostname strictly resolves to Gumroad" do
+    described_class.new.perform(valid_custom_domain.id)
+
+    expect(Rails.cache.read(valid_custom_domain.send(:routability_cache_key))).to be(true)
+  end
+
+  it "caches false when only the configured hostname's counterpart resolves to Gumroad" do
+    allow(valid_verification_service)
+      .to receive(:domains_resolving_to_gumroad)
+      .and_return(["www.#{valid_custom_domain.domain}"])
+
+    described_class.new.perform(valid_custom_domain.id)
+
+    expect(Rails.cache.read(valid_custom_domain.send(:routability_cache_key))).to be(false)
   end
 
   it "ignores verification of a deleted custom domain" do

@@ -160,15 +160,9 @@ describe Pages::ProfileData do
       let!(:product) { create(:product, user: seller, name: "My product") }
       let!(:post) { create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update") }
 
-      before do
-        allow(CustomDomainVerificationService)
-          .to receive(:new)
-          .with(domain: "shop.example.com")
-          .and_return(double(domains_pointed_to_gumroad: ["shop.example.com"]))
-      end
-
       it "builds product and post URLs on the custom domain, not the subdomain" do
-        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.cache_routability!(true)
 
         payload = Pages::ProfileData.build(seller.reload)
 
@@ -177,23 +171,9 @@ describe Pages::ProfileData do
         expect(payload.to_json).not_to include(seller.subdomain)
       end
 
-      it "caches exact-host DNS verification across profile-data cache reads" do
-        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
-        expect(CustomDomainVerificationService)
-          .to receive(:new)
-          .with(domain: "shop.example.com")
-          .once
-          .and_return(double(domains_pointed_to_gumroad: ["shop.example.com"]))
-
-        2.times { Pages::ProfileData.build(seller.reload) }
-      end
-
       it "stays on the subdomain when only the configured domain's apex points to Gumroad" do
-        create(:custom_domain, :verified_with_certificate, user: seller, domain: "www.example.com")
-        allow(CustomDomainVerificationService)
-          .to receive(:new)
-          .with(domain: "www.example.com")
-          .and_return(double(domains_pointed_to_gumroad: ["example.com"]))
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "www.example.com")
+        custom_domain.cache_routability!(false)
 
         payload = Pages::ProfileData.build(seller.reload)
 
@@ -214,13 +194,15 @@ describe Pages::ProfileData do
       it "moves the URLs off the old host when the domain goes live after the payload was cached" do
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
 
-        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.cache_routability!(true)
 
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
       end
 
       it "moves the URLs back to the subdomain when the domain is removed" do
         custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.cache_routability!(true)
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
 
         custom_domain.mark_deleted!
@@ -229,7 +211,8 @@ describe Pages::ProfileData do
       end
 
       it "keeps the emitted host inside the navigation bridge's allowlist" do
-        create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.cache_routability!(true)
         seller.reload
 
         payload = Pages::ProfileData.build(seller)
@@ -249,6 +232,7 @@ describe Pages::ProfileData do
 
       it "leaves the custom-domain host behind when the certificate ages out with no DB write" do
         domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        domain.cache_routability!(true)
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
 
         # active? goes false purely by the clock, so the domain row's updated_at never moves.

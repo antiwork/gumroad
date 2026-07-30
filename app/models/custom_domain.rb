@@ -5,6 +5,8 @@ require "ipaddr"
 class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
+  ROUTABILITY_CACHE_TTL = 2.hours
+  ROUTABILITY_REFRESH_LOCK_TTL = 5.minutes
 
   include Deletable
 
@@ -68,16 +70,34 @@ class CustomDomain < ApplicationRecord
     end
   end
 
-  def verify(allow_incrementing_failed_verification_attempts_count: true)
+  def verify(allow_incrementing_failed_verification_attempts_count: true, verification_service: CustomDomainVerificationService.new(domain:))
     self.allow_incrementing_failed_verification_attempts_count = allow_incrementing_failed_verification_attempts_count
 
-    has_valid_configuration = CustomDomainVerificationService.new(domain:).process
+    has_valid_configuration = verification_service.process
 
     if has_valid_configuration
       mark_verified if unverified?
     else
       verified? ? mark_unverified : increment_failed_verification_attempts_count_and_notify_creator
     end
+  end
+
+  def strictly_routable?
+    return false unless active?
+
+    cached_result = Rails.cache.read(routability_cache_key)
+    return cached_result unless cached_result.nil?
+
+    if Rails.cache.write(routability_refresh_lock_key, true, expires_in: ROUTABILITY_REFRESH_LOCK_TTL, unless_exist: true)
+      CustomDomainVerificationWorker.perform_async(id)
+    end
+
+    false
+  end
+
+  def cache_routability!(routable)
+    Rails.cache.write(routability_cache_key, routable, expires_in: ROUTABILITY_CACHE_TTL)
+    Rails.cache.delete(routability_refresh_lock_key)
   end
 
   def self.find_by_host(host)
@@ -122,6 +142,14 @@ class CustomDomain < ApplicationRecord
 
     def reset_ssl_certificate_issued_at
       self.ssl_certificate_issued_at = nil
+    end
+
+    def routability_cache_key
+      "custom_domain_routability/#{id}/#{domain}"
+    end
+
+    def routability_refresh_lock_key
+      "#{routability_cache_key}/refreshing"
     end
 
     def increment_failed_verification_attempts_count_and_notify_creator

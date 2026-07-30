@@ -165,6 +165,23 @@ describe SslCertificates::Generate do
         end
 
         expect(@custom_domain.reload.ssl_certificate_issued_at.to_i).to eq time.to_i
+        expect(Rails.cache.read(@custom_domain.send(:routability_cache_key))).to be(true)
+      end
+    end
+
+    context "when only the configured hostname's counterpart receives a certificate" do
+      before do
+        allow(@obj).to receive(:can_order_certificates?).and_return(true)
+        allow_any_instance_of(CustomDomainVerificationService)
+          .to receive(:domains_resolving_to_gumroad)
+          .and_return(["example.com"])
+        allow(@obj).to receive(:generate_certificate).with("example.com").and_return(true)
+      end
+
+      it "caches the configured hostname as unroutable" do
+        @obj.process
+
+        expect(Rails.cache.read(@custom_domain.send(:routability_cache_key))).to be(false)
       end
     end
 

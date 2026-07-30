@@ -10,7 +10,11 @@ class CustomDomainVerificationWorker
     return if custom_domain.deleted?
     return unless custom_domain.valid?
 
-    custom_domain.verify
+    verification_service = CustomDomainVerificationService.new(domain: custom_domain.domain)
+    custom_domain.verify(verification_service:)
     custom_domain.save!
+    custom_domain.cache_routability!(
+      verification_service.domains_resolving_to_gumroad.include?(custom_domain.domain)
+    )
   end
 end

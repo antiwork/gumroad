@@ -1039,10 +1039,9 @@ class User < ApplicationRecord
     hostnames.compact.uniq
   end
 
-  # An active certificate may belong to the apex/www counterpart, so reuse UrlService's
-  # exact-host DNS check. nil preserves each caller's root-domain or relative-path fallback.
+  # Exact-host DNS is refreshed by the verification worker, never while rendering a profile.
   def store_host_with_protocol
-    UrlService.custom_domain_with_protocol(self) || subdomain_with_protocol
+    custom_domain&.strictly_routable? ? "#{PROTOCOL}://#{custom_domain.domain}" : subdomain_with_protocol
   end
 
   def auto_transcode_videos?
