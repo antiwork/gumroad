@@ -1562,8 +1562,8 @@ const LicenseSection = ({
   };
 
   const handleReset = async () => {
-    await handleSetUses(0);
-    setConfirmingReset(false);
+    // A failed reset keeps the confirmation open so the seller can retry without reopening the flow.
+    if (await handleSetUses(0)) setConfirmingReset(false);
   };
 
   const handleSaveUses = async () => {
