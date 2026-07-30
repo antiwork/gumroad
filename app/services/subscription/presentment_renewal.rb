@@ -101,6 +101,14 @@ class Subscription::PresentmentRenewal
     # Gumroad's share converts at today's rate like any other renewal: the fee is a
     # percentage of the canonical USD amount, and holding it fixed would let Gumroad's cut
     # drift away from the fee schedule the seller agreed to.
+    #
+    # WHICH SIDE THIS LEAVES THE DRIFT ON IS STILL OPEN, and today it is not the side the header
+    # above claims. Stripe takes this as the application fee or the transfer deduction, so the
+    # seller receives the fixed total minus a share converted at today's rate: a $10 canonical
+    # charge with a $1 fee, fixed at EUR 9.00, pays the seller EUR 7.75 at 0.8 (worth $6.20)
+    # against $9.00 of canonical proceeds, while Gumroad still collects its $1.00. Settling this
+    # is a prerequisite for the ramp, and whichever way it goes the header and
+    # LaterChargePresentment's class comment have to move with it.
     presentment_gumroad_amount_cents =
       presentment_cents_for(gumroad_amount_cents, quote.fx_rate, currency).clamp(0, presentment_total_cents)
 
