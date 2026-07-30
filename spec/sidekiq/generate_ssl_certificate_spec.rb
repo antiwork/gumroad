@@ -24,7 +24,7 @@ describe GenerateSslCertificate do
 
         it "retries after a stale lock can expire instead of generating concurrently" do
           semaphore = instance_double(Suo::Client::Redis, lock: nil)
-          allow(SuoSemaphore).to receive(:custom_domain_certificate).with(@custom_domain.id).and_return(semaphore)
+          allow(SuoSemaphore).to receive(:custom_domain_certificate).with(@custom_domain.domain).and_return(semaphore)
           expect(SslCertificates::Generate).not_to receive(:new)
           described_class.clear
 

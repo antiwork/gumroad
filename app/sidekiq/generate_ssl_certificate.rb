@@ -42,7 +42,9 @@ class GenerateSslCertificate
   def perform(id, rate_limit_reschedules = 0)
     return unless SslCertificates::Generate.supported_environment?
 
-    certificate_semaphore = SuoSemaphore.custom_domain_certificate(id)
+    custom_domain = CustomDomain.find(id)
+    certificate_domain = custom_domain.domain
+    certificate_semaphore = SuoSemaphore.custom_domain_certificate(certificate_domain)
     certificate_lock_token = certificate_semaphore.lock
     unless certificate_lock_token
       self.class.perform_in(SuoSemaphore::CUSTOM_DOMAIN_CERTIFICATE_LOCK_EXPIRATION, id, rate_limit_reschedules)
@@ -50,8 +52,8 @@ class GenerateSslCertificate
     end
 
     begin
-      custom_domain = CustomDomain.find(id)
-      return if custom_domain.deleted? # The domain was deleted after this job was enqueued
+      custom_domain.reload
+      return if custom_domain.deleted? || custom_domain.domain != certificate_domain
 
       begin
         SslCertificates::Generate.new(custom_domain).process
