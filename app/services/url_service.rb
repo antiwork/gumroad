@@ -41,15 +41,14 @@ class UrlService
       (allow_custom_domain && custom_domain_with_protocol(seller)) || seller&.subdomain_with_protocol || root_domain_with_protocol
     end
 
-    private
-      def custom_domain_with_protocol(seller)
-        return if Rails.env.development?
-        return unless seller.present? && seller.custom_domain&.active?
+    def custom_domain_with_protocol(seller)
+      return if Rails.env.development?
+      return unless seller.present? && seller.custom_domain&.active?
 
-        domain = seller.custom_domain.domain
-        is_strictly_pointing_to_gumroad = CustomDomainVerificationService.new(domain:).domains_pointed_to_gumroad.include?(domain)
+      domain = seller.custom_domain.domain
+      is_strictly_pointing_to_gumroad = CustomDomainVerificationService.new(domain:).domains_pointed_to_gumroad.include?(domain)
 
-        "#{PROTOCOL}://#{domain}" if is_strictly_pointing_to_gumroad
-      end
+      "#{PROTOCOL}://#{domain}" if is_strictly_pointing_to_gumroad
+    end
   end
 end

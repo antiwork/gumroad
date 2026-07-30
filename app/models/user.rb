@@ -1039,12 +1039,10 @@ class User < ApplicationRecord
     hostnames.compact.uniq
   end
 
-  # Match the navigation bridge's DB-only predicate without resolving DNS in the render path.
-  # nil preserves each caller's root-domain or relative-path fallback.
+  # An active certificate may belong to the apex/www counterpart, so reuse UrlService's
+  # exact-host DNS check. nil preserves each caller's root-domain or relative-path fallback.
   def store_host_with_protocol
-    return "#{PROTOCOL}://#{custom_domain.domain}" if custom_domain&.active?
-
-    subdomain_with_protocol
+    UrlService.custom_domain_with_protocol(self) || subdomain_with_protocol
   end
 
   def auto_transcode_videos?

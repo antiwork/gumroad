@@ -160,6 +160,13 @@ describe Pages::ProfileData do
       let!(:product) { create(:product, user: seller, name: "My product") }
       let!(:post) { create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update") }
 
+      before do
+        allow(CustomDomainVerificationService)
+          .to receive(:new)
+          .with(domain: "shop.example.com")
+          .and_return(double(domains_pointed_to_gumroad: ["shop.example.com"]))
+      end
+
       it "builds product and post URLs on the custom domain, not the subdomain" do
         create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
 
@@ -168,6 +175,20 @@ describe Pages::ProfileData do
         expect(payload[:products].first[:url]).to eq("#{PROTOCOL}://shop.example.com/l/#{product.general_permalink}")
         expect(payload[:posts].first[:url]).to start_with("#{PROTOCOL}://shop.example.com/p/")
         expect(payload.to_json).not_to include(seller.subdomain)
+      end
+
+      it "stays on the subdomain when only the configured domain's apex points to Gumroad" do
+        create(:custom_domain, :verified_with_certificate, user: seller, domain: "www.example.com")
+        allow(CustomDomainVerificationService)
+          .to receive(:new)
+          .with(domain: "www.example.com")
+          .and_return(double(domains_pointed_to_gumroad: ["example.com"]))
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to include(seller.subdomain)
+        expect(payload[:posts].first[:url]).to include(seller.subdomain)
+        expect(payload.to_json).not_to include("www.example.com")
       end
 
       it "stays on the subdomain while the domain is only verified, with no certificate yet" do

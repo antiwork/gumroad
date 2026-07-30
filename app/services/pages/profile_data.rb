@@ -13,8 +13,8 @@ class Pages::ProfileData
     # unsaved record on the seller to be autosaved later (see User#seller_profile). A seller may have
     # no profile row yet, so every read off this is nil-safe.
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
-    Rails.cache.fetch(cache_key(seller, seller_profile)) do
-      base_url = seller.store_host_with_protocol
+    base_url = seller.store_host_with_protocol
+    Rails.cache.fetch(cache_key(seller, seller_profile, base_url)) do
       {
         products: products(seller, base_url),
         posts: posts(seller, base_url),
@@ -29,14 +29,14 @@ class Pages::ProfileData
     end
   end
 
-  def self.cache_key(seller, seller_profile)
+  def self.cache_key(seller, seller_profile, base_url = seller.store_host_with_protocol)
     [
       "profile_data",
       CACHE_VERSION,
       # Certificate validity can lapse without a DB write, so key on the emitted host rather
       # than the custom-domain row's version.
       seller.username,
-      seller.store_host_with_protocol,
+      base_url,
       seller.products.cache_key_with_version,
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
