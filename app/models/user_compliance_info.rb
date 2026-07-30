@@ -14,6 +14,10 @@ class UserComplianceInfo < ApplicationRecord
   # Below this, our payment partner will not verify the account holder on their own and requires a
   # legal guardian on the account instead. See Guardian.
   GUARDIAN_REQUIRED_BELOW_AGE = 18
+  # Countries where our payment partner supports a legal guardian on a minor's payout account.
+  # Stripe documents the guardian requirement for US accounts only and does not publish a wider
+  # list, so this starts as the US alone and grows as each country is confirmed.
+  GUARDIAN_SUPPORTED_COUNTRY_CODES = %w[US].freeze
   KANA_NAME_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\s\u3000\-.]*\z/
   KANA_ADDRESS_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\p{Latin}\d\s\u3000\-.]*\z/
   HAS_KATAKANA = /[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F]/
@@ -125,7 +129,14 @@ class UserComplianceInfo < ApplicationRecord
   # case: an incomplete record is already incomplete by the checks above, and treating an unknown
   # birthday as under-18 would demand a guardian from every seller who has not filled in their date
   # of birth yet.
+  #
+  # Country-gated because the guardian path is not universal. Stripe documents guardian
+  # requirements for US accounts only, and some countries (Brazil) are 18+ with no guardian path at
+  # all, so asking a minor elsewhere for a guardian would collect their details for a verification
+  # that cannot succeed. Countries are added here as Stripe confirms support.
   def requires_legal_guardian?
+    return false unless GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
+
     birthday.present? && birthday > GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date
   end
 

@@ -157,19 +157,31 @@ describe UserComplianceInfo do
 
   describe "#requires_legal_guardian?" do
     it "is true for a seller who is 13" do
-      expect(build(:user_compliance_info, birthday: 13.years.ago.to_date).requires_legal_guardian?).to be(true)
+      expect(build(:user_compliance_info, country: "United States", birthday: 13.years.ago.to_date).requires_legal_guardian?).to be(true)
     end
 
     it "is true for a seller who is 17" do
-      expect(build(:user_compliance_info, birthday: 17.years.ago.to_date).requires_legal_guardian?).to be(true)
+      expect(build(:user_compliance_info, country: "United States", birthday: 17.years.ago.to_date).requires_legal_guardian?).to be(true)
     end
 
     it "is false for a seller who turned 18 today" do
-      expect(build(:user_compliance_info, birthday: 18.years.ago.to_date).requires_legal_guardian?).to be(false)
+      expect(build(:user_compliance_info, country: "United States", birthday: 18.years.ago.to_date).requires_legal_guardian?).to be(false)
     end
 
     it "is false when the birthday is unknown, so we do not demand a guardian from sellers who have not filled it in" do
-      expect(build(:user_compliance_info, birthday: nil).requires_legal_guardian?).to be(false)
+      expect(build(:user_compliance_info, country: "United States", birthday: nil).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false for a minor outside the supported countries, where the guardian path does not exist" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false for a minor in a country we have not confirmed with Stripe yet" do
+      expect(build(:user_compliance_info, country: "United Kingdom", birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false when the country is unknown" do
+      expect(build(:user_compliance_info, country: nil, birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
     end
   end
 
