@@ -190,13 +190,20 @@ class PriceCheckerServiceTest < ActiveSupport::TestCase
     )
     index_products
 
-    search_calls = capture_search_calls do
+    # Assert per-call deltas, not a total: one uncached call already makes two
+    # searches (percentiles + histogram), so any total-count floor passes even
+    # with caching or force_refresh broken.
+    capture_search_calls do |search_calls|
       PriceCheckerService.call(product: @product)
-      PriceCheckerService.call(product: @product)
-      PriceCheckerService.call(product: @product, force_refresh: true)
-    end
+      uncached_searches = search_calls.call
+      assert_operator uncached_searches, :>, 0
 
-    assert_operator search_calls, :>=, 2
+      PriceCheckerService.call(product: @product)
+      assert_equal uncached_searches, search_calls.call
+
+      PriceCheckerService.call(product: @product, force_refresh: true)
+      assert_operator search_calls.call, :>, uncached_searches
+    end
   end
 
   test "stores the result under a stable cache key" do
@@ -319,8 +326,7 @@ class PriceCheckerServiceTest < ActiveSupport::TestCase
         calls += 1
         original_search.call(*args, **kwargs, &block)
       end
-      yield
-      calls
+      yield -> { calls }
     ensure
       if had_own_search
         singleton_class.define_method(:search, original_unbound_search)
