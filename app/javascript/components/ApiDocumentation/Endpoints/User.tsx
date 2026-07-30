@@ -120,14 +120,15 @@ const ProfileCustomHtmlDocumentation = () => (
         currency a native product page would show.
       </li>
       <li>
-        <code>thumbnail_url</code> and <code>cover_url</code> — either may be null, so fall back from one to the other.
+        <code>thumbnail_url</code> and <code>cover_url</code> — either or both may be null, so fall back from one to the
+        other and render a text-only card when neither is set.
       </li>
     </ul>
     <p>
       <code>posts</code> entries carry <code>name</code>, <code>url</code> and <code>published_at</code>, and{" "}
-      <code>pages</code> carries your profile section names. At most 100 products and 100 posts are included;{" "}
-      <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 100 of
-      114" rather than implying the catalogue is complete.
+      <code>pages</code> entries carry a <code>name</code> — your profile section names. At most 100 products and 100
+      posts are included; <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can
+      say "showing 100 of 114" rather than implying the catalogue is complete.
     </p>
     <p>
       The blob is cached per seller and rebuilt when a product, post or profile section changes. A price edit alone does
