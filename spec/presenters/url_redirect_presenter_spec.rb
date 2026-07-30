@@ -204,7 +204,6 @@ describe UrlRedirectPresenter do
           receipt_purchase_id: @purchase.bundle_purchase.external_id,
           created_at: @purchase.created_at,
           email: @purchase.email,
-          receipt_purchase_email: @purchase.bundle_purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
           has_invoice: true,
@@ -364,13 +363,13 @@ describe UrlRedirectPresenter do
         expect(props[:receipt_purchase_id]).to eq(earlier.external_id)
       end
 
-      it "sends the charge's own email so the receipt and invoice pages accept it" do
+      it "points at a charge that shares the buyer's email" do
         _original, charge, url_redirect = membership_with_charge(original_email: "buyer@example.com", charge_email: "buyer@example.com")
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
         expect(props[:receipt_purchase_id]).to eq(charge.external_id)
-        expect(props[:receipt_purchase_email]).to eq("buyer@example.com")
+        expect(charge.email).to eq(props[:email])
       end
 
       it "stays on the sign-up purchase when a charge carries a different email" do
@@ -381,7 +380,6 @@ describe UrlRedirectPresenter do
         expect(props[:receipt_purchase_id]).to eq(original.external_id)
         expect(props[:receipt_purchase_id]).not_to eq(charge.external_id)
         expect(props[:email]).to eq("new@example.com")
-        expect(props[:receipt_purchase_email]).to eq("new@example.com")
       end
 
       it "stays on the product purchase when a bundle parent carries a different email" do
@@ -393,10 +391,10 @@ describe UrlRedirectPresenter do
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
         expect(props[:receipt_purchase_id]).to eq(child_purchase.external_id)
-        expect(props[:receipt_purchase_email]).to eq("new@example.com")
+        expect(props[:email]).to eq("new@example.com")
       end
 
-      it "omits the charge's email while email confirmation is pending" do
+      it "omits the buyer's email while email confirmation is pending" do
         _original, _charge, url_redirect = membership_with_charge
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_without_content_props(
@@ -404,7 +402,6 @@ describe UrlRedirectPresenter do
         )[:purchase]
 
         expect(props[:email]).to be_nil
-        expect(props[:receipt_purchase_email]).to be_nil
       end
 
       it "falls back to the purchase itself when the membership has no successful charge yet" do
@@ -429,7 +426,7 @@ describe UrlRedirectPresenter do
 
         expect(gifter.purchase_state).to eq("successful")
         expect(props[:receipt_purchase_id]).to eq(giftee.external_id)
-        expect(props[:receipt_purchase_email]).to eq("giftee@example.com")
+        expect(props[:email]).to eq("giftee@example.com")
       end
     end
 
@@ -837,7 +834,6 @@ describe UrlRedirectPresenter do
           receipt_purchase_id: @purchase.external_id,
           created_at: @purchase.created_at,
           email: @purchase.email,
-          receipt_purchase_email: @purchase.email,
           email_digest: @purchase.email_digest,
           is_archived: false,
           has_invoice: true,

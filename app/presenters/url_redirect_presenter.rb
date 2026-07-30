@@ -101,11 +101,6 @@ class UrlRedirectPresenter
           # The purchase the receipt and invoice links point at; equal to `id` for a one-off purchase.
           receipt_purchase_id: receipt_purchase&.external_id,
           email: email_confirmation_required ? nil : purchase.email,
-          # Both link targets check the email against the purchase they were given, and a
-          # membership's charges can carry a different address than its sign-up: editing a
-          # customer's email rewrites the sign-up row only, leaving older charges on the old
-          # address.
-          receipt_purchase_email: email_confirmation_required ? nil : receipt_purchase&.email,
           email_digest: purchase.email_digest,
           created_at: purchase.created_at,
           is_archived: purchase.is_archived,

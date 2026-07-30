@@ -47,7 +47,6 @@ export type LayoutProps = {
     id: string;
     receipt_purchase_id: string | null;
     email: string | null;
-    receipt_purchase_email: string | null;
     email_digest: string;
     is_archived: boolean;
     has_invoice: boolean;
@@ -107,7 +106,9 @@ export const Layout = ({
   });
 
   const receiptPurchaseId = purchase?.receipt_purchase_id ?? purchase?.id;
-  const receiptPurchaseEmail = purchase?.receipt_purchase_email ?? purchase?.email;
+  // `receipt_purchase_id` only ever names a purchase sharing this one's email (see
+  // Purchase#receipt_purchase), so the library row's address is the right one for both links.
+  const receiptPurchaseEmail = purchase?.email;
 
   const disabledStatus =
     purchase && !purchase.product_available
