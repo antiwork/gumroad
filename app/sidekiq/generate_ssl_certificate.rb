@@ -2,7 +2,11 @@
 
 class GenerateSslCertificate
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low, lock: :while_executing, on_conflict: :reschedule
+
+  # ACME's challenge expires after an hour; bounding the lock lets a hard-killed job recover.
+  CERTIFICATE_LOCK_TTL = 1.hour.to_i
+
+  sidekiq_options retry: 5, queue: :low, lock: :while_executing, lock_ttl: CERTIFICATE_LOCK_TTL, on_conflict: :reschedule
 
   # The retry counter is transient; all certificate work for a domain must share one runtime lock.
   def self.lock_args(args)
