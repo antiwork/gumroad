@@ -278,6 +278,9 @@ class Subscription < ApplicationRecord
                         is_installment_payment: original_purchase.is_installment_payment }
     purchase_params.merge!(override_params)
     purchase = Purchase.new(purchase_params)
+    # The IP fields above are the original purchase's, not the current request's, so sanctions
+    # screening must not read them as the subscriber's present location.
+    purchase.ip_location_inherited = override_params[:ip_address].blank?
     purchase.variant_attributes = original_purchase.variant_attributes
     unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
       purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer

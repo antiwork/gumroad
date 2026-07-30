@@ -614,7 +614,7 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan, :authenticated_offer_code_buyer
+                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -4693,12 +4693,19 @@ class Purchase < ApplicationRecord
     # because it is only populated once the charge comes back, which is after this callback.
     # `ip_country`/`ip_state` are only filled in by `Order::CreateService`, so we geolocate
     # `ip_address` ourselves as well rather than trusting one caller to have done it.
+    #
+    # A renewal's IP fields were copied off the original purchase by `Subscription#build_purchase`
+    # and describe where the buyer was when they subscribed, so they are excluded: screening them
+    # would keep rejecting a subscriber who has since moved out of a sanctioned jurisdiction, with
+    # no way for them to correct it. The declared address is still screened — the subscriber can
+    # update it from Manage subscription, so it is the signal we maintain.
     def sanctioned_location_signals
-      [
-        [Compliance::Countries.find_by_name(country)&.alpha2, state],
-        [Compliance::Countries.find_by_name(ip_country)&.alpha2, ip_state],
-        [geo_info&.country_code, geo_info&.region_name],
-      ].reject { |alpha2, _subdivision| alpha2.blank? }
+      signals = [[Compliance::Countries.find_by_name(country)&.alpha2, state]]
+      unless ip_location_inherited
+        signals << [Compliance::Countries.find_by_name(ip_country)&.alpha2, ip_state]
+        signals << [geo_info&.country_code, geo_info&.region_name]
+      end
+      signals.reject { |alpha2, _subdivision| alpha2.blank? }
     end
 
     def validate_offer_code

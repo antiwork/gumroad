@@ -449,5 +449,68 @@ describe "PurchaseSubscription", :vcr do
         expect(@recurring_charge.update_balance_and_mark_successful!).to be(true)
       end
     end
+
+    describe "sanctions screening on a renewal" do
+      let(:product) { create(:membership_product) }
+      let(:subscription) { original_purchase.subscription }
+      let(:sanctions_message) { "Sorry, this item is not available in your location." }
+
+      # `skip_preparing_for_charge` runs the real renewal path — price/fee/tax calculation and the
+      # `before_create` chain that screens location — without reaching the charge processor.
+      def renewal_of(subscription)
+        purchase = subscription.build_purchase
+        purchase.purchase_state = "in_progress"
+        purchase.skip_preparing_for_charge = true
+        purchase.process!
+        purchase
+      end
+
+      context "when only the inherited IP fields point at a sanctioned jurisdiction" do
+        let(:original_purchase) do
+          create(:membership_purchase, link: product, country: "United States", state: "CA",
+                                       ip_address: "1.2.3.4", ip_country: "Cuba", ip_state: "03")
+        end
+
+        it "does not reject the renewal" do
+          # The subscriber subscribed from Cuba and has since moved; the IP columns still say Cuba
+          # because `build_purchase` copies them, so screening them would fail every renewal forever.
+          purchase = renewal_of(subscription)
+
+          expect(purchase.errors.full_messages).not_to include sanctions_message
+          expect(purchase.error_code).to be_nil
+          expect(purchase.persisted?).to be true
+        end
+
+        it "does not consult a live geolocation of the inherited IP either" do
+          allow(GeoIp).to receive(:lookup).and_return(
+            GeoIp::Result.new(country_name: "Cuba", country_code: "CU", region_name: "03",
+                              city_name: "Havana", postal_code: nil, latitude: nil, longitude: nil)
+          )
+
+          purchase = renewal_of(subscription)
+
+          expect(purchase.errors.full_messages).not_to include sanctions_message
+          expect(purchase.error_code).to be_nil
+          expect(purchase.persisted?).to be true
+        end
+      end
+
+      context "when the subscriber's declared address is in a sanctioned jurisdiction" do
+        let(:original_purchase) do
+          create(:membership_purchase, link: product, country: "Cuba", state: "03",
+                                       ip_address: "1.2.3.4", ip_country: "United States", ip_state: "CA")
+        end
+
+        it "rejects the renewal" do
+          # The address is what a subscriber can change from Manage subscription, so it is the signal
+          # renewals screen on — this is the half of the gate that must keep working.
+          purchase = renewal_of(subscription)
+
+          expect(purchase.errors.full_messages).to include sanctions_message
+          expect(purchase.error_code).to eq PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+          expect(purchase.stripe_transaction_id).to be_nil
+        end
+      end
+    end
   end
 end
