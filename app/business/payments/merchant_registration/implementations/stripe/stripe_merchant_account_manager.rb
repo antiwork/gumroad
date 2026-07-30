@@ -444,13 +444,11 @@ module StripeMerchantAccountManager
       # Stripe keeps a company's payouts blocked on company.owners_provided until the platform
       # states the owner list is complete. Scoped to accounts we found blocked on it; the callee
       # re-reads the ownership before making the statement.
-      # `updated_stripe_account` is nil when the service-agreement retry had nothing left to push,
-      # so there is no fresh requirements payload to judge and the attestation is simply skipped.
       attest_owners_provided(stripe_account.id) if owner_list_complete && updated_stripe_account && owners_provided_blocking_payouts?(updated_stripe_account)
     end
 
-    # Judged on what actually went to Stripe: when the address was held back it was never
-    # re-validated, so clearing a postal-code note here would report a fix that never happened.
+    # Keyed on what actually reached Stripe: a held-back address was never re-validated, so clearing
+    # the note would report a fix that never happened.
     if person_address_submitted || address_submitted?(account_update.sent_attributes, entity_key)
       clear_stale_postal_code_failure_notes(user)
     end
@@ -459,33 +457,17 @@ module StripeMerchantAccountManager
     raise
   end
 
-  # Push the account diff, holding back the fields Stripe validates against the account's own
-  # country when that country disagrees with the seller's legal-entity country.
+  # The agreement and the legal-entity address are derived from the legal-entity country but
+  # validated against the account's, which is immutable — so while those disagree neither can ever
+  # be accepted, and since the API is all-or-nothing they'd take the whole payload down with them.
+  # Excluded up front rather than peeled off one rejection at a time, which never terminates.
   #
-  # We derive both `tos_acceptance[:service_agreement]` and the legal-entity address from the
-  # seller's legal-entity country, but Stripe validates them against the country the connected
-  # account was created in. When those disagree (a cross-border legal entity on an account created
-  # in the platform's own country) Stripe rejects the whole call, and because the API is
-  # all-or-nothing per request, the fields we already hold — business profile URL, phone, contact
-  # details — go down with it and the seller is asked for data we have.
+  # Dropping `tos_acceptance` whole rather than just `service_agreement` is deliberate: Stripe reads
+  # an acceptance without an agreement as the full one, and which agreement these sellers belong
+  # under is a compliance decision. Any other rejection still raises.
   #
-  # Rejection-driven retry is not enough on its own here: peeling the agreement only exposes the
-  # address as the next rejection (measured: `account_country_invalid_address` on
-  # `company[address][country]`), so nothing lands on any attempt. Neither value can ever be
-  # accepted while the countries disagree, so both are excluded up front rather than discovered
-  # one rejection at a time.
-  #
-  # Which agreement these sellers should sit under, and whether to migrate the accounts so the
-  # countries match, are compliance decisions and are deliberately not settled here — dropping
-  # `tos_acceptance` whole rather than just `service_agreement` keeps us from implicitly moving
-  # them onto the full agreement. Anything else Stripe refuses still raises: a rejection we have
-  # not established as structural is a real problem and must not be swallowed.
-  #
-  # Two callers ask this method different questions — the owners_provided attestation needs the
-  # refreshed account Stripe returned, the postal-code note needs the attributes that actually went
-  # on the wire — and neither is derivable from the other, so both come back. `stripe_account` is
-  # nil whenever no update was sent, which is also the signal that there is no fresh requirements
-  # payload to judge.
+  # `stripe_account` is nil when nothing was sent, which is also the signal to the owners_provided
+  # attestation that there is no fresh requirements payload to judge.
   AccountUpdate = Struct.new(:stripe_account, :sent_attributes)
   private_constant :AccountUpdate
 
