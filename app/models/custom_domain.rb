@@ -5,7 +5,9 @@ require "ipaddr"
 class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
-  ROUTABILITY_REFRESH_INTERVAL = 6.hours
+  # Scheduled verification runs every six hours and fans out over one hour.
+  # The remaining hour absorbs queue delay before a healthy result expires.
+  ROUTABILITY_REFRESH_INTERVAL = 8.hours
 
   include Deletable
 

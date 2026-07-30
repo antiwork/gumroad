@@ -58,5 +58,15 @@ describe CustomDomainRoutabilityService do
       expect(custom_domain.routability_checked_at).to eq(observed_at)
       expect(GenerateSslCertificate.jobs.size).to eq(1)
     end
+
+    it "preserves retryable state when certificate issuance cannot be enqueued" do
+      expect(GenerateSslCertificate).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+
+      expect { service.process }.to raise_error(RedisClient::CannotConnectError)
+
+      expect(custom_domain.reload).not_to be_routable
+      expect(custom_domain.ssl_certificate_issued_at).to be_nil
+      expect(custom_domain.routability_checked_at).to eq(observed_at)
+    end
   end
 end

@@ -298,7 +298,7 @@ describe CustomDomain do
 
     it "falls back from a stale positive result while scheduling a refresh" do
       custom_domain.set_routability!(true)
-      custom_domain.update_column(:routability_checked_at, 7.hours.ago)
+      custom_domain.update_column(:routability_checked_at, (CustomDomain::ROUTABILITY_REFRESH_INTERVAL + 1.minute).ago)
 
       expect(custom_domain.strictly_routable?).to be(false)
 
@@ -307,7 +307,7 @@ describe CustomDomain do
 
     it "falls back from a stale positive result when the refresh is already deduplicated" do
       custom_domain.set_routability!(true)
-      custom_domain.update_column(:routability_checked_at, 7.hours.ago)
+      custom_domain.update_column(:routability_checked_at, (CustomDomain::ROUTABILITY_REFRESH_INTERVAL + 1.minute).ago)
       expect(RefreshCustomDomainRoutabilityWorker).to receive(:perform_async).and_return(nil)
 
       expect(custom_domain.strictly_routable?).to be(false)
@@ -315,7 +315,7 @@ describe CustomDomain do
 
     it "falls back from a stale positive result when the refresh cannot be enqueued" do
       custom_domain.set_routability!(true)
-      custom_domain.update_column(:routability_checked_at, 7.hours.ago)
+      custom_domain.update_column(:routability_checked_at, (CustomDomain::ROUTABILITY_REFRESH_INTERVAL + 1.minute).ago)
       expect(RefreshCustomDomainRoutabilityWorker).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
 
       expect(custom_domain.strictly_routable?).to be(false)

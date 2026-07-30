@@ -55,6 +55,24 @@ describe RefreshCustomDomainRoutabilityWorker do
     end
   end
 
+  context "when certificate repair was persisted before its enqueue failed" do
+    let(:resolving_domains) { [custom_domain.domain] }
+
+    it "retries certificate issuance even though the domain is inactive" do
+      custom_domain.update_columns(
+        ssl_certificate_issued_at: nil,
+        routable: false,
+        routability_checked_at: Time.current
+      )
+      allow(verification_service).to receive(:has_valid_ssl_certificate_for?).and_return(false)
+      GenerateSslCertificate.clear
+
+      described_class.new.perform(custom_domain.id)
+
+      expect(GenerateSslCertificate.jobs.size).to eq(1)
+    end
+  end
+
   context "when another refresh has already stored a current result" do
     let(:resolving_domains) { [] }
 
