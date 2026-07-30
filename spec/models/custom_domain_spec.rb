@@ -288,6 +288,12 @@ describe CustomDomain do
       expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
     end
 
+    it "falls back when the refresh cannot be enqueued" do
+      expect(RefreshCustomDomainRoutabilityWorker).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+
+      expect(custom_domain.strictly_routable?).to be(false)
+    end
+
     it "serves a stale positive result while scheduling a refresh" do
       custom_domain.set_routability!(true)
       custom_domain.update_column(:routability_checked_at, 7.hours.ago)

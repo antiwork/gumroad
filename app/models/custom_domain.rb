@@ -84,7 +84,7 @@ class CustomDomain < ApplicationRecord
   def strictly_routable?
     return false unless active?
 
-    RefreshCustomDomainRoutabilityWorker.perform_async(id) if routability_refresh_due?
+    enqueue_routability_refresh if routability_refresh_due?
     routable?
   end
 
@@ -180,6 +180,13 @@ class CustomDomain < ApplicationRecord
 
       reload
       true
+    end
+
+    # Refreshing future requests must not fail the current profile render.
+    def enqueue_routability_refresh
+      RefreshCustomDomainRoutabilityWorker.perform_async(id)
+    rescue => e
+      Rails.logger.error("Failed to enqueue custom domain routability refresh for #{id}: #{e.class} => #{e.message}")
     end
 
     def increment_failed_verification_attempts_count_and_notify_creator
