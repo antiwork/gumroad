@@ -1,3 +1,5 @@
+import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
+
 export type ProfileSettingsForm = {
   name: string | null;
   bio: string | null;
@@ -5,6 +7,20 @@ export type ProfileSettingsForm = {
   background_color: string;
   highlight_color: string;
   profile_picture_blob_id: string | null;
+};
+
+export const profileThemeColors = (backgroundColor: string, highlightColor: string) => {
+  const accentColors = getAccessibleAccent(highlightColor);
+  const textColor = getContrastColor(backgroundColor);
+
+  return {
+    "--accent": hexToRgb(highlightColor),
+    "--accent-with-text": hexToRgb(accentColors.accent),
+    "--contrast-accent": hexToRgb(accentColors.text),
+    "--filled": hexToRgb(backgroundColor),
+    "--color": hexToRgb(textColor),
+    "--contrast-primary": hexToRgb(getContrastColor(textColor)),
+  };
 };
 
 export const changedProfileSettings = (

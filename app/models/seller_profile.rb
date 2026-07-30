@@ -20,6 +20,7 @@ class SellerProfile < ApplicationRecord
   validates :highlight_color, hex_color: true
   validate :validate_json_data, if: -> { self[:json_data].present? }
 
+  before_validation :normalize_colors
   after_save :clear_custom_style_cache, if: -> { %w[highlight_color background_color font].any? { |prop| send(:"saved_change_to_#{prop}?") } }
 
   after_initialize do
@@ -145,6 +146,11 @@ class SellerProfile < ApplicationRecord
   end
 
   private
+    def normalize_colors
+      self.background_color = HexColorValidator.normalize(background_color)
+      self.highlight_color = HexColorValidator.normalize(highlight_color)
+    end
+
     def custom_style_attributes_safe?
       HexColorValidator.safe_for_css?(highlight_color) &&
         HexColorValidator.safe_for_css?(background_color) &&

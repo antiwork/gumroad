@@ -91,6 +91,14 @@ describe SellerProfile do
   end
 
   describe "validations" do
+    it "normalizes legacy three-digit colours on save" do
+      subject = build(:seller_profile, background_color: "#fff", highlight_color: "#0F0")
+
+      subject.save!
+
+      expect(subject).to have_attributes(background_color: "#ffffff", highlight_color: "#00ff00")
+    end
+
     it "rejects a colour with a valid first line and trailing content" do
       subject = build(:seller_profile, highlight_color: "#ffffff\nbody { display: none }")
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ProfileSettingsForm,
   changedProfileSettings,
+  profileThemeColors,
   rebaseProfileSettings,
 } from "$app/pages/Settings/Profile/profileSettingsForm";
 
@@ -51,5 +52,12 @@ describe("profile settings synchronization", () => {
     const rebased = rebaseProfileSettings(current, baseline, incoming);
 
     expect(changedProfileSettings(rebased, incoming)).toEqual({ bio: "Local bio edit" });
+  });
+
+  it("matches the live primary-button foreground for saturated backgrounds", () => {
+    expect(profileThemeColors("#ff0000", "#ff90e8")).toMatchObject({
+      "--color": "0 0 0",
+      "--contrast-primary": "255 255 255",
+    });
   });
 });

@@ -8,11 +8,11 @@ import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$ap
 import {
   ProfileSettingsForm,
   changedProfileSettings,
+  profileThemeColors,
   rebaseProfileSettings,
 } from "$app/pages/Settings/Profile/profileSettingsForm";
 import { CreatorProfile } from "$app/parsers/profile";
 import { classNames } from "$app/utils/classNames";
-import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -240,21 +240,9 @@ export default function SettingsPage() {
     postToMobileApp({ type: "settingsCanUpdate", canUpdate: canSave });
   }, [isMobileAppWebView, canSave]);
 
-  // Read the FORM state so the preview repaints as the seller edits, before any save.
-  //
-  // The pay-button/offer-banner accent may be a slightly brightness-adjusted version of the chosen
-  // colour so its text clears 4.5:1. Every other accent use keeps the chosen colour.
-  const accentColors = getAccessibleAccent(profileSettings.highlight_color);
-
   // Pin the chosen background too: #ffffff is a saved theme value, not an instruction to inherit
   // the dashboard's colour scheme. The preview must match the buyer-facing stylesheet.
-  const profileColors = {
-    "--accent": hexToRgb(profileSettings.highlight_color),
-    "--accent-with-text": hexToRgb(accentColors.accent),
-    "--contrast-accent": hexToRgb(accentColors.text),
-    "--filled": hexToRgb(profileSettings.background_color),
-    "--color": hexToRgb(getContrastColor(profileSettings.background_color)),
-  };
+  const profileColors = profileThemeColors(profileSettings.background_color, profileSettings.highlight_color);
 
   const fontUrl =
     profileSettings.font !== DEFAULT_PROFILE_FONT
@@ -271,9 +259,10 @@ export default function SettingsPage() {
     }
   });
 
-  const showPagesTab = !has_custom_landing_page;
-  const showCustomLandingPagePreview = custom_html_pages_enabled && has_custom_landing_page && tab !== "design";
-  const showThemeWithoutPublicUrl = custom_html_pages_enabled && has_custom_landing_page && tab === "design";
+  const customLandingPageActive = custom_html_pages_enabled && has_custom_landing_page;
+  const showPagesTab = !customLandingPageActive;
+  const showCustomLandingPagePreview = customLandingPageActive && tab !== "design";
+  const showThemeWithoutPublicUrl = customLandingPageActive && tab === "design";
 
   const renderTab = (key: ProfileSettingsTab, label: string) => (
     <Tab
@@ -346,7 +335,6 @@ export default function SettingsPage() {
               ...profileColors,
               "--primary": "var(--color)",
               "--body-bg": "rgb(var(--filled))",
-              "--contrast-primary": "var(--filled)",
               "--contrast-filled": "var(--color)",
               "--color-body": "var(--body-bg)",
               "--color-background": "rgb(var(--filled))",
@@ -473,7 +461,7 @@ export default function SettingsPage() {
             </section>
           ) : tab === "design" ? (
             <section className="grid gap-8 p-4! md:p-8!">
-              {has_custom_landing_page ? (
+              {customLandingPageActive ? (
                 <Alert role="status" variant="info">
                   Your custom profile page uses its own design. This preview shows the theme used on your product pages
                   and other Gumroad surfaces.

@@ -106,6 +106,16 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(seller.reload.seller_profile.highlight_color).to eq("#ff90e8")
     end
 
+    it "rejects a non-string colour without raising an exception" do
+      seller.seller_profile.update!(background_color: "#ffffff")
+
+      put :update, params: { seller_profile: { background_color: 1 } }
+
+      expect(response).to redirect_to(profile_path)
+      expect(flash[:alert]).to eq("Background color is not a valid hexadecimal color")
+      expect(seller.reload.seller_profile.background_color).to eq("#ffffff")
+    end
+
     describe "when the user has not confirmed their email address" do
       before do
         seller.update!(confirmed_at: nil)

@@ -47,5 +47,15 @@ describe ProfilePresenter do
         font: "Roboto Mono",
       )
     end
+
+    it "expands legacy shorthand colours for the browser color inputs" do
+      seller = create_seller!(username: "legacycolors", email: "legacycolors@example.com")
+      seller.seller_profile.tap(&:save!).update_columns(background_color: "#fff", highlight_color: "#0F0")
+
+      expect(profile_settings_for(seller)).to include(
+        background_color: "#ffffff",
+        highlight_color: "#00ff00",
+      )
+    end
   end
 end

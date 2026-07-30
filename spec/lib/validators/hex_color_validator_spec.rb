@@ -25,9 +25,15 @@ describe HexColorValidator do
   end
 
   it "rejects shorthand, missing hashes, and non-hex characters" do
-    ["#fff", "ff90e8", "#ff90e", "#ff90e88", "#gggggg", "", nil].each do |value|
+    ["#fff", "ff90e8", "#ff90e", "#ff90e88", "#gggggg", "", nil, 1, [], {}].each do |value|
       expect(valid?(value)).to be(false), "expected #{value.inspect} to be rejected"
     end
+  end
+
+  it "expands legacy shorthand colours without changing other values" do
+    expect(described_class.normalize("#f0A")).to eq("#ff00aa")
+    expect(described_class.normalize("#ff90e8")).to eq("#ff90e8")
+    expect(described_class.normalize(1)).to eq(1)
   end
 
   # These values are interpolated straight into the storefront stylesheet, so a value that smuggles
