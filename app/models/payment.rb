@@ -169,6 +169,16 @@ class Payment < ApplicationRecord
     user.save!
   end
 
+  # Notifying the seller must never decide whether Gumroad's money gets reversed. Both callers run
+  # this after `mark_failed!` has already returned the balances to `unpaid` but before the internal
+  # transfer is reversed, so a raise here would strand the transfer with the seller unpaused.
+  def send_payout_failure_email_best_effort
+    send_payout_failure_email
+  rescue => e
+    ErrorNotifier.notify(e, payment_id: id, user_id:,
+                            action_required: "Payout failure email did not send. The payout reversal and any hold still ran.")
+  end
+
   def send_payout_failure_email
     # This would already be done from callback/ We dont't to clean that up rn
     return if failure_reason === FailureReason::CANNOT_PAY
@@ -397,7 +407,7 @@ class Payment < ApplicationRecord
         needs_reverse_transfer = true
       end
 
-      send_payout_failure_email if send_failure_email
+      send_payout_failure_email_best_effort if send_failure_email
       # Hold-aware: the `rescue` below turns a failed reversal into an `errors.add`, which
       # SyncStuckPayoutsJob discards. Without the hold, Gumroad's funds stay on the connected
       # account while `mark_failed!`/`mark_cancelled!` have already returned the balances to

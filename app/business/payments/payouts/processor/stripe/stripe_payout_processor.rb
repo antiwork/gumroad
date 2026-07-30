@@ -752,7 +752,7 @@ class StripePayoutProcessor
     if failure_reason
       payment.failure_reason = failure_reason
       payment.save!
-      payment.send_payout_failure_email
+      payment.send_payout_failure_email_best_effort
     end
 
     reverse_internal_transfer_or_hold_payouts!(payment, failure_reason, reraise: true)
