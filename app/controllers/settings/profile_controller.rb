@@ -42,6 +42,15 @@ class Settings::ProfileController < Settings::BaseController
       current_seller.avatar.purge
     end
 
+    # Validate the pending avatar here, before the lock below. #with_locked_seller_profile locks the
+    # seller, and lock! reloads it - which marks the attachment above as persisted. User#avatar_is_valid
+    # only inspects a new_record? attachment, so after that reload the dimension and format checks
+    # silently pass and an undersized avatar saves. Checked only when an attachment is actually
+    # pending, to keep unrelated seller validation state out of this path.
+    if current_seller.attachment_changes.any? && !current_seller.valid?
+      return respond_error(current_seller.errors.full_messages.to_sentence)
+    end
+
     begin
       current_seller.with_locked_seller_profile do |seller_profile|
         # Optimistic concurrency: the helper loaded this profile with a locking/current read. Reject
