@@ -44,12 +44,11 @@ class Settings::ProfileController < Settings::BaseController
 
     begin
       current_seller.with_locked_seller_profile do |seller_profile|
-        # Optimistic concurrency: lock the profile and reject the save if its pages/sections were
-        # changed elsewhere since this editor loaded. Otherwise this request would overwrite the
-        # layout with a stale snapshot and drop or orphan sections another session added. A brand
-        # new profile has nothing to conflict with, and settings-only saves don't touch the layout.
+        # Optimistic concurrency: the helper loaded this profile with a locking/current read. Reject
+        # the save if its pages/sections changed elsewhere since this editor loaded. Otherwise this
+        # request would overwrite the layout with a stale snapshot and drop or orphan sections
+        # another session added. A new profile cannot conflict, and design-only saves skip the check.
         if (permitted_params[:tabs] || permitted_params[:sections]) && seller_profile.persisted?
-          seller_profile.lock!
           # A persisted profile must be saved against a matching version. A missing/blank version
           # means the editor loaded before this profile row existed (another session has created it
           # since), so the submitted layout is stale too. Re-checked here under the lock in case the
