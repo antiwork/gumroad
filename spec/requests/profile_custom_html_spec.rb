@@ -233,17 +233,28 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response.body).not_to include(">$0<")
     end
 
-    # The blob is rebuilt per request while gumroad-data is cached per seller, so a price edit
-    # shows up in the prices blob even on a cache hit for the catalog payload.
-    it "reflects a price edit immediately" do
+    # The one example that would catch the request wiring degrading to no IP: without
+    # request.remote_ip reaching the service, every visitor falls back to seller currency and
+    # nothing else in the suite notices.
+    it "localizes the blob to the visitor's own currency, from the request IP" do
       product = create(:product, user: seller, price_cents: 1400)
-      get "http://seller.example.com/landing/embed"
-      product.update!(price_cents: 3900)
+      allow(Feature).to receive(:active?).and_call_original
+      allow(Feature).to receive(:active?).with(:buyer_local_currency, seller).and_return(true)
+      allow(GeoIp).to receive(:lookup).and_return(
+        GeoIp::Result.new(country_name: "France", country_code: "FR", region_name: nil,
+                          city_name: nil, postal_code: nil, latitude: nil, longitude: nil)
+      )
+      allow_any_instance_of(Pages::ProductPrices).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
 
       get "http://seller.example.com/landing/embed"
 
       prices = JSON.parse(response.body[%r{<script id="gumroad-prices"[^>]*>(.*?)</script>}m, 1])
-      expect(prices[product.general_permalink]["price_cents"]).to eq(3900)
+      expect(prices[product.general_permalink]).to eq(
+        "price" => "€11.20", "price_cents" => 1120, "currency_code" => "eur", "localized" => true
+      )
+      # The mutation this catches: passing `ip: nil` instead of request.remote_ip still renders a
+      # blob, just never a localized one.
+      expect(GeoIp).to have_received(:lookup).with("127.0.0.1").at_least(:once)
     end
   end
 

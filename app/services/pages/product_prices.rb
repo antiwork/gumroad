@@ -37,19 +37,25 @@ class Pages::ProductPrices
     attr_reader :seller, :ip
 
     # Same scope, ordering and cap as Pages::ProfileData#products so the two payloads describe
-    # the same set of products in the same order. The associations are the ones the buyer-currency
-    # gate and the price formatting read, loaded up front because a large catalogue would
-    # otherwise run them once per product.
+    # the same set of products in the same order. The associations are the ones
+    # Product::Prices#lowest_variant_price_difference_cents needs to take its preloaded path
+    # (:skus plus every alive variant under every alive category — miss either and it falls back
+    # to two queries per product), plus what the buyer-currency gate and formatting read. This
+    # runs uncached on a public page for up to MAX_ITEMS products, so the preload is load-bearing.
     def products
       seller.products.alive.not_archived.not_draft
-            .includes(:alive_prices, :installment_plan, :user, tiers: :alive_prices)
+            .includes(:alive_prices, :installment_plan, :user, :skus,
+                      tiers: :alive_prices, variant_categories_alive: :alive_variants)
             .order(created_at: :desc).limit(Pages::ProfileData::MAX_ITEMS)
     end
 
     def entry_for(product)
-      # display_price_cents with no arguments is what Link#price_formatted_verbose formats, so the
-      # cents we emit and the string a page renders describe the same amount.
-      price_cents = product.display_price_cents
+      # The number a buyer would be charged: display_price_cents is what price_formatted_verbose
+      # formats, and discounted_price_cents takes the default offer code off it — the same pair
+      # ProductPresenter::Card feeds the native grid, so a storefront card and the product page
+      # can't quote different prices for the same product.
+      base_price_cents = product.display_price_cents
+      price_cents = product.discounted_price_cents(base_price_cents)
       display = localizable?(product) ? buyer_currency_display_props(product:, price_cents:, ip:) : nil
 
       if display && display[:display_mode] == "buyer_local" && display[:buyer_local_price_cents].present?
@@ -61,7 +67,7 @@ class Pages::ProductPrices
         }
       else
         {
-          price: product.price_formatted_verbose,
+          price: product.price_formatted_verbose_for_price_cents(price_cents),
           price_cents:,
           currency_code: product.price_currency_type.to_s.downcase,
           localized: false,
@@ -98,5 +104,15 @@ class Pages::ProductPrices
       return @buyer_currency_for_ip[lookup_ip] if @buyer_currency_for_ip.key?(lookup_ip)
 
       @buyer_currency_for_ip[lookup_ip] = super
+    end
+
+    # Same reasoning for the rate, which is a Redis read per call: every product priced in the
+    # same currency converts through the same pair.
+    def buyer_local_currency_rate(from_currency:, to_currency:)
+      @buyer_local_currency_rate ||= {}
+      key = [from_currency.to_s.downcase, to_currency.to_s.downcase]
+      return @buyer_local_currency_rate[key] if @buyer_local_currency_rate.key?(key)
+
+      @buyer_local_currency_rate[key] = super
     end
 end

@@ -562,9 +562,10 @@ class Ai::StoreAgentService
       formatted string), price_cents, currency_code, and localized (true when it was converted for
       this visitor). Equivalently, mark up one element per price with both data-gumroad-product
       set to that permalink and data-gumroad-field="price", and the server fills it in server-side
-      — use that form when the price is static markup rather than built by a script, since it also
-      reaches crawlers and link previewers. Whichever you use, write the creator's own price as the
-      element's text so the page still reads correctly if a permalink stops matching.
+      — use that form when the price is static markup rather than built by a script, since it then
+      renders without JavaScript. Whichever you use, write the creator's own price as the element's
+      text so the page still reads correctly if a permalink stops matching. Both mechanisms exist
+      only on the profile page — a slugged page gets neither, so never put price markup there.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live

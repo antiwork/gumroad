@@ -95,7 +95,15 @@ module Product::Prices
   end
 
   def price_formatted_verbose
-    "#{price_formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_long_indicator(display_recurrence)}" : ''}"
+    price_formatted_verbose_for_price_cents(display_price_cents)
+  end
+
+  # price_formatted_verbose over an arbitrary amount, for surfaces that show a price other than
+  # the product's set one (a default-offer-code discount, say) and still need the "+" and
+  # recurrence wording that make the number read correctly.
+  def price_formatted_verbose_for_price_cents(price_cents)
+    formatted = format_price(display_price_for_price_cents(price_cents))
+    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_long_indicator(display_recurrence)}" : ''}"
   end
 
   def price_formatted_including_rental_verbose
@@ -172,6 +180,17 @@ module Product::Prices
       # raising NoMethodError on nil + integer.
       (default_price_cents || 0) + (lowest_variant_price_difference_cents || 0)
     end
+  end
+
+  # The default offer code taken off a base price, which is what a buyer is actually charged.
+  # A surface showing the undiscounted number quotes a price checkout will not honour, so every
+  # buyer-facing price goes through here. Existing-customers-only codes are left on because a
+  # first-time visitor does not get them.
+  def discounted_price_cents(base_price_cents)
+    offer_code = default_offer_code
+    return base_price_cents if offer_code.blank? || offer_code.inactive? || offer_code.existing_customers_only?
+
+    [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
   end
 
   def display_price(additional_attrs = {})
