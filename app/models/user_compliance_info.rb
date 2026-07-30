@@ -21,14 +21,14 @@ class UserComplianceInfo < ApplicationRecord
 
   belongs_to :user, optional: true
   # Held on the compliance record rather than the user so that the guardian travels with the
-  # legal-entity details Stripe verifies them against. Mutable, unlike the rest of this record:
-  # the guardian is usually attached after the seller's own details exist, because Stripe only
-  # raises the requirement once it sees the minor's date of birth, and it maps onto a single Stripe
-  # Person we update in place rather than a new revision.
+  # legal-entity details Stripe verifies them against. This is the one attribute that can change on
+  # an otherwise immutable record, because Stripe only raises the guardian requirement once it sees
+  # the minor's date of birth, so the guardian is attached after the seller's own details exist.
   belongs_to :guardian, optional: true
   attr_mutable :guardian_id
 
   validates_presence_of :user
+  validate :guardian_is_only_attached_once_to_a_live_revision, on: :update
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -273,5 +273,17 @@ class UserComplianceInfo < ApplicationRecord
 
     def birthday_is_over_minimum_age
       errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
+    end
+
+    # attr_mutable lets guardian_id be set after creation, which the attach flow needs. It must not
+    # become a general edit: repointing a guardian in place, or attaching one to a superseded
+    # revision, would rewrite compliance history that the rest of this record refuses to change.
+    # Replacing a guardian means a new revision, the same as every other detail.
+    def guardian_is_only_attached_once_to_a_live_revision
+      return unless guardian_id_changed?
+
+      previous_guardian_id = guardian_id_was
+      errors.add :base, "The legal guardian cannot be changed once set." if previous_guardian_id.present?
+      errors.add :base, "The legal guardian can only be set on the current compliance details." if deleted?
     end
 end

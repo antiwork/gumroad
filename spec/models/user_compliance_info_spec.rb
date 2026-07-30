@@ -106,6 +106,18 @@ describe UserComplianceInfo do
         end
       end
 
+      describe "guardian has been removed" do
+        let(:guardian) { create(:guardian) }
+        let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian:) }
+
+        it "returns false" do
+          user_compliance_info
+          guardian.mark_deleted!
+
+          expect(user_compliance_info.reload.has_completed_compliance_info?).to eq(false)
+        end
+      end
+
       describe "guardian attached with complete details" do
         let(:user_compliance_info) { create(:user_compliance_info, birthday:, guardian: create(:guardian)) }
 
@@ -157,13 +169,29 @@ describe UserComplianceInfo do
       expect { user_compliance_info.update!(first_name: "Someone else") }.to raise_error(Immutable::RecordImmutable)
     end
 
-    it "is cleared rather than destroying compliance history when the guardian is destroyed" do
+    it "refuses to swap one guardian for another in place, so compliance history is not rewritten" do
+      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian: create(:guardian))
+
+      expect(user_compliance_info.update(guardian: create(:guardian))).to be(false)
+      expect(user_compliance_info.errors.full_messages).to include("The legal guardian cannot be changed once set.")
+    end
+
+    it "refuses to attach a guardian to a superseded revision" do
+      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date)
+      user_compliance_info.mark_deleted!
+
+      expect(user_compliance_info.update(guardian: create(:guardian))).to be(false)
+      expect(user_compliance_info.errors.full_messages).to include("The legal guardian can only be set on the current compliance details.")
+    end
+
+    it "keeps the reference when the guardian's details are erased, so the audit trail survives" do
       guardian = create(:guardian)
       user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
 
-      guardian.destroy!
+      guardian.anonymize!
 
-      expect(user_compliance_info.reload.guardian_id).to be_nil
+      expect(user_compliance_info.reload.guardian_id).to eq(guardian.id)
+      expect(user_compliance_info.has_completed_compliance_info?).to eq(false)
     end
   end
 

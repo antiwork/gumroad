@@ -55,6 +55,36 @@ describe GdprDataErasureService do
       end
     end
 
+    it "clears the legal guardian's own details, since an adult's PII would otherwise survive on a separate row" do
+      guardian = create(:guardian, first_name: "Ellie", last_name: "Doe", email: "ellie@example.com")
+      replaced_info = create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+      replaced_info.mark_deleted!
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(guardian.reload).to have_attributes(
+        first_name: nil,
+        last_name: nil,
+        email: nil,
+        phone: nil,
+        date_of_birth: nil,
+        street_address: nil
+      )
+      expect(guardian.has_individual_tax_id?).to be(false)
+      # The row and the reference survive so the compliance history is still readable.
+      expect(replaced_info.reload.guardian_id).to eq(guardian.id)
+    end
+
+    it "leaves other sellers' guardians alone" do
+      other_guardian = create(:guardian, first_name: "Someone")
+      create(:user_compliance_info, user: create(:user), birthday: 15.years.ago.to_date, guardian: other_guardian)
+      create(:user_compliance_info, user:)
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(other_guardian.reload.first_name).to eq("Someone")
+    end
+
     it "anonymizes buyer purchases" do
       purchase = create(
         :free_purchase,

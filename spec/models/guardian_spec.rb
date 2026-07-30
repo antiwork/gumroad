@@ -69,7 +69,7 @@ describe Guardian do
       expect(build(:guardian)).to have_attributes(has_completed_info?: true)
     end
 
-    %i[first_name last_name email date_of_birth street_address city zip_code country].each do |field|
+    %i[first_name last_name email date_of_birth street_address city zip_code country individual_tax_id].each do |field|
       it "is false without #{field}" do
         expect(build(:guardian, field => nil).has_completed_info?).to be(false)
       end
@@ -77,6 +77,61 @@ describe Guardian do
 
     it "is false until the guardian accepts the terms, because our payment partner requires their acceptance rather than the minor's" do
       expect(build(:guardian, stripe_tos_accepted: false).has_completed_info?).to be(false)
+    end
+
+    it "is false once the guardian is removed, since nothing clears the reference to them" do
+      guardian = create(:guardian)
+
+      guardian.mark_deleted!
+
+      expect(guardian.has_completed_info?).to be(false)
+    end
+  end
+
+  describe "#anonymize!" do
+    let(:guardian) { create(:guardian) }
+
+    it "clears the guardian's own identifying details" do
+      guardian.anonymize!
+
+      expect(guardian.reload).to have_attributes(
+        first_name: nil,
+        last_name: nil,
+        email: nil,
+        phone: nil,
+        date_of_birth: nil,
+        street_address: nil,
+        city: nil,
+        state: nil,
+        zip_code: nil
+      )
+      # Strongbox always hands back a Lock, so ask the predicate rather than comparing to nil.
+      expect(guardian.has_individual_tax_id?).to be(false)
+    end
+
+    it "keeps the row so the compliance revisions referencing it stay intact" do
+      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
+
+      guardian.anonymize!
+
+      expect(Guardian.exists?(guardian.id)).to be(true)
+      expect(user_compliance_info.reload.guardian_id).to eq(guardian.id)
+    end
+
+    it "leaves the record incomplete afterwards" do
+      guardian.anonymize!
+
+      expect(guardian.reload.has_completed_info?).to be(false)
+    end
+  end
+
+  describe "destroying a guardian" do
+    it "is refused while compliance revisions still reference it, rather than silently rewriting them" do
+      guardian = create(:guardian)
+      user_compliance_info = create(:user_compliance_info, birthday: 15.years.ago.to_date, guardian:)
+
+      expect(guardian.destroy).to be(false)
+      expect(user_compliance_info.reload.guardian_id).to eq(guardian.id)
     end
   end
 

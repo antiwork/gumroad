@@ -8,6 +8,10 @@
 # the account holder, which is the whole point — the alternative is the parent owning the seller's
 # Gumroad account outright.
 #
+# Stripe only offers this in some countries, and not at all in Brazil, where the floor is 18 with
+# no guardian path. Storing a guardian therefore does not by itself mean the seller's country
+# supports one; the country gate lives with the payout setup that consumes this.
+#
 # Mirrors UserComplianceInfo's split of responsibilities: validations here cover what must be true
 # of any stored guardian, while has_completed_info? answers whether we have enough to hand Stripe.
 # Unlike UserComplianceInfo this record is mutable, because it maps onto one Stripe Person that we
@@ -19,7 +23,12 @@ class Guardian < ApplicationRecord
   # Stripe's own floor for a person who can take responsibility for an account.
   MINIMUM_AGE = 18
 
-  has_many :user_compliance_infos, dependent: :nullify
+  # Compliance revisions are immutable, so a seller who edits their details leaves several rows
+  # pointing at the same guardian. restrict_with_error rather than nullify: silently clearing
+  # guardian_id would turn historical revisions incomplete with nothing recording why, and it would
+  # write straight past the Immutable guard. A guardian who must go away is anonymized in place by
+  # the erasure path below, which keeps the link intact.
+  has_many :user_compliance_infos, dependent: :restrict_with_error
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -40,9 +49,16 @@ class Guardian < ApplicationRecord
   end
 
   # Whether we hold everything Stripe asks for about the guardian. Terms acceptance is part of it:
-  # Stripe requires the guardian, not the minor, to accept them.
+  # Stripe requires the guardian, not the minor, to accept them. The tax identifier is too — it is
+  # what Stripe verifies the guardian against, and without it the account stalls on a requirement
+  # rather than being ready.
+  #
+  # A soft-deleted guardian is never complete. Nothing clears guardian_id when a guardian is
+  # removed (the link is deliberately kept for the compliance history), so without this check a
+  # seller whose guardian had been removed would still look ready for payouts.
   def has_completed_info?
-    first_name.present? &&
+    alive? &&
+      first_name.present? &&
       last_name.present? &&
       email.present? &&
       date_of_birth.present? &&
@@ -50,7 +66,29 @@ class Guardian < ApplicationRecord
       city.present? &&
       zip_code.present? &&
       country.present? &&
+      has_individual_tax_id? &&
       stripe_tos_accepted?
+  end
+
+  # Removes the guardian's own identifying details while keeping the row, so the compliance
+  # revisions that reference it stay intact and auditable. The guardian is a third party who never
+  # agreed to anything beyond taking responsibility for one seller's account, so their details go
+  # when the seller's do.
+  def anonymize!
+    update_columns(
+      first_name: nil,
+      last_name: nil,
+      email: nil,
+      phone: nil,
+      date_of_birth: nil,
+      street_address: nil,
+      city: nil,
+      state: nil,
+      zip_code: nil,
+      nationality: nil,
+      individual_tax_id: nil,
+      updated_at: Time.current
+    )
   end
 
   def has_individual_tax_id?
