@@ -85,4 +85,37 @@ describe("isValidHost", () => {
     expect(valid("evil.example.", "")).toBe(false);
     expect(valid("evil.example.")).toBe(false);
   });
+
+  // `URL` keeps the DNS root dot in `url.host`, so `https://gumroad.com./l/x` arrives here as
+  // `gumroad.com.` — the same name, a different string. Comparing literally rejected our own
+  // fully-qualified origins: the widget refused those product links and dropped their messages.
+  describe("fully qualified trailing-dot hosts", () => {
+    it("accepts our own domains written with the root dot", () => {
+      expect(valid(`${ROOT_DOMAIN}.`)).toBe(true);
+      expect(valid(`seller.${ROOT_DOMAIN}.`)).toBe(true);
+      expect(valid(`${SHORT_DOMAIN}.`)).toBe(true);
+    });
+
+    it("accepts a seller custom domain written with the root dot", () => {
+      const custom = "shop.example.com";
+      expect(valid(`${custom}.`, custom)).toBe(true);
+      expect(valid(`www.${custom}.`, custom)).toBe(true);
+    });
+
+    // Normalizing the dot must not widen the boundary: an attacker-registrable host stays out
+    // whether it is written fully qualified or not.
+    it("still rejects attacker-registrable hosts written with the root dot", () => {
+      expect(valid(`evil-${ROOT_DOMAIN}.`)).toBe(false);
+      expect(valid(`not${ROOT_DOMAIN}.`)).toBe(false);
+      expect(valid(`${ROOT_DOMAIN}.evil.example.`)).toBe(false);
+      expect(valid(`evil${SHORT_DOMAIN}.`)).toBe(false);
+      expect(valid("evilshop.example.com.", "shop.example.com")).toBe(false);
+    });
+
+    // Only ONE terminal dot is stripped, so a doubled dot is not a way back to the empty-domain
+    // hole the plain empty check closes.
+    it("rejects a doubled root dot", () => {
+      expect(valid(`${ROOT_DOMAIN}..`)).toBe(false);
+    });
+  });
 });

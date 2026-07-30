@@ -14,7 +14,7 @@ export const parseProductURL = (href: string, customDomain?: string) => {
 
     url.searchParams.set("referrer", window.location.href);
 
-    if (url.host === process.env.SHORT_DOMAIN) return url;
+    if (isShortDomain(url.host)) return url;
 
     const matches = /\/a\/(?<affiliateId>.+)\/(?<permalink>.+)/u.exec(url.pathname);
     if (matches?.groups?.permalink && matches.groups.affiliateId) {
@@ -40,8 +40,25 @@ export const parseProductURL = (href: string, customDomain?: string) => {
 // An empty domain has to be rejected outright rather than left to the comparison: `.endsWith(".")`
 // is true for any host written in fully-qualified trailing-dot form (`evil.example.`), which
 // browsers treat as a real origin, so an empty domain would accept exactly what this rejects.
-const isHostOrSubdomainOf = (host: string, domain: string) =>
-  domain !== "" && (host === domain || host.endsWith(`.${domain}`));
+//
+// `gumroad.com.` is the same DNS name as `gumroad.com`, but `URL` keeps the root dot in `url.host`
+// and the browser treats it as a separate origin, so both sides are compared with one terminal dot
+// removed. Only one is removed, which is why the empty-domain rejection above still has to stand.
+const withoutRootDot = (value: string) => value.replace(/\.$/u, "");
+
+// Same trailing-dot normalization for the short domain, which is matched exactly (no subdomains).
+const isShortDomain = (host: string) => {
+  const shortDomain = withoutRootDot(process.env.SHORT_DOMAIN);
+  return shortDomain !== "" && withoutRootDot(host) === shortDomain;
+};
+
+const isHostOrSubdomainOf = (host: string, domain: string) => {
+  const normalizedHost = withoutRootDot(host);
+  const normalizedDomain = withoutRootDot(domain);
+  return (
+    normalizedDomain !== "" && (normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`))
+  );
+};
 
 // Whether a URL is one of ours (or the seller's own storefront), used to decide which iframes the
 // widget will talk to and which product URLs it will load.
@@ -53,7 +70,7 @@ const isHostOrSubdomainOf = (host: string, domain: string) =>
 // which is empty for a host-less scheme such as a page saved to `file:`. The helper rejects it.
 export const isValidHost = (url: URL, customDomain?: string) =>
   isHostOrSubdomainOf(url.host, typia.assert<string>(process.env.ROOT_DOMAIN)) ||
-  url.host === process.env.SHORT_DOMAIN ||
+  isShortDomain(url.host) ||
   (customDomain !== undefined && isHostOrSubdomainOf(url.host, customDomain));
 
 export const onLoad = (cb: () => void) => {
