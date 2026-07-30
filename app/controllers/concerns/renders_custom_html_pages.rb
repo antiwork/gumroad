@@ -257,27 +257,23 @@ module RendersCustomHtmlPages
             (style.contentVisibility && style.contentVisibility !== "visible") ||
             (style.containerType && style.containerType !== "normal");
         }
-        function schemeBackplate(style) {
-          if (!style.colorScheme || style.colorScheme === "normal" || !document.body) return null;
-          var probe = document.createElement("span");
-          probe.style.setProperty("all", "initial", "important");
-          probe.style.setProperty("background-color", "Canvas", "important");
-          probe.style.setProperty("color-scheme", style.colorScheme, "important");
-          probe.style.setProperty("transition", "none", "important");
-          probe.style.setProperty("animation", "none", "important");
-          document.body.appendChild(probe);
-          var color = window.getComputedStyle(probe).backgroundColor;
-          probe.parentNode.removeChild(probe);
-          return opaque(color) ? color : null;
+        function paint(color, colorScheme) {
+          return { color: color, colorScheme: colorScheme };
         }
-        function canvasColor() {
+        function schemeBackplate(style) {
+          if (!style.colorScheme || style.colorScheme === "normal") return paint(null, null);
+          // The trusted wrapper resolves Canvas. Probing here would alter the
+          // seller's DOM, including :last-child selectors.
+          return paint(null, style.colorScheme);
+        }
+        function canvasPaint() {
           var rootStyle = window.getComputedStyle(document.documentElement);
-          if (!flatRootPaint(rootStyle)) return null;
+          if (!flatRootPaint(rootStyle)) return paint(null, null);
           var root = rootStyle.backgroundColor;
           var rootAlpha = colorAlpha(root);
-          if (rootStyle.backgroundImage !== "none") return null;
-          if (rootAlpha === 1) return root;
-          if (rootAlpha !== 0 || !document.body) return null;
+          if (rootStyle.backgroundImage !== "none") return paint(null, null);
+          if (rootAlpha === 1) return paint(root, null);
+          if (rootAlpha !== 0 || !document.body) return paint(null, null);
           var bodyStyle = window.getComputedStyle(document.body);
           if (
             bodyStyle.display === "none" ||
@@ -285,31 +281,49 @@ module RendersCustomHtmlPages
             establishesContainment(bodyStyle)
           ) return schemeBackplate(rootStyle);
           var body = bodyStyle.backgroundColor;
-          if (bodyStyle.backgroundImage !== "none") return null;
-          if (opaque(body)) return body;
-          if (colorAlpha(body) !== 0) return null;
+          if (bodyStyle.backgroundImage !== "none") return paint(null, null);
+          if (opaque(body)) return paint(body, null);
+          if (colorAlpha(body) !== 0) return paint(null, null);
           return schemeBackplate(rootStyle);
         }
-        var reported = null;
+        var reportedColor = null;
+        var reportedColorScheme = null;
         var hasReported = false;
         function report(force) {
-          var color = canvasColor();
-          if (!force && hasReported && color === reported) return;
-          reported = color;
+          var current = canvasPaint();
+          if (
+            !force &&
+            hasReported &&
+            current.color === reportedColor &&
+            current.colorScheme === reportedColorScheme
+          ) return;
+          reportedColor = current.color;
+          reportedColorScheme = current.colorScheme;
           hasReported = true;
           // The first null matters after an iframe reload: its wrapper may
           // still hold the previous document's tint.
-          parent.postMessage({ type: "gumroad:background", color: color }, "*");
+          parent.postMessage({
+            type: "gumroad:background",
+            color: current.color,
+            colorScheme: current.colorScheme
+          }, "*");
         }
         window.addEventListener("message", function (e) {
           var d = e.data;
           if (e.source === parent && d && d.type === "gumroad:background:request") report(true);
         });
         var queued = false;
-        function queueReport() {
+        var queuedForce = false;
+        function queueReport(force) {
+          if (force === true) queuedForce = true;
           if (queued) return;
           queued = true;
-          requestAnimationFrame(function () { queued = false; report(); });
+          requestAnimationFrame(function () {
+            var shouldForce = queuedForce;
+            queued = false;
+            queuedForce = false;
+            report(shouldForce);
+          });
         }
         // Ignore ordinary DOM churn; only selectors and stylesheets can move
         // the canvas color.
@@ -333,10 +347,14 @@ module RendersCustomHtmlPages
           for (var i = 0; i < records.length; i++) {
             var record = records[i];
             if (record.type === "attributes") {
-              affects = true;
+              if (
+                record.target === document.documentElement ||
+                record.target === document.body ||
+                stylesheetNode(record.target)
+              ) affects = true;
               // href swapped on a <link> that is already in the document — the
               // new sheet lands late too.
-              watchStylesheetLoad(record.target);
+              if (stylesheetNode(record.target)) watchStylesheetLoad(record.target);
             }
             if (stylesheetNode(record.target)) affects = true;
             if (stylesheetNode(record.target.parentNode)) affects = true;
@@ -367,7 +385,10 @@ module RendersCustomHtmlPages
           });
         } catch (_err) {}
         try {
-          window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", queueReport);
+          window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+            // The declared scheme can stay "dark light" while Canvas changes.
+            queueReport(true);
+          });
         } catch (_err) {}
         // CSSOM writes emit no mutation, so poll a clean style tree as a backstop.
         try {
@@ -664,13 +685,20 @@ module RendersCustomHtmlPages
             var probeAttached = false;
             // A computed color is well under this; the cap just stops a hostile
             // child from making us parse megabyte strings in a loop.
-            var MAX_COLOR_LENGTH = 128;
-            function resolve(value) {
+            var MAX_VALUE_LENGTH = 128;
+            function resolve(value, colorScheme) {
               if (!probeAttached) {
                 document.body.appendChild(probe);
                 probeAttached = true;
               }
+              probe.style.colorScheme = "";
               probe.style.backgroundColor = "";
+              if (colorScheme !== null) {
+                probe.style.colorScheme = colorScheme;
+                var computedScheme = window.getComputedStyle(probe).colorScheme;
+                if (!probe.style.colorScheme || !computedScheme || computedScheme === "normal") return null;
+                value = "Canvas";
+              }
               // Must stay `backgroundColor` — a color property cannot fetch, so
               // `var(--x, url(https://evil.example/pixel))` never dereferences.
               // The `background` shorthand or `backgroundImage` would fire it.
@@ -694,11 +722,22 @@ module RendersCustomHtmlPages
               if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
+              var colorScheme = d.colorScheme == null ? null : d.colorScheme;
               // The page went transparent after having a color: drop the tint
               // rather than leaving the previous theme painted under it.
-              if (d.color === null) return clear();
-              if (typeof d.color !== "string" || d.color.length > MAX_COLOR_LENGTH) return;
-              var color = resolve(d.color);
+              if (d.color === null && colorScheme === null) return clear();
+              var color;
+              if (colorScheme !== null) {
+                if (
+                  d.color !== null ||
+                  typeof colorScheme !== "string" ||
+                  colorScheme.length > MAX_VALUE_LENGTH
+                ) return;
+                color = resolve("", colorScheme);
+              } else {
+                if (typeof d.color !== "string" || d.color.length > MAX_VALUE_LENGTH) return;
+                color = resolve(d.color, null);
+              }
               // An unresolvable value is refused outright — it is not evidence
               // that the page has no background, so whatever is applied stays.
               if (!color) return;

@@ -23,6 +23,20 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     JS
   end
 
+  def wrapper_canvas_for(color_scheme)
+    page.evaluate_script(<<~JS)
+      (function () {
+        var probe = document.createElement("div");
+        probe.style.backgroundColor = "Canvas";
+        probe.style.colorScheme = #{color_scheme.to_json};
+        document.body.appendChild(probe);
+        var color = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return color;
+      })();
+    JS
+  end
+
   # Poll refusal cases long enough for a wrongly accepted report to arrive.
   def expect_wrapper_never_set(window: 3.0)
     deadline = Time.current + window
@@ -227,16 +241,7 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "mirrors the browser's opaque iframe backplate" do
       visit seller.subdomain_with_protocol
-      canvas = within_frame(find("iframe#gumroad-landing-frame")) do
-        page.evaluate_script(<<~JS)
-          (function () {
-            var probe = document.createElement("span");
-            probe.style.backgroundColor = "Canvas";
-            document.body.appendChild(probe);
-            return getComputedStyle(probe).backgroundColor;
-          })();
-        JS
-      end
+      canvas = wrapper_canvas_for("dark")
       expect_wrapper_background(canvas)
       expect(theme_color).to eq(canvas)
     end
@@ -263,25 +268,79 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "mirrors the browser backplate instead of the hostile rule" do
       visit seller.subdomain_with_protocol
-      canvas = within_frame(find("iframe#gumroad-landing-frame")) do
-        page.evaluate_script(<<~JS)
-          (function () {
-            var host = document.createElement("div");
-            var shadow = host.attachShadow({ mode: "open" });
-            var probe = document.createElement("span");
-            probe.style.backgroundColor = "Canvas";
-            probe.style.colorScheme = "dark";
-            shadow.appendChild(probe);
-            document.body.appendChild(host);
-            var color = getComputedStyle(probe).backgroundColor;
-            host.remove();
-            return color;
-          })();
-        JS
-      end
+      canvas = wrapper_canvas_for("dark")
       expect(canvas).not_to eq("rgb(255, 0, 0)")
       expect_wrapper_background(canvas)
       expect(theme_color).to eq(canvas)
+    end
+  end
+
+  context "when a transparent color-scheme page watches its DOM" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html{color-scheme:dark}html,body{margin:0}</style>
+        <main><h1>BG Studio</h1></main>
+        <script>
+          window.__rootChildCount = document.documentElement.children.length;
+          window.__domMutations = 0;
+          new MutationObserver(function (records) {
+            window.__domMutations += records.length;
+          }).observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+        </script>
+      HTML
+    end
+
+    it "leaves the seller's root structure unchanged across reports" do
+      visit seller.subdomain_with_protocol
+      expect(page).to have_css("iframe#gumroad-landing-frame")
+      wait_until_true(sleep_interval: 0.1) { wrapper_background.present? }
+      initial_mutations = within_frame(find("iframe#gumroad-landing-frame")) do
+        expect(page.evaluate_script("document.documentElement.children.length")).to eq(page.evaluate_script("window.__rootChildCount"))
+        expect(page.evaluate_script("document.documentElement.lastElementChild === document.body")).to be(true)
+        page.evaluate_script("window.__domMutations")
+      end
+      sleep(RendersCustomHtmlPages::BACKGROUND_POLL_INTERVAL_MS / 1000.0 * 4)
+      final_mutations = within_frame(find("iframe#gumroad-landing-frame")) do
+        page.evaluate_script("window.__domMutations")
+      end
+      expect(final_mutations).to eq(initial_mutations)
+    end
+  end
+
+  context "when a descendant animates an unrelated attribute" do
+    before do
+      seller.update!(custom_html: <<~HTML)
+        <style>html,body{margin:0}body{background:#EBEBEB}</style>
+        <main id="animator"><h1>BG Studio</h1></main>
+        <script>
+          window.__canvasStyleReads = 0;
+          var nativeGetComputedStyle = window.getComputedStyle;
+          window.getComputedStyle = function (element) {
+            if (element === document.documentElement || element === document.body) {
+              window.__canvasStyleReads++;
+            }
+            return nativeGetComputedStyle.apply(window, arguments);
+          };
+          window.__attributeAnimation = setInterval(function () {
+            var animator = document.getElementById("animator");
+            animator.setAttribute("data-frame", String(Number(animator.getAttribute("data-frame") || 0) + 1));
+          }, 10);
+        </script>
+      HTML
+    end
+
+    it "does not synchronously inspect the canvas on every frame" do
+      visit seller.subdomain_with_protocol
+      expect_wrapper_background("rgb(235, 235, 235)")
+      initial_reads = within_frame(find("iframe#gumroad-landing-frame")) do
+        page.evaluate_script("window.__canvasStyleReads")
+      end
+      sleep 0.5
+      final_reads = within_frame(find("iframe#gumroad-landing-frame")) do
+        page.execute_script("clearInterval(window.__attributeAnimation)")
+        page.evaluate_script("window.__canvasStyleReads")
+      end
+      expect(final_reads - initial_reads).to be <= 6
     end
   end
 
@@ -489,6 +548,9 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
           document.getElementById("attack").addEventListener("click", function () {
             parent.postMessage({ type: "gumroad:background", color: "var(--nope)" }, "*");
             parent.postMessage({ type: "gumroad:background", color: 12345 }, "*");
+            parent.postMessage({ type: "gumroad:background", color: null, colorScheme: "var(--nope)" }, "*");
+            parent.postMessage({ type: "gumroad:background", color: null, colorScheme: 12345 }, "*");
+            parent.postMessage({ type: "gumroad:background", color: "#000", colorScheme: "dark" }, "*");
           });
         </script>
       HTML
