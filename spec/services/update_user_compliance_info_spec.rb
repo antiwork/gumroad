@@ -805,6 +805,21 @@ describe UpdateUserComplianceInfo do
         expect(result[:success]).to be true
         expect(user.reload.alive_user_compliance_info.city).to eq("Bogotá")
       end
+
+      it "keeps the browser's bounds and message identical to this guard's" do
+        # The same rule is enforced in the browser so the seller gets the error before a round
+        # trip. Two copies can drift silently, and the drift is invisible: the form would accept a
+        # value this service then refuses, or refuse one it would accept.
+        helper = Rails.root.join("app/javascript/utils/colombiaIdNumbers.ts").read
+
+        expect(helper).to include("COLOMBIA_ID_MIN_DIGITS = #{described_class::COLOMBIA_ID_DIGIT_RANGE.first}")
+        expect(helper).to include("COLOMBIA_ID_MAX_DIGITS = #{described_class::COLOMBIA_ID_DIGIT_RANGE.last}")
+
+        # The browser builds its copy by interpolating those two constants, so comparing the
+        # invariant part of the sentence is what catches a reworded message on one side only.
+        expect(helper).to include("digits. Enter it exactly as it appears on your document")
+        expect(helper).to include("do not add leading zeros")
+      end
     end
 
     context "with a non-US business" do
