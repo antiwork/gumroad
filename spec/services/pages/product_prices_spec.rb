@@ -172,6 +172,20 @@ describe Pages::ProductPrices do
                           original_price: "$14", original_price_cents: 1400)
     end
 
+    # Checkout rejects a code whose use cap is spent, so subtracting it here would advertise a
+    # sale price and strikethrough the buyer is never charged.
+    it "leaves an exhausted default offer code on the shelf" do
+      offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product],
+                                              max_purchase_count: 2)
+      product.update!(default_offer_code: offer_code)
+      allow_any_instance_of(OfferCode).to receive(:times_used).and_return(2)
+
+      entry = described_class.build(seller, ip: nil)[product.general_permalink]
+
+      expect(entry[:price_cents]).to eq(1400)
+      expect(entry).not_to have_key(:original_price)
+    end
+
     it "leaves an existing-customers-only code on, since a first-time visitor does not get it" do
       owned = create(:product, user: seller)
       offer_code = seller.offer_codes.create!(code: "loyal", amount_percentage: 50, products: [product],
@@ -212,6 +226,27 @@ describe Pages::ProductPrices do
       create_list(:product, 2, user: seller)
 
       expect(described_class.build(seller, ip: nil).size).to eq(2)
+    end
+
+    # Formatting a tiered membership reads default_tier, a separate has-one-through that the
+    # tiers preload does not populate. Pinning total queries as constant across catalogue sizes
+    # catches that N+1 and any future per-product read this uncached public path grows.
+    it "issues the same number of queries however many tiered memberships the catalogue holds" do
+      count_queries = lambda do
+        queries = 0
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          queries += 1 unless payload[:name] == "SCHEMA"
+        end
+        described_class.build(seller, ip: nil)
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+        queries
+      end
+
+      create(:membership_product, user: seller)
+      baseline = count_queries.call
+      create_list(:membership_product, 3, user: seller)
+
+      expect(count_queries.call).to eq(baseline)
     end
 
     it "geolocates the visitor once regardless of catalogue size" do

@@ -51,9 +51,12 @@ class Pages::ProductPrices
     # to two queries per product), plus what the buyer-currency gate and formatting read. This
     # runs uncached on a public page for up to MAX_ITEMS products, so the preload is load-bearing.
     def products
+      # default_tier is its own has-one-through — `tiers:` does not populate it, and
+      # show_customizable_price_indicator? reads it per tiered membership.
       seller.products.alive.not_archived.not_draft
             .includes(:alive_prices, :installment_plan, :user, :skus, :default_offer_code,
-                      tiers: :alive_prices, variant_categories_alive: :alive_variants)
+                      tiers: :alive_prices, default_tier: :alive_prices,
+                      variant_categories_alive: :alive_variants)
             .order(created_at: :desc).limit(Pages::ProfileData::MAX_ITEMS)
     end
 

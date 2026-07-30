@@ -203,15 +203,17 @@ module Product::Prices
   # The default offer code taken off a base price, which is what a buyer is actually charged.
   # A surface showing the undiscounted number quotes a price checkout will not honour, so every
   # buyer-facing price goes through here. Existing-customers-only codes are left on because a
-  # first-time visitor does not get them.
+  # first-time visitor does not get them, and an exhausted use cap is skipped because checkout
+  # rejects the code once it's used up — the exhaustion read costs a purchases aggregate, so it
+  # runs only for capped codes (is_valid_for_purchase? short-circuits on a nil cap).
   #
-  # Deliberately the same light validity check card surfaces have always used (time bounds
-  # only): the full checkout evaluation (max uses, quantity minimums, PPP) needs per-cart
-  # context and per-product queries no card grid can afford, and the binding amount is minted
-  # at checkout either way.
+  # Deliberately short of the full checkout evaluation beyond that: quantity minimums stay on
+  # (the native page quotes those discounts too, at the code's minimum quantity) and PPP needs
+  # per-cart context — the binding amount is minted at checkout either way.
   def discounted_price_cents(base_price_cents)
     offer_code = default_offer_code
     return base_price_cents if offer_code.blank? || offer_code.inactive? || offer_code.existing_customers_only?
+    return base_price_cents unless offer_code.is_valid_for_purchase?
 
     [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
   end
