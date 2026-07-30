@@ -287,4 +287,43 @@ describe LaterChargePresentment do
       expect(described_class.canonical_price_cents_for(purchase)).to eq(1_000)
     end
   end
+
+  # The known gap on gumroad-private#1322, pinned so it is a decision rather than a surprise:
+  # nothing re-fixes the buyer-currency amount when a plan changes. The writer is the load-bearing
+  # half — it declines any owner that already has a fixing, so it can only ever write the first
+  # one, and no plan-change path calls it anyway. Adding a re-fixing writer reddens this and forces
+  # the class comment documenting the canonical-dollar fallback to be updated with it.
+  describe "re-fixing after a plan change" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:membership_product, user: seller, price_cents: 1_000) }
+    let(:subscription) { create(:subscription, link: product, user: create(:user)) }
+    let(:original) do
+      purchase = build(:membership_purchase, link: product, seller:, subscription:,
+                                             is_original_subscription_purchase: true,
+                                             price_cents: 1_500, total_transaction_cents: 1_500)
+      purchase.save!(validate: false)
+      purchase
+    end
+    let!(:fixing) do
+      create(:later_charge_presentment, owner: subscription, presentment_currency: "eur",
+                                        presentment_price_cents: 899, canonical_price_cents: 1_000,
+                                        effective_from: 30.days.ago)
+    end
+
+    it "is not written by the signup writer, which only ever writes an owner's first fixing" do
+      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      create(:purchase_presentment, purchase: original, charge_presentment:,
+                                    presentment_currency: "eur", presentment_price_cents: 1_349,
+                                    presentment_gumroad_tax_cents: 0, presentment_total_cents: 1_349)
+
+      expect { Purchase::FixLaterChargePresentmentService.new(purchase: original).perform }
+        .not_to change { subscription.later_charge_presentments.count }
+
+      # The pre-change fixing is still what a charge reads, and it is now stale against the plan,
+      # which is what makes the charge path fall back to canonical dollars rather than bill it.
+      expect(subscription.reload.current_later_charge_presentment).to eq(fixing)
+      expect(described_class.canonical_price_cents_for(original))
+        .not_to eq(fixing.canonical_price_cents)
+    end
+  end
 end

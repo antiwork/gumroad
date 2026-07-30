@@ -50,6 +50,11 @@ class Purchase::FixLaterChargePresentmentService
 
   def perform
     owner = later_charge_owner
+    # Writes the FIRST fixing only. A re-fixing after a plan change is deliberately not this
+    # service's job — it reads its terms off the checkout quote/presentment, which no longer exists
+    # by then — so bailing here keeps it from clobbering an existing fixing with signup-time terms.
+    # The consequence is documented on LaterChargePresentment: until a re-fixing writer exists, a
+    # changed plan falls back to canonical dollars via the staleness gate.
     return if owner.blank? || owner.later_charge_presentments.exists?
     return if purchase.is_gift_sender_purchase?
 

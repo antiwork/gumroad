@@ -25,12 +25,22 @@
 # mandate setup, so a floating amount cannot be represented on that rail at all.
 #
 # Rows are IMMUTABLE and effective-dated — one per fixing, not one per owner. An amount
-# legitimately changes mid-life: Subscription#update_current_plan! handles upgrades, downgrades
+# legitimately changes mid-life: Subscription#update_current_plan! applies upgrades, downgrades
 # and quantity changes, and #current_subscription_price_cents moves when a fixed-duration
-# discount expires. Each of those re-fixes the buyer-currency amount at that day's rate.
+# discount expires. Each of those needs the buyer-currency amount re-fixed at that day's rate.
 # Updating a single row in place would overwrite the rate the PREVIOUS amount was fixed at,
-# which is the baseline the seller-side drift is measured against, so a new row is written instead
-# and the newest effective one is what a charge reads.
+# which is the baseline the seller-side drift is measured against, so the shape is a new row and
+# the newest effective one is what a charge reads.
+#
+# ⚠️ Nothing writes that successor row yet. The plan-change paths above do not call
+# Purchase::FixLaterChargePresentmentService, and it would decline them anyway — it returns early
+# once an owner has any fixing at all, so it can only ever write the FIRST one. Until a re-fixing
+# writer exists, a plan change leaves the old fixing in place and
+# Purchase::LaterChargePresentmentService's staleness gate detects the canonical mismatch and bills
+# canonical dollars instead (:stale_fixing). That is correct-but-degraded, not silently wrong: the
+# member is billed exactly what their current plan says, which is what they were billed before
+# this feature existed. What they lose is fixed buyer-currency billing after the change. Tracked
+# on gumroad-private#1322; the writer is a plan-change-path change, not a storage change.
 class LaterChargePresentment < ApplicationRecord
   include CurrencyHelper
 
