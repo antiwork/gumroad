@@ -140,6 +140,22 @@ describe CreateMissingDisputeEvidenceJob do
         end
       end
 
+      it "does not mistake another path's stamp from the same second for its own" do
+        # The rescue's compare-and-clear matches on the timestamp, so it must distinguish two
+        # stamps written inside one wall-clock second. seller_contacted_at is datetime(6) and both
+        # writers stamp with sub-second precision; storing whole seconds instead would alias the
+        # two values and let a failed enqueue clear a window belonging to formalization.
+        described_class.new.perform
+        ours = dispute.reload.dispute_evidence.seller_contacted_at
+        expect(ours.usec).not_to eq(0)
+
+        theirs = ours.change(usec: 0)
+        expect(theirs.to_i).to eq(ours.to_i)
+        expect(
+          DisputeEvidence.where(id: dispute.dispute_evidence.id, seller_contacted_at: theirs).count
+        ).to eq(0)
+      end
+
       it "is idempotent — a second run does not create a second record, re-open the window, or re-email" do
         described_class.new.perform
         dispute_evidence = dispute.reload.dispute_evidence

@@ -168,11 +168,16 @@ class CreateMissingDisputeEvidenceJob
         # the deadline, without a seller statement. Formalization's own notice has the same
         # exposure and no rollback at all; closing it means changing where mailers swallow 5xx.
         #
-        # Only clear the window this run opened, and decide that in the write itself. Formalization
-        # stamps the same row and sends its own notice, and its check-then-stamp is not atomic
-        # against this one, so it can land between our commit and this rescue — including between
-        # a read here and a write after it. Clearing another path's stamp would erase a window the
-        # seller has already been told about, and the next sweep would re-notify and restart it.
+        # Only clear the window this run opened, and decide that in the write itself: carrying the
+        # value we wrote into the WHERE means a stamp belonging to anyone else matches no row.
+        # Clearing another path's stamp would erase a window the seller has already been told
+        # about, and the next sweep would re-notify and restart it.
+        #
+        # Nothing can currently own that stamp but us, since both writers go through
+        # claim_seller_contacted_window! and its NULL condition makes the loser write nothing — a
+        # formalization landing first fails our claim above and we never reach here. The guard
+        # stays because it is the cheap half of the invariant, and it does not rest on timestamps
+        # being distinct: the column is datetime(6), so two stamps in one second differ anyway.
         left_alone = DisputeEvidence.where(id: dispute_evidence.id, seller_contacted_at: stamped_at)
                                     .update_all(seller_contacted_at: nil, updated_at: Time.current)
                                     .zero?
