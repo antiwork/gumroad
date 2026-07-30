@@ -266,7 +266,9 @@ describe("PaymentElementInput", () => {
       colorDanger: "rgb(220,52,30)",
       colorPrimary: "rgb(0,0,0)",
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      focusOutline: "2px solid rgb(255,144,232)",
+      // Not the raw stock pink: the neutral palette now floors its indicator to 3:1 on white
+      // (#ff90e8 -> #d075bd), and the focus outline is drawn from the indicator.
+      focusOutline: "2px solid rgb(208,117,189)",
     });
   });
 
