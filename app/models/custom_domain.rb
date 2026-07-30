@@ -5,6 +5,7 @@ require "ipaddr"
 class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
+  ROUTABILITY_REFRESH_INTERVAL = 6.hours
 
   include Deletable
 
@@ -68,16 +69,53 @@ class CustomDomain < ApplicationRecord
     end
   end
 
-  def verify(allow_incrementing_failed_verification_attempts_count: true)
+  def verify(allow_incrementing_failed_verification_attempts_count: true, verification_service: CustomDomainVerificationService.new(domain:))
     self.allow_incrementing_failed_verification_attempts_count = allow_incrementing_failed_verification_attempts_count
 
-    has_valid_configuration = CustomDomainVerificationService.new(domain:).process
+    has_valid_configuration = verification_service.process
 
     if has_valid_configuration
       mark_verified if unverified?
     else
       verified? ? mark_unverified : increment_failed_verification_attempts_count_and_notify_creator
     end
+  end
+
+  def strictly_routable?
+    return false unless active?
+
+    RefreshCustomDomainRoutabilityWorker.perform_async(id) if routability_refresh_due?
+    routable?
+  end
+
+  def set_routability!(routable, checked_domain: domain, observed_at: Time.current)
+    persist_routability!(routable:, checked_domain:, observed_at:, clear_certificate: false)
+  end
+
+  def activate_with_routability!(routable, checked_domain: domain, observed_at: Time.current)
+    activated = self.class.transaction do
+      locked_domain = self.class.alive.lock.find_by(id:, domain: checked_domain)
+      next false unless locked_domain
+
+      locked_domain.ssl_certificate_issued_at = Time.current
+      if locked_domain.routability_checked_at.nil? || locked_domain.routability_checked_at < observed_at
+        locked_domain.routable = routable
+        locked_domain.routability_checked_at = observed_at
+      end
+      locked_domain.save!
+      true
+    end
+
+    reload if activated
+    activated
+  end
+
+  def require_certificate_for_routability!(checked_domain: domain, observed_at: Time.current)
+    persist_routability!(routable: false, checked_domain:, observed_at:, clear_certificate: true)
+  end
+
+  def routability_refresh_due?
+    routability_checked_at.nil? || routability_checked_at < ROUTABILITY_REFRESH_INTERVAL.ago
   end
 
   def self.find_by_host(host)
@@ -122,6 +160,26 @@ class CustomDomain < ApplicationRecord
 
     def reset_ssl_certificate_issued_at
       self.ssl_certificate_issued_at = nil
+      self.routable = nil
+      self.routability_checked_at = nil
+    end
+
+    def persist_routability!(routable:, checked_domain:, observed_at:, clear_certificate:)
+      attributes = {
+        routable:,
+        routability_checked_at: observed_at,
+        updated_at: Time.current,
+      }
+      attributes[:ssl_certificate_issued_at] = nil if clear_certificate
+
+      matching_row = self.class.alive
+        .where(id:, domain: checked_domain)
+        .where("routability_checked_at IS NULL OR routability_checked_at < ?", observed_at)
+      updated = matching_row.update_all(attributes)
+      return false unless updated == 1
+
+      reload
+      true
     end
 
     def increment_failed_verification_attempts_count_and_notify_creator
