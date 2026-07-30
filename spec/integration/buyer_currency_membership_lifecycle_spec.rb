@@ -119,7 +119,11 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
     it "falls back to canonical dollars when the plan moved since the fixing" do
       # A limited-duration discount expiring, an upgrade, a quantity change: the canonical price
       # no longer matches what the fixing was agreed against, so the stored amount is stale.
-      renewal.update!(price_cents: 1500)
+      #
+      # total_transaction_cents has to move with price_cents: the anchor reads it (through
+      # LaterChargePresentment.canonical_price_cents_for) and nothing recomputes it on update!,
+      # so setting price_cents alone leaves the anchor matching and the gate never trips.
+      renewal.update!(price_cents: 1500, total_transaction_cents: 1500)
 
       expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
         expect(kwargs).not_to include(:processor_currency)
@@ -128,6 +132,21 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       end
 
       renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+    end
+
+    it "falls back to canonical dollars when the buyer is present at the charge" do
+      # An upgrade or a restart at checkout charges on-session through
+      # Subscription::UpdaterService, with a non-original purchase and a fixing in place. The
+      # buyer is looking at a total on their screen, so the amount fixed months ago must not be
+      # billed instead. A restart at the unchanged plan price is the case the staleness anchor
+      # cannot catch, since the anchor still matches.
+      expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+        expect(kwargs).not_to include(:processor_currency)
+        expect(kwargs).not_to include(:processor_amount_cents)
+        double(id: "pi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+      end
+
+      renewal.send(:create_charge_intent, double(get_chargeable_for: double), off_session: false)
     end
 
     it "falls back to canonical dollars for a subscription with no fixing" do

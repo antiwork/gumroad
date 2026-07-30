@@ -4239,7 +4239,17 @@ class Purchase < ApplicationRecord
     # alternative is silently switching their currency mid-subscription. The parent lane gates
     # (seller_enabled?) still apply — a seller who turns buyer-local currency off entirely is
     # asking for dollars.
-    def later_charge_presentment_processor_args
+    #
+    # `off_session` is what makes "genuine renewal" true rather than aspirational. A buyer-present
+    # charge on a subscription — Subscription::UpdaterService#charge_user! for an upgrade, a
+    # restart at checkout — reaches this same method with a non-original purchase and a stored
+    # fixing, and it is looking at a total the buyer can see. Billing the amount fixed months ago
+    # would charge something other than what is on their screen. A restart at the unchanged plan
+    # price is the case that bites: the staleness anchor matches, so nothing else here would stop
+    # it. Mirrors Charge::CreateService#subscription_renewal_presentment_processor_args, which
+    # gates on off_session for the same reason.
+    def later_charge_presentment_processor_args(off_session:)
+      return {} unless off_session
       return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
       return {} unless merchant_account&.stripe_charge_processor?
       return {} if subscription.blank?
@@ -4301,15 +4311,16 @@ class Purchase < ApplicationRecord
         mandate_expected = is_a_saved_card_rebill?
 
         # A membership renewal bills the buyer-currency amount fixed at signup rather than
-        # canonical dollars (gumroad-private#1322). This is the renewal charge site — renewals
-        # reach here via RecurringChargeWorker -> Subscription#charge! -> #process! and never
-        # pass through Charge::CreateService, which only serves checkout.
+        # canonical dollars (gumroad-private#1322). This is the renewal charge site: renewals
+        # reach here via RecurringChargeWorker -> Subscription#charge! -> #process!. The twin in
+        # Charge::CreateService serves checkout, where a purchase is always the original
+        # subscription purchase, so its renewal branch runs but can never produce a fixing.
         #
         # Empty hash means "no fixing applies": the subscription predates the ramp, its plan
         # moved since the fixing, the currency is no longer chargeable, or the quote could not be
         # minted. In every one of those cases this charge proceeds in canonical US dollars, which
         # is exactly what it billed before this feature existed.
-        presentment_args = later_charge_presentment_processor_args
+        presentment_args = later_charge_presentment_processor_args(off_session:)
         # The RBI e-mandate cap is registered in US dollars, but Stripe reads mandate_options
         # amounts in the mandate's own currency and the mandate inherits the intent's currency.
         # An unconverted cap on a presentment charge registers as (say) ₹10.00 instead of $10.00
