@@ -13,8 +13,9 @@ class CustomDomainVerificationWorker
     verification_service = CustomDomainVerificationService.new(domain: custom_domain.domain)
     custom_domain.verify(verification_service:)
     custom_domain.save!
-    custom_domain.cache_routability!(
-      verification_service.domains_resolving_to_gumroad.include?(custom_domain.domain)
+    custom_domain.set_routability!(
+      verification_service.domains_resolving_to_gumroad.include?(custom_domain.domain),
+      checked_domain: custom_domain.domain
     )
   end
 end

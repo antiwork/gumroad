@@ -42,7 +42,10 @@ module SslCertificates
 
         if all_certificates_generated
           custom_domain.set_ssl_certificate_issued_at!
-          custom_domain.cache_routability!(resolving_domains.include?(custom_domain.domain))
+          custom_domain.set_routability!(
+            resolving_domains.include?(custom_domain.domain),
+            checked_domain: custom_domain.domain
+          )
           resolving_domains.each { |domain| log_message(domain, "Issued SSL certificate.") }
         else
           # Reset ssl_certificate_issued_at

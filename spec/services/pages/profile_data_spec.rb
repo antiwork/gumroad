@@ -162,7 +162,7 @@ describe Pages::ProfileData do
 
       it "builds product and post URLs on the custom domain, not the subdomain" do
         custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
-        custom_domain.cache_routability!(true)
+        custom_domain.set_routability!(true)
 
         payload = Pages::ProfileData.build(seller.reload)
 
@@ -173,7 +173,7 @@ describe Pages::ProfileData do
 
       it "stays on the subdomain when only the configured domain's apex points to Gumroad" do
         custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "www.example.com")
-        custom_domain.cache_routability!(false)
+        custom_domain.set_routability!(false)
 
         payload = Pages::ProfileData.build(seller.reload)
 
@@ -195,14 +195,14 @@ describe Pages::ProfileData do
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
 
         custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
-        custom_domain.cache_routability!(true)
+        custom_domain.set_routability!(true)
 
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
       end
 
       it "moves the URLs back to the subdomain when the domain is removed" do
         custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
-        custom_domain.cache_routability!(true)
+        custom_domain.set_routability!(true)
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
 
         custom_domain.mark_deleted!
@@ -212,7 +212,7 @@ describe Pages::ProfileData do
 
       it "keeps the emitted host inside the navigation bridge's allowlist" do
         custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
-        custom_domain.cache_routability!(true)
+        custom_domain.set_routability!(true)
         seller.reload
 
         payload = Pages::ProfileData.build(seller)
@@ -232,7 +232,7 @@ describe Pages::ProfileData do
 
       it "leaves the custom-domain host behind when the certificate ages out with no DB write" do
         domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
-        domain.cache_routability!(true)
+        domain.set_routability!(true)
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
 
         # active? goes false purely by the clock, so the domain row's updated_at never moves.

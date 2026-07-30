@@ -5,7 +5,7 @@ require "ipaddr"
 class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
-  ROUTABILITY_CACHE_TTL = 2.hours
+  ROUTABILITY_REFRESH_INTERVAL = 6.hours
   ROUTABILITY_REFRESH_LOCK_TTL = 5.minutes
 
   include Deletable
@@ -85,19 +85,24 @@ class CustomDomain < ApplicationRecord
   def strictly_routable?
     return false unless active?
 
-    cached_result = Rails.cache.read(routability_cache_key)
-    return cached_result unless cached_result.nil?
-
-    if Rails.cache.write(routability_refresh_lock_key, true, expires_in: ROUTABILITY_REFRESH_LOCK_TTL, unless_exist: true)
-      CustomDomainVerificationWorker.perform_async(id)
-    end
-
-    false
+    refresh_routability_later if routability_checked_at.nil? || routability_checked_at < ROUTABILITY_REFRESH_INTERVAL.ago
+    routable?
   end
 
-  def cache_routability!(routable)
-    Rails.cache.write(routability_cache_key, routable, expires_in: ROUTABILITY_CACHE_TTL)
-    Rails.cache.delete(routability_refresh_lock_key)
+  def set_routability!(routable, checked_domain: domain)
+    checked_at = Time.current
+    updated = self.class.alive.where(id:, domain: checked_domain).update_all(
+      routable:,
+      routability_checked_at: checked_at,
+      updated_at: checked_at
+    )
+    return false unless updated == 1
+
+    self.routable = routable
+    self.routability_checked_at = checked_at
+    self.updated_at = checked_at
+    Rails.cache.delete(routability_refresh_lock_key(checked_domain))
+    true
   end
 
   def self.find_by_host(host)
@@ -144,12 +149,19 @@ class CustomDomain < ApplicationRecord
       self.ssl_certificate_issued_at = nil
     end
 
-    def routability_cache_key
-      "custom_domain_routability/#{id}/#{domain}"
+    def refresh_routability_later
+      return unless Rails.cache.write(
+        routability_refresh_lock_key(domain),
+        true,
+        expires_in: ROUTABILITY_REFRESH_LOCK_TTL,
+        unless_exist: true
+      )
+
+      RefreshCustomDomainRoutabilityWorker.perform_async(id)
     end
 
-    def routability_refresh_lock_key
-      "#{routability_cache_key}/refreshing"
+    def routability_refresh_lock_key(checked_domain)
+      "custom_domain_routability_refresh/#{id}/#{checked_domain}"
     end
 
     def increment_failed_verification_attempts_count_and_notify_creator

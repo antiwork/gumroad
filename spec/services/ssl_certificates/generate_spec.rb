@@ -165,7 +165,8 @@ describe SslCertificates::Generate do
         end
 
         expect(@custom_domain.reload.ssl_certificate_issued_at.to_i).to eq time.to_i
-        expect(Rails.cache.read(@custom_domain.send(:routability_cache_key))).to be(true)
+        expect(@custom_domain).to be_routable
+        expect(@custom_domain.routability_checked_at).to be_present
       end
     end
 
@@ -181,7 +182,8 @@ describe SslCertificates::Generate do
       it "caches the configured hostname as unroutable" do
         @obj.process
 
-        expect(Rails.cache.read(@custom_domain.send(:routability_cache_key))).to be(false)
+        expect(@custom_domain.reload).not_to be_routable
+        expect(@custom_domain.routability_checked_at).to be_present
       end
     end
 

@@ -263,32 +263,49 @@ describe CustomDomain do
   describe "#strictly_routable?" do
     let(:custom_domain) { create(:custom_domain, :verified_with_certificate) }
 
-    it "returns a cached positive result without scheduling DNS verification" do
-      custom_domain.cache_routability!(true)
+    it "returns a current positive result without scheduling DNS verification" do
+      custom_domain.set_routability!(true)
 
       expect(custom_domain.strictly_routable?).to be(true)
-      expect(CustomDomainVerificationWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
     end
 
-    it "returns a cached negative result without scheduling DNS verification" do
-      custom_domain.cache_routability!(false)
+    it "returns a current negative result without scheduling DNS verification" do
+      custom_domain.set_routability!(false)
 
       expect(custom_domain.strictly_routable?).to be(false)
-      expect(CustomDomainVerificationWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
     end
 
-    it "falls back and schedules one refresh when the result is not cached" do
+    it "falls back and schedules one refresh when the result is unknown" do
       2.times { expect(custom_domain.strictly_routable?).to be(false) }
 
-      expect(CustomDomainVerificationWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+      expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
     end
 
-    it "does not use a cached positive result after the certificate expires" do
-      custom_domain.cache_routability!(true)
+    it "serves a stale positive result while scheduling one refresh" do
+      custom_domain.set_routability!(true)
+      custom_domain.update_column(:routability_checked_at, 7.hours.ago)
+
+      2.times { expect(custom_domain.strictly_routable?).to be(true) }
+
+      expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+    end
+
+    it "does not use a positive result after the certificate expires" do
+      custom_domain.set_routability!(true)
       custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
 
       expect(custom_domain.strictly_routable?).to be(false)
-      expect(CustomDomainVerificationWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+
+    it "does not apply a DNS result after the domain changes" do
+      checked_domain = custom_domain.domain
+      custom_domain.update!(domain: "new.example.com")
+
+      expect(custom_domain.set_routability!(true, checked_domain:)).to be(false)
+      expect(custom_domain.reload.routability_checked_at).to be_nil
     end
   end
 

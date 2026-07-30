@@ -38,7 +38,8 @@ describe CustomDomainVerificationWorker do
   it "caches whether the configured hostname strictly resolves to Gumroad" do
     described_class.new.perform(valid_custom_domain.id)
 
-    expect(Rails.cache.read(valid_custom_domain.send(:routability_cache_key))).to be(true)
+    expect(valid_custom_domain.reload).to be_routable
+    expect(valid_custom_domain.routability_checked_at).to be_present
   end
 
   it "caches false when only the configured hostname's counterpart resolves to Gumroad" do
@@ -48,7 +49,8 @@ describe CustomDomainVerificationWorker do
 
     described_class.new.perform(valid_custom_domain.id)
 
-    expect(Rails.cache.read(valid_custom_domain.send(:routability_cache_key))).to be(false)
+    expect(valid_custom_domain.reload).not_to be_routable
+    expect(valid_custom_domain.routability_checked_at).to be_present
   end
 
   it "ignores verification of a deleted custom domain" do
