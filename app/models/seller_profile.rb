@@ -21,7 +21,7 @@ class SellerProfile < ApplicationRecord
   validate :validate_json_data, if: -> { self[:json_data].present? }
 
   before_validation :normalize_colors
-  after_save :clear_custom_style_cache, if: -> { %w[highlight_color background_color font].any? { |prop| send(:"saved_change_to_#{prop}?") } }
+  after_commit :clear_custom_style_cache, if: -> { %w[highlight_color background_color font].any? { |prop| send(:"saved_change_to_#{prop}?") } }
 
   after_initialize do
     self.font ||= "ABC Favorit"

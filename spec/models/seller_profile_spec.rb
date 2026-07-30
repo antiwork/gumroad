@@ -36,6 +36,17 @@ describe SellerProfile do
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(true)
     end
 
+    it "keeps cached CSS until the theme update commits" do
+      subject.custom_styles
+
+      subject.transaction do
+        subject.update!(highlight_color: "#ff90e8")
+        expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(true)
+      end
+
+      expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
+    end
+
     it "picks the accent text colour by contrast, not by HSL lightness" do
       # A bright green accent reads as "dark" to HSL lightness (54.9%, just under the old 55%
       # cutoff) and used to get white text at 1.37:1. Black is 15.36:1 against it.
