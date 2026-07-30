@@ -9333,8 +9333,10 @@ describe StripeMerchantAccountManager, :vcr do
 
         expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
           expect(attributes).not_to have_key(:tos_acceptance)
-          # Unconditional: an entity hash that disappeared entirely would otherwise skip the
-          # address assertion and let a broken exclusion pass.
+          # Asserted positively as well as negatively: dropping the whole entity hash would
+          # discard email and phone, which is the regression a bare "no address" check misses.
+          expect(attributes[:individual]).to be_present
+          expect(attributes[:individual]).to include(:email)
           expect(attributes.fetch(:individual, {})).not_to have_key(:address)
           expect(attributes.fetch(:company, {})).not_to have_key(:address)
           expect(attributes[:business_profile]).to be_present
@@ -9375,6 +9377,20 @@ describe StripeMerchantAccountManager, :vcr do
         allow(Stripe::Account).to receive(:update).and_raise(phone)
 
         expect { subject.update_account(user, passphrase: "1234") }.to raise_error(phone)
+      end
+
+      # The rescue retries from what was SENT, not the original diff. Keying it off the diff would
+      # put the held-back address back on the wire, guaranteeing a second rejection.
+      it "never restores the held-back fields on the agreement retry" do
+        rejection = Stripe::InvalidRequestError.new("Some wording", "tos_acceptance[service_agreement]")
+        allow(Stripe::Account).to receive(:update).and_raise(rejection)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(rejection)
+
+        expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+          expect(attributes).not_to have_key(:tos_acceptance)
+          expect(attributes.fetch(:individual, {})).not_to have_key(:address)
+        end
       end
 
       # The guard has to be load-bearing: when the countries agree there is nothing structural to

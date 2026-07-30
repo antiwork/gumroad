@@ -388,14 +388,16 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
-    update_account_attributes(user, stripe_account, diff_attributes, notify:)
+    sent_attributes = update_account_attributes(user, stripe_account, diff_attributes, notify:)
 
     person_address_submitted = false
     if user_compliance_info.is_business?
       person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, unclaimed_percent_ownership:)
     end
 
-    if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
+    # Judged on what actually went to Stripe: when the address was held back it was never
+    # re-validated, so clearing a postal-code note here would report a fix that never happened.
+    if person_address_submitted || address_submitted?(sent_attributes, entity_key)
       clear_stale_postal_code_failure_notes(user)
     end
   rescue Stripe::InvalidRequestError => e
@@ -426,22 +428,26 @@ module StripeMerchantAccountManager
   # not established as structural is a real problem and must not be swallowed.
   private_class_method
   def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true)
+    account_country = stripe_account_country(stripe_account)
     attributes = diff_attributes
-    if account_country_conflicts_with_legal_entity?(user, stripe_account)
+    if account_country_conflicts_with_legal_entity?(user, account_country)
       attributes = without_account_country_validated_fields(diff_attributes)
       if attributes != diff_attributes
         record_service_agreement_failure_note(user, nil) if notify
         Rails.logger.warn "Holding back country-validated fields for user #{user&.id}: Stripe account country " \
-                          "#{stripe_account.country.inspect} disagrees with the legal-entity country"
+                          "#{account_country.inspect} disagrees with the legal-entity country"
       end
-      return if attributes.values.all?(&:blank?)
+      return attributes if attributes.values.all?(&:blank?)
     end
 
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
+    attributes
   rescue Stripe::InvalidRequestError => e
-    raise unless service_agreement_unsupported_error?(e) && diff_attributes.key?(:tos_acceptance)
+    # Keyed off what was actually sent, not the original diff: retrying from `diff_attributes` here
+    # would restore the fields the branch above deliberately held back.
+    raise unless service_agreement_unsupported_error?(e) && attributes.key?(:tos_acceptance)
 
-    remaining_attributes = diff_attributes.except(:tos_acceptance)
+    remaining_attributes = attributes.except(:tos_acceptance)
     # The agreement id is the marker saying "this ToS acceptance is on file at Stripe". Stripe
     # rejected the acceptance, so moving it would claim an agreement that does not exist —
     # measured: the retry otherwise lands `tos_agreement_id` on an account whose tos_acceptance
@@ -457,9 +463,15 @@ module StripeMerchantAccountManager
     Rails.logger.warn "Stripe rejected the derived service agreement for user #{user&.id}: #{e.message}"
     # Only the agreement was on the wire, so there is nothing left to push — but the rejection
     # is recorded now, which is the part that was missing.
-    return if remaining_attributes.values.all?(&:blank?)
+    return remaining_attributes if remaining_attributes.values.all?(&:blank?)
 
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(remaining_attributes))
+    remaining_attributes
+  end
+
+  private_class_method
+  def self.stripe_account_country(stripe_account)
+    stripe_account.respond_to?(:country) ? stripe_account.country : stripe_account["country"]
   end
 
   private_class_method
@@ -478,8 +490,7 @@ module StripeMerchantAccountManager
   # we build them from. The account's country is authoritative and immutable after creation, so
   # this cannot be reconciled from our side.
   private_class_method
-  def self.account_country_conflicts_with_legal_entity?(user, stripe_account)
-    account_country = stripe_account.respond_to?(:country) ? stripe_account.country : stripe_account["country"]
+  def self.account_country_conflicts_with_legal_entity?(user, account_country)
     return false if account_country.blank?
 
     legal_entity_country = user&.alive_user_compliance_info&.legal_entity_country_code
