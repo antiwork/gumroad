@@ -40,14 +40,20 @@ module Onetime
                           .where(ActiveStorage::Blob.arel_table[:content_type].matches("video%"))
       scope = scope.where("asset_previews.id <= ?", end_id) if end_id
 
-      scope.includes(file_attachment: { blob: { preview_image_attachment: :blob } })
-           .in_batches(of: batch_size) do |batch|
+      # in_batches on a relation that both joins and includes the same
+      # association eager-loads the whole batch just to pluck its ids, then the
+      # yielded relation loads it again. Batch over ids only and do the
+      # eager-load inside the block, so each batch is read once.
+      scope.in_batches(of: batch_size) do |batch|
         # Generation is a download plus an ffmpeg run per cover. Pace the enqueues
         # against replica lag so the backfill can't outrun the database the way a
         # tight loop over a large table would.
         ReplicaLagWatcher.watch
 
-        batch.each do |asset_preview|
+        ids = batch.ids
+        AssetPreview.where(id: ids)
+                    .includes(file_attachment: { blob: { preview_image_attachment: :blob } })
+                    .each do |asset_preview|
           blob = asset_preview.file.blob
           if blob&.preview_image&.attached?
             skipped += 1
@@ -58,7 +64,7 @@ module Onetime
           enqueued += 1
         end
 
-        puts "Video poster backfill: enqueued=#{enqueued} already_persisted=#{skipped} (through id=#{batch.maximum(:id)})"
+        puts "Video poster backfill: enqueued=#{enqueued} already_persisted=#{skipped} (through id=#{ids.max})"
       end
 
       { enqueued:, skipped: }
