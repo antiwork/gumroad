@@ -75,6 +75,17 @@ describe Onetime::BackfillVideoPosterImages do
     expect(GenerateVideoPosterWorker.jobs).to be_empty
   end
 
+  # Every other example fits in one batch, which leaves the batching itself
+  # unwitnessed: a boundary error that skipped later batches would pass them all.
+  it "enqueues every eligible cover across multiple batches" do
+    asset_previews = create_list(:asset_preview_mov, 3)
+    GenerateVideoPosterWorker.jobs.clear
+
+    expect(described_class.process(batch_size: 1)).to eq(enqueued: 3, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs.map { _1["args"].first })
+      .to match_array(asset_previews.map(&:id))
+  end
+
   it "leaves image covers and deleted video covers alone" do
     create(:asset_preview_jpg)
     create(:asset_preview_mov).mark_deleted!
