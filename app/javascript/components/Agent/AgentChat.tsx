@@ -337,7 +337,7 @@ const ProposedActionCard = ({
   onDismiss,
 }: {
   action: ProposedAction;
-  status?: "executing" | "applied" | "unknown" | "rejected" | "dismissed";
+  status?: "executing" | "applied" | "unknown" | "rejected" | "dismissed" | undefined;
   warning: string | null;
   isPending: boolean;
   isApplying: boolean;
@@ -718,10 +718,12 @@ export const AgentChat = ({ greeting, suggestions }: Props) => {
     stickToBottom.current = true;
 
     // Only the plain role/content pairs go to the server; UI-only fields stay local.
-    const history: ChatMessage[] = [...messages, { role: "user", content: trimmed }].map(({ role, content }) => ({
-      role,
-      content,
-    }));
+    const history: ChatMessage[] = [...messages, { role: "user" as const, content: trimmed }].map(
+      ({ role, content }) => ({
+        role,
+        content,
+      }),
+    );
     // The index the streamed assistant reply will occupy: right after the user message we add.
     const assistantIndex = messages.length + 1;
     // Tag the turn with a unique id before sending so, if the stream breaks, recovery can ask the

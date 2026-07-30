@@ -51,7 +51,7 @@ export const isConditionalMediationSupported = async (): Promise<boolean> => {
   }
 };
 
-const base64UrlToBytes = (value: string): Uint8Array => {
+const base64UrlToBytes = (value: string): Uint8Array<ArrayBuffer> => {
   const base64 = value.replace(/-/gu, "+").replace(/_/gu, "/");
   const binary = atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "="));
   const bytes = new Uint8Array(binary.length);
@@ -110,7 +110,10 @@ export const createPasskey = async (options: PasskeyRegistrationOptions): Promis
 
 export const getPasskey = async (
   options: PasskeyAuthenticationOptions,
-  { mediation, signal }: { mediation?: CredentialMediationRequirement; signal?: AbortSignal } = {},
+  {
+    mediation,
+    signal,
+  }: { mediation?: CredentialMediationRequirement | undefined; signal?: AbortSignal | undefined } = {},
 ): Promise<PasskeyAuthenticationCredential> => {
   const publicKey: PublicKeyCredentialRequestOptions = {
     challenge: base64UrlToBytes(options.challenge),

@@ -689,6 +689,7 @@ export const RichTextEditor = ({
   placeholder,
   initialValue,
   ariaLabel,
+  editable,
   onChange,
   onCreate,
   extensions,
@@ -698,6 +699,7 @@ export const RichTextEditor = ({
   placeholder?: string;
   initialValue: Content;
   ariaLabel?: string;
+  editable?: boolean | undefined;
   onChange?: (newValue: string) => void;
   onCreate?: (editor: Editor) => void;
   extensions?: Extensions;
@@ -708,6 +710,7 @@ export const RichTextEditor = ({
     ariaLabel,
     placeholder,
     initialValue,
+    editable,
     onChange,
     onCreate,
     extensions,
