@@ -329,12 +329,9 @@ class SettingsPresenter
       compliance_info.nil? || note.created_at >= compliance_info.created_at
     end
 
-    # The bank-account counterpart of postal_code_rejected_by_stripe?, returning the newest alive
-    # note about the bank details the seller currently has saved, or nil.
-    #
     # Freshness is anchored on the active bank account's created_at rather than on compliance info:
-    # UpdatePayoutMethod replaces the BankAccount row instead of editing it, so a note older than
-    # that row describes details the seller has already replaced.
+    # a full bank-details change soft-deletes the BankAccount row and creates a new one, so a note
+    # older than that row describes details the seller has already replaced.
     #
     # No alive bank row means the seller left bank payouts (switching to PayPal deletes the row,
     # and notes are only cleared on a successful sync), so staying silent here is what stops a
@@ -342,6 +339,14 @@ class SettingsPresenter
     def current_bank_sync_failure_note
       bank_account = seller.active_bank_account
       return nil if bank_account.nil?
+
+      # A seller on their own Stripe account is being paid out through it, so a rejected
+      # Gumroad-managed bank account is no longer blocking anything. Connecting Stripe does not
+      # delete the bank row, and #stripe_account deliberately ignores Connect accounts, so the
+      # guard at the call site cannot see this — and nothing would ever clear the note, because
+      # bank notes are only soft-deleted by a successful managed-account sync that can never run
+      # while Connect is active. Without this the banner would be permanent and false.
+      return nil if seller.has_stripe_account_connected?
 
       note = seller.comments
             .with_type_payout_note
@@ -480,17 +485,22 @@ class SettingsPresenter
       # without this the only notice is an email — and on a paid product the publish button stays
       # blocked with a "connect a payment method" error that reads as unrelated.
       #
-      # The wording splits on whether the retry pipeline has already given up, because telling a
-      # seller to wait for a weekly re-check that will never run again is worse than saying nothing.
-      # Terminality is read from the note the pipeline itself abandoned rather than re-classified
-      # here: RetryStripeRejectedPayoutSetupForSellerJob owns that decision and emails the seller
-      # at the same moment, so a second opinion could contradict the email they just received.
+      # Each branch deliberately says the same thing as the email sent on that same path, because
+      # RetryStripeRejectedPayoutSetupForSellerJob owns the terminality decision and a second
+      # opinion here would contradict the mail the seller just received. That is also why there is
+      # no "add a different bank account" wording: the only reason that would justify it
+      # (ACCOUNT_BLOCKED) is diagnosed exclusively while a managed account is live, which the guard
+      # below excludes — so every note that reaches here is either a format rejection or an
+      # exhausted retry loop, and neither one proves the account itself is unusable.
       if stripe_account.blank? && (bank_note = current_bank_sync_failure_note)
         weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
         bank_message = if bank_note.json_data["abandoned_reason"] == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
           "Our payment partner couldn't accept your bank details as entered, and re-checking won't clear it. Please double-check your account and bank code and re-save them."
         elsif bank_note.json_data["abandoned_at"].present?
-          "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own — please add a different bank account."
+          # give_up! abandons without a reason, and it counts transient failures toward the retry
+          # cap too, so exhaustion is not evidence the details are wrong. Mirrors
+          # ContactingCreatorMailer#payout_setup_retry_exhausted, sent from that same method.
+          "We've been re-checking the bank account you added, but our payment partner still hasn't been able to verify it. Please double-check your details and re-save them. If everything looks correct, contact support and we'll look into it."
         else
           # Matches ContactingCreatorMailer#invalid_bank_account: the sweep is weekly
           # (RetryStripeRejectedPayoutSetupsJob), so don't promise anything faster.

@@ -883,15 +883,17 @@ describe SettingsPresenter do
           )
         end
 
-        it "asks for a different bank account once the retry pipeline has abandoned the note" do
+        it "mirrors the retries-exhausted email once the loop gives up, rather than blaming the account" do
+          # give_up! is the common producer of this branch and sets abandoned_at with NO
+          # abandoned_reason. It also counts transient failures toward the cap, so exhaustion is
+          # not evidence the details are wrong — the banner must not contradict the email.
           create(:ach_account, user: seller)
           note = seller.add_payout_note(content: bank_note_content)
           note.json_data["abandoned_at"] = Time.current.iso8601
-          note.json_data["abandoned_reason"] = RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_ACCOUNT_BLOCKED
           note.save!
 
           expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
-            hash_including(message: a_string_matching(/add a different bank account/), href: nil)
+            hash_including(message: a_string_matching(/still hasn't been able to verify it.*contact support/m), href: nil)
           )
         end
 
@@ -905,6 +907,20 @@ describe SettingsPresenter do
           expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
             hash_including(message: a_string_matching(/re-checking won't clear it/), href: nil)
           )
+        end
+
+        it "stays silent for a seller paid through their own connected Stripe account" do
+          # #stripe_account deliberately ignores Connect accounts, so the caller's blank? guard
+          # cannot catch this, and connecting Stripe does not delete the bank row. Without the
+          # explicit check the banner would be permanent: bank notes are only cleared by a
+          # successful managed-account sync, which never runs while Connect is active.
+          create(:ach_account, user: seller)
+          create(:merchant_account_stripe_connect, user: seller)
+          seller.update!(check_merchant_account_is_linked: true)
+          expect(seller.has_stripe_account_connected?).to be true
+          seller.add_payout_note(content: bank_note_content)
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
         end
 
         it "stays silent for a seller who left bank payouts, so the banner can't outlive the account it blames" do
