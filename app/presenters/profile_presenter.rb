@@ -44,7 +44,7 @@ class ProfilePresenter
     # Sample the version before reading the editor payload below. If a concurrent save lands in
     # between, the payload may be newer than this token — which makes the next save a harmless
     # false-stale rejection rather than letting a stale token wave a lost update through.
-    profile_version = seller.seller_profile.layout_version&.iso8601(6)
+    profile_version = seller.seller_profile.layout_version
     shared_profile_props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.logged_out).merge(
       {
         profile_settings: {

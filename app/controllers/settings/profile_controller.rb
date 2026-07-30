@@ -112,7 +112,7 @@ class Settings::ProfileController < Settings::BaseController
     end
 
     def submitted_version_stale?(seller_profile)
-      permitted_params[:profile_version].blank? || seller_profile.layout_version.iso8601(6) != permitted_params[:profile_version]
+      permitted_params[:profile_version].blank? || seller_profile.layout_version != permitted_params[:profile_version]
     end
 
     def authorize

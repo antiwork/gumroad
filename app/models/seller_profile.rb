@@ -28,12 +28,14 @@ class SellerProfile < ApplicationRecord
     self.highlight_color ||= "#ff90e8"
   end
 
-  # Version stamp for optimistic concurrency in the pages/sections editor: the most recent change
-  # to either the tab layout (this record) or any on-profile section row. Section edits write the
-  # section rows rather than this record, so the section timestamps must be folded in too — without
-  # them a concurrent section-content edit could pass the editor's stale-save check unnoticed.
+  # Fingerprint only the pages/sections editor's state. Theme saves update this row too, so using
+  # updated_at would falsely reject an otherwise current layout from another tab.
   def layout_version
-    [updated_at, seller.seller_profile_sections.on_profile.maximum(:updated_at)].compact.max
+    section_updated_at = seller.seller_profile_sections.on_profile.maximum(:updated_at)
+    return if !persisted? && section_updated_at.nil?
+
+    tabs = Array(json_data["tabs"]).map { [_1["name"], Array(_1["sections"])] }
+    Digest::SHA256.hexdigest([tabs, section_updated_at&.iso8601(6)].to_json)
   end
 
   def custom_styles
