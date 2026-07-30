@@ -373,14 +373,15 @@ class CustomerLowPriorityMailer < ApplicationMailer
     return if purchaser&.opted_out_of_review_reminders?
     first_purchase = order.purchases.first
 
-    # Re-checked at render time, not just at enqueue: the :low queue can lag behind a
-    # buyer unsubscribing, and for a guest the purchaser opt-out above is always nil.
+    # Re-checked at render time: the :low queue can lag behind a buyer unsubscribing, and for
+    # a guest the purchaser opt-out above is always nil. No purchase_for_review_reminder
+    # mapping — gift orders never reach this mailer (OrderReviewReminderJob routes them
+    # per-purchase).
     reviewable = order.purchases.select { _1.eligible_for_review_reminder? }
     return if reviewable.empty?
 
     @title = "Liked your order? Leave some reviews!"
-    # Token comes from a purchase the email is actually about. `purchases.first` can be an
-    # excluded row (already unsubscribed, refunded, reviewed), which would point the guest's
+    # `purchases.first` can be a row excluded from the reminder, which would point the guest's
     # only unsubscribe link at a seller who is not one of the senders.
     @unsub_link = review_reminder_unsubscribe_url(purchaser, purchase: reviewable.first)
     @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
@@ -390,7 +391,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     mail(
       to: email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: first_purchase.seller, to: email)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: reviewable.first.seller, to: email)
     )
   end
 
