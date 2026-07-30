@@ -278,6 +278,23 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  # `recurring_charge` excludes the original purchase but not the gift-receiver one, and that row is
+  # the opening purchase of a gifted membership rather than a renewal — Subscription counts it
+  # alongside the original, and Purchase#is_recurring_subscription_charge excludes both.
+  it "ignores a blocked gift-receiver purchase, which opens a membership rather than renewing one" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    giftee_purchase = failed_renewal(subscription:)
+    giftee_purchase.update_columns(
+      flags: giftee_purchase.flags | Purchase.flag_mapping["flags"][:is_gift_receiver_purchase])
+    expect(giftee_purchase.reload.is_recurring_subscription_charge).to be(false)
+    expect(giftee_purchase.error_code).to eq(PurchaseErrorCode::BLOCKED_BROWSER_GUID)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
   # Row ids are not a clock. A backfill, an import or a retry that preserves timestamps can leave an
   # older failure holding the higher id, and picking by MAX(id) then quoted that older row's guid,
   # block date and "last tried" date while the message claimed to describe the newest renewal.

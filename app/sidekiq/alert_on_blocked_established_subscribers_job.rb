@@ -110,21 +110,31 @@ class AlertOnBlockedEstablishedSubscribersJob
               .select { |_, count| count >= MIN_SUCCESSFUL_CHARGES }
     end
 
-    # Distinct subscriptions, most recent failure first, one over the candidate budget so that
-    # exhausting it is distinguishable from a window holding exactly that many.
+    # Renewals only, which is what the report claims is failing. Both queries below select from
+    # here so they cannot disagree about what a renewal is.
     #
-    # Scoped to recurring_charge because the report claims the subscriber is blocked from RENEWING.
-    # An original subscription purchase carries a subscription_id, still runs the fraud checks and
-    # can take either block code — a plan change is the common way to get one — so without this
-    # every plan-change block on a long-tenured member became a false "blocked from renewing" row.
-    def candidate_subscription_ids
+    # `recurring_charge` alone is not that predicate. It excludes the original subscription purchase
+    # — a plan change builds one, carries a subscription_id and runs the same fraud checks, so
+    # without it every plan-change block on a long-tenured member became a false "blocked from
+    # renewing" row. But it still admits the gift-receiver purchase, which is the OPENING purchase
+    # of a gifted membership rather than a renewal (Subscription counts it alongside the original
+    # for inventory, and Purchase#is_recurring_subscription_charge excludes both). Excluding it here
+    # makes this scope that predicate.
+    def blocked_renewal_failures
       Purchase.failed
               .recurring_charge
+              .not_is_gift_receiver_purchase
               .where(error_code: BLOCK_ERROR_CODES, created_at: FAILURE_LOOKBACK.ago..)
-              .group(:subscription_id)
-              .order(Arel.sql("MAX(purchases.created_at) DESC"))
-              .limit(MAX_CANDIDATES_SCANNED + 1)
-              .pluck(:subscription_id)
+    end
+
+    # Distinct subscriptions, most recent failure first, one over the candidate budget so that
+    # exhausting it is distinguishable from a window holding exactly that many.
+    def candidate_subscription_ids
+      blocked_renewal_failures
+        .group(:subscription_id)
+        .order(Arel.sql("MAX(purchases.created_at) DESC"))
+        .limit(MAX_CANDIDATES_SCANNED + 1)
+        .pluck(:subscription_id)
     end
 
     # The newest blocked renewal per subscription — its error code and identity attributes say which
@@ -138,12 +148,11 @@ class AlertOnBlockedEstablishedSubscribersJob
     def latest_block_failures(subscription_ids)
       return [] if subscription_ids.empty?
 
-      newest_per_subscription = Purchase.failed
-                                        .recurring_charge
-                                        .where(error_code: BLOCK_ERROR_CODES, created_at: FAILURE_LOOKBACK.ago.., subscription_id: subscription_ids)
-                                        .order(created_at: :desc, id: :desc)
-                                        .pluck(:subscription_id, :id)
-                                        .each_with_object({}) { |(subscription_id, id), newest| newest[subscription_id] ||= id }
+      newest_per_subscription = blocked_renewal_failures
+                                  .where(subscription_id: subscription_ids)
+                                  .order(created_at: :desc, id: :desc)
+                                  .pluck(:subscription_id, :id)
+                                  .each_with_object({}) { |(subscription_id, id), newest| newest[subscription_id] ||= id }
 
       Purchase.where(id: newest_per_subscription.values)
               .includes(:purchaser, :gift_given, :gift_received)
