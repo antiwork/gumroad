@@ -11,6 +11,7 @@ export type GetSurchargesRequest = {
     // The share of the buyer's tip included in `price`, so the server can carve it back out
     // when allocating the buyer-currency quote across the cart's lines and components.
     tip_cents: number;
+    pay_in_installments?: boolean | undefined;
     subscription_id?: string | undefined;
   }[];
   postal_code?: string;
@@ -31,6 +32,9 @@ export type SurchargesResponse = {
     currency: CurrencyCode;
     canonical_total_cents: number;
     presentment_total_cents: number;
+    // The exact local-currency amount charged now when the cart total is an agreement that
+    // also includes a preorder, commission balance, or future installments.
+    charge_presentment_total_cents?: number | undefined;
     // What one canonical US dollar cent is worth in the buyer's currency, used only for the
     // amounts the browser still converts itself (the discount row and the tip the buyer types).
     // A single-seller cart reports the exact rate from its one locked quote; a cart spanning

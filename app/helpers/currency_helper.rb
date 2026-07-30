@@ -217,15 +217,15 @@ module CurrencyHelper
   end
 
   # The product-shape half of the gate, kept in step with
-  # Checkout::BuyerCurrencyQuote#quotable_product? and the charge-time mirror in
-  # Checkout::BuyerCurrencyEligibility#unquotable_product?. Those two are private to their
+  # Checkout::BuyerCurrencyQuote#quotable_line_item? and the charge-time mirror in
+  # Checkout::BuyerCurrencyEligibility#unquotable_purchase?. Those two are private to their
   # services, so this repeats the list rather than calling into them; if a shape is added
   # there, add it here too or the product page will start promising a price checkout refuses.
   def buyer_currency_unquotable_product?(product)
-    return true if product.is_in_preorder_state?
     return true if product.free_trial_enabled?
-    return true if product.native_type == Link::NATIVE_TYPE_COMMISSION
-    return true if product.installment_plan.present?
+    if product.is_in_preorder_state? || product.native_type == Link::NATIVE_TYPE_COMMISSION || product.installment_plan.present?
+      return !Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(product.user)
+    end
     return false unless product.is_recurring_billing?
 
     # A plain membership is quotable once its seller is in the subscription ramp, because its

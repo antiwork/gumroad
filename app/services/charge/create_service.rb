@@ -388,7 +388,8 @@ class Charge::CreateService
           permalink: purchase.link.unique_permalink,
           total_cents: purchase.total_transaction_cents,
         }
-      end
+      end,
+      later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases)
     )
   rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
     Rails.logger.info("Buyer currency presentment quote rejected for charge #{charge.external_id}: #{e.message}")

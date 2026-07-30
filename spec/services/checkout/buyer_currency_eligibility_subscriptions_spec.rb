@@ -52,11 +52,11 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
       expect(unquotable.send(:unquotable_product?, membership)).to be(true)
     end
 
-    it "keeps a preorder excluded even in the ramp" do
+    it "makes a preorder quotable once the later-charge ramp is on" do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       allow(membership).to receive(:is_in_preorder_state?).and_return(true)
 
-      expect(unquotable.send(:unquotable_product?, membership)).to be(true)
+      expect(unquotable.send(:unquotable_product?, membership)).to be(false)
     end
   end
 
@@ -164,7 +164,7 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
       expect(eligibility(purchases: [one_off]).send(:subscription_setup_in_ramp?)).to be(false)
     end
 
-    it "stays closed for an installment payment, which is recurring but charges one instalment" do
+    it "opens for an installment payment whose later amounts can be fixed" do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       installment = create(:membership_purchase, link: membership, seller:, subscription:,
                                                  is_original_subscription_purchase: true)
@@ -172,7 +172,7 @@ describe Checkout::BuyerCurrencyEligibility, "subscription ramp" do
       # with update_columns.
       allow(installment).to receive(:is_installment_payment?).and_return(true)
 
-      expect(eligibility(purchases: [installment]).send(:subscription_setup_in_ramp?)).to be(false)
+      expect(eligibility(purchases: [installment]).send(:subscription_setup_in_ramp?)).to be(true)
     end
 
     it "stays closed for a free-trial membership, whose first charge is nothing" do

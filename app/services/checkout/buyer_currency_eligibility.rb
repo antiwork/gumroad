@@ -251,15 +251,10 @@ class Checkout::BuyerCurrencyEligibility
     return fallback(:unsupported_charge_model) unless supported_charge_model?
     return fallback(:wallet_payment_request) if wallet_type.present? && !wallet_lane_allowed?
     # `setup_future_charges` means this checkout is also saving the card for later use. It
-    # is a fallback because a saved card implies a later off-session charge whose amount we
-    # could not previously honor in the buyer's currency. A membership signup in the
-    # subscription ramp is the exception: the later charges now have a stored fixed
-    # presentment amount to reuse (LaterChargePresentment), so the reason for the gate no
-    # longer holds. Card-saving for other reasons (a one-off "save my card" tick, a preorder
-    # authorization) still falls back — see #subscription_setup_in_ramp?, which also refuses a
-    # cart mixing a membership with anything else. BuyerCurrencyQuote withholds the quote for
-    # that same mixed cart, so it arrives here without a token and falls back quietly.
-    return fallback(:future_charge_setup) if setup_future_charges && !subscription_setup_in_ramp?
+    # is a fallback because a saved card implies a later off-session charge. Products in the
+    # later-charge ramp are the exception: their agreed amount is stored for reuse. A one-off
+    # "save my card" checkout and mixed carts still fall back.
+    return fallback(:future_charge_setup) if setup_future_charges && !later_charge_setup_in_ramp?
     return fallback(:no_purchases) if purchases.empty?
     # A cart spanning several sellers becomes several charges (the order pipeline groups
     # purchases into one charge per seller), and this service sees ONE of them. That is fine
@@ -296,13 +291,13 @@ class Checkout::BuyerCurrencyEligibility
 
     # The verified quote locked the cart total, so every purchase on the charge must
     # individually support presentment — one unsupported item invalidates the whole cart.
-    # The gates here must mirror BuyerCurrencyQuote#quotable_product?: the quote token
+    # The gates here must mirror BuyerCurrencyQuote#quotable_line_item?: the quote token
     # binds only seller, currency, and total (not product ids), so a stale token issued
     # for a supported cart could otherwise be replayed against an unsupported product
     # whose charged amount differs from the locked total.
     purchases.each do |purchase|
-      return fallback(:unsupported_product_type) if unsupported_product_type?(purchase)
-      return fallback(:unsupported_product_type) if unquotable_product?(purchase.link)
+      return fallback(:unsupported_product_type) if unsupported_product_type?(purchase) && !later_charge_purchase_in_ramp?(purchase)
+      return fallback(:unsupported_product_type) if unquotable_purchase?(purchase)
       # A product already priced in the buyer's currency is withheld from the quote
       # lane so an FX round trip can never misprice it — see the comment on
       # BuyerCurrencyQuote#quotable_product?. (It only pays its listed price directly
@@ -507,32 +502,29 @@ class Checkout::BuyerCurrencyEligibility
       order.present? && order.purchases.map(&:seller_id).uniq.many?
     end
 
-    # True only for a genuine membership signup by a seller in the subscription ramp.
-    #
     # `setup_future_charges` is set for several unrelated reasons (Order::ChargeService:57
-    # ORs together a buyer ticking "save my card", a preorder authorization, and a
-    # membership), so it cannot be treated as "this is a subscription". Requiring EVERY
-    # purchase on the charge to be a plain membership keeps the lift narrow: a cart mixing a
-    # membership with a card-saving one-off still falls back, because the locked quote covers
-    # the whole cart and only the membership half would have a stored amount to renew with.
-    def subscription_setup_in_ramp?
+    # ORs together a buyer ticking "save my card" and several later-charge products), so the
+    # purchase shape must prove that every saved card has an agreed amount to store.
+    def later_charge_setup_in_ramp?
       return false if purchases.blank?
       return false unless self.class.subscriptions_enabled?(seller)
 
       purchases.all? do |purchase|
-        # An installment plan is `is_recurring_billing?` too, and it also sets
-        # setup_future_charges, so without this it would slip through the lift. Its first
-        # charge is one installment rather than the locked total, and #unsupported_product_type?
-        # rejects it further down — but it must not reach this gate looking like a membership
-        # signup, or the fallback the buyer gets is attributed to the wrong reason and the
-        # ordering here becomes the only thing keeping it out.
-        purchase.link.is_recurring_billing? &&
-          !purchase.is_installment_payment? &&
-          purchase.link.installment_plan.blank? &&
-          !purchase.link.free_trial_enabled? &&
-          !purchase.is_commission_deposit_purchase? &&
-          !purchase.is_preorder_authorization?
+        later_charge_purchase_in_ramp?(purchase)
       end
+    end
+
+    # Kept as an alias while rolling code and specs still use the membership-specific name.
+    alias_method :subscription_setup_in_ramp?, :later_charge_setup_in_ramp?
+
+    def later_charge_purchase_in_ramp?(purchase)
+      return false unless self.class.subscriptions_enabled?(seller)
+      return false if purchase.link.free_trial_enabled?
+
+      purchase.link.is_recurring_billing? ||
+        purchase.is_installment_payment? ||
+        purchase.is_commission_deposit_purchase? ||
+        purchase.is_preorder_authorization?
     end
 
     # True only for a renewal that already has a stored fixed amount to charge.
@@ -575,32 +567,33 @@ class Checkout::BuyerCurrencyEligibility
       self.class.multi_seller_enabled?(order_sellers)
     end
 
-    # Commission deposits and installment payments charge less than the locked cart total
-    # (issue #5419 excludes both from Phase 1), so they must fall back even when a valid
-    # quote token reaches the charge path.
+    # These shapes remain unsupported by the method-forced lane. The card quote lane lifts
+    # them separately once it has signed both today's charge and the later amount.
     def unsupported_product_type?(purchase)
       purchase.is_commission_deposit_purchase? ||
         purchase.is_installment_payment? ||
         purchase.link.native_type == Link::NATIVE_TYPE_COMMISSION
     end
 
-    # Charge-time mirror of the product-shape gates BuyerCurrencyQuote#quotable_product?
-    # applies at quote time. Preorders, free trials, and products offering an installment
-    # plan all charge an amount that can differ from the locked cart total (nothing now,
-    # $0, or a first installment), so a quote replayed against them must fall back instead
-    # of being honored. Only the card-mode #decision uses this — the method-forced lane
-    # (iDEAL/Bancontact) has no locked cart quote.
-    #
-    # A plain membership is the one recurring shape that IS quotable, and only when the
-    # seller is in the subscription ramp: its first charge is the full period price, which
-    # equals the locked cart total. Free trials ($0 now) and installment plans (first
-    # payment only) still charge something other than the total, so they stay excluded
-    # regardless of the flag — the `free_trial_enabled?` and `installment_plan` gates below
-    # keep applying to memberships too.
-    def unquotable_product?(product)
-      return true if product.is_in_preorder_state?
+    # Charge-time mirror of BuyerCurrencyQuote's product-shape gates. Free trials remain
+    # excluded; supported later-charge shapes require the shared ramp.
+    def unquotable_purchase?(purchase)
+      product = purchase.link
       return true if product.free_trial_enabled?
-      return true if product.installment_plan.present?
+      if purchase.is_preorder_authorization? || purchase.is_commission_deposit_purchase? || purchase.is_installment_payment?
+        return !self.class.subscriptions_enabled?(product.user)
+      end
+      return false unless product.is_recurring_billing?
+
+      !self.class.subscriptions_enabled?(product.user)
+    end
+
+    # Product-only compatibility for callers that do not have a purchase shape. A product that
+    # merely offers installments remains quotable; the selected installment intent is checked on
+    # the purchase by #unquotable_purchase?.
+    def unquotable_product?(product)
+      return true if product.free_trial_enabled?
+      return !self.class.subscriptions_enabled?(product.user) if product.is_in_preorder_state? || product.native_type == Link::NATIVE_TYPE_COMMISSION
       return false unless product.is_recurring_billing?
 
       !self.class.subscriptions_enabled?(product.user)
