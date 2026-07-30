@@ -518,8 +518,8 @@ describe UrlRedirectPresenter do
         instance = described_class.new(url_redirect:, logged_in_user: @user)
         expect(instance.download_page_with_content_props[:content][:download_all_button]).to be_nil
 
-        file1 = create(:readable_document)
-        file2 = create(:streamable_video)
+        file1 = create(:readable_document, link: nil, installment:)
+        file2 = create(:streamable_video, link: nil, installment:)
         installment.product_files = [file1, file2]
         installment.save!
 
@@ -943,7 +943,9 @@ describe UrlRedirectPresenter do
     end
 
     it "does not include 'installment' or 'creator' in props" do
-      url_redirect = create(:installment_url_redirect, installment: create(:workflow_installment, name: "Thank you for the purchase!", link: nil, seller: @user, product_files: [create(:product_file)]))
+      installment = create(:workflow_installment, name: "Thank you for the purchase!", link: nil, seller: @user)
+      installment.product_files = [create(:product_file, link: nil, installment:)]
+      url_redirect = create(:installment_url_redirect, installment:)
 
       props = described_class.new(url_redirect:, logged_in_user: @user).download_page_without_content_props
 
