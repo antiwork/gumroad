@@ -21,7 +21,12 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  sidekiq_options queue: :low, retry: 5, lock: :until_executed
+  # `lock_ttl` is the backstop for the death handler: if a process is SIGKILLed (OOM, deploy
+  # reap) no death handler runs at all, so an `until_executed` lock with no expiry survives
+  # forever and silently drops every subsequent enqueue. A day is comfortably longer than a
+  # full scan and shorter than the daily schedule, so a lost lock costs at most one run
+  # instead of every future run (gumroad-private#1576).
+  sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: 1.day.to_i
 
   # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
   # the Sidekiq dead set with no alert, and no abandoned-cart emails went out platform-wide.

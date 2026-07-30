@@ -24,8 +24,16 @@ Sidekiq.configure_server do |config|
 
   # Cleanup Dead Locks
   # https://github.com/mhenrixon/sidekiq-unique-jobs/tree/ec69ac93afccd56cd424e2a9738e5ed478d941b2#cleanup-dead-locks
+  #
+  # Read BOTH digest keys: sidekiq-unique-jobs v7+ writes `lock_digest`
+  # (SidekiqUniqueJobs::LOCK_DIGEST) while `unique_digest` is the pre-v7 name. Reading only the
+  # old key made this handler a silent no-op on v8 — a job that died left its `until_executed`
+  # lock in Redis forever, and because these locks carry no `lock_ttl` by default, every later
+  # enqueue was dropped as a duplicate. That is how abandoned-cart emails stopped platform-wide
+  # for 6 days (gumroad-private#1576); it applies to every `until_executed` job, not just that one.
   config.death_handlers << ->(job, _ex) do
-    SidekiqUniqueJobs::Digests.delete_by_digest(job["unique_digest"]) if job["unique_digest"]
+    digest = job[SidekiqUniqueJobs::LOCK_DIGEST] || job["unique_digest"]
+    SidekiqUniqueJobs::Digests.new.delete_by_digest(digest) if digest
   end
 
   config.client_middleware do |chain|
