@@ -175,8 +175,8 @@ describe SaveFilesService do
 
     it "supports `files` param as an array" do
       installment = create(:installment, workflow: create(:workflow))
-      file1 = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
-      file2 = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf")
+      file1 = create(:product_file, installment:, link: nil, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
+      file2 = create(:product_file, installment:, link: nil, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf")
       service.perform(installment, {
                         files: [
                           {
@@ -326,7 +326,7 @@ describe SaveFilesService do
           # without a contract; the flag being on for the seller must not
           # change them.
           installment = create(:installment, link: @product, seller: @product.user)
-          installment_file = create(:product_file, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
+          installment_file = create(:product_file, installment:, link: nil, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
 
           service.perform(installment, { files: [] })
 

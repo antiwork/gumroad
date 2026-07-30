@@ -8,8 +8,13 @@ describe RefreshSitemapMonthlyWorker do
     # for, and the matcher truncates both that time and its own expected time to whole
     # seconds — so a clock tick across a second boundary in between fails the test at random.
     it "enqueues jobs to generate sitemaps for products updated in last month", :freeze_time do
-      product_1 = create(:product, created_at: 3.months.ago, updated_at: 1.month.ago)
-      product_2 = create(:product, created_at: 2.months.ago, updated_at: 1.month.ago)
+      product_1 = create(:product, created_at: 3.months.ago)
+      product_2 = create(:product, created_at: 2.months.ago)
+      # Set the timestamp after creation: the factory's `price_cents` builds a Price, whose
+      # commit touches the product, so an `updated_at:` passed to `create` gets overwritten.
+      # `update_columns` skips callbacks, leaving the products inside the worker's window.
+      [product_1, product_2].each { _1.update_columns(updated_at: 1.month.ago) }
+
       described_class.new.perform
 
       expect(RefreshSitemapDailyWorker).to have_enqueued_sidekiq_job(product_1.created_at.beginning_of_month.to_date.to_s)

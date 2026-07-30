@@ -10,6 +10,7 @@ class BaseVariant < ApplicationRecord
   include MaxPurchaseCount
   include Integrations
   include RichContents
+  include TouchesProductForPriceCache
 
   MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE = 7
 

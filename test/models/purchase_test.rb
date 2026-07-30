@@ -3407,7 +3407,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_purchase(link: product)
     create_url_redirect(purchase:, link: product)
     purchase.stubs(:webhook_failed).returns(false)
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
 
     assert_equal false, purchase.has_content?
   end
@@ -3417,7 +3417,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_purchase(link: product)
     create_url_redirect(purchase:, link: product)
     purchase.stubs(:webhook_failed).returns(false)
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
 
     purchase.url_redirect.stubs(:is_done_pdf_stamping).returns(true)
     assert_equal true, purchase.has_content?
@@ -7419,7 +7419,7 @@ class PurchaseTest < ActiveSupport::TestCase
       @purchase.chargeable = build_chargeable
       @purchase.process!
       @post = create_installment(link: @product, published_at: 1.hour.ago)
-      @post.product_files << create_product_file
+      @post.product_files << create_product_file(installment: @post)
       @workflow = create_workflow(seller: @user, link: @product, published_at: Time.current)
       @workflow_post = create_installment(link: @product, workflow: @workflow, published_at: Time.current)
       create_installment_rule(installment: @workflow_post, delayed_delivery_time: 3.days)
