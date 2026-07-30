@@ -3,6 +3,10 @@
 class License < ApplicationRecord
   MANAGE_SECURE_ID_SCOPE = "manage_license"
 
+  # Sellers set this by hand from the customer page, so the ceiling only has to be high enough that
+  # no real activation count reaches it while still keeping a typo out of the search index.
+  MAX_SELLER_SETTABLE_USES = 1_000_000
+
   has_paper_trail only: %i[disabled_at serial]
 
   include FlagShihTzu
@@ -44,8 +48,14 @@ class License < ApplicationRecord
     save!
   end
 
+  # Takes the row lock because /v2/licenses/verify increments the same column concurrently, so a
+  # read-modify-write here would otherwise drop activations that happen mid-edit.
+  def set_uses!(value)
+    with_lock { update!(uses: value) }
+  end
+
   def reset_uses!
-    update!(uses: 0)
+    set_uses!(0)
   end
 
   def rotate!

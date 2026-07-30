@@ -318,12 +318,12 @@ export const updateLicense = (licenseId: string, enabled: boolean) =>
     if (!response.ok) throw new ResponseError();
   });
 
-export const resetLicenseUses = (licenseId: string) =>
-  request({ method: "PUT", accept: "json", url: Routes.license_path(licenseId, { reset_uses: true }) }).then(
-    (response) => {
-      if (!response.ok) throw new ResponseError();
-    },
-  );
+export const setLicenseUses = async (licenseId: string, uses: number) => {
+  const response = await request({ method: "PUT", accept: "json", url: Routes.license_path(licenseId, { uses }) });
+  // The server owns the accepted range, so pass its wording through instead of a generic failure
+  // the seller can't act on.
+  if (!response.ok) throw new ResponseError(await getErrorMessage(response));
+};
 
 export const markShipped = (purchaseId: string, trackingUrl: string) =>
   request({

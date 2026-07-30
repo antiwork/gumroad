@@ -80,6 +80,25 @@ describe License do
     end
   end
 
+  describe "#set_uses!" do
+    let(:license) { create(:license, uses: 5) }
+
+    it "sets the uses count to the given value" do
+      expect(license.set_uses!(12)).to be(true)
+      expect(license.reload.uses).to eq 12
+    end
+
+    it "lowers the uses count" do
+      expect(license.set_uses!(2)).to be(true)
+      expect(license.reload.uses).to eq 2
+    end
+
+    it "rejects a negative value" do
+      expect { license.set_uses!(-1) }.to raise_error(ActiveRecord::RecordInvalid)
+      expect(license.reload.uses).to eq 5
+    end
+  end
+
   describe "#reset_uses!" do
     let(:license) { create(:license, uses: 5) }
 
@@ -116,6 +135,20 @@ describe License do
         )
       )
       license.increment!(:uses)
+    end
+
+    it "enqueues a purchase re-index when uses is set directly" do
+      allow(ElasticsearchIndexerWorker).to receive(:perform_in)
+      expect(ElasticsearchIndexerWorker).to receive(:perform_in).with(
+        2.seconds,
+        "update",
+        hash_including(
+          "record_id" => purchase.id,
+          "class_name" => "Purchase",
+          "fields" => ["license_uses"]
+        )
+      )
+      license.set_uses!(7)
     end
 
     it "enqueues a purchase re-index when serial changes" do

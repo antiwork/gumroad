@@ -49,6 +49,70 @@ describe LicensesController do
       expect(license.uses).to eq 0
     end
 
+    context "when uses is passed" do
+      before { license.update!(uses: 4) }
+
+      it "sets the uses count to the given number" do
+        put :update, format: :json, params: { id: secure_id, uses: 9 }
+        expect(response).to be_successful
+        expect(license.reload.uses).to eq 9
+      end
+
+      it "accepts a decrement to a lower number" do
+        put :update, format: :json, params: { id: secure_id, uses: 3 }
+        expect(response).to be_successful
+        expect(license.reload.uses).to eq 3
+      end
+
+      it "accepts zero" do
+        put :update, format: :json, params: { id: secure_id, uses: 0 }
+        expect(response).to be_successful
+        expect(license.reload.uses).to eq 0
+      end
+
+      it "does not change the enabled status" do
+        put :update, format: :json, params: { id: secure_id, uses: 9 }
+        expect(license.reload.disabled_at).to be_nil
+      end
+
+      it "rejects a negative number" do
+        put :update, format: :json, params: { id: secure_id, uses: -1 }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects a number above the ceiling" do
+        put :update, format: :json, params: { id: secure_id, uses: License::MAX_SELLER_SETTABLE_USES + 1 }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      # A blank or non-numeric param must not coerce to 0 — that would silently wipe the count.
+      it "rejects a non-numeric value" do
+        put :update, format: :json, params: { id: secure_id, uses: "abc" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects a blank value" do
+        put :update, format: :json, params: { id: secure_id, uses: "" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects a fractional value" do
+        put :update, format: :json, params: { id: secure_id, uses: "2.5" }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(license.reload.uses).to eq 4
+      end
+
+      it "rejects the plain external id that leaks via the license API" do
+        put :update, format: :json, params: { id: license.external_id, uses: 9 }
+        expect(response).to have_http_status(:not_found)
+        expect(license.reload.uses).to eq 4
+      end
+    end
+
     context "when the id is not a valid management token" do
       before { license.update!(uses: 9) }
 

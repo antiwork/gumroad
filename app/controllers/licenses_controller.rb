@@ -9,7 +9,15 @@ class LicensesController < Sellers::BaseController
     end
     authorize [:audience, license.purchase], :manage_license?
 
-    if params.key?(:reset_uses)
+    if params.key?(:uses)
+      uses = cast_uses(params[:uses])
+      if uses.nil?
+        return render json: { error: "Uses must be a whole number between 0 and #{License::MAX_SELLER_SETTABLE_USES}." },
+                      status: :unprocessable_entity
+      end
+
+      license.set_uses!(uses)
+    elsif params.key?(:reset_uses)
       license.reset_uses!
     elsif ActiveModel::Type::Boolean.new.cast(params[:enabled])
       license.enable!
@@ -19,4 +27,14 @@ class LicensesController < Sellers::BaseController
 
     head :no_content
   end
+
+  private
+    # nil means "reject" — the client sends the absolute count, so anything that isn't a plain
+    # in-range integer has to fail loudly rather than land as a coerced 0.
+    def cast_uses(value)
+      uses = Integer(value.to_s, exception: false)
+      return if uses.nil? || !uses.between?(0, License::MAX_SELLER_SETTABLE_USES)
+
+      uses
+    end
 end
