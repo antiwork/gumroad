@@ -121,8 +121,8 @@ const ProfileCustomHtmlDocumentation = () => (
       </li>
       <li>
         <code>price</code> — the price you set, formatted in the product's own currency, e.g. <code>$14</code> or{" "}
-        <code>$0+</code>. This blob is cached per seller rather than per visitor, so this figure is the same for
-        everyone; see the live values above for a price in the visitor's own currency.
+        <code>$0+</code>. This blob is cached per seller rather than per visitor, so the figure is identical for every
+        visitor and is not converted to their local currency.
       </li>
       <li>
         <code>thumbnail_url</code> and <code>cover_url</code> — either or both may be null, so fall back from one to the
