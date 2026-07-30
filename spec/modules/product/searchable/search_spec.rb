@@ -374,6 +374,41 @@ describe "Product::Searchable - Search scenarios" do
       end
     end
 
+    describe "tags aggregation size" do
+      let(:creator) { create(:compliant_user) }
+
+      before do
+        # 12 distinct tags: more than Discover's cap, so the two lanes give different answers.
+        12.times do |i|
+          product = create(:product, :recommendable, user: creator)
+          product.tag!("tag #{format('%02d', i)}")
+        end
+        Link.import(refresh: true, force: true)
+      end
+
+      it "caps Discover at MAX_NUMBER_OF_TAGS buckets" do
+        buckets = Link.search(Link.search_options({})).aggregations["tags.keyword"]["buckets"]
+
+        expect(Product::Searchable::MAX_NUMBER_OF_TAGS).to eq(9)
+        expect(buckets.length).to eq(9)
+      end
+
+      it "returns every tag on a seller's own profile" do
+        options = Link.search_options({ user_id: creator.id, is_alive_on_profile: true })
+        buckets = Link.search(options).aggregations["tags.keyword"]["buckets"]
+
+        expect(buckets.length).to eq(12)
+        expect(buckets.map { _1["key"] }).to match_array(12.times.map { "tag #{format('%02d', _1)}" })
+      end
+
+      it "still caps a profile-scoped search at the profile bucket limit" do
+        options = Link.search_options({ user_id: creator.id, is_alive_on_profile: true }).to_hash
+        size = options[:aggregations]["tags.keyword"][:terms][:size]
+
+        expect(size).to eq(Product::Searchable::MAX_NUMBER_OF_PROFILE_TAGS)
+      end
+    end
+
     describe "on indexed products with `created_at` value" do
       it "sorts by newest" do
         creator = create(:compliant_user, username: "username")
