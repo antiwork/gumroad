@@ -207,9 +207,11 @@ describe ScheduleAbandonedCartEmailsJob do
       expect { described_class.new.perform }.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
     end
 
-    it "aborts mid-way through the mail enqueue loop, not just while discovering carts" do
+    it "stops mid-way through the mail enqueue loop instead of raising into a duplicating retry" do
       # The enqueue loop is per-cart and platform-wide, so it can be the part that runs long.
-      # Cross the deadline after the first enqueue and expect the second to raise instead of send.
+      # It must not raise: sent_abandoned_cart_emails rows are written when the mailer jobs run,
+      # not at enqueue time, so a retry would rediscover the carts already enqueued here and
+      # email them twice. Stop cleanly, alert, and leave the rest for the next daily run.
       second_cart = create(:cart)
       create(:cart_product, cart: second_cart, product:)
       second_cart.update!(updated_at: 2.days.ago)
@@ -222,10 +224,12 @@ describe ScheduleAbandonedCartEmailsJob do
         real_mailer.call(*args)
       end
 
-      expect do
-        described_class.new.perform
-      end.to raise_error(described_class::AttemptTimeBudgetExceeded)
+      expect(ErrorNotifier).to receive(:notify).with(
+        a_string_including("stopped mid-enqueue after exceeding its attempt budget"),
+        hash_including(carts_enqueued: 1, carts_remaining: 1)
+      )
 
+      expect { described_class.new.perform }.not_to raise_error
       expect(enqueued).to eq(1)
     end
   end

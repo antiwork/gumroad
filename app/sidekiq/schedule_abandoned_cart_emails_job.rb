@@ -107,19 +107,41 @@ class ScheduleAbandonedCartEmailsJob
 
     Rails.logger.info "Fetched #{cart_ids_with_matched_workflow_ids_and_product_ids.count} cart ids with matched workflow ids and product ids in #{(Time.current - start_time).round(2)} seconds"
 
+    enqueued_count = 0
     cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
-      check_attempt_deadline!
+      # Deliberately not `check_attempt_deadline!`: raising here would be retried, and a retry
+      # re-enqueues every cart this loop already sent. `sent_abandoned_cart_emails` rows are
+      # written by the mailer jobs when they run, not at enqueue time, so the retry cannot see
+      # them — `Cart.abandoned` still matches those carts and the buyer gets a second email.
+      # Stopping instead leaves the unreached carts with no sent row, so the next daily run
+      # picks them up.
+      if attempt_deadline_passed?
+        ErrorNotifier.notify(
+          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after exceeding its attempt budget — remaining abandoned carts will be picked up by the next run",
+          attempt_time_budget: ATTEMPT_TIME_BUDGET.inspect,
+          carts_enqueued: enqueued_count,
+          carts_remaining: cart_ids_with_matched_workflow_ids_and_product_ids.size - enqueued_count
+        )
+        break
+      end
+
       CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
+      enqueued_count += 1
     end
   end
 
   private
-    # Raises once the attempt has outrun ATTEMPT_TIME_BUDGET. Called from every unbounded loop —
-    # each day window, each scan batch, each workflow, each mail enqueue — because any one of them
-    # can be the part that runs long, and an attempt that outlives LOCK_TTL is the concurrency
-    # hazard. Miss one loop and the bound is only as good as the loops it does cover.
+    def attempt_deadline_passed?
+      Time.current >= @deadline
+    end
+
+    # Raises once the attempt has outrun ATTEMPT_TIME_BUDGET, because an attempt that outlives
+    # LOCK_TTL is the concurrency hazard. Called from every unbounded loop that runs BEFORE any
+    # mail is enqueued — each day window, each scan batch, each workflow — since a retry there
+    # has no side effects to duplicate. Miss one and the bound is only as good as the loops it
+    # covers. The enqueue loop is the exception and stops without raising; see its comment.
     def check_attempt_deadline!
-      return if Time.current < @deadline
+      return unless attempt_deadline_passed?
 
       raise AttemptTimeBudgetExceeded, "exceeded #{ATTEMPT_TIME_BUDGET.inspect} before finishing; aborting so the run cannot outlive its #{LOCK_TTL.inspect} unique lock"
     end
