@@ -112,13 +112,30 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
-  # Enforcement scopes every block check to its own type, so a row of another type that happens to
-  # carry the same string is not blocking anybody. Reporting it would name a subscriber whose
-  # renewal is failing on something else entirely.
-  it "does not treat another block type carrying the same value as the guid block" do
+  # The guid check does NOT scope to its own type: check_for_past_blocked_guids calls
+  # #past_blocked_object, which matches object_value alone. A row of another type carrying the guid
+  # string is therefore what declined this renewal, and a type-scoped lookup here would find no
+  # active block and drop the subscriber from the report entirely.
+  it "finds the guid block when the row carrying the value is stored under another type" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription:)
-    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: browser_guid)
+    block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+    end
+  end
+
+  # The domain half is the asymmetry's other side: blocked_by_email_domain? runs through
+  # AttributeBlockable, which does scope to :email_domain, so a row of another type carrying the
+  # domain string declines nothing and must not be reported as the block.
+  it "does not treat another block type carrying the domain value as the domain block" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "example.com")
 
     described_class.new.perform
 
