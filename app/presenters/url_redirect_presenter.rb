@@ -90,18 +90,7 @@ class UrlRedirectPresenter
       review = purchase&.original_product_review
       call = purchase&.call
 
-      # The purchase that holds the money is not always the one whose content is on screen.
-      # Bundle content: `purchase` is the $0 per-product access record. Membership: `Purchase.for_library`
-      # excludes recurring charges, so `purchase` is the sign-up — potentially years and several cards
-      # before the period the buyer is asking to be invoiced for.
-      receipt_purchase =
-        if purchase&.is_bundle_product_purchase?
-          purchase.bundle_purchase
-        elsif purchase&.subscription.present?
-          purchase.subscription.last_successful_charge || purchase
-        else
-          purchase
-        end
+      receipt_purchase = purchase&.receipt_purchase
 
       {
         terms_page_url: HomePageLinkService.terms,
@@ -115,8 +104,7 @@ class UrlRedirectPresenter
           # Both link targets check the email against the purchase they were given, and a
           # membership's charges can carry a different address than its sign-up: editing a
           # customer's email rewrites the sign-up row only, leaving older charges on the old
-          # address. Sending the target's own email keeps the links from bouncing the buyer
-          # back to email confirmation.
+          # address.
           receipt_purchase_email: email_confirmation_required ? nil : receipt_purchase&.email,
           email_digest: purchase.email_digest,
           created_at: purchase.created_at,

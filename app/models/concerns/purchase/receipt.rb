@@ -44,6 +44,24 @@ module Purchase::Receipt
     end
   end
 
+  # The purchase whose receipt and invoice this one's buyer should be shown. Usually itself, but
+  # the row a buyer reaches through their library is not always the row that holds the money:
+  #
+  # - bundle content: this is the $0 per-product access record the bundle created, and the money
+  #   was paid on the bundle purchase;
+  # - membership: `Purchase.for_library` excludes recurring charges, so this is the sign-up —
+  #   potentially years and several cards before the period the buyer wants invoiced.
+  #
+  # A gift receiver purchase is deliberately excluded: it shares a subscription with the GIFTER's
+  # paid purchase, which is the only `successful` row on that subscription, so resolving through
+  # the subscription would serve the giftee the gifter's email, amount, and card.
+  def receipt_purchase
+    return bundle_purchase if is_bundle_product_purchase?
+    return self unless subscription.present? && !is_gift_receiver_purchase?
+
+    subscription.last_successful_not_reversed_or_refunded_charge || self
+  end
+
   def has_invoice?
     subscription.present? ? !is_free_trial_purchase? : !free_purchase?
   end

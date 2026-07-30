@@ -644,6 +644,13 @@ class Subscription < ApplicationRecord
     successful_purchases.last
   end
 
+  # A purchase stays in `successful_purchases` after being fully refunded or charged back, so
+  # anything showing the buyer "the charge you last paid for" has to filter those out. Ordered by
+  # `succeeded_at` rather than relying on the association's insertion order.
+  def last_successful_not_reversed_or_refunded_charge
+    successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first
+  end
+
   def last_successful_charge_at
     last_successful_charge&.succeeded_at
   end
@@ -1185,7 +1192,7 @@ class Subscription < ApplicationRecord
     end
 
     def last_successful_not_reversed_or_refunded_charge_at
-      successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first&.succeeded_at
+      last_successful_not_reversed_or_refunded_charge&.succeeded_at
     end
 
     def tier_price

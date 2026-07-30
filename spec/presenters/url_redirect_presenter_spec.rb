@@ -297,39 +297,80 @@ describe UrlRedirectPresenter do
     end
 
     describe "receipt_purchase_id on a membership" do
-      it "points at the latest successful charge, not the sign-up purchase" do
+      def membership_with_charge(original_email: nil, charge_email: nil, charge_attrs: {})
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true)
-        recurring = create(:membership_purchase, link: product, subscription:, created_at: 1.month.from_now)
-        url_redirect = create(:url_redirect, purchase: original, link: product)
+        original = create(:membership_purchase, link: product, subscription:,
+                                                is_original_subscription_purchase: true,
+                                                succeeded_at: 2.months.ago,
+                                                **(original_email ? { email: original_email } : {}))
+        charge = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false,
+                                                        succeeded_at: 1.month.ago,
+                                                        **(charge_email ? { email: charge_email } : {}),
+                                                        **charge_attrs)
+        [original, charge, create(:url_redirect, purchase: original, link: product)]
+      end
+
+      it "points at the latest successful charge, not the sign-up purchase" do
+        original, charge, url_redirect = membership_with_charge
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
         expect(props[:id]).to eq(original.external_id)
-        expect(props[:receipt_purchase_id]).to eq(recurring.external_id)
+        expect(props[:receipt_purchase_id]).to eq(charge.external_id)
       end
 
-      it "sends the charge's own email so the receipt and invoice pages accept it" do
+      it "orders by succeeded_at rather than by insertion order" do
         product = create(:membership_product)
         subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, email: "new@example.com")
-        recurring = create(:membership_purchase, link: product, subscription:, created_at: 1.month.from_now, email: "old@example.com")
+        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, succeeded_at: 2.months.ago)
+        newest = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago)
+        create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 6.weeks.ago)
         url_redirect = create(:url_redirect, purchase: original, link: product)
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
-        expect(props[:receipt_purchase_id]).to eq(recurring.external_id)
+        expect(props[:receipt_purchase_id]).to eq(newest.external_id)
+      end
+
+      it "skips a latest charge that was fully refunded" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
+        earlier = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
+        create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago, stripe_refunded: true)
+        url_redirect = create(:url_redirect, purchase: original, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(earlier.external_id)
+      end
+
+      it "skips a latest charge that was charged back" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
+        earlier = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
+        create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago, chargeback_date: 1.week.ago)
+        url_redirect = create(:url_redirect, purchase: original, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(earlier.external_id)
+      end
+
+      it "sends the charge's own email so the receipt and invoice pages accept it" do
+        _original, charge, url_redirect = membership_with_charge(original_email: "new@example.com", charge_email: "old@example.com")
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:receipt_purchase_id]).to eq(charge.external_id)
         expect(props[:email]).to eq("new@example.com")
         expect(props[:receipt_purchase_email]).to eq("old@example.com")
       end
 
       it "omits the charge's email while email confirmation is pending" do
-        product = create(:membership_product)
-        subscription = create(:subscription, link: product)
-        original = create(:membership_purchase, link: product, subscription:, is_original_subscription_purchase: true)
-        create(:membership_purchase, link: product, subscription:, created_at: 1.month.from_now)
-        url_redirect = create(:url_redirect, purchase: original, link: product)
+        _original, _charge, url_redirect = membership_with_charge
 
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_without_content_props(
           content_unavailability_reason_code: UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]
@@ -346,6 +387,22 @@ describe UrlRedirectPresenter do
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
         expect(props[:receipt_purchase_id]).to eq(original.external_id)
+      end
+
+      it "keeps a gifted membership on the giftee's own purchase rather than the gifter's charge" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        gifter = create(:membership_purchase, link: product, subscription:,
+                                              is_original_subscription_purchase: true,
+                                              email: "gifter@example.com", succeeded_at: 1.month.ago)
+        giftee = create(:purchase, :gift_receiver, link: product, subscription:, email: "giftee@example.com", price_cents: 0)
+        url_redirect = create(:url_redirect, purchase: giftee, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(gifter.purchase_state).to eq("successful")
+        expect(props[:receipt_purchase_id]).to eq(giftee.external_id)
+        expect(props[:receipt_purchase_email]).to eq("giftee@example.com")
       end
     end
 
