@@ -40,8 +40,11 @@ class UsersController < ApplicationController
     return head :not_found unless custom_html_visible?
 
     apply_custom_html_response_headers
-    # Rebuilt per request, unlike the per-seller-cached gumroad-data payload, so the prices a page
-    # renders are the visitor's currency and cannot be served stale by that cache.
+    # Alone among the custom-HTML embeds this body is derived from the visitor's IP, so one
+    # visitor's currency must never be replayed to the next. Rails' default `private` already
+    # says so; state it explicitly because nothing else here would catch an edge cache rule or a
+    # future `expires_in` from turning this response shared.
+    response.cache_control.replace(private: true, no_store: true)
     prices = Pages::ProductPrices.build(@user, ip: request.remote_ip)
     interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user, prices:)
     render html: profile_custom_html_document(

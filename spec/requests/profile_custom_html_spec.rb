@@ -40,6 +40,16 @@ describe "Profile custom HTML rendering", type: :request do
     expect(response.headers["X-Frame-Options"]).to eq("SAMEORIGIN")
   end
 
+  it "forbids shared caching of the embed, whose prices are derived from the visitor's IP" do
+    get "http://seller.example.com/landing/embed"
+
+    directives = response.headers["Cache-Control"].split(",").map(&:strip)
+    expect(directives).to include("private")
+    expect(directives).to include("no-store")
+    expect(directives).not_to include("public")
+    expect(response.headers["Cache-Control"]).not_to match(/s-maxage/)
+  end
+
   it "404s the embed on the custom domain when the feature is disabled" do
     Feature.deactivate_user(:custom_html_pages, seller)
 
