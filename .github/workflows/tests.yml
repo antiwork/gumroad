@@ -44,6 +44,33 @@ jobs:
           LANG: en_US.UTF-8
           LC_ALL: en_US.UTF-8
 
+  typecheck:
+    name: Typecheck TS
+    runs-on: ubicloud-standard-4
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      # tsc needs the gitignored js:export output (app/javascript/utils/routes.*
+      # and app/javascript/json_schemas/*). The export boots Rails off the
+      # committed .env.test but tolerates every backing service being down, so
+      # no MySQL/Redis/etc. containers are needed here.
+      - run: bundle exec rails js:export
+        env:
+          RAILS_ENV: test
+      - run: npm run typecheck
+
   lint_ruby:
     name: Lint Ruby
     runs-on: ubicloud-standard-4
