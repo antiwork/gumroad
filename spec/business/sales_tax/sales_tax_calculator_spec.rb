@@ -42,7 +42,9 @@ describe SalesTaxCalculator do
       compare_calculations(expected: SalesTaxCalculation.zero_tax(0), actual: sales_tax)
     end
 
-    it "returns zero tax if product is physical and in the EU" do
+    # The only rate on file is seller-responsible, which the lookup scope skips, so no rate is
+    # found at all. Nothing here exercises the import logic — see the import context below.
+    it "returns zero tax when the only matching rate is seller-responsible" do
       create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil)
 
       sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
@@ -118,6 +120,31 @@ describe SalesTaxCalculator do
 
         compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
                              actual: sales_tax)
+      end
+
+      # For a business seller legal_entity_country_code reads business_country, not the individual
+      # country, so the business lane needs its own coverage.
+      it "still assesses VAT when the seller's business is in the EU" do
+        expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        create(:user_compliance_info, user: @seller, country: "United States", is_business: true, business_country: "Germany")
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "LT" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
+                             actual: sales_tax)
+      end
+
+      it "returns zero tax when the seller's business is outside the EU" do
+        create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        create(:user_compliance_info, user: @seller, country: "Germany", is_business: true, business_country: "United States")
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "LT" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
       end
 
       it "still assesses VAT on a digital product shipped to the same country" do

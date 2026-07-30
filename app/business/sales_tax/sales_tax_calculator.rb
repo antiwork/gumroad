@@ -235,27 +235,25 @@ class SalesTaxCalculator
       end
     end
 
-    # A physical parcel entering the EU from outside it is an import, and Gumroad has no IOSS
-    # registration to remit under or to stamp on the customs declaration — so destination customs
-    # assesses VAT again on arrival and the buyer pays it twice. The EU number we hold
-    # (GUMROAD_VAT_REGISTRATION_NUMBER) is OSS, which covers electronically supplied services and
-    # intra-EU distance sales, but not imported goods.
+    # A physical parcel entering the EU from outside it clears customs, which assesses import VAT
+    # on arrival. We hold no IOSS registration to remit under or to stamp on the declaration, so
+    # collecting at checkout too means the buyer pays the same VAT twice. Goods already inside the
+    # EU never clear customs, so an EU-27 origin keeps collecting — whether that belongs on our OSS
+    # return or the seller's own is a question for counsel, and collecting is the conservative side.
     #
-    # Origin is what makes it an import. An EU-27 seller shipping within the union is an intra-EU
-    # distance sale, which OSS does cover and no border assesses again, so that VAT is still
-    # collected. We have no ship-from field, so the seller's legal entity country stands in for the
-    # parcel's origin — and an unknown origin keeps collecting, because an unprovable import is not
-    # worth opening a non-collection gap over.
+    # Origin is a proxy: there is no ship-from field, so the seller's legal entity country stands in
+    # for it, and a US-registered seller fulfilling from an EU warehouse is misread. Unknown origin
+    # keeps collecting — over-collection is refundable, under-collection is VAT we owe and never took.
     #
-    # The UK is excluded on both sides via EU_VAT_DESTINATION_COUNTRY_CODES: as a destination it has
-    # its own registration (GUMROAD_UK_VAT_REGISTRATION) and the marketplace collects at checkout
-    # for consignments at or under £135, and as an origin it is outside the customs union.
+    # EU_VAT_DESTINATION_COUNTRY_CODES excludes the UK on both sides: as a destination it has its
+    # own registration and the marketplace collects at checkout under £135, and as an origin it is
+    # outside the customs union.
     def eu_import_vat_unremittable?
       return false unless product.is_physical
       return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
       return false unless EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
 
-      shipment_origin = seller&.alive_user_compliance_info&.legal_entity_country_code
+      shipment_origin = seller&.compliance_country_code
       shipment_origin.present? && !EU_VAT_DESTINATION_COUNTRY_CODES.include?(shipment_origin)
     end
 
