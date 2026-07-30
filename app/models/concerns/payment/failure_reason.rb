@@ -13,12 +13,19 @@ module Payment::FailureReason
   STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
   PROCESSOR_RATE_LIMITED = "processor_rate_limited"
   PROCESSOR_UNAVAILABLE = "processor_unavailable"
+  UNREVERSED_INTERNAL_TRANSFER = "unreversed_internal_transfer"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   # Failures caused by us or by the processor being unreachable, never by the seller's payout
   # details. They must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no
   # STRIPE_FAILURE_SOLUTIONS entry, because there is nothing for the seller to fix.
-  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
+  TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE, UNREVERSED_INTERNAL_TRANSFER].freeze
+
+  # The subset an automated requeue may re-issue. UNREVERSED_INTERNAL_TRANSFER is deliberately
+  # absent: it means Gumroad's funds are still sitting on the seller's connected account because
+  # the reversal failed, so re-issuing would transfer the same money a second time. Those payments
+  # need the transfer reconciled at Stripe by a human first.
+  REQUEUEABLE_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE].freeze
 
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",

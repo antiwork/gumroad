@@ -66,6 +66,36 @@ describe RequeueTransientlyFailedPayoutsJob do
     described_class.new.perform
   end
 
+  it "does not requeue a payout whose internal transfer could not be reversed, because the money is still on the seller's account" do
+    seller = create(:user)
+    create_transient_failure(
+      user: seller,
+      failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER,
+      stripe_internal_transfer_id: "tr_stranded"
+    )
+
+    expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
+
+    described_class.new.perform
+  end
+
+  it "still requeues everyone else when one seller's transfer is stranded" do
+    stranded_seller = create(:user)
+    requeueable_seller = create(:user)
+    create_transient_failure(
+      user: stranded_seller,
+      failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER,
+      stripe_internal_transfer_id: "tr_stranded"
+    )
+    create_transient_failure(user: requeueable_seller)
+
+    expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users) do |_date, _processor_type, users, _options|
+      expect(users.to_a).to eq([requeueable_seller])
+    end
+
+    described_class.new.perform
+  end
+
   it "does not requeue a failure from an earlier payout period" do
     create_transient_failure(user: create(:user), payout_period_end_date: payout_period_end_date - 7)
 

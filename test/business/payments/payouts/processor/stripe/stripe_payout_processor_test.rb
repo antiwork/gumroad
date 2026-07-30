@@ -357,7 +357,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_nil @payment.reload.stripe_internal_transfer_id
   end
 
-  test "prepare_payment_and_set_amount error handling when the reversal itself fails reports it and still surfaces the original failure" do
+  test "prepare_payment_and_set_amount error handling when the reversal itself fails takes the payment out of the requeue set and still surfaces the original failure" do
     setup_prepare_payment_error_handling
     internal_transfer = stub(id: "tr_reversalfails", destination_payment: "py_reversalfails")
     StripeTransferInternallyToCreator.stubs(:transfer_funds_to_account).returns(internal_transfer)
@@ -365,14 +365,24 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     reversal_error = Stripe::APIConnectionError.new("Connection refused")
     StripePayoutProcessor.stubs(:reverse_internal_transfer!).raises(reversal_error)
     ErrorNotifier.stubs(:notify)
-    ErrorNotifier.expects(:notify).with(reversal_error, has_entries(stripe_internal_transfer_id: "tr_reversalfails"))
+    ErrorNotifier.expects(:notify).with(
+      reversal_error,
+      has_entries(stripe_internal_transfer_id: "tr_reversalfails", original_failure_reason: Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+    )
 
     errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@gumroad_balance])
 
-    # The rate limit is why the payout failed; the reversal problem must not overwrite it.
+    # The rate limit is why the payout failed, and that stays in the returned errors and the
+    # error_message. But the reason has to move off a requeueable value: the funds are still on the
+    # seller's connected account, so re-issuing this payout would transfer the same money twice.
     assert_includes errors.first, "rate limit exceeded"
-    assert_equal Payment::FailureReason::PROCESSOR_RATE_LIMITED, @payment.reload.failure_reason
+    assert_equal Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER, @payment.reload.failure_reason
+    assert_not_includes Payment::FailureReason::REQUEUEABLE_REASONS, @payment.failure_reason
     assert_equal "tr_reversalfails", @payment.stripe_internal_transfer_id
+  end
+
+  test "an unreversed internal transfer is still a transient reason so a reversal failure of ours does not push the seller toward the automatic payout pause" do
+    assert_includes Payment::FailureReason::TRANSIENT_REASONS, Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER
   end
 
   # ---------------------------------------------------------------------------

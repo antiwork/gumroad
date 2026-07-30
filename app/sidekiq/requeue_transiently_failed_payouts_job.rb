@@ -39,7 +39,7 @@ class RequeueTransientlyFailedPayoutsJob
     failures_by_user = Payment.failed
                               .reorder(nil)
                               .processed_by(PayoutProcessorType::STRIPE)
-                              .where(failure_reason: Payment::FailureReason::TRANSIENT_REASONS, payout_period_end_date:)
+                              .where(failure_reason: Payment::FailureReason::REQUEUEABLE_REASONS, payout_period_end_date:)
                               .group(:user_id)
                               .count
     return if failures_by_user.empty?

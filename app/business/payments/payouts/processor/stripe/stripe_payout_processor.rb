@@ -292,12 +292,23 @@ class StripePayoutProcessor
       # would transfer the same money again. Send it back. No-ops unless the transfer happened.
       #
       # Rescued because this runs in an `ensure`: a reversal that fails must not replace the
-      # original error (which is what tells us why the payout failed) with its own. The
-      # unreversed transfer is recorded on the payment either way, so it stays reconcilable.
+      # original error (which is what tells us why the payout failed) with its own. But the
+      # failure reason has to change, because the money is still out there — re-stamping it
+      # UNREVERSED_INTERNAL_TRANSFER takes the payment out of REQUEUEABLE_REASONS so the daily
+      # requeue cannot transfer the same funds a second time. Reconciling the transfer at Stripe
+      # is a human's job; this only stops the automation from compounding it.
       begin
         reverse_internal_transfer!(payment)
       rescue => e
-        ErrorNotifier.notify(e, payment_id: payment.id, stripe_internal_transfer_id: payment.stripe_internal_transfer_id)
+        payment.update!(failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
+        ErrorNotifier.notify(
+          e,
+          payment_id: payment.id,
+          user_id: payment.user_id,
+          stripe_internal_transfer_id: payment.stripe_internal_transfer_id,
+          original_failure_reason: failure_reason,
+          action_required: "Reverse or reconcile this transfer at Stripe by hand; the payout will not be requeued automatically"
+        )
       end
     end
   end
