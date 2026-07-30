@@ -89,6 +89,29 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     end
   end
 
+  # Enforcement short-circuits on the first blocked domain of the four it reads, so when two of a
+  # subscriber's domains are blocked the report has to name that row and not simply the oldest one
+  # — dating a renewal from a block that did not stop it sends cleanup at the wrong row.
+  it "dates the block on the domain enforcement stopped at, not the oldest blocked domain" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    purchaser = create(:user, email: "member@account-domain.com")
+    renewal = failed_renewal(subscription:, buyer_email: "member@purchase-domain.com",
+                             error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    renewal.update!(purchaser:)
+
+    declining_block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "purchase-domain.com")
+    older_block = travel_to(3.years.ago) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "account-domain.com")
+    end
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("blocked since #{declining_block.blocked_at.to_date}")
+      expect(message).not_to include("blocked since #{older_block.blocked_at.to_date}")
+    end
+  end
+
   # A seller blocking their own buyer is a decision, not staleness.
   it "ignores a renewal blocked by the seller's own customer block" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)

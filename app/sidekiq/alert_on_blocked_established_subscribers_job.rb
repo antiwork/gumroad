@@ -129,6 +129,11 @@ class AlertOnBlockedEstablishedSubscribersJob
       # runs first and short-circuits, and the guid check matches on object_value alone (so this
       # does too). Widening to every block the subscriber has would date a recent block from an
       # unrelated older one and send cleanup at the wrong row.
+      #
+      # Same reason the domain lookup below resolves by candidate order rather than by date:
+      # blocked_by_email_domain_if_fraudulent_transaction? short-circuits on the first of the four
+      # domains that is blocked, so that row is the one holding this renewal even when another
+      # candidate carries an older block.
       guid_dates = guids.any? ? PlatformBlock.active.where(object_value: guids).group(:object_value).minimum(:blocked_at) : {}
       all_domains = domains_by_purchase.values.flatten.uniq
       domain_dates = all_domains.any? ? PlatformBlock.active.where(object_type: PlatformBlock::TYPES[:email_domain], object_value: all_domains).group(:object_value).minimum(:blocked_at) : {}
@@ -136,7 +141,8 @@ class AlertOnBlockedEstablishedSubscribersJob
       dates = {}
       guid_purchases.each { |purchase| dates[purchase.id] = guid_dates[purchase.browser_guid] }
       domain_purchases.each do |purchase|
-        dates[purchase.id] = domains_by_purchase[purchase].filter_map { |domain| domain_dates[domain] }.min
+        declining_domain = domains_by_purchase[purchase].find { |domain| domain_dates.key?(domain) }
+        dates[purchase.id] = domain_dates[declining_domain] if declining_domain
       end
       dates
     end
