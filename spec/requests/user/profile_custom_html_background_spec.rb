@@ -113,6 +113,39 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     end
   end
 
+  [
+    ["<html>", "html{visibility:hidden;background:#000}"],
+    ["<body>", "body{visibility:hidden;background:#000}"],
+  ].each do |element, styles|
+    context "when #{element} hides its contents but still paints a background" do
+      before do
+        seller.update!(custom_html: "<style>html,body{margin:0}#{styles}</style><main><h1>BG Studio</h1></main>")
+      end
+
+      it "mirrors the canvas color" do
+        visit seller.subdomain_with_protocol
+        expect_wrapper_background("rgb(0, 0, 0)")
+      end
+    end
+  end
+
+  [
+    ["<html>", "html{contain:paint}body{background:#000}"],
+    ["<body>", "body{contain:paint;background:#000}"],
+  ].each do |element, styles|
+    context "when #{element} contains the body's background paint" do
+      before do
+        seller.update!(custom_html: "<style>html,body{margin:0}#{styles}</style><main><h1>BG Studio</h1></main>")
+      end
+
+      it "does not extend the body color across the wrapper canvas" do
+        visit seller.subdomain_with_protocol
+        expect(page).to have_css("iframe#gumroad-landing-frame")
+        expect_wrapper_never_set
+      end
+    end
+  end
+
   context "when the page declares no background" do
     before do
       seller.update!(custom_html: "<main><h1>BG Studio</h1></main>")
