@@ -211,7 +211,10 @@ module Product::Prices
   # binding amount is minted. PPP stays out entirely: it needs per-cart context.
   def discounted_price_cents(base_price_cents)
     offer_code = default_offer_code
-    return base_price_cents if offer_code.blank? || offer_code.inactive? || offer_code.existing_customers_only?
+    return base_price_cents if offer_code.blank? || offer_code.deleted? || offer_code.inactive? || offer_code.existing_customers_only?
+    # A fixed-cents code stops matching after a product currency change; checkout's
+    # find_offer_code refuses that pair, so the quote must too.
+    return base_price_cents unless offer_code.is_currency_valid?(self)
     return base_price_cents if offer_code.minimum_quantity.to_i > 1
     return base_price_cents if offer_code.minimum_amount_cents.to_i > base_price_cents
     return base_price_cents unless default_offer_code_uses_left?(offer_code)

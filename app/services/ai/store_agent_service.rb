@@ -573,8 +573,9 @@ class Ai::StoreAgentService
       so the page still reads correctly if a permalink stops matching (except original-price,
       which must stay empty — it renders only during a sale). The prices are served only to
       pages that reference them, so reference the blob by its literal id ("gumroad-prices"),
-      never a computed string. Both mechanisms exist only on the profile page — a slugged page
-      gets neither, so never put price markup there.
+      never a computed string. The priced set is the same capped product list gumroad-data
+      carries, so never write price markup for a product outside it. Both mechanisms exist
+      only on the profile page — a slugged page gets neither, so never put price markup there.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live

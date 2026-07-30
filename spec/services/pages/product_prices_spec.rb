@@ -221,6 +221,25 @@ describe Pages::ProductPrices do
       expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(700)
     end
 
+    # The default association is a plain belongs_to, so drifted states stay loaded: a code
+    # soft-deleted around the write-time guard, or a fixed-cents code left behind by a product
+    # currency change. Checkout's find_offer_code refuses both, so the quote must too.
+    it "ignores a soft-deleted default code" do
+      offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
+      product.update!(default_offer_code: offer_code)
+      offer_code.update_columns(deleted_at: Time.current)
+
+      expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(1400)
+    end
+
+    it "ignores a fixed discount whose currency no longer matches the product" do
+      offer_code = seller.offer_codes.create!(code: "five", amount_cents: 500, currency_type: "usd", products: [product])
+      product.update!(default_offer_code: offer_code)
+      offer_code.update_columns(currency_type: "eur")
+
+      expect(described_class.build(seller, ip: nil)[product.general_permalink][:price_cents]).to eq(1400)
+    end
+
     # Checkout rejects a code whose use cap is spent, so subtracting it here would advertise a
     # sale price and strikethrough the buyer is never charged.
     it "leaves an exhausted default offer code on the shelf" do

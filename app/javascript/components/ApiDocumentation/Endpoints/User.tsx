@@ -114,8 +114,9 @@ const ProfileCustomHtmlDocumentation = () => (
       applied, memberships quoted at their default recurrence — while the <code>price</code> in{" "}
       <code>gumroad-data</code> is your raw set price, so prefer these whenever you display one. They're included only
       when your page references them: use a <code>data-gumroad-product</code> attribute or the literal id{" "}
-      <code>gumroad-prices</code> in your HTML. Both are specific to your profile page; your slug pages are served
-      without them.
+      <code>gumroad-prices</code> in your HTML. Both cover the same products as <code>gumroad-data</code> — your newest
+      100 — so on a larger catalogue, keep price markup to products that appear there. Both are specific to your profile
+      page; your slug pages are served without them.
     </p>
     <p>
       Unlike a product landing page, a profile has no native checkout, so there are no buy buttons —{" "}
