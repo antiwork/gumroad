@@ -1001,7 +1001,10 @@ describe "PurchaseInstallments", :vcr do
         travel_to(@purchase.created_at + unsubscribed_interval) do
           @purchase.reschedule_workflow_installments(send_delay: unsubscribed_interval)
 
-          expect(SendWorkflowInstallmentWorker).to_not have_enqueued_sidekiq_job(cancellation_installment.id, 1, @purchase.id, nil)
+          expect(SendWorkflowInstallmentWorker.jobs.size).to eq(3)
+          enqueued_installment_ids = SendWorkflowInstallmentWorker.jobs.map { _1["args"].first }
+          expect(enqueued_installment_ids).to match_array([@past_installment_1.id, @past_installment_2.id, @future_installment.id])
+          expect(enqueued_installment_ids).to_not include(cancellation_installment.id)
         end
       end
     end
