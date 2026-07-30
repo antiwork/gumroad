@@ -341,11 +341,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   def purchase_review_reminder(purchase_id)
     @purchase = Purchase.find(purchase_id)
-    return if @purchase.product_review.present? || @purchase.purchaser&.opted_out_of_review_reminders?
+    return if @purchase.product_review.present? || !@purchase.can_contact? || @purchase.purchaser&.opted_out_of_review_reminders?
 
     @product_name = @purchase.link.name
     @title = "Liked #{@product_name}? Give it a review!"
-    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser)
+    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser, purchase: @purchase)
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
     # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
@@ -374,7 +374,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     first_purchase = order.purchases.first
 
     @title = "Liked your order? Leave some reviews!"
-    @unsub_link = review_reminder_unsubscribe_url(purchaser)
+    @unsub_link = review_reminder_unsubscribe_url(purchaser, purchase: first_purchase)
     @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
     email = purchaser&.email || first_purchase.email
@@ -421,12 +421,26 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
-    def review_reminder_unsubscribe_url(purchaser)
-      return if purchaser.nil?
+    # Account holders get the per-feature opt-out (review reminders only). Guests have no
+    # `User` row to hold that flag, so they fall back to the purchase-scoped unsubscribe the
+    # receipt footer already uses — a broader opt-out (it clears `can_contact` for this
+    # seller), but a real one, and `eligible_for_review_reminder?` now honours it. Without
+    # this fallback the reminder shipped with no Unsubscribe link at all, since the email
+    # layout only renders the link when `@unsub_link` is set.
+    #
+    # On an order-level reminder spanning several sellers this unsubscribes from the first
+    # purchase's seller only; the alternative is no link whatsoever, and a review reminder
+    # has to carry one.
+    def review_reminder_unsubscribe_url(purchaser, purchase:)
+      if purchaser.present?
+        return user_unsubscribe_review_reminders_by_token_url(
+          purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
+        )
+      end
 
-      user_unsubscribe_review_reminders_by_token_url(
-        purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
-      )
+      return if purchase.nil?
+
+      unsubscribe_purchase_url(purchase.secure_external_id(scope: "unsubscribe"))
     end
 
     def deliver_subscription_email

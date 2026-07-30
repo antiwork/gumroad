@@ -3742,9 +3742,14 @@ class Purchase < ApplicationRecord
     # two checks drift apart, buyers get a reminder email whose link opens a page
     # with no review form (e.g. purchases flagged `should_exclude_product_review`
     # after a charge reversal, or access-revoked free purchases).
+    # `can_contact` is the buyer-facing opt-out behind the receipt footer's Unsubscribe
+    # link, and it is the ONLY opt-out a guest can reach — they have no `User` row to carry
+    # `opted_out_of_review_reminders`. Honouring it here means one unsubscribe covers both
+    # kinds of buyer; account holders keep their own per-feature flag on top.
     allows_review_to_be_counted? &&
       product_review.blank? &&
       !seller&.disable_review_reminders? &&
+      can_contact? &&
       (purchaser.present? ? !purchaser.opted_out_of_review_reminders? : true)
   end
 
