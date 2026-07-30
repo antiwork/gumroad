@@ -45,7 +45,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "mirrors the color onto the wrapper canvas and a theme-color tag" do
       visit seller.subdomain_with_protocol
-
       expect(page).to have_css("iframe#gumroad-landing-frame")
       # Waits for the postMessage round trip rather than asserting immediately.
       expect_wrapper_background("rgb(235, 235, 235)")
@@ -63,7 +62,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "reports the color that actually paints the canvas" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(16, 32, 48)")
     end
   end
@@ -78,7 +76,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "does not mistake the body's color for the canvas" do
       visit seller.subdomain_with_protocol
-
       expect(page).to have_css("iframe#gumroad-landing-frame")
       expect_wrapper_never_set
     end
@@ -94,9 +91,25 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "does not paint the color underneath and composite it twice" do
       visit seller.subdomain_with_protocol
-
       expect(page).to have_css("iframe#gumroad-landing-frame")
       expect_wrapper_never_set
+    end
+  end
+
+  [
+    ["<html>", "html{display:none;background:#000}"],
+    ["<body>", "body{display:none;background:#000}"],
+  ].each do |element, styles|
+    context "when #{element} has a color but does not render" do
+      before do
+        seller.update!(custom_html: "<style>html,body{margin:0}#{styles}</style><main><h1>BG Studio</h1></main>")
+      end
+
+      it "does not paint the hidden color onto the wrapper" do
+        visit seller.subdomain_with_protocol
+        expect(page).to have_css("iframe#gumroad-landing-frame")
+        expect_wrapper_never_set
+      end
     end
   end
 
@@ -107,7 +120,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "leaves the wrapper untouched" do
       visit seller.subdomain_with_protocol
-
       expect(page).to have_css("iframe#gumroad-landing-frame")
       within_frame(find("iframe#gumroad-landing-frame")) do
         expect(page).to have_text("BG Studio")
@@ -128,7 +140,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "mirrors the browser's opaque iframe backplate" do
       visit seller.subdomain_with_protocol
-
       canvas = within_frame(find("iframe#gumroad-landing-frame")) do
         page.evaluate_script(<<~JS)
           (function () {
@@ -168,7 +179,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
         it "refuses it and applies nothing" do
           visit seller.subdomain_with_protocol
           expect(page).to have_css("iframe#gumroad-landing-frame")
-
           expect_wrapper_never_set
         end
       end
@@ -188,7 +198,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
     it "refuses it and applies nothing" do
       visit seller.subdomain_with_protocol
       expect(page).to have_css("iframe#gumroad-landing-frame")
-
       expect_wrapper_never_set
     end
   end
@@ -203,7 +212,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "falls through to the color that actually paints" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
     end
   end
@@ -223,7 +231,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       it "leaves the wrapper untouched instead of compositing the color twice" do
         visit seller.subdomain_with_protocol
         expect(page).to have_css("iframe#gumroad-landing-frame")
-
         expect_wrapper_never_set
       end
     end
@@ -239,7 +246,6 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "reports it instead of treating the trailing zero as transparency" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(0, 0, 0)")
       expect(theme_color).to eq("rgb(0, 0, 0)")
     end
@@ -263,11 +269,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports the new color to the wrapper" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Toggle theme" }
-
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
@@ -291,18 +294,15 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "clears the wrapper canvas and removes the theme-color tag" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
       expect(theme_color).to eq("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Drop background" }
-
       expect_wrapper_background("")
       expect(theme_color).to be_nil
     end
   end
 
-  context "when a reloaded iframe starts without a background" do
+  context "when the iframe loads another document" do
     before do
       seller.update!(custom_html: <<~HTML)
         <style>html,body{margin:0}body{background:#EBEBEB}</style>
@@ -310,17 +310,38 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       HTML
     end
 
-    it "clears the previous document's wrapper tint" do
+    {
+      "a transparent bridged page" => ["<main><h1>Transparent page</h1></main>", "Transparent page", nil],
+      "another opaque bridged page" => [
+        "<style>body{background:#101010}</style><main><h1>Dark page</h1></main>",
+        "Dark page",
+        "rgb(16, 16, 16)",
+      ],
+    }.each do |destination, (html, text, color)|
+      it "resets for #{destination}" do
+        visit seller.subdomain_with_protocol
+        expect_wrapper_background("rgb(235, 235, 235)")
+        seller.update!(custom_html: html)
+        page.execute_script(<<~JS)
+          var frame = document.getElementById("gumroad-landing-frame");
+          frame.src = frame.src.split("?")[0] + "?reloaded";
+        JS
+        within_frame(find("iframe#gumroad-landing-frame")) { expect(page).to have_text(text) }
+        expect_wrapper_background(color || "")
+        expect(theme_color).to eq(color)
+      end
+    end
+
+    it "clears for a destination without the bridge" do
       visit seller.subdomain_with_protocol
       expect_wrapper_background("rgb(235, 235, 235)")
-
-      seller.update!(custom_html: "<main><h1>Transparent page</h1></main>")
       page.execute_script(<<~JS)
+        window.__landingLoaded = false;
         var frame = document.getElementById("gumroad-landing-frame");
-        frame.src = frame.src.split("?")[0] + "?reloaded";
+        frame.addEventListener("load", function () { window.__landingLoaded = true; }, { once: true });
+        frame.src = "about:blank";
       JS
-
-      within_frame(find("iframe#gumroad-landing-frame")) { expect(page).to have_text("Transparent page") }
+      wait_until_true(sleep_interval: 0.1) { page.evaluate_script("window.__landingLoaded") }
       expect_wrapper_background("")
       expect(theme_color).to be_nil
     end
@@ -345,11 +366,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "keeps the color already applied" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Send junk" }
-
       # Poll the whole window: a wrongly-clearing guard blanks the canvas within
       # a frame of the message, so a single read could pass before it lands.
       deadline = Time.current + 2.0
@@ -379,11 +397,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports the new color to the wrapper" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Rewrite theme" }
-
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
@@ -409,11 +424,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports the new color to the wrapper" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Add theme" }
-
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
@@ -445,11 +457,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports the new color once the stylesheet has loaded" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Load theme" }
-
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
@@ -475,11 +484,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports the new color to the wrapper" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Add theme" }
-
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
@@ -515,11 +521,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports the new color once the nested stylesheet has loaded" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Load theme" }
-
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
     end
@@ -558,11 +561,8 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
       it "re-reports the new color to the wrapper" do
         visit seller.subdomain_with_protocol
-
         expect_wrapper_background("rgb(235, 235, 235)")
-
         within_frame(find("iframe#gumroad-landing-frame")) { click_on "Retheme" }
-
         expect_wrapper_background("rgb(16, 16, 16)")
         expect(theme_color).to eq("rgb(16, 16, 16)")
       end
@@ -594,13 +594,10 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "re-reports in both directions" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Dark" }
       expect_wrapper_background("rgb(16, 16, 16)")
       expect(theme_color).to eq("rgb(16, 16, 16)")
-
       within_frame(find("iframe#gumroad-landing-frame")) { click_on "Light" }
       expect_wrapper_background("rgb(235, 235, 235)")
       expect(theme_color).to eq("rgb(235, 235, 235)")
@@ -617,9 +614,7 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
 
     it "does not re-post the color it already reported" do
       visit seller.subdomain_with_protocol
-
       expect_wrapper_background("rgb(235, 235, 235)")
-
       page.execute_script(<<~JS)
         window.__bgMessages = 0;
         window.addEventListener("message", function (e) {

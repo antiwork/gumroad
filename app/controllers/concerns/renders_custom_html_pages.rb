@@ -233,12 +233,8 @@ module RendersCustomHtmlPages
   # with, and long enough that the cost stays immeasurable on a quiet page.
   BACKGROUND_POLL_INTERVAL_MS = 1000
 
-  # Seller CSS cannot reach the trusted wrapper around this opaque-origin
-  # iframe. Report the computed canvas color so the wrapper can tint browser
-  # chrome and overscroll; re-report after DOM, CSSOM, or color-scheme changes.
-  #
-  # Only fully opaque html/body colors are safe. Mirroring translucent paint
-  # underneath the transparent iframe composites it twice and darkens the page.
+  # Report only flat, opaque canvas paint; mirroring translucent paint under
+  # the iframe would composite it twice.
   BACKGROUND_BRIDGE_SCRIPT = <<~HTML
     <script data-cfasync="false" data-gumroad-background-bridge>
       (function () {
@@ -252,7 +248,9 @@ module RendersCustomHtmlPages
             style.maskImage === "none" &&
             (!style.webkitMaskImage || style.webkitMaskImage === "none") &&
             style.mixBlendMode === "normal" &&
-            style.transform === "none";
+            style.transform === "none" &&
+            style.display !== "none" &&
+            style.visibility === "visible";
         }
         function schemeBackplate(style) {
           if (!style.colorScheme || style.colorScheme === "normal" || !document.body) return null;
@@ -272,6 +270,7 @@ module RendersCustomHtmlPages
           if (rootAlpha === 1) return root;
           if (rootAlpha !== 0 || rootStyle.backgroundImage !== "none" || !document.body) return null;
           var bodyStyle = window.getComputedStyle(document.body);
+          if (bodyStyle.display === "none" || bodyStyle.visibility !== "visible") return schemeBackplate(rootStyle);
           var body = bodyStyle.backgroundColor;
           if (opaque(body)) return body;
           if (colorAlpha(body) !== 0 || bodyStyle.backgroundImage !== "none") return null;
@@ -279,15 +278,19 @@ module RendersCustomHtmlPages
         }
         var reported = null;
         var hasReported = false;
-        function report() {
+        function report(force) {
           var color = canvasColor();
-          if (hasReported && color === reported) return;
+          if (!force && hasReported && color === reported) return;
           reported = color;
           hasReported = true;
           // The first null matters after an iframe reload: its wrapper may
           // still hold the previous document's tint.
           parent.postMessage({ type: "gumroad:background", color: color }, "*");
         }
+        window.addEventListener("message", function (e) {
+          var d = e.data;
+          if (e.source === parent && d && d.type === "gumroad:background:request") report(true);
+        });
         var queued = false;
         function queueReport() {
           if (queued) return;
@@ -669,6 +672,10 @@ module RendersCustomHtmlPages
                 meta = null;
               }
             }
+            frame.addEventListener("load", function () {
+              clear();
+              frame.contentWindow.postMessage({ type: "gumroad:background:request" }, "*");
+            });
             window.addEventListener("message", function (e) {
               if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
               var d = e.data;
