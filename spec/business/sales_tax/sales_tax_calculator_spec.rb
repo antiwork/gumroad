@@ -54,12 +54,7 @@ describe SalesTaxCalculator do
       compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
     end
 
-    context "physical products imported into the EU" do
-      # The seller ships from outside the union, so the parcel crosses a customs border.
-      before do
-        create(:user_compliance_info, user: @seller, country: "United States")
-      end
-
+    context "physical products shipped to the EU" do
       # No IOSS registration, so anything collected here could not be remitted and the buyer paid
       # the same VAT again to customs on delivery.
       it "returns zero tax for a physical product shipped to an EU member state" do
@@ -73,32 +68,31 @@ describe SalesTaxCalculator do
         compare_calculations(expected: SalesTaxCalculation.zero_tax(12_500), actual: sales_tax)
       end
 
-      # OSS covers intra-EU distance sales, so nothing is unremittable and no border charges again.
-      it "still assesses VAT when the seller ships from inside the EU" do
-        expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+      # Origin does not enter into it: we have no IOSS number to remit under or to present at the
+      # border wherever the parcel starts. These four cover the origins the previous revision of
+      # this fix branched on, so re-introducing an origin test reddens them.
+      it "returns zero tax when the seller ships from inside the EU" do
+        create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
         create(:user_compliance_info, user: @seller, country: "Germany")
 
         sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
                                            price_cents: 100,
                                            buyer_location: { country: "LT" }).calculate
 
-        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
-                             actual: sales_tax)
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
       end
 
-      it "still assesses VAT on a domestic EU shipment" do
-        expected_tax_rate = create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil, combined_rate: 0.19, is_seller_responsible: false)
+      it "returns zero tax on a domestic EU shipment" do
+        create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil, combined_rate: 0.19, is_seller_responsible: false)
         create(:user_compliance_info, user: @seller, country: "Germany")
 
         sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
                                            price_cents: 100,
                                            buyer_location: { country: "DE" }).calculate
 
-        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 19, zip_tax_rate: expected_tax_rate),
-                             actual: sales_tax)
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
       end
 
-      # The UK left the customs union, so a UK parcel into the EU is an import like any other.
       it "returns zero tax when the seller ships from the UK into the EU" do
         create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
         create(:user_compliance_info, user: @seller, country: "United Kingdom")
@@ -110,41 +104,28 @@ describe SalesTaxCalculator do
         compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
       end
 
-      # An unprovable import is not worth opening a non-collection gap over.
-      it "still assesses VAT when the shipment origin is unknown" do
-        expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
-        @seller.alive_user_compliance_info.mark_deleted!
-        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
-                                           price_cents: 100,
-                                           buyer_location: { country: "LT" }).calculate
-
-        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
-                             actual: sales_tax)
-      end
-
-      # For a business seller legal_entity_country_code reads business_country, not the individual
-      # country, so the business lane needs its own coverage.
-      it "still assesses VAT when the seller's business is in the EU" do
-        expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
-        create(:user_compliance_info, user: @seller, country: "United States", is_business: true, business_country: "Germany")
-
-        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
-                                           price_cents: 100,
-                                           buyer_location: { country: "LT" }).calculate
-
-        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
-                             actual: sales_tax)
-      end
-
-      it "returns zero tax when the seller's business is outside the EU" do
+      it "returns zero tax when the seller has no compliance country on file" do
         create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
-        create(:user_compliance_info, user: @seller, country: "Germany", is_business: true, business_country: "United States")
+        @seller.alive_user_compliance_info&.mark_deleted!
 
         sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
                                            price_cents: 100,
                                            buyer_location: { country: "LT" }).calculate
 
         compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+      end
+
+      # The UK has its own registration and the marketplace collects under £135, so the border does
+      # not charge again — this is the one physical destination that still assesses.
+      it "still assesses VAT on a physical product shipped to the UK" do
+        expected_tax_rate = create(:zip_tax_rate, country: "GB", zip_code: nil, state: nil, combined_rate: 0.20, is_seller_responsible: false)
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "GB" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 20, zip_tax_rate: expected_tax_rate),
+                             actual: sales_tax)
       end
 
       it "still assesses VAT on a digital product shipped to the same country" do
@@ -2221,9 +2202,8 @@ describe SalesTaxCalculator do
         compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
       end
 
-      it "does not assess VAT for physical products imported into an EU country" do
+      it "does not assess VAT for physical products shipped to an EU country" do
         product = create(:physical_product, user: @seller)
-        create(:user_compliance_info, user: @seller, country: "United States")
         create(:zip_tax_rate, country: "IT", state: nil, zip_code: nil, combined_rate: 0.22, is_seller_responsible: false)
 
         expected_sales_tax = SalesTaxCalculation.zero_tax(100)

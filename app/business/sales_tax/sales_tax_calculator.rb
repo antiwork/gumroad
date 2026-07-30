@@ -235,26 +235,17 @@ class SalesTaxCalculator
       end
     end
 
-    # A physical parcel entering the EU from outside it clears customs, which assesses import VAT
-    # on arrival. We hold no IOSS registration to remit under or to stamp on the declaration, so
-    # collecting at checkout too means the buyer pays the same VAT twice. Goods already inside the
-    # EU never clear customs, so an EU-27 origin keeps collecting — whether that belongs on our OSS
-    # return or the seller's own is a question for counsel, and collecting is the conservative side.
+    # We hold an OSS registration, not IOSS, so we have no scheme to remit physical EU VAT under and
+    # no number to stamp on a customs declaration. Collecting at checkout therefore cannot prevent
+    # the border charging the buyer again — it only guarantees they pay twice.
     #
-    # Origin is a proxy: there is no ship-from field, so the seller's legal entity country stands in
-    # for it, and a US-registered seller fulfilling from an EU warehouse is misread. Unknown origin
-    # keeps collecting — over-collection is refundable, under-collection is VAT we owe and never took.
-    #
-    # EU_VAT_DESTINATION_COUNTRY_CODES excludes the UK on both sides: as a destination it has its
-    # own registration and the marketplace collects at checkout under £135, and as an origin it is
-    # outside the customs union.
+    # The UK is excluded: it has its own registration, and under £135 the marketplace collects at
+    # checkout and the border does not charge again.
     def eu_import_vat_unremittable?
       return false unless product.is_physical
       return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
-      return false unless EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
 
-      shipment_origin = seller&.compliance_country_code
-      shipment_origin.present? && !EU_VAT_DESTINATION_COUNTRY_CODES.include?(shipment_origin)
+      EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
     end
 
     def tax_eligible?
