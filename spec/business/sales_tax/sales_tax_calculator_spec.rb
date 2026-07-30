@@ -447,8 +447,8 @@ describe SalesTaxCalculator do
         product = create(:physical_product, user: @seller)
 
         actual_sales_tax = SalesTaxCalculator.new(product:,
-                                                 price_cents: 100,
-                                                 buyer_location: { country: "SG" }).calculate
+                                                  price_cents: 100,
+                                                  buyer_location: { country: "SG" }).calculate
 
         compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: actual_sales_tax)
       end
