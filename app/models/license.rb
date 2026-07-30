@@ -3,6 +3,10 @@
 class License < ApplicationRecord
   MANAGE_SECURE_ID_SCOPE = "manage_license"
 
+  # Re-minted on every page load, so a TTL only ever costs a click from a tab left open past it.
+  # Without one the token survives rotate! and disable!, and only a key rotation revokes a leak.
+  MANAGE_TOKEN_TTL = 1.week
+
   # Sellers set this by hand from the customer page, so the ceiling only has to be high enough that
   # no real activation count reaches it while still keeping a typo out of the search index.
   MAX_SELLER_SETTABLE_USES = 1_000_000

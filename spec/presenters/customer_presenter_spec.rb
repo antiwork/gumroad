@@ -78,7 +78,7 @@ describe CustomerPresenter do
     end
 
     it "returns the correct props for each customer" do
-      allow_any_instance_of(License).to receive(:secure_external_id).with(scope: License::MANAGE_SECURE_ID_SCOPE).and_return("secure-license-id")
+      allow_any_instance_of(License).to receive(:secure_external_id).with(scope: License::MANAGE_SECURE_ID_SCOPE, expires_at: anything).and_return("secure-license-id")
       allow(purchase1).to receive(:transaction_url_for_seller).and_return("https://google.com")
       allow(purchase1).to receive(:stripe_partially_refunded?).and_return(true)
       allow(purchase1).to receive(:stripe_refunded?).and_return(true)
@@ -222,6 +222,18 @@ describe CustomerPresenter do
           download_count: 0,
         }
       )
+    end
+
+    context "with a license" do
+      it "mints a management token that stops working after the TTL" do
+        token = described_class.new(purchase: purchase2).customer(pundit_user:)[:license][:id]
+
+        expect(License.find_by_secure_external_id(token, scope: License::MANAGE_SECURE_ID_SCOPE)).to eq purchase2.license
+
+        travel_to(License::MANAGE_TOKEN_TTL.from_now + 1.minute) do
+          expect(License.find_by_secure_external_id(token, scope: License::MANAGE_SECURE_ID_SCOPE)).to be_nil
+        end
+      end
     end
 
     context "when the purchase is both charged back and fully refunded" do

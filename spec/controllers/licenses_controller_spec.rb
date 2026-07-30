@@ -231,6 +231,20 @@ describe LicensesController do
         expect(response).to have_http_status(:not_found)
         expect(license.reload.uses).to eq 9
       end
+
+      it "rejects a token past its expiry" do
+        expired_id = license.secure_external_id(scope: License::MANAGE_SECURE_ID_SCOPE, expires_at: 1.minute.ago)
+        put :update, format: :json, params: { id: expired_id, uses: 3 }
+        expect(response).to have_http_status(:not_found)
+        expect(license.reload.uses).to eq 9
+      end
+
+      it "accepts a token still inside its expiry" do
+        fresh_id = license.secure_external_id(scope: License::MANAGE_SECURE_ID_SCOPE, expires_at: License::MANAGE_TOKEN_TTL.from_now)
+        put :update, format: :json, params: { id: fresh_id, uses: 3 }
+        expect(response).to be_successful
+        expect(license.reload.uses).to eq 3
+      end
     end
   end
 end
