@@ -9333,7 +9333,10 @@ describe StripeMerchantAccountManager, :vcr do
 
         expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
           expect(attributes).not_to have_key(:tos_acceptance)
-          expect(attributes[:individual]).not_to have_key(:address) if attributes[:individual]
+          # Unconditional: an entity hash that disappeared entirely would otherwise skip the
+          # address assertion and let a broken exclusion pass.
+          expect(attributes.fetch(:individual, {})).not_to have_key(:address)
+          expect(attributes.fetch(:company, {})).not_to have_key(:address)
           expect(attributes[:business_profile]).to be_present
         end
       end
