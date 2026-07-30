@@ -105,7 +105,7 @@ class AlertOnBlockedEstablishedSubscribersJob
           # only BETWEEN batches: within one, latest_block_failures returns rows keyed by id, so
           # taking the first N off the raw accumulator would keep an arbitrary subset of the batch
           # that tripped the cap and drop newer stranded subscribers for older ones.
-          stranded = stranded.first(MAX_ESTABLISHED_FOUND)
+          stranded = stranded.sort_by { |entry| -entry[:failed_at].to_i }.first(MAX_ESTABLISHED_FOUND)
           truncated = true
           break
         end
