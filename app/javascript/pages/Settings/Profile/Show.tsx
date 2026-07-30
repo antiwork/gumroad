@@ -491,8 +491,8 @@ export default function SettingsPage() {
                   })}
                 </div>
               </Fieldset>
-              <div className="flex flex-wrap gap-x-8 gap-y-4">
-                <Label className="items-center" htmlFor={`${uid}-backgroundColor`}>
+              <div className="grid w-fit grid-cols-[max-content_max-content] gap-y-4">
+                <Label className="col-span-2 grid! grid-cols-subgrid items-center" htmlFor={`${uid}-backgroundColor`}>
                   Background color
                   <ColorPicker
                     id={`${uid}-backgroundColor`}
@@ -501,7 +501,7 @@ export default function SettingsPage() {
                     disabled={!canUpdate}
                   />
                 </Label>
-                <Label className="items-center" htmlFor={`${uid}-highlightColor`}>
+                <Label className="col-span-2 grid! grid-cols-subgrid items-center" htmlFor={`${uid}-highlightColor`}>
                   Highlight color
                   <ColorPicker
                     id={`${uid}-highlightColor`}
