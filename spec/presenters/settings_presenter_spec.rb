@@ -869,6 +869,83 @@ describe SettingsPresenter do
         expect(account_status[:show_section]).to eq(false)
       end
 
+      describe "bank-account rejection banner" do
+        let(:bank_note_content) { "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}: invalid_bank_account — Bank code unrecognized" }
+
+        it "asks the seller to re-save details while automated retries are still running" do
+          create(:ach_account, user: seller)
+          seller.add_payout_note(content: bank_note_content)
+
+          account_status = presenter.payments_props[:account_status]
+          expect(account_status[:show_section]).to eq(true)
+          expect(account_status[:compliance_actions]).to contain_exactly(
+            hash_including(message: a_string_matching(/re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks/o), href: nil)
+          )
+        end
+
+        it "asks for a different bank account once the retry pipeline has abandoned the note" do
+          create(:ach_account, user: seller)
+          note = seller.add_payout_note(content: bank_note_content)
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.json_data["abandoned_reason"] = RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_ACCOUNT_BLOCKED
+          note.save!
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
+            hash_including(message: a_string_matching(/add a different bank account/), href: nil)
+          )
+        end
+
+        it "tells a format-rejected seller to correct the details rather than to wait" do
+          create(:ach_account, user: seller)
+          note = seller.add_payout_note(content: bank_note_content)
+          note.json_data["abandoned_at"] = Time.current.iso8601
+          note.json_data["abandoned_reason"] = RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
+          note.save!
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to contain_exactly(
+            hash_including(message: a_string_matching(/re-checking won't clear it/), href: nil)
+          )
+        end
+
+        it "stays silent for a seller who left bank payouts, so the banner can't outlive the account it blames" do
+          # Switching to PayPal deletes the BankAccount row and nothing soft-deletes the note,
+          # so defaulting to "show" would nag a seller whose payouts already work.
+          seller.add_payout_note(content: bank_note_content)
+
+          account_status = presenter.payments_props[:account_status]
+          expect(account_status[:compliance_actions]).to eq([])
+          expect(account_status[:show_section]).to eq(false)
+        end
+
+        it "ignores a rejection that predates the bank account currently on file" do
+          # Re-entering details creates a NEW BankAccount row, so an older note describes
+          # details the seller has already replaced.
+          note = seller.add_payout_note(content: bank_note_content)
+          note.update!(created_at: 2.days.ago)
+          create(:ach_account, user: seller)
+
+          account_status = presenter.payments_props[:account_status]
+          expect(account_status[:compliance_actions]).to eq([])
+          expect(account_status[:show_section]).to eq(false)
+        end
+
+        it "does not surface the bank rejection once a Stripe account exists" do
+          create(:ach_account, user: seller)
+          create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_bank_note_test")
+          seller.add_payout_note(content: bank_note_content)
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+        end
+
+        it "does not surface a bank rejection whose breadcrumb note was cleared by a successful sync" do
+          create(:ach_account, user: seller)
+          note = seller.add_payout_note(content: bank_note_content)
+          note.update!(deleted_at: Time.current)
+
+          expect(presenter.payments_props[:account_status][:compliance_actions]).to eq([])
+        end
+      end
+
       it "flags the Stripe account as rejected and hides the remediation link when the rejection is terminal" do
         merchant_account = create(:merchant_account, user: seller, stripe_disabled_reason: "rejected.listed")
         create(:balance, user: seller, merchant_account:, amount_cents: 50)

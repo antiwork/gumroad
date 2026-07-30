@@ -329,6 +329,33 @@ class SettingsPresenter
       compliance_info.nil? || note.created_at >= compliance_info.created_at
     end
 
+    # The bank-account counterpart of postal_code_rejected_by_stripe?, returning the newest alive
+    # note about the bank details the seller currently has saved, or nil.
+    #
+    # Freshness is anchored on the active bank account's created_at rather than on compliance info:
+    # UpdatePayoutMethod replaces the BankAccount row instead of editing it, so a note older than
+    # that row describes details the seller has already replaced.
+    #
+    # No alive bank row means the seller left bank payouts (switching to PayPal deletes the row,
+    # and notes are only cleared on a successful sync), so staying silent here is what stops a
+    # seller with working PayPal payouts from being told forever to fix a bank account they removed.
+    def current_bank_sync_failure_note
+      bank_account = seller.active_bank_account
+      return nil if bank_account.nil?
+
+      note = seller.comments
+            .with_type_payout_note
+            .alive
+            .where(author_id: GUMROAD_ADMIN_ID)
+            .where("content LIKE ?", "#{StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX}%")
+            .order(created_at: :desc, id: :desc)
+            .first
+      return nil if note.nil?
+
+      # Equal timestamps count: the note is always written after the row it describes.
+      note.created_at >= bank_account.created_at ? note : nil
+    end
+
     def country_code_for_compliance_field(field, user_compliance_info)
       case field
       when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
@@ -446,6 +473,30 @@ class SettingsPresenter
           message: "Our payment partner couldn't verify the postal code you entered#{" for #{country}" if country.present?}. Please double-check it and re-save your address. If you're sure it's correct (for example, a newly built address), you don't need to do anything — we'll automatically re-check it every few days for up to #{weeks} weeks.",
           href: nil,
         }
+      end
+
+      # Same asynchronous rejection as the postal code above, for the bank details. Stripe can
+      # refuse the account the seller saved while the settings page still reports a clean save, so
+      # without this the only notice is an email — and on a paid product the publish button stays
+      # blocked with a "connect a payment method" error that reads as unrelated.
+      #
+      # The wording splits on whether the retry pipeline has already given up, because telling a
+      # seller to wait for a weekly re-check that will never run again is worse than saying nothing.
+      # Terminality is read from the note the pipeline itself abandoned rather than re-classified
+      # here: RetryStripeRejectedPayoutSetupForSellerJob owns that decision and emails the seller
+      # at the same moment, so a second opinion could contradict the email they just received.
+      if stripe_account.blank? && (bank_note = current_bank_sync_failure_note)
+        weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+        bank_message = if bank_note.json_data["abandoned_reason"] == RetryStripeRejectedPayoutSetupForSellerJob::ABANDONED_REASON_BANK_FORMAT_REJECTION
+          "Our payment partner couldn't accept your bank details as entered, and re-checking won't clear it. Please double-check your account and bank code and re-save them."
+        elsif bank_note.json_data["abandoned_at"].present?
+          "Our payment partner won't accept the bank account you entered, so it can't be used for payouts. This won't clear on its own — please add a different bank account."
+        else
+          # Matches ContactingCreatorMailer#invalid_bank_account: the sweep is weekly
+          # (RetryStripeRejectedPayoutSetupsJob), so don't promise anything faster.
+          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{weeks} weeks."
+        end
+        compliance_actions << { message: bank_message, href: nil }
       end
 
       gumroad_status = if is_under_review && !is_suspended
