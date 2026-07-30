@@ -146,6 +146,27 @@ describe CartPresenter do
       end
     end
 
+    # visible_cart_products backs both the cart items and the checkout seller theme, so a row it
+    # stops excluding would theme the page for a seller whose product is not on screen.
+    context "when the cart contains deleted cart products" do
+      let(:cart) { create(:cart, user:) }
+      let(:removed_product) { create(:product) }
+      let(:active_product) { create(:product) }
+
+      before do
+        create(:cart_product, cart:, product: removed_product, deleted_at: 1.minute.ago)
+        create(:cart_product, cart:, product: active_product)
+      end
+
+      it "excludes deleted cart products from cart items" do
+        props = presenter.cart_props
+        permalinks = props[:items].map { |item| item[:product][:permalink] }
+
+        expect(permalinks).to include(active_product.unique_permalink)
+        expect(permalinks).not_to include(removed_product.unique_permalink)
+      end
+    end
+
     context "with many cart items" do
       let(:cart) { create(:cart, user:) }
       let(:seller) { create(:user) }

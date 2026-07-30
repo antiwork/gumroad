@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class Pages::ProfileData
-  # Bumped when the shape of the cached payload changes (v4 added products' cover_url,
-  # v5 moved product/post URLs onto the seller's live custom domain), so already-cached
-  # entries built by the previous shape are not served to pages that now expect the new keys.
+  # Bumped when the shape of the cached payload changes (v5 added the *_total counts and
+  # moved product/post URLs onto the seller's live custom domain), so already-cached entries
+  # built by the previous shape are not served to pages that now expect the new keys.
   CACHE_VERSION = "v5"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
@@ -19,6 +19,12 @@ class Pages::ProfileData
         products: products(seller, base_url),
         posts: posts(seller, base_url),
         pages: pages(seller_profile),
+        # A page has no way to discover what MAX_ITEMS dropped: CUSTOM_HTML_CSP sets
+        # connect-src 'none', so this payload is its only product source. Emitting the
+        # true totals lets a page say "showing 100 of 114" instead of silently
+        # advertising an incomplete catalogue (gumroad-private#1522).
+        products_total: products_total(seller),
+        posts_total: posts_total(seller),
       }
     end
   end
@@ -78,6 +84,14 @@ class Pages::ProfileData
     return if image.nil? || image.unsplash_url.present?
 
     image.url
+  end
+
+  def self.products_total(seller)
+    seller.products.alive.not_archived.not_draft.count
+  end
+
+  def self.posts_total(seller)
+    seller.installments.visible_on_profile.count
   end
 
   def self.posts(seller, base_url = seller.store_base_url)
