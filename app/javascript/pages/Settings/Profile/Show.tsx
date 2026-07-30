@@ -204,6 +204,20 @@ export default function SettingsPage() {
     if (isSaving) return false;
     setIsSaving(true);
     const settings = profileSettings;
+    const previousSettings = lastSavedSettings.current;
+    const changedSettings: Partial<ProfileSettingsForm> = {};
+    if (settings.name !== previousSettings.name) changedSettings.name = settings.name;
+    if (settings.bio !== previousSettings.bio) changedSettings.bio = settings.bio;
+    if (settings.profile_picture_blob_id !== previousSettings.profile_picture_blob_id) {
+      changedSettings.profile_picture_blob_id = settings.profile_picture_blob_id;
+    }
+    if (settings.font !== previousSettings.font) changedSettings.font = settings.font;
+    if (settings.background_color !== previousSettings.background_color) {
+      changedSettings.background_color = settings.background_color;
+    }
+    if (settings.highlight_color !== previousSettings.highlight_color) {
+      changedSettings.highlight_color = settings.highlight_color;
+    }
     const { sections, tabs } = editableProfile;
     // Only submit pages/sections when they actually changed. A save that left them untouched
     // (e.g. editing just the name or bio) must not resend a now-stale list, or the server would
@@ -213,7 +227,7 @@ export default function SettingsPage() {
       !isEqual(sections, lastSavedProfile.current.sections) || !isEqual(tabs, lastSavedProfile.current.tabs);
     try {
       await saveProfileSettings({
-        ...settings,
+        ...changedSettings,
         ...(profileChanged ? { tabs, sections, profileVersion: profile_version } : {}),
       });
       lastSavedSettings.current = settings;
@@ -275,6 +289,7 @@ export default function SettingsPage() {
 
   const showPagesTab = !has_custom_landing_page;
   const showCustomLandingPagePreview = custom_html_pages_enabled && has_custom_landing_page && tab !== "design";
+  const showThemeWithoutPublicUrl = custom_html_pages_enabled && has_custom_landing_page && tab === "design";
 
   const renderTab = (key: ProfileSettingsTab, label: string) => (
     <Tab
@@ -306,33 +321,36 @@ export default function SettingsPage() {
     <PreviewSidebar>
       <PreviewChrome
         title={profileSettings.name || username}
-        url={profileUrl}
-        link={(props) => (
-          <NavigationButton
-            {...props}
-            disabled={isSaving}
-            href={profileUrl}
-            onClick={(evt) => {
-              evt.preventDefault();
-              // Persist pending edits before previewing, but only when there's something to save -
-              // settings (name/bio/avatar) are sent on every save with no freshness check, so an
-              // unconditional save from a stale, locally-clean tab would revert changes made elsewhere.
-              if (canSave) {
-                // Open the tab NOW, while we still have the user's click activation, then point it
-                // at the profile once the save finishes. Calling window.open after the await instead
-                // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
-                // which matters because the mobile preview pane is this button's main audience.
-                // On a failed save, close the reserved tab so we don't surface a stale preview.
-                const previewWindow = window.open("about:blank", "_blank");
-                void save().then((saved) => {
-                  if (!saved) previewWindow?.close();
-                  else if (previewWindow) previewWindow.location.href = profileUrl;
-                  else window.open(profileUrl, "_blank");
-                });
-              } else window.open(profileUrl, "_blank");
-            }}
-          />
-        )}
+        url={showThemeWithoutPublicUrl ? undefined : profileUrl}
+        link={
+          showThemeWithoutPublicUrl
+            ? undefined
+            : (props) => (
+                <NavigationButton
+                  {...props}
+                  disabled={isSaving}
+                  href={profileUrl}
+                  onClick={(evt) => {
+                    evt.preventDefault();
+                    // Persist pending edits before previewing, but only when there's something to save -
+                    // an unconditional save from a stale, locally-clean tab creates needless writes.
+                    if (canSave) {
+                      // Open the tab NOW, while we still have the user's click activation, then point it
+                      // at the profile once the save finishes. Calling window.open after the await instead
+                      // gets popup-blocked on iOS Safari (the async gap consumes the transient activation),
+                      // which matters because the mobile preview pane is this button's main audience.
+                      // On a failed save, close the reserved tab so we don't surface a stale preview.
+                      const previewWindow = window.open("about:blank", "_blank");
+                      void save().then((saved) => {
+                        if (!saved) previewWindow?.close();
+                        else if (previewWindow) previewWindow.location.href = profileUrl;
+                        else window.open(profileUrl, "_blank");
+                      });
+                    } else window.open(profileUrl, "_blank");
+                  }}
+                />
+              )
+        }
       >
         {showCustomLandingPagePreview ? (
           <ProfileLandingPagePreview username={username} name={profileSettings.name} bio={profileSettings.bio} />
