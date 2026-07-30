@@ -458,21 +458,25 @@ module StripeMerchantAccountManager
   end
 
   # One breadcrumb per account, not per attempt: the resync runs on every compliance change and
-  # the mismatch does not resolve on its own, so re-noting it would bury the payout notes.
+  # the mismatch does not resolve on its own, so re-noting it would bury the payout notes. Two
+  # resyncs can be in flight for the same seller, so the look-then-write has to hold the user row.
   private_class_method
   def self.record_service_agreement_failure_note(user, error)
     return if user.blank?
-    return if user.comments
+
+    user.with_lock do
+      next if user.comments
                   .with_type_payout_note
                   .alive
                   .where(author_id: GUMROAD_ADMIN_ID)
                   .where("content LIKE ?", "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
                   .exists?
 
-    user.add_payout_note(
-      content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{error.message.to_s.truncate(300)}",
-      seller_visible: false
-    )
+      user.add_payout_note(
+        content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{error.message.to_s.truncate(300)}",
+        seller_visible: false
+      )
+    end
   rescue => e
     Rails.logger.error "Failed to record Stripe service-agreement payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)

@@ -9221,6 +9221,29 @@ describe StripeMerchantAccountManager, :vcr do
         expect(note.content).to include("recipient ToS agreement is not supported")
       end
 
+      # Two resyncs for the same seller can both see no note before either writes one, so the
+      # look-then-write has to run under the user row lock for the once-per-account rule to hold.
+      it "takes the user row lock around the breadcrumb check and write" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        locked = false
+        allow(user).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          original.call(*args) do
+            locked = true
+            block.call
+          end
+        end
+        allow(user).to receive(:add_payout_note).and_wrap_original do |original, **kwargs|
+          expect(locked).to be(true)
+          original.call(**kwargs)
+        end
+
+        subject.update_account(user, passphrase: "1234")
+
+        expect(user).to have_received(:add_payout_note)
+      end
+
       it "still raises for any other invalid-request rejection" do
         other = Stripe::InvalidRequestError.new("Invalid Tax ID.", nil)
         allow(Stripe::Account).to receive(:update).and_raise(other)
