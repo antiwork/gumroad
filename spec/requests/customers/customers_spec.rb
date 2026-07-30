@@ -975,7 +975,7 @@ describe "Sales page", type: :system, js: true do
           expect(page).to have_text("Uses 12", normalize_ws: true)
           click_on "Reset uses"
         end
-        click_on "Reset"
+        within_modal("Reset license uses?") { click_on "Reset" }
         wait_for_ajax
         expect(purchase2.license.reload.uses).to eq 0
 
