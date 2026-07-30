@@ -9161,6 +9161,74 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "when Stripe rejects the service agreement we derived from the legal-entity country" do
+      let(:user_compliance_info_1) { create(:user_compliance_info, user:, country: "Korea, Republic of") }
+      let(:tos_agreement) { create(:tos_agreement, user:) }
+      let(:merchant_account) { subject.create_account(user, passphrase: "1234") }
+      let(:user_compliance_info_2) { create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul") }
+      let(:rejection) do
+        Stripe::InvalidRequestError.new(
+          "The recipient ToS agreement is not supported for platforms in US creating accounts in US.",
+          nil
+        )
+      end
+
+      before do
+        user_compliance_info_1
+        create(:korea_bank_account, user:)
+        travel_to(Time.find_zone("UTC").local(2015, 4, 1)) do
+          tos_agreement
+        end
+        merchant_account
+        user_compliance_info_2
+
+        original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
+          stripe_account = original_stripe_account_retrieve.call(*args)
+          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
+          stripe_account
+        end
+      end
+
+      it "retries without the agreement so the fields Gumroad already holds still land" do
+        merchant_id = user.stripe_account.charge_processor_merchant_id
+
+        expect(Stripe::Account).to receive(:update)
+          .with(merchant_id, hash_including(:tos_acceptance))
+          .and_raise(rejection)
+        expect(Stripe::Account).to receive(:update)
+          .with(merchant_id, hash_excluding(:tos_acceptance)) do |_id, attributes|
+            expect(attributes[:business_profile]).to be_present
+            expect(attributes[:individual][:address][:city]).to eq("Seoul")
+          end
+
+        expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+      end
+
+      it "leaves one private payout-note breadcrumb naming the rejection" do
+        allow(Stripe::Account).to receive(:update).with(anything, hash_including(:tos_acceptance)).and_raise(rejection)
+        allow(Stripe::Account).to receive(:update).with(anything, hash_excluding(:tos_acceptance))
+
+        expect do
+          2.times { subject.update_account(user, passphrase: "1234") }
+        end.to change {
+          user.comments.with_type_payout_note.alive
+              .where("content LIKE ?", "#{StripeMerchantAccountManager::SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX}%")
+              .count
+        }.by(1)
+
+        note = user.comments.with_type_payout_note.alive.last
+        expect(note.content).to include("recipient ToS agreement is not supported")
+      end
+
+      it "still raises for any other invalid-request rejection" do
+        other = Stripe::InvalidRequestError.new("Invalid Tax ID.", nil)
+        allow(Stripe::Account).to receive(:update).and_raise(other)
+
+        expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
+      end
+    end
+
     describe "updating business type" do
       let(:user_compliance_info_1) { create(:user_compliance_info, user:) }
       let(:tos_agreement) { create(:tos_agreement, user:) }
