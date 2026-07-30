@@ -232,6 +232,15 @@ class Payment < ApplicationRecord
       FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.include?(failure_reason)
   end
 
+  # True when the seller can clear this rejection on the PayPal account they already use, by adding
+  # US dollars to the currencies it accepts. This is the reason we keep retrying it, so the copy has
+  # to offer that fix and must not claim the retries have stopped.
+  # See Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
+  def repairable_in_place_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
   # What to tell the seller to do about a terminal PayPal rejection, and what to expect after.
   #
   # Both halves are per-seller. Bank transfer is only a real option where Gumroad supports it —
@@ -244,7 +253,15 @@ class Payment < ApplicationRecord
   # but the hundreds of sellers who were already stuck before that stopped are still holding one,
   # as is anyone paused for an unrelated reason, so the paused wording still has to exist.
   def terminal_paypal_failure_seller_solution
-    fix = if user.can_setup_bank_payouts?
+    fix = if repairable_in_place_paypal_failure?
+      # The seller can clear this on the account they already use, so lead with that — see
+      # Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
+      if user.can_setup_bank_payouts?
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_WITH_BANK
+      else
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_PAYPAL_ONLY
+      end
+    elsif user.can_setup_bank_payouts?
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK
     else
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY

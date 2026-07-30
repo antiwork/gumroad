@@ -19,11 +19,17 @@ module Onetime
   class ExplainTerminalPaypalPayoutFailures
     BATCH_SIZE = 500
 
-    def self.process(batch_size: BATCH_SIZE, dry_run: false)
+    # Reports by default; writing needs dry_run: false said out loud.
+    #
+    # A bare .process in a production console would otherwise write a seller-visible note to every
+    # seller in the population in one go — hundreds of accounts, no undo, and no chance to read the
+    # list first. The safe order is: run it as-is, read what it says it would do, then re-run with
+    # dry_run: false.
+    def self.process(batch_size: BATCH_SIZE, dry_run: true)
       new.process(batch_size:, dry_run:)
     end
 
-    def process(batch_size: BATCH_SIZE, dry_run: false)
+    def process(batch_size: BATCH_SIZE, dry_run: true)
       noted = 0
       skipped = 0
 

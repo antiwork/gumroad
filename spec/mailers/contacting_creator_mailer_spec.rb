@@ -52,6 +52,25 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include("your PayPal account cannot receive US dollars")
     end
 
+    # A currency rejection does not stop the retries, so the email must not say it did — and the
+    # seller can clear it on the account they already use. Reviewer finding on #6526.
+    it "does not claim the retries stopped for a rejection we keep retrying" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("stopped retrying")
+      expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("add US dollars as a currency you accept")
+    end
+
+    it "still says the retries stopped for a rejection that blocks them" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("stopped retrying it")
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+    end
+
     it "does not promise a payout date when the account is also under a payout hold" do
       payment.user.update!(payouts_paused_internally: true)
 

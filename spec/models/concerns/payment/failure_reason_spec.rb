@@ -29,6 +29,17 @@ describe Payment::FailureReason do
         .to match_array(described_class::EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS.keys)
     end
 
+    # The in-place fix and the block are opposites: we only stop retrying because nothing the seller
+    # does inside the account changes the answer. An overlap would send a seller to fix something
+    # while an address-keyed block guaranteed we never noticed.
+    it "never blocks retries on a rejection the seller can repair in place" do
+      expect(described_class::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS).to match_array(["PAYPAL 14159"])
+      expect(described_class::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS & described_class::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS)
+        .to be_empty
+      expect(described_class::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS - described_class::EXPLAINED_PAYPAL_FAILURE_REASONS)
+        .to be_empty
+    end
+
     # Recognising an already-written note by its wording is how the pipeline knows whether the
     # seller can still see an explanation, so a reword has to keep matching the old rows.
     it "still recognises every wording ever shipped" do

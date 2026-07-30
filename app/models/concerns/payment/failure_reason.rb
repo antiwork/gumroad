@@ -59,12 +59,27 @@ module Payment::FailureReason
   # who does fix it is not stuck behind a permanent block.
   RETRY_BLOCKING_PAYPAL_FAILURE_REASONS = ["PAYPAL 3148"].freeze
 
+  # Rejections the seller can clear on the PayPal account they already use, by adding US dollars to
+  # the currencies that account accepts. Only 14159 qualifies: 3148 is about the country on the
+  # account's address, which adding a currency does not change. Kept next to the retry lists because
+  # it is the other half of the same distinction — this is exactly why 14159 is explained but still
+  # retried, and the seller-facing copy has to offer the in-place fix rather than only telling them
+  # to find another account.
+  REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS = ["PAYPAL 14159"].freeze
+
   # Every code that stops the retries must also have seller-facing wording, because the payout walk
   # looks that wording up by code (Payment#terminal_paypal_failure_seller_note) while deciding
   # whether to re-explain the block. Without this, adding a code to one list and not the other
   # raises a KeyError inside the weekly payout run.
   raise "every retry-blocking PayPal rejection needs seller-facing wording" unless
     (RETRY_BLOCKING_PAYPAL_FAILURE_REASONS - EXPLAINED_PAYPAL_FAILURE_SELLER_REASONS.keys).empty?
+
+  # A rejection cannot be both repairable on the same account and a reason to stop retrying: the
+  # whole argument for blocking is that no action inside the account changes the outcome. If the two
+  # lists ever overlap, the seller is told to fix something in place while an address-keyed block
+  # makes sure we never notice they did.
+  raise "a rejection cannot be repairable in place and retry-blocking at once" unless
+    (REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS & RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).empty?
 
   # Kept as the name the rest of the payout code has always used for "do not retry this".
   TERMINAL_PAYPAL_FAILURE_REASONS = RETRY_BLOCKING_PAYPAL_FAILURE_REASONS
@@ -149,6 +164,18 @@ module Payment::FailureReason
   TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY =
     "PayPal is the only payout method we can offer in your country, so to get paid you'll need to use a " \
     "different PayPal account that can receive US dollars. You can change it in your payout settings."
+
+  # For a rejection the seller can clear without leaving the account they already use (14159), the
+  # in-place repair is offered first, because it is the only fix that costs them nothing: no new
+  # account, no new bank details, and no waiting on us. The other options still follow, since a
+  # seller may prefer them.
+  TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_WITH_BANK =
+    "Sign in to PayPal and add US dollars to the currencies your account can receive. You can also add a bank " \
+    "account in your payout settings, or use a different PayPal account that can receive US dollars."
+  TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_PAYPAL_ONLY =
+    "Sign in to PayPal and add US dollars to the currencies your account can receive. PayPal is the only payout " \
+    "method we can offer in your country, so the alternative is to use a different PayPal account that can " \
+    "receive US dollars, which you can change in your payout settings."
 
   # What happens after they fix it. Three consecutive failed payouts to the same destination trip
   # an automatic hold on the whole account (Payment#pause_payouts_after_repeated_failures), and

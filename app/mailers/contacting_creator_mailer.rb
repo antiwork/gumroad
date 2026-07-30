@@ -168,10 +168,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
   end
 
-  # PayPal permanently refused a payout to the seller's PayPal address (their country cannot
-  # receive PayPal payments, or the account cannot receive US dollars). Unlike a normal failed
-  # payout, we have stopped re-attempting it, so this email has to say what is wrong and what
-  # they need to change — otherwise their balance just sits there.
+  # PayPal refused a payout for a reason about the seller's PayPal account rather than the attempt:
+  # their country cannot receive PayPal payments (3148), or the account cannot receive US dollars
+  # (14159). Either way nothing will change until they act, so this email says what is wrong and
+  # what to change — otherwise their balance just sits there.
+  #
+  # The two cases differ in what is true about the retries, and the copy has to match: 3148 stops
+  # them, 14159 does not (see Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).
   def paypal_payout_permanently_failed(payment_id)
     @payment = Payment.find(payment_id)
     @seller = @payment.user
@@ -185,6 +188,12 @@ class ContactingCreatorMailer < ApplicationMailer
       # restriction, so keep the caller gated on Payment#explained_paypal_failure?.
       Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
     )
+    # Never claim the retries have stopped unless they have. A seller rejected for the currency
+    # keeps being paid on schedule, and telling them otherwise would be false and would push them
+    # to change accounts when they do not have to.
+    @retries_stopped = @payment.terminal_paypal_failure?
+    # And when they can clear it on the account they already have, lead with that fix.
+    @can_receive_us_dollars_on_same_account = @payment.repairable_in_place_paypal_failure?
     # Ask the seller to reply rather than promising the next payout date, because an admin or
     # system hold outlives the payout-method fix this email prescribes and only support can lift
     # it. Two narrower cases are deliberately swept in with it: a hold Stripe placed is lifted

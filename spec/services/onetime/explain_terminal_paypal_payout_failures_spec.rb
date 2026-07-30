@@ -23,7 +23,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       payment = terminal_failure_for(seller)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to change { seller.comments.with_type_payout_note.count }.from(0).to(1)
 
       note = seller.comments.with_type_payout_note.last
@@ -37,7 +37,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       create(:user_compliance_info, user: seller, country: "Ukraine")
       terminal_failure_for(seller)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       note = seller.comments.with_type_payout_note.last
       expect(note.content).to include("PayPal is the only payout method we can offer in your country")
@@ -47,17 +47,31 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
     it "explains the currency restriction for a currency rejection" do
       terminal_failure_for(seller, reason: "PAYPAL 14159")
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       expect(seller.comments.with_type_payout_note.last.content)
         .to include("your PayPal account cannot receive US dollars")
+    end
+
+    # The seller can clear a currency rejection on the account they already use, and we keep paying
+    # them meanwhile, so the note must offer that fix and must not claim the retries stopped.
+    # Reviewer finding on #6526.
+    it "offers the in-place currency fix for a currency rejection" do
+      allow_bank_payouts_for(seller)
+      terminal_failure_for(seller, reason: "PAYPAL 14159")
+
+      described_class.process(dry_run: false)
+
+      content = seller.comments.with_type_payout_note.last.content
+      expect(content).to include("Sign in to PayPal and add US dollars to the currencies your account can receive")
+      expect(content).to_not include("stopped retrying")
     end
 
     it "asks a seller whose account is also on hold to reply, rather than promising a payout date" do
       terminal_failure_for(seller)
       seller.update!(payouts_paused_internally: true)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       note = seller.comments.with_type_payout_note.last
       expect(note.content).to include("Payouts on your account are also on hold")
@@ -69,7 +83,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       terminal_failure_for(seller)
       seller.update!(payouts_paused_internally: true)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       note = seller.comments.with_type_payout_note.last
       expect(note.content).to include("contact support")
@@ -82,7 +96,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       terminal_failure_for(seller)
       seller.update!(payouts_paused_by_user: true)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       note = seller.comments.with_type_payout_note.last
       expect(note.content).to include("paused in your settings")
@@ -97,7 +111,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       terminal_failure_for(seller, created_at: 10.weeks.ago)
       latest = terminal_failure_for(seller, created_at: 1.week.ago)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       expect(seller.comments.with_type_payout_note.last.content)
         .to include("payments cannot be received in the country on that account's address")
@@ -113,7 +127,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
                               failure_reason: "PAYPAL 14159", created_at: 1.week.ago,
                               txn_id: nil, processor_fee_cents: nil)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       note = seller.comments.with_type_payout_note.last
       expect(note.content).to include("payments cannot be received in the country on that account's address")
@@ -128,16 +142,16 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       terminal_failure_for(seller, created_at: 3.years.ago)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to change { seller.comments.with_type_payout_note.count }.from(0).to(1)
     end
 
     it "does not write a second note when run again" do
       terminal_failure_for(seller)
-      described_class.process
+      described_class.process(dry_run: false)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -145,14 +159,14 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
     # under now: it names a different date, and possibly the other of the two PayPal restrictions.
     it "explains the current block even when an older address was already explained" do
       terminal_failure_for(seller, reason: "PAYPAL 3148", created_at: 10.weeks.ago)
-      described_class.process
+      described_class.process(dry_run: false)
       expect(seller.comments.with_type_payout_note.count).to eq(1)
 
       seller.update!(payment_address: "current@example.com")
       current = terminal_failure_for(seller, reason: "PAYPAL 14159", created_at: 1.week.ago)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to change { seller.comments.with_type_payout_note.count }.from(1).to(2)
 
       expect(seller.comments.with_type_payout_note.last.content)
@@ -168,7 +182,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       blocking = terminal_failure_for(seller, reason: "PAYPAL 3148", created_at: 6.weeks.ago)
       terminal_failure_for(seller, reason: "PAYPAL 14159", created_at: 1.week.ago)
 
-      described_class.process
+      described_class.process(dry_run: false)
 
       expect(seller.comments.with_type_payout_note.last.content)
         .to eq(blocking.terminal_paypal_failure_seller_note)
@@ -181,7 +195,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       seller.update!(payment_address: "")
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -195,7 +209,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(seller.reload.paypal_payout_email).to be_present
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -209,7 +223,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(seller.reload.has_stripe_account_connected?).to eq(true)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -223,7 +237,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       expect(seller.reload).to be_suspended
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -234,7 +248,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       seller.update!(deleted_at: Time.current)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -243,7 +257,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       seller.update!(payment_address: "working@example.com")
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -252,7 +266,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       create(:payment_completed, user: seller, payment_address: seller.payment_address, created_at: 1.week.ago)
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -260,7 +274,7 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       terminal_failure_for(seller, reason: "PAYPAL 3015")
 
       expect do
-        described_class.process
+        described_class.process(dry_run: false)
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
@@ -269,6 +283,24 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
 
       expect do
         expect(described_class.process(dry_run: true)).to eq(noted: 1, skipped: 0)
+      end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
+    # Writing seller-visible notes to the whole population must be asked for, not the accident of
+    # typing the shortest thing that runs. Reviewer finding on #6526.
+    it "reports without writing when no dry_run is given" do
+      terminal_failure_for(seller)
+
+      expect do
+        expect(described_class.process).to eq(noted: 1, skipped: 0)
+      end.to_not change { seller.comments.with_type_payout_note.count }
+    end
+
+    it "reports without writing when the instance method is called with no dry_run" do
+      terminal_failure_for(seller)
+
+      expect do
+        described_class.new.process
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
   end
