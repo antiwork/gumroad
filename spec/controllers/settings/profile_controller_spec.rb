@@ -78,6 +78,15 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       )
     end
 
+    it "serializes creation of the seller's first profile row" do
+      expect(seller.seller_profile).not_to be_persisted
+      expect_any_instance_of(User).to receive(:lock!).and_call_original
+
+      put :update, params: { seller_profile: { font: "Domine" } }
+
+      expect(SellerProfile.where(seller_id: seller.id).sole.font).to eq("Domine")
+    end
+
     it "leaves the other design fields alone when only one is sent" do
       seller.seller_profile.update!(background_color: "#ffffff", highlight_color: "#ff90e8", font: "ABC Favorit")
 

@@ -45,6 +45,13 @@ class Settings::ProfileController < Settings::BaseController
     begin
       ActiveRecord::Base.transaction do
         seller_profile = current_seller.seller_profile
+        unless seller_profile.persisted?
+          # The table predates a uniqueness constraint, so serialize first-row creation on the
+          # seller and re-read after acquiring the lock. Two first saves must not insert two rows.
+          current_seller.lock!
+          current_seller.association(:seller_profile).reset
+          seller_profile = current_seller.seller_profile
+        end
         # Optimistic concurrency: lock the profile and reject the save if its pages/sections were
         # changed elsewhere since this editor loaded. Otherwise this request would overwrite the
         # layout with a stale snapshot and drop or orphan sections another session added. A brand
