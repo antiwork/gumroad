@@ -30,11 +30,13 @@ let pendingPrefetchReject: ((reason: Error) => void) | null = null;
 
 const inertiaPage = (url: string) => ({
   component: "Page",
-  props: {},
+  props: { errors: {} },
   url,
   version: "1",
   clearHistory: false,
   encryptHistory: false,
+  flash: {},
+  rememberedState: {},
 });
 
 // Inertia marks its prefetch requests with the Purpose header, which is exactly

@@ -110,6 +110,7 @@ export const ProductPreview = ({
           streamable: false,
           is_quantity_enabled: bundle.quantity_enabled,
           is_multiseat_license: false,
+          is_licensed: false,
           hide_sold_out_variants: false,
           native_type: "bundle",
           sales_count: bundle.should_show_sales_count ? salesCountForInventory : null,
