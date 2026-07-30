@@ -201,6 +201,46 @@ describe DisputeEvidence do
     end
   end
 
+  # One row per condition, because each has to be able to reject on its own: the mailer and
+  # Charge::Disputable both decide from this whether to invite a submission, and the page behind
+  # that invitation (Purchases::DisputeEvidenceController#check_if_needs_redirect) refuses on
+  # submitted and resolved independently.
+  describe ".accepting_seller_evidence?" do
+    let(:open_window) { { seller_contacted_at: 3.hours.ago, seller_submitted_at: nil, resolved_at: nil } }
+
+    it "accepts an open window" do
+      expect(described_class.accepting_seller_evidence?(**open_window)).to be(true)
+    end
+
+    it "accepts a dispute with no window, which is asked for nothing" do
+      expect(described_class.accepting_seller_evidence?(**open_window, seller_contacted_at: nil)).to be(true)
+    end
+
+    it "refuses once the seller has submitted, even inside the window" do
+      expect(described_class.accepting_seller_evidence?(**open_window, seller_submitted_at: 1.hour.ago)).to be(false)
+    end
+
+    it "refuses once the dispute is resolved, even inside the window" do
+      expect(described_class.accepting_seller_evidence?(**open_window, resolved_at: 1.hour.ago)).to be(false)
+    end
+
+    it "refuses once the window has run out" do
+      elapsed = DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 1
+
+      expect(described_class.accepting_seller_evidence?(**open_window, seller_contacted_at: elapsed.hours.ago)).to be(false)
+    end
+
+    it "answers the same question as the instance reader" do
+      dispute_evidence.update!(seller_contacted_at: 3.hours.ago)
+
+      expect(dispute_evidence.accepting_seller_evidence?).to be(true)
+
+      dispute_evidence.update_as_seller_submitted!
+
+      expect(dispute_evidence.accepting_seller_evidence?).to be(false)
+    end
+  end
+
   describe "#claim_seller_contacted_window!" do
     before { dispute_evidence.update_as_not_seller_contacted! }
 
