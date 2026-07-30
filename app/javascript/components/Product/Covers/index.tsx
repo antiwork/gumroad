@@ -54,16 +54,12 @@ export const Covers = ({
   // frame that changed width with the active cover would move the panels out from under
   // that calculation and bounce a two-cover carousel back to the first cover.
   //
-  // The cap is portrait-only, and that restriction is the whole point of it. Applied to
-  // every shaped frame it fires on covers it was never meant for: a 16:9 cover in the
-  // 1138px product column derives a 640px frame, which exceeds 80svh in any window
-  // shorter than about 800px, so the frame goes shorter than the ratio and the
-  // `object-contain` below shrinks the cover in BOTH axes to fit — 142px of empty
-  // background either side of a 1280x720 cover at 1440x700. That is a regression against
-  // the pre-#6451 `w-full` behaviour for a shape that never had the problem the cap
-  // exists to solve. A landscape cover's derived height is at most the column width, so
-  // it cannot run away the way a 9:16 frame (~1.8x its width) does.
-  // See https://github.com/antiwork/gumroad-private/issues/1570
+  // Only portrait gets the cap, and the exclusion is load-bearing: because the frame
+  // cannot narrow, a cap shorter than the ratio makes `object-contain` shrink the cover
+  // in BOTH axes, so capping a shape that does not need it buys empty side bars and
+  // nothing else. Only portrait needs it — a cover no taller than it is wide derives a
+  // frame at most the column's width, which is not the runaway a 9:16 frame (~1.8x its
+  // width) is.
   //
   // Covers with no recorded dimensions still get no ratio at all and fall back to the
   // CSS box exactly as before.
@@ -87,10 +83,10 @@ export const Covers = ({
   // in which case the cover narrows and whatever is behind it becomes visible for the
   // first time. The decorative tiled artwork is meant for products with no cover at
   // all, and tiling it either side of a cover reads as a rendering glitch, so a shaped
-  // frame uses the plain page background instead. Keying on "the frame is shaped"
-  // rather than "the cover is portrait" matters because the cap can bite on a square
-  // or 4:3 cover in a short window too; behind a cover that does fill the frame the
-  // backdrop is invisible either way, so this is a no-op there.
+  // frame uses the plain page background instead. Keyed on "the frame is shaped" rather
+  // than "the cap bit" because behind a cover that does fill its frame the backdrop is
+  // invisible either way, so the broader condition is a no-op there and stays correct if
+  // the cap's shape test changes.
   const frameIsShaped = frameStyle !== undefined;
 
   const { itemsRef, handleScroll } = useScrollableCarousel(activeCoverIndex, (index) =>
