@@ -166,6 +166,12 @@ describe SellerProfile do
       expect(subject.accent_color_for_indicators).to eq("#009a49")
     end
 
+    it "keeps the default pink on the default white background" do
+      subject = build(:seller_profile, highlight_color: "#ff90e8", background_color: "#ffffff")
+
+      expect(subject.accent_color_for_indicators).to eq("#ff90e8")
+    end
+
     it "moves an accent that matches the background far enough to be seen" do
       subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
 

@@ -298,7 +298,11 @@ export default function SubscriptionsManage() {
     if (state.status.type !== "finished") return;
     const result = await updateSubscription({
       cardParams:
-        state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
+        state.status.paymentMethod.type === "not-applicable" ||
+        state.status.paymentMethod.type === "saved" ||
+        // Client-confirm never occurs here: it's a checkout-only lane and recurring carts are
+        // excluded from it, so subscription management only sees server-confirm methods.
+        state.status.paymentMethod.type === "payment-element-client-confirm"
           ? null
           : state.status.paymentMethod.cardParamsResult.cardParams,
       recaptchaResponse: state.status.recaptchaResponse ?? null,

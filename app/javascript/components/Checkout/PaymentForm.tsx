@@ -7,6 +7,7 @@ import {
   PaymentRequestShippingAddress,
   PaymentRequestShippingAddressEvent,
   StripeCardElement,
+  StripeElements,
 } from "@stripe/stripe-js";
 import { DataCollector, PayPal } from "braintree-web";
 import * as BraintreeClient from "braintree-web/client";
@@ -694,10 +695,7 @@ const CreditCardContent = ({
   const useStripePaymentElement = canUseStripePaymentElement(state);
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
-  const stripePaymentElementConfig =
-    usesPaymentElement && state.checkoutPayment.integration !== "card_element"
-      ? state.checkoutPayment.elements_options
-      : null;
+  const stripePaymentElementConfig = usesPaymentElement ? state.checkoutPayment.elements_options : null;
 
   // When the Payment Element renders Apple Pay, describe the cart's recurring agreement on the
   // sheet so Apple issues a device-independent merchant token (MPAN) — the exact same declaration
@@ -884,7 +882,10 @@ const CreditCardContent = ({
           confirmationTokenId: tokenResult.confirmationTokenId,
           cardCountry: tokenResult.cardCountry,
           walletType: tokenResult.wallet?.type ?? null,
-          mountCurrency: stripePaymentElementConfig.currency,
+          mountCurrency: assertDefined(
+            stripePaymentElementConfig,
+            "`stripePaymentElementConfig` should be defined when confirming via the Payment Element",
+          ).currency,
         };
         if (tokenResult.wallet && !hasShipping(state)) {
           const taxLocationChanged = applyWalletBillingAddressToCheckout(
