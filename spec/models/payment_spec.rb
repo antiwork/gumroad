@@ -377,6 +377,27 @@ describe Payment do
         expect(payment).to have_received(:send_payout_failure_email)
       end
 
+      it "pauses payouts when the reversal fails, so nothing re-pays the returned balances" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_rev_fail", stripe_connect_account_id: "acct_rev_fail",
+                                   stripe_internal_transfer_id: "tr_rev_fail", created_at: 3.days.ago)
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_rev_fail", { stripe_account: "acct_rev_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!).and_raise(Stripe::APIConnectionError.new("Connection refused"))
+        allow(payment).to receive(:send_payout_failure_email)
+        allow(ErrorNotifier).to receive(:notify)
+
+        payment.send(:sync_with_stripe)
+
+        # SyncStuckPayoutsJob discards these errors, so the hold is the only thing standing between
+        # the seller's next scheduled batch and a second transfer of the same balances.
+        expect(payment.errors[:base]).to include("Connection refused")
+        expect(payment.user.reload.payouts_paused_internally?).to be(true)
+        expect(payment.user.payouts_paused_by).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(ErrorNotifier).to have_received(:notify)
+      end
+
       it "uses a default failure reason when no failure_code is present" do
         payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
                                    stripe_transfer_id: "po_no_code", stripe_connect_account_id: "acct_no_code",

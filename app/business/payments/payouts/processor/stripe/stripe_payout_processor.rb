@@ -525,7 +525,6 @@ class StripePayoutProcessor
     )
     raise if reraise
   end
-  private_class_method :reverse_internal_transfer_or_hold_payouts!
 
   # The comment is written even when the account is already paused, and that is the point.
   # `User#payouts_paused_for_chargeback_rate?` identifies the live hold by the most recent pausing

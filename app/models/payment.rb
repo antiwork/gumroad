@@ -398,7 +398,11 @@ class Payment < ApplicationRecord
       end
 
       send_payout_failure_email if send_failure_email
-      StripePayoutProcessor.reverse_internal_transfer!(self) if needs_reverse_transfer
+      # Hold-aware: the `rescue` below turns a failed reversal into an `errors.add`, which
+      # SyncStuckPayoutsJob discards. Without the hold, Gumroad's funds stay on the connected
+      # account while `mark_failed!`/`mark_cancelled!` have already returned the balances to
+      # `unpaid`, so the seller's next scheduled batch would transfer the same money again.
+      StripePayoutProcessor.reverse_internal_transfer_or_hold_payouts!(self, failure_reason, reraise: true) if needs_reverse_transfer
     rescue => e
       Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message
