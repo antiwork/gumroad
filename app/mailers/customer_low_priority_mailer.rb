@@ -345,7 +345,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
     @product_name = @purchase.link.name
     @title = "Liked #{@product_name}? Give it a review!"
-    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser)
+    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser, @purchase.email)
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
     # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
@@ -374,10 +374,10 @@ class CustomerLowPriorityMailer < ApplicationMailer
     first_purchase = order.purchases.first
 
     @title = "Liked your order? Leave some reviews!"
-    @unsub_link = review_reminder_unsubscribe_url(purchaser)
     @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
     email = purchaser&.email || first_purchase.email
+    @unsub_link = review_reminder_unsubscribe_url(purchaser, email)
 
     mail(
       to: email,
@@ -421,12 +421,22 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
-    def review_reminder_unsubscribe_url(purchaser)
+    # The token is a sessionless capability over the purchaser account's preference, so it may
+    # only travel to that account's own address. A purchase can be claimed into a different
+    # account (Users#add_purchase_to_library, UrlRedirects, support reassignment) while
+    # `purchase.email` keeps pointing at whoever bought it, and that recipient must not be
+    # handed the new owner's opt-out. When the two diverge, fall back to the session-gated
+    # route: the link still works, it just makes the visitor prove who they are first.
+    def review_reminder_unsubscribe_url(purchaser, recipient_email)
       return if purchaser.nil?
 
-      user_unsubscribe_review_reminders_by_token_url(
-        purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
-      )
+      if purchaser.email.present? && recipient_email.present? && purchaser.email.casecmp?(recipient_email)
+        user_unsubscribe_review_reminders_by_token_url(
+          purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
+        )
+      else
+        user_unsubscribe_review_reminders_url
+      end
     end
 
     def deliver_subscription_email
