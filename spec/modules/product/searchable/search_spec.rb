@@ -389,7 +389,6 @@ describe "Product::Searchable - Search scenarios" do
       it "caps Discover at MAX_NUMBER_OF_TAGS buckets" do
         buckets = Link.search(Link.search_options({})).aggregations["tags.keyword"]["buckets"]
 
-        expect(Product::Searchable::MAX_NUMBER_OF_TAGS).to eq(9)
         expect(buckets.length).to eq(9)
       end
 
@@ -406,6 +405,15 @@ describe "Product::Searchable - Search scenarios" do
         size = options[:aggregations]["tags.keyword"][:terms][:size]
 
         expect(size).to eq(Product::Searchable::MAX_NUMBER_OF_PROFILE_TAGS)
+      end
+
+      it "ignores a spoofed is_alive_on_profile with no seller scope" do
+        # /discover passes raw request params straight through, so this arrives as a public
+        # query string. Without a user_id there is no seller to bound the vocabulary.
+        options = Link.search_options({ is_alive_on_profile: "true" })
+        buckets = Link.search(options).aggregations["tags.keyword"]["buckets"]
+
+        expect(buckets.length).to eq(Product::Searchable::MAX_NUMBER_OF_TAGS)
       end
     end
 

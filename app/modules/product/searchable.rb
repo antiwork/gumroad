@@ -4,9 +4,10 @@ module Product::Searchable
   extend ActiveSupport::Concern
 
   MAX_NUMBER_OF_TAGS = 9
-  # A seller's own storefront shows every tag they use: the vocabulary is bounded by the
-  # 5-tags-per-product editor cap, and truncating it silently makes their own catalogue
-  # unbrowsable. Discover keeps the small cap - it aggregates over every seller.
+  # A seller's own storefront shows their whole tag vocabulary; Discover aggregates over every
+  # seller, so it keeps the small cap. 200 covers any realistic catalogue but is not a guarantee:
+  # the 5-tags-per-product limit is enforced only in the editor UI, so a very large catalogue can
+  # still truncate here silently.
   MAX_NUMBER_OF_PROFILE_TAGS = 200
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
@@ -167,7 +168,10 @@ module Product::Searchable
   class_methods do
     def search_options(params)
       # Local, not a method call inside the DSL block: `size` there is the DSL's own setter.
-      tags_aggregation_size = params[:is_alive_on_profile] ? MAX_NUMBER_OF_PROFILE_TAGS : MAX_NUMBER_OF_TAGS
+      # `is_alive_on_profile` alone is not enough to pick the wide lane: it arrives from raw
+      # request params on /discover and /products/search, so it is spoofable. `user_id` is what
+      # actually bounds the vocabulary, via the `terms user_id:` filter below.
+      tags_aggregation_size = params[:user_id].present? && params[:is_alive_on_profile] ? MAX_NUMBER_OF_PROFILE_TAGS : MAX_NUMBER_OF_TAGS
       search_options = Elasticsearch::DSL::Search.search do
         size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE).to_i
         from (params[:from].to_i - 1).clamp(0, MAX_RESULT_WINDOW - size)
