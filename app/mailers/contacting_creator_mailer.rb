@@ -94,10 +94,13 @@ class ContactingCreatorMailer < ApplicationMailer
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered
-    # with none, and the sweep's windows are deliberately backdated to a few hours. Drop the ask
-    # rather than quote a deadline that has passed — the evidence is submitted without a statement.
+    # with none, the seller may have answered it in the meantime, and the sweep's windows are
+    # deliberately backdated to a few hours. Ask through DisputeEvidence#accepting_seller_evidence?
+    # so this matches the form behind the link — an urgent ask that lands on a redirect is worse
+    # than the plain notice.
+    ask_for_evidence = dispute_evidence&.seller_contacted? && dispute_evidence.accepting_seller_evidence?
     @dispute_evidence_content = \
-      if dispute_evidence&.seller_contacted? && dispute_evidence.hours_left_to_submit_evidence.positive?
+      if ask_for_evidence
         safe_join(
           [
             tag.p(tag.b("Any additional information you can provide in the next #{pluralize(dispute_evidence.hours_left_to_submit_evidence, "hour")} will help us win on your behalf.")),
@@ -115,7 +118,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = \
       if @is_paypal.present?
         "A PayPal sale has been disputed"
-      elsif dispute_evidence&.seller_contacted?
+      elsif ask_for_evidence
         "🚨 Urgent: Action required for resolving disputed sale"
       else
         "A sale has been disputed"

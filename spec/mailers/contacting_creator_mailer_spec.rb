@@ -118,6 +118,34 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).to include "We fight every dispute."
           end
         end
+
+        # Purchases::DisputeEvidenceController#check_if_needs_redirect turns the seller away on both
+        # of these, so an urgent ask sent after either transition leads to a redirect and not a form.
+        context "when the seller answers before the mail renders" do
+          before { dispute_evidence.update_as_seller_submitted! }
+
+          it "does not ask again for information that has already been submitted" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        context "when the dispute resolves before the mail renders" do
+          before { dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED) }
+
+          it "does not ask for information the form no longer takes" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
       end
 
       context "when the purchase was done via a PayPal Connect account" do

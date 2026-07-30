@@ -93,6 +93,25 @@ class DisputeEvidence < ApplicationRecord
     self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
   end
 
+  # Whether a notice we send now would still reach a form that takes an answer. Three conditions,
+  # and they have to be asked together: Purchases::DisputeEvidenceController#check_if_needs_redirect
+  # turns the seller away once the evidence is submitted or the dispute resolves, and the notice's
+  # own body promises "in the next N hours", so a window with none left has nothing to offer either.
+  # A nil stamp is not a failure here — a dispute with no window (PayPal, Stripe Connect) still gets
+  # the plain notice, which asks for nothing.
+  #
+  # Takes raw timestamps because formalization reads the columns back with #pick rather than
+  # reloading: claim_seller_contacted_window! writes through update_all, and reloading there would
+  # reset the attachment associations the row was just built with.
+  def self.accepting_seller_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    seller_submitted_at.nil? && resolved_at.nil? &&
+      (seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?)
+  end
+
+  def accepting_seller_evidence?
+    self.class.accepting_seller_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+  end
+
   # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
   #
   # Two paths open it — formalization and CreateMissingDisputeEvidenceJob — and they can run against

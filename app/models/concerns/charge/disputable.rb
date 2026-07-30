@@ -345,18 +345,10 @@ module Charge::Disputable
       # that sweep cannot extend the seller's deadline past the point evidence is still accepted.
       dispute_evidence.claim_seller_contacted_window! if dispute_evidence.present?
 
-      # Ask for the seller's side only while the form behind the notice would still take it, and
-      # only while there are whole hours left to quote them: the notice's own body promises "in the
-      # next N hours", so a window with none left would ask for information against a "0 hours"
-      # deadline. The submitted and resolved conditions are the controller's; the hours test is not
-      # — check_if_needs_redirect lets an elapsed window through until FightDisputesJob resolves the
-      # row, and that imminent submission is what the notice must not invite a race with.
-      #
-      # All three shapes are reachable on a re-delivery, because losing the claim above does not
-      # stop this path: CreateMissingDisputeEvidenceJob may have opened this window hours earlier
-      # and backdated it past its own end, or had the evidence answered and submitted before the
-      # re-delivery arrived. A dispute with no evidence surface at all (PayPal, Stripe Connect)
-      # still gets the plain notice, as it always has.
+      # Every shape the predicate rejects is reachable on a re-delivery, because losing the claim
+      # above does not stop this path: CreateMissingDisputeEvidenceJob may have opened this window
+      # hours earlier and backdated it past its own end, or had the evidence answered and submitted
+      # before the re-delivery arrived.
       #
       # Read the columns rather than #reload: claim_seller_contacted_window! writes through
       # update_all and leaves this object stale, and reloading it here would reset the attachment
@@ -364,8 +356,9 @@ module Charge::Disputable
       stamped_at, submitted_at, resolved_at =
         dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
                                            .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
-      accepting_evidence = submitted_at.nil? && resolved_at.nil? &&
-        (stamped_at.nil? || DisputeEvidence.hours_left_in_window(stamped_at).positive?)
+      accepting_evidence = DisputeEvidence.accepting_seller_evidence?(
+        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+      )
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
