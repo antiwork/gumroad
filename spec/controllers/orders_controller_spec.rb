@@ -2672,6 +2672,31 @@ describe OrdersController, :vcr do
         end
       end
 
+      # The shape production actually sends. Stripe only attaches payment_method to an error when
+      # it involved one, and a plain issuer decline does not — so on the overwhelming majority of
+      # card declines payment_method_type arrives BLANK and only the selected row identifies them.
+      # Without this the denylist above never matched in production (gumroad-private#1514).
+      %w[card link].each do |selected_payment_method_type|
+        it "logs but does not notify for #{selected_payment_method_type} when Stripe named no method" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).not_to receive(:notify)
+          expect(Rails.logger).to receive(:error).with(/Client-confirm browser error for order #{order.id}/)
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            stage: "confirm",
+            selected_payment_method_type:,
+            stripe_error_type: "card_error",
+            stripe_error_code: "payment_intent_payment_attempt_failed",
+            stripe_error_message: "Your card was declined.",
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
       it "does not consume the per-order notify budget, so a later redirect-leg failure still reports" do
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
@@ -2739,19 +2764,59 @@ describe OrdersController, :vcr do
         expect(response.parsed_body["success"]).to be(true)
       end
 
-      it "notifies when payment_method_type is blank" do
-        # Blank arrives whenever Stripe raises before attaching a payment method, and reporting it
-        # is the denylist's deliberate fail-open direction.
+      it "notifies when neither Stripe nor the client named a payment method" do
+        # Nothing to key on at all, so this is the denylist's genuine fail-open direction.
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
 
         expect(ErrorNotifier).to receive(:notify).with(
           "Client-confirm browser error",
-          hash_including(payment_method_type: "")
+          hash_including(payment_method_type: "", selected_payment_method_type: "")
         )
 
         post :confirm_error, params: {
           id: order.secure_external_id(scope: "confirm"),
+          stripe_error_type: "card_error",
+          stripe_error_code: "card_declined",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies when Stripe named no method and the buyer had a redirect method selected" do
+        # The signal the endpoint exists for: a rejected iDEAL confirm carries no payment_method,
+        # so only the selected row identifies it.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "", selected_payment_method_type: "ideal")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          selected_payment_method_type: "ideal",
+          stripe_error_type: "card_error",
+          stripe_error_code: "payment_intent_unexpected_state",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies when Stripe contradicts the selected row, since Stripe is what actually charged" do
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(payment_method_type: "ideal", selected_payment_method_type: "card")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          payment_method_type: "ideal",
+          selected_payment_method_type: "card",
           stripe_error_type: "card_error",
           stripe_error_code: "card_declined",
         }

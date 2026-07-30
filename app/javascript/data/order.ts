@@ -258,6 +258,12 @@ export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
 ): Promise<CartPurchaseResult> => {
+  // Read off the payload rather than taking a parameter: the caller already narrowed
+  // paymentMethod to the client-confirm variant to reach this function at all.
+  const selectedMethodType =
+    requestData.paymentMethod.type === "payment-element-client-confirm"
+      ? requestData.paymentMethod.selectedMethodType
+      : "";
   let confirmedReturnUrl: string | null = null;
   try {
     const prepareResponse = await prepareClientConfirmOrder(requestData, confirmationTokenId);
@@ -304,7 +310,7 @@ export const startClientConfirmOrderCreation = async (
       // this leg are debuggable (the 2026-07-23 iDEAL ramp-down produced zero completions
       // with zero server-side evidence of why — gumroad-private#933). Fire-and-forget: the
       // buyer-facing failure below must render whether or not the report lands.
-      void reportClientConfirmError(order.id, "confirm", confirmResult.error);
+      void reportClientConfirmError(order.id, "confirm", confirmResult.error, selectedMethodType);
       return translateOrderFailureResponseIntoLineItemFailures(requestData, {
         success: false,
         error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
@@ -350,7 +356,18 @@ export const startClientConfirmOrderCreation = async (
 // Reports a client-side confirm failure to the server, which is otherwise blind to it (see the
 // call site above). Best-effort: swallow every failure — error reporting must never break the
 // checkout error path it instruments.
-const reportClientConfirmError = async (orderId: string, stage: string, error: StripeError): Promise<void> => {
+//
+// selectedMethodType is what the buyer had selected in the Payment Element; Stripe's
+// error.payment_method is only set when it attached one, so on a plain decline it is absent
+// and the server cannot tell a card decline from a redirect-leg failure without this
+// (gumroad-private#1514). Stripe's own type is sent alongside when present so a mismatch
+// stays visible rather than being papered over.
+const reportClientConfirmError = async (
+  orderId: string,
+  stage: string,
+  error: StripeError,
+  selectedMethodType: string,
+): Promise<void> => {
   try {
     await request({
       method: "POST",
@@ -362,6 +379,7 @@ const reportClientConfirmError = async (orderId: string, stage: string, error: S
         stripe_error_code: error.code ?? null,
         stripe_error_message: error.message ?? null,
         payment_method_type: error.payment_method?.type ?? null,
+        selected_payment_method_type: selectedMethodType,
       },
     });
   } catch {

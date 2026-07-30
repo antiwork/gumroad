@@ -25,14 +25,17 @@ const getStripeInstanceMock = vi.mocked(getStripeInstance);
 
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
+const clientConfirmPaymentMethod = {
+  type: "payment-element-client-confirm",
+  confirmationTokenId: "ct_123",
+  cardCountry: "US",
+  walletType: null,
+  mountCurrency: "usd",
+  selectedMethodType: "card",
+} as const;
+
 const requestData: StartCartPurchaseRequestPayload = {
-  paymentMethod: {
-    type: "payment-element-client-confirm",
-    confirmationTokenId: "ct_123",
-    cardCountry: "US",
-    walletType: null,
-    mountCurrency: "usd",
-  },
+  paymentMethod: clientConfirmPaymentMethod,
   email: "buyer@example.com",
   fullName: "Buyer",
   zipCode: "10001",
@@ -223,5 +226,33 @@ describe("startClientConfirmOrderCreation", () => {
     );
     // The buyer still sees the failure — reporting must not change the outcome.
     expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
+  });
+
+  it("reports the selected Payment Element row, which is the only method signal a decline carries", async () => {
+    // A plain decline: Stripe returns no payment_method, so the server can only tell this is a
+    // card from the selected row (gumroad-private#1514).
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true }));
+    const stripe: Stripe = Object.create(null);
+    stripe.confirmPayment = vi.fn().mockResolvedValue({
+      error: { type: "card_error", code: "card_declined", message: "Your card was declined." },
+    });
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    await startClientConfirmOrderCreation(
+      { ...requestData, paymentMethod: { ...clientConfirmPaymentMethod, selectedMethodType: "ideal" } },
+      "ct_123",
+    );
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/orders/order-token/confirm_error",
+        data: expect.objectContaining({
+          payment_method_type: null,
+          selected_payment_method_type: "ideal",
+        }),
+      }),
+    );
   });
 });
