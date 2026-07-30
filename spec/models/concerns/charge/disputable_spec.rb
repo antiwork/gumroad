@@ -687,6 +687,19 @@ describe Charge::Disputable, :vcr do
             expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
           end
 
+          it "still asks the seller for their side, on the window the crashed delivery opened" do
+            expect { Purchase.handle_charge_event(event) }.to raise_error("simulated crash")
+
+            # The replay loses the window claim to its own crashed attempt, and the notice that
+            # attempt was raising on never reached the seller. Suppressing the send on a lost
+            # claim would therefore lose the only request for evidence this dispute ever gets.
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
+
+            evidence = purchase.reload.dispute.dispute_evidence
+            expect(evidence.hours_left_to_submit_evidence).to be_positive
+          end
+
           context "when the product is a subscription" do
             let(:product) { create(:subscription_product, user: seller) }
             let!(:purchase) do
@@ -785,6 +798,54 @@ describe Charge::Disputable, :vcr do
             dispute = purchase.reload.dispute
             expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
             expect(dispute.formalized_side_effects_finished_at).to be_present
+          end
+        end
+
+        context "when the seller already answered the recovery notice" do
+          # The sweep can open the window, notify the seller, and have them submit before a
+          # re-delivery arrives. A second notice would ask for a statement the form no longer
+          # accepts, on a dispute already sent to the processor.
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              if evidence
+                DisputeEvidence.where(id: evidence.id)
+                               .update_all(seller_contacted_at: 2.hours.ago, seller_submitted_at: 1.hour.ago)
+              end
+              evidence
+            end
+          end
+
+          it "does not ask the seller again for a statement they have already submitted" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.dispute.dispute_evidence.seller_submitted?).to be(true)
+          end
+        end
+
+        context "when the evidence has already been submitted to the processor" do
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              if evidence
+                DisputeEvidence.where(id: evidence.id).update_all(
+                  seller_contacted_at: 2.hours.ago,
+                  resolved_at: 1.hour.ago,
+                  resolution: DisputeEvidence::RESOLUTION_SUBMITTED
+                )
+              end
+              evidence
+            end
+          end
+
+          it "does not send a notice linking a form that no longer accepts anything" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.dispute.dispute_evidence.resolved?).to be(true)
           end
         end
 
