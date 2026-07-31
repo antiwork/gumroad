@@ -7189,9 +7189,11 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     body = response.parsed_body
     assert_equal "stale_deletion_conflict", body["error_code"]
-    # The response carries the token for the CURRENT state, so the editor can
-    # reconcile and retry without a full reload.
-    assert_equal Product::EditorRevision.current(@product.reload), body["editor_revision"]
+    # And NO token: one here could only authorise the session's next save, which
+    # is the same stale snapshot, so the retry it enabled would delete AND revert
+    # a co-editor's changes (gumroad-private#1532). Recovery is a reload, which
+    # issues a current token of its own.
+    assert_not body.key?("editor_revision")
 
     # Nothing was written: the deletion did not happen AND the ordinary field
     # updates in the same payload were rolled back with it.
@@ -7442,9 +7444,11 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     body = response.parsed_body
     assert_equal "stale_deletion_conflict", body["error_code"]
-    # The 409 carries a token for the state as it stands NOW, so the editor
-    # can reconcile and retry without forcing a full reload.
-    assert_equal Product::EditorRevision.current(@product.reload), body["editor_revision"]
+    # And NO token. See gumroad-private#1532: the only thing a token here could
+    # authorise is the session's next save, which is the same stale snapshot, so
+    # it would delete as asked AND revert a co-editor's edits. Recovery is a
+    # reload, which issues a current token of its own.
+    assert_not body.key?("editor_revision")
 
     # Refused BEFORE any mutation: the rows survive and the ordinary field
     # updates in the same payload were rolled back with the transaction.
@@ -7481,7 +7485,7 @@ class LinksControllerSaveContractTest < ActionController::TestCase
   # Driven end to end here rather than asserted in the client, because it is the
   # SERVER's acceptance of the retry that makes the overwrite happen; a client
   # test can only show which request was sent.
-  test "flag on: resending a stale snapshot with the 409's fresh token deletes as asked AND reverts the other session's edit" do
+  test "flag on: the 409 refusing a stale deletion carries no fresh revision token" do
     enable_contract!
     doomed = create_variant(variant_category: @category, name: "Version Y, to delete")
     edited = create_variant(variant_category: @category, name: "Version X, as this session loaded it")
@@ -7501,13 +7505,52 @@ class LinksControllerSaveContractTest < ActionController::TestCase
       deletion_operations: { deleted_ids: { variants: [doomed.external_id] } },
     ), format: :json
     assert_response :conflict
-    fresh_token = response.parsed_body["editor_revision"]
+
+    # The refusal must not hand back a token. It could only authorise the next
+    # save, which is the same stale snapshot — so the deletion would land AND
+    # revert the other session's rename (gumroad-private#1532). The client
+    # discards it, and the recovery is a reload, which issues its own current
+    # token from ProductPresenter.
+    assert_equal "stale_deletion_conflict", response.parsed_body["error_code"]
+    assert_not response.parsed_body.key?("editor_revision"),
+               "the 409 must not carry a token that can only authorise a stale overwrite"
+    assert response.parsed_body["error_message"].present?
+
+    # Nothing was written: the deletion is still pending and the co-editor's
+    # rename survives.
+    assert doomed.reload.alive?
+    assert_equal "Version X, renamed by the other session", edited.reload.name
+  end
+
+  test "flag on: resending a stale snapshot with a separately-obtained fresh token deletes as asked AND reverts the other session's edit" do
+    enable_contract!
+    doomed = create_variant(variant_category: @category, name: "Version Y, to delete")
+    edited = create_variant(variant_category: @category, name: "Version X, as this session loaded it")
+    stale_token = current_revision
+    session_snapshot = @params.merge(
+      variants: [
+        { id: doomed.external_id, name: doomed.name },
+        { id: edited.external_id, name: edited.name },
+      ],
+    )
+
+    # The other session renames X. That moves the fingerprint, so this session's
+    # deletion of Y is refused.
+    edited.update!(name: "Version X, renamed by the other session")
+    post :update, params: session_snapshot.merge(
+      editor_revision: stale_token,
+      deletion_operations: { deleted_ids: { variants: [doomed.external_id] } },
+    ), format: :json
+    assert_response :conflict
     assert_equal "Version X, renamed by the other session", edited.reload.name
 
-    # The retry the removed "Save again" button used to send: same in-memory
-    # snapshot, only the token swapped.
+    # The 409 no longer supplies a token, so compute the current one directly —
+    # this is what any client-side "adopt a fresh token and resend" retry
+    # amounts to, however the token is obtained. The point of this test is that
+    # the DANGER is in resending the stale snapshot, not in where the token came
+    # from: that is why no safe retry can be built by swapping tokens alone.
     post :update, params: session_snapshot.merge(
-      editor_revision: fresh_token,
+      editor_revision: current_revision,
       deletion_operations: { deleted_ids: { variants: [doomed.external_id] } },
     ), format: :json
     assert_response :success

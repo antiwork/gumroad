@@ -196,10 +196,13 @@ describe CustomDomain do
     end
 
     it "resets ssl_certificate_issued_at on save if the domain is changed" do
+      @domain.set_routability!(true)
       @domain.domain = "example2.com"
       @domain.save!
 
       expect(@domain.reload.ssl_certificate_issued_at).to be_nil
+      expect(@domain.routable).to be_nil
+      expect(@domain.routability_checked_at).to be_nil
     end
 
     it "doesn't reset ssl_certificate_issued_at on save if the domain is not changed" do
@@ -257,6 +260,86 @@ describe CustomDomain do
 
       expect(domain.ssl_certificate_issued_at).to be_nil
       expect(domain.has_valid_certificate?(@renew_in)).to eq(false)
+    end
+  end
+
+  describe "#strictly_routable?" do
+    let(:custom_domain) { create(:custom_domain, :verified_with_certificate) }
+
+    it "returns a current positive result without scheduling DNS verification" do
+      custom_domain.set_routability!(true)
+
+      expect(custom_domain.strictly_routable?).to be(true)
+      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+
+    it "returns a current negative result without scheduling DNS verification" do
+      custom_domain.set_routability!(false)
+
+      expect(custom_domain.strictly_routable?).to be(false)
+      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+
+    it "falls back and schedules one refresh when the result is unknown" do
+      expect(custom_domain.strictly_routable?).to be(false)
+
+      expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+    end
+
+    it "serves a stale positive result while scheduling a refresh" do
+      custom_domain.set_routability!(true)
+      custom_domain.update_column(:routability_checked_at, 7.hours.ago)
+
+      expect(custom_domain.strictly_routable?).to be(true)
+
+      expect(RefreshCustomDomainRoutabilityWorker).to have_enqueued_sidekiq_job(custom_domain.id).once
+    end
+
+    it "does not use a positive result after the certificate expires" do
+      custom_domain.set_routability!(true)
+      custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+
+      expect(custom_domain.strictly_routable?).to be(false)
+      expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
+    end
+
+    it "does not apply a DNS result after the domain changes" do
+      checked_domain = custom_domain.domain
+      custom_domain.update!(domain: "new.example.com")
+
+      expect(custom_domain.set_routability!(true, checked_domain:)).to be(false)
+      expect(custom_domain.reload.routability_checked_at).to be_nil
+    end
+
+    it "does not activate a certificate generated for the previous domain" do
+      checked_domain = custom_domain.domain
+      custom_domain.update!(domain: "new.example.com")
+
+      expect(custom_domain.activate_with_routability!(true, checked_domain:)).to be(false)
+      expect(custom_domain.reload.ssl_certificate_issued_at).to be_nil
+      expect(custom_domain.routability_checked_at).to be_nil
+    end
+
+    it "does not let an older observation overwrite a newer result" do
+      newer_observation = Time.current.change(usec: 0)
+      older_observation = newer_observation - 1.minute
+      custom_domain.set_routability!(false, observed_at: newer_observation)
+
+      expect(custom_domain.set_routability!(true, observed_at: older_observation)).to be(false)
+      expect(custom_domain.reload).not_to be_routable
+      expect(custom_domain.routability_checked_at).to eq(newer_observation)
+    end
+
+    it "records successful certificate issuance without overwriting a newer routability result" do
+      newer_observation = Time.current.change(usec: 0)
+      older_observation = newer_observation - 1.minute
+      custom_domain.set_routability!(false, observed_at: newer_observation)
+      custom_domain.update_column(:ssl_certificate_issued_at, nil)
+
+      expect(custom_domain.activate_with_routability!(true, observed_at: older_observation)).to be(true)
+      expect(custom_domain.reload.ssl_certificate_issued_at).to be_present
+      expect(custom_domain).not_to be_routable
+      expect(custom_domain.routability_checked_at).to eq(newer_observation)
     end
   end
 
