@@ -89,6 +89,25 @@ describe ScheduleAbandonedCartEmailsJob do
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
         end
 
+        it "does not schedule an email for products the recipient already bought" do
+          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+          create(:purchase, link: seller2_product1, email: cart2.user.email, purchaser: cart2.user)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(2).times
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
+
+        it "still schedules an email when a refunded purchase is the only one for a carted product" do
+          create(:purchase, :refunded, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
+
         it "does not walk workflows of sellers with no products in the abandoned carts" do
           # Workflow matching drives off the carted products' sellers; walking every
           # published workflow was the bulk of the runtime that kept the job from

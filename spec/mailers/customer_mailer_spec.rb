@@ -1190,6 +1190,26 @@ describe CustomerMailer do
         end
       end
 
+      context "when the recipient already bought a matched product" do
+        it "does not send an email when every matched product is already owned" do
+          create(:purchase, link: seller1.products.first, email: cart.user.email, purchaser: cart.user)
+
+          expect do
+            mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end.not_to change { SentAbandonedCartEmail.count }
+        end
+
+        it "sends an email covering only the products that are not owned" do
+          create(:purchase, link: seller1.products.first, email: cart.user.email, purchaser: cart.user)
+
+          mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => seller1.products.pluck(:id).first(2) }.stringify_keys)
+
+          expect(mail.body.sanitized).to_not have_text("S1 Product 1")
+          expect(mail.body.sanitized).to have_text("S1 Product 2")
+        end
+      end
+
       context "when multiple workflows are provided" do
         it "sends a combined email" do
           expect do

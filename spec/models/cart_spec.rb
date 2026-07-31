@@ -127,6 +127,102 @@ describe Cart do
     end
   end
 
+  describe "#purchased_product_ids" do
+    let(:product) { create(:product) }
+    let(:other_product) { create(:product) }
+    let(:buyer) { create(:user) }
+    let(:cart) { create(:cart, user: buyer) }
+
+    before do
+      create(:cart_product, cart:, product:)
+      create(:cart_product, cart:, product: other_product)
+    end
+
+    it "returns only the carted products the buyer has bought" do
+      create(:purchase, link: product, email: buyer.email, purchaser: buyer)
+
+      expect(cart.purchased_product_ids).to eq([product.id])
+    end
+
+    it "matches a purchase made under a differently-cased spelling of the cart's email" do
+      cart.update!(user: nil, email: "Buyer@Example.com")
+      create(:purchase, link: product, email: "buyer@example.com", purchaser: nil)
+
+      expect(cart.purchased_product_ids).to eq([product.id])
+    end
+
+    it "matches a purchase made by the cart's user under a different email" do
+      create(:purchase, link: product, email: "elsewhere@example.com", purchaser: buyer)
+
+      expect(cart.purchased_product_ids).to eq([product.id])
+    end
+
+    it "ignores another buyer's purchase of the same product" do
+      create(:purchase, link: product, email: "someone-else@example.com", purchaser: create(:user))
+
+      expect(cart.purchased_product_ids).to be_empty
+    end
+
+    it "ignores a refunded purchase" do
+      create(:purchase, link: product, email: buyer.email, purchaser: buyer, stripe_refunded: true)
+
+      expect(cart.purchased_product_ids).to be_empty
+    end
+
+    it "ignores a charged-back purchase" do
+      create(:purchase, link: product, email: buyer.email, purchaser: buyer, chargeback_date: 1.day.ago)
+
+      expect(cart.purchased_product_ids).to be_empty
+    end
+
+    it "ignores a failed purchase" do
+      create(:failed_purchase, link: product, email: buyer.email, purchaser: buyer)
+
+      expect(cart.purchased_product_ids).to be_empty
+    end
+
+    it "ignores a gift bought for someone else" do
+      create(:purchase, :gift_sender, link: product, email: buyer.email, purchaser: buyer)
+
+      expect(cart.purchased_product_ids).to be_empty
+    end
+
+    it "counts a free purchase" do
+      create(:free_purchase, link: product, email: buyer.email, purchaser: buyer)
+
+      expect(cart.purchased_product_ids).to eq([product.id])
+    end
+  end
+
+  describe ".purchased_product_ids_by_cart_id" do
+    it "attributes each buyer's purchases to their own cart without querying per cart" do
+      product = create(:product)
+      buyer1 = create(:user)
+      buyer2 = create(:user)
+      cart1 = create(:cart, user: buyer1)
+      cart2 = create(:cart, user: buyer2)
+      create(:cart_product, cart: cart1, product:)
+      create(:cart_product, cart: cart2, product:)
+      create(:purchase, link: product, email: buyer1.email, purchaser: buyer1)
+
+      purchase_queries = 0
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        purchase_queries += 1 if payload[:sql].include?("FROM `purchases`")
+      end
+      begin
+        result = Cart.purchased_product_ids_by_cart_id([cart1.reload, cart2.reload])
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      # One statement per recipient column, not one per cart: the abandoned-cart run passes
+      # a 500-cart batch through here.
+      expect(purchase_queries).to eq(2)
+      expect(result[cart1.id]).to eq([product.id])
+      expect(result[cart2.id]).to be_empty
+    end
+  end
+
   describe "#abandoned?" do
     it "returns false for a deleted cart" do
       cart = create(:cart)
