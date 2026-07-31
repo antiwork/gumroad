@@ -196,6 +196,32 @@ describe Api::Internal::AgentMessageStreamsController do
         $redis.del(turn_status_key) if turn_status_key
       end
 
+      it "rejects and replaces server-owned confirmation copy without a proposal" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+          turn = store_agent_turn(reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY, proposed_action: nil)
+          on_reply_complete&.call(turn)
+          emit.call(:token, { text: turn[:reply] })
+          turn.merge(suggestions: [])
+        end
+        expect(ErrorNotifier).to receive(:notify).with(
+          an_instance_of(ArgumentError).and(having_attributes(
+            message: "Store agent proposal reply requires a proposed action.",
+          )),
+        )
+
+        expect do
+          post :create, params: valid_params, format: :json
+        end.to not_change { seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+        done_data = JSON.parse(response.body[/event: done\ndata: (.*)\n/, 1])
+        expect(response.body).to include("event: token")
+        expect(response.body).not_to include(Ai::StoreAgentService::PROPOSAL_READY_REPLY)
+        expect(done_data["reply"]).to eq(Ai::StoreAgentService::NOTHING_STAGED_REPLY)
+        expect(done_data["proposed_action"]).to be_nil
+      end
+
       it "persists the turn before any trailing write, so a client disconnect can't drop it" do
         # The reply is final when on_reply_complete fires; every socket write after it can raise
         # ClientDisconnected (the seller's connection died mid-stream while the server kept

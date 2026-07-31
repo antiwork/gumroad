@@ -472,16 +472,19 @@ export const Checkout = ({
                     </footer>
                     {commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0 ? (
                       <div className="grid gap-4 border-t border-border p-4">
-                        {/* Commissions and installment plans never reach the listed-currency lane
-                            (the payment-method resolver keeps both off the client-confirm Payment
-                            Element), so these rows only ever see canonical USD amounts — which
-                            formatCheckoutPrice converts with the display's rate as usual. */}
                         <CartPriceItem
                           title="Payment today"
-                          price={formatCheckoutPrice(
-                            total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
-                            localCurrency,
-                          )}
+                          price={
+                            buyerCurrencyDisplay
+                              ? formatPresentmentCents(
+                                  buyerCurrencyDisplay.chargePresentmentTotalCents,
+                                  buyerCurrencyDisplay,
+                                )
+                              : formatCheckoutPrice(
+                                  total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
+                                  localCurrency,
+                                )
+                          }
                         />
                         {commissionCompletionTotal > 0 ? (
                           <CartPriceItem

@@ -74,6 +74,7 @@ describe CustomerSurchargeController, :vcr do
     before do
       Feature.activate_user(:buyer_local_currency, @user)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, @user)
       # Price-ending rounding is off so the quote props asserted below stay the exact
       # converted amounts. These examples cover what the surcharge endpoint returns —
       # the minor-unit scale, and the largest-remainder line allocations that must sum
@@ -94,6 +95,7 @@ describe CustomerSurchargeController, :vcr do
     after do
       Feature.deactivate_user(:buyer_local_currency, @user)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, @user)
     end
 
     it "returns the locked quote props including the currency's minor-unit scale" do
@@ -142,6 +144,47 @@ describe CustomerSurchargeController, :vcr do
       expect(allocation["price_cents"] + allocation["tip_cents"]).to eq(allocation["total_cents"])
       expect(allocation["tip_cents"]).to be_positive
       expect(quote_props["line_allocations"].sum { _1["total_cents"] }).to eq(quote_props["presentment_total_cents"])
+    end
+
+    it "returns the first-installment amount separately from the full agreement" do
+      @product.update!(price_cents: 10_00)
+      create(:product_installment_plan, link: @product, number_of_installments: 3)
+
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 10_00, quantity: 1, pay_in_installments: true }],
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to include(
+        "presentment_total_cents" => 12_50,
+        "charge_presentment_total_cents" => 4_18
+      )
+    end
+
+    it "returns zero as the initial charge for a preorder agreement" do
+      @product.update!(is_in_preorder_state: true)
+
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 10_00, quantity: 1 }],
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to include(
+        "presentment_total_cents" => 12_50,
+        "charge_presentment_total_cents" => 0
+      )
+    end
+
+    it "returns the commission deposit separately from the full agreement" do
+      @user.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+      commission = create(:commission_product, user: @user, price_cents: 10_00)
+
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 10_00, quantity: 1 }],
+      }, as: :json
+
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to include(
+        "presentment_total_cents" => 12_50,
+        "charge_presentment_total_cents" => 6_25
+      )
     end
 
     it "locks one quote per seller and returns their sum for a cart spanning several sellers" do

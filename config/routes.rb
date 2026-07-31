@@ -552,6 +552,9 @@ Rails.application.routes.draw do
         scope module: :users do
           get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
           get "unsubscribe_review_reminders", to: "review_reminders#unsubscribe", as: :user_unsubscribe_review_reminders
+          # Token-carrying variants for links in review reminder emails; these work without a session.
+          get "subscribe_review_reminders/:id", to: "review_reminders#subscribe_by_token", as: :user_subscribe_review_reminders_by_token
+          get "unsubscribe_review_reminders/:id", to: "review_reminders#unsubscribe_by_token", as: :user_unsubscribe_review_reminders_by_token
         end
       end
     end
