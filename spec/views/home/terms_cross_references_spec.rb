@@ -63,8 +63,17 @@ describe "app/views/home/terms.html.erb cross-references" do
   # Every number a cite points at, titled or not, in any of the forms this document uses: lowercase
   # "section 6.4", plural "Sections 11.3(a) and 11.3(b)", letter limbs "Section 11.3(c)". A limb
   # cite resolves to its parent subsection, which is what has a heading.
+  #
+  # Two passes, because one "Sections" prefix can govern a list: the prefix pass finds the head of
+  # each cite, then the list pass walks the "and"/"," continuations after it. Matching only after
+  # the prefix would capture 11.3 out of "Sections 11.3(a) and 11.99(b)" and let the bad
+  # continuation through — the shape §11.3(c) actually uses.
   def cited_numbers(pattern)
-    source.scan(/(?:#{section_word})#{sp}+(#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?/).flatten.uniq
+    numbers = source.scan(/(?:#{section_word})#{sp}+((?:#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?
+                          (?:(?:,|#{sp}+and|#{sp}+or)?#{sp}+(?:#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?)*)/x)
+    numbers.flatten
+           .flat_map { |run| run.scan(/#{pattern}/) }
+           .uniq
   end
 
   # A cite is dead when the number it names does not exist, or when the number it names is titled
@@ -132,6 +141,20 @@ describe "app/views/home/terms.html.erb cross-references" do
 
     missing = cited - sections.keys
     expect(missing).to be_empty, "cited but absent: #{missing.inspect}"
+  end
+
+  # The scans above only protect the document if they read a whole list, not just its head. §11.3(c)
+  # cites "Sections 11.3(a) and 11.3(b)", so a continuation is a real shape here rather than a
+  # hypothetical one, and a dead number in the tail position must not slip through.
+  it "reads every number in a list governed by one Sections prefix" do
+    document = instance_double(Pathname, read: <<~HTML)
+      <p>In addition to and without limiting Sections 11.3(a) and 11.99(b), Gumroad may act.</p>
+      <p>Nothing in Sections 4.1, 9.98 or 9.99 limits Sections 14 and 40.</p>
+    HTML
+    allow(Rails.root).to receive(:join).with("app/views/home/terms.html.erb").and_return(document)
+
+    expect(cited_numbers('\d{1,2}\.\d{1,2}')).to contain_exactly("11.3", "11.99", "4.1", "9.98", "9.99")
+    expect(cited_numbers('\d{1,2}').map(&:to_i)).to include(14, 40)
   end
 
   it "numbers each subsection under the section it is printed beneath" do
