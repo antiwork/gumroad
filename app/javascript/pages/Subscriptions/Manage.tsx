@@ -181,6 +181,17 @@ export default function SubscriptionsManage() {
       : Math.max(price - subscription.prorated_discount_price_cents, 0);
   if (amountDueToday > 0) amountDueToday = Math.max(amountDueToday, getMinPriceCents(product.currency_code));
 
+  // Mirrors `Subscription::UpdaterService#apply_plan_change_immediately?`. Reading this off
+  // `amountDueToday` is not equivalent: the server floors a chargeable change to the product
+  // minimum, so a change whose prorated credit covers the new price still charges and applies
+  // at once while the client computes nothing due. Only a strict price decrease defers.
+  const deferredToRenewal =
+    requirePayment &&
+    !isResubscribing &&
+    !subscription.is_in_free_trial &&
+    !subscription.is_overdue_for_charge &&
+    price < subscription.price;
+
   let warning = null;
   if (selection.optionId === subscription.option_id && (hasPriceChanged || isRecurrenceChanged)) {
     const price = `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, { symbolFormat: "long" })} ${recurrenceLabels[selection.recurrence ?? subscription.recurrence]}`;
@@ -190,11 +201,6 @@ export default function SubscriptionsManage() {
     const oneWayNote = irreversible
       ? ` Your current ${recurrenceLabels[subscription.recurrence]} billing is no longer offered on this ${subscriptionEntity}, so as long as the seller does not offer it again you will not be able to switch back.`
       : "";
-    // Mirrors `Subscription::UpdaterService#apply_plan_change_immediately?`: only a downgrade
-    // that charges nothing today defers. A free trial or a switch to a free plan also owes $0
-    // today but applies at once, so neither may be described as starting at renewal.
-    const deferredToRenewal =
-      amountDueToday === 0 && !isResubscribing && !subscription.is_in_free_trial && requirePayment;
     const deferralNote = deferredToRenewal ? ", starting at your next renewal" : "";
     if (isQuantityChanged && isRecurrenceChanged) {
       warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat${deferralNote}.${oneWayNote}`;

@@ -474,6 +474,25 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
       end
     end
 
+    context "when the new per-seat price leaves the total unchanged" do
+      before do
+        # Two seats at $5.99 were bought for $11.98; one seat at $11.98 is the same total.
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "quarterly").update!(price_cents: 1198)
+      end
+
+      it "does not promise the next renewal" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        fill_in "Seats", with: 1
+
+        # An unchanged total is not a downgrade, so `UpdaterService#upgrade?` holds and the charge
+        # is floored to the product minimum rather than skipped: the change applies immediately.
+        # Deriving the timing from a computed amount-due of zero would claim the opposite.
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $11.98 every 3 months per seat.")
+        expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
+      end
+    end
+
     context "when the price of the user's current tier has dropped" do
       before do
         @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "quarterly").update!(price_cents: 100)
