@@ -340,6 +340,15 @@ describe CustomerLowPriorityMailer do
 
         expect(body).to include "token=#{subscription.reload.token}"
       end
+
+      it "marks the manage link as coming from a failure email so the retry it invites does not re-send it" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "declined=true"
+      end
     end
 
     context "installment plans" do

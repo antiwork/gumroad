@@ -120,6 +120,9 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   def subscription_charge_blocked_location(subscription_id)
     @subscription = Subscription.find(subscription_id)
+    # Marks the manage link as coming from a failure email, which is what makes the retry it invites
+    # charge without sending this email again on every still-blocked attempt.
+    @declined = true
     @subject =
       if @subscription.is_installment_plan?
         "Your installment payment could not be processed."

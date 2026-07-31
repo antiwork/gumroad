@@ -1719,13 +1719,15 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_equal PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION, purchase.error_code
   end
 
-  test "#charge! blocked by sanctions screening does not schedule the card-declined reminder" do
+  test "#charge! blocked by sanctions screening enqueues the location email and the termination worker, not the card-declined reminder" do
     sanctioned_renewal_setup
 
     @subscription.charge!
 
     assert_enqueued_email(CustomerLowPriorityMailer, :subscription_charge_blocked_location, args: [@subscription.id])
     refute_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+    # The email promises cancellation within 5 days, and this worker is what keeps that promise.
+    assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
   end
 
   # --- #charge! double charged -----------------------------------------------
