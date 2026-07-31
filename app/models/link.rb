@@ -286,6 +286,39 @@ class Link < ApplicationRecord
 
   scope :alive,                           -> { where(purchase_disabled_at: nil, banned_at: nil, deleted_at: nil) }
   scope :visible,                         -> { where(deleted_at: nil) }
+  # SQL mirror of #default_offer_code_detached?, so the repairs can re-evaluate
+  # detachment inside their own UPDATE instead of reading it first. Kept beside
+  # that method — the two must agree, and only this form is race-free.
+  scope :with_detached_default_offer_code, -> {
+    where(<<~SQL.squish)
+      links.default_offer_code_id IS NOT NULL AND (
+        NOT EXISTS (
+          SELECT 1 FROM offer_codes oc
+          WHERE oc.id = links.default_offer_code_id
+            AND oc.deleted_at IS NULL AND oc.code IS NOT NULL AND oc.code != ''
+        )
+        OR EXISTS (
+          SELECT 1 FROM offer_codes oc
+          WHERE oc.id = links.default_offer_code_id AND oc.universal = FALSE
+            AND NOT EXISTS (
+              SELECT 1 FROM offer_codes_products ocp
+              WHERE ocp.offer_code_id = oc.id AND ocp.product_id = links.id
+            )
+        )
+        OR EXISTS (
+          SELECT 1 FROM offer_codes oc
+          WHERE oc.id = links.default_offer_code_id AND oc.universal = TRUE
+            AND (
+              (oc.currency_type IS NOT NULL AND oc.currency_type != links.price_currency_type)
+              OR EXISTS (
+                SELECT 1 FROM offer_codes_excluded_products ocep
+                WHERE ocep.offer_code_id = oc.id AND ocep.product_id = links.id
+              )
+            )
+        )
+      )
+    SQL
+  }
   scope :visible_and_not_archived,        -> { visible.not_archived }
   scope :by_user,                         ->(user) { where(user.present? ? { user_id: user.id } : "1 = 1") }
   scope :by_general_permalink,            ->(permalink) { where("unique_permalink = ? OR custom_permalink = ?", permalink, permalink) }
@@ -1472,18 +1505,16 @@ class Link < ApplicationRecord
 
     # Closes the write-skew race with a concurrent discount edit: each side
     # validates against its own snapshot, so an assignment and a detaching code
-    # edit can both commit. Whichever commits second re-checks fresh state here
-    # and clears the pointer, compare-and-set so a newer assignment survives.
+    # edit can both commit. Whichever commits second clears the pointer here.
     # OfferCode#repair_detached_default_discounts covers the other commit order.
-    # Checks a fresh instance so this instance's association cache stays intact.
+    # Detachment is re-evaluated inside the UPDATE (with_detached_default_offer_code),
+    # so a reattachment landing between here and the write makes it match zero rows
+    # rather than clearing a default that became valid again.
     def repair_detached_default_offer_code
       forget_default_offer_code_assignment
       return if default_offer_code_id.nil?
 
-      fresh = Link.includes(:default_offer_code).find_by(id:)
-      return if fresh.nil? || !fresh.default_offer_code_detached?
-
-      updated = Link.where(id:, default_offer_code_id: fresh.default_offer_code_id).update_all(default_offer_code_id: nil)
+      updated = Link.where(id:).with_detached_default_offer_code.update_all(default_offer_code_id: nil)
       invalidate_cache if updated > 0
     end
 

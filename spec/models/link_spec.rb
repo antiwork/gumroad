@@ -54,6 +54,24 @@ describe Link do
 
       expect(product.reload.default_offer_code_id).to be_nil
     end
+
+    it "leaves the default alone when the code is reattached before the clearing write" do
+      offer_code = create(:offer_code, user: seller, products: [product, other_product])
+      offer_code.products.delete(product)
+      allow_any_instance_of(Link).to receive(:default_offer_code_must_be_valid)
+      product.update_column(:default_offer_code_id, offer_code.id)
+
+      # Stand in for a concurrent request re-adding the product after this repair
+      # decided the default was detached but before its UPDATE lands.
+      allow(Link).to receive(:where).and_wrap_original do |original, *args|
+        offer_code.products << product unless offer_code.products.reload.include?(product)
+        original.call(*args)
+      end
+
+      product.send(:repair_detached_default_offer_code)
+
+      expect(product.reload.default_offer_code_id).to eq(offer_code.id)
+    end
   end
 
   describe "clearing detached default discounts on undelete" do
