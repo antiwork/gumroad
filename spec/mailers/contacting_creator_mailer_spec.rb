@@ -1672,6 +1672,17 @@ describe ContactingCreatorMailer do
       expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
     end
 
+    # `perform_deliveries = false` drops the message with no raise and a recipient still set, so
+    # treating it as sent would burn the notice on a mail that never left the process.
+    it "gives the notice back when deliveries are switched off" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+      mail.perform_deliveries = false
+
+      mail.deliver_now
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
     # The advice comes from current state, so the reason recorded has to be the reason the seller was
     # told about — the other reason is still a notice they are owed.
     it "records only the reason it gave, leaving the other one reportable" do

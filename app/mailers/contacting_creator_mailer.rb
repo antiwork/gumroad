@@ -762,14 +762,15 @@ class ContactingCreatorMailer < ApplicationMailer
     end
 
     # The render claimed the seller's one notice; this decides whether it was spent. Only a message
-    # actually handed to the delivery method spends it — `deliver_email` returns before `mail` for an
-    # address we will not send to, which delivers an empty message rather than raising, and a transport
-    # failure raises straight through here. Both leave the seller un-notified, so both give the claim
-    # back and let a later event report it again.
+    # actually transmitted spends it — `deliver_email` returns before `mail` for an address we will
+    # not send to, which delivers an empty message rather than raising; a transport failure raises
+    # straight through here; and `perform_deliveries = false` drops the message silently, the way
+    # `PostSendgridApi` already reads that flag. All three leave the seller un-notified, so all three
+    # give the claim back and let a later event report it again.
     def settle_undeliverable_ping_subscription_notice
       delivered = false
       yield
-      delivered = message.to.present?
+      delivered = message.to.present? && message.perform_deliveries
     ensure
       # `ensure` rather than an after callback, so a raised delivery settles too.
       unless @resource_subscription.nil? || @undeliverable_ping_subscription_reason.blank?
