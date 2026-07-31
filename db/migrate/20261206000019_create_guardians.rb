@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 class CreateGuardians < ActiveRecord::Migration[7.1]
-  def change
-    # Guarded because this migration was renumbered from 20261206000015 after that version had
-    # already been recorded in production's schema_migrations. Environments that applied it under
-    # the old number — production included — already have the table, and db:migrate will now run
-    # this one against them.
+  # Renumbered from 20261206000015 after that version was already recorded in production's
+  # schema_migrations, so db:migrate now runs this migration against databases that already have
+  # the table. up leaves an existing table alone; down refuses to drop a table this migration never
+  # created, which is why this is an explicit up/down pair rather than a reversible change.
+  SUPERSEDED_VERSION = "20261206000015"
+
+  def up
     create_table :guardians, if_not_exists: true do |t|
       t.bigint :user_id, null: false, index: true
 
@@ -35,4 +37,25 @@ class CreateGuardians < ActiveRecord::Migration[7.1]
       t.timestamps
     end
   end
+
+  def down
+    return unless table_exists?(:guardians)
+    # Where the old version is still recorded, the table and every guardian row in it belong to that
+    # migration, and rolling this one back must leave them in place. The version numbers alone cannot
+    # prove ownership — the collision this branch fixes means 15 may instead have been the
+    # presentment migration — so this errs towards keeping the table. A rollback that leaves an
+    # unused table behind costs nothing; one that drops it loses data.
+    return if superseded_version_applied?
+
+    drop_table :guardians
+  end
+
+  private
+    def superseded_version_applied?
+      connection.select_value(
+        ActiveRecord::Base.sanitize_sql_array(
+          ["SELECT 1 FROM schema_migrations WHERE version = ? LIMIT 1", SUPERSEDED_VERSION]
+        )
+      ).present?
+    end
 end
