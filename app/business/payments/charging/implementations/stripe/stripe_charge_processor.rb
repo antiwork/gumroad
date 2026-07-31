@@ -163,7 +163,7 @@ class StripeChargeProcessor
     balance_transaction = charge.balance_transaction
     if balance_transaction.is_a?(String)
       begin
-        merchant_account = Purchase.find(charge.transfer_group).merchant_account rescue nil
+        merchant_account = merchant_account_for_transfer_group(charge.transfer_group)
         balance_transaction = merchant_account&.is_a_stripe_connect_account? ?
                                 Stripe::BalanceTransaction.retrieve({ id: balance_transaction }, { stripe_account: merchant_account.charge_processor_merchant_id }) :
                                 Stripe::BalanceTransaction.retrieve({ id: balance_transaction })
@@ -174,6 +174,19 @@ class StripeChargeProcessor
     end
     StripeCharge.new(charge, balance_transaction, charge.application_fee.try(:balance_transaction),
                      stripe_destination_payment.try(:balance_transaction), destination_transfer)
+  end
+
+  # A combined charge's transfer_group is a Charge id carrying the "CH-" prefix, not a Purchase id,
+  # so looking it up as a Purchase always raised and left the connected-account retrieve below
+  # unreachable for every cart purchase.
+  def merchant_account_for_transfer_group(transfer_group)
+    return if transfer_group.blank?
+
+    if transfer_group.to_s.starts_with?(Charge::COMBINED_CHARGE_PREFIX)
+      Charge.find_by(id: Charge.parse_id(transfer_group))&.purchases&.first&.merchant_account
+    else
+      Purchase.find_by(id: transfer_group)&.merchant_account
+    end
   end
 
   def get_charge_intent(payment_intent_id, merchant_account: nil)
