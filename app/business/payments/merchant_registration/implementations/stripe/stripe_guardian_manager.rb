@@ -62,11 +62,9 @@ module StripeGuardianManager
   #
   # Returns the Stripe Person, or nil when there was nothing to sync.
   def self.sync(user, stripe_account, passphrase:)
-    user_compliance_info = user.alive_user_compliance_info
-    return unless user_compliance_info&.requires_legal_guardian?
-
-    guardian = user_compliance_info.guardian
-    return unless guardian&.has_completed_info?
+    # Cheap pre-check so the overwhelming majority of sellers — no guardian requirement at all —
+    # never take the lock. Authoritative only inside it: see the re-read below.
+    return unless user.alive_user_compliance_info&.requires_legal_guardian?
 
     # Serialized across the whole lookup-create-adopt-reconcile sequence, per Stripe ACCOUNT. Two
     # overlapping syncs — account creation racing an update, or two updates — can otherwise both
@@ -81,17 +79,30 @@ module StripeGuardianManager
     # can — guardian_id is mutable on a live compliance revision, so a request that read the old
     # guardian can overlap one that read the new. Per-guardian locks let the reconcile of one delete
     # the Person the other had just created but not yet recorded.
-    with_account_sync_lock(stripe_account.id, "sync guardian #{guardian.id}") do
-      # Re-read inside the lock: the sync we waited on may have just created the Person and written
-      # its id, and this stale copy would otherwise still look unsynced and create a second one.
-      guardian.reload
+    with_account_sync_lock(stripe_account.id, "sync guardian for user #{user.id}") do
+      # Everything the payload is built from is re-read here, not just the guardian row. We may have
+      # waited seconds for the lock, and a compliance update in that window REPLACES the live
+      # revision — UpdateUserComplianceInfo soft-deletes the old one and creates a new one — so the
+      # pre-lock read can point at a revision that is no longer live. guardian_id is mutable on a
+      # live revision too, so the guardian can be swapped without a new revision at all.
+      #
+      # Reading only the guardian would send Stripe a former guardian's identity data, or a
+      # guardian's data after the requirement was dropped (birthday corrected, country changed to
+      # one with no guardian path) — an export the current compliance state no longer authorizes.
+      # legal_entity_country_code matters for the same reason: it decides how the tax identifier is
+      # labelled, so a stale country can mislabel one as an ssn_last_4.
+      #
+      # Re-deriving the guardian INSIDE the lock is only safe because the lock is keyed on the Stripe
+      # account rather than the guardian. A per-guardian lock would be held for the guardian we read
+      # before waiting, leaving the one we actually sync unserialized.
+      user_compliance_info = user.alive_user_compliance_info
+      return unless user_compliance_info&.requires_legal_guardian?
 
-      # The guardian we may have waited seconds to sync can have been erased in the meantime. GDPR
-      # erasure anonymizes the row and then deletes the Persons Stripe holds, under this same lock —
-      # so a sync that read the guardian before that and creates a Person after it would put the
-      # adult's details back at Stripe with erasure already finished and reporting success. Checked
-      # against the reloaded row rather than the pre-lock read, which is the whole point.
-      return unless guardian.has_completed_info?
+      guardian = user_compliance_info.guardian
+      # Also covers erasure: it anonymizes the row and deletes the Persons Stripe holds under this
+      # same lock, so a sync that read a complete guardian before that must not put the adult's
+      # details back at Stripe with the erasure already finished and reporting success.
+      return unless guardian&.has_completed_info?
 
       attributes = person_hash(guardian, user_compliance_info, passphrase:)
       stripe_person = existing_person(stripe_account, guardian)

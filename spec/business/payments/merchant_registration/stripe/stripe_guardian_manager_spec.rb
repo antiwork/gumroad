@@ -312,16 +312,25 @@ describe StripeGuardianManager do
     # survives locally — leaving an adult's name, date of birth and address at Stripe with no handle
     # erasure can select on. The lock is the only thing preventing that, so these pin it directly.
     describe "serialization across overlapping syncs" do
+      # Returns the pre-lock read first and the live state on every later call, which is exactly the
+      # shape sync sees: it reads once to decide whether to take the lock at all, then re-reads
+      # inside it. Stubbing a single fixed return would make the in-lock re-read untestable.
+      def stub_stale_then_live_compliance_info(stale_info)
+        call = 0
+        allow(user).to receive(:alive_user_compliance_info) do
+          call += 1
+          call == 1 ? stale_info : UserComplianceInfo.alive.where(user_id: user.id).last
+        end
+      end
+
       it "does not create a second person when a concurrent sync already recorded one" do
         info = create_compliance_info(guardian_record: guardian)
-        # The guardian is read BEFORE the lock is taken, so by the time this sync gets the lock the
-        # sync it waited on may already have created the Person and written its id. This stale
-        # instance is that pre-lock read; the DB row below is what the other sync left. Without the
-        # reload inside the lock, this sync still sees no id and creates a duplicate Person.
-        stale_guardian = Guardian.find(guardian.id)
+        # The pre-lock read, still showing no recorded id. By the time this sync gets the lock the
+        # sync it waited on has created the Person and written the id below. Without the re-read
+        # inside the lock this sync still sees no id and creates a duplicate Person.
+        stale_info = UserComplianceInfo.find(info.id)
         Guardian.where(id: guardian.id).update_all(stripe_person_id: "person_from_sibling")
-        allow(user).to receive(:alive_user_compliance_info).and_return(info)
-        allow(info).to receive(:guardian).and_return(stale_guardian)
+        stub_stale_then_live_compliance_info(stale_info)
         allow(Stripe::Account).to receive(:retrieve_person).and_return(
           Stripe::StripeObject.construct_from(id: "person_from_sibling")
         )
@@ -452,14 +461,84 @@ describe StripeGuardianManager do
         info = create_compliance_info(guardian_record: guardian)
         # The pre-lock read the sync is holding, still fully populated. The row underneath it is what
         # erasure left.
-        stale_guardian = Guardian.find(guardian.id)
+        stale_info = UserComplianceInfo.find(info.id)
+        stale_info.guardian
         guardian.anonymize!
-        allow(user).to receive(:alive_user_compliance_info).and_return(info)
-        allow(info).to receive(:guardian).and_return(stale_guardian)
+        stub_stale_then_live_compliance_info(stale_info)
 
         expect(described_class.sync(user, stripe_account, passphrase:)).to be_nil
         expect(Stripe::Account).not_to have_received(:create_person)
         expect(Stripe::Account).not_to have_received(:update_person)
+      end
+
+      # Everything the payload is built from is re-derived inside the lock, not just the guardian
+      # row. A compliance update REPLACES the live revision — the old one is soft-deleted and a new
+      # one created — so a sync holding the pre-lock read is holding a revision that no longer
+      # decides anything. These three are the shapes where acting on it exports data the current
+      # compliance state does not authorize.
+      it "does not sync a guardian the current compliance revision no longer selects" do
+        superseded_info = create_compliance_info(guardian_record: guardian)
+        replacement_guardian = create(:guardian, user:, email: "current@example.com")
+        # What a compliance update leaves behind: the revision the sync read is dead, and the live
+        # one points at a different guardian.
+        superseded_info.mark_deleted!
+        create_compliance_info(guardian_record: replacement_guardian)
+
+        allow(user).to receive(:alive_user_compliance_info).and_return(
+          superseded_info, UserComplianceInfo.alive.where(user_id: user.id).last
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        sent = nil
+        expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
+        expect(sent[:email]).to eq("current@example.com")
+        expect(replacement_guardian.reload.stripe_person_id).to eq("person_guardian_new")
+        # The guardian the requirement no longer names keeps no Stripe handle, because nothing of
+        # theirs was sent.
+        expect(guardian.reload.stripe_person_id).to be_nil
+      end
+
+      # The requirement itself can end while the sync waits — a corrected birthday, or a move to a
+      # country with no guardian path. Then the guardian's identity data must not reach Stripe at
+      # all, and the pre-lock check cannot know that yet.
+      it "sends nothing when the guardian requirement was dropped while this sync waited" do
+        stale_info = create_compliance_info(guardian_record: guardian)
+        stale_info.mark_deleted!
+        create_compliance_info(birthday: 30.years.ago.to_date, guardian_record: guardian)
+
+        allow(user).to receive(:alive_user_compliance_info).and_return(
+          stale_info, UserComplianceInfo.alive.where(user_id: user.id).last
+        )
+
+        expect(described_class.sync(user, stripe_account, passphrase:)).to be_nil
+        expect(Stripe::Account).not_to have_received(:create_person)
+        expect(Stripe::Account).not_to have_received(:update_person)
+      end
+
+      # The revision also decides how the tax identifier is LABELLED: Stripe validates it against the
+      # ACCOUNT country, so the same 4 digits are an ssn_last_4 on a US account and an id_number
+      # anywhere else. A stale revision saying US mislabels it, and Stripe then verifies it against
+      # the wrong directory and fails the guardian permanently with a generic mismatch.
+      it "labels the tax identifier against the current compliance country" do
+        guardian.update!(individual_tax_id: "6789")
+        stale_info = create_compliance_info(guardian_record: guardian)
+        stale_info.mark_deleted!
+        create_compliance_info(country: "Australia", guardian_record: guardian)
+        # The country gate would otherwise drop the requirement along with the country change, which
+        # is the separate case above; here the requirement stands and only the labelling moves.
+        allow_any_instance_of(UserComplianceInfo).to receive(:requires_legal_guardian?).and_return(true)
+
+        allow(user).to receive(:alive_user_compliance_info).and_return(
+          stale_info, UserComplianceInfo.alive.where(user_id: user.id).last
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        sent = nil
+        expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
+        expect(sent[:id_number]).to eq("6789")
+        expect(sent).not_to have_key(:ssn_last_4)
       end
 
       # The lease is held across two Stripe round trips, so a TTL shorter than a worst-case call
