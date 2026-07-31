@@ -1618,30 +1618,17 @@ class Link < ApplicationRecord
     # can see a claim committed meanwhile.
     #
     # `permalink` is globally unique while `custom_permalink` is unique per
-    # seller, so two sellers can have held one slug: the first writer keeps it.
-    # A mapping whose product is gone is reclaimable — it resolves to nothing on
-    # either branch, so leaving it would squat the slug forever (about a third of
-    # the imported rows are in that state). Every write here is conditional on
-    # the row still being the one this call read or created, so a concurrent
-    # rename's reclaim is never overwritten or deleted; two reclaims racing on
-    # one row leave the loser unmapped, i.e. the 404 it already had, until its
-    # next rename.
+    # seller, so two sellers can have held one slug and an existing mapping is
+    # never taken over: soft deletion is reversible (`publish!` clears
+    # `deleted_at`), so a mapping that resolves to nothing today can start
+    # serving again, and stealing it would forward that seller's already-shared
+    # links to this product. A rename off a slug another mapping holds keeps the
+    # 404 it already had.
     def redirect_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
       return if live_product_answers_on?(outgoing)
-
-      existing = LegacyPermalink.find_by(permalink: outgoing)
-      if existing.present?
-        return if mapped_product_visible?(existing.product_id)
-        # Conditional on the row still pointing where the check looked. A
-        # concurrent rename may have reclaimed it to a live product meanwhile,
-        # and overwriting that would forward their shared links to us.
-        return if LegacyPermalink.where(id: existing.id, product_id: existing.product_id)
-                                 .update_all(product_id: id, updated_at: Time.current).zero?
-        withdraw_legacy_permalink(existing.id) if live_product_answers_on?(outgoing)
-        return
-      end
+      return if LegacyPermalink.exists?(permalink: outgoing)
 
       mapping = LegacyPermalink.create(permalink: outgoing, product_id: id)
       Rails.logger.warn("LegacyPermalink not recorded for #{outgoing.inspect}: #{mapping.errors.full_messages.to_sentence}") unless mapping.persisted?
@@ -1654,12 +1641,6 @@ class Link < ApplicationRecord
     # Uncached: the second call has to see a claim committed since the first.
     def live_product_answers_on?(permalink)
       Link.uncached { Link.visible.by_general_permalink(permalink).exists? }
-    end
-
-    # Uncached for the same reason: a deletion may have committed since an
-    # earlier read of this product in the same request.
-    def mapped_product_visible?(product_id)
-      Link.uncached { Link.visible.where(id: product_id).exists? }
     end
 
     # Scoped to `id` so this only ever removes a row this call owns, never a
