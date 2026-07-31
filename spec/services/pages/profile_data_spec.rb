@@ -263,6 +263,106 @@ describe Pages::ProfileData do
       end
     end
 
+    context "when the seller has a live custom domain" do
+      let!(:product) { create(:product, user: seller, name: "My product") }
+      let!(:post) { create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update") }
+
+      it "builds product and post URLs on the custom domain, not the subdomain" do
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.set_routability!(true)
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to eq("#{PROTOCOL}://shop.example.com/l/#{product.general_permalink}")
+        expect(payload[:posts].first[:url]).to start_with("#{PROTOCOL}://shop.example.com/p/")
+        expect(payload.to_json).not_to include(seller.subdomain)
+      end
+
+      it "stays on the subdomain when only the configured domain's apex points to Gumroad" do
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "www.example.com")
+        custom_domain.set_routability!(false)
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to include(seller.subdomain)
+        expect(payload[:posts].first[:url]).to include(seller.subdomain)
+        expect(payload.to_json).not_to include("www.example.com")
+      end
+
+      it "stays on the subdomain while the domain is only verified, with no certificate yet" do
+        create(:custom_domain, user: seller, domain: "shop.example.com", state: "verified")
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to include(seller.subdomain)
+        expect(payload[:posts].first[:url]).to include(seller.subdomain)
+      end
+
+      it "moves the URLs off the old host when the domain goes live after the payload was cached" do
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
+
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.set_routability!(true)
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
+      end
+
+      it "moves the URLs back to the subdomain when the domain is removed" do
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.set_routability!(true)
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
+
+        custom_domain.mark_deleted!
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
+      end
+
+      it "keeps the emitted host inside the navigation bridge's allowlist" do
+        custom_domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        custom_domain.set_routability!(true)
+        seller.reload
+
+        payload = Pages::ProfileData.build(seller)
+        hosts = (payload[:products] + payload[:posts]).map { URI(_1[:url]).host }.uniq
+
+        expect(hosts).to all(be_in(seller.custom_html_store_hostnames))
+      end
+
+      it "ignores a custom domain belonging to one of the seller's products" do
+        create(:custom_domain, :verified_with_certificate, user: nil, product:, domain: "oneproduct.example.com")
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:products].first[:url]).to include(seller.subdomain)
+        expect(payload.to_json).not_to include("oneproduct.example.com")
+      end
+
+      it "leaves the custom-domain host behind when the certificate ages out with no DB write" do
+        domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
+        domain.set_routability!(true)
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
+
+        # active? goes false purely by the clock, so the domain row's updated_at never moves.
+        domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+
+        expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
+      end
+    end
+
+    context "when the seller has neither a subdomain nor a live custom domain" do
+      # A nil store host keeps posts on /:username/p/:slug rather than the invalid
+      # gumroad.com/p/:slug route.
+      it "does not build post URLs on the shared root domain" do
+        create(:product, user: seller, name: "My product")
+        create(:audience_post, :published, seller:, link: nil, shown_on_profile: true, slug: "my-update")
+        allow_any_instance_of(User).to receive(:subdomain_with_protocol).and_return(nil)
+
+        payload = Pages::ProfileData.build(seller.reload)
+
+        expect(payload[:posts].first[:url]).not_to start_with("#{UrlService.domain_with_protocol}/p/")
+      end
+    end
+
     it "does not serve a v4 payload without the totals" do
       seller_profile = SellerProfile.find_by(seller_id: seller.id)
       current_key = Pages::ProfileData.cache_key(seller, seller_profile)
