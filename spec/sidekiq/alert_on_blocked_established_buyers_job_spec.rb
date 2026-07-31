@@ -45,7 +45,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
       expect(sender).to eq("Blocked established buyers")
       expect(message).to include(email)
       expect(message).to include("#{established_count} settled purchases")
-      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by a browser_guid block since #{block.blocked_at.to_date}")
     end
   end
 
@@ -89,7 +89,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include(email)
-      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by a email_domain block since #{block.blocked_at.to_date}")
     end
   end
 
@@ -115,6 +115,69 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message.scan(/#{Regexp.escape(email)}/).size).to eq(1)
       expect(message).to include("1 buyer with")
+    end
+  end
+
+  it "names the block type, so a reader knows what clearing it would cost" do
+    settled_purchases(established_count)
+    blocked_attempt(error_code: PurchaseErrorCode::BLOCKED_EMAIL_DOMAIN)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email_domain], object_value: "example.com")
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("blocked by a email_domain block since")
+    end
+  end
+
+  # The report's line format is its user interface, and a reader triaging 25 lines needs to see which
+  # buyer only just hit this.
+  it "marks a failure from the last day as new, and does not mark an older one" do
+    settled_purchases(established_count)
+    blocked_attempt(created_at: 1.hour.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("NEW — #{email}")
+    end
+  end
+
+  it "does not mark a failure older than a day as new" do
+    settled_purchases(established_count)
+    blocked_attempt(created_at: 3.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).not_to include("NEW —")
+      expect(message).to include(email)
+    end
+  end
+
+  it "dates the last attempt" do
+    settled_purchases(established_count)
+    failure = blocked_attempt(created_at: 4.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("last tried #{failure.created_at.to_date}")
+    end
+  end
+
+  it "does not report an attempt count for a buyer who only tried once" do
+    settled_purchases(established_count)
+    blocked_attempt
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).not_to include("1 attempts")
     end
   end
 
@@ -167,7 +230,26 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
-  it "ignores a buyer carrying a full refund on another purchase" do
+  # A reversed chargeback resolved in our favour, and settled_purchase_counts already counts that
+  # same row as clean history — vetoing on it would make one row both the numerator and the veto.
+  it "still reports a buyer whose only chargeback was reversed" do
+    settled_purchases(established_count)
+    create(:purchase, email:, purchase_state: "successful", price_cents: 500,
+                      created_at: history_starts_at, chargeback_date: 3.months.ago,
+                      chargeback_reversed: true)
+    blocked_attempt
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+    end
+  end
+
+  # An ordinary remorse refund is customer service, not a fraud signal. Vetoing on one would
+  # permanently hide exactly the long-standing buyers this report exists to find.
+  it "still reports a buyer carrying a refund on another purchase" do
     settled_purchases(established_count)
     create(:purchase, email:, purchase_state: "successful", price_cents: 500,
                       created_at: history_starts_at, stripe_refunded: true)
@@ -176,7 +258,9 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
     described_class.new.perform
 
-    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+    end
   end
 
   it "ignores a checkout that failed for a reason other than a block" do
@@ -248,6 +332,51 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  # Claiming a free download does not prove checkout works for them, so it is not recovery.
+  it "still reports a buyer whose only later purchase was free" do
+    settled_purchases(established_count)
+    blocked_attempt(created_at: 2.days.ago)
+    create(:purchase, email:, purchase_state: "successful", price_cents: 0, created_at: 1.day.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+    end
+  end
+
+  # Purchase#downcase_email only normalizes rows saved since that callback existed, and the column's
+  # ci collation hands a mixed-case group back under an arbitrary member's casing — so without
+  # normalising both sides a legacy buyer's history does not join to their failure row, and the entry
+  # carries a nil count that takes the whole report down in report_order.
+  it "matches legacy mixed-case history to a lowercase blocked attempt" do
+    settled_purchases(established_count, buyer_email: email).each do |purchase|
+      purchase.update_column(:email, email.upcase)
+    end
+    blocked_attempt
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("#{established_count} settled purchases")
+    end
+  end
+
+  it "vetoes a buyer whose disqualifying chargeback sits on a legacy mixed-case row" do
+    settled_purchases(established_count)
+    create(:purchase, email:, purchase_state: "successful", price_cents: 500,
+                      created_at: history_starts_at, chargeback_date: 3.months.ago)
+      .update_column(:email, email.upcase)
+    blocked_attempt
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
   it "still reports a buyer whose successful purchases all predate the blocked attempt" do
     settled_purchases(established_count)
     blocked_attempt(created_at: 1.hour.ago)
@@ -271,7 +400,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by a email block since #{block.blocked_at.to_date}")
     end
   end
 
@@ -293,7 +422,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by a email_domain block since #{block.blocked_at.to_date}")
     end
   end
 
@@ -310,7 +439,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked since #{guid_block.blocked_at.to_date}")
+      expect(message).to include("blocked by a browser_guid block since #{guid_block.blocked_at.to_date}")
     end
   end
 
@@ -326,6 +455,56 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message.index(email)).to be < message.index(small_email)
+    end
+  end
+
+  # A backfill, an import or a retry that preserves timestamps can give an older failure the higher
+  # id. Picking by id would then quote that older row's guid and dates while claiming to describe the
+  # newest attempt.
+  it "describes the newest blocked attempt even when an older one has a higher id" do
+    settled_purchases(established_count)
+    newest = blocked_attempt(created_at: 1.hour.ago)
+    older = blocked_attempt(created_at: 5.days.ago)
+    expect(older.id).to be > newest.id
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("last tried #{newest.created_at.to_date}")
+      expect(message).not_to include("last tried #{older.created_at.to_date}")
+    end
+  end
+
+  # Two buyers with equal history: the one who tried most recently is the one still trying to pay us.
+  it "puts the more recent failure first among buyers with equal history" do
+    stale_email = "stale@example.com"
+    settled_purchases(established_count, buyer_email: stale_email)
+    blocked_attempt(buyer_email: stale_email, created_at: 6.days.ago)
+    settled_purchases(established_count, buyer_email: email)
+    blocked_attempt(created_at: 1.hour.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message.index(email)).to be < message.index(stale_email)
+    end
+  end
+
+  # A same-second pair is an ambiguous ordering, and a human reading a false positive beats a silent
+  # drop — so a tie is reported rather than treated as recovery.
+  it "reports a buyer whose later purchase shares a timestamp with the blocked attempt" do
+    settled_purchases(established_count)
+    failure = blocked_attempt(created_at: 2.days.ago)
+    create(:purchase, email:, purchase_state: "successful", price_cents: 500,
+                      created_at: failure.created_at)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
     end
   end
 
@@ -397,6 +576,46 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).not_to include("At least")
       expect(message).not_to include("The scan stopped at")
+    end
+  end
+
+  # A window holding exactly the budget is not truncated — the extra candidate plucked above the
+  # budget is what distinguishes "exactly full" from "there are more".
+  it "does not claim truncation when the window holds exactly the scan budget" do
+    stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 2)
+    2.times do |index|
+      buyer_email = "buyer#{index}@example.com"
+      settled_purchases(established_count, buyer_email:)
+      blocked_attempt(buyer_email:, created_at: (index + 1).hours.ago)
+    end
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("2 buyers with")
+      expect(message).not_to include("At least")
+      expect(message).not_to include("The scan stopped at")
+    end
+  end
+
+  # "Blocked since" is the date the buyer became stuck, so where several active rows carry the guid
+  # value the earliest is the honest one — a later re-block is not when their trouble started.
+  it "dates the block from the earliest active row carrying the value" do
+    settled_purchases(established_count)
+    blocked_attempt
+    earliest = travel_to(2.years.ago) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+    end
+    recent = travel_to(1.month.ago) do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: browser_guid)
+    end
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("since #{earliest.blocked_at.to_date}")
+      expect(message).not_to include("since #{recent.blocked_at.to_date}")
     end
   end
 
