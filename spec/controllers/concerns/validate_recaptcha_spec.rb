@@ -334,6 +334,20 @@ describe ValidateRecaptcha, type: :controller do
         expect(response).to have_http_status(:unprocessable_entity)
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
+
+      # Only the top level of Google's response is guaranteed to be an object, so the hostname can
+      # be any JSON scalar. Without the type guard these raise instead of failing verification.
+      [true, 123].each do |malformed_hostname|
+        it "fails checkout without raising when the hostname is #{malformed_hostname.inspect}" do
+          allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+          stub_recaptcha_response(valid: true, score: 0.7, hostname: malformed_hostname)
+
+          post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq("captcha_failed")
+        end
+      end
     end
 
     context "with the follow surface" do

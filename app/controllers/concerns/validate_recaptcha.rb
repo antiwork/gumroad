@@ -136,6 +136,11 @@ module ValidateRecaptcha
 
     def hostname_allowed?(hostname)
       return true unless Rails.env.production?
+      # Only the top level of the verification response is guaranteed to be an object, so
+      # tokenProperties.hostname can arrive as any JSON scalar. A non-string is not a hostname
+      # we can allow, and every comparison below would raise on it — which lands on the caller's
+      # 500 rather than a clean failed verification.
+      return false unless hostname.is_a?(String)
       return false if hostname.blank?
 
       # Google echoes the hostname as the browser sent it, so a legal absolute FQDN arrives
