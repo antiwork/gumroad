@@ -5,6 +5,14 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.cannot_pay(Payment.last&.id)
   end
 
+  def paypal_payout_permanently_failed
+    payment = Payment.where(
+      processor: PayoutProcessorType::PAYPAL,
+      failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS
+    ).last || Payment.last
+    ContactingCreatorMailer.paypal_payout_permanently_failed(payment&.id)
+  end
+
   def preorder_release_reminder
     ContactingCreatorMailer.preorder_release_reminder(PreorderLink.last&.link&.id)
   end
@@ -30,6 +38,16 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
       User.last&.id,
       StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
       "Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ."
+    )
+  end
+
+  def invalid_bank_account_directory_miss
+    user = User.last
+    ContactingCreatorMailer.invalid_bank_account(
+      user&.id,
+      nil,
+      "We couldn't find the bank for that bank/branch code.",
+      user&.active_bank_account&.id
     )
   end
 

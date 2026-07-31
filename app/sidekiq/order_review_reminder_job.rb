@@ -23,7 +23,15 @@ class OrderReviewReminderJob
     # among the eligible purchases, fall back to per-purchase reminders so each
     # email goes to the person who can actually review, with a link scoped to
     # their own purchase.
-    if eligible_purchases.count > 1 && eligible_purchases.none?(&:is_gift_receiver_purchase?)
+    #
+    # Same fallback when the eligible purchases no longer share one address: one
+    # email carries one recipient and one unsubscribe link, so a mixed-address
+    # order can only be served correctly one purchase at a time. Checkout writes
+    # a single address across the order, but a later per-purchase reassignment
+    # (support moving one item to another buyer) splits them.
+    if eligible_purchases.count > 1 &&
+       eligible_purchases.none?(&:is_gift_receiver_purchase?) &&
+       eligible_purchases.map { _1.email&.downcase }.uniq.one?
       enqueue_reminder_once(:order_review_reminder, order_id)
     else
       # Each purchase gets its own uniqueness record rather than sharing one

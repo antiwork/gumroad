@@ -88,6 +88,57 @@ describe ScheduleAbandonedCartEmailsJob do
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
         end
+
+        it "does not walk workflows of sellers with no products in the abandoned carts" do
+          # Workflow matching drives off the carted products' sellers; walking every
+          # published workflow was the bulk of the runtime that kept the job from
+          # finishing inside a deploy window (gumroad-private#1576).
+          uncarted_seller = create(:user)
+          create(:payment_completed, user: uncarted_seller)
+          uncarted_product = create(:product, user: uncarted_seller)
+          uncarted_workflow = create(:abandoned_cart_workflow, seller: uncarted_seller, published_at: 1.day.ago, bought_products: [uncarted_product.unique_permalink])
+
+          walked_workflow_ids = []
+          allow_any_instance_of(Workflow).to receive(:abandoned_cart_products).and_wrap_original do |original, **kwargs|
+            walked_workflow_ids << original.receiver.id
+            original.call(**kwargs)
+          end
+
+          described_class.new.perform
+
+          expect(walked_workflow_ids).to include(seller1_abandoned_cart_workflow.id, seller2_abandoned_cart_workflow.id)
+          expect(walked_workflow_ids).not_to include(uncarted_workflow.id)
+        end
+      end
+
+      context "when the run is killed partway through the day windows" do
+        it "has already scheduled emails for the days scanned before the kill" do
+          # Each day's window is matched and delivered before the next is scanned, so a
+          # deploy-window kill costs one day's chunk instead of the whole run
+          # (gumroad-private#1576): a death on day 2 must not take day 1's sends with it.
+          travel_to Time.current.noon do
+            day1_cart = create(:cart)
+            create(:cart_product, cart: day1_cart, product: seller1_product1)
+            day1_cart.update!(updated_at: 25.hours.ago)
+
+            day2_cart = create(:cart)
+            create(:cart_product, cart: day2_cart, product: seller1_product1)
+            day2_cart.update!(updated_at: 2.days.ago)
+
+            job = described_class.new
+            scanned_windows = 0
+            allow(job).to receive(:abandoned_cart_ids).and_wrap_original do |original, window|
+              scanned_windows += 1
+              raise Sidekiq::Shutdown if scanned_windows > 1
+              original.call(window)
+            end
+
+            expect do
+              expect { job.perform }.to raise_error(Sidekiq::Shutdown)
+            end.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
+              .with(day1_cart.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id] }.stringify_keys)
+          end
+        end
       end
 
       context "when there are multiple matching abandoned cart workflows for a cart" do

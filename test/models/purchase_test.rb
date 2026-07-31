@@ -6688,6 +6688,21 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal true, purchase.eligible_for_review_reminder?
   end
 
+  test "#eligible_for_review_reminder? when the buyer unsubscribed from the seller returns false" do
+    # `can_contact: false` is set by the receipt footer's Unsubscribe link, and for a guest
+    # buyer it is the only opt-out available — there is no User row to hold
+    # `opted_out_of_review_reminders`.
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(can_contact: false)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when a guest buyer unsubscribed from the seller returns false" do
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(purchaser: nil, can_contact: false)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
   test "#eligible_for_review_reminder? when the seller has disabled review reminders returns false" do
     purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
     purchase.seller.update!(disable_review_reminders: true)

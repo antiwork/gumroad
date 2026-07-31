@@ -24,6 +24,165 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "paypal payout permanently failed" do
+    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
+
+    before do
+      # Gumroad supports bank payouts here, so the email may suggest one. Sellers in PayPal-only
+      # countries — the majority of those hitting these rejections — are covered separately below.
+      create(:user_compliance_info, user: payment.user, country: "United States")
+    end
+
+    it "names PayPal, the restriction, and the fix" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.to).to eq [payment.user.email]
+      expect(mail.subject).to eq("Your PayPal account can't receive your payout.")
+      expect(mail.body.encoded).to include("$439.13")
+      expect(mail.body.encoded).to include("payments cannot be received in the country on that account&#39;s address")
+      expect(mail.body.encoded).to include("add a bank account in your payout settings")
+      expect(mail.body.encoded).to include("stopped retrying it")
+    end
+
+    it "names the currency restriction for a currency rejection" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("your PayPal account cannot receive US dollars")
+    end
+
+    # A currency rejection does not stop the retries, so the email must not say it did — and the
+    # seller can clear it on the account they already use. Reviewer finding on #6526.
+    it "does not claim the retries stopped for a rejection we keep retrying" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("stopped retrying")
+      expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("add US dollars as a currency you accept")
+    end
+
+    it "still says the retries stopped for a rejection that blocks them" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("stopped retrying it")
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+    end
+
+    # The payout gate exits on payouts_paused? before any processor runs, so a paused seller is not
+    # being retried on schedule whatever the rejection code says. Promising it contradicts the pause
+    # this same email describes further down. Reviewer finding on #6526.
+    it "does not promise schedule retries to a seller whose payouts we have paused" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Payouts on your account are paused right now")
+      # The pause is named once, so the later paragraph must not reintroduce it as a second,
+      # distinct restriction.
+      expect(mail.body.encoded).to_not include("are also on hold")
+      expect(mail.body.encoded).to include("That hold is ours to lift")
+    end
+
+    it "does not promise schedule retries to a seller who paused their own payouts" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Payouts on your account are paused right now")
+      expect(mail.body.encoded).to_not include("also paused in your settings")
+      expect(mail.body.encoded).to include("You paused them yourself")
+    end
+
+    it "promises schedule retries for a retried rejection when nothing is paused" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to_not include("paused right now")
+    end
+
+    it "does not promise a payout date when the account is also under a payout hold" do
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("Payouts on your account are also on hold")
+      expect(mail.body.encoded).to include("reply to this email")
+      expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "does not blame the hold on the failed payouts, since support or Stripe may have placed it" do
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("placed a hold")
+    end
+
+    # The payout gate checks the broader payouts_paused?, so this seller is skipped too — but the
+    # switch is theirs, so they are pointed at it rather than at support.
+    it "points a seller who paused their own payouts at their own setting, not at support" do
+      payment.user.update!(payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("paused in your settings")
+      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to_not include("on hold")
+      expect(mail.body.encoded).to_not include("reply to this email")
+    end
+
+    it "promises the next payout date when the account is not under a payout hold" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to_not include("on hold")
+    end
+
+    # The two pause flags are independent, so both can be on. Naming only the hold would tell the
+    # seller support can release the balance while their own pause still blocks it. Reviewer
+    # finding on #6526.
+    it "names both pauses when the account is held and the seller paused their own payouts" do
+      payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("resume payouts in your settings")
+      expect(mail.body.encoded).to include("review the hold")
+      expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "names both pauses for a retried rejection whose retries a pause is stopping" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Two separate pauses are on your account")
+      expect(mail.body.encoded).to include("resume payouts in your settings")
+      expect(mail.body.encoded).to include("review the hold")
+    end
+
+    it "does not tell a seller in a PayPal-only country to add a bank account" do
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("PayPal is the only payout method we can offer in your country")
+      expect(mail.body.encoded).to_not include("add a bank account")
+    end
+  end
+
   describe "purchase refunded" do
     it "sends notification to the seller about refunded purchase" do
       purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
@@ -2095,6 +2254,7 @@ describe ContactingCreatorMailer do
     let(:format_rejection_message) do
       "Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ."
     end
+    let(:directory_miss_message) { "We couldn't find the bank for that bank/branch code" }
 
     context "when the bank code was rejected on format" do
       let(:mail) do
@@ -2191,6 +2351,68 @@ describe ContactingCreatorMailer do
         expect(mail.subject).to eq("We couldn't verify your bank account yet.")
         expect(mail.body.encoded).to include("automatically re-check")
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "quotes back both values and asks the seller to check both halves" do
+        bank_account = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, bank_account.id)
+
+        expect(mail.body.encoded).to include("bank code JSCLUZ22XXX and branch code 00401")
+        expect(mail.body.encoded).to include("check both")
+        expect(mail.body.encoded).not_to include("branch code is the half")
+      end
+
+      it "omits the two-field advice for a country that collects one routing value" do
+        bank_account = create(:ach_account, user: seller, routing_number: "110000000")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, bank_account.id)
+
+        expect(mail.body.encoded).to include("routing number 110000000")
+        expect(mail.body.encoded).not_to include("check both")
+      end
+
+      it "quotes nothing when the caller could not name the refused row" do
+        # A job enqueued before the id argument existed. The seller may have re-saved since, so
+        # naming the active row would attribute values Stripe never saw.
+        create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message)
+
+        # Decoded, not .encoded: quoted-printable soft-wraps can split a quoted value across a
+        # line break and make a negative assertion pass for the wrong reason.
+        body = mail.html_part&.decoded || mail.body.decoded
+        # Positive anchor from static template text — the header copy's apostrophes HTML-escape
+        # ("couldn&#39;t"), so anchoring on those makes the negatives below vacuous.
+        expect(body).to include("double-check your details")
+        expect(body).not_to include("JSCLUZ22XXX")
+        expect(body).not_to include("The details we sent were")
+      end
+
+      it "quotes the row Stripe refused, not whatever the seller has saved since" do
+        # The mail renders asynchronously, and the #1550 seller re-saved six times in eleven
+        # minutes. Re-saving soft-deletes the old row and makes the newest one active, so reading
+        # the active row would tell them values that were never sent had been refused.
+        rejected = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+        rejected.mark_deleted!
+        replacement = create(:uzbekistan_bank_account, user: seller, bank_code: "KACHUZ22XXX", branch_code: "01158")
+        expect(seller.reload.active_bank_account).to eq(replacement)
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, rejected.id)
+
+        expect(mail.body.encoded).to include("branch code 00401")
+        expect(mail.body.encoded).not_to include("01158")
+      end
+
+      it "says nothing about routing values when the rejection was not a directory miss" do
+        # A declined debit card and a bank-country mismatch both arrive with no rejection kind.
+        # Quoting routing values at those sellers points them at a field that was never the problem.
+        bank_account = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, "Your card was declined.", bank_account.id)
+
+        expect(mail.body.encoded).not_to include("JSCLUZ22XXX")
+        expect(mail.body.encoded).not_to include("The details we sent were")
       end
     end
 

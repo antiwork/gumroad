@@ -1696,6 +1696,40 @@ class SubscriptionTest < ActiveSupport::TestCase
     end
   end
 
+  # A renewal blocked by sanctions screening never reaches a charge processor:
+  # `validate_sanctioned_location` is a before_create validation, so the card
+  # mailers would be describing a charge that was never attempted. No cassette
+  # here for that same reason — unlike the rest of this section these cases must
+  # not tokenize a card, since a card that reached Stripe would mean the block
+  # leaked.
+  def sanctioned_renewal_setup
+    @subscription.original_purchase.update!(country: "Iran", ip_country: "Iran")
+  end
+
+  test "#charge! blocked by sanctions screening sends the location email, not the card one" do
+    sanctioned_renewal_setup
+    mail = mock
+    mail.stubs(:deliver_later)
+    CustomerLowPriorityMailer.expects(:subscription_charge_blocked_location).returns(mail)
+    CustomerLowPriorityMailer.expects(:subscription_card_declined).never
+    CustomerLowPriorityMailer.expects(:subscription_charge_failed).never
+
+    purchase = @subscription.charge!
+
+    assert_equal PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION, purchase.error_code
+  end
+
+  test "#charge! blocked by sanctions screening enqueues the location email and the termination worker, not the card-declined reminder" do
+    sanctioned_renewal_setup
+
+    @subscription.charge!
+
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_charge_blocked_location, args: [@subscription.id])
+    refute_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+    # The email promises cancellation within 5 days, and this worker is what keeps that promise.
+    assert_sidekiq_enqueued(UnsubscribeAndFailWorker, args: [@subscription.id])
+  end
+
   # --- #charge! double charged -----------------------------------------------
 
   test "#charge! double charged does not create the purchase row" do

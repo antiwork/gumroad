@@ -569,7 +569,11 @@ const CheckoutIndexPage = () => {
       };
       const result =
         requestData.paymentMethod.type === "payment-element-client-confirm"
-          ? await startClientConfirmOrderCreation(requestData, requestData.paymentMethod.confirmationTokenId)
+          ? await startClientConfirmOrderCreation(
+              requestData,
+              requestData.paymentMethod.confirmationTokenId,
+              requestData.paymentMethod.selectedMethodType,
+            )
           : await startOrderCreation(requestData);
       const results = Object.entries(result.lineItems).flatMap(([key, result]) => {
         const [permalink, optionId] = key.split(" ");
