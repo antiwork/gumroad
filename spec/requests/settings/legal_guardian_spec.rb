@@ -84,9 +84,10 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       expect(guardian.has_accepted_terms?).to be(true)
     end
 
-    # The sibling's position, kept: the guardian is a third party who may not be at the keyboard, so
-    # the save goes through and the alert names the terms as what is still holding payouts. Blocking
-    # it would throw away everything the seller just typed on someone else's behalf.
+    # The guardian is a third party who may not be at the keyboard, so an unticked box does not throw
+    # away everything the seller just typed on their behalf. The save goes through and the alert
+    # names the terms as what is still holding payouts. The re-save once ticked is covered by the
+    # controller spec, where it does not depend on the page's props round trip.
     it "saves without the terms but says they are what is holding payouts" do
       visit settings_payments_path
 
@@ -105,12 +106,6 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       expect(page).to have_text("Your payouts are on hold until your guardian's details are complete")
       expect(seller.guardians.alive.sole.has_completed_info?).to be(false)
       expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(false)
-
-      check "My guardian has read and accepts the Stripe Connected Account Agreement."
-      click_on "Save guardian"
-
-      expect(page).to have_alert(text: "Your legal guardian's details are saved")
-      expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(true)
     end
 
     it "rejects a guardian who is under 18 themselves" do

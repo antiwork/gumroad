@@ -249,6 +249,20 @@ describe Settings::GuardiansController, type: :controller do
       expect(guardian.has_completed_info?).to be(true)
     end
 
+    # The other half of saving without the terms: ticking the box on a later edit is what finally
+    # satisfies the requirement, and it is the point at which the guardian is worth sending.
+    it "completes the requirement and syncs when the terms are accepted on a later edit" do
+      guardian.update!(stripe_tos_accepted: false, stripe_tos_accepted_at: nil, stripe_tos_ip: nil)
+      expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(false)
+
+      expect do
+        put :update, params: { id: guardian.external_id, guardian: { accept_terms: "true" } }, format: :json
+      end.to change { SyncGuardianToStripeJob.jobs.size }.by(1)
+
+      expect(guardian.reload.has_accepted_terms?).to be(true)
+      expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(true)
+    end
+
     # Only ever set, never cleared: an unchecked box on a later edit is the form echoing back a value
     # the seller cannot see, not an adult withdrawing their agreement.
     it "does not clear an acceptance already recorded" do
