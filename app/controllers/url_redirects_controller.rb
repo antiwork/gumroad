@@ -372,12 +372,18 @@ class UrlRedirectsController < ApplicationController
     end
 
     def redirect_bundle_purchase_to_library_if_needed
-      return unless @url_redirect.purchase&.is_bundle_purchase?
+      purchase = @url_redirect.purchase
+      return unless purchase&.is_bundle_purchase?
       # The library filters by `bundle_id`, which only the member purchases carry, so a bundle
       # whose members can't render there would land the buyer on an empty filtered library. Let
       # the download page render the bundle's own content instead — LibraryPresenter shows the
       # bundle row itself in exactly this case, and the two must agree (gumroad-private#1585).
-      return if @url_redirect.purchase.product_purchases.visible_in_library.none?
+      #
+      # Scoped to the parent's purchaser because `User#purchases` is keyed on `purchaser_id`: a
+      # member reassigned to (or never claimed by) that account still satisfies `visible_in_library`
+      # yet renders in a different library, or none. This runs before `check_permissions`, so anchor
+      # on the purchase rather than the signed-in user.
+      return if purchase.product_purchases.visible_in_library.where(purchaser_id: purchase.purchaser_id).none?
 
       # Build the library URL on the main app domain explicitly. This request can arrive on
       # the seller's subdomain (or custom domain), and /library requires authentication. A
