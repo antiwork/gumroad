@@ -66,6 +66,14 @@ describe ScheduleAbandonedCartEmailsJob do
           guest_cart4.update!(updated_at: 2.days.ago)
         end
 
+        # cart1 holds two seller1 products (one variant-specific) and one of seller2's; owning
+        # every one of them is what leaves the cart with nothing to be reminded about.
+        def own_everything_in_cart1
+          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+          create(:purchase, link: seller1_product2, email: cart1.user.email, purchaser: cart1.user, variant_attributes: [seller1_product2_variant1])
+          create(:purchase, link: seller2_product2, email: cart1.user.email, purchaser: cart1.user)
+        end
+
         it "schedules emails for the matching abandoned carts belonging to both logged-in users and guest carts" do
           expect do
             described_class.new.perform
@@ -108,29 +116,29 @@ describe ScheduleAbandonedCartEmailsJob do
           end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
         end
 
-        it "schedules nothing for a cart whose every matched product is owned, and leaves it eligible" do
-          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
-          create(:purchase, link: seller1_product2, email: cart1.user.email, purchaser: cart1.user, variant_attributes: [seller1_product2_variant1])
+        it "schedules nothing for a cart whose every product is owned, and leaves it eligible" do
+          own_everything_in_cart1
 
+          # guest_cart1 holds the same seller1 products under an unowned email, so the run
+          # staying otherwise intact proves the filter keys on the recipient, not the products.
           expect do
             described_class.new.perform
-          end.not_to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, anything)
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(2).times
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
 
-          # No mail means no SentAbandonedCartEmail row, which is what keeps the cart inside
-          # Cart.abandoned — suppression must not spend the cart's one eligibility.
+          # Skipping a cart must not write the SentAbandonedCartEmail marker the mailer writes
+          # on delivery: that row is what takes a cart out of Cart.abandoned for good.
           expect(cart1.reload.sent_abandoned_cart_emails).to be_empty
           expect(cart1).to be_abandoned
         end
 
         it "schedules an email for an all-owned cart once an unowned product is added to it" do
-          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
-          create(:purchase, link: seller1_product2, email: cart1.user.email, purchaser: cart1.user, variant_attributes: [seller1_product2_variant1])
+          own_everything_in_cart1
           described_class.new.perform
 
           create(:cart_product, cart: cart1, product: seller2_product1)
-          # Adding to a cart touches it, so it only becomes stale again a day later — the
-          # point being that the earlier suppressed run left it eligible to get here at all.
-          cart1.update!(updated_at: 2.days.ago)
+          cart1.update!(updated_at: 2.days.ago) # adding to a cart touches it
 
           expect do
             described_class.new.perform
