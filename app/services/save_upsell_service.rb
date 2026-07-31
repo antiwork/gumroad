@@ -15,17 +15,30 @@ class SaveUpsellService
   def perform
     @upsell = existing_upsell || seller.upsells.build
 
-    assign_upsell_attributes
+    # On a persisted upsell, HABTM assignments and mark_deleted! write
+    # immediately — before save runs the validations — so a failed save must
+    # roll those writes back too.
+    ActiveRecord::Base.transaction do
+      assign_upsell_attributes
 
-    if existing_upsell
-      update_upsell_variants
-      set_variant
-    else
-      set_variant
-      create_upsell_variants
+      if existing_upsell
+        update_upsell_variants
+        set_variant
+      else
+        set_variant
+        create_upsell_variants
+      end
+
+      set_offer_code
+
+      unless upsell.save
+        # Callers read `errors` to decide success, so a save that fails without
+        # populating them (an aborted callback) would render success for a write
+        # that never happened.
+        upsell.errors.add(:base, "Sorry, something went wrong.") if upsell.errors.empty?
+        raise ActiveRecord::Rollback
+      end
     end
-
-    set_offer_code
 
     upsell
   end
