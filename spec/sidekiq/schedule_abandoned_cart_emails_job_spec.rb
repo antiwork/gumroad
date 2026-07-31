@@ -174,6 +174,13 @@ describe ScheduleAbandonedCartEmailsJob do
       expect(described_class::ATTEMPT_TIME_BUDGET).to be > described_class::SCAN_TIME_BUDGET
       expect(described_class::ATTEMPT_TIME_BUDGET).to be < described_class::LOCK_TTL
     end
+
+    # Ordering alone is not enough: the TTL is anchored at acquire, which for a first attempt is
+    # enqueue time, so the gap between the two bounds is the queue latency the lock can absorb
+    # before an attempt still inside its budget is running on an expired lock.
+    it "leaves enough headroom between the bounds to absorb :low queue latency" do
+      expect(described_class::LOCK_TTL - described_class::ATTEMPT_TIME_BUDGET).to be >= 4.hours
+    end
   end
 
   describe "attempt time budget" do

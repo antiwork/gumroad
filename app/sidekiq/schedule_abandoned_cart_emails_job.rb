@@ -112,11 +112,12 @@ class ScheduleAbandonedCartEmailsJob
       # re-enqueues every cart this loop already sent. `sent_abandoned_cart_emails` rows are
       # written by the mailer jobs when they run, not at enqueue time, so the retry cannot see
       # them — `Cart.abandoned` still matches those carts and the buyer gets a second email.
-      # Stopping instead leaves the unreached carts with no sent row, so the next daily run
-      # picks them up.
+      # Stopping is not lossless either: unreached carts still inside the day windows below are
+      # rescanned tomorrow, but ones already in the oldest window age out of it and never get an
+      # email at all. Duplicating mail to every cart already sent is the worse of the two.
       if attempt_deadline_passed?
         ErrorNotifier.notify(
-          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after exceeding its attempt budget — remaining abandoned carts will be picked up by the next run",
+          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after exceeding its attempt budget — unreached carts still inside the abandoned-cart window will be picked up by the next run, but any already in its oldest day age out unemailed",
           attempt_time_budget: ATTEMPT_TIME_BUDGET.inspect,
           carts_enqueued: enqueued_count,
           carts_remaining: cart_ids_with_matched_workflow_ids_and_product_ids.size - enqueued_count
