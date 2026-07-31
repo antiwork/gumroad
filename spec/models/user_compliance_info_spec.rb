@@ -134,6 +134,37 @@ describe UserComplianceInfo do
           expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(true)
         end
       end
+
+      # A country with no guardian path is not a country with no requirement. Reading the absent ask
+      # as readiness would send a minor our payment partner will never verify through payout setup.
+      describe "a minor in a country where the guardian path does not exist" do
+        let(:user_compliance_info) { create(:user_compliance_info, country: "Brazil", birthday:) }
+
+        it "returns false even though no guardian is asked for" do
+          expect(user_compliance_info).to have_attributes(
+            requires_legal_guardian?: false,
+            legal_guardian_unsupported?: true,
+            has_completed_payout_compliance_info?: false
+          )
+        end
+
+        it "returns false even with an otherwise complete guardian attached" do
+          user_compliance_info.update!(guardian: create(:guardian, user: user_compliance_info.user))
+
+          expect(user_compliance_info.reload.has_completed_payout_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "an adult in a country where the guardian path does not exist" do
+        let(:user_compliance_info) { create(:user_compliance_info, country: "Brazil", birthday: 30.years.ago.to_date) }
+
+        it "returns true, since the country gate only ever concerns minors" do
+          expect(user_compliance_info).to have_attributes(
+            legal_guardian_unsupported?: false,
+            has_completed_payout_compliance_info?: true
+          )
+        end
+      end
     end
   end
 
@@ -183,6 +214,26 @@ describe UserComplianceInfo do
 
     it "is false when the country is unknown" do
       expect(build(:user_compliance_info, country: nil, birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+  end
+
+  # The unsupported case is split out from requires_legal_guardian? precisely so payout readiness can
+  # tell "no guardian needed" apart from "no guardian possible".
+  describe "#legal_guardian_unsupported?" do
+    it "is true for a minor in a country with no guardian path" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: 15.years.ago.to_date).legal_guardian_unsupported?).to be(true)
+    end
+
+    it "is false for a minor in a supported country, who is asked for one instead" do
+      expect(build(:user_compliance_info, country: "United States", birthday: 15.years.ago.to_date).legal_guardian_unsupported?).to be(false)
+    end
+
+    it "is false for an adult in a country with no guardian path" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: 30.years.ago.to_date).legal_guardian_unsupported?).to be(false)
+    end
+
+    it "is false when the birthday is unknown, matching requires_legal_guardian?" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: nil).legal_guardian_unsupported?).to be(false)
     end
   end
 

@@ -24,6 +24,17 @@ describe "Tiered Membership Free Trial Spec", type: :system, js: true do
       expect(page).not_to have_text "You'll be charged"
     end
 
+    it "does not promise the next renewal when changing billing frequency" do
+      visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
+
+      select("Monthly", from: "Recurrence")
+
+      # A free trial owes $0 today but applies the plan change immediately, so the deferral
+      # phrasing would be wrong here. Assert the base warning too, or this passes vacuously.
+      expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription")
+      expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
+    end
+
     it "does not display prices when toggling between options" do
       visit "/subscriptions/#{@subscription.external_id}/manage?token=#{@subscription.token}"
 

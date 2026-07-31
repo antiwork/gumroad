@@ -22,12 +22,6 @@ Sidekiq.configure_server do |config|
     config.reliable_scheduler!
   end
 
-  # Cleanup Dead Locks
-  # https://github.com/mhenrixon/sidekiq-unique-jobs/tree/ec69ac93afccd56cd424e2a9738e5ed478d941b2#cleanup-dead-locks
-  config.death_handlers << ->(job, _ex) do
-    SidekiqUniqueJobs::Digests.delete_by_digest(job["unique_digest"]) if job["unique_digest"]
-  end
-
   config.client_middleware do |chain|
     chain.add SidekiqUniqueJobs::Middleware::Client
   end
