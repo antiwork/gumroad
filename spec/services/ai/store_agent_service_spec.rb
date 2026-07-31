@@ -273,6 +273,7 @@ describe Ai::StoreAgentService do
 
         result = service.respond(messages: [{ role: "user", content: "what sells best?" }])
 
+        expect(Rails.logger).to have_received(:warn).with("Store agent final turn did not match proposal state (missing_complete_turn, gave up)")
         expect(client).to have_received(:messages).twice
         expect(result[:reply]).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
       end

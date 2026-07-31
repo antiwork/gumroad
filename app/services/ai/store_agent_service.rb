@@ -938,9 +938,8 @@ class Ai::StoreAgentService
 
       outcome = retrying ? "retrying" : "gave up"
       message = "Store agent final turn did not match proposal state (#{reason}, #{outcome})"
-      # A model that omits the terminal marker is corrected and recovers on the retry — routine, and
-      # at roughly half of all turns it buries the phantom-staging signal it sits next to in Sentry.
-      # Only the give-up is a real failure. Every other mismatch stays error-level either way.
+      # The retry recovers this almost every time, and reporting the recoverable half buried the
+      # signals worth seeing. Only the give-up is a failure; every other reason stays error-level.
       if reason == :missing_complete_turn && retrying
         Rails.logger.info(message)
         return
