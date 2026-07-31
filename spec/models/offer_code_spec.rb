@@ -338,6 +338,25 @@ describe OfferCode do
       expect(offer_code.update(valid_at: 1.day.ago, expires_at: 30.days.from_now)).to eq(true)
     end
 
+    it "allows an edit that removes and re-adds the defaulting product" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      offer_code.products.delete(@product)
+      offer_code.products << @product
+
+      expect(offer_code.save).to eq(true)
+      expect(offer_code.reload.products).to match_array([@product, other_product])
+    end
+
+    it "allows a retry on the same instance once the seller clears the default" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      expect(offer_code.update(products: [other_product])).to eq(false)
+
+      @product.update!(default_offer_code_id: nil)
+
+      expect(offer_code.update(products: [other_product])).to eq(true)
+    end
+
     it "still blocks removing another product while a pre-existing detached default is present" do
       third_product = create(:product, user: @product.user)
       @product.update!(name: "Stale default")
@@ -398,12 +417,35 @@ describe OfferCode do
       expect(universal_offer_code.reload.update(name: "New name")).to eq(true)
     end
 
-    it "keeps the default when the new currency still matches" do
+    it "leaves the default alone when the currency is not changing" do
       @product.update!(default_offer_code_id: universal_offer_code.id)
 
-      @product.update!(price_currency_type: "usd", price_range: "10")
+      # No currency change, so the repair must not run at all.
+      expect_any_instance_of(Link).not_to receive(:clear_detached_default_offer_code)
+      @product.update!(name: "Renamed")
 
       expect(@product.reload.default_offer_code_id).to eq(universal_offer_code.id)
+    end
+
+    it "keeps a product-specific default, which applies regardless of currency" do
+      specific = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100)
+      @product.update!(default_offer_code_id: specific.id)
+
+      @product.update!(price_currency_type: "eur", price_range: "10")
+
+      expect(@product.reload.default_offer_code_id).to eq(specific.id)
+    end
+
+    it "keeps the default when duplicating a product in a non-default currency" do
+      # A duplicate reports every attribute as changed, and its offer-code join
+      # rows are copied only after the first save.
+      @product.update!(price_currency_type: "eur", price_range: "10")
+      specific = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100, currency_type: "eur")
+      @product.update!(default_offer_code_id: specific.id)
+
+      duplicate = ProductDuplicatorService.new(@product.id).duplicate
+
+      expect(duplicate.reload.default_offer_code_id).to eq(specific.id)
     end
 
     it "keeps a percentage universal default, which applies to every currency" do

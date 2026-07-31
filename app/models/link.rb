@@ -249,7 +249,9 @@ class Link < ApplicationRecord
   # The offer code guards only watch visible products, so a default discount can
   # detach while a product is deleted, and a currency change detaches a universal
   # code no OfferCode save ever sees. Both repair here, in the same write.
-  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) || will_save_change_to_price_currency_type? }
+  # Persisted-only: on a duplicate every attribute reads as changed, and the
+  # join rows that make the code applicable are copied after this first save.
+  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) || (!new_record? && will_save_change_to_price_currency_type?) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
   after_save :note_default_offer_code_assignment

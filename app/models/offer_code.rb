@@ -430,9 +430,8 @@ class OfferCode < ApplicationRecord
     end
 
     # Consumed at commit by repair_detached_default_discounts. Direct collection
-    # mutations (products.delete) never save the owner, so nothing consumes it
-    # and note_removed_product's list is never read — they bypass the detachment
-    # guards. Change product lists through update.
+    # mutations (products.delete) never save the owner, so nothing consumes it —
+    # they bypass the detachment guards. Change product lists through update.
     def note_applicability_change(_product)
       @applicability_changed = true unless new_record?
     end
@@ -577,7 +576,7 @@ class OfferCode < ApplicationRecord
         return unless currency_type_changed?
 
         blocked = Link.visible.where(default_offer_code_id: id).where.not(price_currency_type: currency_type)
-        names = blocked.limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
+        names = blocked.order(:id).limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
         return if names.empty?
 
         errors.add(:base, "This discount code is the default discount for #{to_product_sentence(names, blocked.count)}, which #{names.one? ? "uses" : "use"} a different currency. Please remove it from #{names.one? ? "that product" : "those products"} before changing the discount's currency.")
@@ -585,7 +584,7 @@ class OfferCode < ApplicationRecord
         return if removed_product_ids.empty?
 
         blocked = Link.visible.where(default_offer_code_id: id, id: removed_product_ids)
-        names = blocked.limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
+        names = blocked.order(:id).limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
         return if names.empty?
 
         errors.add(:base, "This discount code is the default discount for #{to_product_sentence(names, blocked.count)}. Please remove it from #{names.one? ? "that product" : "those products"} before removing #{names.one? ? "it" : "them"} from the discount.")
@@ -595,9 +594,12 @@ class OfferCode < ApplicationRecord
     def removed_product_ids
       # A code switching from universal to product-specific removes nothing, but
       # every product defaulting to it that isn't in the new list detaches.
-      return @removed_product_ids || [] unless universal_changed?(from: true, to: false)
+      return Link.visible.where(default_offer_code_id: id).where.not(id: products.map(&:id)).pluck(:id) if universal_changed?(from: true, to: false)
 
-      Link.visible.where(default_offer_code_id: id).where.not(id: products.map(&:id)).pluck(:id)
+      # Subtract the current list: a product removed and re-added in the same
+      # edit is recorded by after_remove but ends up attached, so it detaches
+      # nothing.
+      (@removed_product_ids || []) - products.map(&:id)
     end
 
     def to_product_sentence(names, total)
@@ -605,7 +607,7 @@ class OfferCode < ApplicationRecord
       remaining = total - names.size
       return quoted.to_sentence if remaining <= 0
 
-      "#{quoted.to_sentence} and #{remaining} #{"other".pluralize(remaining)}"
+      (quoted + ["#{remaining} #{"other".pluralize(remaining)}"]).to_sentence
     end
 
     def validate_ownership_duration_tiers
