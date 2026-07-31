@@ -1,0 +1,114 @@
+name: Migration Version Guard
+
+# Two PRs can each add db/migrate/<V>_*.rb for the same V. Git sees no conflict
+# (different filenames, no shared lines) and each PR is green against the main it
+# branched from, so nothing blocks either merge -- the second one breaks main for
+# everyone at `rake db:prepare`. That is PR #6716: #6656 merged at 10:36Z, #6495
+# merged 3h43m later on a check run that predated it.
+#
+# tests.yml catches the collision when a PR runs. This closes the window after
+# that run: when main moves, re-check every open PR that touches db/migrate
+# against the new main, and fail ci/green on the ones that now collide. It has to
+# be ci/green rather than a status of its own, because ci/green is the context the
+# main ruleset requires -- a new context would report the problem while auto-merge
+# sailed past it.
+#
+# Only ever writes failure. A PR cleared here is not marked green; it re-earns
+# ci/green through tests.yml on its next push, which is the run that has actually
+# seen the new main.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: read
+
+concurrency:
+  group: migration-version-guard
+  cancel-in-progress: false
+
+jobs:
+  recheck_open_prs:
+    name: Re-check open PRs against main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Skip when this push did not touch db/migrate
+        id: touched
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Zero SHA (branch creation) or a commit this clone does not have:
+          # fall back to checking, since we cannot prove nothing moved.
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "$AFTER" -- db/migrate | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Push did not touch db/migrate; no open PR can have newly collided."
+          fi
+
+      - name: Fail ci/green on open PRs that now collide
+        if: steps.touched.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MAIN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # main's migration versions, as version -> filename.
+          git ls-tree --name-only "$MAIN_SHA:db/migrate" \
+            | grep -E '^[0-9]{14}_.*\.rb$' > /tmp/main-migrations.txt
+          NEWEST=$(sed -E 's/^([0-9]{14})_.*/\1/' /tmp/main-migrations.txt | sort | tail -1)
+          echo "main newest migration version: $NEWEST"
+
+          # Read the PR list once, up front: `gh` calls inside the loop would
+          # otherwise compete for the loop's stdin.
+          gh pr list --repo "$REPO" --state open --limit 200 \
+            --json number,headRefOid --jq '.[] | "\(.number) \(.headRefOid)"' > /tmp/open-prs.txt
+
+          while read -r NUMBER HEAD_SHA; do
+              # Filenames only, from the API -- never fetch or execute fork code.
+              MIGRATIONS=$(gh pr view "$NUMBER" --repo "$REPO" --json files \
+                --jq '.files[].path | select(startswith("db/migrate/"))' < /dev/null || true)
+              [ -n "$MIGRATIONS" ] || continue
+
+              COLLISIONS=""
+              while read -r PATH_IN_PR; do
+                FILE=$(basename "$PATH_IN_PR")
+                case "$FILE" in
+                  [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.rb) ;;
+                  *) continue ;;
+                esac
+                VERSION=${FILE%%_*}
+
+                # A version main spends on a DIFFERENT file is the collision. The
+                # same filename at the same version is this PR's own migration
+                # already merged, or the PR is a no-op here.
+                MAIN_FILE=$(grep -E "^${VERSION}_" /tmp/main-migrations.txt || true)
+                if [ -n "$MAIN_FILE" ] && [ "$MAIN_FILE" != "$FILE" ]; then
+                  COLLISIONS="${COLLISIONS}${VERSION} (main: ${MAIN_FILE}, PR: ${FILE}); "
+                fi
+              done <<< "$MIGRATIONS"
+
+              if [ -n "$COLLISIONS" ]; then
+                echo "PR #$NUMBER collides: $COLLISIONS"
+                gh api "repos/${REPO}/statuses/${HEAD_SHA}" \
+                  -f state=failure \
+                  -f context="ci/green" \
+                  -f description="Migration version now used on main. Renumber above ${NEWEST}." \
+                  -f target_url="https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
+                  < /dev/null >/dev/null
+              fi
+          done < /tmp/open-prs.txt
