@@ -1376,10 +1376,8 @@ class LinksController < ApplicationController
       return if requested_variants.empty? && requested_pages.empty?
 
       @product.reload
-      surviving_variants = requested_variants & @product.alive_variants.map(&:external_id)
-      alive_page_ids = @product.alive_rich_contents.map(&:external_id) +
-        @product.current_base_variants.flat_map { |variant| variant.alive_rich_contents.map(&:external_id) }
-      surviving_pages = requested_pages & alive_page_ids
+      surviving_variants = surviving_variant_ids(requested_variants)
+      surviving_pages = surviving_rich_content_ids(requested_pages)
       return if surviving_variants.empty? && surviving_pages.empty?
 
       ErrorNotifier.notify(
@@ -1394,6 +1392,49 @@ class LinksController < ApplicationController
       )
     rescue StandardError => e
       ErrorNotifier.notify(e)
+    end
+
+    # Survivors are looked up by the requested id rather than by walking the
+    # product's live parents. Deleting a grouping does not soft-delete the
+    # versions inside it, so a version (or its page) whose grouping went away in
+    # this same save is still alive and still unapplied, while being unreachable
+    # through `current_base_variants` — exactly the rows this report exists to
+    # name.
+    def surviving_variant_ids(requested_ids)
+      return [] if requested_ids.empty?
+
+      BaseVariant.alive.by_external_ids(requested_ids)
+        .select { variant_belongs_to_product?(_1) }
+        .map(&:external_id)
+    end
+
+    # A page under a version this save DID delete is not a survivor: version
+    # deletion hands its pages to DeleteProductRichContentWorker, so the row is
+    # still alive at commit by design and reporting it would fire on every
+    # successful version removal.
+    def surviving_rich_content_ids(requested_ids)
+      return [] if requested_ids.empty?
+
+      RichContent.alive.by_external_ids(requested_ids)
+        .select { rich_content_survived?(_1) }
+        .map(&:external_id)
+    end
+
+    # A version reaches the product either directly (SKUs) or through its
+    # grouping, and the grouping may itself be soft-deleted by this save —
+    # `belongs_to` is unscoped, so the link is still readable.
+    def variant_belongs_to_product?(variant)
+      return true if variant.link_id == @product.id
+
+      variant.try(:variant_category)&.link_id == @product.id
+    end
+
+    def rich_content_survived?(page)
+      entity = page.entity
+      return entity.id == @product.id if entity.is_a?(Link)
+      return variant_belongs_to_product?(entity) && entity.alive? if entity.is_a?(BaseVariant)
+
+      false
     end
 
     # Accumulates client id → canonical server id for records this save

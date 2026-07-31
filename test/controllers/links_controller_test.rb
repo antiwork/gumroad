@@ -8163,4 +8163,54 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
   end
+
+  test "flag on: an unapplied page deletion is reported even when its grouping is gone" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Kept")
+    # Deleting a grouping does not soft-delete the versions in it, so a page
+    # under one is alive and unreachable through the product's live versions.
+    # The grouping's state at commit is all that matters here, so deleting it
+    # up front stands in for a save that removes it and the page together.
+    other_category = create_variant_category(link: @product, title: "Formats")
+    orphaned_variant = create_variant(variant_category: other_category, name: "Under a dead grouping")
+    survivor = create_rich_content(entity: orphaned_variant, description: [])
+    other_category.mark_deleted!
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { rich_content: [survivor.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert survivor.reload.alive?, "precondition: the named page really did survive the save"
+    report = notified.find { |message, _| message == "Product save applied fewer deletions than it named" }
+    assert report, "expected the unapplied-deletion report (got: #{notified.inspect})"
+    assert_equal [survivor.external_id], report.last[:surviving_rich_content_ids]
+  end
+
+  test "flag on: a page whose version this save deleted is not reported as surviving" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+    # Version deletion hands the page to DeleteProductRichContentWorker, so the
+    # row is still alive when the check runs. That is the deletion working, not
+    # a discrepancy.
+    page = create_rich_content(entity: removed, description: [])
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id], rich_content: [page.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
+  end
 end
