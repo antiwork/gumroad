@@ -532,14 +532,22 @@ class PaypalPayoutProcessor
   # Only codes PayPal actually sent are considered: a part with no code contributes nothing rather
   # than forcing the generic reason, so one part reporting 3148 classifies the payout even if a
   # sibling part reported nothing. That is deliberate — the parts share one destination, so a
-  # restriction on that account explains all of them. If two parts report *different* codes, or no
-  # part reports any, fall back to the generic reason instead of picking a code that only
-  # describes part of the payout.
+  # restriction on that account explains all of them.
+  #
+  # A retry-blocking code wins over any other code for the same reason, and this is the case worth
+  # being careful about: a part rejected for the address's country (3148) and a part rejected for
+  # the account's currencies (14159) are both true, but only the first says re-sending is pointless.
+  # Choosing the generic reason there would leave a permanently unreachable address collecting a
+  # weekly rejection forever. Falling back to the generic reason is only right when no code claims
+  # the destination is unusable — then no single code describes the whole payout.
   def self.split_payment_failure_reason(payment)
-    reason_codes = payment.split_payments_info.map { |split_payment_info| split_payment_info["reason_code"] }.compact.uniq
-    return Payment::FailureReason::PAYPAL_PAYOUT_FAILED unless reason_codes.one?
+    reasons = payment.split_payments_info
+                     .filter_map { |split_payment_info| split_payment_info["reason_code"] }
+                     .uniq
+                     .map { |reason_code| "PAYPAL #{reason_code}" }
 
-    "PAYPAL #{reason_codes.first}"
+    reasons.find { |reason| Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS.include?(reason) } ||
+      (reasons.one? ? reasons.first : Payment::FailureReason::PAYPAL_PAYOUT_FAILED)
   end
 
   def self.get_latest_payment_state_from_paypal(amount_cents, transaction_id, start_date, current_state)

@@ -1204,15 +1204,28 @@ describe PaypalPayoutProcessor do
       end
     end
 
-    context "when the parts disagree about why they failed" do
+    context "when the parts disagree and none of them stops the retries" do
       let(:split_payments_info) do
-        [{ "state" => "failed", "reason_code" => "3148" }, { "state" => "failed", "reason_code" => "3015" }]
+        [{ "state" => "failed", "reason_code" => "3015" }, { "state" => "failed", "reason_code" => "1002" }]
       end
 
       it "falls back to the generic reason rather than picking one part's code" do
         described_class.update_split_payment_state(payment)
 
         expect(payment.reload.failure_reason).to eq Payment::FailureReason::PAYPAL_PAYOUT_FAILED
+      end
+    end
+
+    context "when the parts disagree and one of them stops the retries" do
+      let(:split_payments_info) do
+        [{ "state" => "failed", "reason_code" => "14159" }, { "state" => "failed", "reason_code" => "3148" }]
+      end
+
+      it "keeps the retry-blocking code, so the unreachable address stops being paid out to" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.failure_reason).to eq "PAYPAL 3148"
+        expect(payment.terminal_paypal_failure?).to eq true
       end
     end
   end
