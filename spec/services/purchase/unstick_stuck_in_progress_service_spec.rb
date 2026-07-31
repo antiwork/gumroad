@@ -12,19 +12,19 @@ describe Purchase::UnstickStuckInProgressService do
     create(:purchase_in_progress, link: product, created_at:)
   end
 
-  def stub_sync(result, &block)
-    allow_any_instance_of(Purchase).to receive(:sync_status_with_charge_processor) do |purchase|
-      # `purchase` here is the receiver instance the service loaded, so mutate it through its own id
-      # rather than the block's copy — otherwise the row the assertion reloads never changes.
+  # Stands in for the sync service: reports `result` from #perform, `outcome` from #charge_outcome,
+  # and runs `block` against the purchase it was handed so an example can simulate the write.
+  def stub_sync(result, outcome: :succeeded, &block)
+    allow(Purchase::SyncStatusWithChargeProcessorService).to receive(:new) do |purchase, **|
       block&.call(purchase)
-      result
+      instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: result, charge_outcome: outcome)
     end
   end
 
   describe "dry run" do
     it "defaults to dry run and writes nothing" do
       purchase = stuck_purchase(created_at: 10.days.ago)
-      expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to_not receive(:new)
 
       expect { described_class.process }.to_not change { purchase.reload.purchase_state }
     end
@@ -42,7 +42,7 @@ describe Purchase::UnstickStuckInProgressService do
 
     it "does not write when called on the instance either" do
       purchase = stuck_purchase(created_at: 10.days.ago)
-      expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to_not receive(:new)
 
       expect { described_class.new.process }.to_not change { purchase.reload.purchase_state }
     end
@@ -61,7 +61,7 @@ describe Purchase::UnstickStuckInProgressService do
 
     it "leaves a purchase still inside SyncStuckPurchasesJob's own window alone" do
       purchase = stuck_purchase(created_at: 2.days.ago)
-      expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to_not receive(:new)
 
       result = described_class.process(dry_run: false)
 
@@ -88,10 +88,12 @@ describe Purchase::UnstickStuckInProgressService do
     end
 
     it "asks the sync path not to fail the purchase" do
-      stuck_purchase(created_at: 10.days.ago)
+      purchase = stuck_purchase(created_at: 10.days.ago)
       allow(ErrorNotifier).to receive(:notify)
 
-      expect_any_instance_of(Purchase).to receive(:sync_status_with_charge_processor).with(no_args).and_return(false)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new)
+        .with(purchase_with_id(purchase.id))
+        .and_return(instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false, charge_outcome: :succeeded))
 
       described_class.process(dry_run: false)
     end
@@ -99,7 +101,7 @@ describe Purchase::UnstickStuckInProgressService do
     it "skips a purchase that cannot be force updated" do
       purchase = stuck_purchase(created_at: 10.days.ago)
       allow_any_instance_of(Purchase).to receive(:can_force_update?).and_return(false)
-      expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to_not receive(:new)
 
       result = described_class.process(dry_run: false)
 
@@ -134,6 +136,44 @@ describe Purchase::UnstickStuckInProgressService do
       expect(result[:unrecoverable_ids]).to eq([purchase.id])
     end
 
+    %i[missing refunded disputed pending unsuccessful].each do |outcome|
+      it "keeps a #{outcome} charge out of the succeeded-charge alert" do
+        purchase = stuck_purchase(created_at: 10.days.ago)
+        stub_sync(false, outcome:)
+        alerts = []
+        allow(ErrorNotifier).to receive(:notify) { |title, **rest| alerts << [title, rest] }
+
+        result = described_class.process(dry_run: false)
+
+        expect(result[:unrecoverable]).to eq(0)
+        expect(result[:unrecoverable_ids]).to be_empty
+        expect(result[:other_charge_state]).to eq(1)
+        expect(result[:other_ids_by_outcome]).to eq(outcome => [purchase.id])
+        expect(alerts.map(&:first)).to eq(["Purchases stuck in_progress without a succeeded charge"])
+        expect(alerts.first.last[:context][:purchase_ids_by_charge_state]).to eq(outcome => [purchase.id])
+      end
+    end
+
+    it "reports a succeeded-charge row and a non-succeeded one in separate alerts" do
+      stuck = stuck_purchase(created_at: 10.days.ago)
+      refunded = stuck_purchase(created_at: 11.days.ago)
+      allow(Purchase::SyncStatusWithChargeProcessorService).to receive(:new) do |purchase, **|
+        outcome = purchase.id == stuck.id ? :succeeded : :refunded
+        instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false, charge_outcome: outcome)
+      end
+      titles = []
+      allow(ErrorNotifier).to receive(:notify) { |title, **| titles << title }
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:unrecoverable_ids]).to eq([stuck.id])
+      expect(result[:other_ids_by_outcome]).to eq(refunded: [refunded.id])
+      expect(titles).to contain_exactly(
+        "Purchases stuck in_progress with a succeeded charge could not be recovered",
+        "Purchases stuck in_progress without a succeeded charge"
+      )
+    end
+
     it "stays silent when asked not to notify" do
       stuck_purchase(created_at: 10.days.ago)
       stub_sync(false)
@@ -147,12 +187,12 @@ describe Purchase::UnstickStuckInProgressService do
       first = stuck_purchase(created_at: 11.days.ago)
       second = stuck_purchase(created_at: 10.days.ago)
       seen = []
-      allow_any_instance_of(Purchase).to receive(:sync_status_with_charge_processor) do |purchase|
+      allow(Purchase::SyncStatusWithChargeProcessorService).to receive(:new) do |purchase, **|
         seen << purchase.id
         raise StandardError, "boom" if purchase.id == first.id
 
         purchase.update_columns(purchase_state: "successful")
-        true
+        instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: true, charge_outcome: :succeeded)
       end
       allow(ErrorNotifier).to receive(:notify)
 
@@ -164,16 +204,16 @@ describe Purchase::UnstickStuckInProgressService do
       expect(second.reload).to be_successful
     end
 
-    it "leaves a row a concurrent sync resolved between selection and the lock alone" do
+    it "leaves a row a concurrent sync resolved between selection and the re-read alone" do
       purchase = stuck_purchase(created_at: 10.days.ago)
       # The scan selects the row while it is still in_progress; a webhook-driven sync then wins the
-      # race, so the re-read under the lock must find it resolved and skip it.
-      allow_any_instance_of(Purchase).to receive(:with_lock).and_wrap_original do |orig, &blk|
+      # race, so the re-read must find it resolved and skip the processor round trip.
+      allow_any_instance_of(Purchase).to receive(:reload).and_wrap_original do |orig, *args|
         purchase.update_columns(purchase_state: "successful")
-        orig.call(&blk)
+        orig.call(*args)
       end
 
-      expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to_not receive(:new)
 
       result = described_class.process(dry_run: false)
 
@@ -181,5 +221,22 @@ describe Purchase::UnstickStuckInProgressService do
       expect(result[:recovered]).to eq(0)
       expect(result[:unrecoverable]).to eq(0)
     end
+
+    it "counts a row the sync path itself found already resolved as resolved, not unrecoverable" do
+      stuck_purchase(created_at: 10.days.ago)
+      # charge_outcome stays nil when the sync returns before consulting the processor, which is
+      # what happens when the row is no longer in_progress by the time it holds the lock.
+      stub_sync(false, outcome: nil)
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:already_resolved]).to eq(1)
+      expect(result[:unrecoverable]).to eq(0)
+    end
+  end
+
+  # Matches whichever Purchase instance the service loaded for this row.
+  def purchase_with_id(id)
+    satisfy { |arg| arg.is_a?(Purchase) && arg.id == id }
   end
 end
