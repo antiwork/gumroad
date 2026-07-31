@@ -31,6 +31,7 @@ const clientConfirmPaymentMethod = {
   cardCountry: "US",
   walletType: null,
   mountCurrency: "usd",
+  methodListToken: null,
   selectedMethodType: "card",
 } as const;
 
