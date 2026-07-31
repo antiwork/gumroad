@@ -38,10 +38,20 @@ describe User::DashboardNavItems do
       expect(user.reload.promoted_nav_items).to be_nil
     end
 
-    it "does not write again when the item is already recorded" do
+    it "does not touch the database again when the item is already recorded" do
       user.promote_nav_item!("workflows")
 
-      expect { user.promote_nav_item!("workflows") }.not_to change { user.reload.updated_at }
+      # The regression that matters is the row lock, not the column value: an already-promoted
+      # destination is visited on most page loads, so it must not open a transaction at all.
+      writes = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        writes << payload[:sql] if payload[:sql].match?(/FOR UPDATE|UPDATE `users`/)
+      end
+
+      user.promote_nav_item!("workflows")
+
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+      expect(writes).to be_empty
     end
 
     it "accumulates across items" do
@@ -104,6 +114,29 @@ describe User::DashboardNavItems do
       user.seed_promoted_nav_items!(seller: user)
 
       expect(user.reload.promoted_nav_item_keys).to eq %w[workflows]
+    end
+
+    it "seeds a legacy row whose json_data is NULL" do
+      # Reading json_data instantiates it and marks the record dirty, and `lock!` refuses a dirty
+      # record — so locking `self` here would raise a bare RuntimeError and 500 the page.
+      user.update_column(:json_data, nil)
+      legacy = User.find(user.id)
+      create(:workflow, seller: legacy)
+
+      expect { legacy.seed_promoted_nav_items!(seller: legacy) }.not_to raise_error
+      expect(legacy.reload.promoted_nav_item_keys).to include "workflows"
+    end
+
+    it "seeds a user whose record would fail validation" do
+      # An ungated legacy validation must not keep the seed from persisting: if it did, the
+      # seed-once guard would never latch and every page load would re-scan and re-lock the row.
+      user.update_column(:google_analytics_id, "UA-12345-6")
+      stale = User.find(user.id)
+      expect(stale).not_to be_valid
+
+      stale.seed_promoted_nav_items!(seller: stale)
+
+      expect(stale.reload.dashboard_nav_items_seeded?).to be true
     end
   end
 end

@@ -321,19 +321,23 @@ export const Nav = (props: Props) => {
 // it, so persisting "open" would work against the thing it exists to fix.
 const EverythingElse = ({ children }: { children: React.ReactNode }) => {
   const [open, setOpen] = React.useState(false);
+  const listId = React.useId();
 
   return (
     <>
       <button
         type="button"
         aria-expanded={open}
+        aria-controls={listId}
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full cursor-pointer items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 text-left all-unset hover:text-accent dark:border-foreground/50 dark:border-b-transparent"
       >
         <DotsHorizontalRounded className="size-5" />
         <span className="ml-4">Everything else</span>
       </button>
-      {open ? children : null}
+      <div id={listId} className="grid">
+        {open ? children : null}
+      </div>
     </>
   );
 };

@@ -31,6 +31,18 @@ describe DashboardNav do
       expect(described_class.item_for_path(nil)).to be_nil
     end
 
+    it "maps only the seller's checkout tabs, never the buyer's cart" do
+      expect(described_class.item_for_path("/checkout/discounts")).to eq "checkout"
+      expect(described_class.item_for_path("/checkout/form")).to eq "checkout"
+      expect(described_class.item_for_path("/checkout/upsells")).to eq "checkout"
+
+      # /checkout is the buyer cart and /checkout/returns/:id the buyer's return status; neither
+      # renders the dashboard nav, and crediting them would earn the seller-side row for buyers.
+      expect(described_class.item_for_path("/checkout")).to be_nil
+      expect(described_class.item_for_path("/checkout/returns/123")).to be_nil
+      expect(described_class.dashboard_path?("/checkout")).to be false
+    end
+
     it "does not match a path that merely starts with an item's name" do
       expect(described_class.item_for_path("/pages-archive")).to be_nil
       expect(described_class.item_for_path("/libraryish")).to be_nil

@@ -25,13 +25,13 @@ describe DashboardNavPromotion, type: :request do
     expect(seller.reload.promoted_nav_item_keys).to eq []
   end
 
-  it "does not hand the frontend a promoted row the user is no longer authorized for" do
+  it "records the promoted key but leaves the row's own policy gate to hide it" do
     seller.update!(promoted_nav_items: %w[community])
 
     get dashboard_path
 
-    # The nav's own per-row policy gate is what hides it; promotion never grants access. Payouts is
-    # the parallel case for a core row.
+    # Promotion is a record of a visit, not a grant. Nav/index.test.tsx covers the render side:
+    # a promoted-but-forbidden row appears in neither the top level nor the overflow.
     expect(seller.reload.promoted_nav_item_keys).to include "community"
     expect(Pundit.policy!(SellerContext.new(user: seller, seller:), Community).index?).to be false
   end
@@ -62,6 +62,35 @@ describe DashboardNavPromotion, type: :request do
 
     expect(response).to be_successful
     expect(seller.reload.promoted_nav_item_keys).to include "affiliates"
+  end
+
+  it "promotes on an Inertia visit, which is how in-app navigation arrives" do
+    # Inertia always sets X-Requested-With, so treating every XHR as "not a page render" would make
+    # the feature inert exactly when the seller clicks the row that should earn it.
+    get workflows_path, headers: { "X-Requested-With" => "XMLHttpRequest", "X-Inertia" => "true" }
+
+    expect(seller.reload.promoted_nav_item_keys).to include "workflows"
+  end
+
+  it "ignores an Inertia partial reload, which re-fetches props for a page already on screen" do
+    get workflows_path, headers: {
+      "X-Requested-With" => "XMLHttpRequest",
+      "X-Inertia" => "true",
+      "X-Inertia-Partial-Data" => "props",
+    }
+
+    expect(seller.reload.promoted_nav_items).to be_nil
+  end
+
+  it "does not seed a team member from the seller they are switched into" do
+    other_seller = create(:user)
+    create(:workflow, seller: other_seller)
+    create(:team_membership, user: seller, seller: other_seller, role: TeamMembership::ROLE_ADMIN)
+
+    get dashboard_path
+
+    # Whatever the switched-into store contains is not something THIS user has used.
+    expect(seller.reload.promoted_nav_item_keys).not_to include "workflows"
   end
 
   it "ignores requests to paths that do not render the dashboard nav" do

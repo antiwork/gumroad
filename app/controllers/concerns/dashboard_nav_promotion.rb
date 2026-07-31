@@ -2,8 +2,8 @@
 
 # Grows the dashboard sidebar as the user visits destinations that start out under "Everything else".
 # Promotion is keyed on the person browsing, not the seller being browsed: it answers "have you used
-# this", and each promoted row still passes its own policy check before the nav renders it — so a
-# promotion recorded for a destination this user can no longer open renders nothing.
+# this". It records a visit and never grants access — the policy-gated rows keep their own gates in
+# the nav, so a promotion for a destination this user cannot open renders nothing.
 module DashboardNavPromotion
   extend ActiveSupport::Concern
 
@@ -20,10 +20,15 @@ module DashboardNavPromotion
   private
     def seed_dashboard_nav_items
       return unless dashboard_nav_request?
+      # Seed only from the user's OWN store. Seeding a team member from whichever seller they happen
+      # to be switched into would permanently credit them rows they never used, and it follows them
+      # back to their own account — they earn rows by visiting instead.
+      return unless logged_in_user && current_seller == logged_in_user
 
-      logged_in_user&.seed_promoted_nav_items!(seller: current_seller)
-    rescue ActiveRecord::ActiveRecordError => e
-      # Never fail a page over sidebar bookkeeping.
+      logged_in_user.seed_promoted_nav_items!(seller: current_seller)
+    rescue StandardError => e
+      # Never fail a page over sidebar bookkeeping. Deliberately broader than ActiveRecordError:
+      # `lock!` raises a bare RuntimeError when the record is dirty, which would 500 the page.
       ErrorNotifier.notify(e)
     end
 
@@ -35,13 +40,17 @@ module DashboardNavPromotion
       return if item.nil?
 
       logged_in_user&.promote_nav_item!(item)
-    rescue ActiveRecord::ActiveRecordError => e
+    rescue StandardError => e
       ErrorNotifier.notify(e)
     end
 
     def dashboard_nav_request?
       return false unless request.get?
-      return false if request.xhr?
+      # An Inertia visit IS a page render, and it always sets X-Requested-With, so xhr? alone would
+      # skip every in-app click — the navigation that earns a row in the first place. Partial
+      # reloads re-fetch props for a page already on screen, so they promote nothing.
+      return false if request.xhr? && request.headers["X-Inertia"].blank?
+      return false if request.headers["X-Inertia-Partial-Data"].present?
       return false if impersonating?
       # Storefronts are served from seller subdomains and custom domains, where a slugged page can
       # collide with a dashboard path. Only the app's own hosts render this nav.

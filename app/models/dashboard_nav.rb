@@ -9,19 +9,27 @@ module DashboardNav
   # Always rendered, in this order, for every seller.
   CORE_ITEMS = %w[home products sales payouts discover].freeze
 
-  # Rendered only once promoted. A promoted item still passes through its own policy check in the
-  # nav, so a promotion recorded for a destination the user cannot open renders nothing.
+  # Rendered only once promoted. Promotion records a visit, it does not grant access: the rows that
+  # carry a policy gate in the nav keep it, so a promotion for a destination the user cannot open
+  # renders nothing.
   PROMOTABLE_ITEMS = %w[agent profile pages collaborators checkout emails workflows analytics affiliates community library].freeze
 
   ITEMS = (CORE_ITEMS + PROMOTABLE_ITEMS).freeze
 
   # Dashboard paths that count as using a promotable destination.
+  #
+  # Note the checkout entries name the three dashboard tabs individually rather than a bare
+  # "/checkout": that path is the BUYER's cart, which renders no dashboard nav, and matching it
+  # would both credit the seller-side Checkout row to every buyer and run the seed scan inside the
+  # purchase funnel.
   PATH_PREFIXES = {
     "/agent" => "agent",
     "/profile" => "profile",
     "/pages" => "pages",
     "/collaborators" => "collaborators",
-    "/checkout" => "checkout",
+    "/checkout/discounts" => "checkout",
+    "/checkout/form" => "checkout",
+    "/checkout/upsells" => "checkout",
     "/emails" => "emails",
     "/followers" => "emails",
     "/workflows" => "workflows",
@@ -38,7 +46,7 @@ module DashboardNav
 
   # Paths that render the dashboard sidebar but promote nothing, either because the destination is
   # always in the core list or because it is reached from the pinned footer.
-  CORE_PATH_PREFIXES = %w[/dashboard /products /bundles /customers /payouts /settings /discover].freeze
+  CORE_PATH_PREFIXES = %w[/dashboard /products /bundles /customers /payouts /settings /discover /help].freeze
 
   # Matched longest-prefix first so /dashboard/sales resolves to analytics rather than to a shorter
   # sibling.
