@@ -21,7 +21,7 @@ class Commission < ApplicationRecord
   end
 
   belongs_to :deposit_purchase, class_name: "Purchase"
-  belongs_to :completion_purchase, class_name: "Purchase", optional: true
+  belongs_to :completion_purchase, class_name: "Purchase", optional: true, inverse_of: :commission_as_completion
 
   has_many_attached :files
 

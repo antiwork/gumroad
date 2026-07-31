@@ -123,7 +123,9 @@ class Purchase < ApplicationRecord
   has_many :media_locations
   has_one :processor_payment_intent
   has_one :commission_as_deposit, class_name: "Commission", foreign_key: :deposit_purchase_id
-  has_one :commission_as_completion, class_name: "Commission", foreign_key: :completion_purchase_id
+  # Commission persists this link after processing, so saving a failed completion must not attach it.
+  has_one :commission_as_completion, class_name: "Commission", foreign_key: :completion_purchase_id,
+                                     inverse_of: :completion_purchase, autosave: false
   has_one :utm_link_driven_sale
   has_one :utm_link, through: :utm_link_driven_sale
 
