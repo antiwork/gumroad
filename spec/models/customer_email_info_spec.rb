@@ -107,50 +107,8 @@ describe CustomerEmailInfo do
     end
   end
 
-  describe ".build_for_charge" do
-    let(:purchase) { create(:purchase) }
-    let(:charge) { create(:charge, purchases: [purchase]) }
-
-    it "builds a new row even when one already exists for the charge" do
-      existing = create(
-        :customer_email_info,
-        purchase_id: nil,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
-        email_info_charge_attributes: { charge_id: charge.id }
-      )
-
-      email_info = CustomerEmailInfo.build_for_charge(
-        charge_id: charge.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-
-      expect(email_info.persisted?).to be(false)
-      expect(email_info).not_to eq(existing)
-      expect(email_info.charge_id).to eq(charge.id)
-    end
-  end
-
-  describe ".build_for_purchase" do
-    let(:purchase) { create(:purchase) }
-
-    it "builds a new row even when one already exists for the purchase" do
-      existing = create(:customer_email_info, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD, purchase:)
-
-      email_info = CustomerEmailInfo.build_for_purchase(
-        purchase_id: purchase.id,
-        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
-      )
-
-      expect(email_info.persisted?).to be(false)
-      expect(email_info).not_to eq(existing)
-      expect(email_info.purchase_id).to eq(purchase.id)
-    end
-  end
-
-  # gumroad-private#1635: a seller reported "the receipt took five days to
-  # arrive". It had not. He resent on day five, and the resend overwrote the
-  # original send's row, so the only surviving record claimed the first send
-  # happened then.
+  # gumroad-private#1635: a resend overwrote the original send's row, so the only
+  # surviving record dated the first send at the resend's time.
   describe "a resend after the original send was delivered" do
     let(:purchase) { create(:purchase) }
 

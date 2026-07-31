@@ -40,8 +40,6 @@ module EmailDeliveryObserver::HandleCustomerEmailInfo
       )
     end
 
-    # A send gets its own row rather than overwriting the last one, so the
-    # original send's delivery evidence survives a resend (gumroad-private#1635).
     def build_customer_email_info(email_name:, purchase_id:, charge_id:)
       if charge_id.present?
         CustomerEmailInfo.build_for_charge(charge_id:, email_name:)

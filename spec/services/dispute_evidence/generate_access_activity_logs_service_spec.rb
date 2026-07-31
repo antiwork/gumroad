@@ -282,6 +282,35 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
             )
           end
         end
+
+        # The dispute flow this evidence answers is "I never got it" -> seller
+        # resends -> buyer opens the RESEND, so the open attaches to the resend's
+        # row. Citing the original alone would drop the strongest signal we have.
+        context "when the buyer opened the resend rather than the original" do
+          before do
+            create(
+              :customer_email_info_sent,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+            )
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+              delivered_at: sent_at + 5.days + 1.hour,
+              opened_at: sent_at + 5.days + 2.hours
+            )
+          end
+
+          it "reports the resend's own delivery and open" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC. The receipt was sent again at " \
+              "2024-05-12 00:00:00 UTC, delivered at 2024-05-12 01:00:00 UTC, opened at 2024-05-12 02:00:00 UTC."
+            )
+          end
+        end
       end
 
       context "when the email info is associated with a charge" do

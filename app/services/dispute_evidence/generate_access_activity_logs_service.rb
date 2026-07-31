@@ -84,13 +84,19 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       original = receipt_email_infos.first
       return unless original.present?
 
-      content = "The receipt email was sent at #{original.sent_at}"
-      content << ", delivered at #{original.delivered_at}" if original.delivered_at.present?
-      content << ", opened at #{original.opened_at}" if original.opened_at.present?
-      content << "."
+      content = "The receipt email was sent at #{send_activity(original)}."
 
       resends = receipt_email_infos.drop(1)
-      content << " The receipt was sent again at #{resends.map(&:sent_at).join(', ')}." if resends.any?
+      content << " The receipt was sent again at #{resends.map { send_activity(_1) }.join('; ')}." if resends.any?
       content
+    end
+
+    # Delivery events attach to the newest send, so when a buyer opens the
+    # resent receipt the open lands here and not on the original row.
+    def send_activity(email_info)
+      activity = email_info.sent_at.to_s
+      activity << ", delivered at #{email_info.delivered_at}" if email_info.delivered_at.present?
+      activity << ", opened at #{email_info.opened_at}" if email_info.opened_at.present?
+      activity
     end
 end
