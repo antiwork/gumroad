@@ -45,7 +45,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
       expect(sender).to eq("Blocked established buyers")
       expect(message).to include(email)
       expect(message).to include("#{established_count} settled purchases")
-      expect(message).to include("blocked by a browser_guid block since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by browser_guid since #{block.blocked_at.to_date}")
     end
   end
 
@@ -89,7 +89,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
       expect(message).to include(email)
-      expect(message).to include("blocked by a email_domain block since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by email_domain since #{block.blocked_at.to_date}")
     end
   end
 
@@ -126,7 +126,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked by a email_domain block since")
+      expect(message).to include("blocked by email_domain since")
     end
   end
 
@@ -273,6 +273,21 @@ describe AlertOnBlockedEstablishedBuyersJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
+  # A one-off buyer never files a second failure row, so anyone falling out of the window is
+  # invisible to this report forever. The literal is deliberate: written against the constant it
+  # would pass at any window length.
+  it "reports a failure three weeks old" do
+    settled_purchases(established_count)
+    blocked_attempt(created_at: 3.weeks.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include(email)
+    end
+  end
+
   it "ignores a failure older than the lookback window" do
     settled_purchases(established_count)
     blocked_attempt(created_at: described_class::FAILURE_LOOKBACK.ago - 1.day)
@@ -400,7 +415,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked by a email block since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by email since #{block.blocked_at.to_date}")
     end
   end
 
@@ -422,7 +437,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked by a email_domain block since #{block.blocked_at.to_date}")
+      expect(message).to include("blocked by email_domain since #{block.blocked_at.to_date}")
     end
   end
 
@@ -439,7 +454,7 @@ describe AlertOnBlockedEstablishedBuyersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
-      expect(message).to include("blocked by a browser_guid block since #{guid_block.blocked_at.to_date}")
+      expect(message).to include("blocked by browser_guid since #{guid_block.blocked_at.to_date}")
     end
   end
 

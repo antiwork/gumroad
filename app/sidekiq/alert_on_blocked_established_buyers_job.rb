@@ -38,8 +38,8 @@ class AlertOnBlockedEstablishedBuyersJob
   # The bound on the work: how many buyers with a blocked checkout get their purchase history
   # counted. Everything past it is unscanned, and the report says so rather than presenting its
   # count as the total. Nothing is dropped inside the window — candidates arrive newest-failure
-  # first, so ranking a prefix of them is not ranking the window. Measured headroom: 1,453 distinct
-  # emails over the 7-day window.
+  # first, so ranking a prefix of them is not ranking the window. Measured 1,453 distinct emails
+  # over 7 days (2026-07-31), so ~6k over this job's 30-day window.
   MAX_CANDIDATES_SCANNED = 20_000
 
   # Candidates are counted in batches to keep each grouped query's IN list bounded.
@@ -258,7 +258,7 @@ class AlertOnBlockedEstablishedBuyersJob
       # The block's TYPE decides what clearing it costs: an email_domain row holds every buyer on
       # that domain, so a reader acting on this line has to know they are not unblocking one person.
       "• #{new_marker}#{entry[:email]} — #{entry[:settled_purchases]} settled purchases, " \
-        "blocked by a #{entry[:block_type]} block since #{entry[:blocked_at].to_date}, " \
+        "blocked by #{entry[:block_type]} since #{entry[:blocked_at].to_date}, " \
         "last tried #{entry[:failed_at].to_date}#{attempts}"
     end
 
