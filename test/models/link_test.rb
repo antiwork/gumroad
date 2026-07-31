@@ -1452,7 +1452,7 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal other, Link.fetch_leniently("shared")
   end
 
-  test "the first writer keeps a legacy mapping when a second product releases the same slug" do
+  test "the first writer keeps a legacy mapping when a second product claims and releases the same slug" do
     first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     first.update!(custom_permalink: "first-new")
     assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
@@ -1460,19 +1460,27 @@ class LinkTest < ActiveSupport::TestCase
     second = create_product(unique_permalink: "bbb", custom_permalink: "slug")
     second.update!(custom_permalink: "second-new")
 
+    # The second seller's rename must not take over the mapping — the old URL
+    # belongs to whoever shared it first.
     assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    assert_equal first, Link.fetch_leniently("slug")
   end
 
-  test "claiming a slug that a stale legacy mapping shadows drops the mapping" do
-    old = create_product(unique_permalink: "aaa", custom_permalink: "slug")
-    old.update!(custom_permalink: "moved")
-    assert_equal old.id, LegacyPermalink.find_by(permalink: "slug").product_id
-
+  test "a mapping is withdrawn when a live claim lands between the check and the insert" do
+    releasing = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     claimant = create_product(unique_permalink: "bbb")
-    claimant.update!(custom_permalink: "slug")
+
+    # The interleave a plain check-then-insert cannot exclude: the claim commits
+    # after the availability check passed.
+    original = LegacyPermalink.method(:create)
+    LegacyPermalink.stub(:create, ->(attrs) {
+      claimant.update!(custom_permalink: "slug")
+      original.call(attrs)
+    }) do
+      releasing.update!(custom_permalink: "moved")
+    end
 
     assert_nil LegacyPermalink.find_by(permalink: "slug")
-    # The live claim wins the lookup instead of being shadowed by the mapping.
     assert_equal claimant, Link.fetch_leniently("slug")
   end
 

@@ -187,7 +187,7 @@ class Link < ApplicationRecord
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
-  after_save :redirect_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
+  after_commit :redirect_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
   # Keep in sync with Product::BulkUpdateSupportEmailService.
@@ -1600,36 +1600,35 @@ class Link < ApplicationRecord
       deleted_product&.update(custom_permalink: nil)
     end
 
-    # Renaming a product's URL used to 404 every link the seller had already
-    # shared: `custom_permalink` is a single overwritten column, so the outgoing
-    # slug stopped matching `by_general_permalink`. `fetch_leniently` already
-    # reads `legacy_permalinks`, so recording the outgoing slug here is enough to
-    # forward the old address (gumroad-private#1619).
+    # Records the outgoing slug so `fetch_leniently` forwards the old URL
+    # (gumroad-private#1619).
     #
-    # Two ordering traps, both load-bearing:
+    # `fetch_leniently` reads the legacy table BEFORE the live permalink match,
+    # so a mapping for a slug some live product answers on shadows that product:
+    # never write one, and withdraw our own if a claim lands between the check
+    # and the insert. Only ever removes the row this callback just created —
+    # deleting a competing mapping would break another seller's shared links,
+    # which is the harm this fixes, not a fix for it. `after_commit` (not
+    # `after_save`) so the re-check can see a claim committed meanwhile.
     #
-    # 1. `legacy_permalinks.permalink` is globally unique while
-    #    `custom_permalink` is only unique per seller, so two sellers can
-    #    legitimately have held the same slug. First writer keeps the mapping —
-    #    stealing it would redirect the other seller's shared links to a
-    #    stranger's product, which is worse than the 404 this fixes.
-    # 2. `fetch_leniently` checks the legacy table BEFORE the live permalink
-    #    match, so a mapping for a slug some live product still answers on would
-    #    shadow that product. Hence: never write a mapping over a live claim
-    #    here, and drop any mapping the incoming claim would be shadowed by.
+    # `permalink` is globally unique while `custom_permalink` is unique only per
+    # seller, so two sellers can have held the same slug: first writer keeps it.
     def redirect_renamed_custom_permalink
-      claimed = custom_permalink.presence
-      LegacyPermalink.where(permalink: claimed).where.not(product_id: id).delete_all if claimed
-
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
-      return if Link.visible.by_general_permalink(outgoing).exists?
+      return if live_product_answers_on?(outgoing)
       return if LegacyPermalink.where(permalink: outgoing).exists?
 
-      LegacyPermalink.create(permalink: outgoing, product_id: id)
+      mapping = LegacyPermalink.create(permalink: outgoing, product_id: id)
+      mapping.destroy if mapping.persisted? && live_product_answers_on?(outgoing)
     rescue ActiveRecord::RecordNotUnique
-      # A concurrent rename won the row; first writer keeps it (see 1 above).
+      # A concurrent rename won the row; first writer keeps it.
       nil
+    end
+
+    # Uncached: the second call has to see a claim committed since the first.
+    def live_product_answers_on?(permalink)
+      Link.uncached { Link.visible.by_general_permalink(permalink).exists? }
     end
 
     def create_licenses_for_existing_customers
