@@ -5,6 +5,11 @@ class SendPaypalTopupNotificationJob
   include CurrencyHelper
   sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  # Two static-arg daily entries, so each digest is constant. The attempt is one PayPal balance
+  # check plus the upcoming-payout total.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 30.minutes
+
   def perform(notify_only_if_topup_needed = false)
     return unless Rails.env.production?
 

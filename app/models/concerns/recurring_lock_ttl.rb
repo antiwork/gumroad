@@ -2,12 +2,13 @@
 
 # Bounds how long an `until_executed` lock can survive its own job.
 #
-# A SIGKILL (OOM, deploy reap) skips the `ensure` that releases the lock. A job taking no
-# arguments has a constant digest, so one strand makes every later enqueue hash to a held
-# digest and get dropped by the client middleware — no exception, no dead set, cron still
-# reporting success. `ScheduleAbandonedCartEmailsJob` was muted platform-wide for seven days
-# that way (gumroad-private#1576). The death handler in the Sidekiq initializer only fires on
-# retry exhaustion, so it never sees a killed process.
+# A SIGKILL (OOM, deploy reap) skips the `ensure` that releases the lock. The digest is
+# MD5(class, queue, lock_args), and a cron entry enqueues the same args every fire — so every
+# scheduled job's digest is constant, arguments or not. One strand makes every later enqueue for
+# that entry hash to a held digest and get dropped by the client middleware: no exception, no dead
+# set, cron still reporting success. The death handler in the Sidekiq initializer only fires on
+# retry exhaustion, so it never sees a killed process, and `on_conflict: :replace` does not rescue
+# it either (it deletes a *queued* duplicate; in this scenario the original was running).
 #
 # Two bounds apply, and they are not symmetric:
 #
@@ -17,10 +18,14 @@
 #                                than the outage this exists to prevent.
 #   TTL < schedule interval    — recovery. Keeps a strand costing one run instead of every run.
 #
-# The second is best-effort. `DispatchPendingFailedRefundExceptionsJob` runs every 60 seconds
-# and cannot finish in less, so no TTL satisfies both — safety wins and the outage is bounded
-# by the TTL rather than by the interval. Turning "forever" into "minutes" is the point;
-# "one run" is the bonus where the schedule allows it.
+# The second is best-effort. `DispatchPendingFailedRefundExceptionsJob` runs every 60 seconds and
+# cannot finish in less, so no TTL satisfies both — safety wins and the outage is bounded by the
+# TTL rather than by the interval.
+#
+# Because the ceiling forces TTL ≤ interval − margin, the lock is always expired by the time the
+# next cron fires, so for cron-driven enqueues the lock is not what serializes runs — the attempt
+# finishing inside its interval is. `max_attempt` must therefore stay below the interval, which
+# `spec/models/concerns/recurring_lock_ttl_spec.rb` asserts per job.
 module RecurringLockTtl
   extend ActiveSupport::Concern
 
@@ -32,14 +37,21 @@ module RecurringLockTtl
   # on the schedule interval, which on a monthly job would be a month.
   ATTEMPT_MULTIPLE = 3
 
+  included do
+    # Read back by the spec to assert the safety bound against the declared figure rather than
+    # against the margin, which every TTL clears trivially.
+    class_attribute :recurring_lock_max_attempt, instance_writer: false
+  end
+
   class_methods do
     # `max_attempt` is the worst-case runtime of one attempt and is a judgement call per job, not
     # something derivable — it is required for that reason. The interval comes from the job's own
     # cron so it cannot drift out of sync with the schedule the way a copied constant would.
     def recurring_lock_ttl(max_attempt:)
-      ttl = RecurringLockTtl.ttl_for(name, max_attempt:)
-      sidekiq_options lock_ttl: ttl.to_i
-      ttl
+      raise ArgumentError, "max_attempt must be positive" unless max_attempt.positive?
+
+      self.recurring_lock_max_attempt = max_attempt
+      sidekiq_options lock_ttl: RecurringLockTtl.ttl_for(name, max_attempt:).to_i
     end
   end
 
@@ -55,6 +67,10 @@ module RecurringLockTtl
   # from breaking boot; the ttl then falls back to the safety floor, which is finite and above the
   # attempt, and `spec/models/concerns/recurring_lock_ttl_spec.rb` fails in CI so it does not go
   # unnoticed.
+  #
+  # A class scheduled under several entries takes the shortest gap of any of them. Digests are
+  # per-(class, args) so each entry strands independently, and the shortest gap is the tightest
+  # ceiling — which is the safe direction for recovery.
   def self.schedule_interval_for(job_class_name)
     crons = schedule_crons[job_class_name]
     return nil if crons.blank?
@@ -75,12 +91,16 @@ module RecurringLockTtl
   # ("0 9 * * 1-5") reports its shortest real gap instead of a nominal period. The shortest gap is
   # the one that matters: it is the soonest a strand could block a run.
   #
-  # `to_utc_time`, not `to_t` — the latter returns system-local time, which shifts every gap by the
-  # UTC offset and silently reports a daily job's interval as 13h on a UTC-4 host.
+  # The zone is pinned to UTC rather than left to the host: sidekiq-scheduler evaluates these
+  # expressions in UTC in production, and on a host in a DST-observing zone the gap across a
+  # transition is 23h or 25h, so an unpinned weekly cron reports 167h and a TTL derived from it
+  # drifts under the real interval.
   SAMPLES = 12
 
   def self.interval_of(cron)
-    parsed = Fugit.parse_cron(cron)
+    # Every expression in the schedule is a bare 5-field cron; only pin the zone when one has not
+    # been given, so a future entry carrying its own zone is honoured rather than mangled.
+    parsed = Fugit.parse_cron(cron.split.size == 5 ? "#{cron} UTC" : cron)
     return nil if parsed.nil?
 
     # Start from the first fire, not from an arbitrary instant: the gap between the cursor and the

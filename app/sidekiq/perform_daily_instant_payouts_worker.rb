@@ -13,7 +13,7 @@ class PerformDailyInstantPayoutsWorker
   # long-running healthcheck does.
   include LongRunningJobTracking
   sidekiq_options retry: 0, queue: :critical, lock: :until_executed
-  # Its own query budget is 2h (WithMaxExecutionTime above), and that caps statements rather
+  # Its own query budget is 2h (WithMaxExecutionTime below), and that caps statements rather
   # than the run, so the attempt ceiling sits above it. retry: 0 means a killed run is already
   # lost for the day; the TTL only decides whether tomorrow's is lost too.
   include RecurringLockTtl

@@ -19,12 +19,9 @@ class DispatchPendingFailedRefundExceptionsJob
 
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
-  # The one job whose interval (60s) is below any survivable attempt, so no TTL can be under
-
-  # both bounds. Safety wins: a strand blocks runs for up to the TTL rather than forever.
-
+  # The one job whose interval (60s) is below any survivable attempt, so no TTL can be under both
+  # bounds. Safety wins: a strand blocks runs for up to the TTL rather than forever.
   include RecurringLockTtl
-
   recurring_lock_ttl max_attempt: 10.minutes
 
   def perform

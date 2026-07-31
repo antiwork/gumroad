@@ -29,6 +29,11 @@ class UploadUsStatesSalesTaxToTaxjarJob
   include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
+  # Daily, enqueued with no args, so the digest is constant. The attempt pushes a full day of
+  # taxable US-state orders and refunds to TaxJar one transaction at a time.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 6.hours
+
   # Resolved default for a no-arg scheduled run (mirrors #perform's default). Used to key
   # completion tracking so the backstop can distinguish the scheduled day's upload from a
   # manual re-push of another day/month.
