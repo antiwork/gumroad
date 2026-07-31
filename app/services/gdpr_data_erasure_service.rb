@@ -160,21 +160,24 @@ class GdprDataErasureService
     # skip the rest. A failure here leaves a Person at Stripe that our row no longer describes, so
     # it is reported rather than logged quietly.
     def delete_guardian_stripe_persons!(guardian_stripe_persons)
-      guardian_stripe_persons.each do |guardian, stripe_account_id|
-        StripeGuardianManager.delete_person(guardian, stripe_account_id)
+      guardian_stripe_persons.each do |stripe_person_id, stripe_account_id|
+        StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
       rescue => e
         Rails.logger.error("GDPR: Failed to delete Stripe guardian person for user #{@user.id}: #{e.message}")
         ErrorNotifier.notify(e)
       end
     end
 
-    # Pairs each guardian with the Stripe account its Person lives on, resolved while the account is
-    # still active. Only guardians we actually created a Person for are returned.
+    # Pairs each guardian Person with the Stripe account it lives on, resolved while the account is
+    # still active. Includes Persons found by relationship scan: a sync that created one but failed
+    # to record its id leaves no local pointer, and that PII must still go.
     def guardian_stripe_persons_for_erasure
       stripe_account_id = @user.stripe_account&.charge_processor_merchant_id
       return [] if stripe_account_id.blank?
 
-      @user.guardians.where.not(stripe_person_id: nil).map { |guardian| [guardian, stripe_account_id] }
+      StripeGuardianManager
+        .stripe_person_ids_for_erasure(@user.guardians.to_a, stripe_account_id)
+        .map { |stripe_person_id| [stripe_person_id, stripe_account_id] }
     end
 
     def anonymize_carts!(anonymized_email)

@@ -66,12 +66,16 @@ module StripeGuardianManager
     end
   end
 
-  # Points this guardian at a Stripe Person, taking the id from whichever other row still holds it.
-  # stripe_person_id is uniquely indexed, so a replacement guardian adopting the previous
-  # guardian's Person would otherwise collide with the superseded row.
+  # Points this guardian at a Stripe Person, taking the id from whichever other row of the same
+  # seller still holds it. stripe_person_id is uniquely indexed, so a replacement guardian adopting
+  # the previous guardian's Person would otherwise collide with the superseded row. Scoped to the
+  # seller: a cross-user holder means corruption, and the unique index failing loudly beats silently
+  # destroying another guardian's only erasure handle.
   def self.adopt_person_id!(guardian, stripe_person_id)
     Guardian.transaction do
-      Guardian.where(stripe_person_id:).where.not(id: guardian.id).update_all(stripe_person_id: nil)
+      Guardian.where(stripe_person_id:, user_id: guardian.user_id)
+              .where.not(id: guardian.id)
+              .update_all(stripe_person_id: nil)
       guardian.update!(stripe_person_id:)
     end
   end
@@ -90,9 +94,37 @@ module StripeGuardianManager
   #
   # Returns true when Stripe no longer holds the Person.
   def self.delete_person(guardian, stripe_account_id)
-    return false if guardian.stripe_person_id.blank? || stripe_account_id.blank?
+    delete_person_by_id(guardian.stripe_person_id, stripe_account_id)
+  end
 
-    Stripe::Account.delete_person(stripe_account_id, guardian.stripe_person_id)
+  # Every legal-guardian Person on the account, by recorded id where we have one and by a
+  # relationship scan where we do not. A sync that created the Person but failed to save its id
+  # leaves no local handle, and erasure cannot wait for the next sync to supply one — the accounts
+  # being erased are the least likely to get another.
+  def self.stripe_person_ids_for_erasure(guardians, stripe_account_id)
+    recorded = guardians.filter_map(&:stripe_person_id)
+    return recorded if guardians.none?
+
+    scanned = Stripe::Account.list_persons(
+      stripe_account_id,
+      relationship: { legal_guardian: true },
+      limit: 100
+    ).data.map(&:id)
+
+    (recorded + scanned).uniq
+  rescue Stripe::StripeError => e
+    # The scan is the belt to the recorded id's braces. If Stripe will not answer, delete what we
+    # can point at rather than abandoning the erasure entirely.
+    ErrorNotifier.notify(e)
+    recorded
+  end
+
+  # Deletes one Person by id, so erasure can act on a Person found by scan, which has no Guardian
+  # row pointing at it.
+  def self.delete_person_by_id(stripe_person_id, stripe_account_id)
+    return false if stripe_person_id.blank? || stripe_account_id.blank?
+
+    Stripe::Account.delete_person(stripe_account_id, stripe_person_id)
     true
   rescue Stripe::InvalidRequestError => e
     # Already gone on Stripe's side is the outcome we wanted. Anything else is a real failure and

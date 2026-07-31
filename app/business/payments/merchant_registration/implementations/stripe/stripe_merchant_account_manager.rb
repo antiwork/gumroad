@@ -2183,9 +2183,4 @@ module StripeMerchantAccountManager
 
     true
   end
-
-  # StripeGuardianManager sends its own Person payload and needs the same two treatments. Pinned
-  # public because most of the helpers above sit under a bare `private_class_method`, which does
-  # nothing in Ruby — anyone fixing that pattern would otherwise break guardian sync silently.
-  public_class_method :normalize_postal_code, :force_utf8_encoding
 end
