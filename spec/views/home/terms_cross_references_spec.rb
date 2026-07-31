@@ -41,19 +41,30 @@ describe "app/views/home/terms.html.erb cross-references" do
           .each_with_object({}) { |(n, title), h| h[n.to_i] ||= normalize(title) }
   end
 
+  # "Section", "section", "SECTION", singular or plural. The caps form is not decoration: the
+  # emphasised passages cite SECTION 18 (RELEASE), SECTION 25 (ARBITRATION AGREEMENT) and six
+  # others, and a scan that only saw title case left all of them unchecked.
+  #
+  # (?!\d) keeps a 1-2 digit number from matching inside a longer one, which is what stops
+  # "CALIFORNIA CIVIL CODE SECTION 1542" — a statute, not a cite — from reading as section 15.
+  #
+  # No /o on either: these interpolate the caller's pattern, and /o would cache the first call's
+  # pattern and silently reuse it for the second.
+  def section_word
+    "[Ss]ections?|SECTIONS?"
+  end
+
   # Titled cites, as [cited number, cited title]. A comma before the paren is drift, not a
   # different construct ("Section 25.4, (Waiver...)"), so it is tolerated.
-  # No /o here: these regexes interpolate the caller's pattern, and /o would cache the first
-  # call's pattern and silently reuse it for the second.
   def titled_cites(pattern)
-    source.scan(/[Ss]ections?#{sp}+(#{pattern})(?!\d)(?!\.\d),?#{sp}*\(([^)]{3,90})\)/)
+    source.scan(/(?:#{section_word})#{sp}+(#{pattern})(?!\d)(?!\.\d),?#{sp}*\(([^)]{3,90})\)/)
   end
 
   # Every number a cite points at, titled or not, in any of the forms this document uses: lowercase
   # "section 6.4", plural "Sections 11.3(a) and 11.3(b)", letter limbs "Section 11.3(c)". A limb
   # cite resolves to its parent subsection, which is what has a heading.
   def cited_numbers(pattern)
-    source.scan(/[Ss]ections?#{sp}+(#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?/).flatten.uniq
+    source.scan(/(?:#{section_word})#{sp}+(#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?/).flatten.uniq
   end
 
   # A cite is dead when the number it names does not exist, or when the number it names is titled
@@ -69,7 +80,11 @@ describe "app/views/home/terms.html.erb cross-references" do
       heading = headings[key]
 
       next "'Section #{num} (#{title})' — there is no Section #{num}" if heading.nil?
-      next if title_key(heading) == title_key(title)
+      # Prefix, not equality: a cite may shorten its target's heading ("SECTION 20 (DISCLAIMER OF
+      # WARRANTIES)" for "DISCLAIMER OF WARRANTIES AND CONDITIONS"), and §25's heading runs on into
+      # a paragraph of prose. A wrong number still fails — no other heading starts with the cited
+      # title.
+      next if title_key(heading).start_with?(title_key(title))
 
       "'Section #{num} (#{title})' — Section #{num} is '#{heading}'"
     end
@@ -77,12 +92,19 @@ describe "app/views/home/terms.html.erb cross-references" do
 
   it "parses the document it is asserting about" do
     expect(sections.keys.sort).to eq((1..27).to_a)
-    expect(subsections.keys.size).to eq(84)
+
+    # Per section rather than one total: "expected 84, got 83" does not say which heading stopped
+    # parsing, and if the lost one is the last of its section the contiguity example stays green too.
+    counts = subsections.keys.group_by { |k| k.split(".").first.to_i }.transform_values(&:size)
+    expect(counts.sort.to_h).to eq(
+      { 1 => 2, 3 => 4, 4 => 5, 6 => 9, 8 => 2, 10 => 8, 11 => 3, 12 => 2, 13 => 6, 16 => 2,
+        17 => 3, 20 => 2, 21 => 4, 23 => 4, 25 => 12, 26 => 2, 27 => 14 }
+    )
   end
 
   it "resolves every titled whole-section cite to the section it names" do
     cites = titled_cites('\d{1,2}')
-    expect(cites.size).to eq(6)
+    expect(cites.size).to eq(13)
 
     dead = dead_cites(cites, sections)
     expect(dead).to be_empty, dead.join("\n")
@@ -90,7 +112,7 @@ describe "app/views/home/terms.html.erb cross-references" do
 
   it "resolves every titled subsection cite to the subsection it names" do
     cites = titled_cites('\d{1,2}\.\d{1,2}')
-    expect(cites.size).to eq(15)
+    expect(cites.size).to eq(17)
 
     dead = dead_cites(cites, subsections)
     expect(dead).to be_empty, dead.join("\n")
@@ -98,7 +120,7 @@ describe "app/views/home/terms.html.erb cross-references" do
 
   it "points every subsection cite at a subsection that exists" do
     cited = cited_numbers('\d{1,2}\.\d{1,2}')
-    expect(cited.size).to eq(10)
+    expect(cited.sort).to eq(["10.5", "11.3", "12.1", "25.1", "25.4", "25.5", "25.9", "3.4", "4.1", "6.1", "6.4"])
 
     missing = cited - subsections.keys
     expect(missing).to be_empty, "cited but absent: #{missing.inspect}"
@@ -106,7 +128,7 @@ describe "app/views/home/terms.html.erb cross-references" do
 
   it "points every whole-section cite at a section that exists" do
     cited = cited_numbers('\d{1,2}').map(&:to_i)
-    expect(cited.sort).to eq([5, 6, 7, 14, 20])
+    expect(cited.sort).to eq([5, 6, 7, 14, 18, 19, 20, 25])
 
     missing = cited - sections.keys
     expect(missing).to be_empty, "cited but absent: #{missing.inspect}"
@@ -150,10 +172,14 @@ describe "app/views/home/terms.html.erb cross-references" do
     expect(articles.fetch("_155-things-you-cant-sell-on-gumroad.html.erb")).to match(/section#{sp}+11\.3/o)
     expect(articles.fetch("_286-how-do-i-report-a-gumroad-creator.html.erb")).to match(/Section#{sp}+22#{sp}+of/o)
 
-    # (?!\d) so "17 U.S.C. Section 512" in the DMCA article is not read as Terms section 51.
+    # Same section-word alternation as the Terms scans, so a new article citing "SECTIONS 11.3 and
+    # 22" is not silently absent from the set below. (?!\d) so "17 U.S.C. Section 512" in the DMCA
+    # article is not read as Terms section 51.
     cited = articles.values
-                    .flat_map { |body| body.scan(/[Ss]ection#{sp}+(\d{1,2}(?:\.\d{1,2})?)(?!\d)/o) }
+                    .flat_map { |body| body.scan(/(?:#{section_word})#{sp}+(\d{1,2}(?:\.\d{1,2})?)(?!\d)/) }
                     .flatten.uniq
-    expect(cited.sort).to eq(["11.3", "22"])
+    expect(cited.sort).to eq(["11.3", "22"]),
+                          "help articles cite Terms sections #{cited.sort.inspect}. A number new to " \
+                          "this list needs asserting above against the heading it points at."
   end
 end
