@@ -178,21 +178,11 @@ class Checkout::BuyerCurrencyQuote
 
   TOKEN_PURPOSE = :buyer_currency_quote
 
-  # How many sellers a cart may span before this lane stops quoting it and lets it check out in
-  # canonical US dollars.
-  #
-  # Each seller costs one Stripe FX quote, and they are minted one after another on the
-  # surcharge request the buyer is waiting on (StripeFxQuote allows 2s to connect and 5s to
-  # read, with no retry). A cart may hold up to Cart::MAX_ALLOWED_CART_PRODUCTS products, so
-  # without a limit here a wide cart of one-product sellers could keep the buyer, and a request
-  # thread, waiting through fifty round trips — and pay that cost again on every edit that
-  # changes the total, because the checkout re-requests surcharges when the cart, tip, address,
-  # or VAT id changes.
-  #
-  # Four covers the multi-seller carts this lane is being ramped for while keeping the worst
-  # case in the same range a single-seller checkout already accepts. A cart above the limit is
-  # not refused: it simply falls back to canonical US dollars, exactly as it did before
-  # multi-seller quoting existed.
+  # Each seller costs one serial Stripe FX quote (2s connect + 5s read, no retry) on the
+  # surcharge request the buyer is waiting on, re-paid on every cart/tip/address/VAT edit.
+  # Without a bound, a wide cart of one-product sellers would block a request thread through
+  # Cart::MAX_ALLOWED_CART_PRODUCTS round trips. Over the limit the cart is not refused, it
+  # falls back to canonical USD.
   MAX_QUOTED_CHARGES = 4
 
   def self.create(line_items:, canonical_total_cents:, ip:)
@@ -358,52 +348,29 @@ class Checkout::BuyerCurrencyQuote
     # complete that checkout at all, and reloading reproduced it.
     recurring, one_time = products.partition(&:is_recurring_billing?)
     return if recurring.any? && one_time.any?
-    # On a non-USD listing, a tip or a shipping charge is not yet safe to quote.
+    # A tip or shipping charge on a non-USD listing is not safe to quote: both are computed
+    # twice on the way to a purchase (once by the surcharge request that mints this quote,
+    # again by the order builder), and on a non-USD listing the two convert at different
+    # points, disagree by a cent, and `verify!` then fails the buyer's payment on "total
+    # mismatch". A USD listing has no conversion, so both sides agree.
     #
-    # Both are computed twice on the way to a purchase: once by the surcharge request that
-    # mints this quote, and again by the code that builds the order. The two arrive at the
-    # canonical USD figure by converting at different points, and for a non-USD listing the
-    # roundings land on either side of a division by the same rate. They then disagree by a
-    # cent often enough to matter, `verify!` rejects the token on "total mismatch", and the
-    # buyer's payment fails outright. For a USD listing there is no conversion, both sides
-    # agree, and none of this bites, which is why it never mattered before: this change is
-    # what first lets a non-USD listing reach the quote at all.
+    # Tip: the surcharge request splits it over each line's canonical USD price
+    # (`state.products[].price`, already through `convertToUSD`); the order splits it over
+    # each line's *listed* price and the server runs that back through `get_usd_cents` with
+    # the product's currency (Purchase::CreateService).
     #
-    # The tip. The surcharge request splits it over each line's canonical USD price
-    # (`state.products[].price` is already run through `convertToUSD`), whereas the order
-    # submitted later splits it over each line's *listed* price, and the server then runs
-    # that figure back through `get_usd_cents` using the product's own currency
-    # (Purchase::CreateService, where the tip is built).
+    # Shipping: CustomerSurchargeController asks ShippingDestination#calculate_shipping_rate
+    # with no currency, so it sums the listed one-item and multiple-items rates and converts
+    # the sum once; Purchase#calculate_shipping passes the currency and converts each term
+    # separately. E.g. a EUR listing at rate 0.879624, 250 one-item + 200 multiple-items,
+    # quantity 2, signs 3922 against a charge computing 3921. Shipping also feeds the tax
+    # base, where the surcharge endpoint passes the listed-unit figure and
+    # Purchase#calculate_taxes the converted USD one — a larger divergence than a cent.
     #
-    # Shipping. CustomerSurchargeController asks ShippingDestination#calculate_shipping_rate
-    # for a rate with no currency, so it sums the listed one-item and multiple-items rates and
-    # converts that sum once. Purchase#calculate_shipping passes the product's currency to the
-    # same method, which converts each of the two terms separately and adds them afterwards.
-    # Convert-then-sum and sum-then-convert differ by a cent whenever both terms round the same
-    # way: a EUR listing at a stored rate of 0.879624 with 250 one-item and 200 multiple-items
-    # shipping, quantity 2, signs a token for 3922 against a charge that computes 3921.
-    # Shipping also feeds the tax calculation, and there the two sides differ by more than a
-    # rounding cent: the surcharge endpoint hands SalesTaxCalculator the listed-unit figure
-    # while Purchase#calculate_taxes hands it the converted USD one, so any tax that moves as a
-    # result fails the same total check.
-    #
-    # Note either one needs only ONE non-USD listing to go wrong, not a mixed-currency cart:
-    # a single-line EUR cart with a tip reproduces it, as does one with shipping.
-    #
-    # The gate is cart-level (any tip or shipping anywhere + any non-USD listing anywhere),
-    # not per-line, because the tip allocation can also move the tip BETWEEN lines: the
-    # largest-remainder split hands leftover cents to different lines depending on the
-    # price basis, so a cent that lands on a USD line at quote time can land on the
-    # non-USD line at submit. A per-line check (tip on a non-USD line) would mint a
-    # token for that cart and the changed per-line totals would then fail verification.
-    #
-    # Withholding the quote is the conservative answer: the cart simply falls back to the
-    # canonical USD checkout, exactly as it does on main today, so nothing regresses and no
-    # payment can fail verification. The real fixes are to make both sides allocate the tip
-    # from the same figures (a checkout-wide change to `computeTipsForLines` and its two call
-    # sites) and to make both sides convert shipping and its tax base at the same point. Both
-    # ship separately so this gate can be lifted deliberately, with a regression that
-    # completes exactly the payment it currently withholds.
+    # The gate is cart-level, not per-line, because the largest-remainder tip split hands
+    # leftover cents to different lines depending on the price basis: a cent landing on a USD
+    # line at quote time can land on the non-USD line at submit, so a per-line check would
+    # mint a token whose per-line totals then fail verification.
     if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
        line_items.any? { |line| line.tip_cents.to_i.positive? || line.shipping_cents.to_i.positive? }
       return
@@ -452,18 +419,14 @@ class Checkout::BuyerCurrencyQuote
     # #charge_quote_for) so subsequent checkouts on that account skip the doomed FX-quote round
     # trip entirely (issue #6011); other currencies on it keep quoting.
     #
-    # "That account" is not always one seller: only a Stripe Connect seller charges on their own
-    # account, and everyone else falls back to the shared Gumroad platform account, so a marker
-    # recorded there suppresses this currency for every Gumroad-managed seller. That is the
-    # existing behavior of this marker rather than something multi-seller quoting introduced (a
-    # EUR mismatch on the platform account has already had that reach, as
-    # BuyerCurrencyEligibility.usd_holding_merchant_account? describes), and it is why the specs
-    # for this stub the write rather than letting it land on the shared account.
+    # Only a Stripe Connect seller charges on their own account; everyone else shares the
+    # Gumroad platform account, so a marker recorded there suppresses this currency for every
+    # Gumroad-managed seller (pre-existing reach — see
+    # BuyerCurrencyEligibility.usd_holding_merchant_account?). That is why the specs stub the
+    # write rather than letting it land on the shared account.
     #
-    # On a destination charge the quote is minted on the Gumroad platform account rather than
-    # the seller's connected account, so the marker lands on the platform account — which is
-    # the right place: the rejection was the platform's, and every seller quoting through it
-    # would hit the same wall.
+    # A destination charge quotes on the platform account, so its marker lands there too — the
+    # rejection was the platform's, and every seller quoting through it hits the same wall.
     Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
     nil
   rescue StandardError => e
@@ -486,29 +449,21 @@ class Checkout::BuyerCurrencyQuote
     # What one canonical US dollar cent is worth in the buyer's currency, for the two amounts
     # the browser still converts itself: the discount row and a tip the buyer types.
     #
-    # With one charge there is one Stripe rate, and using it exactly is better than dividing
-    # the rounded totals: a ratio of two integers that were each rounded to the cent carries
-    # that rounding into every conversion the browser does, which is why this used to come
-    # straight off the quote. A cart of $3.34 at 0.8 would otherwise report 1.2514970 instead
-    # of 1.25, and a typed CA$10.00 tip would store 799 canonical cents rather than 800.
+    # With one charge, use Stripe's rate exactly rather than dividing the rounded totals — that
+    # ratio carries each total's cent rounding into every browser conversion ($3.34 at 0.8 would
+    # report 1.2514970 instead of 1.25, and a typed CA$10.00 tip would store 799 canonical cents).
     #
-    # With several charges there is no single rate to use: Stripe mints one quote per connected
-    # account and their rates need not agree, so the rate has to be a blend. WHICH amounts it is
-    # blended over decides whether a typed tip survives the round trip, because the browser uses
-    # this rate in both directions: it converts the typed buyer-currency figure into the canonical
-    # cents it stores, and `computeTipsForLines` then splits those canonical cents across the cart
-    # by each line's PRICE, after which each seller's share is converted back at that seller's own
-    # rate. Blending over the charge totals instead would weight the rate by amounts the split
-    # never sees (a seller's tax and shipping ride in their total but not in their price basis),
-    # so on a cart where one seller carries tax and the two rates differ, a buyer typing CA$5.00
-    # would watch the box settle on CA$2.97. Blending over the price bases keeps the two ends
-    # agreeing, and the only gap left is the rounding cent the largest-remainder split already
-    # owns.
+    # With several charges Stripe mints one quote per connected account and the rates need not
+    # agree, so the rate must be a blend — and it must be blended over the PRICE BASES, because
+    # the browser uses it in both directions: it converts the typed figure into canonical cents,
+    # `computeTipsForLines` splits those by each line's price, and each seller's share is
+    # converted back at that seller's own rate. Blending over the charge totals weights the rate
+    # by amounts the split never sees (tax and shipping), so on a cart where one seller carries
+    # tax and the rates differ, a typed CA$5.00 settles on CA$2.97.
     #
-    # Each price basis is converted at its own charge's rate and the blend is the ratio of those
-    # sums, rather than the locked presentment totals, so the seller's cosmetic price-ending
-    # rounding stays out of it: a cart rounded from CA$12.50 down to CA$11.99 must not bend the
-    # rate a tip is converted at.
+    # Each basis is converted at its own charge's rate rather than taken from the locked
+    # presentment totals, so cosmetic price-ending rounding (CA$12.50 → CA$11.99) cannot bend
+    # the rate a tip is converted at.
     def display_rate_for(charge_quotes, buyer_currency)
       if charge_quotes.one?
         return BigDecimal(subunit_to_unit(buyer_currency)) /
@@ -550,13 +505,10 @@ class Checkout::BuyerCurrencyQuote
     # Mints ONE charge's locked quote: the amount this seller's PaymentIntent will be created
     # for, in the buyer's currency, plus the split of it across that seller's cart lines.
     #
-    # This is the whole of the atomicity answer for multi-seller carts. Nothing is shared
-    # between charges: each has its own Stripe FX quote (Stripe binds a quote to the account
-    # the intent is created on, so it could not be otherwise), its own rounding, and its own
-    # line allocation. The buyer's displayed cart total is the sum of these locked amounts,
-    # so every charge independently satisfies "charged equals displayed" — and their sum does
-    # too, without any cross-charge commit. That is exactly the guarantee a multi-seller cart
-    # has always had in dollars, where a cart is already several independent PaymentIntents.
+    # Nothing is shared between charges — each has its own Stripe FX quote (Stripe binds a
+    # quote to the account the intent is created on), its own rounding, and its own line
+    # allocation. The displayed cart total is the sum of these locked amounts, so every charge
+    # independently satisfies "charged equals displayed" and no cross-charge commit is needed.
     #
     # Returns nil when this seller cannot be quoted, which takes the whole cart back to
     # canonical US dollars (see the caller).
@@ -793,35 +745,23 @@ class Checkout::BuyerCurrencyQuote
     end
 
     # Signs one token covering every charge the cart will produce. The buyer's currency is
-    # cart-wide (it comes from their location), so it sits at the top level; everything that
-    # is per-charge lives in `charges`, and the charge path picks its own entry out by seller.
+    # cart-wide (it comes from their location), so it sits at the top level; everything
+    # per-charge lives in `charges`, and the charge path picks its own entry out by seller.
     #
     # One token rather than one per charge because the browser submits one order: a token per
-    # charge would need the client to route them to the right purchases, which is exactly the
-    # kind of thing the server must not delegate to a buyer-controlled request.
+    # charge would need the client to route them to the right purchases, and the server must
+    # not delegate that to a buyer-controlled request.
     #
-    # A single-charge cart also repeats its one entry's fields at the top level, which is the
-    # shape this token had before multi-seller quoting. That is for the deploy and rollback
-    # windows, in both directions: a checkout page loaded before the deploy submits after it
-    # (handled by `charge_payload_for` reading a flat token as a one-charge list), and a token
-    # minted by this code being charged by a server that does not have it yet — either
-    # mid-deploy or after this change is rolled back. The older code reads these fields at the
-    # top level and fails the payment outright if they are missing, and single-seller carts are
-    # all of today's buyer-currency traffic, so leaving them out would break live checkouts on
-    # rollback. Once that ramp is complete this duplication can go.
+    # A single-charge cart ALSO repeats its one entry's fields at the top level — the shape
+    # this token had before multi-seller quoting. Required for the deploy/rollback windows in
+    # both directions: older code reads those fields flat and fails the payment outright if
+    # they are missing, and single-seller carts are all of today's buyer-currency traffic, so
+    # omitting them would break live checkouts on rollback. Removable once the ramp completes.
     #
-    # A MULTI-charge cart has no meaningful flat shape (there is no one seller or one amount to
-    # put at the top level), and it does not need one. If this change is rolled back while the
-    # multi-seller ramp is on, the older code never looks at the token's shape at all: its
-    # BuyerCurrencyEligibility#decision rejects any order spanning several sellers with
-    # `:multi_seller_checkout` before verification runs, and Charge::CreateService then fails
-    # the charge closed because a token was submitted. So an in-flight multi-seller checkout
-    # gets the "the local-currency price changed or expired, please review the updated total"
-    # message rather than a payment at the wrong amount — the same outcome as pulling the flag
-    # mid-checkout, and the outcome this lane wants either way. The checkout re-quotes on that
-    # error, the rolled-back surcharge endpoint withholds a quote for a multi-seller cart, and
-    # the buyer completes in canonical US dollars. Adding a flat shape here could not improve
-    # on that: it would only be read by code that has already refused the cart.
+    # A MULTI-charge cart needs no flat shape: rolled-back code rejects any multi-seller order
+    # with `:multi_seller_checkout` before verification runs, and Charge::CreateService fails
+    # the charge closed, so an in-flight checkout gets the "price changed or expired" message
+    # (which re-quotes into canonical USD) rather than a payment at the wrong amount.
     def signed_token(buyer_currency:, charge_quotes:)
       charges = charge_quotes.map do |charge_quote|
         {
