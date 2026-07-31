@@ -152,6 +152,12 @@ module Payment::FailureReason
   # restriction sentence. Both come from the note the payment itself generates
   # (Payment#terminal_paypal_failure_seller_note), and the restriction is matched across every
   # wording ever shipped for that code so notes written before a reword still match.
+  #
+  # The PayPal address is deliberately not part of the match, even though a seller can be rejected
+  # on two addresses on the same day with the same code. The note names no address, and its fix and
+  # next-step halves come from the user rather than the payment, so two such notes are identical
+  # text — treating one as explaining the other is right, and keying on the address would only write
+  # the seller a second copy of what they are already reading.
   def self.terminal_paypal_explanation_note_for?(content, payment)
     text = content.to_s
     return false unless text.include?(payment.created_at.to_fs(:formatted_date_full_month))
