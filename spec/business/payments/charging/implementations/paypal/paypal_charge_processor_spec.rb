@@ -386,6 +386,26 @@ describe PaypalChargeProcessor, :vcr do
           eq(-@purchase.affiliate_credit_cents))
       end
 
+      def paypal_refund_event(refund_id:, capture_id:, amount:, total_refunded_amount:, currency_code: "USD")
+        {
+          "id" => "WEBHOOK-#{refund_id}",
+          "event_type" => "PAYMENT.CAPTURE.REFUNDED",
+          "resource_type" => "refund",
+          "resource" => {
+            "id" => refund_id,
+            "status" => "COMPLETED",
+            "amount" => { "currency_code" => currency_code, "value" => amount },
+            "seller_payable_breakdown" => {
+              "gross_amount" => { "currency_code" => currency_code, "value" => amount },
+              "total_refunded_amount" => { "currency_code" => currency_code, "value" => total_refunded_amount },
+            },
+            "links" => [
+              { "href" => "https://api.paypal.com/v2/payments/captures/#{capture_id}", "rel" => "up", "method" => "GET" },
+            ],
+          },
+        }
+      end
+
       it "refunds the purchase and reverts associated affiliate balance when event type is PAYMENT.CAPTURE.DENIED" do
         @purchase.update!(stripe_transaction_id: "7NW873794T343360M")
 
@@ -400,7 +420,6 @@ describe PaypalChargeProcessor, :vcr do
         @purchase.update!(stripe_transaction_id: "4L335234718889942")
 
         event_info = { "id" => "WH-6F207351SC284371F-0KX52201050121307", "create_time" => "2018-08-15T21:30:35.780Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REVERSED", "summary" => "A $ 2.51 USD capture payment was reversed", "resource" => { "seller_payable_breakdown" => { "gross_amount" => { "currency_code" => "USD", "value" => "2.51" }, "paypal_fee" => { "currency_code" => "USD", "value" => "0.00" }, "net_amount" => { "currency_code" => "USD", "value" => "2.51" }, "total_refunded_amount" => { "currency_code" => "GBP", "value" => "7.00" } }, "amount" => { "currency_code" => "USD", "value" => "2.51" }, "update_time" => "2018-08-15T14:30:10-07:00", "create_time" => "2018-08-15T14:30:10-07:00", "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/09E71677NS257044M", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/4L335234718889942", "rel" => "up", "method" => "GET" }], "id" => "09E71677NS257044M", "note_to_payer" => "Payment reversed", "status" => "COMPLETED" }, "links" => [{ "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-6F207351SC284371F-0KX52201050121307", "rel" => "self", "method" => "GET", "encType" => "application/json" }, { "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-6F207351SC284371F-0KX52201050121307/resend", "rel" => "resend", "method" => "POST", "encType" => "application/json" }], "event_version" => "1.0", "resource_version" => "2.0" }
-
         described_class.handle_order_events(event_info)
 
         verify_purchase_refunded
@@ -409,7 +428,12 @@ describe PaypalChargeProcessor, :vcr do
       it "sets the processor_refund_id and status on the refund record" do
         @purchase.update!(stripe_transaction_id: "0JF852973C016714D")
 
-        event_info = { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "gross_amount" => { "currency_code" => "USD", "value" => "0.99" }, "paypal_fee" => { "currency_code" => "USD", "value" => "0.02" }, "net_amount" => { "currency_code" => "USD", "value" => "0.97" }, "total_refunded_amount" => { "currency_code" => "USD", "value" => "10.00" } }, "amount" => { "currency_code" => "USD", "value" => "0.99" }, "update_time" => "2018-08-15T12:13:29-07:00", "create_time" => "2018-08-15T12:13:29-07:00", "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" }, "links" => [{ "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G", "rel" => "self", "method" => "GET", "encType" => "application/json" }, { "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G/resend", "rel" => "resend", "method" => "POST", "encType" => "application/json" }], "event_version" => "1.0", "resource_version" => "2.0" }
+        event_info = paypal_refund_event(
+          refund_id: "1Y107995YT783435V",
+          capture_id: "0JF852973C016714D",
+          amount: "0.99",
+          total_refunded_amount: "0.99"
+        )
 
         described_class.handle_order_events(event_info)
 
@@ -427,6 +451,63 @@ describe PaypalChargeProcessor, :vcr do
         described_class.handle_order_events(event_info)
 
         expect(@purchase.refunds.count).to eq(1)
+      end
+
+      it "does not re-record a refund that becomes visible while waiting for the purchase lock" do
+        capture_id = "0JF852973C016714D"
+        refund_id = "PAYPAL-CONCURRENT-REFUND"
+        @purchase.update!(stripe_transaction_id: capture_id, stripe_partially_refunded: true)
+        existing_refund = create(
+          :refund,
+          purchase: @purchase,
+          processor_refund_id: refund_id,
+          amount_cents: 2_00,
+          total_transaction_cents: 2_00,
+          status: "COMPLETED"
+        )
+        event_info = paypal_refund_event(
+          refund_id:,
+          capture_id:,
+          amount: "2.00",
+          total_refunded_amount: "2.00"
+        )
+
+        # Model the webhook's first read before another transaction commits; later
+        # reads see the row after the purchase lock becomes available.
+        calls = 0
+        purchase_lock_held = false
+        allow_any_instance_of(Purchase).to receive(:with_lock).and_wrap_original do |method, *args, **kwargs, &block|
+          method.call(*args, **kwargs) do
+            purchase_lock_held = true
+            block.call
+          ensure
+            purchase_lock_held = false
+          end
+        end
+        allow(Refund).to receive(:where).and_wrap_original do |method, *args, **kwargs|
+          if args == [{ processor_refund_id: refund_id }] || kwargs == { processor_refund_id: refund_id }
+            calls += 1
+            next Refund.none if calls == 1
+
+            expect(purchase_lock_held).to be(true)
+          end
+          method.call(*args, **kwargs)
+        end
+
+        balance_transaction_count = BalanceTransaction.joins(:refund)
+                                                      .where(refunds: { processor_refund_id: refund_id })
+                                                      .count
+        expect(CustomerMailer).not_to receive(:partial_refund)
+
+        expect do
+          described_class.handle_order_events(event_info)
+        end.not_to change { @purchase.reload.refunds.count }
+
+        expect(@purchase.refunds).to contain_exactly(existing_refund)
+        expect(
+          BalanceTransaction.joins(:refund).where(refunds: { processor_refund_id: refund_id }).count
+        ).to eq(balance_transaction_count)
+        expect(calls).to be >= 2
       end
 
       it "creates refund if there is already a refund associated with the purchase but with different " \
@@ -447,8 +528,12 @@ describe PaypalChargeProcessor, :vcr do
       it "refunds the purchase and reverts associated affiliate balance when event type is PAYMENT.CAPTURE.REFUNDED" do
         @purchase.update!(stripe_transaction_id: "0JF852973C016714D")
 
-        event_info = { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "gross_amount" => { "currency_code" => "USD", "value" => "0.99" }, "paypal_fee" => { "currency_code" => "USD", "value" => "0.02" }, "net_amount" => { "currency_code" => "USD", "value" => "0.97" }, "total_refunded_amount" => { "currency_code" => "USD", "value" => "10.00" } }, "amount" => { "currency_code" => "USD", "value" => "0.99" }, "update_time" => "2018-08-15T12:13:29-07:00", "create_time" => "2018-08-15T12:13:29-07:00", "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" }, "links" => [{ "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G", "rel" => "self", "method" => "GET", "encType" => "application/json" }, { "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G/resend", "rel" => "resend", "method" => "POST", "encType" => "application/json" }], "event_version" => "1.0", "resource_version" => "2.0" }
-
+        event_info = paypal_refund_event(
+          refund_id: "1Y107995YT783435V",
+          capture_id: "0JF852973C016714D",
+          amount: "10.00",
+          total_refunded_amount: "10.00"
+        )
         described_class.handle_order_events(event_info)
 
         verify_purchase_refunded
@@ -470,8 +555,12 @@ describe PaypalChargeProcessor, :vcr do
         @purchase.update!(stripe_transaction_id: "0JF852973C016714D", chargeback_date: 1.day.ago)
         expect(@purchase.chargedback_not_reversed?).to be(true)
 
-        event_info = { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "total_refunded_amount" => { "currency_code" => "USD", "value" => "0.99" } }, "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" } }
-
+        event_info = paypal_refund_event(
+          refund_id: "1Y107995YT783435V",
+          capture_id: "0JF852973C016714D",
+          amount: "0.99",
+          total_refunded_amount: "0.99"
+        )
         expect_any_instance_of(Purchase).not_to receive(:decrement_balance_for_refund_or_chargeback!)
 
         described_class.handle_order_events(event_info)
@@ -479,22 +568,21 @@ describe PaypalChargeProcessor, :vcr do
         expect(@purchase.reload.refunds.where(processor_refund_id: "1Y107995YT783435V").count).to eq(1)
       end
 
-      it "refunds remaining amount if purchase is partially refunded" do
+      it "records the partial refund amount when the purchase already has a refund" do
         @purchase.update!(stripe_transaction_id: "0JF852973C016714D")
         create(:refund, purchase: @purchase, amount_cents: @purchase.price_cents / 2)
         expect(@purchase.refunds.count).to eq(1)
         expect(@purchase.refunds.last.amount_cents).to eq(@purchase.price_cents / 2)
 
         event_info = { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "gross_amount" => { "currency_code" => "USD", "value" => "0.99" }, "paypal_fee" => { "currency_code" => "USD", "value" => "0.02" }, "net_amount" => { "currency_code" => "USD", "value" => "0.97" }, "total_refunded_amount" => { "currency_code" => "USD", "value" => "10.00" } }, "amount" => { "currency_code" => "USD", "value" => "0.99" }, "update_time" => "2018-08-15T12:13:29-07:00", "create_time" => "2018-08-15T12:13:29-07:00", "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" }, "links" => [{ "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G", "rel" => "self", "method" => "GET", "encType" => "application/json" }, { "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G/resend", "rel" => "resend", "method" => "POST", "encType" => "application/json" }], "event_version" => "1.0", "resource_version" => "2.0" }
-
         described_class.handle_order_events(event_info)
 
         expect(@purchase.refunds.count).to eq(2)
         expect(@purchase.refunds.first.amount_cents).to eq(@purchase.price_cents / 2)
-        expect(@purchase.refunds.last.amount_cents).to eq(@purchase.price_cents / 2)
+        expect(@purchase.refunds.last.amount_cents).to eq(99)
       end
 
-      it "refunds the correct partial amount for partial refunds" do
+      it "uses the current refund amount instead of PayPal's cumulative total" do
         @purchase.update!(stripe_transaction_id: "0JF852973C016714D")
 
         event_info = { "id" => "WH-1GE84257G0350133W-6RW800890C634293G", "create_time" => "2018-08-15T19:14:04.543Z", "resource_type" => "refund", "event_type" => "PAYMENT.CAPTURE.REFUNDED", "summary" => "A $ 0.99 USD capture payment was refunded", "resource" => { "seller_payable_breakdown" => { "gross_amount" => { "currency_code" => "USD", "value" => "0.99" }, "paypal_fee" => { "currency_code" => "USD", "value" => "0.02" }, "net_amount" => { "currency_code" => "USD", "value" => "0.97" }, "total_refunded_amount" => { "currency_code" => "USD", "value" => "1.98" } }, "amount" => { "currency_code" => "USD", "value" => "0.99" }, "update_time" => "2018-08-15T12:13:29-07:00", "create_time" => "2018-08-15T12:13:29-07:00", "links" => [{ "href" => "https://api.paypal.com/v2/payments/refunds/1Y107995YT783435V", "rel" => "self", "method" => "GET" }, { "href" => "https://api.paypal.com/v2/payments/captures/0JF852973C016714D", "rel" => "up", "method" => "GET" }], "id" => "1Y107995YT783435V", "status" => "COMPLETED" }, "links" => [{ "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G", "rel" => "self", "method" => "GET", "encType" => "application/json" }, { "href" => "https://api.paypal.com/v1/notifications/webhooks-events/WH-1GE84257G0350133W-6RW800890C634293G/resend", "rel" => "resend", "method" => "POST", "encType" => "application/json" }], "event_version" => "1.0", "resource_version" => "2.0" }
@@ -502,7 +590,152 @@ describe PaypalChargeProcessor, :vcr do
         described_class.handle_order_events(event_info)
 
         expect(@purchase.refunds.count).to eq(1)
-        expect(@purchase.refunds.last.amount_cents).to eq(198)
+        expect(@purchase.refunds.last.amount_cents).to eq(99)
+      end
+
+      it "records each partial refund amount instead of repeatedly recording PayPal's cumulative total" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        first_refund = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-1",
+          capture_id:,
+          amount: "2.00",
+          total_refunded_amount: "2.00"
+        )
+        second_refund = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-2",
+          capture_id:,
+          amount: "3.00",
+          total_refunded_amount: "5.00"
+        )
+
+        described_class.handle_order_events(first_refund)
+        described_class.handle_order_events(second_refund)
+        described_class.handle_order_events(second_refund)
+
+        expect(@purchase.reload.refunds.order(:id).pluck(:processor_refund_id, :amount_cents)).to eq(
+          [["PAYPAL-REFUND-1", 200], ["PAYPAL-REFUND-2", 300]]
+        )
+        expect(@purchase.refunds.sum(:amount_cents)).to eq(500)
+        expect(@purchase.gross_amount_refundable_cents).to eq(500)
+        expect(@purchase.stripe_refunded?).to be(false)
+        expect(@purchase.refunds.order(:id).flat_map { |refund| refund.balance_transactions.pluck(:holding_amount_net_cents) }).to(
+          eq([-43, -64])
+        )
+      end
+
+      it "skips automatic processing and alerts when the current refund amount is missing" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        event_info = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-WITHOUT-AMOUNT",
+          capture_id:,
+          amount: "2.00",
+          total_refunded_amount: "5.00"
+        )
+        event_info["resource"].delete("amount")
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "PayPal refund webhook: current refund amount is missing; skipping automatic refund",
+          capture_id:,
+          processor_refund_id: "PAYPAL-REFUND-WITHOUT-AMOUNT",
+          refund_currency: nil,
+          refund_value: nil,
+          webhook_event_id: "WEBHOOK-PAYPAL-REFUND-WITHOUT-AMOUNT",
+          webhook_event_type: "PAYMENT.CAPTURE.REFUNDED"
+        )
+
+        described_class.handle_order_events(event_info)
+
+        expect(@purchase.reload.refunds).to be_empty
+        expect(@purchase.balance_transactions.count).to eq(1)
+      end
+
+      it "skips automatic processing and alerts when the current refund amount is invalid" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        event_info = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-WITH-INVALID-AMOUNT",
+          capture_id:,
+          amount: "not-a-number",
+          total_refunded_amount: "5.00"
+        )
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "PayPal refund webhook: current refund amount is invalid; skipping automatic refund",
+          capture_id:,
+          processor_refund_id: "PAYPAL-REFUND-WITH-INVALID-AMOUNT",
+          refund_currency: "USD",
+          refund_value: "not-a-number",
+          webhook_event_id: "WEBHOOK-PAYPAL-REFUND-WITH-INVALID-AMOUNT",
+          webhook_event_type: "PAYMENT.CAPTURE.REFUNDED"
+        )
+
+        described_class.handle_order_events(event_info)
+
+        expect(@purchase.reload.refunds).to be_empty
+        expect(@purchase.balance_transactions.count).to eq(1)
+      end
+
+      it "skips automatic processing and alerts when the current refund amount is non-finite" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        event_info = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-WITH-NON-FINITE-AMOUNT",
+          capture_id:,
+          amount: "NaN",
+          total_refunded_amount: "5.00"
+        )
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "PayPal refund webhook: current refund amount is invalid; skipping automatic refund",
+          capture_id:,
+          processor_refund_id: "PAYPAL-REFUND-WITH-NON-FINITE-AMOUNT",
+          refund_currency: "USD",
+          refund_value: "NaN",
+          webhook_event_id: "WEBHOOK-PAYPAL-REFUND-WITH-NON-FINITE-AMOUNT",
+          webhook_event_type: "PAYMENT.CAPTURE.REFUNDED"
+        )
+
+        described_class.handle_order_events(event_info)
+
+        expect(@purchase.reload.refunds).to be_empty
+        expect(@purchase.balance_transactions.count).to eq(1)
+      end
+
+      it "skips automatic processing and alerts for unsupported, nonpositive, or over-precise amounts" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        invalid_amounts = [
+          ["UNSUPPORTED-CURRENCY", "2.00", "ZZZ"],
+          ["ZERO-AMOUNT", "0.00", "USD"],
+          ["NEGATIVE-AMOUNT", "-1.00", "USD"],
+          ["EXCESS-PRECISION", "0.009", "USD"],
+        ]
+
+        invalid_amounts.each do |refund_id, amount, currency_code|
+          event_info = paypal_refund_event(
+            refund_id:,
+            capture_id:,
+            amount:,
+            total_refunded_amount: "5.00",
+            currency_code:
+          )
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal refund webhook: current refund amount is invalid; skipping automatic refund",
+            capture_id:,
+            processor_refund_id: refund_id,
+            refund_currency: currency_code,
+            refund_value: amount,
+            webhook_event_id: "WEBHOOK-#{refund_id}",
+            webhook_event_type: "PAYMENT.CAPTURE.REFUNDED"
+          )
+
+          described_class.handle_order_events(event_info)
+        end
+
+        expect(@purchase.reload.refunds).to be_empty
+        expect(@purchase.balance_transactions.count).to eq(1)
       end
 
       it "refunds the correct amount for single unit currency refunds" do
@@ -600,8 +833,8 @@ describe PaypalChargeProcessor, :vcr do
         end
 
         it "also blocks PAYMENT.CAPTURE.REVERSED and notifies when the capture is shared" do
-          # Reversals (chargebacks) route through the same handler as refunds, so a reversal
-          # on a shared capture is just as ambiguous and must also defer to human review.
+          # Reversals still reach the shared attribution guard, so a shared capture must also
+          # defer to human review.
           @purchase.update!(stripe_transaction_id: "0JF852973C016714D", paypal_order_id: "5O190127TN364715T")
           create(:failed_purchase, link: @purchase.link, paypal_order_id: "5O190127TN364715T",
                                    stripe_transaction_id: nil,
