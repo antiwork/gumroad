@@ -148,7 +148,32 @@ describe User::PingNotification do
 
     it "omits a subscription whose application was deleted from both lists" do
       create(:resource_subscription, oauth_application: oauth_app, user:)
-      oauth_app.mark_deleted!
+      # update_column, not mark_deleted!: the latter cascades deleted_at onto the subscriptions, so
+      # the alive scope empties and the guard under test never executes.
+      oauth_app.update_column(:deleted_at, Time.current)
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.deliverable_subscriptions).to be_empty
+      expect(targets.undeliverable_subscriptions).to be_empty
+    end
+
+    # The historical hard-delete bug leaves oauth_application_id pointing at a missing row. Without
+    # the nil guard this raises NoMethodError inside the critical-queue ping worker on every sale.
+    it "omits a subscription whose application row no longer exists" do
+      subscription = create(:resource_subscription, oauth_application: oauth_app, user:)
+      OauthApplication.where(id: oauth_app.id).delete_all
+      subscription.reload
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.deliverable_subscriptions).to be_empty
+      expect(targets.undeliverable_subscriptions).to be_empty
+    end
+
+    it "does not report a Store Agent subscription as undeliverable" do
+      agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      create(:resource_subscription, oauth_application: agent_app, user:)
 
       targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
 

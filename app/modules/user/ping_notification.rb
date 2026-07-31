@@ -46,7 +46,7 @@ module User::PingNotification
 
       if resource_subscription.post_url.present? && live_ping_notification_token?(oauth_application)
         deliverable << resource_subscription
-      else
+      elsif reportable_undeliverable?(oauth_application)
         undeliverable << resource_subscription
       end
     end
@@ -58,6 +58,15 @@ module User::PingNotification
   end
 
   private
+    # The Store Agent mints a token per request and revokes it in its own ensure block, so its
+    # subscriptions are permanently token-less by design, and the notifier's created_at cutover
+    # cannot exclude them because they are created now. 24 are live in production, and their owners
+    # cannot re-authorize an application that has no authorization flow. That agent-created webhooks
+    # never deliver is a real bug, but it is ours to fix, not to ask the seller to act on.
+    def reportable_undeliverable?(oauth_application)
+      oauth_application.name != Ai::StoreAgentApiClient::AGENT_APP_NAME
+    end
+
     def live_ping_notification_token?(oauth_application)
       Doorkeeper::AccessToken.active_for(self).where(application_id: oauth_application.id).any? do |token|
         token.includes_scope?(:view_sales) || token.includes_scope?(:account)
