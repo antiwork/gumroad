@@ -1521,6 +1521,92 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "undelivered_receipts" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, name: "Terraforming Guide") }
+
+    def undelivered_purchase
+      purchase = create(:purchase, seller:, link: product)
+      create(:customer_email_info, purchase:, state: "sent", sent_at: 3.days.ago)
+      purchase
+    end
+
+    it "names the buyer and product for a single affected sale" do
+      purchase = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id], 1)
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "A buyer may not have received their receipt"
+      expect(mail.body.encoded).to include purchase.email
+      expect(mail.body.encoded).to include "Terraforming Guide"
+      expect(mail.body.encoded).to include "have not opened what they bought"
+    end
+
+    it "pluralizes the subject and body for several affected sales" do
+      first = undelivered_purchase
+      second = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [first.id, second.id], 2)
+
+      expect(mail.subject).to eq "2 buyers may not have received their receipt"
+      expect(mail.body.encoded).to include "2 of your buyers"
+    end
+
+    # The sweep and this render are separated by a queue, and the whole email asks the seller to chase
+    # someone who may have opened their content in between.
+    it "drops a buyer who accessed their content after the sweep" do
+      listed = undelivered_purchase
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id], 2)
+
+      expect(mail.body.encoded).to include listed.email
+      expect(mail.body.encoded).not_to include recovered.email
+    end
+
+    # The count is what the seller acts on, so it has to shrink with the list rather than keep the
+    # sweep's figure and claim more affected sales than the email stands behind.
+    it "reduces the reported total when a listed buyer has recovered" do
+      listed = undelivered_purchase
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id], 2)
+
+      expect(mail.subject).to eq "A buyer may not have received their receipt"
+      expect(mail.body.encoded).not_to include "and 1 more"
+    end
+
+    it "counts the buyers it does not list" do
+      purchase = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id], 4)
+
+      expect(mail.subject).to eq "4 buyers may not have received their receipt"
+      expect(mail.body.encoded).to include "and 3 more"
+    end
+
+    it "sends nothing when every listed buyer has recovered" do
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [recovered.id], 1)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    it "sends nothing when the seller is gone by render time" do
+      purchase = undelivered_purchase
+      seller.update!(deleted_at: Time.current)
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id], 1)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+  end
+
   describe "undeliverable_ping_subscription" do
     let(:seller) { create(:user) }
     let(:oauth_application) { create(:oauth_application, owner: seller, name: "Gumroad Store Agent") }

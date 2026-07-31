@@ -394,6 +394,28 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your #{@resource_subscription.resource_name} webhook is not being sent"
   end
 
+  # `purchase_ids` are the buyers this email names; `total` counts everything the sweep found for this
+  # seller, so a seller with more than the listed number is told the real figure rather than the
+  # truncated one.
+  def undelivered_receipts(seller_id, purchase_ids, total)
+    @seller = User.alive.find_by(id: seller_id)
+    return do_not_send if @seller.nil?
+
+    # Re-judged here rather than trusted from the sweep: a buyer can open their content in the gap
+    # between the scan and this render, and then this email would tell the seller to chase someone who
+    # already has what they paid for.
+    @purchases = Purchase.where(id: purchase_ids).includes(:link, :url_redirect).select do |purchase|
+      UndeliveredReceiptNotifier.undelivered?(purchase)
+    end
+    return do_not_send if @purchases.empty?
+
+    # The count shrinks with the list: reporting the sweep's total after dropping recovered buyers
+    # would claim more affected sales than the email can stand behind.
+    @total = total - (purchase_ids.size - @purchases.size)
+    @undisclosed_count = @total - @purchases.size
+    @subject = "#{@total == 1 ? "A buyer" : "#{@total} buyers"} may not have received their receipt"
+  end
+
   def chargeback_lost_no_refund_policy(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
