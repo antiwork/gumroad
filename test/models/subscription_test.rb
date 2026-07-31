@@ -1724,6 +1724,7 @@ class SubscriptionTest < ActiveSupport::TestCase
 
     @subscription.charge!
 
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_charge_blocked_location, args: [@subscription.id])
     refute_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
   end
 

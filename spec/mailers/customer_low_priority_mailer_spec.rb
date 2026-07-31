@@ -351,6 +351,13 @@ describe CustomerLowPriorityMailer do
         expect(mail.subject).to eq "Your installment payment could not be processed."
         expect(mail.body.encoded).to include "installment plan"
       end
+
+      it "says the plan will be paused rather than canceled" do
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "will be paused"
+        expect(body).to_not include "will be canceled"
+      end
     end
   end
 
