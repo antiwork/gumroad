@@ -248,17 +248,18 @@ describe Purchase::PresentmentRefund do
   end
 
   # The Connect charge model decides how Stripe splits the money, not how much of the
-  # buyer's presentment total is still refundable. Both entry points read only the
-  # purchase_presentment snapshot and the purchase's own effective refunds, so a
-  # destination charge, a direct charge and a platform charge must all derive the same
-  # numbers from the same snapshot. These specs pin that: if someone later reaches for
-  # the charge model here, one of them fails.
+  # buyer's presentment total is still refundable. Nothing in this service reads the
+  # merchant account today; these specs are the tripwire for the day someone does.
   describe "charge-model independence" do
     let(:direct_charge_account) { create(:merchant_account_stripe_connect) }
     let(:destination_charge_account) { create(:merchant_account) }
+    let(:platform_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+    end
 
-    # The purchase is built with `save!(validate: false)` above, so re-saving it through
-    # validations would trip the charge-state validators; only the association matters here.
+    # The nil-account save fails `financial_transaction_validation`; skip validations
+    # uniformly so all four shapes go through the same path.
     def use_charge_model(merchant_account)
       purchase.merchant_account = merchant_account
       purchase.save!(validate: false)
@@ -283,13 +284,18 @@ describe Purchase::PresentmentRefund do
       expect(direct_charge_account.is_a_stripe_connect_account?).to eq(true)
       expect(destination_charge_account.is_a_stripe_connect_account?).to eq(false)
       expect(destination_charge_account.user).to be_present
+      # The real platform shape is a Gumroad-managed row (user_id nil), not a nil
+      # association — a guard on `is_managed_by_gumroad?` would escape the nil case.
+      expect(platform_account.is_managed_by_gumroad?).to eq(true)
 
       direct = snapshot_for(direct_charge_account)
       destination = snapshot_for(destination_charge_account)
-      platform = snapshot_for(nil)
+      platform = snapshot_for(platform_account)
+      no_account = snapshot_for(nil)
 
       expect(direct).to eq(destination)
       expect(direct).to eq(platform)
+      expect(direct).to eq(no_account)
       expect(direct[:full].first).to eq(100)
       expect(direct[:full].last[:presentment_amount_cents]).to eq(135)
       expect(direct[:partial].first).to eq(40)
@@ -305,14 +311,22 @@ describe Purchase::PresentmentRefund do
       purchase.refunds << refund
       purchase.reload
 
-      # 135 - 54 already refunded, so only 81 presentment cents remain on either shape.
-      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 82)).to be_nil
-      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 81)).to be_present
+      # 135 - 54 already refunded, so only 81 presentment cents remain on every shape.
+      remaining_on = lambda do |merchant_account|
+        use_charge_model(merchant_account)
+        expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 82)).to be_nil
 
-      use_charge_model(destination_charge_account)
+        derived = described_class.from_presentment_amount(purchase:, presentment_amount_cents: 81)
+        [derived.canonical_gross_refund_cents, derived.presentment_refund.json_data]
+      end
 
-      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 82)).to be_nil
-      expect(described_class.from_presentment_amount(purchase:, presentment_amount_cents: 81)).to be_present
+      direct = remaining_on.call(direct_charge_account)
+
+      # Value parity, not just boundary parity: a charge-model branch that only fires once
+      # prior refunds exist would keep the 81/82 boundary and still derive a different amount.
+      expect(remaining_on.call(destination_charge_account)).to eq(direct)
+      expect(remaining_on.call(platform_account)).to eq(direct)
+      expect(direct.first).to eq(60)
     end
   end
 
