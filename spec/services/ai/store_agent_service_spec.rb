@@ -105,7 +105,7 @@ describe Ai::StoreAgentService do
         captured = args
         text_result("ok")
       end
-      proposal_state = "the proposed action was applied and cannot be confirmed again"
+      proposal_state = "the action was applied and cannot be confirmed again"
 
       service.respond(messages: [
                         { role: "user", content: "Earlier question" },

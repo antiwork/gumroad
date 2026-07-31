@@ -63,6 +63,18 @@ module AgentConversationPersistence
   MISSING_PROPOSAL_MESSAGE_ID_NOTICE = "Store agent confirmation omitted proposal message id"
   ACTION_CLAIM_RELEASE_FAILED_NOTICE = "Store agent action claim could not be released"
 
+  # What the model is told a proposal turn was, in place of the reply the creator actually saw. That
+  # reply points at a confirmation card, and by the next turn the server already knows the card's
+  # result — replaying the reply is what lets the model send the creator back to a card that can no
+  # longer be confirmed. The state notes below carry the result instead.
+  PROPOSAL_TURN_HISTORY_CONTENT = "You proposed a change on this turn."
+  NO_PROPOSAL_STATE_NOTE = "no proposed action was recorded for this message"
+  PROPOSAL_STATE_RECORDED = "a proposal was recorded, but its current result and card visibility " \
+                            "are unknown; never send the creator back to that card"
+  PROPOSAL_STATE_EXECUTING = "execution started; do not confirm again"
+  PROPOSAL_STATE_APPLIED = "the action was applied and cannot be confirmed again"
+  PROPOSAL_STATE_UNKNOWN = "the result is unknown; do not confirm again"
+
   private_constant :LEGACY_ACTION_LOOKUP_LIMIT,
                    :FORM_DECIMAL_NUMBER_PATTERN,
                    :ACTION_NUMBER_INPUT_MAX_BYTES,
@@ -147,27 +159,31 @@ module AgentConversationPersistence
       true
     end
 
-    # Rebuild history from stored rows and mark assistant claims with the proposal state the server
-    # actually persisted. This keeps old card directions from being replayed as current facts.
-    # `last` bounds token cost while preserving chronological order.
+    # Rebuild history from stored rows. A turn that carried a proposal is replayed as server-owned
+    # state only: the creator-facing confirmation copy is dropped, because the card it points at has
+    # a result the server knows and the model does not. `last` bounds token cost while preserving
+    # chronological order. Nothing here may carry proposal payloads, params, objects, or client turn
+    # ids — the model has no use for them and they are the creator's data, not conversation.
     def agent_conversation_history(conversation)
       conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map do |message|
-        history_message = { role: message.role, content: message.content }
-        history_message[:proposal_state] = agent_proposal_state_note(message) if message.role == "assistant"
-        history_message
+        next { role: message.role, content: message.content } unless message.role == "assistant"
+
+        proposal_state = agent_proposal_state_note(message)
+        content = proposal_state == NO_PROPOSAL_STATE_NOTE ? message.content : PROPOSAL_TURN_HISTORY_CONTENT
+        { role: message.role, content:, proposal_state: }
       end
     end
 
     def agent_proposal_state_note(message)
       metadata = message.metadata || {}
-      return "no proposed action was recorded for this message" if metadata["proposed_action"].blank?
+      return NO_PROPOSAL_STATE_NOTE if metadata["proposed_action"].blank?
 
-      status = metadata["action_status"].presence
-      return "a proposed action was recorded for this message; confirmation outcome and card visibility are unknown" if status.nil?
-      return "proposal execution started; do not confirm again" if status == ACTION_STATUS_EXECUTING
-      return "the proposed action was applied and cannot be confirmed again" if status == ACTION_STATUS_APPLIED
-
-      "proposal outcome is unknown; do not confirm again"
+      case metadata["action_status"].presence
+      when nil then PROPOSAL_STATE_RECORDED
+      when ACTION_STATUS_EXECUTING then PROPOSAL_STATE_EXECUTING
+      when ACTION_STATUS_APPLIED then PROPOSAL_STATE_APPLIED
+      else PROPOSAL_STATE_UNKNOWN
+      end
     end
 
     def record_agent_user_message!(conversation, content)
