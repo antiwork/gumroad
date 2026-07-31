@@ -461,6 +461,10 @@ describe Onetime::ResolveTerminalPaypalPayoutFailures do
         expect(described_class.process(dry_run: true)).to eq(noted: 1, emailed: 1, invalidated: 1, skipped: 0)
       end.to_not change { seller_visible_note_count(seller) }
       expect(seller.reload.payment_address).to eq("stuck@example.com")
+      # The email is the one write that cannot be taken back, so it is pinned separately: asserting
+      # only notes and the address leaves an ungated email branch green.
+      expect(seller.reload.payout_date_of_last_paypal_terminal_failure_email).to be_blank
+      expect(ActionMailer::Base.deliveries).to be_empty
     end
 
     # Writing seller-visible notes to the whole population must be asked for, not the accident of

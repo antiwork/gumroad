@@ -229,58 +229,53 @@ class Payment < ApplicationRecord
 
   # Take the permanently-refused PayPal address off the account.
   #
-  # A retry-blocking rejection means PayPal will not deliver to this address, ever, whatever we do
-  # (Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS). Stopping the retries fixed the
-  # weekly noise but left the seller's payout settings still showing that address as how they get
-  # paid, so the page contradicted the note telling them to change it. Clearing it makes the
-  # settings page true and puts the seller in the state the explanation asks for: no payout method
-  # on file, add a working one (gumroad-private#1478).
-  #
   # Only the retry-blocking rejection invalidates. A currency rejection (14159) is repairable on the
   # same account and we deliberately keep retrying it, so removing that address would be taking away
   # a payout method that is about to start working.
   #
-  # `payment_address` is the only thing removed, and only when it is what we were paying. A seller
-  # whose payout email comes from a connected PayPal account keeps it — there is nothing of ours to
-  # clear, and the address-keyed block still holds them. Clearing the column is how the rest of the
-  # codebase already says "no PayPal on file" (UpdatePayoutMethod, UpdateUserCountry), so nothing
-  # downstream has to learn a new state.
+  # The address is kept in `invalidated_paypal_payout_address` because every lookup of the rejection
+  # standing against this seller is keyed on it — see User#paypal_payout_email_for_failure_lookup.
+  # Support can restore from there.
   #
-  # Two consequences worth knowing about, both intended:
-  #
-  # - Every lookup of the rejection standing against this seller is keyed on the address, so
-  #   clearing it would erase the block and the seller's explanation along with it. The address is
-  #   therefore kept in `invalidated_paypal_payout_address` and read back by
-  #   User#paypal_payout_email_for_failure_lookup, which is what the failure lookups use. Support
-  #   can also restore it from there.
-  # - A seller with no other payment method cannot publish a NEW product while nothing is on file
-  #   (Link#publishable?). Products already published keep selling, so this costs them no revenue,
-  #   and it is the same state as never having added a payout method. Leaving an address we will
-  #   never pay to in place to avoid it would be pretending they have a working one.
+  # Accepted consequence: with nothing on file the seller cannot publish a NEW product
+  # (Link#publishable?) and their products stop being recommendable in Discover
+  # (User::Recommendations#recommendable?), so this does cost them Discover-sourced sales. It is
+  # still the same state as never having added a payout method, and leaving an address we will never
+  # pay to in place would be pretending they have a working one.
   def invalidate_paypal_payout_address
-    address = user.payment_address
-    return if address.blank?
-    # Only remove the address this payout was actually sent to. A payout carries the address it was
-    # attempted against (Payouts.create_payment sets it from User#paypal_payout_email), so a
-    # rejection of an address the seller has since replaced must not take the new one away.
-    return unless payment_address == address
-    # And not an address a later payout already succeeded to: a failure row can be transitioned
-    # late, and the retry block ignores rejections older than the last completed payout to the same
-    # address for the same reason.
-    last_completed_at = user.payments.completed.where(processor: PayoutProcessorType::PAYPAL, payment_address: address)
-                            .maximum(:created_at)
-    return if last_completed_at.present? && last_completed_at > created_at
+    address = nil
 
-    user.payment_address = ""
-    user.invalidated_paypal_payout_address = address
-    # Skipping validations for the same reason send_paypal_terminal_failure_email does: these seller
-    # rows are frequently invalid for unrelated reasons, and a raise here would roll back the failure
-    # transition and leave the payout stuck in `processing`, blocking every future payout with
-    # nothing on the account to show why.
-    user.save!(validate: false)
+    # Same lock UpdatePayoutMethod takes around its writes. Without it, a seller saving a
+    # replacement address between the comparison below and the save has their new address
+    # overwritten with "", leaving them with no payout method after successfully choosing one.
+    user.with_lock do
+      address = user.payment_address
+      next if address.blank?
+      # Only remove the address this payout was actually sent to. A payout carries the address it
+      # was attempted against (Payouts.create_payment sets it from User#paypal_payout_email), so a
+      # rejection of an address the seller has since replaced must not take the new one away.
+      next address = nil unless payment_address == address
+      # And not an address a later payout already succeeded to: a failure row can be transitioned
+      # late, and the retry block ignores rejections older than the last completed payout to the
+      # same address for the same reason.
+      last_completed_at = user.payments.completed.where(processor: PayoutProcessorType::PAYPAL, payment_address: address)
+                              .maximum(:created_at)
+      next address = nil if last_completed_at.present? && last_completed_at > created_at
+
+      user.payment_address = ""
+      user.invalidated_paypal_payout_address = address
+      # Skipping validations for the same reason send_paypal_terminal_failure_email does: these
+      # seller rows are frequently invalid for unrelated reasons, and a raise here would roll back
+      # the failure transition and leave the payout stuck in `processing`, blocking every future
+      # payout with nothing on the account to show why.
+      user.save!(validate: false)
+    end
+
+    return if address.blank?
+
     user.add_payout_note(
       content: "PayPal payout address #{address} removed because PayPal permanently refused it (#{failure_reason}). " \
-               "Kept in invalidated_paypal_payout_address; restore it there if the account is fixed.",
+               "To restore it, set payment_address back and clear invalidated_paypal_payout_address.",
       seller_visible: false
     )
   end
@@ -321,12 +316,12 @@ class Payment < ApplicationRecord
   end
 
   # True when the seller is currently reading copy that says we removed their PayPal address, i.e.
-  # when the invalidation actually happened. Not every retry-blocking rejection invalidates: a seller
-  # paid through a connected PayPal account has no saved address for us to remove, and telling them
-  # we removed one would be false. Read off the account rather than recomputed, so the copy and the
-  # account cannot disagree.
+  # when the invalidation actually happened for THIS payout. Keyed on this payment's address, not
+  # merely "the account has a removed address on record": a seller invalidated on an old address who
+  # later connects a PayPal account would otherwise be told we removed the connected one.
   def paypal_payout_address_invalidated?
-    user.invalidated_paypal_payout_address.present?
+    user.invalidated_paypal_payout_address.present? &&
+      user.invalidated_paypal_payout_address == payment_address
   end
 
   # What to tell the seller to do about a terminal PayPal rejection, and what to expect after.

@@ -28,7 +28,10 @@ class UpdateUserCountry
     raise PayoutInProcessingError if @user.payments.where(state: PAYOUT_IN_FLIGHT_STATES).exists?
 
     keep_payment_address = !@user.native_payouts_supported? && !@user.native_payouts_supported?(country_code: @new_country_code)
-    @user.update!(payment_address: "") unless keep_payment_address
+    # Dropping the address also drops the record of one we removed for a permanent PayPal refusal
+    # (Payment#invalidate_paypal_payout_address). The seller is choosing a new payout setup here, so
+    # the old rejection stops being their live situation — leaving it would resurrect it later.
+    @user.update!(payment_address: "", invalidated_paypal_payout_address: nil) unless keep_payment_address
 
     @user.comments.create!(
       author_id: GUMROAD_ADMIN_ID,

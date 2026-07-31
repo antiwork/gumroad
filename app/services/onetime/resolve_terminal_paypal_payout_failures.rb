@@ -21,15 +21,10 @@
 # task is safe to re-run and safe to stop halfway:
 #
 # 1. The note, seller-visible on their Payouts page.
-# 2. The email, because for almost all of these sellers nothing else will ever send one. Measured on
-#    production: of 384 affected sellers, 383 are dropped by gates that sit EARLIER than the PayPal
-#    processor — an internal hold (75 sellers, $54.8K), a balance below the payout minimum (298), no
-#    payout email, the payout-cycle date — so no Payment is ever created for them, there is no
-#    processing → failed transition, and Payment#send_paypal_terminal_failure_email never fires. One
-#    seller of the 384 would be emailed by the live path. Those gates are permanent for this
-#    population: nothing about a PayPal rejection clears a hold, and a below-minimum balance on a
-#    dormant account only grows from sales they are not making. Idempotent through the same
-#    `payout_date_of_last_paypal_terminal_failure_email` marker the live path uses.
+# 2. The email, because almost none of this population ever reaches the PayPal processor — earlier
+#    gates (internal holds, balances below the payout minimum, the payout-cycle date) mean no Payment
+#    is created, so there is no processing → failed transition and the live path never emails them.
+#    Idempotent through the same `payout_date_of_last_paypal_terminal_failure_email` marker.
 # 3. The invalidation, for retry-blocking rejections only: the unusable address comes off the account
 #    so their payout settings stop showing a PayPal account we will never pay to. Same operation the
 #    live path now performs (Payment#invalidate_paypal_payout_address); this reaches the sellers who
@@ -74,10 +69,7 @@ module Onetime
 
         did_something = false
 
-        # The invalidation runs first, for the same reason the live path orders it first: the note
-        # and the email both say we removed the PayPal address, and
-        # Payment#paypal_payout_address_invalidated? reads the account to decide whether that is
-        # true. Writing the note first would have it deny what this run is about to do.
+        # Ordered first for the same reason as the live path — see Payment's transition callbacks.
         if should_invalidate?(user, payment)
           if dry_run
             puts "[dry run] would remove the PayPal payout address from User #{user.id}"

@@ -186,15 +186,9 @@ module Payment::FailureReason
   # remove.
   #
   # These are reached only for a retry-blocking rejection, which is also the only one that takes the
-  # PayPal address off the account (Payment#invalidate_paypal_payout_address). The two WE_REMOVED
-  # variants say so, because a seller sent to "change it in your payout settings" would find nothing
-  # there to change and no explanation of where it went. The CONNECTED variants are for the seller
-  # whose payout email comes from a connected PayPal account instead of the saved address: there is
-  # nothing of ours to remove, so claiming we removed it would be false.
-  #
-  # None of them describe the alternative account as one that "can receive US dollars" — 3148 is
-  # about the country on the account's address, and an account in the same country accepting dollars
-  # would be refused exactly the same way.
+  # PayPal address off the account (Payment#invalidate_paypal_payout_address). The WE_REMOVED variants
+  # say so; the CONNECTED ones are for sellers whose payout email comes from a connected PayPal
+  # account, where there is nothing of ours to remove.
   TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK =
     "We've removed that PayPal account from your payout settings, since we can't pay to it. Add a bank account " \
     "there instead, or a PayPal account registered in a country that can receive PayPal payments."

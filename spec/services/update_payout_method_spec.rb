@@ -315,6 +315,28 @@ describe UpdatePayoutMethod do
         expect(result).to eq(success: true)
         expect(user.reload.payment_address).to eq("refused@example.com")
       end
+
+      # Switching to a bank account resolves the situation just as much as saving a working PayPal
+      # address does. Leaving the record set would let the old rejection come back as this account's
+      # live situation the moment the bank account goes away — UpdateUserCountry deletes it, so that
+      # is reachable, and the seller would be blocked by a rejection of an address they no longer use.
+      it "clears the record of the removed address when the seller switches to a bank account" do
+        bank_params = ActionController::Parameters.new(
+          bank_account: {
+            type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789",
+            routing_number: "110000000", account_holder_full_name: "Gum Road"
+          }
+        )
+
+        result = described_class.new(user_params: bank_params, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.invalidated_paypal_payout_address).to be_blank
+        # Asserted with the bank account gone, since its mere presence short-circuits the block —
+        # asserting while it is alive would pass no matter what the record holds.
+        user.bank_accounts.alive.each(&:mark_deleted!)
+        expect(PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user.reload)).to eq(false)
+      end
     end
   end
 end

@@ -176,7 +176,7 @@ class UpdatePayoutMethod
       return bank_account_error_for(bank_account) unless bank_account.valid?
 
       replace_active_bank_account_with_validated_delete!(bank_account)
-      user.update!(payment_address: "") if user.payment_address.present?
+      clear_payment_address_and_invalidation!
       { success: true }
     end
 
@@ -211,7 +211,7 @@ class UpdatePayoutMethod
       return bank_account_error_for(bank_account) unless bank_account.valid?
 
       replace_active_bank_account_with_unvalidated_delete!(bank_account)
-      user.update!(payment_address: "") if user.payment_address.present?
+      clear_payment_address_and_invalidation!
       { success: true }
     end
 
@@ -259,6 +259,17 @@ class UpdatePayoutMethod
 
       after_commit { CheckPaymentAddressWorker.perform_async(user.id) }
       { success: true }
+    end
+
+    # Clearing `payment_address` for a non-PayPal method also has to drop the record of the address
+    # we removed, or User#paypal_payout_email_for_failure_lookup keeps resolving to it and the old
+    # rejection comes back as this account's live situation the moment the replacement method is
+    # gone — UpdateUserCountry deletes the bank account, so that is a reachable state, not a
+    # hypothetical.
+    def clear_payment_address_and_invalidation!
+      return if user.payment_address.blank? && user.invalidated_paypal_payout_address.blank?
+
+      user.update!(payment_address: "", invalidated_paypal_payout_address: nil)
     end
 
     def replace_active_bank_account_with_validated_delete!(new_bank_account)

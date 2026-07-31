@@ -217,6 +217,20 @@ describe Payment do
         expect(compliant_creator.invalidated_paypal_payout_address).to eq("seller@example.com")
       end
 
+      # The copy we send tells these sellers to add a PayPal account, and in a native-payout country
+      # `payment_address` being present was the only thing qualifying them for the PayPal form —
+      # so clearing it would hide the form and refuse the submit, making that copy a dead end.
+      it "leaves the seller able to add a different PayPal account" do
+        allow(compliant_creator).to receive(:native_payouts_supported?).and_return(true)
+        # Precondition: the only thing qualifying them is the address about to be removed.
+        expect(compliant_creator.can_setup_paypal_payouts?).to eq(true)
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.payment_address).to be_blank
+        expect(compliant_creator.can_setup_paypal_payouts?).to eq(true)
+      end
+
       # The rejection lookups are all keyed on the address, so removing it without keeping a record
       # would release the block and erase the seller's explanation at the same time.
       it "keeps the seller blocked and explained afterwards" do

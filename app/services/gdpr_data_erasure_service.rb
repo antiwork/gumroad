@@ -101,6 +101,14 @@ class GdprDataErasureService
         otp_secret_key: nil,
       )
 
+      # A removed PayPal payout address is the same email PII as `payment_address` above, just moved
+      # into json_data (Payment#invalidate_paypal_payout_address). update_columns bypasses the
+      # attr_json accessor, so it has to be written through the model.
+      if @user.invalidated_paypal_payout_address.present?
+        @user.invalidated_paypal_payout_address = nil
+        @user.save!(validate: false)
+      end
+
       anonymized_email
     end
 

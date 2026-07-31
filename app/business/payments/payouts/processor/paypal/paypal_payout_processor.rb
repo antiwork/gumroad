@@ -44,13 +44,9 @@ class PaypalPayoutProcessor
     # page has always kept them out of its banner (it filtered them out by content), so they are
     # written with seller_visible: false to keep that behaviour now that visibility is explicit.
 
-    # Nothing to pay to because WE took the address off the account after PayPal permanently refused
-    # it (Payment#invalidate_paypal_payout_address). Handled before the "no valid payment address"
-    # branch below, which would be a misleading description of an account we emptied on purpose, and
-    # which writes a note every single week — these sellers stay in this state indefinitely, and
-    # PayoutNoteVisibility::MAX_NOTES_SCANNED weekly rows would push the seller's explanation out of
-    # the window the banner and the note lookups scan, at which point they would be back to reading
-    # nothing. So no note here, and the explanation is restored if something else has buried it.
+    # We emptied this on purpose, so the "no valid payment address" branch below would both describe
+    # it wrongly and write a weekly note — and these sellers stay here indefinitely, so those rows
+    # would bury the explanation out of the scanned window (see the comment further down).
     if payout_email.blank? && user.invalidated_paypal_payout_address.present?
       ensure_terminal_failure_explanation_visible(user) if add_comment
       return false
