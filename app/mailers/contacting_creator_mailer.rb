@@ -767,6 +767,9 @@ class ContactingCreatorMailer < ApplicationMailer
     # straight through here; and `perform_deliveries = false` drops the message silently, the way
     # `PostSendgridApi` already reads that flag. All three leave the seller un-notified, so all three
     # give the claim back and let a later event report it again.
+    #
+    # `RescueSmtpErrors` does not hide the SMTP cases from this: it handles them outside the deliver
+    # callbacks, so a rejection unwinds to this `ensure` first and only then looks like a clean send.
     def settle_undeliverable_ping_subscription_notice
       delivered = false
       yield

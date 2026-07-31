@@ -1662,6 +1662,26 @@ describe ContactingCreatorMailer do
       expect(retried.message).not_to be_a ActionMailer::Base::NullMail
     end
 
+    # `RescueSmtpErrors` swallows these, so the delivery looks successful to the caller. The claim
+    # still has to come back: `handle_exceptions` wraps the deliver callbacks from outside, so the
+    # raise reaches this settle before the handler sees it.
+    [Net::SMTPFatalError, Net::SMTPSyntaxError, Net::SMTPAuthenticationError].each do |error_class|
+      it "gives the notice back when SMTP rejects the message with #{error_class}" do
+        allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(error_class, "550 rejected")
+
+        expect do
+          ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+        end.not_to raise_error
+
+        expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+
+        allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
+        retried = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+        expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+      end
+    end
+
     # `deliver_email` returns before `mail` for an address it will not send to, so the delivery
     # succeeds with nothing sent — keeping the claim there would burn the notice permanently.
     it "gives the notice back when the seller's address is not one we will send to" do
