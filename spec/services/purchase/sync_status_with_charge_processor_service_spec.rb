@@ -150,6 +150,24 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(purchase.reload.failed?).to be(false)
   end
 
+  it "returns false and leaves a standalone buyer-presentment purchase in_progress when flow_of_funds is nil" do
+    purchase = create(:purchase,
+                      link: @product,
+                      purchase_state: "in_progress",
+                      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                      stripe_transaction_id: "ch_test_nil_fof")
+    create(:purchase_presentment, purchase:, charge_presentment: nil)
+
+    charge_with_nil_fof = BaseProcessorCharge.new
+    charge_with_nil_fof.id = purchase.stripe_transaction_id
+    charge_with_nil_fof.status = "succeeded"
+    charge_with_nil_fof.charge_processor_id = StripeChargeProcessor.charge_processor_id
+    allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase).and_return(charge_with_nil_fof)
+
+    expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase, mark_as_failed: true).perform).to be(false)
+    expect(purchase.reload).to be_in_progress
+  end
+
   it "marks the associated gift and giftee purchase as successful too in case of a successful gift purchase" do
     gift = create(:gift)
     purchase_given = build(:purchase, link: gift.link, gift_given: gift, is_gift_sender_purchase: true, chargeable: create(:chargeable), purchase_state: "in_progress")

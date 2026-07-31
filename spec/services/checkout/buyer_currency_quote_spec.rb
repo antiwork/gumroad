@@ -251,6 +251,33 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to be_nil
     end
 
+    # The charge path exempts a card-saving checkout from the buyer-currency fallback only when
+    # every purchase on it is a plain membership. Minting a token for a mixed cart here would
+    # not degrade to dollars at the till: the charge refuses a token it cannot honour and raises
+    # BuyerCurrencyQuoteInvalid, so the buyer could not complete that checkout at all.
+    context "for a cart mixing a membership with a one-off, with the seller in the subscription ramp" do
+      before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller) }
+
+      let(:membership) { create(:subscription_product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD) }
+
+      it "withholds the quote, so the whole cart is displayed and charged in canonical dollars" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        result = described_class.create(line_items: line_items_for(membership, product),
+                                        canonical_total_cents: 20_00, ip: "24.48.0.1")
+
+        expect(result).to be_nil
+      end
+
+      it "still quotes a membership bought on its own, which the charge path does honour" do
+        result = described_class.create(line_items: line_items_for(membership),
+                                        canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result).to be_present
+        expect(result.currency).to eq(Currency::CAD)
+      end
+    end
+
     it "returns nil instead of reporting an error when a line item carries no product" do
       orphan_line = described_class::LineItem.new(
         permalink: "gone", product: nil,
@@ -745,6 +772,114 @@ describe Checkout::BuyerCurrencyQuote do
       result = described_class.create(line_items: line_items_for(product.reload), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
+    end
+
+    context "when the later-charge ramp is on" do
+      before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller) }
+
+      after { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller) }
+
+      it "signs the first installment separately from the full agreement" do
+        create(:product_installment_plan, link: product, number_of_installments: 3)
+        line_item = described_class::LineItem.new(
+          permalink: product.unique_permalink,
+          product: product.reload,
+          price_cents: 10_00,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0,
+          charge_price_cents: 3_34,
+          charge_tip_cents: 0,
+          charge_seller_tax_cents: 0,
+          charge_gumroad_tax_cents: 0,
+          charge_shipping_cents: 0,
+          later_charge_kind: "installment",
+          later_charge_price_cents: 3_33
+        )
+
+        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_00, ip: "24.48.0.1")
+        verified = described_class.verify!(
+          token: result.token,
+          seller:,
+          merchant_account:,
+          currency: Currency::CAD,
+          canonical_total_cents: 3_34,
+          canonical_line_items: [{ permalink: product.unique_permalink, total_cents: 3_34 }],
+          later_charge_canonical_line_items: [{ permalink: product.unique_permalink, canonical_price_cents: 3_33 }]
+        )
+
+        expect(result).to have_attributes(presentment_total_cents: 12_50, charge_presentment_total_cents: 4_18)
+        expect(verified).to have_attributes(canonical_total_cents: 3_34, presentment_total_cents: 4_18, rounding_delta_cents: 0)
+      end
+
+      it "signs a commission deposit separately from its full agreement" do
+        seller.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+        commission_product = create(:commission_product, user: seller, price_cents: 10_00)
+        line_item = described_class::LineItem.new(
+          permalink: commission_product.unique_permalink,
+          product: commission_product,
+          price_cents: 10_00,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0,
+          charge_price_cents: 5_00,
+          charge_tip_cents: 0,
+          charge_seller_tax_cents: 0,
+          charge_gumroad_tax_cents: 0,
+          charge_shipping_cents: 0,
+          later_charge_kind: "commission",
+          later_charge_price_cents: 5_00
+        )
+
+        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(presentment_total_cents: 12_50, charge_presentment_total_cents: 6_25)
+      end
+
+      it "signs a preorder agreement without an initial charge" do
+        product.update!(is_in_preorder_state: true)
+        line_item = described_class::LineItem.new(
+          permalink: product.unique_permalink,
+          product:,
+          price_cents: 10_00,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0,
+          charge_price_cents: 0,
+          charge_tip_cents: 0,
+          charge_seller_tax_cents: 0,
+          charge_gumroad_tax_cents: 0,
+          charge_shipping_cents: 0,
+          later_charge_kind: "preorder",
+          later_charge_price_cents: 10_00
+        )
+
+        result = described_class.create(line_items: [line_item], canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+        expect(result).to have_attributes(presentment_total_cents: 12_50, charge_presentment_total_cents: 0)
+      end
+
+      it "keeps partial-charge products to a single line" do
+        create(:product_installment_plan, link: product, number_of_installments: 3)
+        installment = described_class::LineItem.new(
+          **line_items_for(product.reload).sole.to_h,
+          charge_price_cents: 3_34,
+          later_charge_kind: "installment",
+          later_charge_price_cents: 3_33
+        )
+        second_product = create(:product, user: seller, price_cents: 5_00)
+
+        expect(
+          described_class.create(
+            line_items: [installment, line_items_for(second_product).sole],
+            canonical_total_cents: 15_00,
+            ip: "24.48.0.1"
+          )
+        ).to be_nil
+      end
     end
 
     it "returns nil for buyer currencies Gumroad stores in different minor units than Stripe charges" do

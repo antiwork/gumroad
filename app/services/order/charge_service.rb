@@ -2,6 +2,7 @@
 
 class Order::ChargeService
   include Events, Order::ResponseHelpers
+  include CurrencyHelper
 
   attr_accessor :order, :params, :charge_intent, :setup_intent, :charge_responses
 
@@ -133,9 +134,12 @@ class Order::ChargeService
 
   def setup_for_future_charges_without_charging(purchases, chargeable, card_already_saved)
     merchant_account = purchases.first.merchant_account
+    locked_quote = locked_setup_buyer_currency_quote(purchases:, merchant_account:, chargeable:)
+    return if locked_quote == false
 
     if merchant_account.stripe_charge_processor? && !card_already_saved
       mandate_options = mandate_options_for_stripe(purchases:, with_currency: true)
+      mandate_options = mandate_options_in_setup_currency(mandate_options, locked_quote)
       self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 
       if setup_intent.present?
@@ -145,6 +149,7 @@ class Order::ChargeService
           purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if purchase.credit_card&.requires_mandate?
 
           if setup_intent.succeeded?
+            fix_setup_later_charge_presentment(purchase, locked_quote)
             # Indian cards register an RBI e-mandate on this setup intent; renewals reference it.
             # If Stripe completed the setup without creating a Mandate object, every future
             # off-session renewal will be declined by the issuer — report it now rather than
@@ -163,6 +168,7 @@ class Order::ChargeService
             end
             mark_setup_future_charges_successful(purchase)
           elsif setup_intent.requires_action?
+            fix_setup_later_charge_presentment(purchase, locked_quote)
             # Check back later to see if the purchase has been completed. If not, transition to a failed state.
             FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
           else
@@ -172,9 +178,66 @@ class Order::ChargeService
       end
     else
       purchases.each do |purchase|
+        fix_setup_later_charge_presentment(purchase, locked_quote)
         mark_setup_future_charges_successful(purchase)
       end
     end
+  end
+
+  def locked_setup_buyer_currency_quote(purchases:, merchant_account:, chargeable:)
+    quote_token = params[:buyer_currency_quote].presence if merchant_account&.stripe_charge_processor?
+    return if quote_token.blank?
+
+    seller = purchases.first.seller
+    decision = Checkout::BuyerCurrencyEligibility.new(
+      order:,
+      seller:,
+      merchant_account:,
+      chargeable:,
+      purchases:,
+      params:,
+      setup_future_charges: true,
+      off_session: false
+    ).decision
+    raise Checkout::BuyerCurrencyQuote::InvalidToken, "charge-time eligibility fallback (#{decision.fallback_reason})" unless decision.eligible?
+
+    Checkout::BuyerCurrencyQuote.verify!(
+      token: quote_token,
+      seller:,
+      merchant_account:,
+      currency: decision.currency,
+      canonical_total_cents: 0,
+      canonical_line_items: [],
+      later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases)
+    )
+  rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
+    Rails.logger.info("Buyer currency setup quote rejected for order #{order.id}: #{e.message}")
+    purchases.each do |purchase|
+      purchase.errors.add(:base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+    end
+    false
+  end
+
+  def fix_setup_later_charge_presentment(purchase, locked_quote)
+    return if locked_quote.blank?
+
+    Purchase::FixLaterChargePresentmentService.new(purchase:, locked_quote:).perform
+  end
+
+  def mandate_options_in_setup_currency(mandate_options, locked_quote)
+    return mandate_options if mandate_options.blank? || locked_quote.blank?
+
+    canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
+    return mandate_options if canonical_cap_cents.blank? || !locked_quote.fx_rate&.positive?
+
+    presentment_cap_cents = (
+      BigDecimal(canonical_cap_cents.to_s) / subunit_to_unit(Currency::USD) /
+        locked_quote.fx_rate * subunit_to_unit(locked_quote.currency)
+    ).ceil
+    inner = mandate_options[:payment_method_options][:card][:mandate_options]
+              .merge(amount: presentment_cap_cents, currency: locked_quote.currency)
+    mandate_options.deep_merge(payment_method_options: { card: { mandate_options: inner } })
   end
 
   def mark_setup_future_charges_successful(purchase)
