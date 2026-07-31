@@ -52,6 +52,16 @@ describe UpdatePurchaseHealthcheckThresholdJob do
     expect(ttl).to be <= described_class::THRESHOLD_TTL.to_i
   end
 
+  it "bounds the until_executed lock so a SIGKILLed run cannot mute the refresh forever" do
+    lock_ttl = described_class.sidekiq_options["lock_ttl"]
+
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+    expect(lock_ttl).to be_present
+    # Must expire well before the threshold key it refreshes, or a stranded lock
+    # takes the healthcheck down with it.
+    expect(lock_ttl).to be < described_class::THRESHOLD_TTL.to_i
+  end
+
   it "counts only successful purchases inside the baseline window" do
     create(:purchase, purchase_state: "successful", created_at: 1.day.ago - 5.minutes)
     create(:purchase, purchase_state: "successful", created_at: 1.day.ago - 30.minutes)

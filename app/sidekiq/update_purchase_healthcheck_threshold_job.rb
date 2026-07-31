@@ -8,8 +8,6 @@
 # quiet through ordinary overnight troughs a static threshold must be sized for.
 class UpdatePurchaseHealthcheckThresholdJob
   include Sidekiq::Job
-  sidekiq_options retry: 0, queue: :critical, lock: :until_executed
-
   BASELINE_DAYS = 7
   BASELINE_FRACTION = 0.5
   WINDOW = 10.minutes
@@ -18,6 +16,18 @@ class UpdatePurchaseHealthcheckThresholdJob
   MIN_THRESHOLD = 100
   # Survives ~6 missed runs, then the endpoint fails closed on the absent key.
   THRESHOLD_TTL = 1.hour
+
+  # A SIGKILL (OOM, deploy pod reap) skips the `ensure` that releases an
+  # `until_executed` lock, and this job's digest is constant because it takes no
+  # arguments — so one stranded lock silently drops every subsequent enqueue
+  # (gumroad-private#1576). That failure is worse here than elsewhere: the
+  # threshold key then expires and the healthcheck it feeds goes quiet in exactly
+  # the conditions that kill workers. Bounded above a slow run (seven windowed
+  # COUNTs on purchases) and far below THRESHOLD_TTL, so a strand costs a couple
+  # of refreshes rather than the page.
+  LOCK_TTL = 2.minutes
+
+  sidekiq_options retry: 0, queue: :critical, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
   def perform
     now = Time.current
