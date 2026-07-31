@@ -663,6 +663,14 @@ describe AffiliatedProductsPresenter do
       expect(props[:stats][:total_affiliated_creators]).to eq(1)
       expect(props[:affiliated_products].map { _1[:product_name] }).not_to include("Removal Product")
     end
+
+    it "reports account-wide stats while a search narrows the listing" do
+      props = described_class.new(affiliate_user, query: "Removal").affiliated_products_page_props
+
+      expect(props[:affiliated_products].map { _1[:product_name] }).to eq(["Removal Product"])
+      expect(props[:stats][:total_products]).to eq(2)
+      expect(props[:stats][:total_affiliated_creators]).to eq(2)
+    end
   end
 
   describe "#archived_tab_visible" do

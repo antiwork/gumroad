@@ -90,6 +90,10 @@ class AffiliatedProductsPresenter
     end
 
     def stats
+      # Unfiltered on purpose: these are the account's headline totals, not a description of the
+      # current search. The destroy response repaints them, so a removal made while a search is
+      # active would otherwise show the filtered counts as the account totals.
+      scope = affiliated_products_scope(filtered: false)
       {
         # A plain indexed gross sum of every affiliate credit the user has
         # earned — the same population as `total_sales` right below, so the two
@@ -104,11 +108,11 @@ class AffiliatedProductsPresenter
         # unique link ids in Ruby. For affiliates promoting thousands of
         # products, that unbounded grouped query took multiple seconds and was
         # the main source of slow requests on this page.
-        total_products: affiliated_products_scope.distinct.count("affiliates_links.link_id"),
+        total_products: scope.distinct.count("affiliates_links.link_id"),
         # Derived from the same alive scope as the list rather than User#affiliated_creators, so the
         # count always matches the table: that association walks every affiliate row including
         # soft-deleted ones and collaborations, and does not filter deleted or banned products.
-        total_affiliated_creators: affiliated_products_scope.distinct.count("links.user_id"),
+        total_affiliated_creators: scope.distinct.count("links.user_id"),
       }
     end
 
@@ -146,13 +150,13 @@ class AffiliatedProductsPresenter
     # not banned) products, filtered by the optional search query. It carries
     # no aggregation, so callers that only need a count don't pay for the
     # revenue/sales grouping.
-    def affiliated_products_scope
+    def affiliated_products_scope(filtered: true)
       scope = ProductAffiliate.
         joins(:product).
         joins(:affiliate).
         where(affiliate_id: Affiliate.direct_or_global_affiliates.alive.where(affiliate_user_id: user.id).pluck(:id)).
         where(links: { deleted_at: nil, banned_at: nil })
-      scope = scope.where("links.name LIKE :query", query: "%#{query.strip}%") if query
+      scope = scope.where("links.name LIKE :query", query: "%#{query.strip}%") if filtered && query
       scope
     end
 

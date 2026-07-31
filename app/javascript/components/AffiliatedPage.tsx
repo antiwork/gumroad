@@ -99,6 +99,7 @@ type AffiliatedProductsTableProps = {
     stats: AffiliatedPageStats;
   }) => void;
   query: string;
+  cancelPendingLoad: () => void;
   isLoading: boolean;
 };
 
@@ -110,6 +111,7 @@ const AffiliatedProductsTable = ({
   loadAffiliatedProducts,
   onAffiliationRemoved,
   query,
+  cancelPendingLoad,
   isLoading,
 }: AffiliatedProductsTableProps) => {
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
@@ -124,6 +126,9 @@ const AffiliatedProductsTable = ({
   const removeAffiliation = async (product: AffiliatedProduct) => {
     if (product.affiliate_id === null) return;
     try {
+      // A search or sort GET still in flight would resolve after this and repaint the removed rows
+      // back in.
+      cancelPendingLoad();
       setRemoving({ product, inFlight: true });
       const {
         affiliated_products: affiliatedProducts,
@@ -379,6 +384,11 @@ const AffiliatedPage = ({
                     setState((prevState) => ({ ...prevState, affiliatedProducts, pagination, stats }))
                   }
                   query={state.query}
+                  cancelPendingLoad={() => {
+                    debouncedLoadAffiliatedProducts.cancel();
+                    activeRequest.current?.cancel();
+                    activeRequest.current = null;
+                  }}
                   isLoading={isLoading}
                 />
               )}
