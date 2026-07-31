@@ -1507,15 +1507,16 @@ export default function PaymentsPage() {
               />
             )}
           </section>
-          {selectedPayoutMethod !== "stripe" ? (
-            <LegalGuardianSection
-              legalGuardian={props.legal_guardian}
-              sellerCountry={props.user.country_code}
-              states={guardianStates}
-              isFormDisabled={props.is_form_disabled}
-              onSaved={refreshLegalGuardian}
-            />
-          ) : null}
+          {/* Not tied to the selected payout tab: the guardian requirement is a property of the
+              seller, not of the rail they picked, and the presenter already decides who is asked.
+              Gating it on a tab hid the form from exactly the sellers the payout gate blocks. */}
+          <LegalGuardianSection
+            legalGuardian={props.legal_guardian}
+            sellerCountry={props.user.country_code}
+            states={guardianStates}
+            isFormDisabled={props.is_form_disabled}
+            onSaved={refreshLegalGuardian}
+          />
           {selectedPayoutMethod !== "stripe" && props.can_manage_beneficial_owners ? (
             <BeneficialOwnersSection
               countries={props.countries}

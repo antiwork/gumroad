@@ -372,6 +372,36 @@ describe Payouts do
         expect(described_class.is_user_payable(seller, payout_date, from_admin: true)).to be(true)
       end
 
+      # There is no Gumroad-managed account for a guardian to go on, the payout settings page offers
+      # these sellers no form, and Stripe verifies the account under its own agreement with them. So
+      # blocking here would strand them with nothing to do — the one outcome this gate must not
+      # cause, and the reason the presenter exempts the same sellers.
+      it "pays out a minor with no guardian who is paid through their own connected Stripe account" do
+        seller = minor_seller
+        allow(seller).to receive(:has_stripe_account_connected?).and_return(true)
+        allow(seller).to receive(:stripe_connect_account).and_return(
+          double(is_a_brazilian_stripe_connect_account?: false)
+        )
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(true)
+      end
+
+      # The guardian gate sits ahead of the others, so folding the seller's OWN details into it
+      # would blame the guardian for a missing tax id and, because the note does not repeat,
+      # permanently withhold the one naming the field they are actually missing.
+      it "does not blame the guardian when the seller's own details are what is incomplete" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller)
+        compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+        compliance_info.update_columns(individual_tax_id: nil)
+
+        described_class.is_user_payable(seller.reload, payout_date, add_comment: true)
+
+        expect(seller.comments.with_type_payout_note.last&.content.to_s)
+          .not_to include("sellers under 18 need a legal guardian")
+      end
+
       describe "the note the seller reads" do
         it "tells a minor to add a guardian, visibly" do
           seller = minor_seller

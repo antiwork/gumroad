@@ -16,38 +16,21 @@ class Settings::GuardiansController < Settings::BaseController
   before_action :ensure_guardian_required
 
   def create
-    guardian = current_seller.guardians.build(guardian_params)
-    apply_sellers_country(guardian)
-    accept_terms(guardian)
+    # A second create is the seller's second click, or a stale tab, not a request for a second
+    # guardian: the compliance record holds exactly one and repointing it is refused. Treated as an
+    # edit of the one already attached, so the retry succeeds instead of 500ing and leaving an
+    # orphaned row holding an adult's identity details.
+    existing = current_seller.alive_user_compliance_info&.guardian
+    return save_guardian(existing) if existing&.alive?
 
-    unless guardian.save
-      return render json: { error: guardian.errors.full_messages.to_sentence }, status: :unprocessable_entity
-    end
-
-    attach_to_compliance_info!(guardian)
-    log_payout_settings_update_by_non_owner("Legal guardian added")
-    render json: { guardian: GuardianPresenter.new(guardian).props }, status: :created
+    save_guardian(current_seller.guardians.build, status: :created)
   end
 
   def update
     guardian = current_seller.guardians.alive.find_by_external_id(params[:id])
     return head :not_found if guardian.nil?
 
-    guardian.assign_attributes(guardian_params)
-    apply_sellers_country(guardian)
-    accept_terms(guardian)
-
-    unless guardian.save
-      return render json: { error: guardian.errors.full_messages.to_sentence }, status: :unprocessable_entity
-    end
-
-    # A guardian edited after being attached is still the attached guardian, so this re-attach is
-    # normally a no-op. It matters for the one case where it is not: a seller whose live compliance
-    # revision was replaced (any payout-settings save does that) between adding the guardian and
-    # editing them, which would otherwise leave the new revision pointing at no guardian.
-    attach_to_compliance_info!(guardian)
-    log_payout_settings_update_by_non_owner("Legal guardian updated")
-    render json: { guardian: GuardianPresenter.new(guardian).props }
+    save_guardian(guardian)
   end
 
   private
@@ -55,12 +38,48 @@ class Settings::GuardiansController < Settings::BaseController
       super([:settings, :payments, current_seller], :update?)
     end
 
+    def save_guardian(guardian, status: :ok)
+      guardian.assign_attributes(guardian_params)
+      apply_sellers_country(guardian)
+      accept_terms(guardian)
+
+      # One transaction so a refused attach cannot leave a saved guardian nothing points at — a row
+      # holding an adult's name, date of birth, address and tax id that no surface would ever show
+      # the seller again.
+      saved =
+        begin
+          ActiveRecord::Base.transaction do
+            raise ActiveRecord::Rollback unless guardian.save
+
+            attach_to_compliance_info!(guardian)
+            true
+          end
+        rescue ActiveRecord::RecordInvalid => e
+          guardian.errors.add(:base, e.record.errors.full_messages.to_sentence)
+          false
+        end
+
+      unless saved
+        return render json: { error: guardian.errors.full_messages.to_sentence }, status: :unprocessable_entity
+      end
+
+      # The reason this is here rather than on a model callback: attaching a guardian mutates the
+      # live compliance revision in place, so none of the revision-created paths that normally sync
+      # an account fire. Without this the seller is told they are done and Stripe never learns the
+      # guardian exists, leaving the requirement that stopped their payouts unmet.
+      SyncGuardianToStripeJob.perform_async(current_seller.id) if guardian.has_completed_info?
+
+      log_payout_settings_update_by_non_owner(status == :created ? "Legal guardian added" : "Legal guardian updated")
+      render json: { guardian: GuardianPresenter.new(guardian.reload).props }, status:
+    end
+
     # Only a seller our payment partner will actually accept a guardian for can add one. Asking
     # anyone else would collect an adult's identity details we have no lawful use for and cannot
     # send anywhere — see UserComplianceInfo#requires_legal_guardian?, which is also what decides
     # whether the form is offered.
     def ensure_guardian_required
-      return if current_seller.alive_user_compliance_info&.requires_legal_guardian?
+      return if !current_seller.has_stripe_account_connected? &&
+                current_seller.alive_user_compliance_info&.requires_legal_guardian?
       render json: { error: "A legal guardian isn't required on this account." }, status: :forbidden
     end
 

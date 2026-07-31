@@ -1584,5 +1584,31 @@ describe SettingsPresenter do
       expect(props[:guardian]).to be_nil
       expect(props[:blocking_payouts]).to be(true)
     end
+
+    # The gate exempts these sellers, so the page must not ask them either — a form here would
+    # collect an adult's identity details for a verification we cannot perform, and an ask the
+    # payout gate does not enforce is the mirror image of the stranding this pairing prevents.
+    it "never asks a seller paid through their own connected Stripe account" do
+      create(:user_compliance_info, user: seller, birthday: minor_birthday)
+      allow_any_instance_of(User).to receive(:has_stripe_account_connected?).and_return(true)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(false)
+      expect(props[:unsupported]).to be(false)
+      expect(props[:blocking_payouts]).to be(false)
+    end
+
+    # Their route is picking a country, not waiting to turn 18 — the country modal is already
+    # asking them to. Telling them payouts start at 18 would be wrong the moment they choose US.
+    it "neither asks nor writes off a seller aged 13-17 with no country on file yet" do
+      compliance_info = create(:user_compliance_info, user: seller, birthday: minor_birthday)
+      compliance_info.update_columns(country: nil, country_code: nil)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(false)
+      expect(props[:unsupported]).to be(false)
+    end
   end
 end

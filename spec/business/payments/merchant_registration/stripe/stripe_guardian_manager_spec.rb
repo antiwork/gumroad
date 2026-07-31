@@ -51,7 +51,7 @@ describe StripeGuardianManager do
           line1: "address_full_match",
           line2: nil,
           city: "San Francisco",
-          state: "California",
+          state: "CA",
           postal_code: "94107",
           country: "US"
         }

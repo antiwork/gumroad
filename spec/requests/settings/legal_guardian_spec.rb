@@ -10,8 +10,8 @@ require "spec_helper"
 # available if the form does not render for exactly the sellers it must. A request spec would pass
 # with the section conditioned out of the page.
 describe("Legal guardian payout setup", type: :system, js: true) do
-  # 15 today, derived from the current date. A literal birthday would age past 18 and turn every
-  # example here into an adult-seller example that silently asserts nothing.
+  # 15 today: a literal birthday ages past 18 and every example here would quietly become an
+  # adult-seller example asserting nothing.
   let(:minor_birthday) { 15.years.ago.to_date }
   let(:seller) { create(:user, name: "Ari") }
 
@@ -78,15 +78,16 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       expect(page).to have_alert(text: "Your legal guardian's details are saved")
 
       guardian = seller.guardians.alive.sole
-      # All three, because our payment partner takes them together and drops the whole acceptance
-      # block if any is missing — leaving an account that looks ready here and stalls there.
       expect(guardian.stripe_tos_accepted).to be(true)
       expect(guardian.stripe_tos_accepted_at).to be_present
       expect(guardian.stripe_tos_ip).to be_present
       expect(guardian.has_accepted_terms?).to be(true)
     end
 
-    it "keeps payouts blocked when the guardian is saved without accepting the terms" do
+    # The sibling's position, kept: the guardian is a third party who may not be at the keyboard, so
+    # the save goes through and the alert names the terms as what is still holding payouts. Blocking
+    # it would throw away everything the seller just typed on someone else's behalf.
+    it "saves without the terms but says they are what is holding payouts" do
       visit settings_payments_path
 
       fill_in "Guardian's first name", with: "Dana"
@@ -104,6 +105,12 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       expect(page).to have_text("Your payouts are on hold until your guardian's details are complete")
       expect(seller.guardians.alive.sole.has_completed_info?).to be(false)
       expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(false)
+
+      check "My guardian has read and accepts the Stripe Connected Account Agreement."
+      click_on "Save guardian"
+
+      expect(page).to have_alert(text: "Your legal guardian's details are saved")
+      expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(true)
     end
 
     it "rejects a guardian who is under 18 themselves" do

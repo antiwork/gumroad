@@ -61,9 +61,6 @@ class Payouts
     # payment partner stop payouts on a minor's account in the first place. A seller who is also
     # paused for an unrelated reason loses nothing by reading this first — they have to add the
     # guardian either way, and the pause note returns once they have.
-    #
-    # from_admin is honoured for the same reason every other gate here honours it: support releasing
-    # a specific balance by hand has already made the judgement this predicate exists to automate.
     unless from_admin || guardian_requirement_met?(user)
       add_guardian_requirement_note(user, payout_date) if add_comment
       return false
@@ -258,13 +255,22 @@ class Payouts
   #
   # Reads the seller's LIVE compliance revision. No revision at all is not treated as a guardian
   # problem — such a seller has no birthday on file, so nothing says they are a minor, and their
-  # missing details are the other gates' business.
+  # missing details are the other gates' business. Same for the seller's own details being
+  # incomplete: this gate answers the guardian question only, so the note naming the field they are
+  # really missing still gets written by the gate that owns it.
+  #
+  # A seller paid through a Stripe account they connected themselves is exempt. There is no
+  # Gumroad-managed account for a guardian to go on, the payout settings page offers them no form,
+  # and Stripe verifies that account under its own agreement with them — so blocking here would
+  # strand them with no action available, which is the one outcome this requirement must not cause.
   def self.guardian_requirement_met?(user)
+    return true if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
+
     compliance_info = user.alive_user_compliance_info
     return true if compliance_info.nil?
     return true unless compliance_info.under_legal_guardian_age?
 
-    compliance_info.has_completed_payout_compliance_info?
+    compliance_info.legal_guardian_requirement_met?
   end
   private_class_method :guardian_requirement_met?
 

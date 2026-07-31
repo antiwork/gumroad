@@ -24,7 +24,7 @@ describe Settings::GuardiansController, type: :controller do
         date_of_birth: "1984-06-02",
         street_address: "1 Market St",
         city: "San Francisco",
-        state: "California",
+        state: "CA",
         zip_code: "94107",
         individual_tax_id: "000000000",
         accept_terms: "true",
@@ -115,6 +115,64 @@ describe Settings::GuardiansController, type: :controller do
         expect(response.parsed_body["error"]).to include("must be at least 18 years old")
         expect(seller.guardians.alive).to be_empty
       end
+
+      # Nothing else sends the guardian to our payment partner. Attaching one mutates the live
+      # compliance revision in place, so none of the revision-created paths that sync an account
+      # fire — without this enqueue the seller is told they are done and the requirement that
+      # stopped their payouts is never satisfied.
+      it "sends the completed guardian to our payment partner" do
+        expect do
+          post :create, params: valid_params, format: :json
+        end.to change { SyncGuardianToStripeJob.jobs.size }.by(1)
+
+        expect(SyncGuardianToStripeJob.jobs.last["args"]).to eq([seller.id])
+      end
+
+      it "sends nothing while the guardian is still incomplete" do
+        expect do
+          post :create, params: valid_params.deep_merge(guardian: { accept_terms: "false" }), format: :json
+        end.not_to change { SyncGuardianToStripeJob.jobs.size }
+      end
+
+      # A double-click, or a stale second tab. The compliance record holds one guardian and refuses
+      # to be repointed, so the naive second create 500s and leaves an unattached row holding an
+      # adult's name, date of birth, address and tax id that no surface would ever show again.
+      it "treats a second create as an edit of the guardian already attached" do
+        post :create, params: valid_params, format: :json
+        first = seller.guardians.alive.sole
+
+        post :create, params: valid_params.deep_merge(guardian: { city: "Berkeley" }), format: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(seller.reload.guardians.alive.sole).to eq(first)
+        expect(first.reload.city).to eq("Berkeley")
+      end
+
+      # The rollback that keeps a refused attach from stranding the row.
+      it "saves no guardian at all when the attach is refused" do
+        allow_any_instance_of(UserComplianceInfo)
+          .to receive(:update!).and_raise(ActiveRecord::RecordInvalid.new(seller.alive_user_compliance_info))
+
+        expect do
+          post :create, params: valid_params, format: :json
+        end.not_to change { Guardian.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+    end
+
+    # Exempt for the same reason the payout gate exempts them: there is no Gumroad-managed account
+    # for a guardian to go on, so collecting one would take an adult's identity details for a
+    # verification we cannot perform. The page offers them no form either, which is what keeps the
+    # blocked set and the asked set identical.
+    it "refuses a seller paid through their own connected Stripe account" do
+      create(:user_compliance_info, user: seller, birthday: minor_birthday)
+      allow_any_instance_of(User).to receive(:has_stripe_account_connected?).and_return(true)
+
+      post :create, params: valid_params, format: :json
+
+      expect(response).to have_http_status(:forbidden)
+      expect(seller.guardians).to be_empty
     end
 
     # The gate that keeps an adult's identity details from being collected where they can serve no

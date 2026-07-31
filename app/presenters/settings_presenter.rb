@@ -313,6 +313,14 @@ class SettingsPresenter
     def legal_guardian_details(user_compliance_info)
       guardian = user_compliance_info.guardian
 
+      # A seller paid through a Stripe account they connected themselves is never asked. There is no
+      # Gumroad-managed account for a guardian to go on and Stripe verifies that account under its
+      # own agreement with them — which is also why Payouts.is_user_payable exempts them, so the set
+      # of sellers the gate blocks and the set this form is offered to stay the same set.
+      if seller.has_stripe_account_connected?
+        return { required: false, unsupported: false, blocking_payouts: false, guardian: nil }
+      end
+
       required = user_compliance_info.requires_legal_guardian?
       unsupported = user_compliance_info.legal_guardian_unsupported?
 
@@ -323,10 +331,10 @@ class SettingsPresenter
         # held up at all. A seller who has filled in nothing yet is unpayable for reasons that have
         # nothing to do with a guardian, and this flag drives guardian copy only.
         #
-        # Read through has_completed_payout_compliance_info?, the same predicate the payout gate
-        # reads, rather than recomputed from the two flags above, so the page cannot tell a seller
-        # their guardian is sorted while Payouts.is_user_payable disagrees.
-        blocking_payouts: (required || unsupported) && !user_compliance_info.has_completed_payout_compliance_info?,
+        # Read through legal_guardian_requirement_met?, the same predicate the payout gate reads,
+        # rather than recomputed from the two flags above, so the page cannot tell a seller their
+        # guardian is sorted while Payouts.is_user_payable disagrees.
+        blocking_payouts: !user_compliance_info.legal_guardian_requirement_met?,
         guardian: guardian.present? && guardian.alive? ? GuardianPresenter.new(guardian).props : nil,
       }
     end
