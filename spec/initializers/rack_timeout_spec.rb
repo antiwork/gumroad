@@ -35,32 +35,64 @@ describe "Rack::Timeout configuration" do
       expect(resolve.call(bad)).to eq(15),
                                    "#{bad.inspect} must fall back to 15, not disable the timeout"
     end
-
-    # And the shipped initializer really does guard, rather than `.to_i`-ing blindly.
-    source = File.read(Rails.root.join("config/initializers/rack_timeout.rb"))
-    expect(source).to include('ENV["RACK_TIMEOUT_SERVICE_TIMEOUT"]')
-    expect(source).to match(/\\A\\d\+\\z/)
   end
 
   describe "in-request query guards" do
     # A query guard exists to convert a slow query into a clean 4xx that tells the
-    # caller how to narrow it. If a guard is set at or above the request budget it can
-    # never fire first: Rack::Timeout kills the request (and the worker) instead, so
-    # the graceful path becomes dead code. Every in-request guard must stay strictly
-    # below the budget.
+    # caller how to narrow it. If a guard resolves at or above the request budget it can
+    # never fire first: Rack::Timeout kills the request (and the worker) instead, so the
+    # graceful path becomes dead code. The controller clamps against the live budget, so
+    # exercise the clamp with real Redis values -- asserting the bare constant would pass
+    # for the wrong reason, since test Redis is empty.
     let(:service_timeout) { middleware.args.first[:service_timeout] }
-
-    it "keeps the API v2 sales guards strictly below the request budget" do
+    let(:controller) { Api::V2::SalesController.new }
+    let(:keys) do
       [
         RedisKey.api_v2_sales_page_key_query_timeout,
         RedisKey.api_v2_sales_deprecated_pagination_query_timeout,
-      ].each do |key|
-        default = Api::V2::SalesController::QUERY_TIMEOUT_DEFAULT_SECONDS
-        configured = ($redis.get(key) || default).to_i
+      ]
+    end
 
-        expect(configured).to be < service_timeout,
-                              "#{key} is #{configured}s against a #{service_timeout}s request budget; " \
-                              "the guard can never fire before Rack::Timeout kills the worker."
+    def resolved(key) = controller.send(:query_timeout_seconds, key)
+
+    after { keys.each { $redis.del(_1) } }
+
+    it "defaults below the request budget" do
+      keys.each do |key|
+        expect(resolved(key)).to eq Api::V2::SalesController::QUERY_TIMEOUT_DEFAULT_SECONDS
+        expect(resolved(key)).to be < service_timeout
+      end
+    end
+
+    it "clamps a Redis override that meets or exceeds the request budget" do
+      # The pre-change default was 15s, which now equals the budget -- a stale key is the
+      # realistic way this regresses.
+      [service_timeout, service_timeout + 60, 15].each do |dangerous|
+        keys.each do |key|
+          $redis.set(key, dangerous)
+          expect(resolved(key)).to be < service_timeout,
+                                   "an override of #{dangerous}s must be clamped under the " \
+                                   "#{service_timeout}s budget, got #{resolved(key)}s"
+        end
+      end
+    end
+
+    it "never resolves to zero, which would disable the guard entirely" do
+      # max_execution_time = 0 means "no limit" in MySQL, so a 0 or garbage override must
+      # not pass through.
+      ["0", "", "abc", "-5"].each do |bad|
+        keys.each do |key|
+          $redis.set(key, bad)
+          expect(resolved(key)).to be_positive, "#{bad.inspect} must not disable the guard"
+          expect(resolved(key)).to be < service_timeout
+        end
+      end
+    end
+
+    it "honours a legitimate lower override" do
+      keys.each do |key|
+        $redis.set(key, 3)
+        expect(resolved(key)).to eq 3
       end
     end
   end

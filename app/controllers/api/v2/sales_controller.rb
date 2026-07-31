@@ -13,6 +13,11 @@ class Api::V2::SalesController < Api::V2::BaseController
   # Rack::Timeout service budget so a slow query becomes a 400 explaining how to
   # narrow it, rather than a killed request (and, in production, a killed worker).
   QUERY_TIMEOUT_DEFAULT_SECONDS = 10
+  # Redis lets us retune the cap without a deploy, but an override at or above the
+  # request budget would put the kill back in front of the graceful 400, and a 0 or
+  # unparseable value would disable the guard outright (max_execution_time = 0 means
+  # "no limit"). Clamp both ends rather than trusting the stored value.
+  QUERY_TIMEOUT_MIN_SECONDS = 1
   SALES_API_PRELOADS = [
     :preorder,
     :subscription,
@@ -60,7 +65,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     if params[:page] # DEPRECATED
       filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, root_scope: current_resource_owner.sales)
       begin
-        timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || QUERY_TIMEOUT_DEFAULT_SECONDS).to_i
+        timeout_s = query_timeout_seconds(RedisKey.api_v2_sales_deprecated_pagination_query_timeout)
         WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
           paginated_sales = filtered_sales.for_sales_api.preload(*SALES_API_PRELOADS).limit(RESULTS_PER_PAGE + 1).offset((@page - 1) * RESULTS_PER_PAGE).to_a
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
@@ -97,7 +102,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     # the budget the request is killed instead, which takes the Puma worker with it
     # (RACK_TIMEOUT_TERM_ON_TIMEOUT=1 in production).
     begin
-      timeout_s = ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || QUERY_TIMEOUT_DEFAULT_SECONDS).to_i
+      timeout_s = query_timeout_seconds(RedisKey.api_v2_sales_page_key_query_timeout)
       WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
         paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
         subquery_filters = ->(query) {
@@ -204,6 +209,21 @@ class Api::V2::SalesController < Api::V2::BaseController
   end
 
   private
+    # Resolve the per-query cap, clamped to stay strictly under the live Rack::Timeout
+    # budget. Reads the budget from the installed middleware rather than a duplicated
+    # constant so the two cannot drift.
+    def query_timeout_seconds(redis_key)
+      stored = $redis.get(redis_key)
+      seconds = stored.to_s.match?(/\A\d+\z/) ? stored.to_i : QUERY_TIMEOUT_DEFAULT_SECONDS
+      seconds = QUERY_TIMEOUT_DEFAULT_SECONDS unless seconds.positive?
+
+      middleware = Rails.application.config.middleware.find { _1.klass == Rack::Timeout }
+      budget = middleware&.args&.first&.dig(:service_timeout)
+      seconds = [seconds, budget - 1].min if budget.is_a?(Numeric) && budget.positive?
+
+      [seconds, QUERY_TIMEOUT_MIN_SECONDS].max
+    end
+
     def success_with_sale(sale = nil)
       success_with_object(:sale, sale)
     end
