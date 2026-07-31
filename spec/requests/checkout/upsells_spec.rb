@@ -546,6 +546,29 @@ describe("Checkout upsells page", type: :system, js: true) do
       expect(upsell1.upsell_variants.first.offered_variant).to eq(product1.alive_variants.second)
     end
 
+    it "keeps the upsell and its discount unchanged when the update fails validation" do
+      visit checkout_upsells_path
+
+      find(:table_row, { "Upsell" => "Upsell 1" }).click
+      click_on "Edit"
+
+      find(:label, "Product to offer").click
+      select_combo_box_option search: "Product 2", from: "Product to offer"
+      select_combo_box_option search: "Untitled 1", from: "Version to offer"
+
+      fill_in "Fixed amount", with: "4.50", fill_options: { clear: :backspace }
+
+      click_on "Save"
+
+      expect(page).to have_alert(text: "The price after discount for all of your products must be either $0 or at least $0.99.")
+
+      upsell1.reload
+      expect(upsell1.product).to eq(product1)
+      expect(upsell1.variant).to eq(product1.alive_variants.second)
+      expect(upsell1.offer_code.products).to eq([product1])
+      expect(upsell1.offer_code.amount_cents).to eq(100)
+    end
+
     context "when has archived products" do
       let(:selected_product) { upsell1.selected_products.first }
       let(:product) { upsell1.product }

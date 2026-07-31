@@ -376,6 +376,26 @@ describe Checkout::UpsellsController do
       end
     end
 
+    context "when the updated offer code is invalid for the new product" do
+      it "rolls back the offer code's product reassignment and the variant deletions" do
+        put :update, params: {
+          id: upsell2.external_id,
+          product_id: product1.external_id,
+          offer_code: { amount_cents: 950 },
+        }, as: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error"]).to eq("The price after discount for all of your products must be either $0 or at least $0.99.")
+
+        upsell2.reload
+        expect(upsell2.product).to eq(product2)
+        expect(upsell2.offer_code.products).to eq([product2])
+        expect(upsell2.offer_code.amount_cents).to eq(100)
+        expect(upsell2_variant.reload).to be_alive
+      end
+    end
+
     context "when the offer code doesn't exist" do
       it "returns a 404 error" do
         expect { put :update, params: { id: "" } }.to raise_error(ActiveRecord::RecordNotFound)
