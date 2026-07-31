@@ -166,8 +166,14 @@ describe Products::AffiliatedController, inertia: true do
     end
 
     context "when signed in as a role that cannot end affiliations" do
-      include_context "with user signed in as marketing for seller" do
-        let(:seller) { affiliate_user }
+      # Signed in by hand instead of the role shared context: nesting it inside the outer admin
+      # context would point both `before` hooks at the same member and trip the one-membership-per-
+      # seller validation.
+      before do
+        marketing_member = create(:user)
+        create(:team_membership, user: marketing_member, seller: affiliate_user, role: TeamMembership::ROLE_MARKETING)
+        cookies.encrypted[:current_seller_id] = affiliate_user.id
+        sign_in marketing_member
       end
 
       it "marks no row removable, so the Remove control never renders" do
