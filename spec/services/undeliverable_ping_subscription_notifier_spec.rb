@@ -52,6 +52,20 @@ describe UndeliverablePingSubscriptionNotifier do
       expect($redis.exists?(key)).to be false
     end
 
+    # The reason can change while the enqueue is in flight, and the release has to free the window it
+    # took: re-deriving the key frees one nobody holds and leaves the real one blocking for an hour.
+    it "releases the throttle it took when the reason changes mid-enqueue" do
+      taken = RedisKey.undeliverable_ping_subscription_enqueued(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later) do
+        resource_subscription.update_column(:post_url, nil)
+        raise StandardError
+      end
+
+      expect { described_class.new(resource_subscription).notify }.to raise_error(StandardError)
+
+      expect($redis.exists?(taken)).to be false
+    end
+
     it "does not email about a subscription predating the subscription-cleanup cutover" do
       resource_subscription.update_column(:created_at, described_class::SUBSCRIPTION_CLEANUP_CUTOVER - 1.day)
 

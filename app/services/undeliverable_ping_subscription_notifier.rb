@@ -77,14 +77,18 @@ class UndeliverablePingSubscriptionNotifier
 
   def notify
     return unless resource_subscription.created_at >= SUBSCRIPTION_CLEANUP_CUTOVER
-    return unless throttle_enqueue
+
+    key = throttle_key
+    return unless claim_throttle(key)
 
     begin
       ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_later(queue: "low")
     rescue
       # Nothing was enqueued, so the throttle is holding a window against a render that will never
-      # happen. Unlike the send-once record this key expires, so a failed release self-heals.
-      release_throttle
+      # happen. Release the key we took, not a freshly derived one: the subscription can change under
+      # us, and re-deriving would free a window nobody holds while keeping the one we do. Unlike the
+      # send-once record this key expires, so even a failed release self-heals.
+      release_throttle(key)
       raise
     end
   end
@@ -98,13 +102,13 @@ class UndeliverablePingSubscriptionNotifier
       )
     end
 
-    def release_throttle
-      $redis.del(throttle_key)
+    def release_throttle(key)
+      $redis.del(key)
     rescue => e
       self.class.send(:report, e)
     end
 
-    def throttle_enqueue
-      !!$redis.set(throttle_key, Time.current.to_i, nx: true, ex: ENQUEUE_THROTTLE.to_i)
+    def claim_throttle(key)
+      !!$redis.set(key, Time.current.to_i, nx: true, ex: ENQUEUE_THROTTLE.to_i)
     end
 end
