@@ -362,7 +362,11 @@ class ContactingCreatorMailer < ApplicationMailer
   # The two reasons need opposite advice — fill in a URL, or re-authorize the app that owns the
   # subscription — so the reason reaches the template instead of being flattened to one message.
   def undeliverable_ping_subscription(resource_subscription_id, reason)
-    @resource_subscription = ResourceSubscription.find(resource_subscription_id)
+    @resource_subscription = ResourceSubscription.alive.find_by(id: resource_subscription_id)
+    # Enqueued from the sale path but rendered later, so the seller may have deleted the
+    # subscription in between; saying it is "still listed as active" would then be false.
+    return do_not_send if @resource_subscription.nil?
+
     @seller = @resource_subscription.user
     @application_name = @resource_subscription.oauth_application&.name
     @missing_post_url = reason.to_s == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL

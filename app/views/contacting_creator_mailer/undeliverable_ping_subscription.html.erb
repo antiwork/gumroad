@@ -7,19 +7,26 @@
   </p>
   <% if @missing_post_url %>
     <p>
-      The webhook does not have a URL to send to. Add one and we will start sending
-      <%= @resource_subscription.resource_name %> notifications from your next sale onwards.
+      The webhook does not have a URL to send to. Set one through the application that created it and
+      we will start sending <%= @resource_subscription.resource_name %> notifications from your next
+      sale onwards.
     </p>
   <% else %>
     <p>
-      The application that created this webhook no longer has permission to read your sales, which
-      is required for us to send it. Re-authorize the application and we will start sending
-      <%= @resource_subscription.resource_name %> notifications from your next sale onwards.
+      The application that created this webhook no longer has permission to read your sales, which is
+      required for us to send it. Reconnecting Gumroad inside that application will restore the
+      permission, and <%= @resource_subscription.resource_name %> notifications will resume from your
+      next sale onwards. If you did not expect to hear from it, you can ignore this — nothing else is
+      affected.
     </p>
   <% end %>
   <p>
-    You can review your webhooks and set a notification URL directly under
-    <%= link_to "advanced settings", settings_advanced_url %>, and read how these notifications work
-    on our <%= link_to "ping documentation", ping_url %>.
+    Webhooks like this one are created by the applications you connect, so there is nothing to change
+    in your Gumroad settings. If you would rather send these notifications to your own URL instead,
+    you can set one under <%= link_to "advanced settings", settings_advanced_url %>. Our
+    <%= link_to "ping documentation", ping_url %> explains how they work.
+  </p>
+  <p>
+    Reply to this email if you would like us to remove the webhook for you.
   </p>
 </div>

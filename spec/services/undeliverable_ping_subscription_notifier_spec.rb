@@ -30,22 +30,28 @@ describe UndeliverablePingSubscriptionNotifier do
       end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription).once
     end
 
-    it "sets the claim to expire after the notification interval" do
+    # The seller cannot act on a repeat, so the claim has to outlive any window.
+    it "keeps the claim forever rather than letting it expire into a repeat email" do
       described_class.new(resource_subscription).notify
 
       key = RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
-      expect($redis.ttl(key)).to be_within(60).of(described_class::NOTIFICATION_INTERVAL.to_i)
+      expect($redis.ttl(key)).to eq(-1)
     end
 
-    # Redis TTLs run on wall-clock time, so travel_to cannot expire the claim. Dropping the key is
-    # what the expiry does, and this asserts the seller is told again on the far side of the window.
-    it "emails again once the claim has expired" do
-      described_class.new(resource_subscription).notify
-      $redis.del(RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, described_class::REVOKED_CREDENTIAL))
+    it "does not email about a subscription predating the subscription-cleanup cutover" do
+      resource_subscription.update_column(:created_at, described_class::SUBSCRIPTION_CLEANUP_CUTOVER - 1.day)
 
       expect do
         described_class.new(resource_subscription).notify
-      end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription).once
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription)
+    end
+
+    it "emails about a subscription created on the cutover itself" do
+      resource_subscription.update_column(:created_at, described_class::SUBSCRIPTION_CLEANUP_CUTOVER)
+
+      expect do
+        described_class.new(resource_subscription).notify
+      end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription)
     end
 
     it "still emails for a second reason on the same subscription" do

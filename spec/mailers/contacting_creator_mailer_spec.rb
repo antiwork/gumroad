@@ -1526,7 +1526,7 @@ describe ContactingCreatorMailer do
     let(:oauth_application) { create(:oauth_application, owner: seller, name: "Gumroad Store Agent") }
     let(:resource_subscription) { create(:resource_subscription, oauth_application:, user: seller) }
 
-    it "names the affected webhook and tells a seller with a revoked credential to re-authorize" do
+    it "names the affected webhook and tells a seller with a revoked credential to reconnect" do
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(
         resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
       )
@@ -1535,12 +1535,23 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq "Your sale webhook is not being sent"
       expect(mail.body.encoded).to include "Gumroad Store Agent"
       expect(mail.body.encoded).to include "no longer has permission to read your sales"
-      expect(mail.body.encoded).to include "Re-authorize the application"
-      expect(mail.body.encoded).to include settings_advanced_url
+      expect(mail.body.encoded).to include "Reconnecting Gumroad inside that application"
       expect(mail.body.encoded).not_to include "does not have a URL to send to"
     end
 
-    it "tells a seller with no post URL to add one" do
+    # Resource subscriptions have no seller-facing UI, so advanced settings is offered as the
+    # alternative destination rather than the place to fix this webhook.
+    it "does not tell the seller to change this webhook in their own settings" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.body.encoded).to include "nothing to change"
+      expect(mail.body.encoded).to include "Reply to this email"
+      expect(mail.body.encoded).not_to include "review your webhooks and set a notification URL"
+    end
+
+    it "tells a seller with no post URL to set one through the application that created it" do
       resource_subscription.update_column(:post_url, nil)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(
@@ -1548,16 +1559,31 @@ describe ContactingCreatorMailer do
       )
 
       expect(mail.body.encoded).to include "does not have a URL to send to"
+      expect(mail.body.encoded).to include "through the application that created it"
       expect(mail.body.encoded).not_to include "no longer has permission to read your sales"
     end
 
-    it "does not leak the post URL or any identifier of the seller's account" do
+    # Enqueued on a sale, rendered later: the seller may have removed it in between, and the email
+    # asserts the subscription "is still listed as active".
+    it "sends nothing when the subscription is gone by render time" do
+      resource_subscription.mark_deleted!
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # A small numeric primary key matches inside the footer address, so the identifier worth
+    # asserting on is the one that would actually leak: the subscription's own external id.
+    it "does not leak the post URL or an identifier of the seller's subscription" do
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(
         resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
       )
 
       expect(mail.body.encoded).not_to include resource_subscription.post_url
-      expect(mail.body.encoded).not_to include seller.id.to_s
+      expect(mail.body.encoded).not_to include resource_subscription.external_id
     end
   end
 

@@ -77,4 +77,25 @@ describe PostToPingEndpointsWorker, "undeliverable subscription notifications" d
       3.times { described_class.new.perform(purchase.id, nil) }
     end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription).once
   end
+
+  # This queue is :critical. The notification is a side-feature and must never gate the webhooks
+  # that do work.
+  it "still delivers the working webhooks when notifying raises" do
+    create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
+    deliverable = create(:resource_subscription, oauth_application:, user: seller)
+
+    other_application = create(:oauth_application, owner: seller)
+    broken_token = create("doorkeeper/access_token", application: other_application, resource_owner_id: seller.id, scopes: "view_sales")
+    create(:resource_subscription, oauth_application: other_application, user: seller)
+    broken_token.update!(revoked_at: Time.current)
+
+    allow(UndeliverablePingSubscriptionNotifier).to receive(:notify_all).and_raise(Redis::CannotConnectError)
+    expect(ErrorNotifier).to receive(:notify).with(instance_of(Redis::CannotConnectError))
+
+    expect do
+      described_class.new.perform(purchase.id, nil)
+    end.to change { PostToIndividualPingEndpointWorker.jobs.size }.by(1)
+
+    expect(PostToIndividualPingEndpointWorker.jobs.last["args"].first).to eq(deliverable.post_url)
+  end
 end

@@ -21,8 +21,13 @@ class PostToPingEndpointsWorker
 
     targets = user.ping_notification_targets(resource_name)
     # Notified from the delivery path only. urls_for_ping_notification also backs the can_ping flag
-    # on every sale JSON render, and a read has no business emailing anyone.
-    UndeliverablePingSubscriptionNotifier.notify_all(targets.undeliverable_subscriptions)
+    # on every sale JSON render, and a read has no business emailing anyone. Rescued because this
+    # queue is :critical: a notifier failure must never hold up the webhooks that DO work.
+    begin
+      UndeliverablePingSubscriptionNotifier.notify_all(targets.undeliverable_subscriptions)
+    rescue => e
+      ErrorNotifier.notify(e)
+    end
 
     post_urls = targets.post_urls
     return if post_urls.empty?
