@@ -1,4 +1,4 @@
-Captured output of qa-media/pr-redis-isolation-overlap-probe.sh on this branch, against a
+Captured output of qa-media/pr-6747-redis-isolation-overlap-probe.sh on this branch, against a
 Redis started with 64 databases (`redis-server --databases 64`) on port 6399.
 
 The pairing is a run that HOLDS a lease against a run that SKIPPED leasing and therefore

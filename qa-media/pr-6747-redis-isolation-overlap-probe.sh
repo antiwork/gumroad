@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs qa-media/pr-redis-isolation-overlap-probe.rb as the two-process pair it needs.
+# Runs qa-media/pr-6747-redis-isolation-overlap-probe.rb as the two-process pair it needs.
 # Occupies slot 0 first, so the leased writer lands on a later slot — the pre-fix
 # arithmetic put those on top of the .env.test databases the fallback run flushes.
 set -u
@@ -21,10 +21,10 @@ redis-cli -p "$PORT" -n "$REGISTRY" set "gumroad:test-redis-slot:0" "held-by-pro
 echo "slot 0 held by the probe, so the writer leases a later block"
 
 RUN="overlap-$$"
-RUN_ID="$RUN" ROLE=writer bundle exec ruby qa-media/pr-redis-isolation-overlap-probe.rb 2>/dev/null | grep writer &
+RUN_ID="$RUN" ROLE=writer bundle exec ruby qa-media/pr-6747-redis-isolation-overlap-probe.rb 2>/dev/null | grep writer &
 WRITER=$!
 RUN_ID="$RUN" ROLE=flusher DISABLE_TEST_REDIS_ISOLATION=1 \
-  bundle exec ruby qa-media/pr-redis-isolation-overlap-probe.rb 2>/dev/null | grep flusher
+  bundle exec ruby qa-media/pr-6747-redis-isolation-overlap-probe.rb 2>/dev/null | grep flusher
 wait $WRITER
 
 redis-cli -p "$PORT" -n "$REGISTRY" del "gumroad:test-redis-slot:0" >/dev/null

@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Two-process race harness for gumroad-private#1641. Evidence artifact, not part of the
-# suite — see qa-media/pr-redis-isolation-race-probe.txt for its captured output.
+# suite — see qa-media/pr-6747-redis-isolation-race-probe.txt for its captured output.
 #
 # Boots the real Rails app twice against ONE Redis server, exactly as two concurrent
 # test runs do. The writer stores the key the failing LinkTest depends on; the flusher
@@ -15,8 +15,8 @@
 # has connected — which looks like a pass and proves nothing. The barrier lives on a
 # raw connection to a database no run is assigned, so flushdb cannot clear it.
 #
-#   RUN_ID=x ROLE=writer  bundle exec ruby qa-media/pr-redis-isolation-race-probe.rb &
-#   RUN_ID=x ROLE=flusher bundle exec ruby qa-media/pr-redis-isolation-race-probe.rb
+#   RUN_ID=x ROLE=writer  bundle exec ruby qa-media/pr-6747-redis-isolation-race-probe.rb &
+#   RUN_ID=x ROLE=flusher bundle exec ruby qa-media/pr-6747-redis-isolation-race-probe.rb
 #
 # Add DISABLE_TEST_REDIS_ISOLATION=1 to both to see the pre-fix behavior.
 require_relative "../config/environment"

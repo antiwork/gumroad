@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Overlap probe for the pre-merge review finding on this branch. Evidence artifact, not
-# part of the suite — captured output in qa-media/pr-redis-isolation-overlap-probe.txt.
+# part of the suite — captured output in qa-media/pr-6747-redis-isolation-overlap-probe.txt.
 #
 # The race this branch fixes has a second form the first probe does not reach. A run that
 # SKIPS leasing keeps the .env.test databases and flushes them. If a leased block contains
@@ -17,7 +17,7 @@
 # suites run before every test, once per store IT was given. The writer then reports which
 # of its own databases were erased by a process that never touched its lease.
 #
-#   RUN_ID=x ROLE=writer  bundle exec ruby qa-media/pr-redis-isolation-overlap-probe.rb &
+#   RUN_ID=x ROLE=writer  bundle exec ruby qa-media/pr-6747-redis-isolation-overlap-probe.rb &
 #   RUN_ID=x ROLE=flusher DISABLE_TEST_REDIS_ISOLATION=1 bundle exec ruby ...
 require_relative "../config/environment"
 
