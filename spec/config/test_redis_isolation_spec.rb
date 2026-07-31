@@ -312,16 +312,6 @@ describe TestRedisIsolation do
       expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
     end
 
-    it "skips under spring, whose per-command forks would share one leased block" do
-      env = base_env.dup
-      warnings = StringIO.new
-      allow(described_class).to receive(:spring_preload?).and_return(true)
-
-      expect(install(env, warn_io: warnings)).to be_nil
-      expect(warnings.string).to include("spring")
-      expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
-    end
-
     it "keeps refreshing the lease after a failed tick instead of letting it expire" do
       # If the refresh thread dies, the lease expires mid-run and another run leases the
       # same databases — this file's own race, with nothing to point at. So the rescue has

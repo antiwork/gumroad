@@ -27,6 +27,13 @@ require "socket"
 # across such an edit map the same slot number to different blocks. Change those values
 # and the shared-server runs need to be on the same checkout.
 #
+# Under spring the lease is claimed once per app process, which spring runs per checkout —
+# so separate worktrees still get separate blocks, which is the case this exists for. Its
+# per-command forks share their server's block, so two simultaneous runs in ONE checkout
+# are no more isolated than today; `DISABLE_SPRING=1` gives each its own. The pid guard on
+# the release is what makes this safe: without it the first fork to exit would drop the
+# lease its own server was still using.
+#
 # Capacity is the constraint: 16 databases is one concurrent run, hence
 # `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
 # block this warns and leaves the env vars alone — the fallback block is disjoint from
@@ -58,19 +65,10 @@ module TestRedisIsolation
 
   class << self
     # Rewrites ENV in place. Returns the claimed slot number, or nil when isolation was
-    # skipped (not the test env, opted out, unparseable env, spring, or no free block).
+    # skipped (not the test env, opted out, unparseable env, or no free block).
     def install!(env: ENV, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
       return nil unless env["RAILS_ENV"] == "test" || Rails.env.test?
       return nil if truthy?(env["DISABLE_TEST_REDIS_ISOLATION"])
-
-      # Under a spring server the app boots once and every `bin/rspec` is a fork of it,
-      # sharing the already-open connections — so a lease claimed here would isolate the
-      # server, not the runs, while every concurrent run still shared one block. The
-      # fallback block is disjoint from leased ones either way.
-      if spring_preload?
-        warn_io.puts("[test-redis-isolation] skipped: running under spring, whose forks would share one leased block. Use DISABLE_SPRING=1 to isolate concurrent runs.")
-        return nil
-      end
 
       endpoints = STORE_ENV_VARS.map { |var| parse(env[var]) }
       if endpoints.any?(&:nil?)
@@ -229,12 +227,6 @@ module TestRedisIsolation
         # using, and the token compare cannot tell them apart.
         owner = Process.pid
         at_exit { release_lease(claim) if Process.pid == owner }
-      end
-
-      # True inside a spring server's preloaded application, whose per-command forks would
-      # all share one leased block. Spring only defines this while serving.
-      def spring_preload?
-        defined?(Spring::Application) ? true : false
       end
 
       def truthy?(value)

@@ -6,29 +6,33 @@ flusher db=10 done
 writer db=10 WIPED
 
 ############ AFTER — isolation on ############
-[test-redis-isolation] slot 1 → Redis databases 8, 9, 10, 11 on localhost:6399
-flusher db=8 done
-[test-redis-isolation] slot 0 → Redis databases 4, 5, 6, 7 on localhost:6399
-writer db=4 SURVIVED
+[test-redis-isolation] slot 1 → Redis databases 18, 19, 20, 21 on localhost:6399
+flusher db=18 done
+[test-redis-isolation] slot 0 → Redis databases 14, 15, 16, 17 on localhost:6399
+writer db=14 SURVIVED
 
 
-$ # The Minitest case from the issue, on the fixed branch.
+$ # The Minitest case from the issue, on the fixed branch. bin/rails test goes through
+$ # spring, so this also shows the lease being claimed in a spring app process and the
+$ # stores landing on the leased block (Sidekiq on 15, not the .env.test 11).
 $ bin/rails test test/models/link_test.rb -n "/permalink/"
-Run options: -n /permalink/ --seed 26567
-Sidekiq 7.3.0 connecting to Redis with options {... url: "redis://localhost:6399/5"}
-............................................
-Finished in 13.006046s, 3.3830 runs/s, 7.3043 assertions/s.
+[test-redis-isolation] slot 0 → Redis databases 14, 15, 16, 17 on localhost:6399
+Run options: -n /permalink/ --seed 6121
+Sidekiq 7.3.0 connecting to Redis with options {... url: "redis://localhost:6399/15"}
 44 runs, 95 assertions, 0 failures, 0 errors, 0 skips
 
 
 $ bundle exec rspec spec/config/test_redis_isolation_spec.rb
-Sidekiq 7.3.0 connecting to Redis with options {... url: "redis://localhost:6399/5"}
-.................
-Finished in 5.24 seconds (files took 1 minute 50.15 seconds to load)
-17 examples, 0 failures
+26 examples, 0 failures
+
+$ # Same file against a stock 16-database Redis: the examples that need a real lease
+$ # skip with a reason rather than failing opaquely, because the derived floor (14)
+$ # leaves no assignable block there.
+$ REDIS_HOST="localhost:6379/10" ... bundle exec rspec spec/config/test_redis_isolation_spec.rb
+26 examples, 0 failures, 3 pending
 
 
 $ # The two suites' other Redis stores (Rack::Attack has its own database).
-$ bundle exec rspec spec/requests/rack_attack_spec.rb spec/requests/api/v2/product_rate_limiting_spec.rb
-Finished in 1 minute 25.3 seconds (files took 4.65 seconds to load)
-25 examples, 0 failures
+$ bundle exec rspec spec/config/test_redis_isolation_spec.rb \
+    spec/requests/rack_attack_spec.rb spec/controllers/healthcheck_controller_spec.rb
+74 examples, 0 failures
