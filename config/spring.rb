@@ -13,10 +13,7 @@
   .env.test.local
 ].each { |path| Spring.watch(path) }
 
-# Spring preloads the app once per checkout and forks each command from it, so every
-# command inherits the one Redis block config/test_redis_isolation.rb leased at preload.
-# A fork cannot re-lease: the stores connected before it existed. Registering here makes a
-# second concurrent command say so instead of silently flushing the first one's keys.
-Spring.after_fork do
-  TestRedisIsolation.register_command! if defined?(TestRedisIsolation)
-end
+# Spring preloads once per checkout, so the Redis block leased at boot belongs to the
+# server and every command forked from it would inherit the same one. Re-lease per command,
+# which also has to repoint the stores that connected at boot.
+Spring.after_fork { TestRedisIsolation.reinstall_after_fork! if defined?(TestRedisIsolation) }

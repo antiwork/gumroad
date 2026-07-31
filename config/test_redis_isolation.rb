@@ -27,16 +27,12 @@ require "socket"
 # across such an edit map the same slot number to different blocks. Change those values
 # and the shared-server runs need to be on the same checkout.
 #
-# Under spring the lease is claimed once per app process, which spring runs per checkout —
-# so separate worktrees still get separate blocks, which is the case this exists for. Its
-# per-command forks share their server's block, so two simultaneous runs in ONE checkout
-# are no more isolated than today; `DISABLE_SPRING=1` gives each its own. A fork cannot
-# lease a block of its own, because every store connected at preload against the block the
-# server leased — so `register_command!` (wired up in config/spring.rb) makes the overlap
-# LOUD instead of silent, which is the whole reason the skip paths above warn. The pid
-# guard on the release is what makes the shared lease safe. Note the opt-out below is read
-# at preload too, so under a live spring server it needs `DISABLE_SPRING=1` or a
-# `bin/spring stop` first.
+# Spring preloads the app once per checkout, so a lease claimed at boot belongs to the
+# server. `reinstall_after_fork!` (wired up in config/spring.rb) re-leases per command, so
+# two concurrent commands from one checkout get separate blocks too. The pid guard on the
+# release is what keeps a fork from dropping the lease its server still holds. Note the
+# opt-out below is read at boot, so under a live spring server it needs `DISABLE_SPRING=1`
+# or a `bin/spring stop` first.
 #
 # Capacity is the constraint: 16 databases is one concurrent run, hence
 # `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
@@ -55,10 +51,6 @@ module TestRedisIsolation
   LEASE_TTL_SECONDS = 300
   LEASE_REFRESH_SECONDS = 60
 
-  # Field of the lease's companion hash, which tracks the command processes currently
-  # sharing the block. Only spring forks land in it.
-  COMMANDS_KEY_SUFFIX = ":commands"
-
   # Release and refresh both compare the token first, so a run can never touch a block
   # that expired out from under it and was re-leased by someone else.
   RELEASE_SCRIPT = <<~LUA
@@ -66,22 +58,12 @@ module TestRedisIsolation
     return 0
   LUA
 
-  # KEYS[2] is the companion hash. It has to ride the same tick as the lease: a command
-  # can outlive the hash's TTL, and once its field is gone the next fork sees an empty
-  # hash and warns about nothing while both flush the same databases.
   REFRESH_SCRIPT = <<~LUA
-    if redis.call('get', KEYS[1]) == ARGV[1] then
-      redis.call('expire', KEYS[2], ARGV[2])
-      return redis.call('expire', KEYS[1], ARGV[2])
-    end
+    if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('expire', KEYS[1], ARGV[2]) end
     return 0
   LUA
 
   class << self
-    # The claim this process holds, or nil. Under spring the forks inherit it, which is
-    # what `register_command!` exists to notice.
-    attr_reader :claim
-
     # Rewrites ENV in place. Returns the claimed slot number, or nil when isolation was
     # skipped (not the test env, opted out, unparseable env, or no free block).
     def install!(env: ENV, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
@@ -108,6 +90,9 @@ module TestRedisIsolation
         return nil
       end
 
+      # The floor sits above every database a fallback run would flush, so remember the
+      # endpoints as they were before the rewrite — a fork re-leases from these.
+      @boot_endpoints ||= endpoints
       reserved = reserved_databases(endpoints)
       claim = claim_slot(server:, databases:, reserved:, warn_io:, key_prefix:)
       return nil if claim.nil?
@@ -117,7 +102,6 @@ module TestRedisIsolation
       end
       keep_lease_alive(claim)
       release_lease_at_exit(claim)
-      @claim = claim
 
       warn_io.puts("[test-redis-isolation] slot #{claim[:slot]} → Redis databases #{claim[:databases].join(', ')} on #{server}")
       claim[:slot]
@@ -128,12 +112,51 @@ module TestRedisIsolation
       nil
     end
 
+    # Re-lease per forked command. Spring preloads once per checkout, so a lease claimed at
+    # boot belongs to the server and every command forked from it inherits that one block.
+    # Each fork claims its own and re-points the stores that captured a connection at boot.
+    #
+    # Leasing reads the ORIGINAL endpoints, not the rewritten ENV: the floor is derived from
+    # the values a fallback run would use, and boot has already replaced those with leased
+    # ones. Re-deriving from ENV would walk the floor up on every fork.
+    def reinstall_after_fork!(env: ENV, warn_io: $stderr)
+      return nil if boot_endpoints.nil?
+
+      boot_endpoints.each_with_index { |endpoint, index| env[STORE_ENV_VARS.fetch(index)] = "#{endpoint[:server]}/#{endpoint[:database]}" }
+      slot = install!(env:, warn_io:)
+      return nil if slot.nil?
+
+      reconnect_stores(env)
+      slot
+    end
+
+    # Stores that read a *_REDIS_HOST once at boot and cached a connection or URL from it.
+    # Anything resolving the env var per call needs nothing here.
+    def reconnect_stores(env)
+      $redis = Redis.new(url: "redis://#{env.fetch('REDIS_HOST')}")
+
+      Sidekiq.configure_client { |config| config.redis = { url: "redis://#{env.fetch('SIDEKIQ_REDIS_HOST')}" } }
+      # `config.redis=` only merges options; the internal pool is memoized on first use and
+      # would keep serving the databases this process inherited.
+      Sidekiq.default_configuration.instance_variable_set(:@redis, nil)
+
+      Modis.redis_options = { url: "redis://#{env.fetch('RPUSH_REDIS_HOST')}" } if defined?(Modis)
+
+      return unless defined?(Rack::Attack)
+      connection = Redis.new(url: "redis://#{env.fetch('RACK_ATTACK_REDIS_HOST')}")
+      Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisProxy.new(connection)
+    end
+
     # The first database a slot may use: above .env.development AND above every index
     # the passed-in env vars name, so a run that falls back to them cannot flush a
     # leased block.
     def reserved_databases(endpoints)
       [RESERVED_DATABASES, endpoints.map { |endpoint| endpoint[:database] }.max + 1].max
     end
+
+    # The *_REDIS_HOST endpoints as they were before boot rewrote them. nil when boot never
+    # leased, in which case a fork has nothing to re-lease from.
+    attr_reader :boot_endpoints
 
     # Pure: which database indexes slot N gets, given a server's database count.
     # nil when the slot does not fit. The last database is the lease registry, so it is
@@ -203,53 +226,6 @@ module TestRedisIsolation
       # one slot and must not turn a passing run into a crash on exit.
     end
 
-    # Called from config/spring.rb after spring forks a command process. The fork cannot
-    # lease a block of its own — every store connected during preload against the block
-    # the server leased, and rewriting ENV here would not move an open connection — so
-    # this records the command in the lease's companion hash and warns when a sibling
-    # command is already using the same block. Silence is the thing this file cannot
-    # afford: a shared block that looks isolated is the original race with a valid lease
-    # on top of it.
-    def register_command!(warn_io: $stderr, claim: self.claim)
-      return nil if claim.nil?
-
-      commands_key = "#{claim.fetch(:key)}#{COMMANDS_KEY_SUFFIX}"
-      # Its own connection: the registry socket was opened before the fork, so every
-      # command would be writing down one shared file descriptor.
-      registry = Redis.new(url: claim.fetch(:registry).id)
-      me = Process.pid.to_s
-
-      registry.hset(commands_key, me, Time.now.to_i)
-      registry.expire(commands_key, LEASE_TTL_SECONDS)
-
-      siblings = registry.hkeys(commands_key).reject { |pid| pid == me }
-      # A command killed with SIGKILL never removes its own field, so a stale pid would
-      # warn forever. Spring runs one server per host, so these pids are all local.
-      dead, live = siblings.partition { |pid| !process_alive?(pid) }
-      registry.hdel(commands_key, *dead) if dead.any?
-
-      owner = Process.pid
-      at_exit do
-        next unless Process.pid == owner
-        registry.hdel(commands_key, me)
-      rescue Redis::BaseError, RedisClient::Error, IOError
-        # The hash carries the lease's TTL, so a missed cleanup costs a stale warning at
-        # worst — never a crash on exit.
-      end
-
-      if live.any?
-        warn_io.puts(<<~WARNING.chomp)
-          [test-redis-isolation] #{live.length + 1} test commands are sharing Redis databases #{claim.fetch(:databases).join(', ')} (pids #{(live + [me]).join(', ')}).
-          [test-redis-isolation] Spring preloads the app once per checkout and forks each command from it, so they inherit one lease and will flush each other's keys mid-test. Run them with DISABLE_SPRING=1, or from separate checkouts.
-        WARNING
-      end
-
-      live
-    rescue Redis::BaseError, RedisClient::Error, IOError => e
-      # Same rule as install!: never let bookkeeping stop a test run.
-      warn_io.puts("[test-redis-isolation] could not register this command: #{e.class}: #{e.message}")
-      nil
-    end
 
     private
       def capacity_warning(server:, databases:, slots:)
@@ -277,7 +253,7 @@ module TestRedisIsolation
         thread = Thread.new do
           loop do
             sleep(LEASE_REFRESH_SECONDS)
-            connection.eval(REFRESH_SCRIPT, keys: [claim[:key], "#{claim[:key]}#{COMMANDS_KEY_SUFFIX}"], argv: [claim[:token], LEASE_TTL_SECONDS])
+            connection.eval(REFRESH_SCRIPT, keys: [claim[:key]], argv: [claim[:token], LEASE_TTL_SECONDS])
           rescue StandardError
             # Every error, not a list: if this thread dies the lease expires mid-run and
             # another run leases the same databases — this file's own race, with nothing
@@ -298,17 +274,6 @@ module TestRedisIsolation
 
       def truthy?(value)
         %w[1 true yes].include?(value.to_s.downcase)
-      end
-
-      # Signal 0 asks "may I signal this pid" — EPERM means it exists but belongs to
-      # someone else, which still counts as alive.
-      def process_alive?(pid)
-        Process.kill(0, Integer(pid))
-        true
-      rescue Errno::ESRCH, ArgumentError, TypeError
-        false
-      rescue Errno::EPERM
-        true
       end
   end
 end

@@ -49,6 +49,26 @@ describe TestRedisIsolation do
     with_registry { |registry| registry.del(claimed[:key]) }
   end
 
+  # The .env.test-shaped endpoints a run starts from, before any rewrite.
+  def base_env
+    {
+      "RAILS_ENV" => "test",
+      "REDIS_HOST" => "#{server}/10",
+      "SIDEKIQ_REDIS_HOST" => "#{server}/11",
+      "RPUSH_REDIS_HOST" => "#{server}/12",
+      "RACK_ATTACK_REDIS_HOST" => "#{server}/13",
+    }
+  end
+
+  # A stock `redis-server` ships 16 databases, which leaves no block above the .env.test
+  # indexes — so the examples that need a real lease would fail there for a reason that
+  # is not a regression. Skip loudly instead.
+  def skip_without_a_free_block
+    reserved = described_class.reserved_databases(base_env.values_at(*described_class::STORE_ENV_VARS).map { parse(it) })
+    return if described_class.slot_count(databases:, reserved:).positive?
+    skip("needs a Redis started with --databases 64; #{databases} leaves no block above #{reserved - 1}")
+  end
+
   describe ".databases_for_slot" do
     it "gives each slot its own block of four databases with no overlap" do
       blocks = all_blocks(64)
@@ -207,16 +227,6 @@ describe TestRedisIsolation do
   end
 
   describe ".install!" do
-    let(:base_env) do
-      {
-        "RAILS_ENV" => "test",
-        "REDIS_HOST" => "#{server}/10",
-        "SIDEKIQ_REDIS_HOST" => "#{server}/11",
-        "RPUSH_REDIS_HOST" => "#{server}/12",
-        "RACK_ATTACK_REDIS_HOST" => "#{server}/13",
-      }
-    end
-
     # install! claims a real lease, so these examples route it through the spec's own
     # prefix and capture the claim in order to release it and stop its refresh thread.
     attr_reader :claimed
@@ -226,17 +236,6 @@ describe TestRedisIsolation do
         @claimed = original.call(**kwargs)
       end
       described_class.install!(env:, warn_io:, key_prefix: test_prefix)
-    end
-
-    # A stock `redis-server` ships 16 databases, which leaves no block above the .env.test
-    # indexes — so the examples that need a real lease would fail there for a reason that
-    # is not a regression. Skip loudly instead.
-    def skip_without_a_free_block
-      reserved = described_class.reserved_databases(
-        described_class::STORE_ENV_VARS.map { parse(base_env.fetch(it)) }
-      )
-      return if described_class.slot_count(databases:, reserved:).positive?
-      skip("needs a Redis started with --databases 64; #{databases} leaves no block above #{reserved - 1}")
     end
 
     after { discard(claimed) }
@@ -372,117 +371,87 @@ describe TestRedisIsolation do
     end
   end
 
-  describe ".register_command!" do
-    # The spring shape: the app is preloaded once and every test command is a fork of it,
-    # so the forks inherit one lease and cannot re-lease (their stores connected before
-    # they existed). Two of them flush the same databases, which is the original race
-    # wearing a valid lease — so the second one has to say so.
-    let(:claimed) { claim }
-    let(:commands_key) { "#{claimed.fetch(:key)}#{described_class::COMMANDS_KEY_SUFFIX}" }
+  describe ".reinstall_after_fork!" do
+    # Spring preloads once per checkout, so the block leased at boot belongs to the server
+    # and every command forked from it inherits the same one. Without this path two
+    # concurrent `bin/rspec` runs flush each other's databases — this file's own race,
+    # relocated from .env.test onto a leased block.
+    attr_reader :claims
 
-    after do
-      with_registry { |registry| registry.del(commands_key) }
-      described_class.release_lease(claimed)
-    end
+    before { @claims = [] }
+    after { claims.each { discard(it) } }
 
-    def register_in_fork(claimed, hold: 0.6)
-      reader, writer = IO.pipe
-      pid = fork do
-        reader.close
-        warnings = StringIO.new
-        live = described_class.register_command!(warn_io: warnings, claim: claimed)
-        writer.puts(Marshal.dump([live, warnings.string]).unpack1("H*"))
-        writer.close
-        sleep(hold)
-        exit(0)
-      end
-      writer.close
-      result = Marshal.load([reader.gets.chomp].pack("H*"))
-      reader.close
-      [pid, *result]
-    end
-
-    it "warns the second command that it is sharing the first command's databases" do
-      first_pid, first_live, first_warnings = register_in_fork(claimed)
-      _second_pid, second_live, second_warnings = register_in_fork(claimed, hold: 0)
-
-      # The first command is alone and must not cry wolf.
-      expect(first_live).to be_empty
-      expect(first_warnings).to be_empty
-
-      expect(second_live).to eq([first_pid.to_s])
-      expect(second_warnings).to include("2 test commands are sharing Redis databases #{claimed.fetch(:databases).join(', ')}")
-      expect(second_warnings).to include("DISABLE_SPRING=1")
-
-      Process.waitall
-    end
-
-    it "removes the command from the lease when it exits" do
-      # Asserted against the registry rather than through a later register_command!,
-      # because the liveness prune would clean a dead pid up anyway and carry the
-      # example on its own — leaving this deregistration untested. It is not redundant
-      # with the prune: pids are reused, and a stale field whose pid has been handed to
-      # an unrelated process reads as a live sibling.
-      _pid, _live, _warnings = register_in_fork(claimed, hold: 0)
-      Process.waitall
-
-      with_registry { |registry| expect(registry.hkeys(commands_key)).to be_empty }
-    end
-
-    it "does not warn about a command killed before it could deregister" do
-      # SIGKILL skips at_exit, so the field outlives the process. Without the liveness
-      # check every later command would warn about a pid that no longer exists, and a
-      # warning that is always on is a warning nobody reads.
-      killed = fork { sleep 30 }
-      with_registry { |registry| registry.hset(commands_key, killed.to_s, Time.now.to_i) }
-      Process.kill("KILL", killed)
-      Process.wait(killed)
-
-      warnings = StringIO.new
-      live = described_class.register_command!(warn_io: warnings, claim: claimed)
-
-      expect(live).to be_empty
-      expect(warnings.string).to be_empty
-      with_registry { |registry| expect(registry.hkeys(commands_key)).not_to include(killed.to_s) }
-    end
-
-    it "gives the commands hash the lease's TTL so it cannot outlive the block" do
-      described_class.register_command!(warn_io: StringIO.new, claim: claimed)
-
-      with_registry do |registry|
-        expect(registry.ttl(commands_key)).to be_between(1, described_class::LEASE_TTL_SECONDS)
+    def capture_claims
+      allow(described_class).to receive(:claim_slot).and_wrap_original do |original, **kwargs|
+        original.call(**kwargs).tap { claims << it }
       end
     end
 
-    it "keeps a long-running command in the hash by refreshing it on the lease tick" do
-      # A command that outlives the hash's TTL is still holding the block. If the tick
-      # renews only the lease, its field expires, the next fork sees an empty hash and
-      # says nothing — the silent shared block this whole file exists to prevent.
-      described_class.register_command!(warn_io: StringIO.new, claim: claimed)
-      with_registry { |registry| registry.expire(commands_key, 1) }
+    def boot(env)
+      described_class.install!(env:, warn_io: StringIO.new, key_prefix: test_prefix)
+    end
 
-      stub_const("TestRedisIsolation::LEASE_REFRESH_SECONDS", 0.05)
-      described_class.send(:keep_lease_alive, claimed)
+    def fork_command(env)
+      described_class.reinstall_after_fork!(env:, warn_io: StringIO.new)
+    end
+
+    it "gives a forked command its own block instead of the one it inherited" do
+      skip_without_a_free_block
+      allow(described_class).to receive(:reconnect_stores)
+      capture_claims
+
+      env = base_env.dup
+      expect(boot(env)).to be_present
+      inherited = env.dup
+
+      expect(fork_command(env)).to be_present
+
+      booted, forked = claims.first, claims.last
+      expect(forked[:slot]).not_to eq(booted[:slot])
+      expect(forked[:databases] & booted[:databases]).to be_empty
+      # The point of the re-lease: the command no longer uses what it inherited.
+      expect(env.fetch("REDIS_HOST")).not_to eq(inherited.fetch("REDIS_HOST"))
+    end
+
+    it "re-leases from the boot endpoints so repeated forks do not walk the floor upward" do
+      # Each fork inherits an ENV already rewritten to a leased block. Deriving the floor
+      # from that rather than the original .env.test values would push it up every time.
+      # Asserted as "every block sits in the range the boot floor allows" rather than
+      # "the blocks are contiguous": a sibling example may hold a slot in between.
+      skip_without_a_free_block
+      allow(described_class).to receive(:reconnect_stores)
+      capture_claims
+
+      env = base_env.dup
+      expect(boot(env)).to be_present
+      2.times { expect(fork_command(env)).to be_present }
+
+      floor = described_class.reserved_databases(base_env.values_at(*described_class::STORE_ENV_VARS).map { parse(it) })
+      ceiling = floor + described_class.slot_count(databases:, reserved: floor) * stores
+      expect(claims.length).to eq(3)
+      expect(claims.map { it.fetch(:databases).min }).to all(be_between(floor, ceiling))
+      expect(claims.flat_map { it.fetch(:databases) }.uniq.length).to eq(3 * stores)
+    end
+
+    it "repoints the stores that captured a connection at boot" do
+      # A fork that re-leases but keeps the parent's connections is still reading and
+      # flushing the parent's databases; the lease would be bookkeeping over nothing.
+      skip_without_a_free_block
+      capture_claims
+      original = $redis
 
       begin
-        Timeout.timeout(5) do
-          sleep(0.05) until with_registry { |registry| registry.ttl(commands_key) } > 1
-        end
+        env = base_env.dup
+        expect(boot(env)).to be_present
+        expect(fork_command(env)).to be_present
 
-        with_registry do |registry|
-          expect(registry.ttl(commands_key)).to be_between(2, described_class::LEASE_TTL_SECONDS)
-          expect(registry.hkeys(commands_key)).to include(Process.pid.to_s)
-        end
+        forked = claims.last
+        expect($redis.connection.fetch(:db)).to eq(forked.fetch(:databases).first)
+        expect(Sidekiq.redis { |connection| connection.config.db }).to eq(forked.fetch(:databases)[1])
       ensure
-        claimed[:refresh_thread]&.kill
+        $redis = original
+        described_class.reconnect_stores(ENV)
       end
-    end
-
-    it "does nothing when this process never leased a block" do
-      warnings = StringIO.new
-
-      expect(described_class.register_command!(warn_io: warnings, claim: nil)).to be_nil
-      expect(warnings.string).to be_empty
     end
   end
 
