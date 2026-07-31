@@ -67,10 +67,11 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
+      recurring_upi_registration:,
       disable_wallets:,
       request_apple_pay_merchant_tokens:,
       payment_element_wallets:,
@@ -1333,7 +1334,7 @@ describe Checkout::StripePaymentPresenter do
       expect(stripe_payment_props(cart:)).to eq(payment_element_props)
     end
 
-    it "keeps server-confirm Payment Element for a recurring membership because client-confirm mode is one-time only" do
+    it "keeps server-confirm Payment Element for a recurring membership outside UPI registration" do
       expect(stripe_payment_props(add_products: [confirm_flagged_seller_product(recurrence: "monthly")]))
         .to eq(payment_element_props)
     end
@@ -1682,6 +1683,7 @@ describe Checkout::StripePaymentPresenter do
           presentment_amount_cents: 73_000,
           payment_method_types: %w[card upi],
           stripe_link_enabled: false,
+          recurring_upi_registration: true,
           disable_wallets: true,
         )
       )
@@ -1979,11 +1981,9 @@ describe Checkout::StripePaymentPresenter do
     end
 
     it "falls back to CardElement for a recurring EUR-priced presentment candidate instead of crashing" do
-      # A recurring cart is rejected by the payment method resolver (client-confirm only
-      # covers one-time purchases), so its resolution carries a nil method list. The
-      # method-forced shape check must consult the resolver's eligibility verdict before
-      # scanning the method list — otherwise this cart raises instead of returning the
-      # buyer_currency_presentment_unsupported fallback.
+      # A recurring EUR cart is outside the UPI registration exception, so its resolution carries
+      # a nil method list. Consult the eligibility verdict before scanning that list or this cart
+      # raises instead of returning the buyer_currency_presentment_unsupported fallback.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: "eur", price_cents: 1500)
       Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)

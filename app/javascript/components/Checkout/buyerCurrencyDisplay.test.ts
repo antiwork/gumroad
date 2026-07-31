@@ -250,6 +250,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
   ): CheckoutPaymentConfig => ({
     integration: "payment_element_client_confirm",
     fallback_reason: null,
+    recurring_upi_registration: false,
     disable_wallets: true,
     request_apple_pay_merchant_tokens: false,
     payment_element_wallets: false,

@@ -179,7 +179,7 @@ class Checkout::PaymentMethodResolver
   private
     attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted, :cart_product_currency, :cart_total_usd_cents, :recurring_upi_registration
 
-    # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
+    # The client-confirm cart-shape gates, including the narrow recurring UPI exception, are applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
     def ineligibility_reason
       return "multi_seller" unless sellers.one?

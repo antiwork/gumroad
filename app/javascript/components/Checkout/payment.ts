@@ -54,11 +54,11 @@ export type PaymentElementConfig = {
   stripe_link_enabled: boolean;
 };
 // Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
-// payment_method_creation and stays in one-time payment mode. The method list is
-// server-resolved (Checkout::PaymentMethodResolver) and must match the deferred intent's;
-// the browser never widens it — card and Link everywhere (stripe_link_enabled reflects the
-// resolved set; Link auto-enables with the Payment Element, dropped only by the PPP gate), plus
-// the US-locked methods (cashapp, us_bank_account) for US buyers.
+// payment_method_creation and stays in payment mode. The method list is server-resolved
+// (Checkout::PaymentMethodResolver) and must match the deferred intent's;
+// the browser never widens it — card everywhere, Link when the resolver leaves it enabled, plus
+// the US-locked methods (cashapp, us_bank_account) for US buyers. Recurring UPI registration is
+// the narrow card + UPI exception.
 // Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact/UPI),
 // where the server mounts the element in the payment method's forced currency (e.g. "eur") and
 // supplies presentment_amount_cents — the whole cart's listed subtotal in that currency,
@@ -119,6 +119,7 @@ export type CheckoutPaymentConfig =
   | {
       integration: "payment_element_client_confirm";
       fallback_reason: null;
+      recurring_upi_registration: boolean;
       disable_wallets: boolean;
       request_apple_pay_merchant_tokens: boolean;
       payment_element_wallets: boolean;
@@ -371,8 +372,37 @@ export function canUseStripePaymentElement(state: State): state is StateWithPaym
   return !state.products.some((product) => product.payInInstallments || product.hasFreeTrial || product.isPreorder);
 }
 
-// The browser must not widen server eligibility for client-confirm: single-seller,
-// one-time card checkouts only.
+function isRecurringUpiRegistrationCheckout(
+  state: State,
+  config: StateWithPaymentElementClientConfirmCheckout["checkoutPayment"],
+) {
+  const [product] = state.products;
+  const options = config.elements_options;
+
+  return (
+    config.recurring_upi_registration &&
+    config.disable_wallets &&
+    !config.payment_element_wallets &&
+    options.currency === "inr" &&
+    options.presentment_amount_cents !== null &&
+    options.presentment_amount_cents > 0 &&
+    options.listed_currency_display?.currency === "inr" &&
+    options.listed_currency_display.subunit_to_unit === 100 &&
+    options.payment_method_types.length === 2 &&
+    options.payment_method_types.includes("card") &&
+    options.payment_method_types.includes("upi") &&
+    !options.stripe_link_enabled &&
+    options.stripe_connect_account_id === null &&
+    state.products.length === 1 &&
+    product?.quantity === 1 &&
+    product.installmentPlan == null &&
+    !product.requireShipping &&
+    state.gift === null
+  );
+}
+
+// The browser must not widen server eligibility. Recurring client-confirm is limited to the
+// server-selected UPI registration lane while the live cart retains that lane's shape.
 export function canUseStripePaymentElementClientConfirm(
   state: State,
 ): state is StateWithPaymentElementClientConfirmCheckout {
@@ -385,12 +415,14 @@ export function canUseStripePaymentElementClientConfirm(
     if (total === null || total < STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS) return false;
   }
 
+  const recurringUpiRegistration = isRecurringUpiRegistrationCheckout(state, state.checkoutPayment);
+
   return !state.products.some(
     (product) =>
       product.payInInstallments ||
       product.hasFreeTrial ||
       product.isPreorder ||
-      !!product.recurrence ||
+      (!!product.recurrence && !recurringUpiRegistration) ||
       !!product.subscription_id ||
       product.nativeType === "commission",
   );

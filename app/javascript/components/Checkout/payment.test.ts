@@ -89,6 +89,7 @@ const cardElementConfig: CheckoutPaymentConfig = {
 const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   integration: "payment_element_client_confirm",
   fallback_reason: null,
+  recurring_upi_registration: false,
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
   payment_element_wallets: false,
@@ -99,6 +100,22 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
     presentment_amount_cents: null,
     listed_currency_display: null,
     payment_method_types: ["card"],
+    stripe_link_enabled: false,
+    stripe_connect_account_id: null,
+  },
+};
+
+const recurringUpiPaymentElementClientConfirmConfig: CheckoutPaymentConfig = {
+  ...paymentElementClientConfirmConfig,
+  recurring_upi_registration: true,
+  disable_wallets: true,
+  flat_payment_methods: true,
+  elements_options: {
+    ...paymentElementClientConfirmConfig.elements_options,
+    currency: "inr",
+    presentment_amount_cents: 73_000,
+    listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+    payment_method_types: ["card", "upi"],
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
   },
@@ -391,6 +408,17 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(canUseStripePaymentElementClientConfirm(clientConfirmState())).toBe(true);
   });
 
+  it("allows the server-selected recurring UPI registration lane", () => {
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        clientConfirmState({
+          checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+          products: [product({ recurrence: "monthly" })],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });
@@ -416,7 +444,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     ).toBe(false);
   });
 
-  it("falls back for reusable-payment-method flows because client-confirm mode is one-time only", () => {
+  it("falls back for recurring and reusable-payment-method flows outside UPI registration", () => {
     expect(
       canUseStripePaymentElementClientConfirm(clientConfirmState({ products: [product({ recurrence: "monthly" })] })),
     ).toBe(false);
@@ -428,6 +456,62 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(
       canUseStripePaymentElementClientConfirm(
         clientConfirmState({ products: [product({ nativeType: "commission" })] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("fails closed when recurring UPI configuration or the live cart no longer matches", () => {
+    const recurringProduct = product({ recurrence: "monthly" });
+    const recurringUpiState = (overrides: Partial<State> = {}) =>
+      clientConfirmState({
+        checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+        products: [recurringProduct],
+        ...overrides,
+      });
+
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({
+          checkoutPayment: {
+            ...recurringUpiPaymentElementClientConfirmConfig,
+            recurring_upi_registration: false,
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({
+          checkoutPayment: {
+            ...recurringUpiPaymentElementClientConfirmConfig,
+            elements_options: {
+              ...recurringUpiPaymentElementClientConfirmConfig.elements_options,
+              payment_method_types: ["card", "link", "upi"],
+            },
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({ products: [product({ recurrence: "monthly", quantity: 2 })] }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({
+          products: [product({ recurrence: "monthly", installmentPlan: { numberOfInstallments: 2 } })],
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({ products: [product({ recurrence: "monthly", requireShipping: true })] }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({ gift: { type: "normal", email: "recipient@example.com", note: "" } }),
       ),
     ).toBe(false);
   });

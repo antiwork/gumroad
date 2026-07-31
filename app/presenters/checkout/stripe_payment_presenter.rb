@@ -357,6 +357,7 @@ class Checkout::StripePaymentPresenter
       {
         integration: STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
         fallback_reason: nil,
+        recurring_upi_registration: recurring_upi_registration_shape?(items),
         disable_wallets:,
         request_apple_pay_merchant_tokens: request_apple_pay_merchant_tokens?,
         # The disable_wallets constraint is server-owned: when the cart can't take a wallet
