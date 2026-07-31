@@ -41,19 +41,24 @@ class Shipment < ApplicationRecord
 
   # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
   # `tracking_url` — so read them back out of the URL when it is one of the forms above.
-  # Scheme- and case-insensitive on the prefix: the stored prefixes are http for carriers that now
-  # serve https, and hosts are case-insensitive.
+  # Only the scheme and host are compared case-insensitively; the stored prefixes are http for
+  # carriers that now serve https, and hosts are case-insensitive by definition. Path and query
+  # keys are compared exactly, because their casing is significant to the carrier — `QTC_TLABELS1`
+  # is not the USPS tracking form and must not be promoted to structured evidence.
   # Returns nil rather than a guess: dispute evidence submits once, and a wrong number is worse
   # than an absent one.
   def carrier_and_tracking_number_from_url
     return if tracking_url.blank?
 
-    url = tracking_url.sub(%r{\Ahttps?://}i, "")
-    CARRIER_TRACKING_URL_MAPPING.each do |carrier_name, prefix|
-      bare_prefix = prefix.sub(%r{\Ahttps?://}i, "")
-      next unless url[0, bare_prefix.length]&.casecmp?(bare_prefix)
+    url_host, slash, url_rest = tracking_url.sub(%r{\Ahttps?://}i, "").partition("/")
+    return if slash.empty?
 
-      number = url[bare_prefix.length..]
+    CARRIER_TRACKING_URL_MAPPING.each do |carrier_name, prefix|
+      prefix_host, _, prefix_rest = prefix.sub(%r{\Ahttps?://}i, "").partition("/")
+      next unless url_host.casecmp?(prefix_host)
+      next unless url_rest.start_with?(prefix_rest)
+
+      number = url_rest[prefix_rest.length..]
       # Bounded because every mapped carrier's number falls well inside it, so a longer or shorter
       # alphanumeric remainder is paste garbage rather than something to submit.
       return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{4,40}\z/)

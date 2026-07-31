@@ -110,6 +110,16 @@ describe Shipment do
       expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999aa"])
     end
 
+    it "returns nothing when the path or query keys differ in case from the carrier's form" do
+      # Only the host is case-insensitive. `QTC_TLABELS1` is not a URL USPS serves, so the number
+      # after it is not a USPS tracking number and must not become structured evidence.
+      shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?QTC_TLABELS1=1Z999AA10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+
+      shipment.update!(tracking_url: "https://tools.usps.com/GO/TrackConfirmAction?qtc_tLabels1=1Z999AA10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+    end
+
     it "returns nothing for a URL that is not a known carrier's tracking form" do
       shipment.update!(tracking_url: "https://track.aftership.com/1Z999AA10123456784")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
