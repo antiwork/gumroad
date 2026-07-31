@@ -98,11 +98,31 @@ else
   # this failover happened at the docker exec step (SSH connected fine, but
   # exec never returned). A hung/recycling instance previously burned the full
   # outer timeout; now it costs <=20s and we fail over to the next-oldest.
+  # Callers get a couple of minutes of wall clock for the WHOLE run, so picking an instance
+  # cannot spend all of it — a large pool would time the caller out before the query they
+  # actually asked for ever starts. Both passes below draw down one shared deadline.
+  : "${PROD_SELECT_BUDGET:=90}"
+  select_deadline=$(( $(date +%s) + PROD_SELECT_BUDGET ))
+  # Hold back a third of the budget for the patient pass: five 20s timeouts would
+  # otherwise drain all of it in the fast pass and the retry below would never run —
+  # exactly the many-slow-hosts case it exists for.
+  patient_reserve=$(( PROD_SELECT_BUDGET / 3 ))
+  [ "$patient_reserve" -gt 60 ] && patient_reserve=60 || true
+  fast_deadline=$(( select_deadline - patient_reserve ))
+
   instance_ip=""
   stale_key_ips=""
+  slow_ips=""
+  budget_exhausted=""
   probe_err=$(mktemp)
   for ip in $candidate_ips; do
-    if LC_PAPER="$ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+    remaining=$(( fast_deadline - $(date +%s) ))
+    if [ "$remaining" -le 5 ]; then
+      budget_exhausted=1
+      break
+    fi
+    [ "$remaining" -gt 20 ] && remaining=20 || true
+    if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
         -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
         >/dev/null 2>"$probe_err"; then
@@ -119,12 +139,64 @@ else
     if grep -qE "REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed" "$probe_err" \
        && grep -qF "$ip" "$probe_err"; then
       stale_key_ips="$stale_key_ips $ip"
-      >&2 echo "Instance $ip refused: bastion holds an outdated host key, trying next..."
+      # The bastion's onward hop usually just WARNS about a changed key and connects anyway
+      # (recycled EC2 IPs make that the steady state, not an anomaly). Only an outright
+      # refusal means the key caused the failure; after a warn-and-proceed banner the probe
+      # failed for some other reason, so that candidate still deserves the patient retry.
+      if grep -qF "Host key verification failed" "$probe_err"; then
+        >&2 echo "Instance $ip refused: bastion holds an outdated host key, trying next..."
+      else
+        slow_ips="$slow_ips $ip"
+        >&2 echo "Instance $ip failed health probe (outdated host key noted), trying next..."
+      fi
     else
+      # A 20s probe is tuned to skip past a hung host quickly, which means it also rejects a
+      # host that is merely slow — and a slow-but-working host is still a usable hop. Keep it
+      # for a second, more patient pass rather than discarding it (see below).
+      slow_ips="$slow_ips $ip"
       >&2 echo "Instance $ip failed health probe, trying next..."
     fi
   done
   rm -f "$probe_err"
+
+  # Before giving up entirely, retry the non-stale-key failures with a patient probe.
+  # The 20s pass above is deliberately impatient so one hung host cannot eat the caller's
+  # whole budget, but that same impatience rejects hosts that are only slow to answer.
+  # When the fast pass finds NOTHING, "every instance is unhealthy" is the less likely
+  # explanation — a fleet-wide outage is rare, a fleet under load is not. On 2026-07-29
+  # this aborted with all 8 candidates rejected while 10.1.34.180 answered a real query
+  # fine on the very next attempt, which silently blocked every prod-console verification
+  # (and every watcher built on one) until it was forced by hand with PROD_INSTANCE_IP.
+  #
+  # This runs only on the all-rejected path, so the common case pays nothing for it — and it
+  # only gets whatever is left of the shared selection budget, so a large pool cannot turn the
+  # retry into a longer stall than the failure it replaces.
+  if [ -z "$instance_ip" ] && [ -n "${slow_ips// /}" ]; then
+    if [ $(( select_deadline - $(date +%s) )) -le 5 ]; then
+      # No time left for even one patient probe — don't announce a retry that won't happen.
+      budget_exhausted=1
+    else
+      >&2 echo "No candidate answered within 20s; retrying${slow_ips} with a patient probe..."
+      for ip in $slow_ips; do
+        remaining=$(( select_deadline - $(date +%s) ))
+        if [ "$remaining" -le 5 ]; then
+          budget_exhausted=1
+          break
+        fi
+        [ "$remaining" -gt 60 ] && remaining=60 || true
+        connect_timeout=$(( remaining / 3 ))
+        [ "$connect_timeout" -lt 5 ] && connect_timeout=5 || true
+        if LC_PAPER="$ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout="$connect_timeout" "admin@$PROD_BASTION" \
+            'sudo docker exec $(sudo docker ps -qf "name='"$PROD_CONTAINER_FILTER"'" -f "status=running" | head -n1) true' \
+            >/dev/null 2>&1; then
+          instance_ip="$ip"
+          >&2 echo "Instance $ip answered on the patient retry (slow, not unhealthy)."
+          break
+        fi
+      done
+    fi
+  fi
 
   # EC2 recycles private IPs, so the BASTION's known_hosts accumulates stale keys and refuses
   # the onward hop with "REMOTE HOST IDENTIFICATION HAS CHANGED" / "Offending ECDSA key". From
@@ -151,7 +223,13 @@ else
     for stale_ip in $stale_key_ips; do
       keygen_cmd="$keygen_cmd ssh-keygen -f ~/.ssh/known_hosts -R '$stale_ip';"
     done
-    if LC_PAPER="$instance_ip" probe_timeout 20 ssh -o SendEnv=LC_PAPER \
+    # Also inside the selection budget: this is housekeeping for the NEXT run, so it must
+    # never be the reason this one times out before its query starts.
+    remaining=$(( select_deadline - $(date +%s) ))
+    [ "$remaining" -gt 20 ] && remaining=20 || true
+    if [ "$remaining" -lt 5 ]; then
+      >&2 echo "Skipped clearing outdated bastion host keys for:$stale_key_ips (out of selection budget)."
+    elif LC_PAPER="$instance_ip" probe_timeout "$remaining" ssh -o SendEnv=LC_PAPER \
         -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "admin@$PROD_BASTION" \
         "$keygen_cmd" >/dev/null 2>&1; then
       >&2 echo "Cleared outdated bastion host keys for:$stale_key_ips"
@@ -161,7 +239,12 @@ else
   fi
 
   if [ -z "$instance_ip" ]; then
-    echo "Error: No instance in $PROD_SECURITY_GROUP passed the health probe. Set PROD_INSTANCE_IP to force one." >&2
+    if [ -n "$budget_exhausted" ]; then
+      echo "Error: ran out of the ${PROD_SELECT_BUDGET}s instance-selection budget before any candidate in $PROD_SECURITY_GROUP answered." >&2
+      echo "Not necessarily an outage — the pool may just be slow. Set PROD_INSTANCE_IP to pin a host, or raise PROD_SELECT_BUDGET." >&2
+    else
+      echo "Error: No instance in $PROD_SECURITY_GROUP passed the health probe. Set PROD_INSTANCE_IP to force one." >&2
+    fi
     exit 1
   fi
 fi

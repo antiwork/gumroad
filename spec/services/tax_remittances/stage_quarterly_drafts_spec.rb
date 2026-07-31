@@ -481,12 +481,12 @@ describe TaxRemittances::StageQuarterlyDrafts do
 
     it "passes through country names that resolve to no country" do
       travel_to(in_period) do
-        create_taxed_purchase(product, country: "Slovak Republic", gumroad_tax_cents: 8_00)
+        create_taxed_purchase(product, country: "Freedonia", gumroad_tax_cents: 8_00)
       end
 
       service = described_class.new(period).process
 
-      expect(service.coverage_gaps[:unresolved_country_names]).to eq({ "Slovak Republic" => 8_00 })
+      expect(service.coverage_gaps[:unresolved_country_names]).to eq({ "Freedonia" => 8_00 })
     end
 
     # A purchase with no country at all can't be filed anywhere, so the amount

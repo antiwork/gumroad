@@ -48,7 +48,7 @@ export const loadProductEditPage = () => fetchWithOneRetry(importProductEditPage
 // Inertia visit to reuse a module request that is pending or has failed.
 let productEditPageIsWarm = false;
 
-export const useWarmProductEditPage = (load = loadProductEditPage) => {
+export const useWarmProductEditPage = (load: () => Promise<unknown> = loadProductEditPage) => {
   const [requiresFullPageNavigation, setRequiresFullPageNavigation] = useState(!productEditPageIsWarm);
 
   useEffect(() => {

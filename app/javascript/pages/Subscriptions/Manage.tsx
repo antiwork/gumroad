@@ -77,6 +77,7 @@ type Props = {
     is_overdue_for_charge: boolean;
     is_gift: boolean;
     is_installment_plan: boolean;
+    current_recurrence_available: boolean;
   };
   contact_info: {
     email: string;
@@ -167,20 +168,6 @@ export default function SubscriptionsManage() {
   const noChangesToNonPriceOptions =
     selection.optionId === subscription.option_id && !isRecurrenceChanged && !isQuantityChanged && !isResubscribing;
 
-  let warning = null;
-  if (selection.optionId === subscription.option_id && hasPriceChanged) {
-    const price = `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, { symbolFormat: "long" })} ${recurrenceLabels[selection.recurrence ?? subscription.recurrence]}`;
-    if (isQuantityChanged && isRecurrenceChanged) {
-      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.`;
-    } else if (isQuantityChanged) {
-      warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat.`;
-    } else if (isRecurrenceChanged) {
-      warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat.`;
-    } else if (isResubscribing) {
-      warning = `Restarting will update your subscription to the current price of ${price} per seat.`;
-    }
-  }
-
   const price =
     (isPWYW || noChangesToNonPriceOptions ? (selection.price.value ?? discountedPriceCents) : discountedPriceCents) *
     selection.quantity;
@@ -193,6 +180,39 @@ export default function SubscriptionsManage() {
       ? 0
       : Math.max(price - subscription.prorated_discount_price_cents, 0);
   if (amountDueToday > 0) amountDueToday = Math.max(amountDueToday, getMinPriceCents(product.currency_code));
+
+  // Mirrors `Subscription::UpdaterService#apply_plan_change_immediately?`. Reading this off
+  // `amountDueToday` is not equivalent: the server floors a chargeable change to the product
+  // minimum, so a change whose prorated credit covers the new price still charges and applies
+  // at once while the client computes nothing due. Only a strict price decrease defers.
+  const deferredToRenewal =
+    requirePayment &&
+    !isResubscribing &&
+    !subscription.is_in_free_trial &&
+    !subscription.is_overdue_for_charge &&
+    price < subscription.price;
+
+  let warning = null;
+  if (selection.optionId === subscription.option_id && (hasPriceChanged || isRecurrenceChanged)) {
+    const price = `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, { symbolFormat: "long" })} ${recurrenceLabels[selection.recurrence ?? subscription.recurrence]}`;
+    // A retired recurrence is only in the dropdown because it is currently this buyer's. Once the
+    // plan change applies at renewal it stops being re-added, so they cannot switch back.
+    const irreversible = isRecurrenceChanged && !subscription.current_recurrence_available;
+    const oneWayNote = irreversible
+      ? ` Your current ${recurrenceLabels[subscription.recurrence]} billing is no longer offered on this ${subscriptionEntity}, so as long as the seller does not offer it again you will not be able to switch back.`
+      : "";
+    const deferralNote = deferredToRenewal ? ", starting at your next renewal" : "";
+    if (isQuantityChanged && isRecurrenceChanged) {
+      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat${deferralNote}.${oneWayNote}`;
+    } else if (isQuantityChanged) {
+      warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat${deferralNote}.`;
+    } else if (isRecurrenceChanged) {
+      warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat${deferralNote}.${oneWayNote}`;
+    } else if (isResubscribing) {
+      warning = `Restarting will update your subscription to the current price of ${price} per seat.`;
+    }
+  }
+
   // Facts about the FUTURE payments of this subscription, declared as a recurring agreement on
   // the Apple Pay sheet (when the seller is in the merchant-token rollout) so Apple issues a
   // device-independent merchant token. `price` here is the currently selected plan's per-period
@@ -298,7 +318,11 @@ export default function SubscriptionsManage() {
     if (state.status.type !== "finished") return;
     const result = await updateSubscription({
       cardParams:
-        state.status.paymentMethod.type === "not-applicable" || state.status.paymentMethod.type === "saved"
+        state.status.paymentMethod.type === "not-applicable" ||
+        state.status.paymentMethod.type === "saved" ||
+        // Client-confirm never occurs here: it's a checkout-only lane and recurring carts are
+        // excluded from it, so subscription management only sees server-confirm methods.
+        state.status.paymentMethod.type === "payment-element-client-confirm"
           ? null
           : state.status.paymentMethod.cardParamsResult.cardParams,
       recaptchaResponse: state.status.recaptchaResponse ?? null,

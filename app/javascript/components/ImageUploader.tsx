@@ -24,7 +24,7 @@ export const ImageUploader = ({
   id?: string;
   helpText: string;
   imageUrl: string | null;
-  defaultImageUrl?: string;
+  defaultImageUrl?: string | undefined;
   allowedExtensions: string[];
   onSelectFile: (file: File) => Promise<void>;
   onRemove: () => void;

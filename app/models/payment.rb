@@ -169,9 +169,25 @@ class Payment < ApplicationRecord
     user.save!
   end
 
+  # Notifying the seller must never decide whether Gumroad's money gets reversed. Both callers run
+  # this after `mark_failed!` has already returned the balances to `unpaid` but before the internal
+  # transfer is reversed, so a raise here would strand the transfer with the seller unpaused.
+  def send_payout_failure_email_best_effort
+    send_payout_failure_email
+  rescue => e
+    # Discard the unpersisted `payout_date_of_last_payment_failure_email` assignment. The reversal
+    # and the payout hold both take `user.with_lock`, and `lock!` raises outright on a record with
+    # unsaved changes — so leaving `user` dirty here turns a mail failure back into the stranded
+    # transfer this method exists to prevent.
+    user.reload
+    ErrorNotifier.notify(e, payment_id: id, user_id:,
+                            action_required: "Payout failure email did not send. The payout reversal and any hold still ran.")
+  end
+
   def send_payout_failure_email
-    # This would already be done from callback/ We dont't to clean that up rn
-    return if failure_reason === FailureReason::CANNOT_PAY
+    # Both of these are already mailed by the `processing => failed` transition callbacks, which now
+    # see the reason because it is written by the transition itself rather than a later save.
+    return if failure_reason.in?([FailureReason::CANNOT_PAY, FailureReason::DEBIT_CARD_LIMIT])
 
     ContactingCreatorMailer.cannot_pay(id).deliver_later(queue: "critical")
 
@@ -286,6 +302,12 @@ class Payment < ApplicationRecord
       last_completed_at = payouts_to_destination.completed.maximum(:created_at)
       failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
       failed_payouts = failed_payouts.where("created_at > ?", last_completed_at) if last_completed_at
+      # A payout we failed ourselves says nothing about the seller's bank account, so it must not
+      # push them toward the pause threshold. The IS NULL arm is load-bearing — `NOT IN` alone
+      # drops NULL rows, which is most failures, silently disabling this check.
+      failed_payouts = failed_payouts.where(
+        "failure_reason IS NULL OR failure_reason NOT IN (?)", TRANSIENT_REASONS
+      )
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS
 
@@ -375,11 +397,12 @@ class Payment < ApplicationRecord
             mark_cancelled!
             needs_reverse_transfer = true
           when "failed"
-            mark_failed!
-            if stripe_payout["failure_code"].present?
-              self.failure_reason = stripe_payout["failure_code"]
-              save!
-            end
+            # The reason rides along with the transition's own write, same as the webhook path. A
+            # `save!` of its own ran after the balances were already back to `unpaid`, so a raise
+            # from it skipped the reversal below and left Gumroad's funds on the seller's connected
+            # account with the payment already terminal — and this caller swallows the exception into
+            # `errors`, which SyncStuckPayoutsJob discards, so it was silent.
+            mark_failed!(stripe_payout["failure_code"].presence)
             needs_reverse_transfer = true
             send_failure_email = true
           end
@@ -391,8 +414,12 @@ class Payment < ApplicationRecord
         needs_reverse_transfer = true
       end
 
-      send_payout_failure_email if send_failure_email
-      StripePayoutProcessor.reverse_internal_transfer!(self) if needs_reverse_transfer
+      send_payout_failure_email_best_effort if send_failure_email
+      # Hold-aware: the `rescue` below turns a failed reversal into an `errors.add`, which
+      # SyncStuckPayoutsJob discards. Without the hold, Gumroad's funds stay on the connected
+      # account while `mark_failed!`/`mark_cancelled!` have already returned the balances to
+      # `unpaid`, so the seller's next scheduled batch would transfer the same money again.
+      StripePayoutProcessor.reverse_internal_transfer_or_hold_payouts!(self, failure_reason, reraise: true) if needs_reverse_transfer
     rescue => e
       Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message

@@ -429,4 +429,65 @@ describe RecurringChargeWorker, :vcr do
       end
     end
   end
+
+  context "installment plan with a standing chargeback on every installment" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, :with_installment_plan, user: seller) }
+    let(:buyer) { create(:user, credit_card: create(:credit_card)) }
+    let(:subscription) do
+      create(:subscription, user: buyer, link: product, is_installment_plan: true,
+                            charge_occurrence_count: 3, cancelled_at: nil)
+    end
+
+    # Paid installments, all in the past so the period check does not mask the guard.
+    def create_installment(chargedback:, original:, created_at:)
+      create(:purchase, link: product, seller:, purchaser: buyer, subscription:,
+                        is_original_subscription_purchase: original,
+                        purchase_state: "successful",
+                        chargeback_date: chargedback ? 1.day.ago : nil,
+                        created_at:)
+    end
+
+    it "does not charge when every installment is charged back" do
+      create_installment(chargedback: true, original: true,  created_at: 3.months.ago)
+      create_installment(chargedback: true, original: false, created_at: 2.months.ago)
+
+      expect_any_instance_of(Subscription).to_not receive(:charge!)
+      described_class.new.perform(subscription.id)
+    end
+
+    # A single disputed installment can be a reversible mistake; blocking those would strand
+    # plans whose buyer still intends to pay.
+    it "still charges when only some installments are charged back" do
+      create_installment(chargedback: true,  original: true,  created_at: 3.months.ago)
+      create_installment(chargedback: false, original: false, created_at: 2.months.ago)
+
+      expect_any_instance_of(Subscription).to receive(:charge!)
+      described_class.new.perform(subscription.id)
+    end
+
+    # A won dispute must let the plan resume without anyone re-enabling it by hand.
+    it "charges again once the chargebacks are reversed" do
+      create_installment(chargedback: true, original: true,  created_at: 3.months.ago)
+      create_installment(chargedback: true, original: false, created_at: 2.months.ago)
+      # Set the flag rather than assigning `flags` wholesale: flags is a bitfield that also
+      # carries is_original_subscription_purchase, and overwriting it detaches the original
+      # purchase, which makes the subscription unpriceable rather than testing anything.
+      subscription.purchases.each { _1.update!(chargeback_reversed: true) }
+
+      expect_any_instance_of(Subscription).to receive(:charge!)
+      described_class.new.perform(subscription.id)
+    end
+
+    # The guard is scoped to installment plans: a recurring membership has a working
+    # cancellation path (widened by #6568) and must not be silently frozen instead.
+    it "does not apply to a recurring subscription whose charges are all disputed" do
+      recurring = create(:subscription, user: buyer, link: @product)
+      create(:purchase, link: @product, subscription: recurring, purchase_state: "successful",
+                        is_original_subscription_purchase: true, chargeback_date: 1.day.ago,
+                        created_at: 3.months.ago)
+
+      expect(recurring.all_charges_disputed?).to eq(false)
+    end
+  end
 end

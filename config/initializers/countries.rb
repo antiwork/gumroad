@@ -14,6 +14,9 @@ ISO3166::Country["CG"].data["unofficial_names"] << "Congo Republic"
 ISO3166::Country["FM"].data["unofficial_names"] << "Federated States of Micronesia"
 ISO3166::Country["UM"].data["unofficial_names"] << "U.S. Outlying Islands"
 ISO3166::Country["VC"].data["unofficial_names"] << "St Vincent and Grenadines"
+# The gem knows SK only as "Slovakia" / "The Slovak Republic"; the bare long form misses. Slovakia
+# is an EU VAT state, so a purchase stored this way resolves to nil and drops out of the OSS return.
+ISO3166::Country["SK"].data["unofficial_names"] << "Slovak Republic"
 
 # Similarly, there are times when we want to query by multiple country names,
 # e.g., `WHERE purchases.country IN ()`
@@ -40,6 +43,7 @@ ISO3166::Country["PN"].data["gumroad_historical_names"] = ["Pitcairn Islands"]
 ISO3166::Country["PS"].data["gumroad_historical_names"] = ["Palestine"]
 ISO3166::Country["RU"].data["gumroad_historical_names"] = ["Russia"]
 ISO3166::Country["SH"].data["gumroad_historical_names"] = ["Saint Helena"]
+ISO3166::Country["SK"].data["gumroad_historical_names"] = ["Slovak Republic"]
 ISO3166::Country["ST"].data["gumroad_historical_names"] = ["São Tomé and Príncipe"]
 ISO3166::Country["SX"].data["gumroad_historical_names"] = ["Sint Maarten"]
 ISO3166::Country["SZ"].data["gumroad_historical_names"] = ["Swaziland"]

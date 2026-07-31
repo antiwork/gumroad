@@ -48,7 +48,10 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
   # AgentConversationPersistence#agent_conversation_props.
   def latest_conversation
     conversation = seller.ai_conversations.alive.order(updated_at: :desc, id: :desc).first
-    render json: { success: true, conversation: conversation && agent_conversation_props(conversation) }
+    render json: {
+      success: true,
+      conversation: conversation && agent_conversation_props(conversation, hide_executing_action: true),
+    }
   end
 
   # GET /mobile/agent/turns/:client_turn_id
@@ -71,7 +74,7 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
         success: true,
         status: "persisted",
         conversation_id: message.ai_conversation.external_id,
-        message: agent_message_props(message),
+        message: agent_message_props(message, hide_executing_action: true),
       }
     else
       marker = agent_turn_marker(turn_id)
@@ -115,18 +118,30 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
       # reply would leave a stray user message that gets silently replayed to the model on the
       # next turn or after a resume (the same partial-history problem the pre-service guard above
       # protects against).
-      ActiveRecord::Base.transaction do
-        conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-        record_agent_assistant_message!(conversation, result)
+      # A persistence failure does not erase a completed read reply. A proposed write is different:
+      # without a stored message it cannot be confirmed, so its confirmation wording is replaced.
+      assistant_message = nil
+      begin
+        ActiveRecord::Base.transaction do
+          conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
+          record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+          assistant_message = record_agent_assistant_message!(conversation, result)
+        end
+      rescue => e
+        Rails.logger.error("Mobile store agent turn persistence failed: #{e.full_message}")
+        ErrorNotifier.notify(e)
       end
-      render json: {
+      replace_unpersisted_proposal_reply!(result) unless assistant_message
+      response_payload = {
         success: true,
         reply: result[:reply],
-        proposed_action: result[:proposed_action],
+        # A proposal can only be confirmed through its persisted message.
+        proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        conversation_id: conversation.external_id,
+        conversation_id: conversation&.external_id,
       }
+      response_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
+      render json: response_payload
     rescue ::Ai::StoreAgentService::Error => e
       render json: { success: false, error: e.message }, status: :unprocessable_entity
     rescue => e
@@ -137,10 +152,10 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
   end
 
   # POST /mobile/agent/actions
-  # params: { type:, params: {...}, conversation_id: <optional external id> } — the confirmed
-  # proposed action. With a conversation_id, a successful execution is also recorded on the stored
-  # conversation (the proposing message is marked applied) so resumed history — on mobile or web —
-  # shows the collapsed "Applied" card instead of a still-confirmable one.
+  # params: { type:, params: {...}, conversation_id:, proposal_message_id: } — the confirmed
+  # proposed action. Both ids bind the replay to the exact persisted proposal the seller saw; a
+  # successful execution finalizes that message as applied so resumed history — mobile or web —
+  # shows the collapsed audit card instead of a still-confirmable one.
   def execute
     type = params[:type].to_s
     unless ::Ai::StoreAgentActionExecutor::SUPPORTED_TYPES.include?(type)
@@ -154,38 +169,77 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
     # v2 API dispatch calling find! on a product that no longer exists — is an unexpected failure
     # that the generic rescue below must log + report, not a missing conversation.
     conversation = find_agent_conversation!
+    proposal_message, confirmation_error, confirmation_status, confirmation_retryable = claim_agent_action(
+      conversation,
+      proposal_message_id: params[:proposal_message_id],
+      type:,
+      action_params:,
+    )
+    if confirmation_error
+      render json: agent_action_confirmation_error(
+        confirmation_error,
+        confirmation_status,
+        retryable: confirmation_retryable,
+      ), status: :unprocessable_entity
+      return
+    end
+    persisted_action = stored_action_payload(proposal_message)
+    persisted_type = persisted_action.fetch("type")
+    persisted_action_params = persisted_action.fetch("params")
 
     begin
-      result = ::Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type:, params: action_params)
+      result = ::Ai::StoreAgentActionExecutor.new(seller:, pundit_user:)
+        .execute(type: persisted_type, params: persisted_action_params)
 
-      # Recording the applied status must not mask a store change that already committed: if the
-      # bookkeeping write fails after `execute` succeeded, returning an error would prompt the seller
-      # to retry the confirmation — running the action a second time (a duplicate discount, refund,
-      # etc.). Log + report the failure and return the successful result; the only cost is that
-      # resumed history shows a still-confirmable card instead of the collapsed "Applied" one.
-      begin
-        record_agent_action_applied!(conversation, result, type:, action_params:) if conversation && result[:success]
-      rescue => e
-        Rails.logger.error("Mobile store agent action persistence failed: #{e.full_message}")
-        ErrorNotifier.notify(e)
+      action_status = nil
+      retryable = false
+      if result[:success]
+        # Recording the applied status must not mask a store change that already committed. If the
+        # audit write fails, settle the claim as "unknown" and return success: releasing it or
+        # returning an error would invite a retry that runs the action twice.
+        begin
+          record_agent_action_applied!(proposal_message, result)
+        rescue => e
+          Rails.logger.error("Mobile store agent action persistence failed: #{e.full_message}")
+          ErrorNotifier.notify(e)
+          record_agent_action_outcome_unknown!(proposal_message)
+        end
+      else
+        # Only a rejection proven to occur before the nested request is safe to retry. A failed
+        # response can follow an external side effect, so post-dispatch outcomes stay claimed.
+        if result[:retry_safe]
+          action_status, retryable = release_retry_safe_agent_action_claim!(proposal_message)
+        else
+          action_status = record_agent_action_outcome_unknown!(proposal_message)
+        end
       end
 
-      render json: public_action_result(result), status: result[:success] ? :ok : :unprocessable_entity
+      # Installed clients cannot represent "unknown": a non-2xx leaves Confirm enabled, but a 2xx
+      # falsely renders the action as Applied. Keep the response honest; the server claim blocks
+      # every retry, and hydrated mobile history hides unresolved proposal cards.
+      render json: public_action_result(result, action_status:, retryable:), status: result[:success] ? :ok : :unprocessable_entity
     rescue => e
-      # The executor only rescues expected validation failures; log + report anything unexpected from
-      # a real store mutation (e.g. ActiveRecord::StatementInvalid, or a RecordNotFound raised inside
-      # the executor) instead of leaking a 500 with no trail.
+      # An unexpected exception does not prove the nested API failed before mutating the store.
+      # Keep the one-shot claim: token revocation and other post-response work can raise after the
+      # write committed, and releasing here would let the seller run that change twice.
       Rails.logger.error("Mobile store agent action failed: #{e.full_message}")
       ErrorNotifier.notify(e)
-      render json: { success: false, message: "Something went wrong. Please try again." }, status: :internal_server_error
+      action_status = record_agent_action_outcome_unknown!(proposal_message)
+      render json: {
+        success: false,
+        message: "The action may have completed, so it can't be retried automatically.",
+        action_status:,
+      }, status: :conflict
     end
   end
 
   private
-    # The executor includes fixed failure metadata for the web request's structured log. It is not
-    # part of either client API, so mobile strips it just as the web controller does.
-    def public_action_result(result)
-      result.except(:failure_reason, :failure_status)
+    # Convert server-only execution metadata to the narrow client retry/status contract.
+    def public_action_result(result, action_status:, retryable:)
+      public_result = result.except(:failure_reason, :failure_status, :retry_safe)
+      public_result[:action_status] = action_status if action_status
+      public_result[:retryable] = true if retryable
+      public_result
     end
 
     def seller

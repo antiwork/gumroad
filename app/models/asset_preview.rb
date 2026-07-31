@@ -243,15 +243,25 @@ class AssetPreview < ApplicationRecord
   # Generating a poster means downloading the video and running ffmpeg, which
   # can take a while for large files. That work never happens on a web
   # request thread: GenerateVideoPosterWorker is enqueued when the cover is
-  # created and does the generation in the background, writing the result to
-  # the cache. Renders only ever read the cache.
-  #   - success caches the poster URL;
-  #   - failure caches an empty-string sentinel (for an hour) so the worker's
-  #     retries don't re-download and re-run ffmpeg on a video that can't be
-  #     previewed.
-  # If a render happens before the worker has finished (or for covers created
-  # before this existed), this returns nil — the player shows its plain idle
-  # state — and we enqueue a generation so the poster appears on later views.
+  # created and does the generation in the background. Renders only ever read
+  # an already-generated result.
+  #
+  # Where that result lives matters. In production the cache store is namespaced
+  # by the deploy revision (config/environments/production.rb:
+  # `namespace: ENV.fetch("REVISION")`), so every deploy is a full cache clear —
+  # a poster kept only in Rails.cache disappears on every deploy. Hence the read
+  # order:
+  #
+  #   1. Rails.cache, a memo for the URL string of a poster we have already
+  #      confirmed, so the common render costs no queries;
+  #   2. otherwise the blob's persisted preview_image, which is a real database
+  #      record and survives deploys — a cache miss must never hide a poster we
+  #      demonstrably have;
+  #   3. otherwise nil, and enqueue a generation so the poster appears on later
+  #      views (the player shows its plain idle state this time).
+  #
+  # Failures cache an empty-string sentinel for an hour so the worker's retries
+  # don't re-download and re-run ffmpeg on a video ffmpeg cannot preview.
   FAILED_POSTER_SENTINEL = ""
   FAILED_POSTER_RETRY_INTERVAL = 1.hour
 
@@ -259,22 +269,72 @@ class AssetPreview < ApplicationRecord
     return nil unless file.attached? && file.video? && file.previewable?
 
     cached = Rails.cache.read(video_poster_cache_key)
-    if cached.nil?
-      # Nothing generated yet — covers created before poster support existed
-      # land here. Kick off a background generation so the poster shows up on
-      # subsequent views; this view renders without one.
-      GenerateVideoPosterWorker.perform_async(id)
-      return nil
+    return cached if cached.present?
+
+    # Cache miss, or the failure sentinel: read through to the persisted preview.
+    # This is what makes a poster survive a deploy — unlike the cache, the
+    # preview_image attachment is a real database record pointing at a real
+    # object in storage. We're on a web request, so this only reports a poster
+    # whose resized copy already exists; it never stops to make one (see
+    # persisted_video_poster_url).
+    persisted = persisted_video_poster_url
+    if persisted.present?
+      Rails.cache.write(video_poster_cache_key, persisted)
+      return persisted
     end
 
-    cached == FAILED_POSTER_SENTINEL ? nil : cached
+    # The sentinel means generation already tried and ffmpeg couldn't preview
+    # this blob, so don't queue another attempt until it expires.
+    return nil unless cached.nil?
+
+    # Nothing generated yet — covers created before poster support existed land
+    # here. Kick off a background generation so the poster shows up on
+    # subsequent views; this view renders without one.
+    GenerateVideoPosterWorker.perform_async(id)
+    nil
   end
 
-  # Does the actual download + ffmpeg frame extraction. Only called from
-  # GenerateVideoPosterWorker — web requests read the cached result via
-  # video_poster_url above.
+  # The URL of the poster frame ActiveStorage has already persisted for this
+  # video, or nil if it hasn't persisted one. Returns nil rather than raising if
+  # the attachment record exists but its URL can't be built (a half-written
+  # preview shouldn't 500 a product page — a missing poster only costs us the
+  # nicety of a preview frame).
+  #
+  # Pass process: true only from background work. The poster is stored at full
+  # size and we serve a resized copy of it, and asking ActiveStorage for that
+  # resized copy's URL when it doesn't exist yet makes it right there and then:
+  # download the poster, run the image processor, upload the result. That is
+  # fine in a worker and unacceptable on a web request, where a page full of
+  # covers would do it once per cover while the request waits.
+  def persisted_video_poster_url(process: false)
+    blob = file.blob
+    return nil unless blob&.preview_image&.attached?
+
+    variant = blob.preview_image.variant(resize_to_limit: [retina_width || RETINA_DISPLAY_WIDTH, nil])
+    return nil unless process || resized_poster_exists?(variant)
+
+    cdn_url_for(variant.processed.url)
+  rescue StandardError => e
+    Rails.logger.warn("AssetPreview#persisted_video_poster_url failed for asset_preview #{id}: #{e.message}")
+    nil
+  end
+
+  # Extracts a poster frame, reusing the persisted preview when one already
+  # exists instead of re-running ffmpeg. Only called from
+  # GenerateVideoPosterWorker.
   def generate_video_poster!
     return nil unless file.attached? && file.video? && file.previewable?
+
+    # Already persisted by an earlier generation (possibly many deploys ago) —
+    # reuse it instead of re-downloading the video and re-running ffmpeg. This is
+    # what makes the backfill cheap for covers whose preview_image survived even
+    # though the cache pointer didn't. We're in a worker, so it's fine to build
+    # the resized copy of the poster here if it doesn't exist yet.
+    persisted = persisted_video_poster_url(process: true)
+    if persisted.present?
+      Rails.cache.write(video_poster_cache_key, persisted)
+      return persisted
+    end
 
     cached = Rails.cache.read(video_poster_cache_key)
     return (cached == FAILED_POSTER_SENTINEL ? nil : cached) unless cached.nil?
@@ -388,6 +448,22 @@ class AssetPreview < ApplicationRecord
   private
     def video_poster_cache_key
       "attachment_#{file.id}_poster_url"
+    end
+
+    # Whether the resized copy of the persisted poster already exists, so that
+    # asking for its URL is a lookup instead of an image-processing run. Rails
+    # records every resized copy it has made in active_storage_variant_records
+    # (config.active_storage.track_variants, on by default), so this is one
+    # indexed row read.
+    #
+    # Returning false when we can't tell is deliberate: the caller then reports
+    # "no poster yet", which enqueues GenerateVideoPosterWorker unless the
+    # failure sentinel is still live, and the worker makes the resized copy off
+    # the request path.
+    def resized_poster_exists?(variant)
+      return false unless ActiveStorage.track_variants
+
+      variant.blob.variant_records.exists?(variation_digest: variant.variation.digest)
     end
 
     def enqueue_video_poster_generation

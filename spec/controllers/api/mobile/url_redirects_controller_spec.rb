@@ -450,9 +450,7 @@ describe Api::Mobile::UrlRedirectsController do
     context "when the redirect points at an installment that has its own files" do
       let(:installment) { create(:product_installment, link: @product) }
       let(:installment_file) do
-        file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/installment-only.pdf", link: nil)
-        installment.product_files << file
-        file
+        create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/installment-only.pdf", link: nil, installment:)
       end
 
       before do

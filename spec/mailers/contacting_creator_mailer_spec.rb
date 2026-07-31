@@ -98,6 +98,74 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
+
+        # Hours are computed when the mail renders, not when it is enqueued, and
+        # CreateMissingDisputeEvidenceJob backdates windows to a few hours to beat the processor's
+        # cutoff. A notice queued with an hour left can therefore render with none, and asking for
+        # information "in the next 0 hours" beside a live button is worse than not asking.
+        context "when the window has run out by the time the mail renders" do
+          before do
+            dispute_evidence.update!(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)
+          end
+
+          it "drops the request for evidence rather than quoting a deadline that has passed" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(dispute_evidence.hours_left_to_submit_evidence).to eq(0)
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "in the next 0 hours"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        # The mailer renders whenever the queue gets to it, so the seller may have answered the ask —
+        # or the row may have been resolved — after the notice was enqueued. Both states make
+        # Purchases::DisputeEvidenceController redirect away, so the button would go nowhere.
+        context "when the seller has already submitted evidence by the time the mail renders" do
+          before { dispute_evidence.update!(seller_submitted_at: Time.current) }
+
+          it "does not ask again for evidence the submission page will not accept" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        context "when the evidence has been resolved by the time the mail renders" do
+          before { dispute_evidence.update!(resolved_at: Time.current, resolution: DisputeEvidence::RESOLUTION_SUBMITTED) }
+
+          it "does not ask for evidence the submission page will not accept" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        # An evidence row can exist with no window while a notice for it is still queued: the
+        # sweep's push succeeded and the stamp write then failed. The form rejects that state too,
+        # and quoting its window would read "in the next 0 hours".
+        context "when the row exists but its window was never opened" do
+          before { dispute_evidence.update!(seller_contacted_at: nil) }
+
+          it "sends the plain notice without asking for evidence" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(dispute_evidence.reload.hours_left_to_submit_evidence).to eq(0)
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "in the next 0 hours"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
       end
 
       context "when the purchase was done via a PayPal Connect account" do
@@ -2085,6 +2153,37 @@ describe ContactingCreatorMailer do
       end
     end
 
+    context "when Stripe refused the account itself" do
+      let(:unusable_message) do
+        "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
+      end
+      let(:mail) do
+        ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL,
+          unusable_message
+        )
+      end
+
+      it "asks for a different bank account rather than a corrected code" do
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("We need a different bank account for your payouts.")
+        expect(mail.body.encoded).to include("add a different bank account")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "does not promise a re-check and does not blame a typo" do
+        expect(mail.body.encoded).not_to include("automatically re-check")
+        expect(mail.body.encoded).not_to include("you don't need to do anything")
+        expect(mail.body.encoded).not_to include("format banks in your country use")
+        expect(mail.body.encoded).to include("won't clear on its own")
+      end
+
+      it "offers a way out for a seller who has no other account" do
+        expect(mail.body.encoded).to include("reply to this email")
+      end
+    end
+
     context "when the bank simply isn't in the partner's records yet" do
       it "keeps the wait-and-we-will-re-check wording" do
         mail = ContactingCreatorMailer.invalid_bank_account(seller.id)
@@ -2092,6 +2191,48 @@ describe ContactingCreatorMailer do
         expect(mail.subject).to eq("We couldn't verify your bank account yet.")
         expect(mail.body.encoded).to include("automatically re-check")
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+    end
+
+    context "when Stripe has block-listed the specific external account" do
+      let(:mail) do
+        ContactingCreatorMailer.invalid_bank_account(
+          seller.id,
+          StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED,
+          "You cannot use this external account because it is on your block list. Please contact us via https://support.stripe.com/contact if you think this is an error."
+        )
+      end
+
+      it "asks the seller for a different account" do
+        expect(mail.to).to eq([seller.email])
+        expect(mail.subject).to eq("Please add a different bank account for payouts.")
+        expect(mail.body.encoded).to include("won't accept that particular account")
+        expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "does not tell the seller to check for typos or to wait" do
+        # These are the two wrong instructions we used to send. A seller followed the second one
+        # for three months, re-saving a perfectly valid account against a refusal that would
+        # never lift (gumroad-private#1476), so both are pinned as absent rather than assumed.
+        expect(mail.body.encoded).not_to include("automatically re-check")
+        expect(mail.body.encoded).not_to include("you don't need to do anything")
+        expect(mail.body.encoded).not_to include("have a typo")
+        expect(mail.body.encoded).to include("re-entering them won't help")
+      end
+
+      it "does not promise that payouts will resume, since other payout holds can outlive this one" do
+        # Adding a different account clears THIS destination only. A seller can still be held by
+        # compliance, a missing tax form, or the minimum balance, so promising resumption sets up
+        # a second round of "you said I'd get paid".
+        expect(mail.body.encoded).not_to include("payouts will resume")
+        expect(mail.body.encoded).to include("clears this particular hold")
+      end
+
+      it "does not leak Stripe's own message, which tells the seller to contact Stripe" do
+        # Stripe's text points the seller at support.stripe.com, which cannot help them: the
+        # block is on OUR connected account, not theirs.
+        expect(mail.body.encoded).not_to include("support.stripe.com")
+        expect(mail.body.encoded).not_to include("block list")
       end
     end
   end

@@ -38,7 +38,8 @@ export type SubscribeSection = Section & {
 
 export type FeaturedProductSection = Section & {
   type: "SellerProfileFeaturedProductSection";
-  featured_product_id?: string;
+  // Explicit `undefined` is how the editor clears the selection (serialized as absent).
+  featured_product_id?: string | undefined;
 };
 
 export type WishlistsSection = Section & {
@@ -65,7 +66,13 @@ export const updateProfileSettings = async (
     profileVersion?: string | null;
   },
 ) => {
-  const { profile_picture_blob_id, tabs, sections, profileVersion, ...user } = profileSettings;
+  const { profile_picture_blob_id, tabs, sections, profileVersion, font, background_color, highlight_color, ...user } =
+    profileSettings;
+  // font/background_color/highlight_color live on seller_profile, not user, and must be pulled out
+  // of the rest-spread above — anything left in `user` is sent as a User attribute and the profile
+  // policy would reject these three there.
+  const sellerProfile = { font, background_color, highlight_color };
+  const hasSellerProfileChanges = Object.values(sellerProfile).some((value) => value !== undefined);
   const response = await request({
     method: "PUT",
     url: Routes.profile_path(),
@@ -73,6 +80,7 @@ export const updateProfileSettings = async (
     data: {
       user,
       profile_picture_blob_id,
+      ...(hasSellerProfileChanges ? { seller_profile: sellerProfile } : {}),
       // Omit pages/sections entirely when the caller didn't pass them, so a settings-only save
       // doesn't replace (and prune) the server's section list. When they are sent, profile_version
       // lets the server reject the write if the layout changed elsewhere since this editor loaded.

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyRichContentPageSaveResponse,
   buildRichContentReconciliationTransaction,
+  HiddenVariantContentConflictError,
   canonicalRichContentScope,
   copyRichContentPages,
   filesForSave,
@@ -15,7 +16,11 @@ import {
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
   richContentMoveSourceIds,
+  saveProductError,
+  StaleContentConflictError,
+  StaleDeletionConflictError,
 } from "$app/data/product_edit";
+import { ResponseError } from "$app/utils/request";
 
 vi.mock("@tiptap/core", () => ({
   Editor: class {
@@ -41,20 +46,19 @@ describe("filesForSave", () => {
 
 describe("copyRichContentPages", () => {
   it("keeps stored source ids while assigning new page ids and clearing copied upsell ids", () => {
-    const pages = [
-      {
-        id: "source-page",
-        title: "Source",
-        updated_at: "2026-07-28T00:00:00.000Z",
-        description: {
-          type: "doc",
-          content: [
-            { type: "upsellCard", attrs: { id: "stored-upsell" } },
-            { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
-          ],
-        },
+    const sourcePage = {
+      id: "source-page",
+      title: "Source",
+      updated_at: "2026-07-28T00:00:00.000Z",
+      description: {
+        type: "doc",
+        content: [
+          { type: "upsellCard", attrs: { id: "stored-upsell" } },
+          { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
+        ],
       },
-    ];
+    };
+    const pages = [sourcePage];
 
     expect(copyRichContentPages(pages, () => "new-page", "2026-07-28T01:00:00.000Z")).toEqual([
       {
@@ -80,7 +84,7 @@ describe("copyRichContentPages", () => {
     expect(secondCopy.source_id).toBe("source-page");
     expect(secondCopy.copy_parent_id).toBe("first-copy");
 
-    const unsavedCopy = copyRichContentPages([{ ...pages[0], id: "unsaved", newlyAdded: true }], () => "copy");
+    const unsavedCopy = copyRichContentPages([{ ...sourcePage, id: "unsaved", newlyAdded: true }], () => "copy");
     expect(unsavedCopy[0]?.source_id).toBeUndefined();
     expect(unsavedCopy[0]?.copy_parent_id).toBe("unsaved");
   });
@@ -403,5 +407,68 @@ describe("removeFileEmbedsFromRichContent", () => {
       type: "doc",
       content: [{ type: "paragraph", content: [{ type: "text", text: "First edit" }] }],
     });
+  });
+});
+
+describe("save contract conflict responses", () => {
+  // The seller-visible bug (gumroad-private#1508): the server answers a
+  // stale-token deletion with 409 + error_code, but the mapping only recognised
+  // the two content-conflict codes, so this one fell through to a bare
+  // ResponseError and the page turned it into a generic red toast that never
+  // said the deletion had not happened.
+  it("maps stale_deletion_conflict to its own typed error", () => {
+    const error = saveProductError({
+      error_message: "This product changed since you opened it.",
+      error_code: "stale_deletion_conflict",
+    });
+
+    expect(error).toBeInstanceOf(StaleDeletionConflictError);
+    expect(error).not.toBeInstanceOf(StaleContentConflictError);
+    expect(error.message).toBe("This product changed since you opened it.");
+  });
+
+  // A fresh token must never reach the editor: adopting it would let the
+  // session's next save — still the full stale snapshot — delete AND revert
+  // every field another session changed in between (gumroad-private#1532).
+  // The server no longer sends one, and the payload type no longer has a field
+  // to receive it, so this pins the defence in depth: even a server that
+  // regressed and emitted the token could not get it onto the error.
+  it("does not carry a fresh revision onto the error", () => {
+    const error = saveProductError({
+      error_message: "Stale.",
+      error_code: "stale_deletion_conflict",
+      // @ts-expect-error -- not part of SaveProductErrorPayload; a server that
+      // regressed and sent it anyway must still not have it reach the editor.
+      editor_revision: "revision-issued-with-the-409",
+    });
+
+    expect(error).toBeInstanceOf(StaleDeletionConflictError);
+    expect(JSON.stringify({ ...error, message: error.message })).not.toContain("revision-issued-with-the-409");
+  });
+
+  // Pins the discrimination to error_code, not to HTTP status. stale-content and
+  // stale-deletion are both 409 and describe different things: a write that
+  // would clobber newer content vs. a deletion that did not happen.
+  it("keeps the two 409 conflicts distinct", () => {
+    const contentConflict = saveProductError({
+      error_message: "Someone else saved.",
+      error_code: "stale_content_conflict",
+      stale_records: [{ type: "variant", id: "8056662", name: "ADManager-Portable" }],
+    });
+    expect(contentConflict).toBeInstanceOf(StaleContentConflictError);
+    expect(contentConflict).not.toBeInstanceOf(StaleDeletionConflictError);
+
+    const hiddenConflict = saveProductError({
+      error_message: "Choose which content to keep.",
+      error_code: "hidden_variant_content_conflict",
+      hidden_variant_pages: [{ id: "p1", title: null, variant_name: null }],
+    });
+    expect(hiddenConflict).toBeInstanceOf(HiddenVariantContentConflictError);
+
+    // An unrecognised code stays a plain ResponseError, so new server codes
+    // degrade to the generic toast instead of being silently mis-handled.
+    const unknown = saveProductError({ error_message: "Nope.", error_code: "some_future_code" });
+    expect(unknown).toBeInstanceOf(ResponseError);
+    expect(unknown).not.toBeInstanceOf(StaleDeletionConflictError);
   });
 });

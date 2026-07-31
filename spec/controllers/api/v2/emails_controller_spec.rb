@@ -623,7 +623,7 @@ describe Api::V2::EmailsController do
       end
 
       it "keeps attached files when publishing a draft" do
-        file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
+        file = create(:product_file, link: nil, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
         @installment.product_files << file
 
         post @action, params: @params

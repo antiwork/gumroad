@@ -203,9 +203,14 @@ module Charge::Disputable
 
       purchase.mark_product_purchases_as_chargeback_reversed!
 
-      if purchase.link.is_recurring_billing?
-        logger.info("Chargeback event won; re-activating subscription: #{purchase.subscription_id}")
-        subscription = Subscription.find_by(id: purchase.subscription_id)
+      # Read the purchase's own subscription: a seller converting a membership to a one-off flips
+      # link.is_recurring_billing for every past sale, live ones included.
+      #
+      # Skip installment plans, and skip anything already ended: resubscribe! does not clear
+      # ended_at, so it would announce a restart that leaves the subscription non-alive.
+      subscription = Subscription.find_by(id: purchase.subscription_id)
+      if subscription.present? && !subscription.is_installment_plan? && !subscription.ended?
+        logger.info("Chargeback event won; re-activating subscription: #{subscription.id}")
         terminated_or_scheduled_for_termination = subscription.termination_date.present?
         subscription.resubscribe!
         subscription.send_restart_notifications!(Subscription::ResubscriptionReason::PAYMENT_ISSUE_RESOLVED) if terminated_or_scheduled_for_termination
@@ -294,15 +299,20 @@ module Charge::Disputable
         # has a purchase_chargeback_balance, so a replay never debits the seller twice.
         purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
 
-        if purchase.link.is_recurring_billing
-          subscription = Subscription.find_by(id: purchase.subscription_id)
-          # Only cancel a live subscription: re-cancelling one that a previous attempt already
-          # deactivated would re-fire the cancellation webhooks and customer emails on replay.
-          # The review exclusion stays inside this guard because it is tied to the cancellation.
-          if subscription.present? && subscription.deactivated_at.nil?
-            subscription.cancel_effective_immediately!(by_buyer: true)
-            subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
-          end
+        # Read the purchase's own subscription: a seller converting a membership to a one-off flips
+        # link.is_recurring_billing for every past sale, live ones included.
+        #
+        # Installment plans must stay out: installment_plans_cannot_be_cancelled_by_buyer rejects
+        # the by_buyer cancel below, and raising here would strand every later side effect
+        # (payout pause, dispute evidence, FightDisputeJob) on every webhook redelivery.
+        subscription = Subscription.find_by(id: purchase.subscription_id)
+        subscription = nil if subscription&.is_installment_plan?
+        # Only cancel a live subscription: re-cancelling one that a previous attempt already
+        # deactivated would re-fire the cancellation webhooks and customer emails on replay.
+        # The review exclusion stays inside this guard because it is tied to the cancellation.
+        if subscription.present? && subscription.deactivated_at.nil?
+          subscription.cancel_effective_immediately!(by_buyer: true)
+          subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
         end
 
         purchase.enqueue_update_sales_related_products_infos_job(false)
@@ -329,15 +339,40 @@ module Charge::Disputable
       end
 
       dispute_evidence = create_dispute_evidence_if_needed!
-      # Don't re-stamp seller_contacted_at on replay: it anchors the 72-hour evidence-submission
-      # window, and moving it forward would silently extend the seller's deadline.
-      dispute_evidence.update_as_seller_contacted! if dispute_evidence.present? && !dispute_evidence.seller_contacted?
+      # Claim rather than check-then-stamp: CreateMissingDisputeEvidenceJob opens the same window
+      # once a formalization looks abandoned, and it backdates the stamp to beat the processor's
+      # cutoff. Claiming keeps whichever window was opened first, so a re-delivery arriving after
+      # that sweep cannot extend the seller's deadline past the point evidence is still accepted.
+      dispute_evidence.claim_seller_contacted_window! if dispute_evidence.present?
+
+      # Ask for the seller's side only while the form behind the notice would still take it, and
+      # only while there are whole hours left to quote them: the notice's own body promises "in the
+      # next N hours", so a window with none left would ask for information against a "0 hours"
+      # deadline. The submitted and resolved conditions are the controller's; the hours test is not
+      # — check_if_needs_redirect lets an elapsed window through until FightDisputesJob resolves the
+      # row, and that imminent submission is what the notice must not invite a race with.
+      #
+      # All three shapes are reachable on a re-delivery, because losing the claim above does not
+      # stop this path: CreateMissingDisputeEvidenceJob may have opened this window hours earlier
+      # and backdated it past its own end, or had the evidence answered and submitted before the
+      # re-delivery arrived. A dispute with no evidence surface at all (PayPal, Stripe Connect)
+      # still gets the plain notice, as it always has.
+      #
+      # Read the columns rather than #reload: claim_seller_contacted_window! writes through
+      # update_all and leaves this object stale, and reloading it here would reset the attachment
+      # associations the evidence row was just built with.
+      stamped_at, submitted_at, resolved_at =
+        dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
+                                           .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
+      notice_worth_sending = DisputeEvidence.notice_worth_sending?(
+        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+      )
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
       # between these enqueues and the marker write — that degrades to at-least-once
       # email/webhook delivery, which is normal for crash-retry semantics.
-      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later
+      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later if notice_worth_sending
       AdminMailer.chargeback_notify(dispute.id).deliver_later
       CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
 

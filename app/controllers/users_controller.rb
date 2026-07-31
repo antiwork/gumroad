@@ -40,10 +40,21 @@ class UsersController < ApplicationController
     return head :not_found unless custom_html_visible?
 
     apply_custom_html_response_headers
-    interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user)
+    # Alone among the custom-HTML embeds this body can be derived from the visitor's IP (the
+    # prices below), so one visitor's currency must never be replayed to the next. Rails'
+    # default `private` already says so; state it explicitly because nothing else here would
+    # catch an edge cache rule or a future `expires_in` from turning this response shared.
+    # Unconditional, so the headers don't flip with the page's content.
+    response.cache_control.replace(private: true, no_store: true)
+    # Skipped for pages that reference no price: the build is uncached, per-request work for up
+    # to Pages::ProfileData::MAX_ITEMS products, and a page with no reference cannot consume it.
+    prices_referenced = Pages::ProductPrices.referenced_in?(@user.custom_html)
+    prices = prices_referenced ? Pages::ProductPrices.build(@user, ip: request.remote_ip) : {}
+    interpolated = Pages::Interpolator.interpolate_profile(@user.custom_html, profile: @user, prices:)
     render html: profile_custom_html_document(
       interpolated,
       data_json: ERB::Util.json_escape(Pages::ProfileData.build(@user).to_json),
+      prices_json: prices_referenced ? ERB::Util.json_escape(prices.to_json) : nil,
       live_fields: params[:preview].present? && current_seller_owns_profile?,
       navigation_bridge: custom_html_navigation_bridge_script(allowed_hostnames: profile_store_hostnames(@user)),
       follow_bridge: FOLLOW_BRIDGE_SCRIPT,
@@ -53,7 +64,7 @@ class UsersController < ApplicationController
   def landing_version
     return render_landing_version(visible: false, page: nil) unless current_seller_owns_profile?
     page = @user.page
-    render_landing_version(visible: Feature.active?(:custom_html_pages, @user) && page&.custom_html.present?, page:)
+    render_landing_version(visible: @user.custom_landing_page_visible?, page:)
   end
 
   def edit
@@ -214,7 +225,7 @@ class UsersController < ApplicationController
     # before these actions run (unlike products, which aren't gated on alive?
     # upstream), so there's no owner/team preview branch to add here.
     def custom_html_visible?
-      Feature.active?(:custom_html_pages, @user) && @user.custom_html.present?
+      @user.custom_landing_page_visible?
     end
 
     def profile_landing_src(user, suffix)
@@ -259,9 +270,34 @@ class UsersController < ApplicationController
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
-      # avatar_url always returns a value (it falls back to the default avatar),
-      # so only advertise og:image when the seller uploaded a real one.
-      og_image_tag = user.avatar.attached? ? %(<meta property="og:image" content="#{ERB::Util.h(user.avatar_url)}">) : ""
+      # Share-card chain mirroring the standard profile (PageMeta::User): the
+      # branded subscribe-preview card wins, then a real uploaded avatar, then
+      # Gumroad's generic banner. avatar_url always returns a value (it falls back
+      # to the default avatar), so only advertise it when the seller uploaded one.
+      # Resolve the preview once — it rescues to nil internally, so re-reading it
+      # could mix the two branches' tags. This <head> is hand-built and gets none
+      # of PageMeta::Base's defaults, so the generic fallback is spelled out here;
+      # it must be absolute, since a relative path would resolve against the
+      # seller's custom domain, which does not serve Gumroad's assets.
+      preview_url = user.subscribe_preview_url.presence
+      avatar_url = user.avatar_url if user.avatar.attached?
+      share_image = preview_url || avatar_url || ActionController::Base.helpers.image_url("opengraph_image.png")
+      escaped_share_image = ERB::Util.h(share_image)
+      alt = if preview_url
+        title
+      elsif avatar_url
+        "#{title}'s profile picture"
+      else
+        "Gumroad"
+      end
+      share_image_tags = [%(<meta property="og:image" content="#{escaped_share_image}">),
+                          %(<meta property="og:image:alt" content="#{alt}">)]
+      if preview_url
+        share_image_tags << %(<meta property="twitter:card" content="summary_large_image">)
+        share_image_tags << %(<meta property="twitter:image" content="#{escaped_share_image}">)
+        share_image_tags << %(<meta property="twitter:image:alt" content="#{alt}">)
+      end
+      share_image_tags = share_image_tags.join("\n    ")
       live_reload = if current_seller_owns_profile?
         custom_html_live_reload_script(version_src: profile_landing_src(user, "version"), nonce:)
       else
@@ -278,7 +314,7 @@ class UsersController < ApplicationController
             <meta property="og:title" content="#{title}">
             <meta property="og:type" content="profile">
             <meta property="og:url" content="#{canonical}">
-            #{og_image_tag}
+            #{share_image_tags}
             #{profile_custom_html_analytics_head(user)}
             <meta name="csrf-token" content="#{CsrfTokenInjector::TOKEN_PLACEHOLDER}">
             <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style>
@@ -311,6 +347,7 @@ class UsersController < ApplicationController
               })();
             </script>
             #{custom_html_follow_wrapper_script(seller_external_id: user.external_id, nonce:)}
+            #{custom_html_background_wrapper_script(nonce:)}
             #{live_reload}
           </body>
         </html>

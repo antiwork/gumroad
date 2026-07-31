@@ -93,11 +93,19 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = @disputable.seller
 
     dispute_evidence = dispute.dispute_evidence
+    # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
+    # none, and the seller may have answered or the row been resolved in between. Asking through the
+    # same predicate the submission endpoint enforces keeps the ask from outliving the page it links to.
+    #
+    # hours_left is read FIRST and the gate is ANDed with it: accepting_evidence? reads its own clock,
+    # so the two calls can straddle the window's end and quote "the next 0 hours" past the gate.
+    hours_left = dispute_evidence&.hours_left_to_submit_evidence
+    asking_for_evidence = dispute_evidence&.accepting_evidence? && hours_left&.positive?
     @dispute_evidence_content = \
-      if dispute_evidence&.seller_contacted?
+      if asking_for_evidence
         safe_join(
           [
-            tag.p(tag.b("Any additional information you can provide in the next #{pluralize(dispute_evidence.hours_left_to_submit_evidence, "hour")} will help us win on your behalf.")),
+            tag.p(tag.b("Any additional information you can provide in the next #{pluralize(hours_left, "hour")} will help us win on your behalf.")),
             tag.p(
               link_to(
                 "Submit additional information",
@@ -112,7 +120,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = \
       if @is_paypal.present?
         "A PayPal sale has been disputed"
-      elsif dispute_evidence&.seller_contacted?
+      elsif asking_for_evidence
         "🚨 Urgent: Action required for resolving disputed sale"
       else
         "A sale has been disputed"
@@ -142,17 +150,27 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your last week."
   end
 
-  # rejection_kind distinguishes a bank-code FORMAT rejection (the value can never be accepted
-  # as typed, so the seller has to correct it) from a directory miss (the bank or branch may
-  # simply not be in our payment partner's records yet, which waiting can fix). The two cases
-  # need opposite advice, so the template branches on it. stripe_error_message is Stripe's own
-  # message, which for format rejections names the expected format for the seller's country —
-  # the single most actionable thing we can tell them.
+  # The three rejection kinds need opposite advice — correct the value, use a different account,
+  # or wait — so the kind has to reach the template rather than being flattened to one message.
   def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil)
     @seller = User.find(user_id)
     @format_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT
+    # A block-listed account is the third case, and the only one where re-entering the SAME
+    # details is guaranteed to fail: the details are valid, our payment partner just refuses
+    # this particular account. Telling these sellers to check for typos or to wait is what
+    # kept one of them re-saving a correct account for three months (gumroad-private#1476).
+    @account_blocked = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED
+    @terminal_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL
     @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
-    @subject = @format_rejected ? "Your bank details need correcting for payouts." : "We couldn't verify your bank account yet."
+    @subject = if @account_blocked
+      "Please add a different bank account for payouts."
+    elsif @format_rejected
+      "Your bank details need correcting for payouts."
+    elsif @terminal_rejected
+      "We need a different bank account for your payouts."
+    else
+      "We couldn't verify your bank account yet."
+    end
   end
 
   def invalid_account_holder_name(user_id)

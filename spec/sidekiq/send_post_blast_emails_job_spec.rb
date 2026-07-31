@@ -242,7 +242,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
       end
 
       it "creates the UrlRedirect records and adds a download button to the email" do
-        @post.product_files << create(:product_file)
+        @post.product_files << create(:product_file, link: nil, installment: @post)
 
         expect do
           described_class.new.perform(@blast.id)
