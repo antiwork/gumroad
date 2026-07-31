@@ -2847,6 +2847,71 @@ describe OrdersController, :vcr do
 
         expect(response.parsed_body["success"]).to be(true)
       end
+
+      # The type says invalid_request_error, but the code proves an attempt happened, so
+      # `payment_intent.payment_failed` already wrote it to purchases.stripe_error_code.
+      # Production shape: 5 of 5 survivors on gumroad-private#1514.
+      {
+        "payment_intent_authentication_failure" => "card",
+        "payment_intent_authentication_failure_generic_decline" => "card",
+        "payment_intent_payment_attempt_failed" => "card",
+        "payment_intent_payment_attempt_failed_generic_decline" => "link",
+      }.each do |stripe_error_code, method_type|
+        it "does not notify for #{stripe_error_code} on #{method_type}" do
+          params = { line_items: line_items.map(&:dup) }.merge(common_params)
+          order, = Order::CreateService.new(params:).perform
+
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          post :confirm_error, params: {
+            id: order.secure_external_id(scope: "confirm"),
+            payment_method_type: method_type,
+            stripe_error_type: "invalid_request_error",
+            stripe_error_code:,
+          }
+
+          expect(response.parsed_body["success"]).to be(true)
+        end
+      end
+
+      it "does not notify when only the selected row names the method on an attempt code" do
+        # The blank-payment_method_type case from gumroad-private#1514, now reached through the
+        # code rather than the type.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          selected_payment_method_type: "card",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_authentication_failure",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+
+      it "notifies for an attempt code on a redirect method, whose failure nothing else records" do
+        # The prefix match must not swallow the signal the endpoint exists for: an attempted
+        # iDEAL payment is still only witnessed here.
+        params = { line_items: line_items.map(&:dup) }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Client-confirm browser error",
+          hash_including(selected_payment_method_type: "ideal")
+        )
+
+        post :confirm_error, params: {
+          id: order.secure_external_id(scope: "confirm"),
+          selected_payment_method_type: "ideal",
+          stripe_error_type: "invalid_request_error",
+          stripe_error_code: "payment_intent_authentication_failure",
+        }
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
     end
   end
 end
