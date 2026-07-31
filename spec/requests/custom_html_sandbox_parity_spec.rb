@@ -66,5 +66,19 @@ describe "custom HTML sandbox parity", type: :request do
       expect(sandbox).not_to include("allow-same-origin")
       expect(sandbox).not_to include("allow-top-navigation")
     end
+
+    # Deliberately a literal, not the constant: every other example here compares
+    # a response against CUSTOM_HTML_SANDBOX, which moves with production and so
+    # can't notice a token being dropped. This one fails if the set ever changes,
+    # which is the point — update it consciously.
+    it "serves this exact token set on a rendered wrapper" do
+      seller.update!(custom_html: "<section><h1>Profile</h1></section>")
+
+      get "http://#{seller.subdomain}/"
+
+      expect(response.body).to include(
+        %(sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads")
+      )
+    end
   end
 end

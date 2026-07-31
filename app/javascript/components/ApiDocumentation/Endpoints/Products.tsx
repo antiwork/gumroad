@@ -127,11 +127,13 @@ gumroad products page publish <permalink> ./landing.html`}
       <li>Load fonts from Google Fonts and Bunny Fonts.</li>
       <li>Load images and media from Gumroad only — e.g. your product's covers and thumbnail.</li>
       <li>Submit forms in-page with JavaScript.</li>
+      <li>Open links in a new tab or window.</li>
+      <li>Link to files that download.</li>
     </ul>
     <p>It can't:</p>
     <ul>
       <li>Read your Gumroad cookies or session — it runs on an opaque origin.</li>
-      <li>Touch or navigate the parent page, or open popups.</li>
+      <li>Touch the parent page.</li>
       <li>
         Make <code>fetch</code>, <code>XHR</code>, or WebSocket requests (<code>connect-src 'none'</code>).
       </li>
