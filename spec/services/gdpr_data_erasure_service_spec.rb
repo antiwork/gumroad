@@ -352,6 +352,84 @@ describe GdprDataErasureService do
           # The other holder's lock must survive, or both would run after all.
           expect($redis.get("stripe_guardian_sync:acct_erasure_test")).to eq("a-sync-is-running")
         end
+
+        # The load-bearing half of the branch above. Handing the recorded ids to the retry job only
+        # covers Persons we have a handle for — and the lock holder we lost to is a sync that may
+        # have created a Person without yet writing its id, which is precisely the no-recorded-id
+        # case. Keying the failure on "we found something to retry" reported success exactly when the
+        # skipped scan was the only thing that could have found the Person.
+        it "reports the erasure incomplete when the lock cannot be taken and no person id is recorded" do
+          guardian = create(:guardian, user:, stripe_person_id: nil)
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          stub_const("StripeGuardianManager::SYNC_LOCK_WAIT_TIMEOUT", 0.seconds)
+          $redis.set("stripe_guardian_sync:acct_erasure_test", "a-sync-is-running")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          expect(result[:error]).to include("could not be scanned")
+          # Nothing to enqueue — a retry job takes a Person id — so the note naming the account is
+          # the only handle a human gets.
+          note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+          expect(note.content).to include("acct_erasure_test")
+        end
+
+        # A merchant account created while the local transaction ran is absent from the pre-transaction
+        # snapshot, and a sync can put a guardian Person on it. Erasure never locked or scanned that
+        # account and reported success with the adult's details still at Stripe.
+        it "deletes a guardian person on an account created after the snapshot" do
+          guardian = create(:guardian, user:, stripe_person_id: nil)
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow(Stripe::Account).to receive(:list_persons) do |stripe_account_id, _params|
+            data = stripe_account_id == "acct_created_late" ? [{ id: "person_on_late_account" }] : []
+            Stripe::ListObject.construct_from(data:)
+          end
+          # Created during the local transaction, after the snapshot was taken.
+          allow_any_instance_of(described_class).to receive(:log_erasure!).and_wrap_original do |m, *args|
+            create(:merchant_account, user:, charge_processor_merchant_id: "acct_created_late")
+            m.call(*args)
+          end
+
+          described_class.new(user, performed_by: admin).perform!
+
+          expect(Stripe::Account).to have_received(:delete_person)
+            .with("acct_created_late", "person_on_late_account")
+        end
+      end
+
+      # The scan is what erasure reports as the complete deletion set, so a Person past the first page
+      # is not merely missed — it is an adult's identity data that erasure affirmatively reports gone.
+      it "deletes guardian persons beyond the first page of Stripe's results" do
+        guardian = create(:guardian, user:, stripe_person_id: nil)
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          if params[:starting_after] == "person_page_one"
+            Stripe::ListObject.construct_from(data: [{ id: "person_page_two" }], has_more: false)
+          else
+            Stripe::ListObject.construct_from(data: [{ id: "person_page_one" }], has_more: true)
+          end
+        end
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_page_one")
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_page_two")
+      end
+
+      # A partial scan still found real Persons. Dropping them on the rescue would delete fewer than
+      # the single-page version did.
+      it "deletes the persons a partially failing scan did find" do
+        guardian = create(:guardian, user:, stripe_person_id: nil)
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          raise Stripe::APIError.new("Stripe is down") if params[:starting_after]
+
+          Stripe::ListObject.construct_from(data: [{ id: "person_page_one" }], has_more: true)
+        end
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_page_one")
       end
 
       # A Redis outage is not a lock that is merely busy — the calls themselves raise. Those errors

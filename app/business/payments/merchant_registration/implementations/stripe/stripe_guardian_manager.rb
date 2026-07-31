@@ -28,6 +28,10 @@ module StripeGuardianManager
   US_SSN_LAST_4_LENGTH = 4
   US_FULL_TAX_ID_LENGTH = 9
 
+  # Stripe's maximum page size for list_persons. Named because the pagination loop's correctness
+  # depends on asking for a full page, not on the number.
+  PERSON_PAGE_LIMIT = 100
+
   # Must outlast the worst case Stripe call, not the typical one. The lock is held across two round
   # trips, and stripe-ruby's 80s read timeout retried max_network_retries times puts one call at up
   # to ~320s — so both together exceed 10 minutes. That worst case is a Stripe brownout, which is
@@ -155,11 +159,7 @@ module StripeGuardianManager
   def self.reconcile_duplicate_persons!(guardian, stripe_account_id)
     recorded_ids = Guardian.where(user_id: guardian.user_id).pluck(:stripe_person_id).compact.to_set
 
-    Stripe::Account.list_persons(
-      stripe_account_id,
-      relationship: { legal_guardian: true },
-      limit: 100
-    ).data.each do |person|
+    each_legal_guardian_person(stripe_account_id) do |person|
       next if recorded_ids.include?(person.id)
 
       Stripe::Account.delete_person(stripe_account_id, person.id)
@@ -171,6 +171,37 @@ module StripeGuardianManager
     ErrorNotifier.notify(e)
   end
   private_class_method :reconcile_duplicate_persons!
+
+  # Every legal-guardian Person on the account, across all pages.
+  #
+  # Paginated rather than reading one page, because both callers treat what this yields as the
+  # COMPLETE set: erasure deletes it and reports the request fulfilled, and the reconcile deletes
+  # what it does not find recorded. A Person past the page boundary is therefore not merely missed —
+  # it is an adult's name, date of birth, address and tax id that erasure affirmatively reports as
+  # gone. `has_more` is read with [] rather than a reader so a page object without the key answers
+  # nil instead of raising.
+  def self.each_legal_guardian_person(stripe_account_id, &block)
+    starting_after = nil
+
+    loop do
+      params = { relationship: { legal_guardian: true }, limit: PERSON_PAGE_LIMIT }
+      params[:starting_after] = starting_after if starting_after
+
+      page = Stripe::Account.list_persons(stripe_account_id, params)
+      people = page[:data].to_a
+      people.each(&block)
+
+      break unless page[:has_more]
+
+      last_id = people.last&.id
+      # Stripe says there is more but gave us no cursor to ask for it. Stopping beats looping on the
+      # same page forever; the caller's own reporting is what surfaces an incomplete scan.
+      break if last_id.nil? || last_id == starting_after
+
+      starting_after = last_id
+    end
+  end
+  private_class_method :each_legal_guardian_person
 
   # Holds a Redis lock for the duration of one guardian sync, keyed on the Stripe account.
   #
@@ -263,18 +294,18 @@ module StripeGuardianManager
     recorded = guardians.filter_map(&:stripe_person_id)
     return recorded if guardians.none?
 
-    scanned = Stripe::Account.list_persons(
-      stripe_account_id,
-      relationship: { legal_guardian: true },
-      limit: 100
-    ).data.map(&:id)
+    scanned = []
+    each_legal_guardian_person(stripe_account_id) { |person| scanned << person.id }
 
     (recorded + scanned).uniq
   rescue Stripe::StripeError => e
     # The scan is the belt to the recorded id's braces. If Stripe will not answer, delete what we
     # can point at rather than abandoning the erasure entirely.
+    #
+    # Whatever pages the scan did reach is kept: a partial scan raising on page two still found real
+    # Persons on page one, and dropping them would delete fewer than before this rescue existed.
     ErrorNotifier.notify(e)
-    recorded
+    (recorded + scanned.to_a).uniq
   end
 
   # Deletes one Person by id, so erasure can act on a Person found by scan, which has no Guardian

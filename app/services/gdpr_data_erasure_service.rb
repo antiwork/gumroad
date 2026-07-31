@@ -13,6 +13,7 @@ class GdprDataErasureService
     @performed_by = performed_by
     @products_deleted = 0
     @unreachable_guardian_person_ids = []
+    @unscanned_guardian_account_ids = []
     @local_erasure_committed = false
   end
 
@@ -43,9 +44,18 @@ class GdprDataErasureService
     @local_erasure_committed = true
 
     remove_profile_assets!
+    # Re-resolved after the commit and unioned with the snapshot, because an account created while
+    # the transaction ran is absent from the snapshot and a sync can put a guardian Person on it.
+    # Safe to trust this second read as final: past the anonymize no sync can create a Person at all
+    # (StripeGuardianManager re-checks the reloaded guardian under the lock, and an anonymized row is
+    # never complete), so no third account can appear behind this one. The snapshot is still unioned
+    # in rather than replaced — erasure soft-deletes the account holder, so a row the first read
+    # resolved may no longer resolve here.
+    stripe_account_ids = (stripe_account_ids | resolve_guardian_stripe_account_ids)
     retained_guardian_person_ids = delete_guardian_stripe_persons!(stripe_account_ids)
 
-    if retained_guardian_person_ids.any? || @unreachable_guardian_person_ids.any?
+    if retained_guardian_person_ids.any? || @unreachable_guardian_person_ids.any? ||
+        @unscanned_guardian_account_ids.any?
       # Our own copy is erased, but a third party's identity data is still at the processor. Saying
       # "success" here is what let a failed guardian deletion pass for a completed erasure, so the
       # request stays open until the retry job clears it.
@@ -100,10 +110,19 @@ class GdprDataErasureService
     # re-checks the request needs to know which Persons to look for after the alert has aged out.
     def record_incomplete_erasure_note!(retained_guardian_person_ids)
       stuck_person_ids = (retained_guardian_person_ids + @unreachable_guardian_person_ids).uniq
+      subject = if stuck_person_ids.any?
+        "guardian Stripe person(s) #{stuck_person_ids.join(', ')} still held at Stripe"
+      else
+        # No id to name: the account could not be scanned, so which Persons it holds is exactly what
+        # is unknown. Naming the account is the only actionable thing here, and it is what the note
+        # exists for.
+        "guardian Stripe person(s) possibly still held at Stripe on account(s) " \
+          "#{@unscanned_guardian_account_ids.uniq.join(', ')}"
+      end
 
       @user.add_payout_note(
-        content: "GDPR erasure incomplete: guardian Stripe person(s) #{stuck_person_ids.join(', ')} " \
-                 "still held at Stripe. #{incomplete_erasure_error(retained_guardian_person_ids)}",
+        content: "GDPR erasure incomplete: #{subject}. " \
+                 "#{incomplete_erasure_error(retained_guardian_person_ids)}",
         seller_visible: false
       )
     rescue => e
@@ -123,6 +142,13 @@ class GdprDataErasureService
       if @unreachable_guardian_person_ids.any?
         parts << "#{@unreachable_guardian_person_ids.size} guardian record(s) have no resolvable " \
                  "Stripe account and must be deleted at Stripe manually"
+      end
+      if @unscanned_guardian_account_ids.any?
+        # A third shape: nothing is known to be retained, but nothing was confirmed deleted either,
+        # because the account could not be locked to scan it. Worded as unverified rather than
+        # retained — that is what someone re-checking has to go and establish.
+        parts << "#{@unscanned_guardian_account_ids.uniq.size} Stripe account(s) could not be " \
+                 "scanned for guardian records and must be checked at Stripe manually"
       end
 
       "Erasure incomplete: #{parts.join('; ')}. Re-check before confirming the request as fulfilled."
@@ -295,15 +321,23 @@ class GdprDataErasureService
         # retry job instead — by then the guardian is anonymized, so no sync can create another and
         # the job needs no lock of its own. That also fails the erasure, which is the point: it is
         # not fulfilled until the retry confirms the delete.
-        #
-        # Only recorded ids can be handed over; a Person reachable solely by scan needs the scan,
-        # which is what did not happen here. The failed erasure is what gets someone to re-run it.
         Rails.logger.error("GDPR: could not lock Stripe account #{stripe_account_id} for user #{@user.id}: #{e.message}")
         ErrorNotifier.notify(e)
         @user.guardians.filter_map(&:stripe_person_id).each do |stripe_person_id|
           DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
           retained << stripe_person_id
         end
+
+        # The account is recorded as unscanned whether or not any id was handed over, and that is the
+        # substance of this branch rather than a detail. Handing over recorded ids only covers
+        # Persons we have a handle for; the lock holder we lost the race to is a sync that may have
+        # created a Person and not yet written its id, which is exactly the case with NO recorded id
+        # to hand over. Keying the failure on "we found something to retry" therefore reported
+        # success precisely when the scan we skipped was the only thing that could have found it.
+        #
+        # There is nothing to enqueue for it — a retry job takes a Person id — so this fails the
+        # erasure and names the account in the note for a human to scan.
+        @unscanned_guardian_account_ids << stripe_account_id
       end
 
       # Nothing confirmed this Person deleted anywhere, so it may still stand at Stripe. Retry it
@@ -337,10 +371,7 @@ class GdprDataErasureService
       guardians = @user.guardians.to_a
       return [] if guardians.empty?
 
-      stripe_account_ids = @user.merchant_accounts.stripe
-                                .reject(&:is_a_stripe_connect_account?)
-                                .filter_map(&:charge_processor_merchant_id)
-                                .uniq
+      stripe_account_ids = resolve_guardian_stripe_account_ids
 
       if stripe_account_ids.empty?
         # A recorded person id with no resolvable account is proof Stripe holds a copy we have no
@@ -360,6 +391,20 @@ class GdprDataErasureService
       end
 
       stripe_account_ids
+    end
+
+    # The raw account resolution, without the unreachable-Person bookkeeping above.
+    #
+    # Split out because perform! resolves twice — once before the transaction and once after — and
+    # the "no resolvable account" branch has side effects (a Sentry notify, and marking every
+    # recorded Person unreachable) that must fire on the caller's own terms rather than a second
+    # time per call. It reloads the association: the second read exists precisely to see a merchant
+    # account created after the first one.
+    def resolve_guardian_stripe_account_ids
+      @user.merchant_accounts.reload.stripe
+           .reject(&:is_a_stripe_connect_account?)
+           .filter_map(&:charge_processor_merchant_id)
+           .uniq
     end
 
     def anonymize_carts!(anonymized_email)

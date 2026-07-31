@@ -448,6 +448,32 @@ describe StripeGuardianManager do
         expect(Stripe::Account).not_to have_received(:delete_person)
       end
 
+      # The reconcile deletes what it does not find recorded, so a Person past the first page is an
+      # orphan holding an adult's identity data that no scan ever revisits.
+      it "deletes an orphaned person beyond the first page of Stripe's results" do
+        create_compliance_info(guardian_record: guardian)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          # limit: 1 is existing_person's own lookup, which must stay empty so the sync creates.
+          if params[:limit] == 1
+            Stripe::ListObject.construct_from(data: [])
+          elsif params[:starting_after] == "person_guardian_new"
+            Stripe::ListObject.construct_from(data: [{ id: "person_orphan_page_two" }], has_more: false)
+          else
+            Stripe::ListObject.construct_from(data: [{ id: "person_guardian_new" }], has_more: true)
+          end
+        end
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).to have_received(:delete_person)
+          .with(stripe_account_id, "person_orphan_page_two")
+        expect(Stripe::Account).not_to have_received(:delete_person)
+          .with(stripe_account_id, "person_guardian_new")
+      end
+
       # The Person the caller asked for exists and its id is recorded by this point. Failing the sync
       # over the cleanup would turn a resolved duplicate into an unmet Stripe requirement.
       it "still returns the created person when the reconcile fails" do
