@@ -11,9 +11,7 @@ class LibraryPresenter
 
   def library_cards
     purchases = logged_in_user.purchases
-      .for_library
-      .not_rental_expired
-      .not_is_deleted_by_buyer
+      .visible_in_library
       .includes(
         :subscription,
         :url_redirect,

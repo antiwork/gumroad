@@ -877,6 +877,9 @@ class Purchase < ApplicationRecord
       .not_is_archived_original_subscription_purchase
       .not_is_access_revoked
   }
+  # The rows the buyer's library can actually render. LibraryPresenter loads exactly this set, so
+  # anything excluded here has no card there and cannot stand in for a bundle it belongs to.
+  scope :visible_in_library, -> { for_library.not_rental_expired.not_is_deleted_by_buyer }
   scope :for_sales_api, -> {
     all_success_states_except_preorder_auth_and_gift.exclude_not_charged_except_free_trial
   }

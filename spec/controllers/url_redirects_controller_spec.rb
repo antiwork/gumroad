@@ -327,6 +327,31 @@ describe UrlRedirectsController, inertia: true do
             expect(response).to_not be_redirect
           end
         end
+
+        context "when every member purchase exists but is excluded from the library" do
+          before do
+            purchase.product_purchases.each { _1.update!(is_deleted_by_buyer: true) }
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+        end
+
+        context "when only some member purchases are excluded from the library" do
+          before do
+            purchase.product_purchases.first.update!(is_deleted_by_buyer: true)
+          end
+
+          it "still redirects to the filtered library, which has the surviving members" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
       end
     end
 
