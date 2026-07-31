@@ -243,6 +243,11 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(sampled.size).to be > described_class::MAX_PAGE_IMAGE_URLS
     end
 
+    it "caps images at what the classifier will moderate, so every extracted URL gets an attempt" do
+      expect(described_class::MAX_PAGE_IMAGE_URLS)
+        .to eq(ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE)
+    end
+
     it "reads a product landing page takeover, whose owner is the product's seller" do
       page = page_for(pageable: create(:product, user: seller), custom_html: "<p>Buy my thing</p>")
 

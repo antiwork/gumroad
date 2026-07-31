@@ -206,6 +206,11 @@ class ContentModeration::Strategies::PromptStrategy
   JUDGE_MODEL = "gpt-4o-mini"
   SUPPORTED_IMAGE_EXTENSIONS = %w[.png .jpg .jpeg .gif .webp].freeze
 
+  # Images sent alongside the rules on each preset call. Kept small because
+  # every preset pays for them, and drawn once per instance so all presets
+  # judge the same pictures.
+  MAX_IMAGES_PER_PRESET = 3
+
   def initialize(text:, image_urls: [], corroborate_judgment_flags: false, check_off_platform_fulfillment: false)
     @text = text
     @image_urls = image_urls
@@ -414,8 +419,16 @@ class ContentModeration::Strategies::PromptStrategy
         openai_error_message: error_message[0, 1000],
         text_length: @text.to_s.length,
         image_url_count: @image_urls.size,
-        image_urls_sent: images_sent ? @image_urls.first(20) : [],
+        image_urls_sent: images_sent ? sampled_image_urls : [],
       )
+    end
+
+    # The images every preset sees, chosen once per strategy instance: a preset
+    # retried without images, a resample, and the presets themselves must all
+    # reason about the same pictures, and re-drawing per call made each one
+    # inspect a different subset.
+    def sampled_image_urls
+      @sampled_image_urls ||= @image_urls.select { |url| supported_image_url?(url) }.sample(MAX_IMAGES_PER_PRESET)
     end
 
     def supported_image_url?(url)
@@ -431,13 +444,12 @@ class ContentModeration::Strategies::PromptStrategy
       user_content << { type: "text", text: "Content to evaluate:\n\n#{@text.presence || '[no text provided]'}" }
 
       if !skip_images && @image_urls.present?
-        supported_urls = @image_urls.select { |url| supported_image_url?(url) }
-        if supported_urls.empty? && @image_urls.any?
+        if sampled_image_urls.empty?
           Rails.logger.warn(
             "ContentModeration::PromptStrategy filtered out all #{@image_urls.size} image URLs (unsupported formats)"
           )
         end
-        supported_urls.sample(3).each do |url|
+        sampled_image_urls.each do |url|
           user_content << { type: "image_url", image_url: { url: url } }
         end
       end

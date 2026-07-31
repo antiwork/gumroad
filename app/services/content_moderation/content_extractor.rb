@@ -18,10 +18,12 @@ class ContentModeration::ContentExtractor
   # publishing surface's abuse is most likely to be carried by.
   MAX_PAGE_LINK_TEXT_LENGTH = 5_000
 
-  # Also bounded, for the same reason: a generated page can reference hundreds
-  # of images, while ClassifierStrategy moderates the first few
-  # (MAX_IMAGES_TO_MODERATE) and PromptStrategy samples from what it is given.
-  MAX_PAGE_IMAGE_URLS = 20
+  # A generated page can reference hundreds of images, so the set is bounded
+  # here — once, deliberately — rather than left for each strategy to reduce on
+  # its own. Sized to what the classifier will actually moderate so every URL a
+  # page contributes gets an attempt, and the prompt presets draw their images
+  # from that same set instead of a separately-narrowed one.
+  MAX_PAGE_IMAGE_URLS = ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
@@ -66,10 +68,10 @@ class ContentModeration::ContentExtractor
 
     Result.new(
       text: text,
-      # Sampled rather than taken in document order: the classifier and the
-      # prompt presets each read only a few of these, so a fixed prefix would let
-      # 20 benign images at the top of the document guarantee the rest are never
-      # eligible.
+      # Sampled rather than taken in document order, so 20 benign images at the
+      # top of the document can't guarantee the rest are never eligible. Every
+      # URL returned here gets a classifier attempt, and the prompt presets read
+      # a subset of this same set rather than re-drawing from a wider pool.
       image_urls: page_image_urls(document).sample(MAX_PAGE_IMAGE_URLS)
     )
   end
