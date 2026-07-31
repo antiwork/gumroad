@@ -115,7 +115,10 @@ gumroad products page publish <permalink> ./landing.html`}
     </CodeSnippet>
     <p>
       Your HTML is sanitized — disallowed tags and attributes are stripped — then served inside a sandboxed iframe (
-      <code>sandbox="allow-scripts allow-forms"</code>).
+      <code>
+        sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads&quot;
+      </code>
+      ).
     </p>
     <p>It can:</p>
     <ul>

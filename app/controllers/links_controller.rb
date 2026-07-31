@@ -1949,7 +1949,7 @@ class LinksController < ApplicationController
               id="gumroad-landing-frame"
               src="#{iframe_src}"
               title="#{title}"
-              sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              sandbox="#{CUSTOM_HTML_SANDBOX}"
             ></iframe>
             <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
               var frame = document.getElementById("gumroad-landing-frame");

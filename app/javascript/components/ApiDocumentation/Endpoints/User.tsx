@@ -77,9 +77,12 @@ const ProfileCustomHtmlDocumentation = () => (
     </ul>
     <p>
       Your HTML is sanitized — disallowed tags and attributes are stripped — then served inside a sandboxed iframe (
-      <code>sandbox="allow-scripts allow-forms"</code>). It can run inline JavaScript, load scripts from the Tailwind,
-      jsDelivr, and unpkg CDNs, and load fonts from Google Fonts and Bunny Fonts. It can't read your Gumroad cookies or
-      session (it runs on an opaque origin), touch or navigate the parent page, or make <code>fetch</code>/
+      <code>
+        sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads&quot;
+      </code>
+      ). It can run inline JavaScript, load scripts from the Tailwind, jsDelivr, and unpkg CDNs, load fonts from Google
+      Fonts and Bunny Fonts, open links in a new tab, and link to files that download. It can't read your Gumroad
+      cookies or session (it runs on an opaque origin), touch the parent page, or make <code>fetch</code>/
       <code>XHR</code>/WebSocket requests (<code>connect-src 'none'</code>). Images and media may only load from
       Gumroad.
     </p>

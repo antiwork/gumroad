@@ -52,13 +52,31 @@ module RendersCustomHtmlPages
     </style>
   HTML
 
+  # Every custom-page surface must sandbox identically, so they all read this one
+  # list rather than repeating the tokens: the wrapper iframes in
+  # UsersController/UserPagesController/LinksController and the CSP directive
+  # below. Adding a token here widens all four at once; that is the point.
+  #
+  # allow-downloads is required for a download to happen *at all* from seller
+  # HTML — without it the browser drops the click silently, and target="_blank"
+  # can't route around it because the escaped popup inherits the initiator's
+  # download restriction.
+  CUSTOM_HTML_SANDBOX_TOKENS = %w[
+    allow-scripts
+    allow-forms
+    allow-popups
+    allow-popups-to-escape-sandbox
+    allow-downloads
+  ].freeze
+
+  CUSTOM_HTML_SANDBOX = CUSTOM_HTML_SANDBOX_TOKENS.join(" ").freeze
+
   CUSTOM_HTML_CSP = [
     # Sandbox the response itself, not just the wrapper's iframe attribute.
     # A visitor can navigate straight to the /landing/embed endpoint (top-level,
     # not framed), where the iframe sandbox doesn't apply — without this the
-    # seller's inline scripts would run on the real subdomain origin. Matches
-    # the wrapper iframe's sandbox: scripts + forms + popups, no same-origin/top-nav.
-    "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
+    # seller's inline scripts would run on the real subdomain origin.
+    "sandbox #{CUSTOM_HTML_SANDBOX}",
     "default-src 'none'",
     "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
     "style-src 'unsafe-inline' #{PAGES_TAILWIND_ASSET_HOST} https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
