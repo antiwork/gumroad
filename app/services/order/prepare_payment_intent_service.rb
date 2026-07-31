@@ -791,46 +791,32 @@ class Order::PreparePaymentIntentService
     end
 
     # The Element's method list is frozen when it mounts and this service re-resolves at pay time,
-    # so the two lists can legitimately differ. Stripe rejects the ConfirmationToken on ANY
-    # difference, but only one direction is recoverable: a method the intent lists that the Element
-    # never mounted can be dropped, while a method the buyer actually confirmed with cannot be
-    # conjured onto the Element after the fact. So the intent may only ever be a SUBSET of what the
-    # page offered — the browser reports the list it mounted with and we intersect against it.
-    # Narrowing keeps a server-side rule that tightened after page load (a launch flag rolled back,
-    # a capability deactivated) authoritative; widening is what fails the buyer at confirm with no
-    # retry on the same page (gumroad-private#1528).
+    # so the two can drift apart and Stripe then rejects the ConfirmationToken. The browser reports
+    # the list it mounted with; intersecting against it is what stops the intent listing a method
+    # the page never offered (gumroad-private#1528).
     #
-    # The reported list is trusted only to narrow, never to widen, so a stale or crafted list
-    # cannot enable a method past its rollout gate — the worst it can do is remove methods from the
-    # buyer's own intent, and if it removes the one they are confirming with the narrowing is
-    # skipped (below) rather than producing an intent their token can never confirm.
+    # The report may only ever narrow, never widen, so a stale or crafted list cannot enable a
+    # method past its rollout gate. Every path that cannot trust the report returns the resolved
+    # list untouched rather than guessing at what the element mounted.
     def narrow_to_mounted_payment_method_types(method_types)
       mounted = reported_mounted_payment_method_types
-      return narrow_klarna_for_legacy_client(method_types) if mounted.nil?
+      # Without a report there is nothing to compare against: an older page that mounted Klarna
+      # and one that mounted without it send the identical request. Dropping a method on a guess
+      # would create the mismatch this method exists to prevent, so leave the resolved list alone
+      # and keep that lane byte-for-byte as it was before this narrowing.
+      return method_types if mounted.nil?
 
       narrowed = method_types & mounted
-      # Fail safe rather than fail closed: an empty intersection, or one that drops the method the
-      # buyer confirmed with, means the report does not describe the element the token was minted
-      # on. Creating that intent guarantees the confirm fails, so fall back to the legacy-client
-      # narrowing — a garbage report must not buy weaker protection than sending nothing at all.
-      return narrow_klarna_for_legacy_client(method_types) if narrowed.empty?
+      # An empty intersection, or one that drops the method the buyer confirmed with, means the
+      # report does not describe the element the token was minted on. Honoring it would guarantee
+      # the confirm fails, so treat it as no report at all.
+      return method_types if narrowed.empty?
       if @previewed_payment_method_type.present? && method_types.include?(@previewed_payment_method_type) && !narrowed.include?(@previewed_payment_method_type)
         Rails.logger.error("Client-confirm prepare ignoring a reported Payment Element method list that excludes the confirmed method #{@previewed_payment_method_type.inspect} for order #{order.id}")
-        return narrow_klarna_for_legacy_client(method_types)
+        return method_types
       end
 
       narrowed
-    end
-
-    # Older checkout pages report no method list, and this is also the floor for a report we cannot
-    # honor. Klarna is the method whose gate moves with the cart total, so it is the one that drifts
-    # onto an intent whose Element never offered it — keep it only when the buyer chose it and it is
-    # still allowed. Capability-snapshot and flag drift can still widen the other methods on this
-    # path; nothing but the report can close that, so those stay as they were.
-    def narrow_klarna_for_legacy_client(method_types)
-      return method_types if @previewed_payment_method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE
-
-      method_types - [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE]
     end
 
     # The method list the browser says the Payment Element was mounted with, or nil when the client
