@@ -6,15 +6,15 @@ describe Product::Sorting do
   let!(:seller) { create(:recommendable_user) }
 
   describe ".sorted_by" do
-    # Every example here breaks flag/taxonomy ties on `created_at desc`, so the four products must
-    # keep a fixed relative order. Anchor them to one instant with hour-wide gaps: a per-`let!`
-    # `Time.current` with 1-2s offsets inverts p1/p4 whenever setup on a slow runner outruns the gap.
+    # These examples tie-break on `created_at desc`, so the four products must keep a fixed relative
+    # order. Derive every timestamp from one anchor with hour-wide gaps — separate `Time.current`
+    # calls let setup latency on a slow runner reorder them.
     let(:created_at_anchor) { Time.current }
     let!(:collaborator) { create(:collaborator, seller:) }
-    let!(:product1) { create(:product, :is_collab, collaborator:, user: seller, name: "p1", display_product_reviews: true, taxonomy: create(:taxonomy), purchase_disabled_at: Time.current, created_at: created_at_anchor, collaborator_cut: 45_00) }
-    let!(:product2) { create(:product, :is_collab, collaborator:, user: seller, name: "p2", display_product_reviews: false, taxonomy: create(:taxonomy), created_at: created_at_anchor + 1.hour, collaborator_cut: 35_00) }
-    let!(:product3) { create(:subscription_product, :is_collab, collaborator:, user: seller, name: "p3", display_product_reviews: false, purchase_disabled_at: Time.current, created_at: created_at_anchor - 1.hour, collaborator_cut: 15_00) }
-    let!(:product4) { create(:subscription_product, :is_collab, collaborator:, user: seller, name: "p4", display_product_reviews: true, created_at: created_at_anchor - 2.hours, collaborator_cut: 25_00) }
+    let!(:product1) { create(:product, :is_collab, collaborator:, user: seller, name: "p1", display_product_reviews: true, taxonomy: create(:taxonomy), purchase_disabled_at: Time.current, created_at: created_at_anchor - 1.hour, collaborator_cut: 45_00) }
+    let!(:product2) { create(:product, :is_collab, collaborator:, user: seller, name: "p2", display_product_reviews: false, taxonomy: create(:taxonomy), created_at: created_at_anchor, collaborator_cut: 35_00) }
+    let!(:product3) { create(:subscription_product, :is_collab, collaborator:, user: seller, name: "p3", display_product_reviews: false, purchase_disabled_at: Time.current, created_at: created_at_anchor - 2.hours, collaborator_cut: 15_00) }
+    let!(:product4) { create(:subscription_product, :is_collab, collaborator:, user: seller, name: "p4", display_product_reviews: true, created_at: created_at_anchor - 3.hours, collaborator_cut: 25_00) }
 
     before do
       create_list(:purchase, 2, link: product1)
