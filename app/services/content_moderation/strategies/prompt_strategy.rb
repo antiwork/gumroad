@@ -426,9 +426,13 @@ class ContentModeration::Strategies::PromptStrategy
     # The images every preset sees, chosen once per strategy instance: a preset
     # retried without images, a resample, and the presets themselves must all
     # reason about the same pictures, and re-drawing per call made each one
-    # inspect a different subset.
+    # inspect a different subset. Bounded deterministically so the set is also
+    # the same across attempts — a random draw per validation would let a retry
+    # loop eventually pick images that omit the prohibited one.
     def sampled_image_urls
-      @sampled_image_urls ||= @image_urls.select { |url| supported_image_url?(url) }.sample(MAX_IMAGES_PER_PRESET)
+      @sampled_image_urls ||= ContentModeration::ImageSelection.bounded(
+        @image_urls.select { |url| supported_image_url?(url) }, MAX_IMAGES_PER_PRESET
+      )
     end
 
     def supported_image_url?(url)

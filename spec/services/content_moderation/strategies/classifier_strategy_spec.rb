@@ -95,6 +95,26 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(tested_urls.uniq.size).to eq(described_class::MAX_IMAGES_TO_MODERATE)
   end
 
+  it "moderates the same images on every run, so a retry cannot draw a subset that omits one" do
+    image_urls = 20.times.map { |i| "https://cdn.example.com/#{i}.png" }
+
+    runs = 3.times.map do
+      tested = []
+      allow(client).to receive(:moderations) do |parameters:|
+        part = parameters[:input].first
+        tested << part[:image_url][:url] if part[:type] == "image_url"
+        { "results" => [{ "category_scores" => {} }] }
+      end
+      described_class.new(text:, image_urls:).perform
+      tested
+    end
+
+    expect(runs.uniq.size).to eq(1)
+    expect(runs.first.size).to eq(described_class::MAX_IMAGES_TO_MODERATE)
+    # Not the document-order prefix either, or the images could be parked past the cap.
+    expect(runs.first).not_to eq(image_urls.first(described_class::MAX_IMAGES_TO_MODERATE))
+  end
+
   it "skips image URLs that OpenAI rejects as bad requests and continues with remaining images" do
     image_urls = [
       "blob:https://gumroad.com/bad-1",

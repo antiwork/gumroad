@@ -68,15 +68,30 @@ class ContentModeration::ContentExtractor
 
     Result.new(
       text: text,
-      # Sampled rather than taken in document order, so 20 benign images at the
-      # top of the document can't guarantee the rest are never eligible. Every
-      # URL returned here gets a classifier attempt, and the prompt presets read
-      # a subset of this same set rather than re-drawing from a wider pool.
-      image_urls: page_image_urls(document).sample(MAX_PAGE_IMAGE_URLS)
+      image_urls: bounded_page_image_urls(page, page_image_urls(document))
     )
   end
 
   private
+    # Bounded by ContentModeration::ImageSelection rather than by document order
+    # (which the images could be parked past) or by a fresh random sample per
+    # attempt (which a seller could re-save against until the prohibited image
+    # fell outside it). Every URL returned gets a classifier attempt, and the
+    # prompt presets narrow this same ordered set rather than re-drawing from a
+    # wider pool.
+    def bounded_page_image_urls(page, urls)
+      if urls.size > MAX_PAGE_IMAGE_URLS
+        # Partial image coverage is a real gap in the verdict, so say so once per
+        # extraction: a page over the budget was judged on some of its pictures.
+        Rails.logger.warn(
+          "ContentModeration::ContentExtractor bounded page #{page.id || "(unsaved)"} images to " \
+          "#{MAX_PAGE_IMAGE_URLS} of #{urls.size}; the remainder is not moderated on this attempt"
+        )
+      end
+
+      ContentModeration::ImageSelection.bounded(urls, MAX_PAGE_IMAGE_URLS)
+    end
+
     # Cut at the last whitespace at or before `max` so a truncation can't leave a
     # half word or half URL behind — the blocklist matches on word boundaries, so
     # a bisected token is a token it can match.

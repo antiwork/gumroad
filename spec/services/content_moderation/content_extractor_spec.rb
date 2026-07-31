@@ -234,13 +234,43 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to include("https://linkfarm.example/deals")
     end
 
-    it "samples the capped image URLs so images past the cap are still reachable" do
+    it "picks the same images on every extraction, so re-saving cannot grind out a subset that omits one" do
       images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
       page = page_for(custom_html: images)
 
-      sampled = 5.times.flat_map { extractor.extract_from_page(page).image_urls }.uniq
+      selections = 5.times.map { extractor.extract_from_page(page).image_urls }
 
-      expect(sampled.size).to be > described_class::MAX_PAGE_IMAGE_URLS
+      expect(selections.uniq.size).to eq(1)
+      expect(selections.first.size).to eq(described_class::MAX_PAGE_IMAGE_URLS)
+    end
+
+    it "does not take the images in document order, so they cannot be parked past the cap" do
+      images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: images)
+
+      selected = extractor.extract_from_page(page).image_urls
+      document_order_prefix = (1..described_class::MAX_PAGE_IMAGE_URLS).map { |n| "https://cdn.example.com/#{n}.png" }
+
+      expect(selected).not_to eq(document_order_prefix)
+    end
+
+    it "logs the images it could not cover when a page carries more than the cap" do
+      allow(Rails.logger).to receive(:warn)
+      images = (1..30).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+
+      extractor.extract_from_page(page_for(custom_html: images))
+
+      expect(Rails.logger).to have_received(:warn).with(
+        /bounded page .* images to #{described_class::MAX_PAGE_IMAGE_URLS} of 30/o
+      )
+    end
+
+    it "does not log when every image fits inside the cap" do
+      allow(Rails.logger).to receive(:warn)
+
+      extractor.extract_from_page(page_for(custom_html: %(<img src="https://cdn.example.com/only.png">)))
+
+      expect(Rails.logger).not_to have_received(:warn).with(/bounded page/)
     end
 
     it "caps images at what the classifier will moderate, so every extracted URL gets an attempt" do

@@ -51,7 +51,13 @@ class ContentModeration::Strategies::ClassifierStrategy
 
     moderated_count = 0
     skipped_urls = []
-    @image_urls.shuffle.each do |url|
+    # Deterministic in the URL, not shuffled per attempt: re-validating unchanged
+    # content must moderate the same images, or a retry loop eventually draws a
+    # subset omitting the prohibited one. Not document order either, so the images
+    # cannot be parked past the cap. Walking the full order (rather than taking
+    # the first MAX) means an image OpenAI refuses to fetch falls through to the
+    # next instead of costing a slot.
+    ContentModeration::ImageSelection.ordered(@image_urls).each do |url|
       break if moderated_count >= MAX_IMAGES_TO_MODERATE
 
       scores = moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url)
