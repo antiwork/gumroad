@@ -40,10 +40,10 @@ module Onetime
           next
         end
 
-        # Only speak to sellers the block actually applies to right now. Someone who has since moved
-        # to a bank account, changed PayPal address, or been paid out is no longer stuck, and telling
-        # them their payouts have stopped would be false.
-        unless still_blocked?(user)
+        # Only speak to sellers PayPal is still refusing right now. Someone who has since moved
+        # to a bank account, changed PayPal address, or been paid out is no longer affected, and
+        # telling them their payout could not be sent would be false.
+        unless still_refused_by_paypal?(user)
           skipped += 1
           next
         end
@@ -102,7 +102,24 @@ module Onetime
         PaypalPayoutProcessor.rejection_to_explain(user)
       end
 
-      def still_blocked?(user)
+      # Whether PayPal is still refusing this seller's payouts — not whether the retries are
+      # stopped. The two differ for a currency rejection (14159), which is explained but still
+      # retried, and this task exists to explain rather than to announce a block.
+      #
+      # ⚠️ Do not narrow `reasons` to RETRY_BLOCKING_PAYPAL_FAILURE_REASONS. It looks like the
+      # tighter, safer set and it is the opposite: a currency-rejected seller's payouts fail every
+      # single week, so they are the ones most in the dark, and for some of them nothing else ever
+      # tells them. A self-paused seller is skipped by Payouts.is_user_payable at the
+      # payouts_paused? gate, so no later payout fails to write the note, and that gate's own
+      # re-explain is scoped to payouts_paused_internally?, which excludes them too. Narrowing
+      # here is what would leave them reading "payouts were paused by the system" forever
+      # (gumroad-private#1478). Pinned by the self-paused example in this task's spec.
+      #
+      # What makes the wider set safe is that the note describes the failed payout and the fix,
+      # never a stopped retry: Payment#terminal_paypal_failure_seller_note branches on
+      # Payment#terminal_paypal_failure? for that claim, so a 14159 seller reads the true
+      # next-payout-date promise. Also pinned by spec.
+      def still_refused_by_paypal?(user)
         # A closed or suspended account is not going to be paid whatever they do, so telling them
         # "your payouts stopped, fix your PayPal account and you'll be paid on the next payout date"
         # would be false. Both are checked before the payout method is even considered
@@ -110,9 +127,9 @@ module Onetime
         return false if user.deleted? || user.suspended?
 
         # Everything else — a bank account on file, a changed PayPal address, a payout that
-        # succeeded since the rejection — is asked of the live block itself rather than
-        # re-implemented here, so this note can only reach sellers the code really is refusing to
-        # pay. A second copy of that logic would drift, and the drift would be us telling sellers
+        # succeeded since the rejection — is asked of the live check itself rather than
+        # re-implemented here, so this note can only reach sellers PayPal really is refusing. A
+        # second copy of that logic would drift, and the drift would be us telling sellers
         # something the payout pipeline no longer does.
         PaypalPayoutProcessor.terminal_failure_blocking_payouts?(
           user, reasons: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS

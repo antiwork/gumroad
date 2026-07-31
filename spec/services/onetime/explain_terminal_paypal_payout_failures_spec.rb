@@ -278,6 +278,52 @@ describe Onetime::ExplainTerminalPaypalPayoutFailures do
       end.to_not change { seller.comments.with_type_payout_note.count }
     end
 
+    # A currency rejection is explained but still retried, so nothing this task writes may claim
+    # the payouts have stopped. Reviewer finding on #6526: the eligibility check deliberately uses
+    # the wider EXPLAINED set rather than the retry-blocking one, and that is only defensible while
+    # the copy it produces describes a failing payout rather than a block.
+    it "does not tell a currency-rejected seller their payouts have been stopped" do
+      allow_bank_payouts_for(seller)
+      terminal_failure_for(seller, reason: "PAYPAL 14159")
+
+      described_class.process(dry_run: false)
+
+      content = seller.comments.with_type_payout_note.last.content
+      expect(content).to include("PayPal will not send your payout")
+      expect(content).to_not include("stopped retrying")
+      expect(content).to_not include("we have stopped")
+      # The retries continue, so the plain next-payout-date promise is the true one for them.
+      expect(content).to include("will be paid out on the next payout date")
+    end
+
+    # The one seller for whom this task is the ONLY path to an explanation, and the reason its
+    # eligibility check cannot be narrowed to the retry-blocking set. Reviewer finding on #6526.
+    #
+    # A self-paused seller with a currency rejection is skipped by Payouts.is_user_payable at the
+    # payouts_paused? gate, so no further payout ever fails and the failure-time note never fires;
+    # and the live re-explain inside that gate is scoped to payouts_paused_internally?, so it
+    # excludes them too. Narrowing this task to RETRY_BLOCKING would leave them reading "payouts
+    # were paused" with nothing naming PayPal — the gumroad-private#1478 dead end, kept alive for
+    # exactly the sellers whose payouts keep failing every week.
+    it "explains a currency rejection to a self-paused seller no other path reaches" do
+      allow_bank_payouts_for(seller)
+      payment = terminal_failure_for(seller, reason: "PAYPAL 14159")
+      seller.update!(payouts_paused_by_user: true)
+
+      expect(PaypalPayoutProcessor.terminal_failure_blocking_payouts?(seller.reload)).to eq(false)
+
+      expect do
+        described_class.process(dry_run: false)
+      end.to change { seller.comments.with_type_payout_note.count }.from(0).to(1)
+
+      content = seller.comments.with_type_payout_note.last.content
+      expect(content).to include("your PayPal account cannot receive US dollars")
+      expect(content).to include(payment.created_at.to_fs(:formatted_date_full_month))
+      # Their own switch is what holds the money once PayPal is fixed, so the copy names it rather
+      # than promising a payout date their pause prevents.
+      expect(content).to include("paused in your settings")
+    end
+
     it "writes nothing on a dry run" do
       terminal_failure_for(seller)
 

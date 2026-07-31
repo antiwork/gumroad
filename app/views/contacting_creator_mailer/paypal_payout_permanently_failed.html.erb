@@ -5,10 +5,6 @@
     <p>
       This will keep happening until you change how you get paid, so we've stopped retrying it. Your balance is safe and stays on your account.
     </p>
-  <% elsif @retries_paused_by_pause %>
-    <p>
-      Every attempt will fail until this is fixed, and payouts on your account are paused right now, so we'll only start trying again once they resume and a working payout method is on file. Your balance is safe and stays on your account.
-    </p>
   <% else %>
     <p>
       We'll keep trying on your usual payout schedule, but every attempt will fail until this is fixed. Your balance is safe and stays on your account.
