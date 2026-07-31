@@ -134,21 +134,40 @@ module AgentConversationPersistence
       end
     end
 
-    # A generated proposal cannot be confirmed unless its assistant message was stored.
+    # A generated proposal cannot be confirmed unless its assistant message was stored. The same
+    # fallback also keeps reserved proposal copy from escaping when the persistence guard rejects it.
     def replace_unpersisted_proposal_reply!(result)
-      return false if result[:proposed_action].blank?
+      if result[:proposed_action].present?
+        result[:reply] = UNPERSISTED_PROPOSAL_REPLY
+        return true
+      end
+      return false unless result[:reply].to_s.strip == Ai::StoreAgentService::PROPOSAL_READY_REPLY
 
-      result[:reply] = UNPERSISTED_PROPOSAL_REPLY
+      result[:reply] = Ai::StoreAgentService::NOTHING_STAGED_REPLY
       true
     end
 
-    # The plain role/content transcript to send to the model — rebuilt from the stored rows so a
-    # tampered or stale client-side history can't rewrite what the agent believes was said. Only
-    # the most recent HISTORY_MAX_MESSAGES are replayed: without a cap, every turn of a long-lived
-    # conversation would resend the entire transcript to the LLM (O(n²) token cost over the
-    # conversation's life) — `last` keeps the newest rows while preserving chronological order.
+    # Rebuild history from stored rows and mark assistant claims with the proposal state the server
+    # actually persisted. This keeps old card directions from being replayed as current facts.
+    # `last` bounds token cost while preserving chronological order.
     def agent_conversation_history(conversation)
-      conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map { |message| { role: message.role, content: message.content } }
+      conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map do |message|
+        history_message = { role: message.role, content: message.content }
+        history_message[:proposal_state] = agent_proposal_state_note(message) if message.role == "assistant"
+        history_message
+      end
+    end
+
+    def agent_proposal_state_note(message)
+      metadata = message.metadata || {}
+      return "no proposed action was recorded for this message" if metadata["proposed_action"].blank?
+
+      status = metadata["action_status"].presence
+      return "a proposed action was recorded for this message; confirmation outcome and card visibility are unknown" if status.nil?
+      return "proposal execution started; do not confirm again" if status == ACTION_STATUS_EXECUTING
+      return "the proposed action was applied and cannot be confirmed again" if status == ACTION_STATUS_APPLIED
+
+      "proposal outcome is unknown; do not confirm again"
     end
 
     def record_agent_user_message!(conversation, content)
@@ -169,6 +188,9 @@ module AgentConversationPersistence
         end
       unless result[:outcome] == expected_outcome
         raise ArgumentError, "Store agent turn outcome does not match its proposed action."
+      end
+      if result[:proposed_action].blank? && result[:reply].to_s.strip == Ai::StoreAgentService::PROPOSAL_READY_REPLY
+        raise ArgumentError, "Store agent proposal reply requires a proposed action."
       end
 
       metadata = {

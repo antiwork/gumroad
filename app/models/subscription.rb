@@ -15,6 +15,9 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  # Memberships AND installment plans are both Subscriptions internally, so this one include
+  # covers two of the four product types in gumroad-private#1322.
+  include HasLaterChargePresentments
   extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
@@ -364,6 +367,9 @@ class Subscription < ApplicationRecord
         # schedule for termination 5 days after subscription is overdue for a charge
         UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
         purchase.mark_failed!
+      elsif purchase.pending_buyer_presentment_settlement?
+        # FinalizeBuyerPresentmentPurchaseJob completes the renewal once Stripe settles it.
+        nil
       elsif purchase.in_progress? && purchase.charge_intent.is_a?(StripeChargeIntent) && (purchase.charge_intent&.processing? || purchase.charge_intent.requires_action?)
         # For recurring charges on Indian cards, the charge goes into processing state for 26 hours.
         # We'll receive a webhook once the charge succeeds/fails, and we'll transition the purchase
