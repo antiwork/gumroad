@@ -21,8 +21,8 @@ export type PurchasePaymentMethod =
       walletType: string | null;
       mountCurrency: string;
       // The method list the element was MOUNTED with, or null if it never reported one. Omitted
-      // from the request when null: #prepare reads absence as an older page and narrows
-      // conservatively instead.
+      // from the request when null: with nothing to narrow against, #prepare keeps the list it
+      // resolved server-side.
       mountedPaymentMethodTypes: readonly string[] | null;
     };
 

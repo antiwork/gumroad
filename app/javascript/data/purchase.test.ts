@@ -176,8 +176,8 @@ describe("createPurchasesRequestData wallet_type threading", () => {
 
   // gumroad-private#1528: #prepare narrows the deferred intent's payment_method_types to the list
   // the Payment Element actually mounted with, so that list has to reach the server. Omitted rather
-  // than sent as null when the element never reported one, because the server treats "absent" as an
-  // older checkout page and applies its own conservative narrowing.
+  // than sent as null when the element never reported one, since a null carries nothing to narrow
+  // against and #prepare then keeps the list it resolved server-side.
   describe("reporting the mounted Payment Element method list", () => {
     it("sends the mounted method list on the client-confirm lane", () => {
       const data = createPurchasesRequestData(
