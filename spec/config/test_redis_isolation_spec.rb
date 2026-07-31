@@ -217,6 +217,37 @@ describe TestRedisIsolation do
       expect(described_class.install!(env:, warn_io: StringIO.new)).to be_nil
       expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
     end
+
+    it "keeps refreshing the lease after a failed tick instead of letting it expire" do
+      # If the refresh thread dies, the lease expires mid-run and another run leases the
+      # same databases — this file's own race, with nothing to point at. So the rescue has
+      # to swallow anything, and that has to be proven rather than asserted.
+      env = base_env.dup
+      slot = nil
+      refreshed = Queue.new
+      attempt = 0
+
+      stub_const("TestRedisIsolation::LEASE_REFRESH_SECONDS", 0.05)
+      allow_any_instance_of(Redis).to receive(:eval).and_wrap_original do |original, *args|
+        attempt += 1
+        # First tick raises something outside any Redis error class, which is what would
+        # kill a thread whose rescue lists specific classes.
+        raise SocketError, "simulated resolver blip" if attempt == 1
+        refreshed << true
+        original.call(*args)
+      end
+
+      begin
+        slot = described_class.install!(env:, warn_io: StringIO.new)
+        expect(slot).to be_present
+
+        # A later tick landing at all is the proof: the thread outlived the raise.
+        expect(Timeout.timeout(5) { refreshed.pop }).to be(true)
+        expect(attempt).to be >= 2
+      ensure
+        with_registry { |registry| registry.del(described_class.lease_key(slot)) } if slot
+      end
+    end
   end
 
   describe "the isolation this run is itself using" do

@@ -172,12 +172,19 @@ module TestRedisIsolation
       end
 
       def keep_lease_alive(claim)
+        # Its own connection: a Redis client is not thread-safe, and this thread would
+        # otherwise share one with the at_exit release running on the main thread.
+        connection = Redis.new(url: claim.fetch(:registry).id)
+
         Thread.new do
           loop do
             sleep(LEASE_REFRESH_SECONDS)
-            claim[:registry].eval(REFRESH_SCRIPT, keys: [claim[:key]], argv: [claim[:token], LEASE_TTL_SECONDS])
-          rescue Redis::BaseError, RedisClient::Error, IOError
-            # Transient: the next tick retries, and the lease outlives one missed refresh.
+            connection.eval(REFRESH_SCRIPT, keys: [claim[:key]], argv: [claim[:token], LEASE_TTL_SECONDS])
+          rescue StandardError
+            # Deliberately every error, not a list: if this thread dies the lease quietly
+            # expires mid-run and another run leases the same databases — the exact race
+            # this file exists to prevent, with no failure to point at. A missed tick is
+            # harmless (the TTL outlives several), so retrying forever is the safe shape.
           end
         end.tap { |thread| thread.name = "test-redis-isolation-lease" }
       end
