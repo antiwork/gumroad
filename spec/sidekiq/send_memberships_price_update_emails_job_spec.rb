@@ -28,11 +28,16 @@ describe SendMembershipsPriceUpdateEmailsJob do
         )
       end
 
-      it "retries the notification when enqueueing fails" do
+      it "retries the notification when enqueueing raises" do
         applicable_plan_change.update!(effective_on: Date.current)
-        allow(SendMembershipPriceUpdateEmailJob).to receive(:perform_later).and_return(false, double)
+        raised = false
+        allow(SendMembershipPriceUpdateEmailJob).to receive(:perform_later) do
+          next double if raised
+          raised = true
+          raise Redis::CannotConnectError, "Redis is unavailable"
+        end
 
-        expect { subject.perform }.to raise_error(RuntimeError, "Membership price update notification was not enqueued")
+        expect { subject.perform }.to raise_error(Redis::CannotConnectError)
         expect(applicable_plan_change.reload.notified_subscriber_at).to be_nil
         expect(applicable_plan_change.notification_claim_id).to be_nil
         expect(applicable_plan_change.notification_claimed_at).to be_nil
@@ -73,7 +78,10 @@ describe SendMembershipsPriceUpdateEmailsJob do
 
       it "recovers an expired notification claim", :freeze_time do
         expired_claim_id = SecureRandom.uuid
-        applicable_plan_change.update!(notification_claim_id: expired_claim_id, notification_claimed_at: 2.hours.ago)
+        applicable_plan_change.update!(
+          notification_claim_id: expired_claim_id,
+          notification_claimed_at: SubscriptionPlanChange::PRICE_CHANGE_NOTIFICATION_CLAIM_TTL.ago - 1.minute,
+        )
 
         subject.perform
 

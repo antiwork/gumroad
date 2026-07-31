@@ -5,7 +5,10 @@
 # worker to check if a user has a plan change that must be made at the end of
 # the current billing period, before initiating the next recurring charge.
 class SubscriptionPlanChange < ApplicationRecord
-  PRICE_CHANGE_NOTIFICATION_CLAIM_TTL = 1.hour
+  # Must exceed the longest single gap in SendMembershipPriceUpdateEmailJob's retry ladder
+  # (~2.1h before the 9th attempt), or the scheduler steals the claim from a job that is still
+  # retrying and a second delivery job sends a duplicate notice. Spec pins the relationship.
+  PRICE_CHANGE_NOTIFICATION_CLAIM_TTL = 3.hours
 
   has_paper_trail
 
@@ -79,11 +82,15 @@ class SubscriptionPlanChange < ApplicationRecord
     with_lock do
       next false if notified_subscriber_at.present? || notification_claim_id != claim_id
 
-      update!(
+      assign_attributes(
         notification_claim_id: nil,
         notification_claimed_at: nil,
         notified_subscriber_at: Time.current,
       )
+      # Runs after the mail provider has already accepted the message, so a validation failure
+      # here (a legacy row missing its tier) would leave the notice sent and the marker unset,
+      # and every later run would send it again. Skip validations, keep the paper_trail version.
+      save!(validate: false)
       true
     end
   end

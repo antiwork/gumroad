@@ -94,5 +94,33 @@ describe SendMembershipPriceUpdateEmailJob do
 
       expect(delivery).to have_received(:deliver_now).once
     end
+
+    it "confirms a row that no longer passes validation, so the notice is not re-sent forever" do
+      subscription_plan_change.update_columns(recurrence: nil)
+      expect(subscription_plan_change.reload).not_to be_valid
+
+      expect do
+        subject.perform(subscription_plan_change.id, claim_id)
+      end.to change { subscription_plan_change.reload.notified_subscriber_at }.from(nil)
+
+      expect(delivery).to have_received(:deliver_now).once
+      expect(subscription_plan_change.notification_claim_id).to be_nil
+    end
+
+    it "releases the claim without mailing when the subscriber cancelled after the claim" do
+      subscription.update!(cancelled_at: 1.minute.ago, deactivated_at: 1.minute.ago)
+
+      subject.perform(subscription_plan_change.id, claim_id)
+
+      expect(CustomerLowPriorityMailer).not_to have_received(:subscription_price_change_notification)
+      expect(subscription_plan_change.reload.notified_subscriber_at).to be_nil
+      expect(subscription_plan_change.notification_claim_id).to be_nil
+      expect(subscription.reload.latest_applicable_plan_change).to be_nil
+    end
+
+    it "keeps the claim TTL above the retry ladder's longest gap" do
+      longest_gap = (described_class::RETRY_ATTEMPTS - 2)**4
+      expect(SubscriptionPlanChange::PRICE_CHANGE_NOTIFICATION_CLAIM_TTL).to be > longest_gap.seconds
+    end
   end
 end
