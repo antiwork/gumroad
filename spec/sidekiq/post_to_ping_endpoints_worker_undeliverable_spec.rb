@@ -98,4 +98,25 @@ describe PostToPingEndpointsWorker, "undeliverable subscription notifications" d
 
     expect(PostToIndividualPingEndpointWorker.jobs.last["args"].first).to eq(deliverable.post_url)
   end
+
+  # Same reason, one layer down: an outage that takes Redis with it can take the Sentry transport
+  # too, and a raising reporter must not become the thing that drops the webhooks.
+  it "still delivers the working webhooks when the error reporter also raises" do
+    create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
+    deliverable = create(:resource_subscription, oauth_application:, user: seller)
+
+    other_application = create(:oauth_application, owner: seller)
+    broken_token = create("doorkeeper/access_token", application: other_application, resource_owner_id: seller.id, scopes: "view_sales")
+    create(:resource_subscription, oauth_application: other_application, user: seller)
+    broken_token.update!(revoked_at: Time.current)
+
+    allow(UndeliverablePingSubscriptionNotifier).to receive(:notify_all).and_raise(Redis::CannotConnectError)
+    allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "sentry down")
+
+    expect do
+      described_class.new.perform(purchase.id, nil)
+    end.to change { PostToIndividualPingEndpointWorker.jobs.size }.by(1)
+
+    expect(PostToIndividualPingEndpointWorker.jobs.last["args"].first).to eq(deliverable.post_url)
+  end
 end
