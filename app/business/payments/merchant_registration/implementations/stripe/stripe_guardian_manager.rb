@@ -113,33 +113,42 @@ module StripeGuardianManager
       return unless guardian&.has_completed_info?
 
       attributes = person_hash(guardian, user_compliance_info, passphrase:)
-      stripe_person = existing_person(stripe_account, guardian)
+      existing = existing_person(stripe_account, guardian)
 
-      if stripe_person
-        # Record the id when we reached this Person by the relationship scan rather than by a stored
-        # id. Without this the recovery path never writes one back, and erasure — which selects on
-        # stripe_person_id — would skip exactly the guardians whose first sync half-failed, leaving
-        # the adult's details at Stripe permanently.
-        adopt_person_id!(guardian, stripe_person.id) if guardian.stripe_person_id != stripe_person.id
+      result =
+        if existing
+          # Record the id when we reached this Person by the relationship scan rather than by a
+          # stored id. Without this the recovery path never writes one back, and erasure — which
+          # selects on stripe_person_id — would skip exactly the guardians whose first sync
+          # half-failed, leaving the adult's details at Stripe permanently.
+          adopt_person_id!(guardian, existing.id) if guardian.stripe_person_id != existing.id
 
-        Stripe::Account.update_person(
-          stripe_account.id,
-          stripe_person.id,
-          StripeMerchantAccountManager.force_utf8_encoding(attributes)
-        )
-      else
-        created = Stripe::Account.create_person(
-          stripe_account.id,
-          StripeMerchantAccountManager.force_utf8_encoding(attributes)
-        )
-        adopt_person_id!(guardian, created.id)
-        # A long lease makes expiry rare; it cannot make an orphan impossible. No lock spans the gap
-        # between Stripe accepting the create and the id reaching our row — a process killed there
-        # leaves a Person holding an adult's details with nothing local pointing at it. So the create
-        # is followed by a reconcile: detected after the fact, rather than assumed away.
-        reconcile_duplicate_persons!(guardian, stripe_account.id)
-        created
-      end
+          Stripe::Account.update_person(
+            stripe_account.id,
+            existing.id,
+            StripeMerchantAccountManager.force_utf8_encoding(attributes)
+          )
+        else
+          created = Stripe::Account.create_person(
+            stripe_account.id,
+            StripeMerchantAccountManager.force_utf8_encoding(attributes)
+          )
+          adopt_person_id!(guardian, created.id)
+          created
+        end
+
+      # Runs on both branches, after the id is recorded, because an orphan is not only left behind by
+      # a create. existing_person takes ONE Person — by recorded id, else the first the relationship
+      # scan returns — so an account that already holds several legal-guardian Persons has the rest
+      # standing after this sync updated one of them. Reconciling only after a create left them
+      # there: an adult's name, date of birth, address and tax id at Stripe that erasure's recorded-id
+      # path cannot select, and that no later sync revisits either, since the next one takes the
+      # recorded id and never scans.
+      #
+      # Ordering is load-bearing: the reconcile deletes what no Guardian row of this seller points
+      # at, so it must follow adopt_person_id! or it would delete the Person we just adopted.
+      reconcile_duplicate_persons!(guardian, stripe_account.id)
+      result
     end
   end
 
@@ -150,8 +159,12 @@ module StripeGuardianManager
   # relationship, but only while the seller still has a resolvable Stripe account — so an orphan left
   # in place is PII we may later be unable to reach at all.
   #
-  # Scoped by "not referenced locally" rather than "not the one I just created", so it also clears an
-  # orphan left by an earlier sync that died between Stripe's create and our write.
+  # Scoped by "not referenced locally" rather than "not the one I just created", which is what lets
+  # it run after an update as well as a create, and what makes it clear an orphan this sync had no
+  # part in: a Person left by an earlier sync killed between Stripe's create and our write, or one of
+  # several the account already held. A long lock lease makes that first case rare and cannot make it
+  # impossible — no lock spans the gap between Stripe accepting a create and the id reaching our row
+  # — so the orphan is detected after the fact rather than assumed away.
   #
   # Never raises: the Person the caller asked for exists and its id is recorded by this point, and
   # failing the sync over the cleanup would turn a resolved duplicate into an unmet Stripe

@@ -474,6 +474,69 @@ describe StripeGuardianManager do
           .with(stripe_account_id, "person_guardian_new")
       end
 
+      # existing_person takes ONE Person, so an account already holding several legal-guardian
+      # Persons had the rest left standing when the reconcile only ran after a create. No later sync
+      # revisits them either — the next one takes the now-recorded id and never scans.
+      it "deletes the extra persons when it adopted the first of several on the account" do
+        create_compliance_info(guardian_record: guardian)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          people = [{ id: "person_guardian_first" }, { id: "person_guardian_second" }]
+          Stripe::ListObject.construct_from(data: params[:limit] == 1 ? [people.first] : people)
+        end
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).not_to have_received(:create_person)
+        expect(guardian.reload.stripe_person_id).to eq("person_guardian_first")
+        expect(Stripe::Account).to have_received(:delete_person)
+          .with(stripe_account_id, "person_guardian_second")
+        # The adopted Person is the one satisfying the account's requirement.
+        expect(Stripe::Account).not_to have_received(:delete_person)
+          .with(stripe_account_id, "person_guardian_first")
+      end
+
+      # The steady-state path: a guardian with a recorded id syncs by update on every account write,
+      # so this is where an orphan from any earlier failure gets its only further chance of being
+      # noticed.
+      it "deletes an orphan on the update path taken by a guardian with a recorded id" do
+        guardian.update!(stripe_person_id: "person_guardian_existing")
+        create_compliance_info(guardian_record: guardian)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:retrieve_person).and_return(
+          Stripe::StripeObject.construct_from(id: "person_guardian_existing")
+        )
+        allow(Stripe::Account).to receive(:list_persons).and_return(
+          Stripe::ListObject.construct_from(
+            data: [{ id: "person_guardian_existing" }, { id: "person_orphaned_duplicate" }]
+          )
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).to have_received(:update_person)
+          .with(stripe_account_id, "person_guardian_existing", anything)
+        expect(Stripe::Account).to have_received(:delete_person)
+          .with(stripe_account_id, "person_orphaned_duplicate")
+        expect(Stripe::Account).not_to have_received(:delete_person)
+          .with(stripe_account_id, "person_guardian_existing")
+      end
+
+      # The reconcile deletes what no local row points at, so running it before adopt_person_id!
+      # would delete the Person this sync had just reached by scan and was about to record.
+      it "keeps the person it adopted by relationship scan rather than reconciling it away" do
+        create_compliance_info(guardian_record: guardian)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:list_persons).and_return(
+          Stripe::ListObject.construct_from(data: [{ id: "person_guardian_orphan" }])
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(guardian.reload.stripe_person_id).to eq("person_guardian_orphan")
+        expect(Stripe::Account).not_to have_received(:delete_person)
+      end
+
       # The Person the caller asked for exists and its id is recorded by this point. Failing the sync
       # over the cleanup would turn a resolved duplicate into an unmet Stripe requirement.
       it "still returns the created person when the reconcile fails" do
