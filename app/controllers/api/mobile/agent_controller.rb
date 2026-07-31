@@ -138,7 +138,7 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
         # A proposal can only be confirmed through its persisted message.
         proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        conversation_id: conversation&.external_id,
+        conversation_id: conversation&.persisted? ? conversation.external_id : nil,
       }
       response_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
       render json: response_payload

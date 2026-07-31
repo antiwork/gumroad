@@ -102,6 +102,7 @@ describe("getPaymentDetailsSource", () => {
       cardCountry: "US",
       walletType: null,
       mountCurrency: "usd",
+      selectedMethodType: "card",
     };
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, false)).toBe("payment_element");
@@ -155,6 +156,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
         cardCountry: "US",
         walletType: "google_pay",
         mountCurrency: "usd",
+        selectedMethodType: "card",
       }),
       {},
     );
@@ -212,6 +214,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
           cardCountry: "US",
           walletType: "google_pay",
           mountCurrency: "usd",
+          selectedMethodType: "card",
         }),
         {},
       );

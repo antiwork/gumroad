@@ -98,6 +98,31 @@ describe Admin::LinksController, type: :controller, inertia: true do
       expect(product.reload.deleted_at).to be_nil
     end
 
+    it "clears a default discount that detached while the product was deleted" do
+      offer_code = create(:offer_code, user: product.user, products: [product])
+      product.update!(default_offer_code_id: offer_code.id)
+      offer_code.products.delete(product)
+
+      post :restore, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.deleted_at).to be_nil
+      expect(product.default_offer_code_id).to be_nil
+    end
+
+    it "keeps a default discount that still applies" do
+      offer_code = create(:offer_code, user: product.user, products: [product])
+      product.update!(default_offer_code_id: offer_code.id)
+
+      post :restore, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.deleted_at).to be_nil
+      expect(product.default_offer_code_id).to eq(offer_code.id)
+    end
+
     it "raises a 404 if the product is not found" do
       expect do
         post :restore, params: { external_id: "invalid-id" }
@@ -113,6 +138,20 @@ describe Admin::LinksController, type: :controller, inertia: true do
 
       expect(response).to be_successful
       expect(product.reload.purchase_disabled_at).to be_nil
+    end
+
+    it "clears a default discount that detached while the product was deleted" do
+      product.update!(deleted_at: 1.day.ago)
+      offer_code = create(:offer_code, user: product.user, products: [product])
+      product.update!(default_offer_code_id: offer_code.id)
+      offer_code.products.delete(product)
+
+      post :publish, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.deleted_at).to be_nil
+      expect(product.default_offer_code_id).to be_nil
     end
 
     it "raises a 404 if the product is not found" do

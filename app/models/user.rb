@@ -35,6 +35,9 @@ class User < ApplicationRecord
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
+  # Seasoning before a seller can pull funds instantly.
+  MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS = 60.days
+
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
   # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
@@ -102,6 +105,7 @@ class User < ApplicationRecord
   has_many :invites, foreign_key: :sender_id
   has_many :offer_codes
   has_many :user_compliance_infos
+  has_many :guardians
   has_many :user_compliance_info_requests
   has_many :user_tax_forms
   has_many :scheduled_payouts
@@ -1131,9 +1135,25 @@ class User < ApplicationRecord
   def eligible_for_instant_payouts?
     compliant? &&
       !payouts_paused? &&
-      payments.completed.count >= 4 &&
+      payments.completed.exists? &&
+      stripe_accounts_seasoned_for_instant_payouts? &&
       alive_user_compliance_info&.legal_entity_country_code == "US"
   end
+
+  # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
+  # account for years before connecting one. A recreated payout account resets this.
+  #
+  # Every account a payout could land on has to season: the destination is picked at payout time,
+  # so seasoning only the managed account leaves a fresh connected account as a hole.
+  def stripe_accounts_seasoned_for_instant_payouts?
+    managed_account = stripe_account
+    return false if managed_account.nil?
+
+    [managed_account, stripe_connect_account].compact.all? do |account|
+      account.created_at <= MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
+    end
+  end
+  private :stripe_accounts_seasoned_for_instant_payouts?
 
   def instant_payouts_supported?
     eligible_for_instant_payouts? && (active_bank_account&.supports_instant_payouts? || false)

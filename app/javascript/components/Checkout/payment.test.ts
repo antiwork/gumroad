@@ -653,6 +653,7 @@ describe("buyer-currency presentment lane", () => {
     currency: "cad" as const,
     canonical_total_cents: 1_300,
     presentment_total_cents: 1_625,
+    charge_presentment_total_cents: 625,
     rate: 1.25,
     subunit_to_unit: 100,
     expires_at: "2026-07-10T00:00:00Z",
@@ -680,13 +681,13 @@ describe("buyer-currency presentment lane", () => {
     },
   };
 
-  it("mounts the element with the quote's currency and locked local-currency total", () => {
+  it("mounts the element with the quote's currency and locked current-charge amount", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
       surcharges: loadedSurchargesWithQuote,
     });
-    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 1_625 });
-    expect(getStripePaymentElementAmount(s)).toBe(1_625);
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+    expect(getStripePaymentElementAmount(s)).toBe(625);
   });
 
   it("mounts canonical USD when the surcharge response has no quote", () => {
