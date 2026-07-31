@@ -6,8 +6,8 @@ require "spec_helper"
 # slugged page, product landing) and the CSP directive that covers a direct
 # top-level hit on /landing/embed, where the iframe attribute doesn't apply.
 # They must stay identical: a token present on three surfaces and missing on
-# the fourth is invisible in review and reaches sellers as "this link works on
-# my product page but not my storefront". These examples hit all four for real
+# the fourth is invisible in review and reaches sellers as "this works on my
+# product page but not my storefront". These examples hit all four for real
 # rather than asserting the constant against itself.
 describe "custom HTML sandbox parity", type: :request do
   include Devise::Test::IntegrationHelpers
@@ -55,30 +55,47 @@ describe "custom HTML sandbox parity", type: :request do
   end
 
   describe "the sandbox itself" do
-    it "permits downloads, so a seller's link to a file isn't silently dropped" do
-      # Without this token the browser cancels the download with no error the
-      # seller or we can see, and target="_blank" can't route around it: the
-      # escaped popup inherits the sandboxed initiator's download restriction.
-      expect(sandbox).to include("allow-downloads")
-    end
-
-    it "still withholds same-origin and top navigation" do
-      expect(sandbox).not_to include("allow-same-origin")
-      expect(sandbox).not_to include("allow-top-navigation")
-    end
-
-    # Deliberately a literal, not the constant: every other example here compares
+    # Deliberately literals, not the constant: every other example here compares
     # a response against CUSTOM_HTML_SANDBOX, which moves with production and so
-    # can't notice a token being dropped. This one fails if the set ever changes,
-    # which is the point — update it consciously.
+    # can't notice a token being added or dropped. These fail if the set changes,
+    # which is the point — change it consciously.
     it "serves this exact token set on a rendered wrapper" do
       seller.update!(custom_html: "<section><h1>Profile</h1></section>")
 
       get "http://#{seller.subdomain}/"
 
       expect(response.body).to include(
-        %(sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads")
+        %(sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox")
       )
+    end
+
+    # These are the tokens that would let seller-authored markup reach the buyer
+    # or the page around it. Downloads are on this list by decision, not
+    # oversight: the token would let a page hand a visitor a file from any host
+    # under the seller's own subdomain, so a download link does nothing and the
+    # docs say so instead.
+    RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX_FORBIDDEN_TOKENS.each do |token|
+      it "withholds #{token}" do
+        expect(sandbox).not_to include(token)
+      end
+    end
+
+    # The wrapper attribute and the CSP directive are separate strings built from
+    # the same list; a forbidden token could be appended to one of them without
+    # touching the list at all.
+    it "withholds them on the rendered wrapper and the embed CSP too" do
+      product = create(:product, user: seller, custom_html: "<section><h1>Product</h1></section>")
+
+      get "http://#{seller.subdomain}/l/#{product.unique_permalink}"
+      wrapper_sandbox = response.body[/sandbox="([^"]*)"/, 1]
+
+      get "http://#{seller.subdomain}/l/#{product.unique_permalink}/landing/embed"
+      csp_sandbox = response.headers["Content-Security-Policy"][/sandbox ([^;]*)/, 1]
+
+      RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX_FORBIDDEN_TOKENS.each do |token|
+        expect(wrapper_sandbox).not_to include(token)
+        expect(csp_sandbox).not_to include(token)
+      end
     end
   end
 end

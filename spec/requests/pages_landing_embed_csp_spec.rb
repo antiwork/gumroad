@@ -42,7 +42,7 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
     # iframe attribute alone wouldn't cover a direct navigation to this URL.
     expect(csp).to include("sandbox #{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}")
     expect(csp).to include("allow-popups")
-    expect(csp).to include("allow-downloads")
+    expect(csp).not_to include("allow-downloads")
     expect(csp).not_to include("allow-same-origin")
     expect(csp).not_to include("allow-top-navigation")
   end

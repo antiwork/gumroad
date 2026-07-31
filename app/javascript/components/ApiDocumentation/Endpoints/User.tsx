@@ -77,14 +77,14 @@ const ProfileCustomHtmlDocumentation = () => (
     </ul>
     <p>
       Your HTML is sanitized — disallowed tags and attributes are stripped — then served inside a sandboxed iframe (
-      <code>
-        sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads&quot;
-      </code>
+      <code>sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox&quot;</code>
       ). It can run inline JavaScript, load scripts from the Tailwind, jsDelivr, and unpkg CDNs, load fonts from Google
-      Fonts and Bunny Fonts, open links in a new tab, and link to files that download. It can't read your Gumroad
-      cookies or session (it runs on an opaque origin), touch the parent page, or make <code>fetch</code>/
-      <code>XHR</code>/WebSocket requests (<code>connect-src 'none'</code>). Images and media may only load from
-      Gumroad.
+      Fonts and Bunny Fonts, and open links in a new tab. It can't read your Gumroad cookies or session (it runs on an
+      opaque origin), touch the parent page, or make <code>fetch</code>/<code>XHR</code>/WebSocket requests (
+      <code>connect-src 'none'</code>). Images and media may only load from Gumroad. It also can't download files: the
+      sandbox omits <code>allow-downloads</code>, so a link to a PDF, zip, or similar is cancelled silently with no
+      error — the link simply looks dead, and <code>target=&quot;_blank&quot;</code> does not work around it. Deliver
+      the file as product content and link to the product instead.
     </p>
     <h5>Live values</h5>
     <p>Mark elements with data attributes that Gumroad fills in server-side so the page always shows current values:</p>

@@ -56,17 +56,24 @@ module RendersCustomHtmlPages
   # list rather than repeating the tokens: the wrapper iframes in
   # UsersController/UserPagesController/LinksController and the CSP directive
   # below. Adding a token here widens all four at once; that is the point.
-  #
-  # allow-downloads is required for a download to happen *at all* from seller
-  # HTML — without it the browser drops the click silently, and target="_blank"
-  # can't route around it because the escaped popup inherits the initiator's
-  # download restriction.
   CUSTOM_HTML_SANDBOX_TOKENS = %w[
     allow-scripts
     allow-forms
     allow-popups
     allow-popups-to-escape-sandbox
+  ].freeze
+
+  # This frame renders seller-supplied markup, so widening it to any of these is
+  # a buyer-safety decision and a spec fails if one appears. allow-downloads is
+  # here by decision: it would let a page hand a visitor a file from any host
+  # under the seller's own subdomain. The cost is that a download link does
+  # nothing and the browser says nothing, so the docs have to carry that limit.
+  CUSTOM_HTML_SANDBOX_FORBIDDEN_TOKENS = %w[
     allow-downloads
+    allow-downloads-without-user-activation
+    allow-same-origin
+    allow-top-navigation
+    allow-top-navigation-by-user-activation
   ].freeze
 
   CUSTOM_HTML_SANDBOX = CUSTOM_HTML_SANDBOX_TOKENS.join(" ").freeze

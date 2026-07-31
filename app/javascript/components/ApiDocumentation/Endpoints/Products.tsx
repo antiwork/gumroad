@@ -115,9 +115,7 @@ gumroad products page publish <permalink> ./landing.html`}
     </CodeSnippet>
     <p>
       Your HTML is sanitized — disallowed tags and attributes are stripped — then served inside a sandboxed iframe (
-      <code>
-        sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads&quot;
-      </code>
+      <code>sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox&quot;</code>
       ).
     </p>
     <p>It can:</p>
@@ -128,12 +126,17 @@ gumroad products page publish <permalink> ./landing.html`}
       <li>Load images and media from Gumroad only — e.g. your product's covers and thumbnail.</li>
       <li>Submit forms in-page with JavaScript.</li>
       <li>Open links in a new tab or window.</li>
-      <li>Link to files that download.</li>
     </ul>
     <p>It can't:</p>
     <ul>
       <li>Read your Gumroad cookies or session — it runs on an opaque origin.</li>
       <li>Touch the parent page.</li>
+      <li>
+        Download files. The sandbox omits <code>allow-downloads</code>, so a link to a PDF, zip, or any other file the
+        browser would download is cancelled — silently, with no error anywhere, so the link just looks dead.{" "}
+        <code>target=&quot;_blank&quot;</code> does not work around it. Deliver the file as product content and link to
+        the product instead.
+      </li>
       <li>
         Make <code>fetch</code>, <code>XHR</code>, or WebSocket requests (<code>connect-src 'none'</code>).
       </li>
