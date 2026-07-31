@@ -17,6 +17,11 @@
 # to, failing with an unknown-attribute error on every attempt to store a fixing. A new version
 # number is the only thing db:migrate will actually run.
 class AddCanonicalPriceCentsToLaterChargePresentments < ActiveRecord::Migration[7.1]
+  # Renumbered from 20261206000016 (and before that 20261206000014) after main took each version,
+  # so db:migrate now runs this against databases that already have the column. Both directions
+  # have to cope with that.
+  SUPERSEDED_VERSION = "20261206000016"
+
   def up
     # No rows exist yet in any environment: nothing writes a fixing until a seller is put in the
     # :buyer_currency_subscriptions ramp, and no seller is in it. A NOT NULL column with no default
@@ -29,7 +34,20 @@ class AddCanonicalPriceCentsToLaterChargePresentments < ActiveRecord::Migration[
 
   def down
     return unless column_exists?(:later_charge_presentments, :canonical_price_cents)
+    # Where the superseded version is still recorded, the column belongs to that migration and a
+    # rollback of this one must leave it in place. Only 16 is checked, not 14: main now uses 14 for
+    # an unrelated migration, so gating on it would make this rollback a permanent no-op.
+    return if superseded_version_applied?
 
     remove_column :later_charge_presentments, :canonical_price_cents
   end
+
+  private
+    def superseded_version_applied?
+      connection.select_value(
+        ActiveRecord::Base.sanitize_sql_array(
+          ["SELECT 1 FROM schema_migrations WHERE version = ? LIMIT 1", SUPERSEDED_VERSION]
+        )
+      ).present?
+    end
 end

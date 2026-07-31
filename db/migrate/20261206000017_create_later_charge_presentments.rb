@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 class CreateLaterChargePresentments < ActiveRecord::Migration[7.1]
-  def change
-    # Guarded because this migration has been renumbered twice — from 20261206000013, then from
-    # 20261206000015 — each time because main took the version for an unrelated table first.
-    # Environments built earlier already created the table under an old number, and db:migrate
-    # will now run this one against them.
+  # Renumbered from 20261206000015 (and before that 20261206000013) after main took each version
+  # for an unrelated table, so db:migrate now runs this migration against databases that already
+  # have the table. up leaves it alone; down refuses to drop a table this migration never created,
+  # which is why this is an explicit up/down pair rather than a reversible change.
+  SUPERSEDED_VERSION = "20261206000015"
+
+  def up
     create_table :later_charge_presentments, if_not_exists: true do |t|
       # Polymorphic because four different things control a charge that happens after checkout,
       # and they share nothing else: a Subscription (memberships and installment plans, which are
@@ -40,4 +42,24 @@ class CreateLaterChargePresentments < ActiveRecord::Migration[7.1]
       t.index [:owner_type, :owner_id, :effective_from], name: "index_later_charge_presentments_on_owner_and_effective"
     end
   end
+
+  def down
+    return unless table_exists?(:later_charge_presentments)
+    # Where the superseded version is still recorded, the table and every fixing in it belong to
+    # that migration, and rolling this one back must leave them in place. Only 15 is checked, not
+    # 13: main now uses 13 for an unrelated migration, so every database records it and gating on
+    # it would make this rollback a permanent no-op.
+    return if superseded_version_applied?
+
+    drop_table :later_charge_presentments
+  end
+
+  private
+    def superseded_version_applied?
+      connection.select_value(
+        ActiveRecord::Base.sanitize_sql_array(
+          ["SELECT 1 FROM schema_migrations WHERE version = ? LIMIT 1", SUPERSEDED_VERSION]
+        )
+      ).present?
+    end
 end
