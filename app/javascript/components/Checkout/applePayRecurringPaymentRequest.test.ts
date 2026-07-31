@@ -32,6 +32,19 @@ const membership = (overrides: Partial<Product> = {}) =>
   product({ nativeType: "membership", recurrence: "monthly", ...overrides });
 
 describe("getApplePayRecurringPaymentRequest", () => {
+  // End dates are derived from the current date, so every example that asserts one runs against a
+  // pinned clock. Left on the real clock they only pass on days whose target month is long enough
+  // to hold the same day-of-month, so they go red on the 31st of a month 11 or 9 months ahead of a
+  // 30-day one. Examples below that pin their own date override this.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 15)); // March 15, 2026
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns null for a one-time cart", () => {
     expect(getApplePayRecurringPaymentRequest([product()], MANAGEMENT_URL)).toBeNull();
   });
@@ -77,57 +90,43 @@ describe("getApplePayRecurringPaymentRequest", () => {
 
   it("bounds the agreement with an end date for a fixed-duration membership", () => {
     // A 12-month membership billed monthly makes 12 payments; the first is charged today, so the
-    // agreement ends 11 months out. Pinned to a mid-month date: computing the expectation with a
-    // bare setMonth() overflows on the 29th-31st and fails only on those days of the month.
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date(2026, 0, 15));
-      const request = getApplePayRecurringPaymentRequest([membership({ durationInMonths: 12 })], MANAGEMENT_URL);
-      expect(request?.regularBilling.recurringPaymentEndDate?.getFullYear()).toBe(2026);
-      expect(request?.regularBilling.recurringPaymentEndDate?.getMonth()).toBe(11); // December
-      expect(request?.billingAgreement).toBe("$10 a month for 12 payments. Manage anytime from your Gumroad library.");
-    } finally {
-      vi.useRealTimers();
-    }
+    // agreement ends 11 months out — February 15, 2027 from the pinned March 15, 2026.
+    const request = getApplePayRecurringPaymentRequest([membership({ durationInMonths: 12 })], MANAGEMENT_URL);
+    const endDate = request?.regularBilling.recurringPaymentEndDate;
+    expect(endDate?.getFullYear()).toBe(2027);
+    expect(endDate?.getMonth()).toBe(1); // February
+    expect(endDate?.getDate()).toBe(15);
+    expect(request?.billingAgreement).toBe("$10 a month for 12 payments. Manage anytime from your Gumroad library.");
   });
 
   it("computes billing cycles from the recurrence interval for fixed-duration memberships", () => {
-    // 12 months billed quarterly = 4 payments, ending 9 months out.
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date(2026, 0, 15));
-      const request = getApplePayRecurringPaymentRequest(
-        [membership({ recurrence: "quarterly", durationInMonths: 12 })],
-        MANAGEMENT_URL,
-      );
-      expect(request?.regularBilling.recurringPaymentEndDate?.getFullYear()).toBe(2026);
-      expect(request?.regularBilling.recurringPaymentEndDate?.getMonth()).toBe(9); // October
-      expect(request?.billingAgreement).toContain("for 4 payments");
-    } finally {
-      vi.useRealTimers();
-    }
+    // 12 months billed quarterly = 4 payments, ending 9 months out — December 15, 2026.
+    const request = getApplePayRecurringPaymentRequest(
+      [membership({ recurrence: "quarterly", durationInMonths: 12 })],
+      MANAGEMENT_URL,
+    );
+    const endDate = request?.regularBilling.recurringPaymentEndDate;
+    expect(endDate?.getFullYear()).toBe(2026);
+    expect(endDate?.getMonth()).toBe(11); // December
+    expect(endDate?.getDate()).toBe(15);
+    expect(request?.billingAgreement).toContain("for 4 payments");
   });
 
   it("uses the singular 'payment' when the fixed duration fits in a single billing cycle", () => {
     // A 12-month membership billed yearly makes exactly one payment (charged today), so the
     // agreement text must not read "1 payments".
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date(2026, 0, 15));
-      const request = getApplePayRecurringPaymentRequest(
-        [membership({ recurrence: "yearly", durationInMonths: 12 })],
-        MANAGEMENT_URL,
-      );
-      expect(request?.billingAgreement).toBe("$10 a year for 1 payment. Manage anytime from your Gumroad library.");
-      // The end date marks the final charge, and with one billing cycle the only charge is today's,
-      // so the agreement ends the same day it starts. This is display-only on the payment sheet.
-      const endDate = request?.regularBilling.recurringPaymentEndDate;
-      expect(endDate?.getFullYear()).toBe(2026);
-      expect(endDate?.getMonth()).toBe(0);
-      expect(endDate?.getDate()).toBe(15);
-    } finally {
-      vi.useRealTimers();
-    }
+    const request = getApplePayRecurringPaymentRequest(
+      [membership({ recurrence: "yearly", durationInMonths: 12 })],
+      MANAGEMENT_URL,
+    );
+    expect(request?.billingAgreement).toBe("$10 a year for 1 payment. Manage anytime from your Gumroad library.");
+    // The end date marks the final charge, and with one billing cycle the only charge is today's,
+    // so the agreement ends the same day it starts. This is display-only on the payment sheet.
+    const today = new Date();
+    const endDate = request?.regularBilling.recurringPaymentEndDate;
+    expect(endDate?.getFullYear()).toBe(today.getFullYear());
+    expect(endDate?.getMonth()).toBe(today.getMonth());
+    expect(endDate?.getDate()).toBe(today.getDate());
   });
 
   it("leaves open-ended memberships without an end date", () => {
