@@ -514,7 +514,7 @@ describe StripeMerchantAccountManager do
       expect do
         described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number", user.active_bank_account.id)
 
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
     end
@@ -544,7 +544,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, nil, "We couldn't find the bank for that BIC")
+        .with(user.id, nil, "We couldn't find the bank for that BIC", user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
       expect(ErrorNotifier).not_to have_received(:notify)
@@ -594,7 +594,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end
@@ -664,6 +664,84 @@ describe StripeMerchantAccountManager do
     end
   end
 
+  describe "naming the value a directory miss refused" do
+    let(:zip_code) { "94107" }
+
+    def error_for(message, code: nil)
+      Stripe::InvalidRequestError.new(message, "bank_account[routing_number]", code:)
+    end
+
+    let(:uz_bank_account) { build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401") }
+
+    it "recognises a directory miss separately from format and terminal rejections" do
+      error = error_for("We couldn't find the bank for that bank/branch code")
+
+      expect(described_class.bank_details_directory_miss?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+    end
+
+    it "does not call a mistyped code a directory miss" do
+      expect(described_class.bank_details_directory_miss?(error_for("Invalid routing number for PK.", code: "routing_number_invalid"))).to be(false)
+    end
+
+    it "quotes back both halves without claiming which one was refused when the country collects two" do
+      detail = described_class.bank_directory_miss_detail(uz_bank_account)
+
+      expect(detail).to include("bank code JSCLUZ22XXX and branch code 00401")
+      expect(detail).to include("doesn't tell us which of the two")
+      expect(detail).to include("check both")
+      expect(detail).to include("head-office code")
+    end
+
+    # The reviewer's case: Stripe's error names neither half, so the copy must not pin the failure on
+    # the branch code. A seller whose BANK code is the unmatched one has to be told to check it too.
+    it "does not blame the branch code, so a refused bank code is still covered" do
+      detail = described_class.bank_directory_miss_detail(uz_bank_account)
+
+      expect(detail).not_to match(/branch code is the half/i)
+      expect(detail).not_to match(/the branch code is (the one|what)/i)
+      # Both boxes are named as things to check, not just the branch code.
+      expect(detail).to match(/check both/i)
+    end
+
+    it "names the bank code for a country that collects only that half" do
+      detail = described_class.bank_directory_miss_detail(build(:armenia_bank_account, bank_code: "AAAAAMNNXXX"))
+
+      expect(detail).to eq("The details we sent were bank code AAAAAMNNXXX.")
+      # No branch code was collected, so there is no two-field ambiguity to explain.
+      expect(detail).not_to match(/branch code/i)
+    end
+
+    it "quotes back the single value without the branch-code advice when there is only one" do
+      detail = described_class.bank_directory_miss_detail(build(:ach_account, routing_number: "110000000"))
+
+      expect(detail).to eq("The details we sent were routing number 110000000.")
+    end
+
+    it "returns nothing when there is no bank account to describe" do
+      expect(described_class.bank_directory_miss_detail(nil)).to be_nil
+    end
+
+    it "builds a seller message that names the value, the field and what to do" do
+      message = described_class.bank_directory_miss_seller_message(
+        error_for("We couldn't find the bank for that bank/branch code"), uz_bank_account
+      )
+
+      expect(message).to start_with("Our payment partner couldn't match your bank details against its records.")
+      expect(message).to include("bank code JSCLUZ22XXX and branch code 00401")
+      expect(message).to include("up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks")
+    end
+
+    it "declines to speak for a rejection that is not a directory miss, so Stripe's own message survives" do
+      expect(
+        described_class.bank_directory_miss_seller_message(
+          error_for("Invalid routing number for PK.", code: "routing_number_invalid"), uz_bank_account
+        )
+      ).to be_nil
+    end
+  end
+
   describe "bank code rejected on format during a bank account sync" do
     let(:zip_code) { "94107" }
     let(:error_message) do
@@ -687,7 +765,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end
@@ -728,7 +806,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end

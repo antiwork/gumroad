@@ -517,7 +517,10 @@ class SettingsPresenter
           "We've been re-checking the bank account you added, but our payment partner still hasn't been able to verify it. Please double-check your details and re-save them. If everything looks correct, contact support and we'll look into it." if abandoned_reason.blank?
         else
           # Cadence wording must match ContactingCreatorMailer#invalid_bank_account.
-          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
+          directory_detail = StripeMerchantAccountManager.bank_directory_miss_detail(seller.active_bank_account) if StripeMerchantAccountManager.bank_details_directory_miss_note?(bank_note)
+          ["Our payment partner couldn't verify the bank account you entered.",
+           directory_detail,
+           "Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."].compact.join(" ")
         end
         compliance_actions << { message: bank_message, href: nil } if bank_message.present?
       end

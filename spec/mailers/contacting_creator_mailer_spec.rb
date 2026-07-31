@@ -2095,6 +2095,7 @@ describe ContactingCreatorMailer do
     let(:format_rejection_message) do
       "Invalid routing number for PK. The number must contain both the bank code and the branch code, and should be in the format AAAAPKBB or AAAAPKBBXYZ."
     end
+    let(:directory_miss_message) { "We couldn't find the bank for that bank/branch code" }
 
     context "when the bank code was rejected on format" do
       let(:mail) do
@@ -2191,6 +2192,51 @@ describe ContactingCreatorMailer do
         expect(mail.subject).to eq("We couldn't verify your bank account yet.")
         expect(mail.body.encoded).to include("automatically re-check")
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
+      end
+
+      it "quotes back both values and asks the seller to check both halves" do
+        bank_account = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, bank_account.id)
+
+        expect(mail.body.encoded).to include("bank code JSCLUZ22XXX and branch code 00401")
+        expect(mail.body.encoded).to include("check both")
+        expect(mail.body.encoded).not_to include("branch code is the half")
+      end
+
+      it "omits the two-field advice for a country that collects one routing value" do
+        bank_account = create(:ach_account, user: seller, routing_number: "110000000")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, bank_account.id)
+
+        expect(mail.body.encoded).to include("routing number 110000000")
+        expect(mail.body.encoded).not_to include("check both")
+      end
+
+      it "quotes the row Stripe refused, not whatever the seller has saved since" do
+        # The mail renders asynchronously, and the #1550 seller re-saved six times in eleven
+        # minutes. Re-saving soft-deletes the old row and makes the newest one active, so reading
+        # the active row would tell them values that were never sent had been refused.
+        rejected = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+        rejected.mark_deleted!
+        replacement = create(:uzbekistan_bank_account, user: seller, bank_code: "KACHUZ22XXX", branch_code: "01158")
+        expect(seller.reload.active_bank_account).to eq(replacement)
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, rejected.id)
+
+        expect(mail.body.encoded).to include("branch code 00401")
+        expect(mail.body.encoded).not_to include("01158")
+      end
+
+      it "says nothing about routing values when the rejection was not a directory miss" do
+        # A declined debit card and a bank-country mismatch both arrive with no rejection kind.
+        # Quoting routing values at those sellers points them at a field that was never the problem.
+        bank_account = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, "Your card was declined.", bank_account.id)
+
+        expect(mail.body.encoded).not_to include("JSCLUZ22XXX")
+        expect(mail.body.encoded).not_to include("The details we sent were")
       end
     end
 

@@ -33,6 +33,16 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     )
   end
 
+  def invalid_bank_account_directory_miss
+    user = User.last
+    ContactingCreatorMailer.invalid_bank_account(
+      user&.id,
+      nil,
+      "We couldn't find the bank for that bank/branch code.",
+      user&.active_bank_account&.id
+    )
+  end
+
   def chargeback_lost_no_refund_policy
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(Purchase.last&.id)
   end

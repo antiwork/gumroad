@@ -934,7 +934,7 @@ module StripeMerchantAccountManager
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       if notify
         rejection_kind = bank_rejection_kind_for(e)
-        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s, bank_account.id).deliver_later(queue: "critical")
         mark_bank_sync_note_seller_notified!(failure_note)
       end
       return :invalid_bank_account
@@ -1033,6 +1033,73 @@ module StripeMerchantAccountManager
   def self.bank_details_format_rejection_note?(note)
     code, message = bank_sync_note_error_details(note)
     format_rejection_signals?(code:, message:)
+  end
+
+  # True when Stripe could not match the routing value against its bank directory. Distinct from
+  # the format and terminal cases: the value may be perfectly real and simply absent from Stripe's
+  # records, so the advice is to check it and wait, not to replace the account.
+  def self.bank_details_directory_miss?(error)
+    bank_details_directory_miss_message?(error.message)
+  end
+
+  # Same question answered from the payout-note breadcrumb, for the surfaces that read the note
+  # rather than a live error.
+  def self.bank_details_directory_miss_note?(note)
+    _code, message = bank_sync_note_error_details(note)
+    bank_details_directory_miss_message?(message)
+  end
+
+  # Same question answered from the message string alone, for the mailer, which receives Stripe's
+  # message rather than the error object.
+  def self.bank_details_directory_miss_message?(message)
+    message.to_s.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+  end
+
+  # The sentence appended to a directory-miss rejection so it names the values that were refused.
+  #
+  # Stripe's own message ("We couldn't find the bank for that bank/branch code") names neither the
+  # values nor which of the two boxes they came from, and the page shows nothing else — so a seller
+  # cannot tell whether we objected to their bank code, their branch code, or the bank itself. The
+  # gumroad-private#1550 seller re-saved six times in eleven minutes cycling BIC spellings.
+  #
+  # For the countries that collect both halves, Stripe does not say WHICH one it could not match:
+  # the error's param is the combined `bank_account[routing_number]` and there is no directory
+  # endpoint to test either half against. So name both values and give the head-office trap as
+  # something to rule out, never as the diagnosis. Single-value countries have no such ambiguity
+  # and get the value alone.
+  #
+  # Returns nil when there is nothing specific to say, so callers can append it unconditionally.
+  def self.bank_directory_miss_detail(bank_account)
+    fields = bank_account&.routing_fields_sentence
+    return if fields.blank?
+
+    detail = "The details we sent were #{fields}."
+    return detail unless bank_account.has_separate_branch_code?
+
+    "#{detail} Our payment partner doesn't tell us which of the two it couldn't match, so please " \
+      "check both against the codes your own branch uses — a bank's head-office code is often not " \
+      "accepted as a branch code, even when the bank publishes it."
+  end
+
+  # The message shown inline on the settings page when a save is refused as a directory miss, or
+  # nil when this rejection is something else (so callers keep Stripe's own message).
+  #
+  # Stripe's string is handed to the seller verbatim today, and on its own it is unactionable: it
+  # names no value, no field, and no next step. Prefix it with our own account of what we sent and
+  # what to do about it.
+  def self.bank_directory_miss_seller_message(error, bank_account)
+    return unless error.is_a?(Stripe::InvalidRequestError)
+    return unless bank_details_directory_miss?(error)
+
+    detail = bank_directory_miss_detail(bank_account)
+    weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+    [
+      "Our payment partner couldn't match your bank details against its records.",
+      detail,
+      "Please double-check them and save again. If you're sure they're correct (for example, a " \
+        "newly opened account or a recently added branch), you don't need to do anything — we'll " \
+        "re-check once a week for up to #{weeks} weeks and only reach out if it still doesn't verify.",
+    ].compact.join(" ")
   end
 
   # True when Stripe refused this specific external account because it is block-listed on the
