@@ -1837,6 +1837,7 @@ class LinksController < ApplicationController
               }, true);
             </script>
             #{custom_html_navigation_bridge_script(allowed_hostnames: product_store_hostnames)}
+            #{BACKGROUND_BRIDGE_SCRIPT}
           </body>
         </html>
       HTML
@@ -1997,6 +1998,7 @@ class LinksController < ApplicationController
                 }
               });
             </script>
+            #{custom_html_background_wrapper_script(nonce:)}
             #{can_preview_custom_html? ? custom_html_live_reload_script(version_src: "/l/#{product.unique_permalink}/landing/version", nonce:) : ""}
           </body>
         </html>
