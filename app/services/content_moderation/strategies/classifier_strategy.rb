@@ -206,11 +206,8 @@ class ContentModeration::Strategies::ClassifierStrategy
       refused + individually(sendable)
     end
 
-    # The per-image fallback is where the phase can overrun: one failed batch
-    # turns into `urls.size` more requests, each with its own attempt budget, so
-    # a five-image slice can spend minutes past the deadline still holding the
-    # save's row lock. Check between requests and report the rest as unreached
-    # rather than as clean.
+    # The per-image fallback multiplies the phase: one failed batch becomes
+    # `urls.size` requests, each with its own attempt budget.
     def individually(urls)
       urls.map do |url|
         next [url, UNREACHED] if deadline_expired?
@@ -269,16 +266,24 @@ class ContentModeration::Strategies::ClassifierStrategy
       begin
         attempts += 1
         response = client.moderations(parameters: { model: "omni-moderation-latest", input: input })
-        response.dig("results", 0, "category_scores") || {}
+        scores = response.dig("results", 0, "category_scores")
+        # A 200 whose payload carries no scores is an input we did NOT get a
+        # verdict for. `{}` would read as "no category over threshold" — the same
+        # clean-pass-for-an-unreviewed-image shape guarded in #moderate_batch.
+        return nil unless scores.is_a?(Hash)
+
+        scores
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ParsingError, Faraday::ServerError => e
         # Retrying past the phase deadline is the same overrun one level down: the
         # image is going to count as unmoderated either way, so spend nothing more
         # on it.
-        if attempts < MAX_MODERATION_ATTEMPTS && !deadline_expired?
+        stopped_by_deadline = deadline_expired?
+        if attempts < MAX_MODERATION_ATTEMPTS && !stopped_by_deadline
           Rails.logger.warn("ContentModeration::ClassifierStrategy #{e.class.name.demodulize} on attempt #{attempts}/#{MAX_MODERATION_ATTEMPTS}, retrying: #{e.message}")
           retry
         end
-        Rails.logger.warn("ContentModeration::ClassifierStrategy exhausted #{MAX_MODERATION_ATTEMPTS} attempts: #{e.class} - #{e.message}")
+        reason = stopped_by_deadline ? "image phase deadline expired" : "exhausted attempts"
+        Rails.logger.warn("ContentModeration::ClassifierStrategy giving up after #{attempts}/#{MAX_MODERATION_ATTEMPTS} attempts (#{reason}): #{e.class} - #{e.message}")
         ErrorNotifier.notify(e, attempts: attempts, input_type: input.first[:type], skip_url: loggable_url(skip_url))
         nil
       rescue Faraday::BadRequestError => e

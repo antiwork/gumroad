@@ -77,6 +77,36 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
   end
 
+  it "treats a single-input 200 with no category_scores as unmoderated rather than clean" do
+    # The batch path already guards this shape; #moderate is the path every
+    # single-image request and the text pass take.
+    allow(client).to receive(:moderations).and_return({ "results" => [{ "error" => "unavailable" }] })
+
+    result = described_class.new(text: "", image_urls: ["https://cdn.example.com/1.png"], max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "reports the real attempt count and the deadline as the cause when a retry is suppressed" do
+    # "exhausted 3 attempts" after one attempt sent an operator hunting an
+    # upstream rejection for what was our own timeout.
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed = 0
+    allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
+    allow(client).to receive(:moderations) do |parameters:|
+      raise Faraday::ServerError.new("boom") if parameters[:input].size > 1
+
+      elapsed = described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS + 1
+      raise Faraday::TimeoutError.new("too slow")
+    end
+
+    described_class.new(text: "", image_urls: (1..2).map { |n| "https://cdn.example.com/#{n}.png" }, max_images: :all).perform
+
+    expect(Rails.logger).to have_received(:warn).with(/giving up after 1\/#{described_class::MAX_MODERATION_ATTEMPTS} attempts \(image phase deadline expired\)/o)
+    expect(Rails.logger).not_to have_received(:warn).with(/exhausted/)
+  end
+
   it "refuses an oversized inline image without spending a request on it" do
     oversized = "data:image/png;base64,#{"A" * described_class::MAX_DATA_IMAGE_BYTES}"
     call_inputs = []
