@@ -548,7 +548,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to redirect_to(settings_payments_path)
             error = session[:inertia_errors][:base].first
             expect(error).to include("bank code JSCLUZ22XXX and branch code 00401")
-            expect(error).to include("branch code is the half")
+            expect(error).to include("check both")
+            expect(error).not_to include("branch code is the half")
           end
 
           it "handles Stripe::APIError gracefully instead of raising a 500" do

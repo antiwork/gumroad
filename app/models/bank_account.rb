@@ -131,10 +131,8 @@ class BankAccount < ApplicationRecord
   end
 
   # True when the seller filled in a first-half code AND a separate branch code, which is the shape
-  # that makes "we couldn't find the bank" ambiguous: the first half is usually right (it is the
-  # published BIC or clearing code) and the branch code is the half Stripe matches per branch, but
-  # nothing in the rejection says so. Hong Kong calls its first half a clearing code rather than a
-  # bank code, and has the same ambiguity.
+  # that makes "we couldn't find the bank" ambiguous: two boxes, and a rejection naming neither. Hong
+  # Kong calls its first half a clearing code rather than a bank code, and has the same ambiguity.
   def has_separate_branch_code?
     return false if branch_code.blank?
 

@@ -905,7 +905,8 @@ describe SettingsPresenter do
 
           message = presenter.payments_props[:account_status][:compliance_actions].first[:message]
           expect(message).to include("bank code JSCLUZ22XXX and branch code 00401")
-          expect(message).to include("branch code is the half")
+          expect(message).to include("check both")
+          expect(message).not_to include("branch code is the half")
         end
 
         it "does not quote values for a rejection that is not a directory miss" do

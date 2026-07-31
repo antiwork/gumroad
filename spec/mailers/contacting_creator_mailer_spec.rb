@@ -2194,22 +2194,23 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to have_link("your payout settings", href: settings_payments_url)
       end
 
-      it "quotes back the values it sent and names the branch code as the half to check" do
+      it "quotes back both values and asks the seller to check both halves" do
         bank_account = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
 
         mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, bank_account.id)
 
         expect(mail.body.encoded).to include("bank code JSCLUZ22XXX and branch code 00401")
-        expect(mail.body.encoded).to include("branch code is the half")
+        expect(mail.body.encoded).to include("check both")
+        expect(mail.body.encoded).not_to include("branch code is the half")
       end
 
-      it "omits the branch-code advice for a country that collects one routing value" do
+      it "omits the two-field advice for a country that collects one routing value" do
         bank_account = create(:ach_account, user: seller, routing_number: "110000000")
 
         mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message, bank_account.id)
 
         expect(mail.body.encoded).to include("routing number 110000000")
-        expect(mail.body.encoded).not_to include("branch code is the half")
+        expect(mail.body.encoded).not_to include("check both")
       end
 
       it "quotes the row Stripe refused, not whatever the seller has saved since" do

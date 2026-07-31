@@ -1055,18 +1055,20 @@ module StripeMerchantAccountManager
     message.to_s.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
   end
 
-  # The sentence appended to a directory-miss rejection so it names the value that was refused.
+  # The sentence appended to a directory-miss rejection so it names the values that were refused.
   #
   # Stripe's own message ("We couldn't find the bank for that bank/branch code") names neither the
-  # value nor which of the two boxes it came from, and the page shows nothing else — so a seller
+  # values nor which of the two boxes they came from, and the page shows nothing else — so a seller
   # cannot tell whether we objected to their bank code, their branch code, or the bank itself. The
-  # gumroad-private#1550 seller re-saved six times in eleven minutes cycling BIC spellings while
-  # the branch code was the half being refused every time.
+  # gumroad-private#1550 seller re-saved six times in eleven minutes cycling BIC spellings.
   #
-  # For the countries that collect both halves, the bank code is the one that is nearly always
-  # right (it is the published BIC) and the branch code is the one Stripe matches per branch, so
-  # that is where the seller is pointed. Returns nil when there is nothing specific to say, so
-  # callers can append it unconditionally.
+  # For the countries that collect both halves, Stripe does not say WHICH one it could not match:
+  # the error's param is the combined `bank_account[routing_number]` and there is no directory
+  # endpoint to test either half against. So name both values and give the head-office trap as
+  # something to rule out, never as the diagnosis. Single-value countries have no such ambiguity
+  # and get the value alone.
+  #
+  # Returns nil when there is nothing specific to say, so callers can append it unconditionally.
   def self.bank_directory_miss_detail(bank_account)
     fields = bank_account&.routing_fields_sentence
     return if fields.blank?
@@ -1074,9 +1076,9 @@ module StripeMerchantAccountManager
     detail = "The details we sent were #{fields}."
     return detail unless bank_account.has_separate_branch_code?
 
-    "#{detail} The branch code is the half our payment partner matches against its own per-branch " \
-      "records, so check it against the code your own branch uses — a bank's head-office code is " \
-      "often not accepted here, even when the bank publishes it."
+    "#{detail} Our payment partner doesn't tell us which of the two it couldn't match, so please " \
+      "check both against the codes your own branch uses — a bank's head-office code is often not " \
+      "accepted as a branch code, even when the bank publishes it."
   end
 
   # The message shown inline on the settings page when a save is refused as a directory miss, or

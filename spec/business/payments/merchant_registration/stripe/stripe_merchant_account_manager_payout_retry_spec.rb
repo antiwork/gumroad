@@ -685,12 +685,32 @@ describe StripeMerchantAccountManager do
       expect(described_class.bank_details_directory_miss?(error_for("Invalid routing number for PK.", code: "routing_number_invalid"))).to be(false)
     end
 
-    it "quotes back both halves and points at the branch code when the country collects two" do
+    it "quotes back both halves without claiming which one was refused when the country collects two" do
       detail = described_class.bank_directory_miss_detail(uz_bank_account)
 
       expect(detail).to include("bank code JSCLUZ22XXX and branch code 00401")
-      expect(detail).to include("branch code is the half")
+      expect(detail).to include("doesn't tell us which of the two")
+      expect(detail).to include("check both")
       expect(detail).to include("head-office code")
+    end
+
+    # The reviewer's case: Stripe's error names neither half, so the copy must not pin the failure on
+    # the branch code. A seller whose BANK code is the unmatched one has to be told to check it too.
+    it "does not blame the branch code, so a refused bank code is still covered" do
+      detail = described_class.bank_directory_miss_detail(uz_bank_account)
+
+      expect(detail).not_to match(/branch code is the half/i)
+      expect(detail).not_to match(/the branch code is (the one|what)/i)
+      # Both boxes are named as things to check, not just the branch code.
+      expect(detail).to match(/check both/i)
+    end
+
+    it "names the bank code for a country that collects only that half" do
+      detail = described_class.bank_directory_miss_detail(build(:armenia_bank_account, bank_code: "AAAAAMNNXXX"))
+
+      expect(detail).to eq("The details we sent were bank code AAAAAMNNXXX.")
+      # No branch code was collected, so there is no two-field ambiguity to explain.
+      expect(detail).not_to match(/branch code/i)
     end
 
     it "quotes back the single value without the branch-code advice when there is only one" do
