@@ -3,6 +3,8 @@
 class RetryStripeRejectedPayoutSetupsJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   RETRY_WINDOW_WEEKS = 8
   MAX_RETRIES = RETRY_WINDOW_WEEKS

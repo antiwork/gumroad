@@ -3,6 +3,8 @@
 class SellerUpdatesWorker
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 6.hours
 
   def perform
     User.by_sales_revenue(days_ago: 7.days.ago, limit: nil) do |user|

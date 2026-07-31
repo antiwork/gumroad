@@ -3,6 +3,11 @@
 class FightDisputesJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :default, lock: :until_executed
+  # Scans open dispute evidence hourly and fans out one job per row; the scan is the whole
+  # attempt. Hourly leaves the least room of any job here, so the ceiling binds and the TTL
+  # lands just under the interval.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 20.minutes
 
   TERMINAL_DISPUTE_STATES = %w[won lost closed].freeze
 

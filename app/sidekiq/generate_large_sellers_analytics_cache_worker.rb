@@ -3,6 +3,8 @@
 class GenerateLargeSellersAnalyticsCacheWorker
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 45.minutes
 
   def perform
     User.joins(:large_seller).find_each do |user|

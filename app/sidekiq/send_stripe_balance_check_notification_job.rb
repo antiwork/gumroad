@@ -4,6 +4,8 @@ class SendStripeBalanceCheckNotificationJob
   include Sidekiq::Job
   include CurrencyHelper
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 30.minutes
 
   def perform
     return unless Rails.env.production?

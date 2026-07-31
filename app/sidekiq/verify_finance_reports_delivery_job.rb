@@ -17,6 +17,8 @@
 class VerifyFinanceReportsDeliveryJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 30.minutes
 
   # Only fires older than this are checked, so a run that is merely slow (or scheduled
   # shortly before this backstop) isn't flagged as missing.

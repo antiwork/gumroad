@@ -17,6 +17,8 @@
 class ReleaseChargebackRatePayoutPausesJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed, retry: 2
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 30.minutes
 
   BATCH_SIZE = 1_000
 
