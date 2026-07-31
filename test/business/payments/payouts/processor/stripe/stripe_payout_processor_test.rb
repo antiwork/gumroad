@@ -220,6 +220,40 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal true, user.has_valid_payout_info?
   end
 
+  # A Brazilian connected account is not a payout rail for Gumroad-held balances, so it must not
+  # excuse the bank checks the way every other connected account does. Kept in step with
+  # is_user_payable, which has always applied this carve-out.
+  # has_stripe_account_connected? is gated on merchant_migration_enabled?, so without the stub these
+  # three would all take the no-connected-account path and prove nothing about the carve-out.
+  test "has_valid_payout_info? returns false for a Brazilian connected account with no bank account" do
+    User.any_instance.stubs(:merchant_migration_enabled?).returns(true)
+    user = create_user(user_risk_state: "compliant")
+    create_merchant_account_stripe_connect(user:, country: "BR", currency: "brl")
+    user.reload
+    assert_equal true, user.has_stripe_account_connected?
+    assert_equal false, StripePayoutProcessor.has_valid_payout_info?(user)
+    assert_equal false, user.has_valid_payout_info?
+  end
+
+  test "has_valid_payout_info? returns true for a Brazilian connected account that does have a bank account" do
+    User.any_instance.stubs(:merchant_migration_enabled?).returns(true)
+    user = create_user(user_risk_state: "compliant")
+    create_merchant_account_stripe_connect(user:, country: "BR", currency: "brl")
+    create_merchant_account(user:)
+    create_ach_account(user:, stripe_bank_account_id: "ba_bankaccountid")
+    user.reload
+    assert_equal true, StripePayoutProcessor.has_valid_payout_info?(user)
+  end
+
+  test "has_valid_payout_info? returns true for a non-Brazilian connected account with no bank account" do
+    User.any_instance.stubs(:merchant_migration_enabled?).returns(true)
+    user = create_user(user_risk_state: "compliant")
+    create_merchant_account_stripe_connect(user:, country: "US", currency: "usd")
+    user.reload
+    assert_equal true, user.has_stripe_account_connected?
+    assert_equal true, StripePayoutProcessor.has_valid_payout_info?(user)
+  end
+
   # ---------------------------------------------------------------------------
   # is_balance_payable
   # ---------------------------------------------------------------------------

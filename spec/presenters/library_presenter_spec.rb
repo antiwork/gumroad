@@ -271,6 +271,44 @@ describe LibraryPresenter do
           ]
         )
       end
+
+      context "when the bundle has no alive member products" do
+        let(:memberless_bundle) do
+          create(:product, :bundle, name: "Memberless Bundle", user: creator).tap do |bundle|
+            bundle.bundle_products.each(&:mark_deleted!)
+          end
+        end
+        let(:memberless_purchase) { create(:purchase, purchaser: buyer, link: memberless_bundle) }
+
+        before do
+          memberless_purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "renders the bundle itself rather than hiding it behind members that do not exist" do
+          purchases, _, bundles = described_class.new(buyer).library_cards
+
+          row = purchases.find { _1[:purchase][:id] == memberless_purchase.external_id }
+          expect(row).to be_present
+          expect(row[:purchase][:is_bundle_purchase]).to eq(false)
+          expect(row[:product][:name]).to eq("Memberless Bundle")
+          expect(row[:purchase][:download_url]).to eq(memberless_purchase.url_redirect.download_page_url)
+
+          # Nothing filters to it, so it must not offer itself as a bundle filter option.
+          expect(bundles.map { _1[:id] }).to_not include(memberless_bundle.external_id)
+        end
+      end
+
+      context "when every member purchase is excluded from the library" do
+        it "renders the bundle itself so the buyer keeps a row for the purchase" do
+          purchase1.product_purchases.each { _1.update!(is_deleted_by_buyer: true) }
+
+          purchases, _, _ = described_class.new(buyer).library_cards
+
+          row = purchases.find { _1[:purchase][:id] == purchase1.external_id }
+          expect(row).to be_present
+          expect(row[:purchase][:is_bundle_purchase]).to eq(false)
+        end
+      end
     end
   end
 end

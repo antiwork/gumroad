@@ -3,6 +3,11 @@
 require_relative "../../../lib/utilities/geo_ip"
 
 class SalesTaxCalculator
+  # EU_VAT_APPLICABLE_COUNTRY_CODES still carries the UK for rate-lookup purposes, but the UK left
+  # the customs union: a UK parcel into Germany is an import. Anything reasoning about EU borders
+  # needs the EU-27 set, not that one.
+  EU_VAT_DESTINATION_COUNTRY_CODES = (Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES - [Compliance::Countries::GBR.alpha2]).freeze
+
   attr_accessor :tax_rate, :product, :price_cents, :shipping_cents, :quantity, :buyer_location, :buyer_vat_id, :state, :is_us_taxable_state, :is_ca_taxable, :is_quebec
 
   def initialize(product:, price_cents:, shipping_cents: 0, quantity: 1, buyer_location:, buyer_vat_id: nil, from_discover: false)
@@ -230,21 +235,33 @@ class SalesTaxCalculator
       end
     end
 
-    # A physical parcel entering the EU is an import, and Gumroad has no IOSS registration to
-    # remit under or to stamp on the customs declaration — so destination customs assesses VAT
-    # again on arrival and the buyer pays it twice. The EU number we hold
-    # (GUMROAD_VAT_REGISTRATION_NUMBER) is OSS, which covers electronically supplied services
-    # rather than imported goods.
+    # We hold an OSS registration, not IOSS, so we have no scheme to remit physical EU VAT under and
+    # no number to stamp on a customs declaration. Collecting at checkout therefore cannot prevent
+    # the border charging the buyer again — it only guarantees they pay twice.
     #
-    # The UK is in EU_VAT_APPLICABLE_COUNTRY_CODES but is carved out: it has its own registration
-    # (GUMROAD_UK_VAT_REGISTRATION), and for consignments at or under £135 the marketplace
-    # collects at checkout and the border does not charge again.
+    # The UK is excluded: it has its own registration, and under £135 the marketplace collects at
+    # checkout and the border does not charge again.
     def eu_import_vat_unremittable?
-      return false unless product.is_physical
       return false if tax_rate.user_id.present? # seller's own rate — the seller remits it, not us
-      return false if tax_rate.country == Compliance::Countries::GBR.alpha2
+      return false unless EU_VAT_DESTINATION_COUNTRY_CODES.include?(tax_rate.country)
 
-      Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
+      entirely_physical_shipment? # queries for a bundle, so ask it last
+    end
+
+    # A bundle built as a bundle is not is_physical, so a bundle of physical goods arrives here
+    # looking digital and the carve-out above never fires.
+    #
+    # For a bundle the components decide, never the bundle row's own is_physical: converting a
+    # variant-less physical product into a bundle leaves that flag set (Bundles::*Controller#update
+    # only sets is_bundle), so trusting it would drop VAT on digital components sold inside it.
+    #
+    # A mixed bundle keeps collecting: excluding it would drop VAT we do owe on the digital half, and
+    # taxing only that half needs an apportionment rule we do not have anywhere yet.
+    def entirely_physical_shipment?
+      return product.is_physical? unless product.is_bundle
+
+      components = product.bundle_products.alive.includes(:product).to_a
+      components.any? && components.all? { |bundle_product| bundle_product.product.is_physical? }
     end
 
     def tax_eligible?

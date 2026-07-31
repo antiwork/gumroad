@@ -154,6 +154,11 @@ expire_transcoded_videos:
   cron: "50 8 * * *" # UTC 08:50
   class: ExpireTranscodedVideosJob
   description: Marks old (in term of access) transcoded videos as deleted
+alert_on_blocked_established_subscribers:
+  cron: "0 11 * * *" # UTC 11:00
+  class: AlertOnBlockedEstablishedSubscribersJob
+  queue: low
+  description: Reports subscribers with long renewal histories whose renewals are failing on a platform block
 
 # Weekly (Payouts)
 payouts_cross_border_stripe:

@@ -347,6 +347,7 @@ class UsersController < ApplicationController
               })();
             </script>
             #{custom_html_follow_wrapper_script(seller_external_id: user.external_id, nonce:)}
+            #{custom_html_background_wrapper_script(nonce:)}
             #{live_reload}
           </body>
         </html>
