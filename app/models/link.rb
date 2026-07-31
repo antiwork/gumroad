@@ -1623,7 +1623,9 @@ class Link < ApplicationRecord
     # `deleted_at`), so a mapping that resolves to nothing today can start
     # serving again, and stealing it would forward that seller's already-shared
     # links to this product. A rename off a slug another mapping holds keeps the
-    # 404 it already had.
+    # 404 it already had. Taking over only rows whose product is hard-deleted
+    # would be safe but dead: zero of the table's 3.7M rows are hard-missing,
+    # every unresolvable one is a restorable soft delete.
     def redirect_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
