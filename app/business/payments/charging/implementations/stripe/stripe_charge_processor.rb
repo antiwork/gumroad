@@ -178,12 +178,14 @@ class StripeChargeProcessor
 
   # A combined charge's transfer_group is a Charge id carrying the "CH-" prefix, not a Purchase id,
   # so looking it up as a Purchase always raised and left the connected-account retrieve below
-  # unreachable for every cart purchase.
+  # unreachable for every cart purchase. Read the Charge's own merchant account rather than a
+  # constituent purchase's: the Charge is what was created against that account.
   def merchant_account_for_transfer_group(transfer_group)
     return if transfer_group.blank?
 
     if transfer_group.to_s.starts_with?(Charge::COMBINED_CHARGE_PREFIX)
-      Charge.find_by(id: Charge.parse_id(transfer_group))&.purchases&.first&.merchant_account
+      charge = Charge.find_by(id: Charge.parse_id(transfer_group))
+      charge&.merchant_account || charge&.purchases&.first&.merchant_account
     else
       Purchase.find_by(id: transfer_group)&.merchant_account
     end

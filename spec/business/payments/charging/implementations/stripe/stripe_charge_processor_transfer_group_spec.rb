@@ -8,7 +8,24 @@ describe StripeChargeProcessor, "#merchant_account_for_transfer_group" do
   let(:purchase) { create(:purchase_in_progress, merchant_account:) }
 
   it "resolves a combined charge's CH-prefixed transfer group to the charge's merchant account" do
-    charge = create(:charge, purchases: [purchase])
+    charge = create(:charge, purchases: [purchase], merchant_account:)
+
+    expect(processor.send(:merchant_account_for_transfer_group, charge.id_with_prefix))
+      .to eq(merchant_account)
+  end
+
+  it "prefers the charge's own merchant account over a constituent purchase's" do
+    # A combined charge covers several purchases; the account the charge was created against is the
+    # authoritative one, so a differing purchase-level account must not win.
+    other = create(:merchant_account)
+    charge = create(:charge, purchases: [create(:purchase_in_progress, merchant_account: other)], merchant_account:)
+
+    expect(processor.send(:merchant_account_for_transfer_group, charge.id_with_prefix))
+      .to eq(merchant_account)
+  end
+
+  it "falls back to a purchase's merchant account when the charge has none" do
+    charge = create(:charge, purchases: [purchase], merchant_account: nil)
 
     expect(processor.send(:merchant_account_for_transfer_group, charge.id_with_prefix))
       .to eq(merchant_account)

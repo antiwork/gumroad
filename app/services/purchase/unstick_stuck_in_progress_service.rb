@@ -14,9 +14,11 @@
 # whose seller amount cannot be derived from processor data is left alone and surfaced for a human,
 # because guessing it would write a wrong number into a money ledger.
 class Purchase::UnstickStuckInProgressService
-  # Sync leaves a purchase `in_progress` on purpose while settlement data is still in flight, so
-  # only rows past this age are considered genuinely stuck rather than merely young.
-  MIN_AGE = 1.day
+  # SyncStuckPurchasesJob owns rows up to 3 days old and retries them every 6 hours. Starting where
+  # it gives up keeps the two out of each other's way: overlapping windows let both run the sync on
+  # one row concurrently, and that path takes no row lock, so each would see no balance transaction
+  # and credit the seller again.
+  MIN_AGE = 3.days
   MAX_AGE = 90.days
   BATCH_SIZE = 100
 
@@ -34,7 +36,7 @@ class Purchase::UnstickStuckInProgressService
   end
 
   def process
-    stats = { scanned: 0, eligible: 0, recovered: 0, failed: 0, skipped: 0, unrecoverable: 0 }
+    stats = { scanned: 0, eligible: 0, recovered: 0, failed: 0, skipped: 0, already_resolved: 0, unrecoverable: 0 }
     unrecoverable_ids = []
     eligible_ids = []
 
@@ -54,18 +56,25 @@ class Purchase::UnstickStuckInProgressService
       # the reviewed worklist rather than predicting an outcome it cannot observe without writing.
       next if @dry_run
 
-      # mark_as_failed stays false: these charges succeeded at the processor, so failing the row
-      # would tell the buyer the payment did not happen while their money is gone.
-      if purchase.sync_status_with_charge_processor
+      # Sync is called without mark_as_failed: these charges succeeded at the processor, so failing
+      # the row would tell the buyer their payment did not happen while their money is gone.
+      # Re-check under a row lock: a webhook-driven sync can be mid-flight on this row, and the sync
+      # path itself takes no lock, so without this both callers can see no balance transaction and
+      # credit the seller twice.
+      recovered = purchase.with_lock do
+        next :gone unless purchase.reload.in_progress?
+
+        purchase.sync_status_with_charge_processor || purchase.reload.successful?
+      end
+
+      case recovered
+      when :gone
+        stats[:already_resolved] += 1
+      when true
         stats[:recovered] += 1
       else
-        purchase.reload
-        if purchase.successful?
-          stats[:recovered] += 1
-        else
-          stats[:unrecoverable] += 1
-          unrecoverable_ids << purchase.id
-        end
+        stats[:unrecoverable] += 1
+        unrecoverable_ids << purchase.id
       end
     rescue StandardError => e
       stats[:failed] += 1
@@ -84,16 +93,17 @@ class Purchase::UnstickStuckInProgressService
     end
 
     # These rows are invisible otherwise: nothing fails, so nobody hears about a charged buyer
-    # holding no product until they write in.
+    # holding no product until they write in. Sentry groups identical messages, so the id list goes
+    # in the fingerprint-varying context rather than the title, and the count leads.
     def report_unrecoverable(stats, ids)
       ErrorNotifier.notify(
         "Purchases stuck in_progress with a succeeded charge could not be recovered",
         context: {
           count: ids.size,
           purchase_ids: ids.first(50),
+          truncated: ids.size > 50,
           scanned: stats[:scanned],
-          recovered: stats[:recovered],
-          dry_run: @dry_run
+          recovered: stats[:recovered]
         }
       )
     end

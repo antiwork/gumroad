@@ -59,8 +59,8 @@ describe Purchase::UnstickStuckInProgressService do
       expect(result[:recovered]).to eq(1)
     end
 
-    it "leaves a purchase younger than the minimum age alone" do
-      purchase = stuck_purchase(created_at: 2.hours.ago)
+    it "leaves a purchase still inside SyncStuckPurchasesJob's own window alone" do
+      purchase = stuck_purchase(created_at: 2.days.ago)
       expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
 
       result = described_class.process(dry_run: false)
@@ -85,15 +85,6 @@ describe Purchase::UnstickStuckInProgressService do
 
       expect(synced).to eq([targeted.id])
       expect(untouched.reload).to be_in_progress
-    end
-
-    it "never marks a purchase failed, since the charge succeeded at the processor" do
-      stuck_purchase(created_at: 10.days.ago)
-      expect_any_instance_of(Purchase).to_not receive(:mark_failed!)
-      allow(ErrorNotifier).to receive(:notify)
-      stub_sync(false)
-
-      described_class.process(dry_run: false)
     end
 
     it "asks the sync path not to fail the purchase" do
@@ -153,13 +144,42 @@ describe Purchase::UnstickStuckInProgressService do
     end
 
     it "keeps going and reports the error when one row raises" do
-      stuck_purchase(created_at: 10.days.ago)
-      allow_any_instance_of(Purchase).to receive(:sync_status_with_charge_processor).and_raise(StandardError, "boom")
+      first = stuck_purchase(created_at: 11.days.ago)
+      second = stuck_purchase(created_at: 10.days.ago)
+      seen = []
+      allow_any_instance_of(Purchase).to receive(:sync_status_with_charge_processor) do |purchase|
+        seen << purchase.id
+        raise StandardError, "boom" if purchase.id == first.id
+
+        purchase.update_columns(purchase_state: "successful")
+        true
+      end
       allow(ErrorNotifier).to receive(:notify)
 
       result = described_class.process(dry_run: false)
 
+      expect(seen).to include(first.id, second.id)
       expect(result[:failed]).to eq(1)
+      expect(result[:recovered]).to eq(1)
+      expect(second.reload).to be_successful
+    end
+
+    it "leaves a row a concurrent sync resolved between selection and the lock alone" do
+      purchase = stuck_purchase(created_at: 10.days.ago)
+      # The scan selects the row while it is still in_progress; a webhook-driven sync then wins the
+      # race, so the re-read under the lock must find it resolved and skip it.
+      allow_any_instance_of(Purchase).to receive(:with_lock).and_wrap_original do |orig, &blk|
+        purchase.update_columns(purchase_state: "successful")
+        orig.call(&blk)
+      end
+
+      expect_any_instance_of(Purchase).to_not receive(:sync_status_with_charge_processor)
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:already_resolved]).to eq(1)
+      expect(result[:recovered]).to eq(0)
+      expect(result[:unrecoverable]).to eq(0)
     end
   end
 end
