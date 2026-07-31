@@ -60,15 +60,45 @@ def check(name, expect:, expect_output: nil, **repo_args)
     stdout, stderr, status = Open3.capture3("ruby", CHECKER, "base", "HEAD", chdir: dir)
     combined = stdout + stderr
 
-    actual = status.exitstatus.zero? ? :pass : :fail
+    # Exact code, not just nonzero: callers gate a required status on 1 meaning
+    # "collides" and treat every other nonzero as "could not run", so a finding
+    # that exited 2 would silently stop blocking anything.
+    expected_status = expect == :pass ? 0 : 1
+    actual = status.exitstatus == expected_status ? expect : "exit #{status.exitstatus}"
     if actual != expect
-      $failures << "#{name}\n    expected #{expect}, got #{actual}\n#{combined.gsub(/^/, '    ')}"
+      $failures << "#{name}\n    expected #{expect} (exit #{expected_status}), got #{actual}\n#{combined.gsub(/^/, '    ')}"
       puts "  FAIL  #{name}"
       return
     end
 
     if expect_output && !combined.include?(expect_output)
       $failures << "#{name}\n    output missing #{expect_output.inspect}\n#{combined.gsub(/^/, '    ')}"
+      puts "  FAIL  #{name}"
+      return
+    end
+
+    puts "  ok    #{name}"
+  end
+end
+
+# Operational failures must be distinguishable from findings, because the push
+# guard writes a failing required status on a finding and nothing on anything
+# else. Exit 1 here would block every clean PR on a transient git failure.
+def check_operational(name, argv:, **repo_args)
+  $count += 1
+  Dir.mktmpdir do |dir|
+    build_repo(dir, **repo_args)
+    stdout, stderr, status = Open3.capture3("ruby", CHECKER, *argv, chdir: dir)
+    combined = stdout + stderr
+
+    if status.exitstatus != 2
+      $failures << "#{name}\n    expected exit 2 (could not run), got #{status.exitstatus}\n#{combined.gsub(/^/, '    ')}"
+      puts "  FAIL  #{name}"
+      return
+    end
+
+    unless combined.include?("could not run")
+      $failures << "#{name}\n    output missing \"could not run\"\n#{combined.gsub(/^/, '    ')}"
       puts "  FAIL  #{name}"
       return
     end
@@ -174,6 +204,21 @@ check(
   base_migrations: %w[20261206000010_a.rb],
   head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb 20261206000012_c.rb],
   expect: :pass
+)
+
+# The exit-code contract both shell callers branch on.
+check_operational(
+  "unresolvable base ref exits operational, not as a collision",
+  argv: %w[no-such-ref HEAD],
+  base_migrations: %w[20261206000010_a.rb],
+  head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb]
+)
+
+check_operational(
+  "unresolvable head ref exits operational, not as a collision",
+  argv: %w[base no-such-ref],
+  base_migrations: %w[20261206000010_a.rb],
+  head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb]
 )
 
 puts

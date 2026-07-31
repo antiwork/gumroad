@@ -65,6 +65,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Nothing to re-check without it, and `ruby <missing file>` exits 1 --
+          # the collision code -- which would fail every open PR.
+          if [ ! -f bin/check-migration-versions ]; then
+            echo "No checker on main; nothing to re-check."
+            exit 0
+          fi
+
           # Read the PR list once, up front: `gh` calls inside the loop would
           # otherwise compete for the loop's stdin.
           gh api "repos/${REPO}/pulls?state=open&per_page=100" --paginate \
@@ -81,7 +88,23 @@ jobs:
               # The canonical checker, not a second copy of its rules: it also
               # catches a migration numbered under main's new schema.rb version,
               # which a collision-only check would miss.
-              if OUTPUT=$(ruby bin/check-migration-versions "$MAIN_SHA" FETCH_HEAD 2>&1); then
+              #
+              # Only exit 1 is a collision. Exit 2 means the checker could not
+              # run, and writing failure on that would block a clean PR on a
+              # transient git failure -- this is the only writer of ci/green
+              # that can turn a green PR red, so it has to fail open.
+              set +e
+              OUTPUT=$(ruby bin/check-migration-versions "$MAIN_SHA" FETCH_HEAD 2>&1)
+              STATUS=$?
+              set -e
+
+              if [ "$STATUS" -eq 0 ]; then
+                continue
+              fi
+
+              if [ "$STATUS" -ne 1 ]; then
+                echo "PR #${NUMBER}: checker exited ${STATUS}; verdict unknown, leaving ci/green alone."
+                echo "$OUTPUT" | sed 's/^/  /'
                 continue
               fi
 

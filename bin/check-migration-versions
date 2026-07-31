@@ -13,10 +13,21 @@
 #
 #   bin/check-migration-versions [BASE_REF] [HEAD_REF]
 #
-# Refs default to origin/main and HEAD. Exit 0 clean, 1 on a finding.
+# Refs default to origin/main and HEAD.
+#
+# Exit codes are a contract, because callers gate a required status on them:
+# 0 clean, 1 a finding, 2 the check could not run (bad ref, git failure). Only
+# 1 means "this branch collides" -- anything else must not be reported as one,
+# or a transient git failure blocks every clean PR.
 
 BASE_REF = ARGV[0] || "origin/main"
 HEAD_REF = ARGV[1] || "HEAD"
+
+EXIT_FINDING = 1
+EXIT_OPERATIONAL = 2
+
+# Distinct from a finding: the check itself could not complete.
+class OperationalError < StandardError; end
 
 # Rails' own MigrationFilenameRegexp (activerecord migration.rb). Anything
 # looser and we accept a filename Rails rejects; anything stricter and we go
@@ -27,7 +38,7 @@ MIGRATION_FILENAME = /\A([0-9]+)_([_a-z0-9]*)\.?([_a-z0-9]*)?\.rb\z/
 
 def git(*args)
   out = IO.popen(["git", *args], err: File::NULL, &:read)
-  raise "git #{args.join(' ')} failed" unless $?.success?
+  raise OperationalError, "git #{args.join(' ')} failed" unless $?.success?
   out
 end
 
@@ -41,9 +52,14 @@ end
 
 # The version schema.rb claims to be at. Everything at or below it is treated as
 # already applied when a fresh database loads the schema.
+#
+# A failure here means the file is absent at that ref, not that the ref is bad:
+# migrations_at has already resolved both refs by the time this runs. Absent
+# schema.rb is a repo state to tolerate (rules 3 and 4 just do not apply), so it
+# returns nil rather than raising operational.
 def schema_version_at(ref)
   git("show", "#{ref}:db/schema.rb")[/define\(version:\s*([\d_]+)\)/, 1]&.delete("_")&.to_i
-rescue RuntimeError
+rescue OperationalError
   nil
 end
 
@@ -54,8 +70,13 @@ def schema_literal(version)
   [s[0, 4], s[4, 2], s[6, 2], s[8, 6]].join("_")
 end
 
-base = migrations_at(BASE_REF)
-head = migrations_at(HEAD_REF)
+begin
+  base = migrations_at(BASE_REF)
+  head = migrations_at(HEAD_REF)
+rescue OperationalError => e
+  warn "Migration version check could not run: #{e.message}"
+  exit EXIT_OPERATIONAL
+end
 failures = []
 
 # 1. Two files claiming one version. This is the abort itself: Rails collects
@@ -126,4 +147,4 @@ end
 
 warn "Migration version check failed (#{HEAD_REF} against #{BASE_REF}):\n\n"
 failures.each { |f| warn "#{f}\n" }
-exit 1
+exit EXIT_FINDING
