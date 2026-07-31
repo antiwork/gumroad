@@ -19,11 +19,11 @@ class CreditCard < ApplicationRecord
   validates :expiry_month, :expiry_year, presence: true, if: -> { card_type != CardType::PAYPAL && !upi? }
   validates :processor_payment_method_id, :recurring_authorization_verified_at,
             :recurring_authorization_currency, :recurring_authorization_max_amount_cents,
-            presence: true, if: :upi?
-  validates :recurring_authorization_currency, inclusion: { in: [Currency::INR] }, if: :upi?
+            presence: true, if: :recurring_upi?
+  validates :recurring_authorization_currency, inclusion: { in: [Currency::INR] }, if: :recurring_upi?
   validates :recurring_authorization_max_amount_cents,
             numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS },
-            if: :upi?
+            if: :recurring_upi?
   validates :braintree_customer_id, presence: { if: :braintree_charge_processor? }
   validates :paypal_billing_agreement_id, presence: { if: :paypal_charge_processor? }
   validates :charge_processor_id, presence: true
@@ -160,7 +160,7 @@ class CreditCard < ApplicationRecord
   end
 
   def to_chargeable(merchant_account: nil)
-    if upi?
+    if recurring_upi?
       upi_chargeable = StripeChargeableUpi.new(
         merchant_account:,
         customer_id: stripe_customer_id,
@@ -206,7 +206,11 @@ class CreditCard < ApplicationRecord
   end
 
   def upi?
-    payment_method_type == Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE || card_type == CardType::UPI
+    recurring_upi? || card_type == CardType::UPI
+  end
+
+  def recurring_upi?
+    payment_method_type == Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE
   end
 
   def stripe_setup_intent_id

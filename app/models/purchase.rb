@@ -4255,7 +4255,7 @@ class Purchase < ApplicationRecord
     def later_charge_presentment_processor_args(off_session:)
       return {} unless off_session
 
-      upi_autopay = credit_card&.upi?
+      upi_autopay = credit_card&.recurring_upi?
       if upi_autopay
         fail_upi_recurring_authorization!("charge processor changed") unless charge_processor_id == StripeChargeProcessor.charge_processor_id
         fail_upi_recurring_authorization!("merchant account changed") unless merchant_account&.stripe_charge_processor?

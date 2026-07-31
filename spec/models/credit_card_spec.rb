@@ -3,6 +3,31 @@
 require "spec_helper"
 
 describe CreditCard do
+  describe "UPI classification" do
+    let(:credit_card) do
+      described_class.new(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_one_time_upi",
+        stripe_fingerprint: "upi_fingerprint",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2
+      )
+    end
+
+    it "does not require recurring authorization fields for one-time UPI" do
+      expect(credit_card).to be_upi
+      expect(credit_card).not_to be_recurring_upi
+      expect(credit_card).to be_valid
+    end
+
+    it "does not reconstruct one-time UPI as an Autopay chargeable" do
+      expect(StripeChargeableUpi).not_to receive(:new)
+
+      credit_card.to_chargeable
+    end
+  end
+
   describe "after creating a credit card", :vcr do
     let(:chargeable) { build(:chargeable) }
 
@@ -168,6 +193,7 @@ describe CreditCard do
 
       expect(credit_card).to be_persisted
       expect(credit_card).to be_upi
+      expect(credit_card).to be_recurring_upi
       expect(credit_card).not_to be_requires_mandate
       expect(credit_card).to have_attributes(
         stripe_customer_id: "cus_upi_signup",
