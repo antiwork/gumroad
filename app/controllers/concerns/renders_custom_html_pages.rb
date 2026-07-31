@@ -52,24 +52,11 @@ module RendersCustomHtmlPages
     </style>
   HTML
 
-  # Every custom-page surface must sandbox identically, so they all read this one
-  # list rather than repeating the tokens: the wrapper iframes in
-  # UsersController/UserPagesController/LinksController and the CSP directive
-  # below. Adding a token here widens all four at once; that is the point.
-  #
-  # allow-downloads is required for a download to happen *at all* from seller
-  # HTML — without it the browser drops the click silently, and target="_blank"
-  # can't route around it because the escaped popup inherits the initiator's
-  # download restriction.
-  CUSTOM_HTML_SANDBOX_TOKENS = %w[
-    allow-scripts
-    allow-forms
-    allow-popups
-    allow-popups-to-escape-sandbox
-    allow-downloads
-  ].freeze
-
-  CUSTOM_HTML_SANDBOX = CUSTOM_HTML_SANDBOX_TOKENS.join(" ").freeze
+  # Without allow-downloads the browser cancels a download from seller HTML with no
+  # error anyone can see, and target="_blank" can't route around it: the escaped popup
+  # inherits the sandboxed initiator's download restriction. The editor preview iframes
+  # in app/javascript must carry the same token — attribute and CSP intersect.
+  CUSTOM_HTML_SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
 
   CUSTOM_HTML_CSP = [
     # Sandbox the response itself, not just the wrapper's iframe attribute.

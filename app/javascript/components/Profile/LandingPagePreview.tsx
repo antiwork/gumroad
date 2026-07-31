@@ -25,7 +25,7 @@ export const ProfileLandingPagePreview = ({
       ref={frameRef}
       title="Custom profile page preview"
       src={`/${encodeURIComponent(username)}/landing/embed?preview=true`}
-      sandbox="allow-scripts allow-forms allow-popups"
+      sandbox="allow-scripts allow-forms allow-popups allow-downloads"
       referrerPolicy="no-referrer"
       onLoad={postFields}
       // No border of its own: this preview renders inside the shared PreviewChrome frame,

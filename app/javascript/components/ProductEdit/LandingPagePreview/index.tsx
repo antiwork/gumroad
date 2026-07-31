@@ -87,7 +87,7 @@ export const LandingPagePreview = ({
       ref={frameRef}
       title="Landing page preview"
       src={`/l/${encodeURIComponent(uniquePermalink)}/landing/embed`}
-      sandbox="allow-scripts allow-forms"
+      sandbox="allow-scripts allow-forms allow-downloads"
       referrerPolicy="no-referrer"
       className="h-[75vh] min-h-150 w-full rounded border border-border bg-white"
     />

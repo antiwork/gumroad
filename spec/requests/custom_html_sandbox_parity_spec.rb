@@ -2,13 +2,11 @@
 
 require "spec_helper"
 
-# The sandbox is spelled in four places — three wrapper iframes (profile,
-# slugged page, product landing) and the CSP directive that covers a direct
-# top-level hit on /landing/embed, where the iframe attribute doesn't apply.
-# They must stay identical: a token present on three surfaces and missing on
-# the fourth is invisible in review and reaches sellers as "this link works on
-# my product page but not my storefront". These examples hit all four for real
-# rather than asserting the constant against itself.
+# The sandbox is spelled on four server surfaces — three wrapper iframes (profile,
+# slugged page, product landing) and the CSP directive covering a direct top-level
+# hit on /landing/embed, where the iframe attribute doesn't apply. A token present
+# on three and missing on the fourth reaches sellers as "works on my product page
+# but not my storefront", so these examples hit all four for real.
 describe "custom HTML sandbox parity", type: :request do
   include Devise::Test::IntegrationHelpers
 
@@ -55,16 +53,32 @@ describe "custom HTML sandbox parity", type: :request do
   end
 
   describe "the sandbox itself" do
-    it "permits downloads, so a seller's link to a file isn't silently dropped" do
-      # Without this token the browser cancels the download with no error the
-      # seller or we can see, and target="_blank" can't route around it: the
-      # escaped popup inherits the sandboxed initiator's download restriction.
+    it "permits downloads" do
       expect(sandbox).to include("allow-downloads")
     end
 
     it "still withholds same-origin and top navigation" do
       expect(sandbox).not_to include("allow-same-origin")
       expect(sandbox).not_to include("allow-top-navigation")
+    end
+  end
+
+  # The editor previews frame these same /landing/embed documents from
+  # app/javascript, and a sandbox attribute intersects with the response CSP: a
+  # preview missing allow-downloads shows the seller their own download link
+  # failing on a page that works once published.
+  describe "the editor preview iframes" do
+    %w[
+      app/javascript/components/Profile/LandingPagePreview.tsx
+      app/javascript/components/ProductEdit/LandingPagePreview/index.tsx
+    ].each do |path|
+      it "grants allow-downloads in #{path}" do
+        source = Rails.root.join(path).read
+        sandbox_attr = source[/sandbox="([^"]*)"/, 1]
+
+        expect(sandbox_attr).to be_present
+        expect(sandbox_attr).to include("allow-downloads")
+      end
     end
   end
 end
