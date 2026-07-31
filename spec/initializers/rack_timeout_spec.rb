@@ -16,11 +16,30 @@ describe "Rack::Timeout configuration" do
     expect(middleware.args.first[:service_timeout]).to eq 15
   end
 
-  it "reads the budget from RACK_TIMEOUT_SERVICE_TIMEOUT so it can be tuned without a deploy" do
-    # The initializer resolves the env var at boot; assert the contract rather than
-    # re-booting the app, which a request spec cannot do.
-    expect(File.read(Rails.root.join("config/initializers/rack_timeout.rb")))
-      .to include('ENV["RACK_TIMEOUT_SERVICE_TIMEOUT"]')
+  it "falls back to the default rather than disabling the timeout on an unparseable override" do
+    # The initializer resolves the env var at boot, so mirror its parsing rather than
+    # re-booting the app. rack-timeout treats 0 as false and disables the timeout
+    # entirely, so a bare `.to_i` on "" / "abc" would silently remove the ceiling --
+    # strictly worse than the 120s this replaced.
+    resolve = lambda do |configured|
+      if configured.present? && configured.to_s.match?(/\A\d+\z/) && configured.to_i.positive?
+        configured.to_i
+      else
+        15
+      end
+    end
+
+    expect(resolve.call("25")).to eq 25
+    expect(resolve.call(nil)).to eq 15
+    ["", " ", "abc", "0", "-5", "15\n", "15s"].each do |bad|
+      expect(resolve.call(bad)).to eq(15),
+                                   "#{bad.inspect} must fall back to 15, not disable the timeout"
+    end
+
+    # And the shipped initializer really does guard, rather than `.to_i`-ing blindly.
+    source = File.read(Rails.root.join("config/initializers/rack_timeout.rb"))
+    expect(source).to include('ENV["RACK_TIMEOUT_SERVICE_TIMEOUT"]')
+    expect(source).to match(/\\A\\d\+\\z/)
   end
 
   describe "in-request query guards" do
