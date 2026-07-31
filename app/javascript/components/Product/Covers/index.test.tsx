@@ -62,6 +62,25 @@ describe("Covers", () => {
     expect(frame(container)?.style.aspectRatio).toBe("1920 / 1080");
   });
 
+  // Capping a landscape frame is what shrank every cover on the storefront in #1570: the
+  // cap cannot narrow the frame, so once it is shorter than the ratio `object-contain`
+  // shrinks the cover in both axes and leaves side bars. Landscape needs no cap.
+  it("does not cap the height of a landscape frame, which would pillarbox the cover", () => {
+    const { container } = renderCovers([cover({ native_width: 1280, native_height: 720 })]);
+
+    expect(frame(container)?.style.aspectRatio).toBe("1280 / 720");
+    expect(frame(container)?.style.maxHeight).toBe("");
+  });
+
+  // Square is the boundary the `height > width` test turns on, and it belongs on the
+  // uncapped side: its derived height is the column width, not a runaway.
+  it("does not cap the height of a square frame", () => {
+    const { container } = renderCovers([cover({ native_width: 1000, native_height: 1000 })]);
+
+    expect(frame(container)?.style.aspectRatio).toBe("1000 / 1000");
+    expect(frame(container)?.style.maxHeight).toBe("");
+  });
+
   it("shapes the frame to a portrait cover and caps its height so the buy box stays in view", () => {
     const { container } = renderCovers([portrait()]);
 

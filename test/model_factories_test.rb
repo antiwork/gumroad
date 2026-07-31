@@ -20,4 +20,13 @@ class ModelFactoriesTest < ActiveSupport::TestCase
     # so it is part of the default shape this builder promises.
     assert transcoded_video.streamable.is_transcoded_for_hls
   end
+
+  test "charge builder reuses the platform Stripe merchant account instead of connecting a duplicate" do
+    charge = create_charge
+
+    # A fresh merchant account here would collide with the gumroad_stripe
+    # fixture's charge_processor_merchant_id and fail validation.
+    assert_equal merchant_accounts(:gumroad_stripe), charge.merchant_account
+    assert_not_nil charge.payment_method_fingerprint
+  end
 end
