@@ -2046,6 +2046,7 @@ class LinksController < ApplicationController
               // visitor's tab off to a phishing site with gumroad.com still in
               // the URL bar.
               var STORE_HOSTNAMES = #{store_hostnames_js};
+              #{custom_html_navigation_allowlist_js.indent(14).strip}
               // Whitelist the selection-state keys the checkout already accepts on the
               // URL (see LinksController#show). The iframe is opaque-origin and untrusted,
               // so anything not in this list is ignored even if the buy button claims it.
@@ -2072,16 +2073,18 @@ class LinksController < ApplicationController
                   return;
                 }
                 // Same-tab navigation to the seller's own Gumroad pages (their
-                // storefront, their other products). The sandbox deliberately
-                // withholds top-level navigation from the iframe, so a plain
-                // link inside the page can't do this itself — it asks here and
-                // we re-validate the destination.
+                // storefront, their other products) and to Gumroad's blessed
+                // account/cart paths. The sandbox deliberately withholds
+                // top-level navigation from the iframe, so a plain link inside
+                // the page can't do this itself — it asks here and we
+                // re-validate the destination.
                 if (e.data && typeof e.data === "object" && e.data.type === "gumroad:navigate" && typeof e.data.url === "string") {
                   var url;
                   try { url = new URL(e.data.url, window.location.href); } catch (_err) { return; }
                   if (url.protocol !== "https:" && url.protocol !== "http:") return;
-                  if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
-                  window.location.href = url.href;
+                  var destination = gumroadNavigationTarget(url, STORE_HOSTNAMES);
+                  if (destination === null) return;
+                  window.location.href = destination;
                 }
               });
             </script>

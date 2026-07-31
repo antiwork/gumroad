@@ -26,6 +26,14 @@ module RendersCustomHtmlPages
   # shim — see tailwind_v3_gradient_compat_head.
   TAILWIND_V3_CDN_HOST = "cdn.tailwindcss.com"
 
+  # Gumroad's own destinations a storefront legitimately links to. They live on
+  # a shared Gumroad host, so they are reachable through the navigate bridge by
+  # exact path only (see custom_html_navigation_allowlist_js). Add a path here
+  # only if seller-authored HTML sending an anonymous visitor there is harmless:
+  # anything that acts on a signed-in account, or that takes a redirect
+  # parameter, is not.
+  GLOBAL_NAV_PATHS = ["/library", "/checkout"].freeze
+
   # Hostnames are case-insensitive, and the sanitizer compares them after
   # downcasing (Ai::PageSanitizer.https_host_in?), so a page written as
   # "https://CDN.Tailwindcss.com" passes sanitization and really does load
@@ -569,6 +577,33 @@ module RendersCustomHtmlPages
   end
 
   private
+    # Emits gumroadNavigationTarget(url, storeHostnames), the single decision
+    # both halves of the navigate bridge use: the in-iframe interceptor to pick
+    # which clicks to hand up, and each trusted wrapper to decide where it will
+    # actually send the tab. Both sides must agree or a link either silently
+    # does nothing or is intercepted and then refused.
+    #
+    # Hosts the seller controls keep the URL they wrote. GLOBAL_NAV_PATHS are
+    # Gumroad's own account/cart pages, which live on a host no seller controls:
+    # putting that host in the hostname allowlist would let seller-authored HTML
+    # drive the visitor's tab to any gumroad.com path, so it is matched on an
+    # exact path instead, and the query and fragment are dropped rather than
+    # rejected — a near-miss link still lands somewhere useful, and no parameter
+    # from the sandbox ever reaches a Gumroad page.
+    def custom_html_navigation_allowlist_js
+      <<~JS
+        var GUMROAD_NAV_HOSTS = #{ERB::Util.json_escape(VALID_REQUEST_HOSTS.to_json)};
+        var GUMROAD_NAV_PATHS = #{ERB::Util.json_escape(GLOBAL_NAV_PATHS.to_json)};
+        function gumroadNavigationTarget(url, storeHostnames) {
+          if (storeHostnames.indexOf(url.hostname) !== -1) return url.href;
+          if (GUMROAD_NAV_HOSTS.indexOf(url.hostname) === -1) return null;
+          var path = url.pathname.replace(/\\/+$/, "");
+          if (GUMROAD_NAV_PATHS.indexOf(path) === -1) return null;
+          return url.origin + path;
+        }
+      JS
+    end
+
     # Injected into the sandboxed landing document at serve time (never authored
     # by the seller) so plain store links work without any seller HTML changes.
     # Clicking a link inside the sandboxed iframe would otherwise navigate the
@@ -588,6 +623,7 @@ module RendersCustomHtmlPages
         <script data-cfasync="false" data-gumroad-navigation-bridge>
           (function () {
             var STORE_HOSTNAMES = #{hostnames_json};
+            #{custom_html_navigation_allowlist_js.indent(4).strip}
             document.addEventListener("click", function (e) {
               // Only plain left-clicks: modified clicks (new tab, etc.) keep
               // the browser's default handling.
@@ -603,13 +639,14 @@ module RendersCustomHtmlPages
               var url;
               try { url = new URL(link.getAttribute("href"), document.baseURI); } catch (_err) { return; }
               if (url.protocol !== "https:" && url.protocol !== "http:") return;
-              if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
+              var destination = gumroadNavigationTarget(url, STORE_HOSTNAMES);
+              if (destination === null) return;
               // Same-page fragment links should scroll within the iframe, not
               // reload the profile at the top level.
               var here = new URL(document.baseURI);
               if (url.hash && url.pathname === here.pathname && url.search === here.search && url.hostname === here.hostname) return;
               e.preventDefault();
-              parent.postMessage({ type: "gumroad:navigate", url: url.href }, "*");
+              parent.postMessage({ type: "gumroad:navigate", url: destination }, "*");
             }, true);
           })();
         </script>
