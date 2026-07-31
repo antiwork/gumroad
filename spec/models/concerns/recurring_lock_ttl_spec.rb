@@ -23,7 +23,11 @@ describe RecurringLockTtl do
       end
     end
 
-    no_arg_until_executed_scheduled_jobs.each do |klass|
+    # Held in a local, not re-called per example: `def self.` methods are group scope, and reaching
+    # for one inside an `it` hits ActiveRecord's fixture `method_missing` instead.
+    covered_jobs = no_arg_until_executed_scheduled_jobs
+
+    covered_jobs.each do |klass|
       context klass do
         let(:job) { klass.constantize }
         let(:ttl) { job.sidekiq_options["lock_ttl"] }
@@ -57,7 +61,7 @@ describe RecurringLockTtl do
     it "covers a non-trivial number of jobs" do
       # A refactor that makes the detector match nothing would turn every example above into a
       # vacuous pass, and the suite would stay green over an unguarded fleet.
-      expect(no_arg_until_executed_scheduled_jobs.size).to be >= 15
+      expect(covered_jobs.size).to be >= 15
     end
   end
 
