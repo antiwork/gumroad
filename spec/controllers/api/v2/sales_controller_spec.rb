@@ -265,10 +265,14 @@ describe Api::V2::SalesController do
       end
 
       it "clamps a Redis-configured timeout that would outlive the request budget" do
-        # 42s exceeds the Rack::Timeout budget, so the guard would never fire before the
-        # request (and its Puma worker) was killed. It resolves to budget - 1 instead.
-        $redis.set(RedisKey.api_v2_sales_page_key_query_timeout, 42)
-        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 14).and_call_original
+        # An override above the Rack::Timeout budget would let the request (and its Puma
+        # worker) be killed before the guard could return a graceful 400, so it resolves to
+        # budget - 1. Derive the budget rather than hardcoding it: `.env.test` raises it so
+        # slow CI runners don't fail specs on machine speed.
+        budget = Rails.application.config.middleware
+                      .find { _1.klass == Rack::Timeout }.args.first[:service_timeout]
+        $redis.set(RedisKey.api_v2_sales_page_key_query_timeout, budget + 30)
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: budget - 1).and_call_original
 
         get :index, params: @params
         expect(response.code).to eq "200"
