@@ -360,32 +360,25 @@ class ContactingCreatorMailer < ApplicationMailer
   end
 
   # The two reasons need opposite advice — fill in a URL, or re-authorize the app that owns the
-  # subscription — so the reason is resolved here from current state rather than flattened to one
-  # message. The enqueued reason identifies the notifier's send-once claim: a suppressed send hands
-  # it back, and a send whose advice no longer matches it moves the claim to the advice given.
-  def undeliverable_ping_subscription(resource_subscription_id, reason = nil)
+  # subscription — so the reason is resolved here rather than flattened into one vague message.
+  # Everything this send depends on is read here rather than passed in: the subscription is enqueued
+  # from the sale path and rendered from the low queue, and inside that window the seller can delete
+  # it, repair it, or break it a different way. The send-once claim is taken here too, for the reason
+  # actually rendered, so no bookkeeping written earlier can outlive a send that never happened.
+  def undeliverable_ping_subscription(resource_subscription_id)
     @resource_subscription = ResourceSubscription.alive.find_by(id: resource_subscription_id)
-    # Enqueued from the sale path but rendered later, so the seller may have deleted the
-    # subscription in between; saying it is "still listed as active" would then be false.
+    # Saying it is "still listed as active" would be false for a subscription deleted in the window.
     return do_not_send if @resource_subscription.nil?
 
     @seller = @resource_subscription.user
     return do_not_send if @seller.nil?
 
-    # Same window, other direction: setting a URL or re-authorizing the app makes it deliverable
-    # again, and this email would then ask the seller to repair something already working. Give the
-    # claim back, so breaking the same way again still gets the one notice this send did not use.
-    if @seller.ping_notification_deliverable?(@resource_subscription)
-      UndeliverablePingSubscriptionNotifier.release_claim(resource_subscription_id, reason)
-      return do_not_send
-    end
+    # Setting a URL or re-authorizing the app makes it deliverable again, and this email would then
+    # ask the seller to repair something already working.
+    return do_not_send if @seller.ping_notification_deliverable?(@resource_subscription)
 
     rendered_reason = UndeliverablePingSubscriptionNotifier.reason_for(@resource_subscription)
-    if reason.present? && !UndeliverablePingSubscriptionNotifier.reconcile_claim(
-      resource_subscription_id, claimed: reason, rendered: rendered_reason
-    )
-      return do_not_send
-    end
+    return do_not_send unless UndeliverablePingSubscriptionNotifier.claim(resource_subscription_id, rendered_reason)
 
     @application_name = @resource_subscription.oauth_application&.name
     @missing_post_url = rendered_reason == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL

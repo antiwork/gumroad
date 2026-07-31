@@ -14,6 +14,11 @@ class UndeliverablePingSubscriptionNotifier
   MISSING_POST_URL = "missing_post_url"
   REVOKED_CREDENTIAL = "revoked_credential"
 
+  # Only wide enough to keep a busy seller's sales from enqueuing one render per sale. It must expire,
+  # and it must not be read as evidence the seller was told: whether the email is owed is decided at
+  # render, so a lost or kept key here can only cost a no-op job, never a notice.
+  ENQUEUE_THROTTLE = 1.hour
+
   def initialize(resource_subscription)
     @resource_subscription = resource_subscription
   end
@@ -33,57 +38,29 @@ class UndeliverablePingSubscriptionNotifier
     resource_subscription.post_url.present? ? REVOKED_CREDENTIAL : MISSING_POST_URL
   end
 
-  # The claim is taken at enqueue, but the mailer suppresses the send when the subscription is
-  # deliverable again by render time. Holding the claim then spends the seller's one notice on an
-  # email nobody received, and the same reason breaking a second time would go unreported.
-  def self.release_claim(resource_subscription_id, reason)
-    return if reason.blank?
-
-    $redis.del(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
-  rescue => e
-    report(e)
-  end
-
-  # Claims the rendered reason and drops the enqueued one in a single step. Both keys are permanent,
-  # so the two writes cannot be separate commands: a failure between them leaves the seller claimed
-  # under a reason they were never told about, and that claim refuses the notice owed the next time
-  # that reason breaks. Returns 1 when the rendered reason was claimed here, 0 when it was already
-  # claimed — the old key is released either way, since it named advice this send did not give.
-  MOVE_CLAIM_SCRIPT = <<~LUA
-    local claimed = redis.call('SET', KEYS[2], ARGV[1], 'NX')
-    redis.call('DEL', KEYS[1])
-    if claimed then return 1 else return 0 end
-  LUA
-
-  # The advice is chosen at render time, so the send-once claim has to be the one for the advice
-  # actually given. Keyed on the enqueued reason instead, the two drift whenever the subscription
-  # changes in the window: a seller told to fill in a URL does so, the revoked token still blocks
-  # delivery, and the notice they are owed is refused by a claim taken under a reason they were
-  # never told about. Returns false when that advice has already been sent once.
-  def self.reconcile_claim(resource_subscription_id, claimed:, rendered:)
-    return true if claimed == rendered
-
-    $redis.eval(
-      MOVE_CLAIM_SCRIPT,
-      keys: [
-        RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, claimed),
-        RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, rendered)
-      ],
-      argv: [Time.current.to_i]
-    ) == 1
-  rescue => e
-    report(e)
-    # Sending on a bookkeeping failure beats withholding: the claim is wrong either way, and silence
-    # is the thing this notice exists to break.
-    true
-  end
-
+  # Send once and stop, keyed on the advice actually given. The seller cannot re-authorize an app
+  # holding no live token, and there is no UI or API to delete the subscription without one, so a
+  # repeat is a nag they cannot act on — which is also why this key carries no expiry.
+  #
+  # The mailer takes it, not the enqueue path, and that placement is the whole safety property: the
+  # reason and the decision to send at all are both render-time state, so claiming earlier meant
+  # writing a permanent key for advice that might never be sent and then moving it afterwards. A move
+  # is a write plus a delete, and a delete that fails leaves a permanent claim on a reason the seller
+  # was never told, silently refusing the notice owed when that reason breaks. Claimed here it is one
+  # atomic SET NX with nothing to undo.
   def self.claim(resource_subscription_id, reason)
+    return false if reason.blank?
+
     !!$redis.set(
       RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason),
       Time.current.to_i,
       nx: true
     )
+  rescue => e
+    report(e)
+    # Sending on a bookkeeping failure beats withholding: silence is the thing this notice exists to
+    # break, and the cost of getting it wrong is one repeat email rather than a permanent gap.
+    true
   end
 
   def self.report(error)
@@ -95,22 +72,20 @@ class UndeliverablePingSubscriptionNotifier
 
   def notify
     return unless resource_subscription.created_at >= SUBSCRIPTION_CLEANUP_CUTOVER
-    return unless claim_notification
+    return unless throttle_enqueue
 
-    ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id, reason).deliver_later(queue: "low")
+    ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_later(queue: "low")
   end
 
   private
     attr_reader :resource_subscription
 
-    def reason
-      self.class.reason_for(resource_subscription)
-    end
-
-    # Send once and stop. The seller cannot re-authorize an app holding no live token, and there is
-    # no UI or API to delete the subscription without one, so a repeat is a nag they cannot act on.
-    # Keys carry no expiry for the same reason; the mailer releases one when it suppresses the send.
-    def claim_notification
-      self.class.claim(resource_subscription.id, reason)
+    def throttle_enqueue
+      !!$redis.set(
+        RedisKey.undeliverable_ping_subscription_enqueued(resource_subscription.id, self.class.reason_for(resource_subscription)),
+        Time.current.to_i,
+        nx: true,
+        ex: ENQUEUE_THROTTLE.to_i
+      )
     end
 end

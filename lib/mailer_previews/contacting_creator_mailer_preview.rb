@@ -142,10 +142,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def undeliverable_ping_subscription
-    ContactingCreatorMailer.undeliverable_ping_subscription(
-      ResourceSubscription.last&.id,
-      UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
-    )
+    ContactingCreatorMailer.undeliverable_ping_subscription(ResourceSubscription.last&.id)
   end
 
   def video_preview_conversion_error
