@@ -175,10 +175,18 @@ module StripeGuardianManager
     each_legal_guardian_person(stripe_account_id) do |person|
       next if recorded_ids.include?(person.id)
 
-      Stripe::Account.delete_person(stripe_account_id, person.id)
-      Rails.logger.info(
-        "Deleted orphaned legal-guardian Stripe person for guardian #{guardian.id} on #{stripe_account_id}"
-      )
+      # Per-person rescue, so one refused delete does not abandon the orphans after it. The
+      # method-level rescue below cannot do this job: it sits outside the enumeration, so a raise on
+      # the first orphan skipped every later one, leaving an adult's identity data at Stripe with no
+      # local handle. Same reason the erasure path rescues per person.
+      begin
+        Stripe::Account.delete_person(stripe_account_id, person.id)
+        Rails.logger.info(
+          "Deleted orphaned legal-guardian Stripe person for guardian #{guardian.id} on #{stripe_account_id}"
+        )
+      rescue => e
+        ErrorNotifier.notify(e)
+      end
     end
   rescue => e
     ErrorNotifier.notify(e)

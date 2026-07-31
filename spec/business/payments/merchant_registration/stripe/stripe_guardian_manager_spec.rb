@@ -432,6 +432,32 @@ describe StripeGuardianManager do
           .with(stripe_account_id, "person_guardian_new")
       end
 
+      # One refused delete must not abandon the orphans after it. The method-level rescue sits
+      # OUTSIDE the enumeration, so a raise on the first orphan skipped every later one — an adult's
+      # identity data left at Stripe with no local handle anything reaches.
+      it "keeps deleting later orphans when one delete is refused" do
+        create_compliance_info(guardian_record: guardian)
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons).and_return(
+          Stripe::ListObject.construct_from(data: []),
+          Stripe::ListObject.construct_from(
+            data: [{ id: "person_orphan_refused" }, { id: "person_orphan_second" }]
+          )
+        )
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:delete_person)
+          .with(stripe_account_id, "person_orphan_refused")
+          .and_raise(Stripe::APIError.new("Stripe is down"))
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).to have_received(:delete_person)
+          .with(stripe_account_id, "person_orphan_second")
+        expect(ErrorNotifier).to have_received(:notify).with(instance_of(Stripe::APIError))
+      end
+
       # Another guardian row of the same seller holding the id is a local pointer too. Erasure can
       # reach that Person, so deleting it here would destroy a superseded guardian's only handle.
       it "keeps a person another guardian row of the same seller points at" do
