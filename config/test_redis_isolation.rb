@@ -66,8 +66,14 @@ module TestRedisIsolation
     return 0
   LUA
 
+  # KEYS[2] is the companion hash. It has to ride the same tick as the lease: a command
+  # can outlive the hash's TTL, and once its field is gone the next fork sees an empty
+  # hash and warns about nothing while both flush the same databases.
   REFRESH_SCRIPT = <<~LUA
-    if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('expire', KEYS[1], ARGV[2]) end
+    if redis.call('get', KEYS[1]) == ARGV[1] then
+      redis.call('expire', KEYS[2], ARGV[2])
+      return redis.call('expire', KEYS[1], ARGV[2])
+    end
     return 0
   LUA
 
@@ -271,7 +277,7 @@ module TestRedisIsolation
         thread = Thread.new do
           loop do
             sleep(LEASE_REFRESH_SECONDS)
-            connection.eval(REFRESH_SCRIPT, keys: [claim[:key]], argv: [claim[:token], LEASE_TTL_SECONDS])
+            connection.eval(REFRESH_SCRIPT, keys: [claim[:key], "#{claim[:key]}#{COMMANDS_KEY_SUFFIX}"], argv: [claim[:token], LEASE_TTL_SECONDS])
           rescue StandardError
             # Every error, not a list: if this thread dies the lease expires mid-run and
             # another run leases the same databases — this file's own race, with nothing

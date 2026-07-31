@@ -454,6 +454,30 @@ describe TestRedisIsolation do
       end
     end
 
+    it "keeps a long-running command in the hash by refreshing it on the lease tick" do
+      # A command that outlives the hash's TTL is still holding the block. If the tick
+      # renews only the lease, its field expires, the next fork sees an empty hash and
+      # says nothing — the silent shared block this whole file exists to prevent.
+      described_class.register_command!(warn_io: StringIO.new, claim: claimed)
+      with_registry { |registry| registry.expire(commands_key, 1) }
+
+      stub_const("TestRedisIsolation::LEASE_REFRESH_SECONDS", 0.05)
+      described_class.send(:keep_lease_alive, claimed)
+
+      begin
+        Timeout.timeout(5) do
+          sleep(0.05) until with_registry { |registry| registry.ttl(commands_key) } > 1
+        end
+
+        with_registry do |registry|
+          expect(registry.ttl(commands_key)).to be_between(2, described_class::LEASE_TTL_SECONDS)
+          expect(registry.hkeys(commands_key)).to include(Process.pid.to_s)
+        end
+      ensure
+        claimed[:refresh_thread]&.kill
+      end
+    end
+
     it "does nothing when this process never leased a block" do
       warnings = StringIO.new
 
