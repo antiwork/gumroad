@@ -9533,6 +9533,27 @@ describe StripeMerchantAccountManager, :vcr do
           expect(user.comments.with_type_payout_note.alive.where(content: representative_note)).to exist
         end
 
+        # Two resyncs for the same seller overlap. The clear must not delete a rejection recorded
+        # while its own Stripe call was in flight — that diagnostic is the only thing on the account
+        # saying why the seller is still blocked.
+        it "keeps a rejection recorded while the accepted call was in flight" do
+          seller_prefix = "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (seller)"
+          stale_note = user.add_payout_note(content: "#{seller_prefix} — from the previous attempt", seller_visible: false)
+          concurrent_note = nil
+
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            if attributes.dig(:individual, :id_number).present?
+              concurrent_note = user.add_payout_note(content: "#{seller_prefix} — recorded by the overlapping resync", seller_visible: false)
+            end
+          end
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(concurrent_note).to be_present
+          expect(concurrent_note.reload.deleted_at).to be_nil
+          expect(stale_note.reload.deleted_at).to be_present
+        end
+
         # The split is scoped to the mismatch. On a matched account the identifier belongs on the
         # main payload, and a second call would be a pointless extra round-trip on every save.
         context "when the countries agree" do

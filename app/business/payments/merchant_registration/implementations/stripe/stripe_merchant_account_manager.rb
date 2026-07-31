@@ -693,8 +693,9 @@ module StripeMerchantAccountManager
   def self.submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify: true)
     return false if identity_attributes.blank?
 
+    stale_note_ids = identity_rejection_note_ids(user, scope: :seller)
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(identity_attributes))
-    clear_identity_rejection_notes(user, scope: :seller)
+    clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     true
   rescue Stripe::InvalidRequestError => e
     record_identity_rejection_note(user, e, account_country, scope: :seller) if notify
@@ -729,18 +730,35 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
-  # The identifier landed, so a note saying it was refused now describes a resolved state. Leaving it
-  # would keep support chasing a verification that is no longer blocked. Scoped, so clearing the
-  # representative's note cannot silence a company rejection that is still outstanding.
+  # Snapshot of the notes this scope's clear is allowed to remove, taken BEFORE the Stripe call.
   private_class_method
-  def self.clear_identity_rejection_notes(user, scope:)
-    return if user.blank?
+  def self.identity_rejection_note_ids(user, scope:)
+    return [] if user.blank?
 
     prefix = identity_rejection_note_prefix(scope)
     user.comments.with_type_payout_note.alive
         .where(author_id: GUMROAD_ADMIN_ID)
         .where("content LIKE ?", "#{prefix}%")
-        .each { |note| note.mark_deleted! }
+        .pluck(:id)
+  rescue => e
+    Rails.logger.error "Failed to read Stripe identity-rejection payout notes for user #{user&.id}: #{e.class}: #{e.message}"
+    []
+  end
+
+  # The identifier landed, so a note saying it was refused now describes a resolved state. Leaving it
+  # would keep support chasing a verification that is no longer blocked.
+  #
+  # Deletes by the id snapshot rather than re-running the scope query, because two resyncs for the
+  # same seller overlap: a rejection recorded while our call was in flight is a diagnostic we have no
+  # result for, and re-querying here would delete it and leave the seller blocked with nothing on the
+  # account saying why. Held under the same lock as the writer so a replacement mid-clear is ordered.
+  private_class_method
+  def self.clear_identity_rejection_notes(user, note_ids:)
+    return if user.blank? || note_ids.blank?
+
+    user.with_lock do
+      user.comments.alive.where(id: note_ids).each { |note| note.mark_deleted! }
+    end
   rescue => e
     Rails.logger.error "Failed to clear Stripe identity-rejection payout note for user #{user&.id}: #{e.class}: #{e.message}"
   end
@@ -868,8 +886,9 @@ module StripeMerchantAccountManager
   def self.submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, identity_attributes, account_country, notify: true)
     return false if identity_attributes.blank?
 
+    stale_note_ids = identity_rejection_note_ids(user, scope: :representative)
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(identity_attributes))
-    clear_identity_rejection_notes(user, scope: :representative)
+    clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     true
   rescue Stripe::InvalidRequestError => e
     record_identity_rejection_note(user, e, account_country, scope: :representative) if notify
