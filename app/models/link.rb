@@ -1644,8 +1644,9 @@ class Link < ApplicationRecord
       discard_renamed_custom_permalinks
       return if outgoing_slugs.blank?
 
-      # A slug renamed away from and back to within one transaction is still live
-      # here, and `live_product_answers_on?` refuses it anyway.
+      # Every hop is mapped, including a slug that only existed inside this
+      # transaction. `live_product_answers_on?` refuses one the product still
+      # answers on, unless the same transaction also soft-deleted it.
       outgoing_slugs.uniq.each { redirect_renamed_custom_permalink(_1) }
     end
 
