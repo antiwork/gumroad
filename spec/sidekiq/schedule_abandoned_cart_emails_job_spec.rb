@@ -254,19 +254,20 @@ describe ScheduleAbandonedCartEmailsJob do
     end
 
     # A retry can be handed a lock with almost nothing left. There is no safe amount of work then,
-    # so the attempt must decline rather than start work it will finish unlocked — and it must say
-    # why, or this looks like an instant unexplained failure in Sidekiq.
-    it "declines the attempt and alerts when less lock life remains than the safety margin" do
+    # so the attempt must decline before enqueueing anything rather than start work it will finish
+    # unlocked. Its own error class, so Sentry separates this from a run that genuinely ran long.
+    it "declines the attempt when less lock life remains than the safety margin" do
       stub_pttl((described_class::LOCK_SAFETY_MARGIN - 5.minutes).in_milliseconds)
 
-      expect(ErrorNotifier).to receive(:notify).with(
-        a_string_including("too little unique-lock life left to run safely"),
-        hash_including(lock_safety_margin: described_class::LOCK_SAFETY_MARGIN.inspect)
-      )
+      expect { job.send(:attempt_deadline) }
+        .to raise_error(described_class::LockLifeTooShort, /less than the #{Regexp.escape(described_class::LOCK_SAFETY_MARGIN.inspect)} margin/)
+    end
 
-      travel_to Time.current do
-        expect(job.send(:attempt_deadline)).to be <= Time.current
-      end
+    it "does not enqueue any mail when it declines for too little lock life" do
+      stub_pttl((described_class::LOCK_SAFETY_MARGIN - 5.minutes).in_milliseconds)
+
+      expect(CustomerMailer).not_to receive(:abandoned_cart)
+      expect { job.perform }.to raise_error(described_class::LockLifeTooShort)
     end
   end
 
@@ -337,7 +338,7 @@ describe ScheduleAbandonedCartEmailsJob do
       end
 
       expect(ErrorNotifier).to receive(:notify).with(
-        a_string_including("stopped mid-enqueue after exceeding its attempt budget"),
+        a_string_including("stopped mid-enqueue after reaching its attempt deadline"),
         hash_including(carts_enqueued: 1, carts_remaining: 1)
       )
 

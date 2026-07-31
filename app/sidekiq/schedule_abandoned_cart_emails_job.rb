@@ -42,6 +42,10 @@ class ScheduleAbandonedCartEmailsJob
 
   class AttemptTimeBudgetExceeded < StandardError; end
 
+  # Raised before any work when the lock has less life left than LOCK_SAFETY_MARGIN. Distinct from
+  # AttemptTimeBudgetExceeded so Sentry separates "ran too long" from "never safely started".
+  class LockLifeTooShort < StandardError; end
+
   sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
   # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
@@ -138,8 +142,11 @@ class ScheduleAbandonedCartEmailsJob
       if attempt_deadline_passed?
         remaining = enqueue_order.drop(enqueued_count)
         ErrorNotifier.notify(
-          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after exceeding its attempt budget — unreached carts are picked up by the next run, except any reported as aging out of the abandoned-cart window",
-          attempt_time_budget: ATTEMPT_TIME_BUDGET.inspect,
+          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after reaching its attempt deadline — unreached carts are picked up by the next run, except any reported as aging out of the abandoned-cart window",
+          # The effective deadline, not ATTEMPT_TIME_BUDGET: the run may have been bounded by the
+          # tighter lock-derived ceiling instead, and reporting "18 hours" for a stop at hour 5
+          # points the reader at the wrong cause.
+          attempt_deadline: @deadline.iso8601,
           carts_enqueued: enqueued_count,
           carts_remaining: remaining.size,
           # A cart in window `d` is scanned again tomorrow as window `d + 1`, so only the last
@@ -155,13 +162,10 @@ class ScheduleAbandonedCartEmailsJob
   end
 
   private
-    # The attempt must end while the lock it is holding is still alive, and the lock's life is not
-    # ATTEMPT_TIME_BUDGET's to assume: `lock_ttl` is anchored at ACQUIRE, which for a first attempt
-    # is enqueue time, and the server reuses that lock without refreshing it (proven against
-    # Redis: after a 6h :low-queue delay, `perform` began with 17h left of a 23h TTL). Deriving the
-    # bound from a constant meant trusting queue latency to stay under LOCK_TTL - ATTEMPT_TIME_BUDGET,
-    # so a slower-than-expected queue put the run back outside its lock. Read what is actually left
-    # instead and take whichever ceiling binds first.
+    # `lock_ttl` is anchored at ACQUIRE, which for a first attempt is enqueue time, and the server
+    # reuses that lock without refreshing it — so the gap between LOCK_TTL and ATTEMPT_TIME_BUDGET
+    # is a bet on :low queue latency, not a guarantee. Read what the lock actually has left and
+    # take whichever ceiling binds first.
     def attempt_deadline
       now = Time.current
       budget_deadline = now + ATTEMPT_TIME_BUDGET
@@ -171,17 +175,12 @@ class ScheduleAbandonedCartEmailsJob
       lock_deadline = now + lock_life - LOCK_SAFETY_MARGIN
 
       # Less lock life left than the margin: a retry that waited out most of the TTL. There is no
-      # safe amount of work to do, so refuse the whole attempt rather than start one that finishes
-      # unlocked. Deferring is recoverable (the enqueue loop sends oldest-first for exactly this
-      # reason); a duplicate email is not. Say so, because otherwise this reads as an instant
-      # unexplained failure.
-      if lock_deadline <= now
-        ErrorNotifier.notify(
-          "ScheduleAbandonedCartEmailsJob started with too little unique-lock life left to run safely — skipping this attempt; carts are picked up by the next run",
-          remaining_lock_life: lock_life.inspect,
-          lock_safety_margin: LOCK_SAFETY_MARGIN.inspect
-        )
-      end
+      # safe amount of work to do, so decline the whole attempt rather than start one that finishes
+      # unlocked — deferring is recoverable (hence the oldest-first enqueue order), a duplicate
+      # email is not. Raising rather than returning is deliberate: the retry re-acquires a fresh
+      # full TTL once the digest finally expires, so the day still completes; returning would
+      # unlock and skip the day, aging out the final window's carts.
+      raise LockLifeTooShort, "only #{lock_life.inspect} of unique-lock life left, less than the #{LOCK_SAFETY_MARGIN.inspect} margin; declining before enqueueing anything" if lock_deadline <= now
 
       [budget_deadline, lock_deadline].min
     end
@@ -189,8 +188,7 @@ class ScheduleAbandonedCartEmailsJob
     # Remaining life of this job's `until_executed` lock, or nil when it has none to spend: no key
     # (uniqueness disabled, as in test) or no expiry (the orphaned digest of gumroad-private#1576 —
     # a lock that cannot expire cannot expire mid-run). The digest is a pure function of class,
-    # queue and args, so it is reconstructible here without the job hash; this job takes no
-    # arguments, which is why one strand mutes it forever and also why `args` is empty.
+    # queue and args, so it is reconstructible here without the job hash.
     def remaining_lock_life
       item = { "class" => self.class.name, "queue" => self.class.sidekiq_options["queue"].to_s, "args" => [] }
       SidekiqUniqueJobs::Job.prepare(item)
@@ -199,12 +197,11 @@ class ScheduleAbandonedCartEmailsJob
 
       (pttl / 1000.0).seconds
     rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
-      # A Redis hiccup must not take down the day's abandoned-cart emails platform-wide, which is
-      # the gumroad-private#1198 failure — this read is a tightening, not a dependency. All four
-      # classes are needed and none is redundant: Sidekiq 7 talks redis-client, so neither
-      # RedisClient::Error nor the pool's checkout timeout is a Redis::BaseError. Deliberately not
-      # a bare StandardError: that hid a NoMethodError in this very method and reported it as a
-      # healthy fallback.
+      # This read is a tightening, not a dependency: a Redis hiccup must not take the day's emails
+      # down platform-wide (gumroad-private#1198). All four classes are load-bearing — Sidekiq 7
+      # talks redis-client, so neither RedisClient::Error nor the pool's checkout timeout is a
+      # Redis::BaseError. Narrow on purpose, so a coding error here surfaces instead of reporting
+      # itself as a healthy fallback.
       Rails.logger.warn "ScheduleAbandonedCartEmailsJob could not read its lock TTL (#{e.class}: #{e.message}); falling back to #{ATTEMPT_TIME_BUDGET.inspect}"
       nil
     end
