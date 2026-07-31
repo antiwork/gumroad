@@ -294,6 +294,65 @@ describe GdprDataErasureService do
         expect(result[:success]).to be(true)
         expect(ErrorNotifier).not_to have_received(:notify)
       end
+
+      # A guardian sync that read the guardian before erasure anonymized it can still be mid-flight
+      # when erasure reaches Stripe, and it creates its Person after any snapshot erasure took
+      # earlier. So the two must be ordered against each other, or the newly created Person survives
+      # an erasure that reported success — the adult's name, date of birth, address and tax id still
+      # at our processor with the request marked fulfilled.
+      describe "a guardian sync racing the erasure" do
+        it "deletes a person that appeared at Stripe after the erasure started" do
+          guardian = create(:guardian, user:, stripe_person_id: nil)
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          # The racing sync's Person exists at Stripe only once erasure holds the lock. An erasure
+          # that snapshotted the account's Persons before its transaction — as this one used to —
+          # sees the empty account and deletes nothing.
+          allow(Stripe::Account).to receive(:list_persons) do
+            data = $redis.get("stripe_guardian_sync:acct_erasure_test") ? [{ id: "person_from_racing_sync" }] : []
+            Stripe::ListObject.construct_from(data:)
+          end
+
+          described_class.new(user, performed_by: admin).perform!
+
+          expect(Stripe::Account).to have_received(:delete_person)
+            .with("acct_erasure_test", "person_from_racing_sync")
+        end
+
+        it "holds the guardian sync lock while it scans and deletes" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          held = nil
+          allow(Stripe::Account).to receive(:delete_person) do
+            held = $redis.get("stripe_guardian_sync:acct_erasure_test")
+          end
+
+          described_class.new(user, performed_by: admin).perform!
+
+          expect(held).to be_present
+          expect($redis.get("stripe_guardian_sync:acct_erasure_test")).to be_nil
+        end
+
+        # Deleting without the lock would race the sync the lock exists to order, and skipping the
+        # account silently would report a complete erasure. Neither: the delete is handed to the
+        # retry job and the erasure fails until it confirms.
+        it "reports the erasure incomplete and retries when the sync lock cannot be taken" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          stub_const("StripeGuardianManager::SYNC_LOCK_WAIT_TIMEOUT", 0.seconds)
+          $redis.set("stripe_guardian_sync:acct_erasure_test", "a-sync-is-running")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          expect(result[:error]).to include("Erasure incomplete")
+          expect(Stripe::Account).not_to have_received(:delete_person)
+          expect(DeleteGuardianStripePersonJob).to have_enqueued_sidekiq_job(
+            "person_erase_me", "acct_erasure_test", user.id
+          )
+          # The other holder's lock must survive, or both would run after all.
+          expect($redis.get("stripe_guardian_sync:acct_erasure_test")).to eq("a-sync-is-running")
+        end
+      end
     end
 
     it "anonymizes buyer purchases" do

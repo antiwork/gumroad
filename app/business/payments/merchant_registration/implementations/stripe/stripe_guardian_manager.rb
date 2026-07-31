@@ -81,10 +81,17 @@ module StripeGuardianManager
     # can — guardian_id is mutable on a live compliance revision, so a request that read the old
     # guardian can overlap one that read the new. Per-guardian locks let the reconcile of one delete
     # the Person the other had just created but not yet recorded.
-    with_sync_lock(guardian, stripe_account) do
+    with_account_sync_lock(stripe_account.id, "sync guardian #{guardian.id}") do
       # Re-read inside the lock: the sync we waited on may have just created the Person and written
       # its id, and this stale copy would otherwise still look unsynced and create a second one.
       guardian.reload
+
+      # The guardian we may have waited seconds to sync can have been erased in the meantime. GDPR
+      # erasure anonymizes the row and then deletes the Persons Stripe holds, under this same lock —
+      # so a sync that read the guardian before that and creates a Person after it would put the
+      # adult's details back at Stripe with erasure already finished and reporting success. Checked
+      # against the reloaded row rather than the pre-lock read, which is the whole point.
+      return unless guardian.has_completed_info?
 
       attributes = person_hash(guardian, user_compliance_info, passphrase:)
       stripe_person = existing_person(stripe_account, guardian)
@@ -152,19 +159,23 @@ module StripeGuardianManager
 
   # Holds a Redis lock for the duration of one guardian sync, keyed on the Stripe account.
   #
+  # Public because erasure takes it too: its Person deletion and a concurrent sync's create are the
+  # two writers of legal-guardian Persons on this account, and only holding one lock across both
+  # orders them. `description` is for the timeout message — the lock's scope is the account.
+  #
   # Raises rather than proceeding when the lock cannot be taken, including when Redis itself is
-  # unreachable: both call sites rescue and report, and a missed sync self-heals on the next account
-  # update, whereas an unserialized one leaves an untracked Person holding a third party's identity
-  # data at Stripe. Failing closed is the cheaper side of that trade.
-  def self.with_sync_lock(guardian, stripe_account)
-    lock_key = "stripe_guardian_sync:#{stripe_account.id}"
+  # unreachable: both sync call sites rescue and report, and a missed sync self-heals on the next
+  # account update, whereas an unserialized one leaves an untracked Person holding a third party's
+  # identity data at Stripe. Failing closed is the cheaper side of that trade.
+  def self.with_account_sync_lock(stripe_account_id, description)
+    lock_key = "stripe_guardian_sync:#{stripe_account_id}"
     token = SecureRandom.uuid
     lock_acquired = false
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + SYNC_LOCK_WAIT_TIMEOUT
 
     until $redis.set(lock_key, token, ex: SYNC_LOCK_TTL.to_i, nx: true)
       if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
-        raise SyncLockUnavailable, "Timed out waiting to sync guardian #{guardian.id} to #{stripe_account.id}"
+        raise SyncLockUnavailable, "Timed out waiting to #{description} on #{stripe_account_id}"
       end
 
       sleep SYNC_LOCK_RETRY_INTERVAL_SECONDS
@@ -175,7 +186,6 @@ module StripeGuardianManager
   ensure
     $redis.eval(SYNC_LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [token]) if lock_acquired
   end
-  private_class_method :with_sync_lock
 
   # Points this guardian at a Stripe Person, taking the id from whichever other row of the same
   # seller still holds it. stripe_person_id is uniquely indexed, so a replacement guardian adopting

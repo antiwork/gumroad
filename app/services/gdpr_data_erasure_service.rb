@@ -18,10 +18,13 @@ class GdprDataErasureService
   def perform!
     original_email = @user.email
     credit_card_ids = credit_card_ids_for_erasure
-    # Read before the transaction so the Stripe deletion below has the account id and the Person
-    # ids to hand. The values would survive the transaction unchanged, but resolving them up front
-    # keeps the deletion independent of what erasure does to the account in between.
-    guardian_stripe_persons = guardian_stripe_persons_for_erasure
+    # Read before the transaction so the Stripe deletion below has the accounts to hand. The values
+    # would survive the transaction unchanged, but resolving them up front keeps the deletion
+    # independent of what erasure does to the account in between.
+    #
+    # Only the ACCOUNTS are resolved here. Which Persons those accounts hold is resolved later,
+    # inside the sync lock, because a concurrent guardian sync can create one after this point.
+    stripe_account_ids = guardian_stripe_account_ids_for_erasure
 
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
@@ -35,7 +38,7 @@ class GdprDataErasureService
     end
 
     remove_profile_assets!
-    retained_guardian_person_ids = delete_guardian_stripe_persons!(guardian_stripe_persons)
+    retained_guardian_person_ids = delete_guardian_stripe_persons!(stripe_account_ids)
 
     if retained_guardian_person_ids.any? || @unreachable_guardian_person_ids.any?
       # Our own copy is erased, but a third party's identity data is still at the processor. Saying
@@ -213,26 +216,61 @@ class GdprDataErasureService
     # and counted, and the caller reports the erasure as incomplete until that count is zero.
     #
     # Returns the Person ids still at Stripe.
-    def delete_guardian_stripe_persons!(guardian_stripe_persons)
+    def delete_guardian_stripe_persons!(stripe_account_ids)
+      return [] if stripe_account_ids.empty?
+
       # A false return means Stripe could not confirm the deletion because the ACCOUNT was missing,
       # which is not evidence the Person is gone. Erasure tries every account the seller ever held,
       # so one account answering "no such account" is expected and harmless — what matters is
       # whether ANY account confirmed the delete. Tracked per Person id and reconciled below.
       confirmed = Set.new
       unconfirmed = {}
+      retained = []
 
-      retained = guardian_stripe_persons.filter_map do |stripe_person_id, stripe_account_id|
-        if StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
-          confirmed << stripe_person_id
-        else
-          unconfirmed[stripe_person_id] = stripe_account_id
+      stripe_account_ids.each do |stripe_account_id|
+        # One lock per account, held across the scan AND the deletes for that account. Guardian sync
+        # is the other writer of legal-guardian Persons here, and the two must be ordered: a sync
+        # that read the guardian before this erasure anonymized it can still be mid-flight, and it
+        # creates its Person after any snapshot taken outside this lock. Scanning inside the lock is
+        # what makes that Person visible to the delete instead of surviving a "successful" erasure.
+        #
+        # Sequential rather than nested, because a sync only touches the one account it was called
+        # with. Past the anonymize above no sync can start a create at all — StripeGuardianManager
+        # re-checks the reloaded guardian and an anonymized row is never complete — so ordering
+        # against the syncs already holding a lock is the whole requirement.
+        StripeGuardianManager.with_account_sync_lock(stripe_account_id, "erase guardian persons") do
+          # Re-read the guardians inside the lock. A sync that finished while erasure waited may have
+          # written a stripe_person_id the snapshot above does not have, and that id is a handle to
+          # PII this erasure is responsible for.
+          StripeGuardianManager.stripe_person_ids_for_erasure(@user.guardians.reload.to_a, stripe_account_id)
+                               .each do |stripe_person_id|
+            if StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
+              confirmed << stripe_person_id
+            else
+              unconfirmed[stripe_person_id] = stripe_account_id
+            end
+          rescue => e
+            Rails.logger.error("GDPR: Failed to delete Stripe guardian person for user #{@user.id}: #{e.message}")
+            ErrorNotifier.notify(e)
+            DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
+            retained << stripe_person_id
+          end
         end
-        nil
-      rescue => e
-        Rails.logger.error("GDPR: Failed to delete Stripe guardian person for user #{@user.id}: #{e.message}")
+      rescue StripeGuardianManager::SyncLockUnavailable => e
+        # Deleting without the lock would race the very sync the lock exists to order, and skipping
+        # the account silently would report a complete erasure. So the recorded Persons go to the
+        # retry job instead — by then the guardian is anonymized, so no sync can create another and
+        # the job needs no lock of its own. That also fails the erasure, which is the point: it is
+        # not fulfilled until the retry confirms the delete.
+        #
+        # Only recorded ids can be handed over; a Person reachable solely by scan needs the scan,
+        # which is what did not happen here. The failed erasure is what gets someone to re-run it.
+        Rails.logger.error("GDPR: could not lock Stripe account #{stripe_account_id} for user #{@user.id}: #{e.message}")
         ErrorNotifier.notify(e)
-        DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
-        stripe_person_id
+        @user.guardians.filter_map(&:stripe_person_id).each do |stripe_person_id|
+          DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
+          retained << stripe_person_id
+        end
       end
 
       # Nothing confirmed this Person deleted anywhere, so it may still stand at Stripe. Retry it
@@ -249,9 +287,7 @@ class GdprDataErasureService
       retained.uniq
     end
 
-    # Pairs each guardian Person with every Stripe account it may live on. Includes Persons found by
-    # relationship scan: a sync that created one but failed to record its id leaves no local pointer,
-    # and that PII must still go.
+    # The Stripe accounts a guardian Person of this seller may live on.
     #
     # Deliberately NOT User#stripe_account: that is scoped to charge_processor_alive, and switching
     # payout method, changing country, or connecting Stripe Connect all call
@@ -264,7 +300,7 @@ class GdprDataErasureService
     # Every candidate account is tried rather than guessing which one holds the Person: a guardian
     # keeps one stripe_person_id, and a re-onboarded seller's later sync overwrites it, so the id
     # alone cannot say which account it came from.
-    def guardian_stripe_persons_for_erasure
+    def guardian_stripe_account_ids_for_erasure
       guardians = @user.guardians.to_a
       return [] if guardians.empty?
 
@@ -279,8 +315,7 @@ class GdprDataErasureService
         # is recorded as unreachable rather than dropped: an empty list would read as "nothing to
         # delete" and let perform! report the erasure complete. Guardians with no recorded person id
         # were never synced, so there is nothing at Stripe to reach.
-        @unreachable_guardian_person_ids =
-          guardians.filter_map(&:stripe_person_id)
+        @unreachable_guardian_person_ids = guardians.filter_map(&:stripe_person_id)
 
         if @unreachable_guardian_person_ids.any?
           message = "GDPR: user #{@user.id} has #{@unreachable_guardian_person_ids.size} guardian " \
@@ -289,14 +324,9 @@ class GdprDataErasureService
           Rails.logger.error(message)
           ErrorNotifier.notify(message)
         end
-        return []
       end
 
-      stripe_account_ids.flat_map do |stripe_account_id|
-        StripeGuardianManager
-          .stripe_person_ids_for_erasure(guardians, stripe_account_id)
-          .map { |stripe_person_id| [stripe_person_id, stripe_account_id] }
-      end
+      stripe_account_ids
     end
 
     def anonymize_carts!(anonymized_email)

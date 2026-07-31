@@ -444,7 +444,25 @@ describe StripeGuardianManager do
         expect(other_guardian.reload.stripe_person_id).to be_nil
       end
 
-      # The lock is held across two Stripe round trips, so a TTL shorter than a worst-case call
+      # The lock orders sync against erasure, but ordering alone is not enough on the sync's side: a
+      # sync that read the guardian before erasure ran and won the lock after it would re-send the
+      # adult's details to Stripe with the erasure already reported complete. The reload inside the
+      # lock is what catches that — an anonymized row is never complete.
+      it "sends nothing to Stripe when the guardian was erased while this sync waited" do
+        info = create_compliance_info(guardian_record: guardian)
+        # The pre-lock read the sync is holding, still fully populated. The row underneath it is what
+        # erasure left.
+        stale_guardian = Guardian.find(guardian.id)
+        guardian.anonymize!
+        allow(user).to receive(:alive_user_compliance_info).and_return(info)
+        allow(info).to receive(:guardian).and_return(stale_guardian)
+
+        expect(described_class.sync(user, stripe_account, passphrase:)).to be_nil
+        expect(Stripe::Account).not_to have_received(:create_person)
+        expect(Stripe::Account).not_to have_received(:update_person)
+      end
+
+      # The lease is held across two Stripe round trips, so a TTL shorter than a worst-case call
       # expires mid-sequence and lets a second sync create the duplicate Person this lock exists to
       # prevent — during a Stripe brownout, which is when overlapping syncs are most likely. Pinned
       # against the client's own worst case rather than a bare number.
