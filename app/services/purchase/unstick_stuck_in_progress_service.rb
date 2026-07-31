@@ -111,12 +111,14 @@ class Purchase::UnstickStuckInProgressService
       # would tell the buyer their payment did not happen while their money is gone. The service
       # takes the row lock itself, so a webhook-driven sync mid-flight on this row cannot double
       # credit the seller.
-      sync = Purchase::SyncStatusWithChargeProcessorService.new(purchase)
-      return :recovered if sync.perform || purchase.reload.successful?
+      sync = Purchase::SyncStatusWithChargeProcessorService.new(purchase, require_final_charge_status: true)
+      return :recovered if sync.perform
 
-      # nil means the sync returned before consulting the processor, i.e. the row was no longer
-      # in_progress by the time it held the lock.
-      sync.charge_outcome || :gone
+      purchase.reload
+      return :recovered if purchase.successful?
+      return :gone unless purchase.in_progress?
+
+      sync.charge_outcome || :unknown
     end
 
     # An explicit id list is a human naming exactly which rows to work, which is the escape hatch

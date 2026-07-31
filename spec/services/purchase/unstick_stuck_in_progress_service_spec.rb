@@ -109,7 +109,7 @@ describe Purchase::UnstickStuckInProgressService do
       allow(ErrorNotifier).to receive(:notify)
 
       expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new)
-        .with(purchase_with_id(purchase.id))
+        .with(purchase_with_id(purchase.id), require_final_charge_status: true)
         .and_return(instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false, charge_outcome: :succeeded))
 
       described_class.process(dry_run: false)
@@ -169,6 +169,34 @@ describe Purchase::UnstickStuckInProgressService do
         expect(alerts.map(&:first)).to eq(["Purchases stuck in_progress without a succeeded charge"])
         expect(alerts.first.last[:context][:purchase_ids_by_charge_state]).to eq(outcome => [purchase.id])
       end
+    end
+
+    it "does not recover a charge whose processor status is still pending" do
+      purchase = stuck_purchase(created_at: 10.days.ago)
+      purchase.update!(charge_processor_id: StripeChargeProcessor.charge_processor_id, stripe_transaction_id: "ch_pending")
+      charge = BaseProcessorCharge.new
+      charge.id = purchase.stripe_transaction_id
+      charge.status = "pending"
+      charge.refunded = false
+      charge.disputed = false
+      allow(ChargeProcessor).to receive(:get_or_search_charge).with(purchase_with_id(purchase.id)).and_return(charge)
+
+      result = described_class.process(dry_run: false, ids: [purchase.id], notify: false)
+
+      expect(purchase.reload).to be_in_progress
+      expect(result[:recovered]).to eq(0)
+      expect(result[:other_ids_by_outcome]).to eq(pending: [purchase.id])
+    end
+
+    it "reports an unknown outcome when sync fails before classifying a still-in-progress row" do
+      purchase = stuck_purchase(created_at: 10.days.ago)
+      stub_sync(false, outcome: nil)
+
+      result = described_class.process(dry_run: false, notify: false)
+
+      expect(purchase.reload).to be_in_progress
+      expect(result[:already_resolved]).to eq(0)
+      expect(result[:other_ids_by_outcome]).to eq(unknown: [purchase.id])
     end
 
     it "reports a succeeded-charge row and a non-succeeded one in separate alerts" do
@@ -295,14 +323,13 @@ describe Purchase::UnstickStuckInProgressService do
       expect(result[:unrecoverable]).to eq(0)
     end
 
-    it "counts a row the sync path itself found already resolved as resolved, not unrecoverable" do
-      stuck_purchase(created_at: 10.days.ago)
-      # charge_outcome stays nil when the sync returns before consulting the processor, which is
-      # what happens when the row is no longer in_progress by the time it holds the lock.
-      stub_sync(false, outcome: nil)
+    it "counts a row the sync path found in a terminal state as already resolved" do
+      purchase = stuck_purchase(created_at: 10.days.ago)
+      stub_sync(false, outcome: nil) { |p| p.update_columns(purchase_state: "failed") }
 
       result = described_class.process(dry_run: false)
 
+      expect(purchase.reload).to be_failed
       expect(result[:already_resolved]).to eq(1)
       expect(result[:unrecoverable]).to eq(0)
     end

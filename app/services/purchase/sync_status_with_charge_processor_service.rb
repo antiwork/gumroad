@@ -12,9 +12,10 @@ class Purchase::SyncStatusWithChargeProcessorService
   # nil until #perform has actually consulted the processor.
   attr_reader :charge_outcome
 
-  def initialize(purchase, mark_as_failed: false)
+  def initialize(purchase, mark_as_failed: false, require_final_charge_status: false)
     @purchase = purchase
     @mark_as_failed = mark_as_failed
+    @require_final_charge_status = require_final_charge_status
   end
 
   def perform
@@ -38,9 +39,10 @@ class Purchase::SyncStatusWithChargeProcessorService
 
       charge = ChargeProcessor.get_or_search_charge(purchase)
       success_statuses = ChargeProcessor.charge_processor_success_statuses(purchase.charge_processor_id)
+      @charge_outcome = classify(charge, success_statuses)
       charge_succeeded = charge && success_statuses.include?(charge.status) &&
                          !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
-      @charge_outcome = classify(charge, success_statuses)
+      charge_succeeded &&= @charge_outcome == :succeeded if @require_final_charge_status
 
       if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
         # Transient unsettled state: the underlying Stripe charge succeeded but
