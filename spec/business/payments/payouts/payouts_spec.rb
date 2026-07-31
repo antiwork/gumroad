@@ -296,6 +296,143 @@ describe Payouts do
       end
     end
 
+    describe "sellers under 18" do
+      let(:payout_date) { Date.today }
+
+      # A US seller who is 15 today, with enough balance and a working payout route, so the ONLY
+      # thing that can make them unpayable is the legal-guardian requirement. Age comes from the
+      # birthday because that is what the requirement reads; a fixed date would age out of the
+      # 13-17 window and quietly turn every example here into an adult-seller example.
+      def minor_seller(country: "United States", guardian: nil)
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        create(:user_compliance_info, user: seller, country:, birthday: 15.years.ago.to_date, guardian:)
+        seller
+      end
+
+      it "does not pay out a minor with no guardian" do
+        seller = minor_seller
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "pays out a minor whose guardian details are complete" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller)
+        create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(true)
+      end
+
+      # The distinction the whole gate turns on: a guardian ROW is not a satisfied requirement. An
+      # incomplete guardian is exactly the state our payment partner refuses to verify, so treating
+      # its presence as enough would pay out against an account that is still unverified.
+      it "does not pay out a minor whose guardian is missing their tax identifier" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller, individual_tax_id: nil)
+        create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "does not pay out a minor whose guardian has not accepted our payment partner's terms" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller, stripe_tos_accepted: false, stripe_tos_accepted_at: nil, stripe_tos_ip: nil)
+        create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "does not pay out a minor in a country with no guardian path, even with a complete guardian" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller)
+        create(:user_compliance_info, user: seller, country: "Brazil", state: "SP", zip_code: "01000-000",
+                                      birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "pays out an adult seller with no guardian" do
+        seller = create(:compliant_user, payment_address: "adult@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        create(:user_compliance_info, user: seller, birthday: 30.years.ago.to_date)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(true)
+      end
+
+      # Support releasing a balance by hand has already made this judgement, the same as every other
+      # gate in this method.
+      it "pays out a minor with no guardian when the payout comes from admin" do
+        seller = minor_seller
+
+        expect(described_class.is_user_payable(seller, payout_date, from_admin: true)).to be(true)
+      end
+
+      describe "the note the seller reads" do
+        it "tells a minor to add a guardian, visibly" do
+          seller = minor_seller
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+
+          note = seller.comments.with_type_payout_note.last
+          expect(note.content).to include("sellers under 18 need a legal guardian")
+          expect(note.content).to include("Add your guardian's details in your payout settings")
+          expect(PayoutNoteVisibility.seller_visible?(note)).to be(true)
+        end
+
+        it "tells a minor with no guardian path that payouts start at 18, and does not ask for a guardian" do
+          seller = minor_seller(country: "Brazil")
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+
+          note = seller.comments.with_type_payout_note.last
+          expect(note.content).to include("cannot verify a seller under 18 in your country")
+          expect(note.content).to include("Payouts will start once you turn 18")
+          expect(note.content).not_to include("Add your guardian's details")
+          expect(PayoutNoteVisibility.seller_visible?(note)).to be(true)
+        end
+
+        it "writes no note when add_comment is false" do
+          seller = minor_seller
+
+          expect do
+            described_class.is_user_payable(seller, payout_date, add_comment: false)
+          end.not_to change { seller.comments.with_type_payout_note.count }
+        end
+
+        # Otherwise a seller on daily payouts buries their own note within a month: the Payouts
+        # banner only scans back PayoutNoteVisibility::MAX_NOTES_SCANNED notes, so the one thing
+        # telling them what to do scrolls out of the window and the page goes silent.
+        it "does not repeat the note on the next payout run" do
+          seller = minor_seller
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+
+          expect do
+            described_class.is_user_payable(seller, payout_date, add_comment: true)
+          end.not_to change { seller.comments.with_type_payout_note.count }
+        end
+
+        # The two wordings say different things about what the seller can do, so a stale one must not
+        # suppress the other. This is why the dedupe keys on one pattern per wording rather than one
+        # pattern covering both.
+        it "writes the unsupported-country note over an existing add-a-guardian note" do
+          seller = minor_seller
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+          seller.alive_user_compliance_info.update_columns(country: "Brazil", state: "SP", zip_code: "01000-000")
+
+          described_class.is_user_payable(seller.reload, payout_date, add_comment: true)
+
+          expect(seller.comments.with_type_payout_note.last.content).to include("cannot verify a seller under 18 in your country")
+        end
+      end
+    end
+
     describe "instant payouts with settling funds" do
       let(:settling_seller) { create(:compliant_user) }
 

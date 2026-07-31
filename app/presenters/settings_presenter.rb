@@ -268,6 +268,7 @@ class SettingsPresenter
       buyer_currency_charging_enabled: Feature.active?(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller),
       disable_buyer_currency_rounding: seller.disable_buyer_currency_rounding?,
       can_manage_beneficial_owners: payments_policy.update? && StripeBeneficialOwnersManager.eligible?(seller),
+      legal_guardian: legal_guardian_details(user_compliance_info),
     }
   end
 
@@ -299,6 +300,37 @@ class SettingsPresenter
   end
 
   private
+    # What the payout settings page needs to know about the legal-guardian requirement.
+    #
+    # Always a hash, never nil, and every key is always present — an omitted key arrives in the
+    # component as `undefined` rather than false, which reads as truthy in a `!== null` style guard
+    # and would render the section to sellers who must never see it.
+    #
+    # `required` and `unsupported` are separate rather than one tri-state because they drive
+    # different copy for different people: a US 15-year-old is asked for a guardian, while a
+    # 15-year-old somewhere our payment partner offers no guardian path is told that no guardian
+    # would help. Deriving one from the other in the component would put that decision in two places.
+    def legal_guardian_details(user_compliance_info)
+      guardian = user_compliance_info.guardian
+
+      required = user_compliance_info.requires_legal_guardian?
+      unsupported = user_compliance_info.legal_guardian_unsupported?
+
+      {
+        required:,
+        unsupported:,
+        # Whether the GUARDIAN requirement is what is holding payouts up — not whether payouts are
+        # held up at all. A seller who has filled in nothing yet is unpayable for reasons that have
+        # nothing to do with a guardian, and this flag drives guardian copy only.
+        #
+        # Read through has_completed_payout_compliance_info?, the same predicate the payout gate
+        # reads, rather than recomputed from the two flags above, so the page cannot tell a seller
+        # their guardian is sorted while Payouts.is_user_payable disagrees.
+        blocking_payouts: (required || unsupported) && !user_compliance_info.has_completed_payout_compliance_info?,
+        guardian: guardian.present? && guardian.alive? ? GuardianPresenter.new(guardian).props : nil,
+      }
+    end
+
     # True when the most recent Stripe account-creation attempt failed because Stripe
     # rejected the seller's postal code. The failure leaves a breadcrumb payout note
     # (written by StripeMerchantAccountManager, authored by the Gumroad admin account)

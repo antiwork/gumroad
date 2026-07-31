@@ -640,6 +640,7 @@ describe SettingsPresenter do
         payout_frequency_daily_supported: false,
         instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
         can_manage_beneficial_owners: false,
+        legal_guardian: { required: false, unsupported: false, blocking_payouts: false, guardian: nil },
       }
     end
 
@@ -1487,6 +1488,101 @@ describe SettingsPresenter do
       it "exposes false so the section is hidden from roles without :update? on payments" do
         expect(presenter.payments_props[:can_manage_beneficial_owners]).to be(false)
       end
+    end
+  end
+
+  describe "#payments_props :legal_guardian" do
+    # 15 today, derived rather than a literal date: a fixed birthday ages past 18 and every example
+    # here would silently become an adult-seller example asserting nothing.
+    let(:minor_birthday) { 15.years.ago.to_date }
+
+    it "asks a US seller aged 13-17 for a guardian" do
+      create(:user_compliance_info, user: seller, birthday: minor_birthday)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(true)
+      expect(props[:unsupported]).to be(false)
+      expect(props[:blocking_payouts]).to be(true)
+      expect(props[:guardian]).to be_nil
+    end
+
+    it "reports a complete guardian as no longer blocking payouts" do
+      guardian = create(:guardian, user: seller)
+      create(:user_compliance_info, user: seller, birthday: minor_birthday, guardian:)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(true)
+      expect(props[:blocking_payouts]).to be(false)
+      expect(props[:guardian][:id]).to eq(guardian.external_id)
+      expect(props[:guardian][:has_completed_info]).to be(true)
+    end
+
+    it "still blocks payouts when the guardian on file is incomplete" do
+      guardian = create(:guardian, user: seller, individual_tax_id: nil)
+      create(:user_compliance_info, user: seller, birthday: minor_birthday, guardian:)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:blocking_payouts]).to be(true)
+      expect(props[:guardian][:has_individual_tax_id]).to be(false)
+    end
+
+    # Nothing may leak the identifier itself: it is encrypted with a key a web request cannot read
+    # back, so the only honest thing to send is whether one is on file.
+    it "never sends the guardian's tax identifier" do
+      guardian = create(:guardian, user: seller, individual_tax_id: "123456789")
+      create(:user_compliance_info, user: seller, birthday: minor_birthday, guardian:)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:guardian]).not_to have_key(:individual_tax_id)
+      expect(props[:guardian].to_json).not_to include("123456789")
+    end
+
+    it "marks a seller aged 13-17 outside the supported countries as unsupported, and never asks them for a guardian" do
+      create(:user_compliance_info, user: seller, birthday: minor_birthday,
+                                    country: "Brazil", state: "SP", zip_code: "01000-000")
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(false)
+      expect(props[:unsupported]).to be(true)
+      expect(props[:blocking_payouts]).to be(true)
+    end
+
+    it "asks nothing of an adult seller" do
+      create(:user_compliance_info, user: seller, birthday: 30.years.ago.to_date)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(false)
+      expect(props[:unsupported]).to be(false)
+      expect(props[:blocking_payouts]).to be(false)
+    end
+
+    # A seller mid-onboarding is unpayable for reasons that have nothing to do with a guardian, and
+    # blocking_payouts drives guardian copy only — so it must stay false rather than putting a
+    # guardian notice in front of someone who has no birthday on file yet.
+    it "does not blame the guardian for a seller who has filled in nothing" do
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:required]).to be(false)
+      expect(props[:unsupported]).to be(false)
+      expect(props[:blocking_payouts]).to be(false)
+      expect(props[:guardian]).to be_nil
+    end
+
+    it "reports no guardian once theirs has been removed" do
+      guardian = create(:guardian, user: seller)
+      create(:user_compliance_info, user: seller, birthday: minor_birthday, guardian:)
+      guardian.mark_deleted!
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:guardian]).to be_nil
+      expect(props[:blocking_payouts]).to be(true)
     end
   end
 end

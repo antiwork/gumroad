@@ -10,7 +10,8 @@
 #
 # Stripe only offers this in some countries, and not at all in Brazil, where the floor is 18 with
 # no guardian path. Storing a guardian therefore does not by itself mean the seller's country
-# supports one; the country gate lives with the payout setup that consumes this.
+# supports one; the country gate is UserComplianceInfo::GUARDIAN_SUPPORTED_COUNTRY_CODES, which
+# decides whether we ask for a guardian at all.
 #
 # Mirrors UserComplianceInfo's split of responsibilities: validations here cover what must be true
 # of any stored guardian, while has_completed_info? answers whether we have enough to hand Stripe.
@@ -18,6 +19,7 @@
 # update in place rather than a revision history.
 class Guardian < ApplicationRecord
   include Deletable
+  include ExternalId
   include Strongbox
 
   # Stripe's own floor for a person who can take responsibility for an account.
@@ -44,8 +46,8 @@ class Guardian < ApplicationRecord
   ].freeze
 
   # stripe_person_id is the handle for the copy Stripe holds, so nulling it would orphan that copy
-  # rather than erase it — the Stripe sync in a later PR is what deletes the remote Person. The
-  # acceptance flag and timestamp stay with it as the record that an adult did once take
+  # rather than erase it — the erasure path in GdprDataErasureService is what deletes the remote
+  # Person. The acceptance flag and timestamp stay with it as the record that an adult did once take
   # responsibility; their IP address is in the erased list above, being personal data and nothing else.
   RETAINED_ON_ANONYMIZE = %w[
     id

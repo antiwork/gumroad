@@ -121,10 +121,11 @@ class UserComplianceInfo < ApplicationRecord
   # the legal guardian to the checks above, because a seller under 18 cannot be verified on their
   # own.
   #
-  # Deliberately has no payout-eligibility caller yet, and must not gain one before the guardian
-  # form ships: 187 US under-18 sellers hold a balance today and 65 have already been paid, so
-  # wiring this into Payouts.is_user_payable now would strand them with no surface on which to
-  # supply the guardian it demands. Wire it in the same change that gives them one.
+  # Read by Payouts.is_user_payable and by the payout-settings page, which is why the two cannot
+  # disagree about whether a seller is ready. Kept separate from has_completed_compliance_info?
+  # because Exports::TaxSummary::Payable reads that one: 16,004 live compliance rows carry an
+  # under-18 birthday, and folding the guardian in there would drop all of them out of 1099 exports.
+  # Tax reporting stays guardian-blind; payout readiness is this predicate.
   def has_completed_payout_compliance_info?
     return false unless has_completed_compliance_info?
     # An unsupported country is not the same as no requirement. There is no guardian path to
@@ -313,7 +314,7 @@ class UserComplianceInfo < ApplicationRecord
     end
 
     def birthday_is_over_minimum_age
-      errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
+      errors.add :base, "You must be #{MINIMUM_DATE_OF_BIRTH_AGE} years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
     end
 
     # attr_mutable lets guardian_id be set after creation, which the attach flow needs. It must not
