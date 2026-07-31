@@ -132,6 +132,10 @@ class Page < ApplicationRecord
       result = ContentModeration::ModerateRecordService.check(self, :page)
       return if result.passed
 
+      # On :base, like products and posts: the message is a whole sentence naming
+      # the page, so an attribute prefix from `full_message` would read wrong.
+      # The dry-run preview endpoints therefore have to read :base too, or a page
+      # the real write rejects would preview as publishable.
       errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "page", title: title))
     end
 

@@ -72,6 +72,12 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
     context "when the record is a storefront page" do
       let(:page) { Page.create!(pageable: seller, slug: "about", title: "About", custom_html: "<p>Copy</p>") }
 
+      # Creating the fixture is itself a moderated save now, so it has to happen
+      # under the compliant stubs from the outer `before` — lazily, it would run
+      # under whichever flagged stub the example installed and either raise
+      # RecordInvalid or spend the admin-note expectation on the fixture.
+      before { page }
+
       it "reads the page through the page extractor" do
         expect_any_instance_of(ContentModeration::ContentExtractor).to receive(:extract_from_page).with(page).and_call_original
 
