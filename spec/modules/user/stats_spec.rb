@@ -967,6 +967,10 @@ describe User::Stats, :vcr do
 
     describe "Stripe Connect stats" do
       before :each do
+        # Same midnight hazard as the PayPal group above: the window comes from Date
+        # arithmetic, the chargeback dates from later travel_to reads.
+        travel_to(Time.current.midday)
+
         @creator = create(:user)
         create(:user_compliance_info, user: @creator)
 
