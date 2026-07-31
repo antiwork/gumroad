@@ -102,9 +102,14 @@ class LibraryPresenter
       return {} if refunded_originals.empty?
 
       purchase_pairs = refunded_originals.map { [_1.subscription_id, _1.link_id] }.uniq
+      # A transfer moves the signup purchase's purchaser but can leave earlier renewals on the
+      # previous owner, so the viewer's id alone would exclude the only paid renewal. Subscription
+      # ownership is what the content page authorizes the viewer against, and the subscriptions are
+      # already preloaded, so widening to it costs no extra query.
+      owner_ids = refunded_originals.filter_map { _1.subscription&.user_id }.push(logged_in_user.id).uniq
       candidates = Purchase
         .where([:subscription_id, :link_id] => purchase_pairs)
-        .where(purchaser_id: logged_in_user.id, purchase_state: %w[successful test_successful])
+        .where(purchaser_id: owner_ids, purchase_state: %w[successful test_successful])
         .not_fully_refunded
         .not_chargedback_or_chargedback_reversed
         .not_is_access_revoked

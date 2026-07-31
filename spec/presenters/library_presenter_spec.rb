@@ -267,6 +267,17 @@ describe LibraryPresenter do
         expect(purchases.first[:purchase][:download_url]).to eq(eligible_renewal.url_redirect.download_page_url)
       end
 
+      it "links a transferred card to a renewal still owned by the subscription's user" do
+        previous_owner = create(:user)
+        purchase.subscription.update!(user: previous_owner)
+        renewal = create_renewal(purchaser: previous_owner, email: previous_owner.email).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        expect(purchases.first[:purchase][:download_url]).to eq(renewal.url_redirect.download_page_url)
+      end
+
       it "ignores unsuccessful renewal attempts" do
         create_renewal(purchase_state: "failed").tap(&:create_url_redirect!)
         create_renewal(purchase_state: "in_progress").tap(&:create_url_redirect!)
