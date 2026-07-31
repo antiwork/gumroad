@@ -20,11 +20,16 @@ class Purchase::BaseService
       create_subscription(giftee_purchase) if purchase.link.is_recurring_billing || purchase.is_installment_payment
 
       purchase.update_balance_and_mark_successful!
+      fix_later_charge_presentment
       purchase.gift_given.mark_successful! if purchase.is_gift_sender_purchase
       purchase.seller.save_gumroad_day_timezone
       after_commit do
         ActivateIntegrationsWorker.perform_async(purchase.id)
       end
+    end
+
+    def fix_later_charge_presentment
+      Purchase::FixLaterChargePresentmentService.new(purchase:).perform
     end
 
     def create_subscription(giftee_purchase)
