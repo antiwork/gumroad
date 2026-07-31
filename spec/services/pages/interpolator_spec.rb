@@ -23,6 +23,46 @@ describe Pages::Interpolator do
       expect(result).to include(product.price_formatted_verbose)
     end
 
+    # The native /l/ page this markup replaces auto-applies the default offer code
+    # (BestOfferCodeService), so the undiscounted set price would sit next to a checkout that
+    # charges less.
+    it "quotes the price a first-time buyer pays, with the default offer code applied" do
+      offer_code = product.user.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
+      product.update!(default_offer_code: offer_code)
+      html = %(<span data-gumroad-field="price">$0</span>)
+
+      result = described_class.interpolate(html, product: product)
+
+      expect(result).to include(">$7.50<")
+    end
+
+    # Without for_default_duration the amount is the cheapest across every enabled recurrence —
+    # here $4 monthly on a yearly-default membership, a price the page's own buy flow never
+    # charges at its default selection.
+    it "quotes a tiered membership at its default recurrence" do
+      membership = create(:membership_product_with_preset_tiered_pricing,
+                          subscription_duration: :yearly,
+                          recurrence_price_values: [
+                            { monthly: { enabled: true, price: 4 }, yearly: { enabled: true, price: 40 } },
+                            { monthly: { enabled: true, price: 9 }, yearly: { enabled: true, price: 90 } },
+                          ])
+      html = %(<span data-gumroad-field="price"></span>)
+
+      result = described_class.interpolate(html, product: membership)
+
+      expect(result).to include(">$40+ a year<")
+    end
+
+    it "labels a fixed-length membership's term like the native page" do
+      membership = create(:membership_product, price_cents: 500)
+      membership.update!(duration_in_months: 1)
+      html = %(<span data-gumroad-field="price"></span>)
+
+      result = described_class.interpolate(html, product: membership)
+
+      expect(result).to include(">$5 once<")
+    end
+
     it "replaces data-gumroad-field='description' with plain-text description" do
       html = %(<p data-gumroad-field="description">placeholder</p>)
 
@@ -200,6 +240,101 @@ describe Pages::Interpolator do
     it "returns blank input as-is" do
       expect(described_class.interpolate_profile("", profile: seller)).to eq("")
       expect(described_class.interpolate_profile(nil, profile: seller)).to be_nil
+    end
+
+    describe "product-scoped price fields" do
+      let(:prices) do
+        { "quicklauncher" => { price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true } }
+      end
+
+      it "writes the product's price into an element scoped to its permalink" do
+        html = %(<span data-gumroad-product="quicklauncher" data-gumroad-field="price">$14</span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">€11.20<")
+        expect(result).not_to include("$14")
+      end
+
+      it "writes the currency the price is in, uppercased for display" do
+        html = %(<span data-gumroad-product="quicklauncher" data-gumroad-field="currency">USD</span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">EUR<")
+      end
+
+      it "writes the pre-discount price into an original-price element" do
+        discounted = { "quicklauncher" => { price: "€5.60", original_price: "€11.20", currency_code: "eur" } }
+        html = %(<s data-gumroad-product="quicklauncher" data-gumroad-field="original-price"></s>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices: discounted)
+
+        expect(result).to include(">€11.20<")
+      end
+
+      it "leaves an original-price element empty when the product is not discounted" do
+        html = %(<s data-gumroad-product="quicklauncher" data-gumroad-field="original-price"></s>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(%(data-gumroad-field="original-price"></s>))
+      end
+
+      it "leaves the element's own text alone when the permalink is unknown" do
+        html = %(<span data-gumroad-product="gone" data-gumroad-field="price">$14</span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">$14<")
+      end
+
+      it "leaves the element's own text alone when no prices are supplied" do
+        html = %(<span data-gumroad-product="quicklauncher" data-gumroad-field="price">$14</span>)
+
+        expect(described_class.interpolate_profile(html, profile: seller)).to include(">$14<")
+      end
+
+      # Without this the seller's name would be written into every product card that reused
+      # data-gumroad-field="name" inside a product-scoped element.
+      it "does not answer a product-scoped element with a seller-level field" do
+        html = %(<h2 data-gumroad-product="quicklauncher" data-gumroad-field="name">Quicklauncher</h2>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">Quicklauncher<")
+        expect(result).not_to include("Jane Doe")
+      end
+
+      # The attribute's presence is what scopes — the preview listener excludes any node
+      # carrying it, so a valueless marker must not fall back to profile fields either.
+      it "treats an empty product marker as product-scoped, keeping its fallback text" do
+        html = %(<h2 data-gumroad-product="" data-gumroad-field="name">Quicklauncher</h2>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">Quicklauncher<")
+        expect(result).not_to include("Jane Doe")
+      end
+
+      it "still fills seller-level fields on elements with no product scope" do
+        html = %(<h1 data-gumroad-field="name"></h1><span data-gumroad-product="quicklauncher" data-gumroad-field="price"></span>)
+
+        result = described_class.interpolate_profile(html, profile: seller, prices:)
+
+        expect(result).to include(">Jane Doe<")
+        expect(result).to include(">€11.20<")
+      end
+
+      it "html-escapes the interpolated price" do
+        html = %(<span data-gumroad-product="x" data-gumroad-field="price"></span>)
+        malicious = { "x" => { price: %(<script>alert("xss")</script>), currency_code: "usd" } }
+
+        result = described_class.interpolate_profile(html, profile: seller, prices: malicious)
+
+        expect(result).not_to include("<script>")
+        expect(result).to include("&lt;script&gt;")
+      end
     end
   end
 end

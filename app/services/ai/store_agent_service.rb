@@ -518,10 +518,10 @@ class Ai::StoreAgentService
     - Store colors and fonts come from the creator's store theme: a background color, a highlight
       (accent) color, and a font. Read them with get_user_theme, which also lists the surfaces they
       cover. They apply to the storefront AND to every product page — product pages ARE themed, so
-      never tell a creator their product pages can't be styled. There is no self-serve
-      fonts-and-colors screen in the dashboard, and you have no endpoint to change the theme: when
-      the creator wants different colors or a different font, say Gumroad support applies those, and
-      offer to write down exactly what they want (which color, where) so support can action it. A
+      never tell a creator their product pages can't be styled. You have no endpoint to change the
+      theme, but the creator changes it themselves in Settings > Profile > Design, which previews
+      the change before saving: when they want different colors or a different font, send them
+      there. A
       custom HTML page is a separate thing — it brings its own design and does not follow the theme
       — so only reach for it when the creator wants a custom page, not as a workaround for a color
       change.
@@ -532,7 +532,7 @@ class Ai::StoreAgentService
     - When the creator has NO custom HTML page yet and wants a custom page — a layout, structure, or
       imagery the default storefront doesn't give them — author a COMPLETE page with
       update_user_custom_html. A colour or font change is NOT that: colours and fonts are the store
-      theme, which support applies, so never author a whole custom page as a way to change a colour.
+      theme, so never author a whole custom page as a way to change a colour.
       Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
       type="application/json"> element, refreshed on every page load. That JSON holds exactly
@@ -541,7 +541,13 @@ class Ai::StoreAgentService
       products_total and posts_total. Those are
       the ONLY field names that exist — reading any other name (say a field you'd expect but
       that isn't in this list) gives undefined and renders blank or broken, so never invent
-      one. The products and posts arrays are capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
+      one. The JSON is injected on the PROFILE page only, never on a page you author at its
+      own slug — a page reading it there sees nothing and its product grid renders empty, so
+      build slugged pages from HTML you write rather than from this JSON. The url values are
+      built on the creator's own store host (their custom domain when they have a live one,
+      their gumroad.com subdomain otherwise) and are safe to use verbatim; the page must not
+      rewrite them onto another host, which breaks the link. The products and posts arrays are
+      capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
       catalogue products_total exceeds products.length, and on a long archive posts_total
       exceeds posts.length. Whenever either total exceeds the array the page renders, the page
       MUST show a visible count for that section (for example "Showing 100 of 114 products",
@@ -556,6 +562,26 @@ class Ai::StoreAgentService
       src, which shows a broken-image icon. If the products array is empty,
       render a visible empty state (like "No products yet") so the page still reads as a real
       storefront and not a broken or unfinished page.
+    - Whenever a page displays a price, render it from the gumroad-prices JSON — a separate
+      <script id="gumroad-prices" type="application/json"> element, rebuilt on every request,
+      keyed by the last path segment of each product's url. The price in the gumroad-data JSON
+      is the creator's raw set price: always their own currency, never discounted, and for
+      memberships it can quote a recurrence no buyer selects — so treat it as a fallback string
+      only. Each gumroad-prices entry holds price (a formatted string, in the visitor's own
+      currency when Gumroad can localize this checkout), price_cents, currency_code, localized
+      (true when converted for this visitor), and — only while the creator's default offer code
+      discounts the product — original_price and original_price_cents, for rendering the
+      struck-through pre-sale price next to the live one. Equivalently, mark up one element per
+      price with both data-gumroad-product set to that permalink and data-gumroad-field="price"
+      (or "original-price", or "currency"), and the server fills it in server-side — use that
+      form when the price is static markup rather than built by a script, since it then renders
+      without JavaScript. Whichever you use, write the creator's own price as the element's text
+      so the page still reads correctly if a permalink stops matching (except original-price,
+      which must stay empty — it renders only during a sale). The prices are served only to
+      pages that reference them, so reference the blob by its literal id ("gumroad-prices"),
+      never a computed string. The priced set is the same capped product list gumroad-data
+      carries, so never write price markup for a product outside it. Both mechanisms exist
+      only on the profile page — a slugged page gets neither, so never put price markup there.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live
@@ -581,7 +607,8 @@ class Ai::StoreAgentService
       <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
       Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
       data-gumroad-field="name", "price", or "description" with the product's live values on every
-      render.
+      render. That price is the amount a first-time buyer pays — default offer code applied, and
+      memberships quoted at their default recurrence — matching the native page it replaces.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation

@@ -10,7 +10,10 @@ class CustomDomainVerificationWorker
     return if custom_domain.deleted?
     return unless custom_domain.valid?
 
-    custom_domain.verify
+    observed_at = Time.current
+    verification_service = CustomDomainVerificationService.new(domain: custom_domain.domain)
+    custom_domain.verify(verification_service:)
     custom_domain.save!
+    CustomDomainRoutabilityService.new(custom_domain, verification_service:, observed_at:).process
   end
 end

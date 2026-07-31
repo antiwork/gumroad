@@ -339,15 +339,40 @@ module Charge::Disputable
       end
 
       dispute_evidence = create_dispute_evidence_if_needed!
-      # Don't re-stamp seller_contacted_at on replay: it anchors the 72-hour evidence-submission
-      # window, and moving it forward would silently extend the seller's deadline.
-      dispute_evidence.update_as_seller_contacted! if dispute_evidence.present? && !dispute_evidence.seller_contacted?
+      # Claim rather than check-then-stamp: CreateMissingDisputeEvidenceJob opens the same window
+      # once a formalization looks abandoned, and it backdates the stamp to beat the processor's
+      # cutoff. Claiming keeps whichever window was opened first, so a re-delivery arriving after
+      # that sweep cannot extend the seller's deadline past the point evidence is still accepted.
+      dispute_evidence.claim_seller_contacted_window! if dispute_evidence.present?
+
+      # Ask for the seller's side only while the form behind the notice would still take it, and
+      # only while there are whole hours left to quote them: the notice's own body promises "in the
+      # next N hours", so a window with none left would ask for information against a "0 hours"
+      # deadline. The submitted and resolved conditions are the controller's; the hours test is not
+      # — check_if_needs_redirect lets an elapsed window through until FightDisputesJob resolves the
+      # row, and that imminent submission is what the notice must not invite a race with.
+      #
+      # All three shapes are reachable on a re-delivery, because losing the claim above does not
+      # stop this path: CreateMissingDisputeEvidenceJob may have opened this window hours earlier
+      # and backdated it past its own end, or had the evidence answered and submitted before the
+      # re-delivery arrived. A dispute with no evidence surface at all (PayPal, Stripe Connect)
+      # still gets the plain notice, as it always has.
+      #
+      # Read the columns rather than #reload: claim_seller_contacted_window! writes through
+      # update_all and leaves this object stale, and reloading it here would reset the attachment
+      # associations the evidence row was just built with.
+      stamped_at, submitted_at, resolved_at =
+        dispute_evidence && DisputeEvidence.where(id: dispute_evidence.id)
+                                           .pick(:seller_contacted_at, :seller_submitted_at, :resolved_at)
+      notice_worth_sending = DisputeEvidence.notice_worth_sending?(
+        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+      )
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
       # between these enqueues and the marker write — that degrades to at-least-once
       # email/webhook delivery, which is normal for crash-retry semantics.
-      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later
+      ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later if notice_worth_sending
       AdminMailer.chargeback_notify(dispute.id).deliver_later
       CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
 

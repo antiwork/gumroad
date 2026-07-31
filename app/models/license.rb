@@ -3,6 +3,14 @@
 class License < ApplicationRecord
   MANAGE_SECURE_ID_SCOPE = "manage_license"
 
+  # Re-minted on every page load, so a TTL only ever costs a click from a tab left open past it.
+  # Without one the token survives rotate! and disable!, and only a key rotation revokes a leak.
+  MANAGE_TOKEN_TTL = 1.week
+
+  # Sellers set this by hand from the customer page, so the ceiling only has to be high enough that
+  # no real activation count reaches it while still keeping a typo out of the search index.
+  MAX_SELLER_SETTABLE_USES = 1_000_000
+
   has_paper_trail only: %i[disabled_at serial]
 
   include FlagShihTzu
@@ -44,8 +52,29 @@ class License < ApplicationRecord
     save!
   end
 
+  # Serializes concurrent writers of the column against each other. It does NOT make a caller's
+  # idea of the current count safe — the value here overwrites whatever /v2/licenses/verify has
+  # incremented in the meantime, which is what the seller asked for when they typed an exact
+  # number. Relative changes must go through #adjust_uses! instead.
+  def set_uses!(value)
+    with_lock { update!(uses: value) }
+  end
+
+  # Reads the count inside the lock so a concurrent /v2/licenses/verify increment is preserved
+  # rather than overwritten. The ceiling only applies while the count is inside the seller-editable
+  # range: verify increments without a ceiling, so a count already above it is real activation and
+  # clamping would silently delete some of it.
+  def adjust_uses!(delta)
+    with_lock do
+      current = uses.to_i
+      target = current + delta
+      target = target.clamp(0, MAX_SELLER_SETTABLE_USES) if current <= MAX_SELLER_SETTABLE_USES
+      update!(uses: [target, 0].max)
+    end
+  end
+
   def reset_uses!
-    update!(uses: 0)
+    set_uses!(0)
   end
 
   def rotate!
