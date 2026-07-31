@@ -36,10 +36,8 @@ class Checkout::StripePaymentPresenter
   # below Stripe's USD charge floor on CardElement. This is intentionally lower than
   # Gumroad's buyer-facing minimum so chargeable near-zero carts can still use Payment Element.
   STRIPE_PAYMENT_ELEMENT_MINIMUM_USD_CHARGE_CENTS = 50
-  # The client-confirm payment_method_types are computed per cart by Checkout::PaymentMethodResolver and
-  # threaded into the deferred PaymentIntent by Order::PreparePaymentIntentService, so the Payment Element
-  # and the intent cannot drift (Stripe rejects a payment_method_types-scoped ConfirmationToken against a
-  # mismatched intent). Currency stays fixed here until buyer-currency charging lands (out of scope) —
+  # Prepare may narrow this menu after reading the ConfirmationToken, but must retain its method.
+  # Currency stays fixed here until buyer-currency charging lands (out of scope) —
   # except for the method-forced local-method surface (see method_forced_element_currency), where
   # the Payment Element must mount in the forced currency or Stripe hides the EUR-only method tabs.
   CLIENT_CONFIRM_CURRENCY = "usd"
@@ -120,7 +118,7 @@ class Checkout::StripePaymentPresenter
       )
     end
 
-    # Client-confirm eligible carts are always one-time charges, so check them before setup mode.
+    # Paid-upfront UPI Autopay also uses PaymentIntent mode while registering reuse.
     return client_confirm_props if client_confirm_eligible?
 
     stripe_elements_mode =
@@ -255,6 +253,8 @@ class Checkout::StripePaymentPresenter
         # fails closed there instead of at Stripe. Only meaningful for USD-priced carts;
         # forced-currency carts never offer Klarna (see the resolver's launched_method_set).
         cart_total_usd_cents: items.all? { _1[:product_currency] == Currency::USD } ? items.sum { _1[:price_cents].to_i * (_1[:quantity] || 1).to_i } : nil,
+        # Only the narrow registration shape may use the recurring client-confirm lane.
+        recurring_upi_registration: recurring_upi_registration_shape?(items),
       )
     end
 
@@ -387,9 +387,8 @@ class Checkout::StripePaymentPresenter
             subunit_to_unit: subunit_to_unit(method_forced_element_currency),
           } : nil,
           payment_method_types:,
-          # Derived from the resolver's method list (not a second flag check) so the Element's Link
-          # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
-          # ConfirmationToken minted with Link against an intent whose method list omits it.
+          # Derived from the resolver's method list (not a second flag check) so Link is present in
+          # the baseline intent menu whenever the Element can select it.
           stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
           stripe_connect_account_id: resolution.stripe_connect_account_id,
         },
@@ -540,6 +539,27 @@ class Checkout::StripePaymentPresenter
       end
     end
 
+    def recurring_upi_registration_shape?(items)
+      return false unless items.one?
+
+      item = items.first
+      seller = item[:seller]
+      return false unless buyer_country == Checkout::PaymentMethodResolver::IN_ALPHA2
+      return false unless Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(seller)
+      return false unless Feature.active?(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+      # Destination and direct-charge routing are outside the verified first rollout.
+      return false if seller.merchant_account(StripeChargeProcessor.charge_processor_id).present?
+      return false unless item[:recurrence].present?
+      return false if item[:pay_in_installments] || item[:offers_installment_plan]
+      return false if item[:is_preorder] || item[:has_free_trial] || item[:is_physical]
+      return false if item[:native_type] == Link::NATIVE_TYPE_COMMISSION
+      return false unless item[:product_currency] == Currency::INR
+      return false unless (item[:quantity] || 1).to_i == 1
+
+      amount_cents = item[:price_cents].to_i
+      amount_cents.positive? && amount_cents <= Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+    end
+
     def method_forced_element_currency
       uniform_method_forced_currency(items)
     end
@@ -595,6 +615,7 @@ class Checkout::StripePaymentPresenter
           offers_installment_plan: product.installment_plan.present?,
           is_preorder: product.is_in_preorder_state,
           has_free_trial: product.free_trial_enabled,
+          is_physical: product.is_physical || product.require_shipping?,
           native_type: product.native_type,
           buyer_currency_display: buyer_currency_display_props(product:, price_cents: cart_product.price, ip:),
           product_currency: product.price_currency_type.to_s.downcase,
@@ -619,6 +640,7 @@ class Checkout::StripePaymentPresenter
           offers_installment_plan: product[:installment_plan].present?,
           is_preorder: product[:is_preorder],
           has_free_trial: product[:free_trial].present?,
+          is_physical: product[:require_shipping],
           native_type: product[:native_type],
           buyer_currency_display: product[:buyer_currency_display],
           # currency_code is the product's own pricing currency (price_currency_type), set by
@@ -705,7 +727,7 @@ class Checkout::StripePaymentPresenter
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, is_physical:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
         price_cents:,
@@ -715,6 +737,7 @@ class Checkout::StripePaymentPresenter
         offers_installment_plan:,
         is_preorder:,
         has_free_trial:,
+        is_physical:,
         native_type:,
         buyer_currency_display:,
         product_currency:,

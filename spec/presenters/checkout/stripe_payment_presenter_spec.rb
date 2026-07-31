@@ -30,6 +30,7 @@ describe Checkout::StripePaymentPresenter do
         # The product's own pricing currency, mirroring CheckoutPresenter#product_common,
         # which sets currency_code on every real add_products entry.
         currency_code: product.price_currency_type.to_s.downcase,
+        require_shipping: product.require_shipping?,
         installment_plan: product.installment_plan.present? ? {
           number_of_installments: product.installment_plan.number_of_installments,
           recurrence: product.installment_plan.recurrence,
@@ -1652,6 +1653,90 @@ describe Checkout::StripePaymentPresenter do
     ensure
       if seller
         Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "mounts card + UPI for the flagged single paid-upfront INR membership slice" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 73_000)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.13", "India")
+
+      props = stripe_payment_props(
+        # Membership products keep their price on tiers, so pass the selected tier price just
+        # as the real checkout payload does.
+        add_products: [checkout_product_for(product, price: 73_000, recurrence: BasePrice::Recurrence::MONTHLY)],
+        ip: "203.0.113.13"
+      )
+
+      expect(props).to eq(
+        payment_element_client_confirm_props(
+          currency: Currency::INR,
+          presentment_amount_cents: 73_000,
+          payment_method_types: %w[card upi],
+          stripe_link_enabled: false,
+          disable_wallets: true,
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        Feature.deactivate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps unsupported recurring shapes off the UPI Autopay registration lane" do
+      seller = create(:user, disable_buyer_local_currency: false)
+      product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 73_000)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      Feature.activate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.14", "India")
+
+      item = checkout_product_for(product, price: 73_000, recurrence: BasePrice::Recurrence::MONTHLY)
+      unsupported = {
+        multi_item: [item.deep_dup, item.deep_dup],
+        quantity: [item.deep_dup.tap { _1[:quantity] = 2 }],
+        installment: [item.deep_dup.tap { _1[:pay_in_installments] = true }],
+        offered_installment_plan: [item.deep_dup.tap { _1[:product][:installment_plan] = { number_of_installments: 2 } }],
+        preorder: [item.deep_dup.tap { _1[:product][:is_preorder] = true }],
+        free_trial: [item.deep_dup.tap { _1[:product][:free_trial] = { duration: { unit: "day", amount: 7 } } }],
+        physical: [item.deep_dup.tap { _1[:product][:require_shipping] = true }],
+        commission: [item.deep_dup.tap { _1[:product][:native_type] = Link::NATIVE_TYPE_COMMISSION }],
+      }
+
+      aggregate_failures do
+        unsupported.each do |shape, add_products|
+          props = stripe_payment_props(add_products:, ip: "203.0.113.14")
+
+          expect(props[:integration]).not_to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION), shape.to_s
+          expect(Array(props.dig(:elements_options, :payment_method_types))).not_to include("upi"), shape.to_s
+        end
+
+        create(:merchant_account, user: seller)
+        seller.merchant_accounts.reset
+        props = stripe_payment_props(add_products: [item], ip: "203.0.113.14")
+        expect(props[:integration]).not_to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION), "seller_merchant_account"
+        expect(Array(props.dig(:elements_options, :payment_method_types))).not_to include("upi"), "seller_merchant_account"
+      end
+    ensure
+      if seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        Feature.deactivate_user(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller)
         deactivate_buyer_currency_flags(seller)
       end
     end

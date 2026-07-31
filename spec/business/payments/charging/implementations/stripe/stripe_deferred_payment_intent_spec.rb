@@ -99,6 +99,27 @@ describe StripeDeferredPaymentIntent do
       expect(captured_params.last[:params]).not_to have_key(:payment_method_options)
     end
 
+    it "creates an idempotent Customer and marks the recurring intent for off-session reuse" do
+      customer_params = { email: "buyer@example.com", description: "UPI Autopay" }
+      expect(Stripe::Customer).to receive(:create).with(
+        customer_params,
+        hash_including(idempotency_key: "#{idempotency_key}_customer")
+      ).and_return(Stripe::Customer.construct_from(id: "cus_upi_autopay"))
+
+      create_deferred_intent(
+        payment_method_types: %w[card upi],
+        currency: Currency::INR,
+        customer_params:,
+        setup_future_usage: "off_session"
+      )
+
+      expect(captured_params.last[:params]).to include(
+        customer: "cus_upi_autopay",
+        setup_future_usage: "off_session",
+        payment_method_types: %w[card upi]
+      )
+    end
+
     it "routes a Gumroad-managed account through a destination transfer" do
       seller = create(:user)
       merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_managed")
