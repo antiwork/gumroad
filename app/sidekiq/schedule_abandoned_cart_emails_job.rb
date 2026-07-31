@@ -21,7 +21,15 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  sidekiq_options queue: :low, retry: 5, lock: :until_executed
+  # A SIGKILL (OOM, deploy pod reap) skips the `ensure` that releases an `until_executed`
+  # lock, and this job's digest is constant because it takes no arguments — so a stranded
+  # lock silently dropped every subsequent daily enqueue (gumroad-private#1576). Kept under
+  # the 24h schedule so a strand costs one run, not every run. Duplicate sends from an
+  # overlapping run are prevented by the unique index on sent_abandoned_cart_emails, not
+  # by this lock.
+  LOCK_TTL = 23.hours
+
+  sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
   # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
   # the Sidekiq dead set with no alert, and no abandoned-cart emails went out platform-wide.
