@@ -352,6 +352,39 @@ describe UrlRedirectsController, inertia: true do
             expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
           end
         end
+
+        context "when the members were reassigned to another account" do
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            # Only the parent moved. The library filters on `purchaser_id`, so the members are
+            # still `visible_in_library` yet render in nobody's library here.
+            purchase.product_purchases.each { _1.update!(purchaser: create(:user)) }
+            sign_in buyer
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+        end
+
+        context "when the members belong to the purchaser" do
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            purchase.product_purchases.each { _1.update!(purchaser: buyer) }
+            sign_in buyer
+          end
+
+          it "redirects to the filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
       end
     end
 
