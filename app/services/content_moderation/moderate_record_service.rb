@@ -205,7 +205,15 @@ class ContentModeration::ModerateRecordService
     end
 
     def record_moderation_disabled?
-      entity_type == :product && record.content_moderation_disabled?
+      case entity_type
+      when :product then record.content_moderation_disabled?
+      # A page inherits the escape hatch from the product it takes over, so
+      # turning moderation off for a product covers its landing page too --
+      # otherwise the exemption would hold for the product and then block the
+      # page that replaces it.
+      when :page then record.pageable.is_a?(Link) && record.pageable.content_moderation_disabled?
+      else false
+      end
     end
 
     def spam_reason?(reason)
@@ -234,7 +242,17 @@ class ContentModeration::ModerateRecordService
     #
     # Posts are unaffected: they have no deliverable of their own, so a spam
     # flag on a post keeps blocking as before.
+    #
+    # A page is a note as well, always. A custom page is a landing page — its
+    # entire job is the sales copy the spam preset misreads, and it has no
+    # deliverable of its own to weigh that against, so the product test above
+    # can't be applied to it. Blocking on tone here would mean an agent that
+    # wrote a perfectly ordinary sales page cannot save it and cannot be told
+    # what to change. The presets that key on concrete content — the blocklist,
+    # the classifier, and adult content — still block a page.
     def spam_flag_should_not_block?
+      return true if entity_type == :page
+
       entity_type == :product && product_has_substantive_deliverable?
     end
 
@@ -440,6 +458,7 @@ class ContentModeration::ModerateRecordService
       case entity_type
       when :product then extractor.extract_from_product(record)
       when :post then extractor.extract_from_post(record)
+      when :page then extractor.extract_from_page(record)
       end
     end
 
@@ -528,6 +547,7 @@ class ContentModeration::ModerateRecordService
       record_label = case entity_type
                      when :product then "Product ##{record.id} (#{record.name})"
                      when :post then "Post ##{record.id} (#{record.name})"
+                     when :page then "Page ##{record.id} (#{page_label})"
       end
 
       action = blocked ? "blocked publish of" : "flagged but did not block"
@@ -546,6 +566,15 @@ class ContentModeration::ModerateRecordService
       @user ||= case entity_type
                 when :product then record.user
                 when :post then record.user
+                when :page then record.pageable.is_a?(User) ? record.pageable : record.pageable.try(:user)
       end
+    end
+
+    # Which page an admin note is about. A page has no name; the root takeover
+    # has no slug either, so it is identified by the surface it replaces.
+    def page_label
+      return "#{record.slug} — #{record.title}" if record.slugged?
+
+      record.pageable.is_a?(User) ? "profile page" : "product page for ##{record.pageable_id}"
     end
 end

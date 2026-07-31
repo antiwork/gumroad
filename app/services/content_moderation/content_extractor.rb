@@ -6,6 +6,19 @@ class ContentModeration::ContentExtractor
 
   PERMITTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
+  # Storefront pages carry up to Page::MAX_CUSTOM_HTML_LENGTH (500k) characters
+  # of seller-authored HTML, an order of magnitude more prose than a product
+  # listing. The visible text is what the moderation strategies read, so it is
+  # truncated to keep one page save from becoming a very large, very slow model
+  # call. Abuse worth catching (keyword farms, adult copy, off-platform pitches)
+  # is never confined to the tail of a document — it is the page's subject.
+  MAX_PAGE_TEXT_LENGTH = 20_000
+
+  # Also bounded, for the same reason: a generated page can reference hundreds
+  # of images, while ClassifierStrategy moderates the first few
+  # (MAX_IMAGES_TO_MODERATE) and PromptStrategy sends what it is given.
+  MAX_PAGE_IMAGE_URLS = 20
+
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
   def extract_from_product(product)
@@ -23,7 +36,62 @@ class ContentModeration::ContentExtractor
     Result.new(text: text, image_urls: image_urls)
   end
 
+  # A storefront page: either the profile/product custom HTML takeover or a
+  # slugged page, carrying rich text `content` or a full `custom_html` document.
+  #
+  # Both representations are read the same way — as a document whose visible
+  # text and images are what a visitor sees. Link targets are included in the
+  # text because a page is a publishing surface: the abuse that shows up here is
+  # usually a set of outbound links (an SEO farm, a redirect to an off-platform
+  # storefront) rather than the prose around them.
+  def extract_from_page(page)
+    document = Nokogiri::HTML(page.custom_html.presence || page.content.to_s)
+
+    # Script and style bodies are code, not content, and a page built on a CSS
+    # framework carries far more of them than prose. Dropping them keeps the
+    # moderated text to what a visitor actually reads.
+    document.css("script, style, noscript, template").each(&:remove)
+
+    text = "Title: #{page.title} #{document.text} #{link_targets(document).join(" ")}".squish
+    text = strip_seller_first_party_urls(text, page_seller(page))
+
+    Result.new(
+      text: text[0, MAX_PAGE_TEXT_LENGTH],
+      image_urls: page_image_urls(document).first(MAX_PAGE_IMAGE_URLS)
+    )
+  end
+
   private
+    # Where a page's links point. Kept as bare URLs so the blocklist's
+    # word-boundary matching and the prompt strategies see the destination, and
+    # so `strip_seller_first_party_urls` can neutralize the seller's own hosts
+    # exactly as it does for a URL written into prose.
+    def link_targets(document)
+      document.css("a[href]").filter_map do |anchor|
+        href = anchor["href"].to_s.strip
+        href if href.start_with?("http://", "https://")
+      end.uniq
+    end
+
+    # Only remotely-hosted images, and only ones a classifier can fetch. A
+    # custom page's images are arbitrary URLs the seller wrote, so inline
+    # `data:` images (which OpenAI cannot download from a URL) and relative
+    # paths (which have no absolute form here) are left out rather than sent as
+    # URLs that would 400 the moderation call.
+    def page_image_urls(document)
+      document.css("img[src]").filter_map do |img|
+        src = img["src"].to_s.strip
+        src if src.start_with?("http://", "https://")
+      end.uniq
+    end
+
+    # A page belongs to a user (storefront/slugged pages) or a product (the
+    # product page takeover); first-party host stripping needs the seller either
+    # way.
+    def page_seller(page)
+      page.pageable.is_a?(User) ? page.pageable : page.pageable.try(:user)
+    end
+
     # A seller linking to their OWN storefront/profile (or one of their own
     # product pages) is inherently first-party and must never be treated as
     # policy-violating content. Domain labels are arbitrary identifiers

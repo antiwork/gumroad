@@ -138,6 +138,99 @@ RSpec.describe ContentModeration::ContentExtractor do
     end
   end
 
+  describe "#extract_from_page" do
+    let(:extractor) { described_class.new }
+    let(:seller) { create(:user) }
+
+    # Built, not saved: the extractor reads the page as submitted, and saving
+    # would run both the sanitizer and the moderation validation these examples
+    # are the input to.
+    def page_for(custom_html: nil, content: nil, title: "About my studio", pageable: seller)
+      Page.new(pageable:, slug: "about", title:, custom_html:, content:)
+    end
+
+    it "extracts the title, visible text, link targets, and remote image URLs" do
+      page = page_for(custom_html: <<~HTML)
+        <html><head><style>.a { color: red }</style></head>
+        <body>
+          <h1>Hand-lettered posters</h1>
+          <p>Printed to order.</p>
+          <img src="https://cdn.example.com/poster.png">
+          <a href="https://example.com/shop">My other shop</a>
+        </body></html>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Title: About my studio")
+      expect(result.text).to include("Hand-lettered posters")
+      expect(result.text).to include("Printed to order.")
+      expect(result.text).to include("https://example.com/shop")
+      expect(result.image_urls).to eq(["https://cdn.example.com/poster.png"])
+    end
+
+    it "ignores script, style, and template bodies so framework code is not moderated as content" do
+      page = page_for(custom_html: <<~HTML)
+        <style>.buy { background: red }</style>
+        <script>const scriptOnlyToken = "gibberish payload";</script>
+        <noscript>Enable JavaScript</noscript>
+        <template><p>Cloned later</p></template>
+        <p>Real copy</p>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Real copy")
+      expect(result.text).not_to include("scriptOnlyToken")
+      expect(result.text).not_to include("Enable JavaScript")
+      expect(result.text).not_to include("Cloned later")
+    end
+
+    it "reads rich text pages the same way as custom HTML pages" do
+      page = page_for(title: "Rich", content: "<p>Written in the editor</p>")
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("Title: Rich")
+      expect(result.text).to include("Written in the editor")
+    end
+
+    it "strips the seller's own storefront host from link targets, keeping third-party links intact" do
+      page = page_for(custom_html: %(<a href="#{seller.subdomain_with_protocol}/l/thing">Mine</a><a href="https://elsewhere.example/x">Theirs</a>))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).not_to include(seller.subdomain)
+      expect(result.text).to include("https://elsewhere.example/x")
+    end
+
+    it "excludes data: and relative image sources, which a classifier cannot fetch by URL" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="data:image/png;base64,AAAA">
+        <img src="/local/asset.png">
+        <img src="https://cdn.example.com/remote.png">
+      HTML
+
+      expect(extractor.extract_from_page(page).image_urls).to eq(["https://cdn.example.com/remote.png"])
+    end
+
+    it "truncates the text and caps the image URLs so one page cannot make an unbounded moderation call" do
+      many_images = (1..30).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: "<p>#{"word " * 8_000}</p>#{many_images}")
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text.length).to eq(described_class::MAX_PAGE_TEXT_LENGTH)
+      expect(result.image_urls.size).to eq(described_class::MAX_PAGE_IMAGE_URLS)
+    end
+
+    it "reads a product landing page takeover, whose owner is the product's seller" do
+      page = page_for(pageable: create(:product, user: seller), custom_html: "<p>Buy my thing</p>")
+
+      expect(extractor.extract_from_page(page).text).to include("Buy my thing")
+    end
+  end
+
   describe "#extract_from_post" do
     let(:extractor) { described_class.new }
     let(:post) do

@@ -58,6 +58,16 @@ class Page < ApplicationRecord
   # ahead of time so it can return the report; that's idempotent with this.
   before_save :sanitize_html
 
+  # Pages are a public publishing surface — a seller's agent or CLI can put a
+  # whole document on their storefront — so they go through the same automated
+  # moderation as products and posts. Sanitization only decides what HTML is
+  # safe to render; it says nothing about what the page says.
+  #
+  # Only on a content change: a page is touched by unrelated saves (a slug
+  # rename, a `touch` from its owner) and re-moderating those would spend a
+  # model call to re-read text that already passed.
+  validate :content_moderation_check, if: -> { custom_html_changed? || content_changed? || title_changed? }
+
   scope :roots, -> { where(slug: nil) }
   scope :slugged, -> { where.not(slug: nil) }
 
@@ -111,6 +121,24 @@ class Page < ApplicationRecord
     def sanitize_html
       self.custom_html = custom_html.nil? ? nil : Ai::PageSanitizer.sanitize(custom_html).presence
       self.content = content.nil? ? nil : Pages::RichContentSanitizer.sanitize(content)
+    end
+
+    # Runs on the HTML as submitted, before `sanitize_html` rewrites it: what a
+    # page SAYS is unchanged by sanitization, and reading the submitted document
+    # means text hidden in a tag the sanitizer would have dropped is still seen.
+    def content_moderation_check
+      return if seller&.vip_creator?
+
+      result = ContentModeration::ModerateRecordService.check(self, :page)
+      return if result.passed
+
+      errors.add(:base, ContentModeration::ModerateRecordService.seller_message(result.reasons, "page", title: title))
+    end
+
+    # The owning seller. A page hangs off a user (their storefront) or a product
+    # (its landing page takeover).
+    def seller
+      pageable.is_a?(User) ? pageable : pageable.try(:user)
     end
 
     def only_one_root_page

@@ -69,6 +69,59 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(result.passed).to eq(true)
     end
 
+    context "when the record is a storefront page" do
+      let(:page) { Page.create!(pageable: seller, slug: "about", title: "About", custom_html: "<p>Copy</p>") }
+
+      it "reads the page through the page extractor" do
+        expect_any_instance_of(ContentModeration::ContentExtractor).to receive(:extract_from_page).with(page).and_call_original
+
+        expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      it "records a flag against the seller naming the page" do
+        allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::BlocklistStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["Matched blocked word: forbidden"]))
+        )
+
+        expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(
+          seller.id, a_string_including("Page ##{page.id} (about — About)")
+        )
+
+        expect(described_class.check(page, :page).passed).to eq(false)
+      end
+
+      it "keeps a spam flag as a note instead of blocking, since a landing page is sales copy with no deliverable" do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["spam: reads like a sales pitch"]))
+        )
+
+        expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(
+          seller.id, a_string_including("flagged but did not block")
+        )
+
+        expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      it "still blocks a page on a flag that keys on concrete content" do
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["adult_content: explicit imagery described"]))
+        )
+
+        expect(described_class.check(page, :page).passed).to eq(false)
+      end
+
+      it "inherits a product's moderation exemption for its landing page takeover" do
+        product.update!(content_moderation_disabled: true)
+        product_page = Page.new(pageable: product, custom_html: "<p>Copy</p>")
+        expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+        expect(described_class.check(product_page, :page).passed).to eq(true)
+      end
+    end
+
     context "when blocklist flags the content" do
       before do
         allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
