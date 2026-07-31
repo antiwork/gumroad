@@ -34,7 +34,7 @@ describe LinksController, :vcr, type: :controller do
 
     it "sandboxes the iframe without top-navigation and mediates checkout via postMessage" do
       get :show, params: { id: product.unique_permalink }
-      expect(response.body).to include(%(sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"))
+      expect(response.body).to include(%(sandbox="#{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}"))
       expect(response.body).to include("allow-popups")
       expect(response.body).not_to include("allow-same-origin")
       expect(response.body).not_to include("allow-top-navigation")
@@ -305,7 +305,7 @@ describe LinksController, :vcr, type: :controller do
     it "applies the strict CSP and iframe-friendly response headers" do
       get :landing_iframe_content, params: { id: product.unique_permalink }
       expect(response.headers["Content-Security-Policy"]).to eq(CUSTOM_HTML_CSP)
-      expect(response.headers["Content-Security-Policy"]).to include("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox")
+      expect(response.headers["Content-Security-Policy"]).to include("sandbox #{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}")
       expect(response.headers["Content-Security-Policy"]).to include("frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com")
       # The shared Tailwind build loads from the asset host as an external
       # stylesheet, so style-src must allow it.
