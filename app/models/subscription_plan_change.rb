@@ -5,6 +5,8 @@
 # worker to check if a user has a plan change that must be made at the end of
 # the current billing period, before initiating the next recurring charge.
 class SubscriptionPlanChange < ApplicationRecord
+  PRICE_CHANGE_NOTIFICATION_CLAIM_TTL = 1.hour
+
   has_paper_trail
 
   include Deletable
@@ -41,6 +43,50 @@ class SubscriptionPlanChange < ApplicationRecord
     subquery_sqls = [for_price_change, not_for_price_change].map(&:to_sql)
     from("(" + subquery_sqls.join(" UNION ") + ") AS #{table_name}")
   }
+
+  def claim_price_change_notification
+    with_lock do
+      next if notified_subscriber_at.present?
+      next if notification_claim_id.present? &&
+        notification_claimed_at.present? &&
+        notification_claimed_at > PRICE_CHANGE_NOTIFICATION_CLAIM_TTL.ago
+
+      claim_id = SecureRandom.uuid
+      update_columns(notification_claim_id: claim_id, notification_claimed_at: Time.current)
+      claim_id
+    end
+  end
+
+  def release_price_change_notification_claim(claim_id)
+    with_lock do
+      next unless notification_claim_id == claim_id
+      next if notified_subscriber_at.present?
+
+      update_columns(notification_claim_id: nil, notification_claimed_at: nil)
+    end
+  end
+
+  def start_price_change_notification_delivery(claim_id)
+    with_lock do
+      next false if notified_subscriber_at.present? || notification_claim_id != claim_id
+
+      update_columns(notification_claimed_at: Time.current)
+      true
+    end
+  end
+
+  def confirm_price_change_notification(claim_id)
+    with_lock do
+      next false if notified_subscriber_at.present? || notification_claim_id != claim_id
+
+      update!(
+        notification_claim_id: nil,
+        notification_claimed_at: nil,
+        notified_subscriber_at: Time.current,
+      )
+      true
+    end
+  end
 
   def formatted_display_price
     formatted_price_in_currency_with_recurrence(
