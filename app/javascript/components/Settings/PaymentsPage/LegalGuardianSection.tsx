@@ -125,9 +125,35 @@ const LegalGuardianSection = ({
 
   if (!legalGuardian.required) return null;
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  // Required fields are checked here rather than by the browser: this section cannot be a <form> (see
+  // the render below), so `required` on the inputs is inert. Mirrors Guardian#has_completed_info? —
+  // without this the endpoint saves a partial guardian and reports success, leaving payouts blocked
+  // with nothing telling the seller which field is missing.
+  const missingRequiredField = () => {
+    if (formState.first_name.trim() === "") return "your guardian's first name";
+    if (formState.last_name.trim() === "") return "your guardian's last name";
+    if (formState.email.trim() === "") return "your guardian's email";
+    if (formState.date_of_birth === "") return "your guardian's date of birth";
+    if (formState.street_address.trim() === "") return "your guardian's address";
+    if (formState.city.trim() === "") return "your guardian's city";
+    if (states.length > 0 && formState.state === "") return "your guardian's state";
+    if (formState.zip_code.trim() === "") return "your guardian's ZIP code";
+    if (!existing?.has_individual_tax_id && formState.individual_tax_id.trim() === "") {
+      return sellerCountry === "US" ? "your guardian's Social Security number" : "your guardian's personal ID number";
+    }
+    return null;
+  };
+
+  const handleSubmit = async () => {
     if (isSaving) return;
+
+    const missing = missingRequiredField();
+    if (missing !== null) {
+      const message = `Please enter ${missing}.`;
+      setFormError(message);
+      showAlert(message, "error");
+      return;
+    }
 
     setIsSaving(true);
     setFormError(null);
@@ -203,7 +229,11 @@ const LegalGuardianSection = ({
         <Alert variant="success">Your guardian's details are complete and your payouts are running normally.</Alert>
       )}
 
-      <form onSubmit={(event) => void handleSubmit(event)} className="grid gap-4">
+      {/* A div, not a form, and the button below is type="button" with an onClick. The payout-settings
+          page wraps this whole section in its own <form>, and a nested form is invalid HTML — the
+          browser discards the inner one, so a submit button here would silently submit the PAGE's form
+          and the guardian would never be saved. */}
+      <div className="grid gap-4">
         <div>{formError ? <Alert variant="danger">{formError}</Alert> : null}</div>
 
         <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
@@ -214,7 +244,6 @@ const LegalGuardianSection = ({
             <Input
               id={`${uid}-first-name`}
               type="text"
-              required
               disabled={isFormDisabled}
               value={formState.first_name}
               onChange={(event) => updateForm({ first_name: event.target.value })}
@@ -227,7 +256,6 @@ const LegalGuardianSection = ({
             <Input
               id={`${uid}-last-name`}
               type="text"
-              required
               disabled={isFormDisabled}
               value={formState.last_name}
               onChange={(event) => updateForm({ last_name: event.target.value })}
@@ -243,7 +271,6 @@ const LegalGuardianSection = ({
             <Input
               id={`${uid}-email`}
               type="email"
-              required
               disabled={isFormDisabled}
               value={formState.email}
               onChange={(event) => updateForm({ email: event.target.value })}
@@ -270,7 +297,6 @@ const LegalGuardianSection = ({
           <Input
             id={`${uid}-date-of-birth`}
             type="date"
-            required
             disabled={isFormDisabled}
             value={formState.date_of_birth}
             onChange={(event) => updateForm({ date_of_birth: event.target.value })}
@@ -285,7 +311,6 @@ const LegalGuardianSection = ({
           <Input
             id={`${uid}-street-address`}
             type="text"
-            required
             disabled={isFormDisabled}
             value={formState.street_address}
             onChange={(event) => updateForm({ street_address: event.target.value })}
@@ -304,7 +329,6 @@ const LegalGuardianSection = ({
             <Input
               id={`${uid}-city`}
               type="text"
-              required
               disabled={isFormDisabled}
               value={formState.city}
               onChange={(event) => updateForm({ city: event.target.value })}
@@ -317,7 +341,6 @@ const LegalGuardianSection = ({
               </FieldsetTitle>
               <Select
                 id={`${uid}-state`}
-                required
                 disabled={isFormDisabled}
                 value={formState.state}
                 onChange={(event) => updateForm({ state: event.target.value })}
@@ -338,7 +361,6 @@ const LegalGuardianSection = ({
             <Input
               id={`${uid}-zip-code`}
               type="text"
-              required
               disabled={isFormDisabled}
               value={formState.zip_code}
               onChange={(event) => updateForm({ zip_code: event.target.value })}
@@ -355,7 +377,6 @@ const LegalGuardianSection = ({
           <Input
             id={`${uid}-individual-tax-id`}
             type="text"
-            required={!existing?.has_individual_tax_id}
             disabled={isFormDisabled}
             placeholder={existing?.has_individual_tax_id ? "•••••••••" : ""}
             value={formState.individual_tax_id}
@@ -389,11 +410,16 @@ const LegalGuardianSection = ({
         </Fieldset>
 
         <div>
-          <Button color="primary" type="submit" disabled={isSaving || isFormDisabled}>
+          <Button
+            color="primary"
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={isSaving || isFormDisabled}
+          >
             {isSaving ? "Saving…" : existing ? "Save guardian" : "Add guardian"}
           </Button>
         </div>
-      </form>
+      </div>
     </section>
   );
 };
