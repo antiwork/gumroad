@@ -15,7 +15,7 @@ class Api::V2::UpsellsController < Api::V2::BaseController
 
   def create
     @upsell = SaveUpsellService.new(seller: current_resource_owner, params:).perform
-    if @upsell.save
+    if @upsell.errors.empty?
       success_with_upsell(@upsell)
     else
       error_with_creating_object(:upsell, @upsell)
@@ -27,7 +27,7 @@ class Api::V2::UpsellsController < Api::V2::BaseController
   def update
     backfill_absent_associations
     SaveUpsellService.new(seller: current_resource_owner, params:, upsell: @upsell).perform
-    if @upsell.save
+    if @upsell.errors.empty?
       success_with_upsell(@upsell)
     else
       error_with_upsell(@upsell)

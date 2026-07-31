@@ -26,6 +26,9 @@ describe StripeMerchantAccountManager do
         allow(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, "external_account"))
       end
 
+      # A card Stripe won't pay out to is terminal, not a typo: re-entering the same card
+      # gets the same refusal, so the seller must be asked for a different account rather
+      # than told to wait for the weekly re-check.
       it "emails the creator and returns invalid_bank_account without notifying ErrorNotifier" do
         expect(ErrorNotifier).not_to receive(:notify)
 
@@ -33,8 +36,16 @@ describe StripeMerchantAccountManager do
         expect do
           result = described_class.update_bank_account(user, passphrase: "1234")
         end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-          .with(user.id, nil, "This card doesn't appear to support payouts.")
+          .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "This card doesn't appear to support payouts.")
         expect(result).to eq(:invalid_bank_account)
+      end
+
+      it "classifies the refusal as terminal rather than a format problem" do
+        error = Stripe::InvalidRequestError.new("This card doesn't appear to support payouts.", "external_account")
+
+        expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+        expect(described_class.bank_details_format_rejection?(error)).to be(false)
+        expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
       end
     end
   end

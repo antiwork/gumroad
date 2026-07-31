@@ -89,13 +89,7 @@ describe AssetPreview do
       end.not_to change { GenerateVideoPosterWorker.jobs.size }
     end
 
-    it "prefers a persisted preview over a cache miss rather than reporting no poster" do
-      allow(asset_preview).to receive(:persisted_video_poster_url).and_return("https://files.example.com/persisted.jpg")
-
-      expect(asset_preview.video_poster_url).to eq("https://files.example.com/persisted.jpg")
-    end
-
-    it "rewarms the cache from the persisted preview so later renders skip the URL build" do
+    it "rewarms the memo from the persisted preview so later renders skip the durable read" do
       allow(asset_preview).to receive(:persisted_video_poster_url).and_return("https://files.example.com/persisted.jpg")
 
       asset_preview.video_poster_url
@@ -108,7 +102,7 @@ describe AssetPreview do
       # poster only costs the nicety of a preview frame.
       allow(asset_preview.file.blob).to receive(:preview_image).and_raise(StandardError, "storage unavailable")
 
-      expect { asset_preview.video_poster_url }.not_to raise_error
+      expect(asset_preview.video_poster_url).to be_nil
     end
 
     it "returns nil for image covers, which need no poster" do

@@ -213,5 +213,13 @@ describe CustomDomainVerificationService do
 
       expect(service.has_valid_ssl_certificates?).to eq true
     end
+
+    it "checks a specific hostname without requiring its counterpart" do
+      expect(OpenSSL::X509::Certificate).to receive(:new).once
+      expect_any_instance_of(Redis::Namespace).to receive(:get).with("ssl_cert_check:www.example.com")
+      expect_any_instance_of(Redis::Namespace).to receive(:set).with("ssl_cert_check:www.example.com", true, ex: 10.days)
+
+      expect(service.has_valid_ssl_certificate_for?("www.example.com")).to be(true)
+    end
   end
 end

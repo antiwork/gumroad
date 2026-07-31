@@ -367,6 +367,19 @@ describe Api::V2::UpsellsController do
         expect(response.parsed_body["message"]).to eq("The offered variant must belong to the offered product.")
       end
 
+      it "leaves the offer code's products untouched when the update fails validation" do
+        offer_code = create(:offer_code, products: [@product], user: @user, amount_cents: 100)
+        @upsell.update!(offer_code:)
+
+        put @action, params: @params.merge(product_id: @other_product.external_id, offer_code: { amount_cents: 450 }), as: :json
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["message"]).to include("The price after discount for all of your products must be either $0 or at least $0.99.")
+        expect(offer_code.reload.products).to eq([@product])
+        expect(offer_code.amount_cents).to eq(100)
+        expect(@upsell.reload.product).to eq(@product)
+      end
+
       it "cannot update another seller's upsell" do
         other = create(:upsell, name: "Theirs")
         put @action, params: @params.merge(id: other.external_id), as: :json

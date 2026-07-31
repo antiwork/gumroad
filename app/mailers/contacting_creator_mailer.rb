@@ -93,8 +93,11 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = @disputable.seller
 
     dispute_evidence = dispute.dispute_evidence
+    # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered
+    # with none, and the sweep's windows are deliberately backdated to a few hours. Drop the ask
+    # rather than quote a deadline that has passed — the evidence is submitted without a statement.
     @dispute_evidence_content = \
-      if dispute_evidence&.seller_contacted?
+      if dispute_evidence&.seller_contacted? && dispute_evidence.hours_left_to_submit_evidence.positive?
         safe_join(
           [
             tag.p(tag.b("Any additional information you can provide in the next #{pluralize(dispute_evidence.hours_left_to_submit_evidence, "hour")} will help us win on your behalf.")),
@@ -142,12 +145,8 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your last week."
   end
 
-  # rejection_kind distinguishes a bank-code FORMAT rejection (the value can never be accepted
-  # as typed, so the seller has to correct it) from a directory miss (the bank or branch may
-  # simply not be in our payment partner's records yet, which waiting can fix). The two cases
-  # need opposite advice, so the template branches on it. stripe_error_message is Stripe's own
-  # message, which for format rejections names the expected format for the seller's country —
-  # the single most actionable thing we can tell them.
+  # The three rejection kinds need opposite advice — correct the value, use a different account,
+  # or wait — so the kind has to reach the template rather than being flattened to one message.
   def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil)
     @seller = User.find(user_id)
     @format_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT
@@ -156,11 +155,14 @@ class ContactingCreatorMailer < ApplicationMailer
     # this particular account. Telling these sellers to check for typos or to wait is what
     # kept one of them re-saving a correct account for three months (gumroad-private#1476).
     @account_blocked = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED
+    @terminal_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL
     @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
     @subject = if @account_blocked
       "Please add a different bank account for payouts."
     elsif @format_rejected
       "Your bank details need correcting for payouts."
+    elsif @terminal_rejected
+      "We need a different bank account for your payouts."
     else
       "We couldn't verify your bank account yet."
     end

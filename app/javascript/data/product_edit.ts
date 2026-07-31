@@ -77,14 +77,14 @@ export class StaleContentConflictError extends Error {
 // any mutation, so nothing was written and the removals are still pending in
 // this editor session.
 //
-// The 409 carries a fresh `editor_revision`, and this error deliberately does
-// NOT expose it. Adopting that token would authorise the session's next save —
-// which is still the full stale snapshot — to delete, so the deletion would go
-// through while every field another session changed in the meantime got
-// reverted to this session's values. The seller confirmed a deletion, not an
-// overwrite. Retrying safely means reconciling against current stored state, or
-// a payload that can only delete; neither exists client-side yet
-// (gumroad-private#1532), so the recovery here is a reload.
+// The 409 carries NO fresh `editor_revision`, and must not: adopting one would
+// authorise the session's next save — still the full stale snapshot — to delete,
+// so the deletion would go through while every field another session changed in
+// the meantime got reverted to this session's values. The seller confirmed a
+// deletion, not an overwrite. Retrying safely means reconciling against current
+// stored state, or a payload that can only delete; neither exists yet
+// (gumroad-private#1532), so the recovery here is a reload — which issues a
+// current token of its own.
 export class StaleDeletionConflictError extends Error {}
 
 // The server's error payload for a rejected save. Every conflict the editor can
@@ -94,9 +94,6 @@ export class StaleDeletionConflictError extends Error {}
 export type SaveProductErrorPayload = {
   error_message: string;
   error_code?: string;
-  // Sent with a stale_deletion_conflict. Read by nothing here on purpose — see
-  // StaleDeletionConflictError for why the editor must not adopt it.
-  editor_revision?: string | null;
   hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
   stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
 };

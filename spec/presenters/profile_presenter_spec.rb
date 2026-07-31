@@ -190,6 +190,9 @@ describe ProfilePresenter do
           profile_settings: {
             name: seller.name,
             bio: seller.bio,
+            font: seller.seller_profile.font,
+            background_color: seller.seller_profile.background_color,
+            highlight_color: seller.seller_profile.highlight_color,
             profile_picture_blob_id: nil,
           },
           editable_profile: {
@@ -199,6 +202,7 @@ describe ProfilePresenter do
           },
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
           profile_version: a_kind_of(String),
+          seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
           custom_html_pages_enabled: false,
           has_custom_landing_page: false,
           username: seller.username,

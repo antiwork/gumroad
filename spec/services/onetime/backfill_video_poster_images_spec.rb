@@ -39,6 +39,53 @@ describe Onetime::BackfillVideoPosterImages do
     expect(GenerateVideoPosterWorker.jobs).to be_empty
   end
 
+  # The batch is selected by id, then read again to eager-load the blobs. That
+  # second read has to stay inside the eligibility scope: ReplicaLagWatcher.watch
+  # runs between the two, so a cover deleted in that window would otherwise still
+  # get a generation job.
+  it "does not enqueue a cover that stopped being eligible after its batch was selected" do
+    asset_preview = create(:asset_preview_mov)
+    GenerateVideoPosterWorker.jobs.clear
+
+    allow(ReplicaLagWatcher).to receive(:watch) { asset_preview.mark_deleted! }
+
+    expect(described_class.process).to eq(enqueued: 0, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs).to be_empty
+  end
+
+  it "does not enqueue a cover whose file was detached after its batch was selected" do
+    asset_preview = create(:asset_preview_mov)
+    GenerateVideoPosterWorker.jobs.clear
+
+    allow(ReplicaLagWatcher).to receive(:watch) { asset_preview.file.purge }
+
+    expect(described_class.process).to eq(enqueued: 0, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs).to be_empty
+  end
+
+  it "does not enqueue a cover retyped to a non-video after its batch was selected" do
+    asset_preview = create(:asset_preview_mov)
+    GenerateVideoPosterWorker.jobs.clear
+
+    allow(ReplicaLagWatcher).to receive(:watch) do
+      asset_preview.file.blob.update!(content_type: "image/jpeg")
+    end
+
+    expect(described_class.process).to eq(enqueued: 0, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs).to be_empty
+  end
+
+  # Every other example fits in one batch, which leaves the batching itself
+  # unwitnessed: a boundary error that skipped later batches would pass them all.
+  it "enqueues every eligible cover across multiple batches" do
+    asset_previews = create_list(:asset_preview_mov, 3)
+    GenerateVideoPosterWorker.jobs.clear
+
+    expect(described_class.process(batch_size: 1)).to eq(enqueued: 3, skipped: 0)
+    expect(GenerateVideoPosterWorker.jobs.map { _1["args"].first })
+      .to match_array(asset_previews.map(&:id))
+  end
+
   it "leaves image covers and deleted video covers alone" do
     create(:asset_preview_jpg)
     create(:asset_preview_mov).mark_deleted!

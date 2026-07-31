@@ -836,10 +836,22 @@ class User < ApplicationRecord
     super || build_seller_profile
   end
 
+  # seller_profiles predates a uniqueness constraint. Lock the seller before a locking/current
+  # profile read so first saves serialize without establishing a stale repeatable-read snapshot.
+  def with_locked_seller_profile
+    with_lock do
+      profile_association = association(:seller_profile)
+      profile_association.reset
+      profile = SellerProfile.lock.find_by(seller_id: id) || build_seller_profile
+      profile_association.target = profile
+      yield profile
+    end
+  end
+
   # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
   # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
   # they take this lock and re-read the sections inside it to avoid clobbering each other. The
-  # profile editor holds the same row via seller_profile.lock!, so all writers serialize on it.
+  # profile editor holds the same row via #with_locked_seller_profile, so all writers serialize on it.
   # Looked up directly (not via #seller_profile, which builds a record) so callers like product
   # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
   # saved profile has nothing to serialize against, so it just runs the block.
@@ -1043,6 +1055,11 @@ class User < ApplicationRecord
     hostnames << URI("#{PROTOCOL}://#{subdomain}").host if subdomain.present?
     hostnames << custom_domain.domain if custom_domain&.active?
     hostnames.compact.uniq
+  end
+
+  # Exact-host DNS is refreshed by the verification worker, never while rendering a profile.
+  def store_host_with_protocol
+    custom_domain&.strictly_routable? ? "#{PROTOCOL}://#{custom_domain.domain}" : subdomain_with_protocol
   end
 
   def auto_transcode_videos?
