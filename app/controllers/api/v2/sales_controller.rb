@@ -9,6 +9,10 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10
+  # Per-query cap for the two paginated-sales paths. Must stay strictly below the
+  # Rack::Timeout service budget so a slow query becomes a 400 explaining how to
+  # narrow it, rather than a killed request (and, in production, a killed worker).
+  QUERY_TIMEOUT_DEFAULT_SECONDS = 10
   SALES_API_PRELOADS = [
     :preorder,
     :subscription,
@@ -56,7 +60,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     if params[:page] # DEPRECATED
       filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, root_scope: current_resource_owner.sales)
       begin
-        timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || 15).to_i
+        timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || QUERY_TIMEOUT_DEFAULT_SECONDS).to_i
         WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
           paginated_sales = filtered_sales.for_sales_api.preload(*SALES_API_PRELOADS).limit(RESULTS_PER_PAGE + 1).offset((@page - 1) * RESULTS_PER_PAGE).to_a
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
@@ -86,9 +90,14 @@ class Api::V2::SalesController < Api::V2::BaseController
     # protection on the deprecated `page` path above. The underlying
     # `for_sales_api_ordered_by_date` UNION query can run for minutes on very large
     # accounts with broad filters; without this guard the request runs until
-    # Rack::Timeout kills the worker process at 120s.
+    # Rack::Timeout kills the worker process.
+    #
+    # Must stay strictly below the Rack::Timeout service budget (15s) so this guard
+    # fires first and returns a 400 explaining how to narrow the query. At or above
+    # the budget the request is killed instead, which takes the Puma worker with it
+    # (RACK_TIMEOUT_TERM_ON_TIMEOUT=1 in production).
     begin
-      timeout_s = ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || 15).to_i
+      timeout_s = ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || QUERY_TIMEOUT_DEFAULT_SECONDS).to_i
       WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
         paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
         subquery_filters = ->(query) {

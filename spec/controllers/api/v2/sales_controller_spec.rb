@@ -248,7 +248,7 @@ describe Api::V2::SalesController do
       end
 
       it "runs the page_key query inside a query timeout guard" do
-        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 15).and_call_original
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 10).and_call_original
 
         get :index, params: @params
         expect(response.code).to eq "200"
