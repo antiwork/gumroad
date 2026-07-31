@@ -743,6 +743,17 @@ describe CustomerLowPriorityMailer do
         expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
       end
 
+      it "addresses the buyer of the purchase it is about, not an excluded first row" do
+        excluded = create(:purchase, full_name: "Excluded Buyer", email: "excluded@example.com", can_contact: false)
+        mixed_order = create(:order, purchaser: nil, purchases: [excluded, purchase])
+
+        mail = CustomerLowPriorityMailer.order_review_reminder(mixed_order.id)
+
+        expect(mail.to).to eq([purchase.email])
+        expect(mail.to).not_to include(excluded.email)
+        expect(mail.body.encoded).to have_text("Hi Buyer,")
+      end
+
       it "does not send when no purchase in the order is still eligible" do
         order.update!(purchaser: nil)
         purchase.update!(can_contact: false)

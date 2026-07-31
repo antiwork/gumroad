@@ -371,7 +371,6 @@ class CustomerLowPriorityMailer < ApplicationMailer
     order = Order.find(order_id)
     purchaser = order.purchaser
     return if purchaser&.opted_out_of_review_reminders?
-    first_purchase = order.purchases.first
 
     # Re-checked at render time: the :low queue can lag behind a buyer unsubscribing, and for
     # a guest the purchaser opt-out above is always nil. No purchase_for_review_reminder
@@ -380,18 +379,23 @@ class CustomerLowPriorityMailer < ApplicationMailer
     reviewable = order.purchases.select { _1.eligible_for_review_reminder? }
     return if reviewable.empty?
 
+    # Every recipient-shaped value comes from this one row. `order.purchases.first` can be a
+    # purchase the reminder excludes, and its email can differ from the eligible rows' (support
+    # reassignment rewrites a single purchase's email), so reading the address from it would mail
+    # a buyer this reminder is not about while the unsubscribe link cleared someone else's row.
+    # Orders whose eligible purchases no longer share one address are split per-purchase upstream.
+    recipient_purchase = reviewable.first
+
     @title = "Liked your order? Leave some reviews!"
-    @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
+    @purchaser_name = recipient_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
-    email = purchaser&.email || first_purchase.email
-    # `purchases.first` can be a row excluded from the reminder, which would point the guest's
-    # only unsubscribe link at a seller who is not one of the senders.
-    @unsub_link = review_reminder_unsubscribe_url(purchaser, email, purchase: reviewable.first)
+    email = purchaser&.email || recipient_purchase.email
+    @unsub_link = review_reminder_unsubscribe_url(purchaser, email, purchase: recipient_purchase)
 
     mail(
       to: email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: reviewable.first.seller, to: email)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: recipient_purchase.seller, to: email)
     )
   end
 
