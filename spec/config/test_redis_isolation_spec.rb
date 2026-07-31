@@ -372,6 +372,96 @@ describe TestRedisIsolation do
     end
   end
 
+  describe ".register_command!" do
+    # The spring shape: the app is preloaded once and every test command is a fork of it,
+    # so the forks inherit one lease and cannot re-lease (their stores connected before
+    # they existed). Two of them flush the same databases, which is the original race
+    # wearing a valid lease — so the second one has to say so.
+    let(:claimed) { claim }
+    let(:commands_key) { "#{claimed.fetch(:key)}#{described_class::COMMANDS_KEY_SUFFIX}" }
+
+    after do
+      with_registry { |registry| registry.del(commands_key) }
+      described_class.release_lease(claimed)
+    end
+
+    def register_in_fork(claimed, hold: 0.6)
+      reader, writer = IO.pipe
+      pid = fork do
+        reader.close
+        warnings = StringIO.new
+        live = described_class.register_command!(warn_io: warnings, claim: claimed)
+        writer.puts(Marshal.dump([live, warnings.string]).unpack1("H*"))
+        writer.close
+        sleep(hold)
+        exit(0)
+      end
+      writer.close
+      result = Marshal.load([reader.gets.chomp].pack("H*"))
+      reader.close
+      [pid, *result]
+    end
+
+    it "warns the second command that it is sharing the first command's databases" do
+      first_pid, first_live, first_warnings = register_in_fork(claimed)
+      _second_pid, second_live, second_warnings = register_in_fork(claimed, hold: 0)
+
+      # The first command is alone and must not cry wolf.
+      expect(first_live).to be_empty
+      expect(first_warnings).to be_empty
+
+      expect(second_live).to eq([first_pid.to_s])
+      expect(second_warnings).to include("2 test commands are sharing Redis databases #{claimed.fetch(:databases).join(', ')}")
+      expect(second_warnings).to include("DISABLE_SPRING=1")
+
+      Process.waitall
+    end
+
+    it "removes the command from the lease when it exits" do
+      # Asserted against the registry rather than through a later register_command!,
+      # because the liveness prune would clean a dead pid up anyway and carry the
+      # example on its own — leaving this deregistration untested. It is not redundant
+      # with the prune: pids are reused, and a stale field whose pid has been handed to
+      # an unrelated process reads as a live sibling.
+      _pid, _live, _warnings = register_in_fork(claimed, hold: 0)
+      Process.waitall
+
+      with_registry { |registry| expect(registry.hkeys(commands_key)).to be_empty }
+    end
+
+    it "does not warn about a command killed before it could deregister" do
+      # SIGKILL skips at_exit, so the field outlives the process. Without the liveness
+      # check every later command would warn about a pid that no longer exists, and a
+      # warning that is always on is a warning nobody reads.
+      killed = fork { sleep 30 }
+      with_registry { |registry| registry.hset(commands_key, killed.to_s, Time.now.to_i) }
+      Process.kill("KILL", killed)
+      Process.wait(killed)
+
+      warnings = StringIO.new
+      live = described_class.register_command!(warn_io: warnings, claim: claimed)
+
+      expect(live).to be_empty
+      expect(warnings.string).to be_empty
+      with_registry { |registry| expect(registry.hkeys(commands_key)).not_to include(killed.to_s) }
+    end
+
+    it "gives the commands hash the lease's TTL so it cannot outlive the block" do
+      described_class.register_command!(warn_io: StringIO.new, claim: claimed)
+
+      with_registry do |registry|
+        expect(registry.ttl(commands_key)).to be_between(1, described_class::LEASE_TTL_SECONDS)
+      end
+    end
+
+    it "does nothing when this process never leased a block" do
+      warnings = StringIO.new
+
+      expect(described_class.register_command!(warn_io: warnings, claim: nil)).to be_nil
+      expect(warnings.string).to be_empty
+    end
+  end
+
   describe "the isolation this run is itself using" do
     it "gives every Redis store a distinct database outside the .env.development block" do
       in_use = described_class::STORE_ENV_VARS.map { parse(ENV.fetch(it)).fetch(:database) }

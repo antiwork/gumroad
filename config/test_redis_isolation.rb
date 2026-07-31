@@ -30,9 +30,13 @@ require "socket"
 # Under spring the lease is claimed once per app process, which spring runs per checkout —
 # so separate worktrees still get separate blocks, which is the case this exists for. Its
 # per-command forks share their server's block, so two simultaneous runs in ONE checkout
-# are no more isolated than today; `DISABLE_SPRING=1` gives each its own. The pid guard on
-# the release is what makes this safe. Note the opt-out below is read at preload too, so
-# under a live spring server it needs `DISABLE_SPRING=1` or a `bin/spring stop` first.
+# are no more isolated than today; `DISABLE_SPRING=1` gives each its own. A fork cannot
+# lease a block of its own, because every store connected at preload against the block the
+# server leased — so `register_command!` (wired up in config/spring.rb) makes the overlap
+# LOUD instead of silent, which is the whole reason the skip paths above warn. The pid
+# guard on the release is what makes the shared lease safe. Note the opt-out below is read
+# at preload too, so under a live spring server it needs `DISABLE_SPRING=1` or a
+# `bin/spring stop` first.
 #
 # Capacity is the constraint: 16 databases is one concurrent run, hence
 # `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
@@ -51,6 +55,10 @@ module TestRedisIsolation
   LEASE_TTL_SECONDS = 300
   LEASE_REFRESH_SECONDS = 60
 
+  # Field of the lease's companion hash, which tracks the command processes currently
+  # sharing the block. Only spring forks land in it.
+  COMMANDS_KEY_SUFFIX = ":commands"
+
   # Release and refresh both compare the token first, so a run can never touch a block
   # that expired out from under it and was re-leased by someone else.
   RELEASE_SCRIPT = <<~LUA
@@ -64,6 +72,10 @@ module TestRedisIsolation
   LUA
 
   class << self
+    # The claim this process holds, or nil. Under spring the forks inherit it, which is
+    # what `register_command!` exists to notice.
+    attr_reader :claim
+
     # Rewrites ENV in place. Returns the claimed slot number, or nil when isolation was
     # skipped (not the test env, opted out, unparseable env, or no free block).
     def install!(env: ENV, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
@@ -99,6 +111,7 @@ module TestRedisIsolation
       end
       keep_lease_alive(claim)
       release_lease_at_exit(claim)
+      @claim = claim
 
       warn_io.puts("[test-redis-isolation] slot #{claim[:slot]} → Redis databases #{claim[:databases].join(', ')} on #{server}")
       claim[:slot]
@@ -184,6 +197,54 @@ module TestRedisIsolation
       # one slot and must not turn a passing run into a crash on exit.
     end
 
+    # Called from config/spring.rb after spring forks a command process. The fork cannot
+    # lease a block of its own — every store connected during preload against the block
+    # the server leased, and rewriting ENV here would not move an open connection — so
+    # this records the command in the lease's companion hash and warns when a sibling
+    # command is already using the same block. Silence is the thing this file cannot
+    # afford: a shared block that looks isolated is the original race with a valid lease
+    # on top of it.
+    def register_command!(warn_io: $stderr, claim: self.claim)
+      return nil if claim.nil?
+
+      commands_key = "#{claim.fetch(:key)}#{COMMANDS_KEY_SUFFIX}"
+      # Its own connection: the registry socket was opened before the fork, so every
+      # command would be writing down one shared file descriptor.
+      registry = Redis.new(url: claim.fetch(:registry).id)
+      me = Process.pid.to_s
+
+      registry.hset(commands_key, me, Time.now.to_i)
+      registry.expire(commands_key, LEASE_TTL_SECONDS)
+
+      siblings = registry.hkeys(commands_key).reject { |pid| pid == me }
+      # A command killed with SIGKILL never removes its own field, so a stale pid would
+      # warn forever. Spring runs one server per host, so these pids are all local.
+      dead, live = siblings.partition { |pid| !process_alive?(pid) }
+      registry.hdel(commands_key, *dead) if dead.any?
+
+      owner = Process.pid
+      at_exit do
+        next unless Process.pid == owner
+        registry.hdel(commands_key, me)
+      rescue Redis::BaseError, RedisClient::Error, IOError
+        # The hash carries the lease's TTL, so a missed cleanup costs a stale warning at
+        # worst — never a crash on exit.
+      end
+
+      if live.any?
+        warn_io.puts(<<~WARNING.chomp)
+          [test-redis-isolation] #{live.length + 1} test commands are sharing Redis databases #{claim.fetch(:databases).join(', ')} (pids #{(live + [me]).join(', ')}).
+          [test-redis-isolation] Spring preloads the app once per checkout and forks each command from it, so they inherit one lease and will flush each other's keys mid-test. Run them with DISABLE_SPRING=1, or from separate checkouts.
+        WARNING
+      end
+
+      live
+    rescue Redis::BaseError, RedisClient::Error, IOError => e
+      # Same rule as install!: never let bookkeeping stop a test run.
+      warn_io.puts("[test-redis-isolation] could not register this command: #{e.class}: #{e.message}")
+      nil
+    end
+
     private
       def capacity_warning(server:, databases:, slots:)
         <<~WARNING.chomp
@@ -231,6 +292,17 @@ module TestRedisIsolation
 
       def truthy?(value)
         %w[1 true yes].include?(value.to_s.downcase)
+      end
+
+      # Signal 0 asks "may I signal this pid" — EPERM means it exists but belongs to
+      # someone else, which still counts as alive.
+      def process_alive?(pid)
+        Process.kill(0, Integer(pid))
+        true
+      rescue Errno::ESRCH, ArgumentError, TypeError
+        false
+      rescue Errno::EPERM
+        true
       end
   end
 end
