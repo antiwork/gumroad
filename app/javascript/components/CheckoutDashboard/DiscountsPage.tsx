@@ -1261,6 +1261,9 @@ const Form = ({
                       <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
                     )}
                   </NumberInput>
+                  <p className="text-muted-foreground text-sm">
+                    Each product a customer buys uses one. A customer checking out with five products uses five.
+                  </p>
                 </Fieldset>
               </Dropdown>
             </Details>

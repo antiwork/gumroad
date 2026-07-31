@@ -155,6 +155,7 @@ export const Checkout = ({
             "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount.",
             "warning",
           );
+        else if (discount.notice) showAlert(discount.notice, "warning");
         updateCart({
           discountCodes: [
             { code, products: discount.products_data, fromUrl },

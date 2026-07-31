@@ -18,7 +18,7 @@ class OfferCodeDiscountComputingService
   end
 
   def process
-    products_data = {}
+    products_data = @products_data = {}
 
     links.each do |link|
       purchase_quantity = products[link.unique_permalink][:quantity].to_i
@@ -40,7 +40,8 @@ class OfferCodeDiscountComputingService
 
     {
       products_data:,
-      error_code:
+      error_code:,
+      partial_ineligibility_code:
     }
   end
 
@@ -136,6 +137,24 @@ class OfferCodeDiscountComputingService
       return :invalid_offer if @applicable_offer_codes.blank?
       return :inactive if @applicable_offer_codes.all?(&:inactive?)
 
+      # Only fatal when nothing survived. The loop above deliberately builds a
+      # partial products_data (see the class comment) — collapsing that into a
+      # rejection is what made a capped code look globally broken to buyers whose
+      # carts were merely wider than the cap.
+      return nil if @products_data.present?
+
+      highest_priority_ineligibility
+    end
+
+    # Set when SOME lines were discounted and others skipped: not an error, but
+    # the reason the discount does not cover the whole cart.
+    def partial_ineligibility_code
+      return nil if @products_data.blank?
+
+      highest_priority_ineligibility
+    end
+
+    def highest_priority_ineligibility
       return nil if @product_level_ineligibilities.blank?
 
       PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY
