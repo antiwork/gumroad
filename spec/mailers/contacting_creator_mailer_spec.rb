@@ -1521,6 +1521,46 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "undeliverable_ping_subscription" do
+    let(:seller) { create(:user) }
+    let(:oauth_application) { create(:oauth_application, owner: seller, name: "Gumroad Store Agent") }
+    let(:resource_subscription) { create(:resource_subscription, oauth_application:, user: seller) }
+
+    it "names the affected webhook and tells a seller with a revoked credential to re-authorize" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "Your sale webhook is not being sent"
+      expect(mail.body.encoded).to include "Gumroad Store Agent"
+      expect(mail.body.encoded).to include "no longer has permission to read your sales"
+      expect(mail.body.encoded).to include "Re-authorize the application"
+      expect(mail.body.encoded).to include settings_advanced_url
+      expect(mail.body.encoded).not_to include "does not have a URL to send to"
+    end
+
+    it "tells a seller with no post URL to add one" do
+      resource_subscription.update_column(:post_url, nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
+      )
+
+      expect(mail.body.encoded).to include "does not have a URL to send to"
+      expect(mail.body.encoded).not_to include "no longer has permission to read your sales"
+    end
+
+    it "does not leak the post URL or any identifier of the seller's account" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.body.encoded).not_to include resource_subscription.post_url
+      expect(mail.body.encoded).not_to include seller.id.to_s
+    end
+  end
+
   describe "chargeback_lost_no_refund_policy" do
     let(:seller) { create(:user) }
 

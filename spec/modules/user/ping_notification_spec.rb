@@ -108,4 +108,61 @@ describe User::PingNotification do
       expect(sale_post_urls).to match_array([])
     end
   end
+
+  describe "#ping_notification_targets" do
+    let(:user) { create(:user) }
+    let(:oauth_app) { create(:oauth_application, owner: user) }
+
+    it "classifies a subscription with a live view_sales token as deliverable" do
+      create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+      subscription = create(:resource_subscription, oauth_application: oauth_app, user:)
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.deliverable_subscriptions).to eq([subscription])
+      expect(targets.undeliverable_subscriptions).to be_empty
+      expect(targets.post_urls).to match_array([[subscription.post_url, subscription.content_type]])
+    end
+
+    it "classifies a subscription whose token was revoked after creation as undeliverable" do
+      token = create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+      subscription = create(:resource_subscription, oauth_application: oauth_app, user:)
+      token.update!(revoked_at: Time.current)
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.undeliverable_subscriptions).to eq([subscription])
+      expect(targets.deliverable_subscriptions).to be_empty
+      expect(targets.post_urls).to be_empty
+    end
+
+    it "classifies a subscription with no post URL as undeliverable" do
+      create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+      subscription = create(:resource_subscription, oauth_application: oauth_app, user:)
+      subscription.update_column(:post_url, nil)
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.undeliverable_subscriptions).to eq([subscription])
+    end
+
+    it "omits a subscription whose application was deleted from both lists" do
+      create(:resource_subscription, oauth_application: oauth_app, user:)
+      oauth_app.mark_deleted!
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.deliverable_subscriptions).to be_empty
+      expect(targets.undeliverable_subscriptions).to be_empty
+    end
+
+    it "includes the seller's own notification endpoint in post_urls without a subscription" do
+      user.update!(notification_endpoint: "https://example.com/hook")
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.post_urls).to match_array([["https://example.com/hook", user.notification_content_type]])
+      expect(targets.undeliverable_subscriptions).to be_empty
+    end
+  end
 end

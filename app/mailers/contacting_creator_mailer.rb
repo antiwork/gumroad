@@ -359,6 +359,16 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "We were unable to stamp your PDF"
   end
 
+  # The two reasons need opposite advice — fill in a URL, or re-authorize the app that owns the
+  # subscription — so the reason reaches the template instead of being flattened to one message.
+  def undeliverable_ping_subscription(resource_subscription_id, reason)
+    @resource_subscription = ResourceSubscription.find(resource_subscription_id)
+    @seller = @resource_subscription.user
+    @application_name = @resource_subscription.oauth_application&.name
+    @missing_post_url = reason.to_s == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
+    @subject = "Your #{@resource_subscription.resource_name} webhook is not being sent"
+  end
+
   def chargeback_lost_no_refund_policy(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable

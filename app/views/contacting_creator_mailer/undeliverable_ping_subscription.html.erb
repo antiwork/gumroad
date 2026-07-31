@@ -1,0 +1,25 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    Your <%= @resource_subscription.resource_name %> webhook<%= " for #{@application_name}" if @application_name.present? %>
+    is still listed as active, but we are not able to send anything to it, so you are not receiving
+    notifications for these events.
+  </p>
+  <% if @missing_post_url %>
+    <p>
+      The webhook does not have a URL to send to. Add one and we will start sending
+      <%= @resource_subscription.resource_name %> notifications from your next sale onwards.
+    </p>
+  <% else %>
+    <p>
+      The application that created this webhook no longer has permission to read your sales, which
+      is required for us to send it. Re-authorize the application and we will start sending
+      <%= @resource_subscription.resource_name %> notifications from your next sale onwards.
+    </p>
+  <% end %>
+  <p>
+    You can review your webhooks and set a notification URL directly under
+    <%= link_to "advanced settings", settings_advanced_url %>, and read how these notifications work
+    on our <%= link_to "ping documentation", ping_url %>.
+  </p>
+</div>
