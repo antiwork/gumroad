@@ -24,14 +24,17 @@ class DeleteGuardianStripePersonJob
               "#{stripe_account_id} could not be deleted and exhausted Sidekiq retries. The " \
               "guardian's details are still held at Stripe. See Sentry for the underlying error."
 
-    ErrorNotifier.notify(content)
-
+    # The breadcrumb is written BEFORE the notify: ErrorNotifier is the transport most likely to be
+    # unavailable here, and a raise from it would skip the one record that is meant to outlive
+    # Sentry's retention.
     begin
       User.find_by(id: user_id)&.add_payout_note(content:, seller_visible: false)
     rescue => e
       Rails.logger.error("Failed to record erasure breadcrumb for user #{user_id}: #{e.class}: #{e.message}")
       ErrorNotifier.notify(e)
     end
+
+    ErrorNotifier.notify(content)
   end
 
   def perform(stripe_person_id, stripe_account_id, user_id)

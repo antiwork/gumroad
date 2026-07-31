@@ -67,5 +67,20 @@ describe DeleteGuardianStripePersonJob do
       expect(note.content).to include("person_retry_me")
       expect(note.content).to include("still held at Stripe")
     end
+
+    # The breadcrumb exists precisely because Sentry events age out, so a Sentry transport failure
+    # must not be what stops it being written. Notifying first meant a raising notifier skipped the
+    # one durable record.
+    it "still records the breadcrumb when notifying fails" do
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "sentry down")
+
+      expect do
+        described_class.sidekiq_retries_exhausted_block.call(message, StandardError.new("boom"))
+      end.to raise_error(StandardError, "sentry down")
+
+      note = user.reload.comments.last
+      expect(note.comment_type).to eq(Comment::COMMENT_TYPE_PAYOUT_NOTE)
+      expect(note.content).to include("person_retry_me")
+    end
   end
 end

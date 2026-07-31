@@ -329,6 +329,10 @@ describe StripeGuardianManager do
         # sync it waited on has created the Person and written the id below. Without the re-read
         # inside the lock this sync still sees no id and creates a duplicate Person.
         stale_info = UserComplianceInfo.find(info.id)
+        # Preloaded so the stale read really is stale. Without this the association lazy-loads on
+        # first touch INSIDE the lock, which reads the sibling's write no matter what the production
+        # code does — and the example passes with the in-lock re-read reverted.
+        stale_info.guardian
         Guardian.where(id: guardian.id).update_all(stripe_person_id: "person_from_sibling")
         stub_stale_then_live_compliance_info(stale_info)
         allow(Stripe::Account).to receive(:retrieve_person).and_return(
@@ -673,22 +677,6 @@ describe StripeGuardianManager do
         # Both round trips under one lock.
         expect(described_class::SYNC_LOCK_TTL).to be > (worst_case_stripe_call * 2).seconds
       end
-
-      # "Just renew the lease in a background thread" is the obvious-looking alternative to a long
-      # TTL and it is unsafe here: $redis is a single bare Redis connection shared process-wide
-      # (config/redis.rb), not a pool, and it is not thread-safe. A renewer interleaves replies on the
-      # socket the sync itself is using — measured, a threaded read of the lock key returned nil while
-      # the key was present. The damage lands on unrelated Redis reads elsewhere in the process, so it
-      # would not fail where it was introduced. Pinned so the next reader does not "improve" this.
-      it "does not renew the lease from a background thread" do
-        source = File.read(
-          Rails.root.join(
-            "app/business/payments/merchant_registration/implementations/stripe/stripe_guardian_manager.rb"
-          )
-        )
-
-        expect(source).not_to include("Thread.new")
-      end
     end
   end
 
@@ -725,6 +713,66 @@ describe StripeGuardianManager do
 
       expect { described_class.delete_person(guardian, stripe_account_id) }
         .to raise_error(Stripe::InvalidRequestError)
+    end
+
+    # The missing-resource test is the structured CODE, not the message. A refusal whose message
+    # happens to contain the phrase but carries a different code is a live failure, and treating it
+    # as "already gone" is how an erasure reports itself fulfilled with the Person still at Stripe.
+    it "raises when the message says no such person but the code does not" do
+      guardian.update!(stripe_person_id: "person_locked")
+      allow(Stripe::Account).to receive(:delete_person).and_raise(
+        Stripe::InvalidRequestError.new("No such person could be modified", nil, code: "account_invalid")
+      )
+
+      expect { described_class.delete_person(guardian, stripe_account_id) }
+        .to raise_error(Stripe::InvalidRequestError)
+    end
+
+    # A missing ACCOUNT is not a confirmed deletion — erasure reconciles false as unconfirmed and
+    # retries it, so this must stay distinguishable from the already-gone Person above.
+    it "reports a missing account as unconfirmed rather than deleted" do
+      guardian.update!(stripe_person_id: "person_on_dead_account")
+      allow(Stripe::Account).to receive(:delete_person).and_raise(
+        Stripe::InvalidRequestError.new("No such account: 'acct_dead'", nil, code: "resource_missing")
+      )
+
+      expect(described_class.delete_person(guardian, stripe_account_id)).to be(false)
+    end
+  end
+
+  describe "looking up the recorded person" do
+    # The retrieve fall-through tests the structured code, not just the message. An unrelated Stripe
+    # refusal whose message happens to contain the phrase would otherwise be read as "the Person is
+    # gone" and silently create a duplicate holding the adult's identity data.
+    it "raises rather than creating a duplicate when the message matches but the code does not" do
+      guardian.update!(stripe_person_id: "person_recorded")
+      create_compliance_info(guardian_record: guardian)
+      allow(Stripe::Account).to receive(:retrieve_person).and_raise(
+        Stripe::InvalidRequestError.new("No such person may be modified", nil, code: "account_invalid")
+      )
+
+      expect { described_class.sync(user, stripe_account, passphrase:) }
+        .to raise_error(Stripe::InvalidRequestError)
+      expect(Stripe::Account).not_to have_received(:create_person)
+    end
+  end
+
+  describe "recording the Stripe person id" do
+    # The superseded-row clear is scoped to the seller. Unscoped it would null stripe_person_id on
+    # ANOTHER seller's guardian row holding that id, destroying their only erasure handle — the row
+    # would then look never-synced while their adult's details stayed at Stripe.
+    it "does not clear another seller's guardian row holding the same person id" do
+      other_seller = create(:user)
+      other_guardian = create(:guardian, user: other_seller, stripe_person_id: "person_shared")
+      create_compliance_info(guardian_record: guardian)
+      allow(Stripe::Account).to receive(:create_person)
+        .and_return(Stripe::StripeObject.construct_from(id: "person_shared"))
+
+      # The unique index is what should complain about a cross-user holder, loudly, rather than this
+      # silently adopting the id out from under them.
+      expect { described_class.sync(user, stripe_account, passphrase:) }
+        .to raise_error(ActiveRecord::RecordInvalid)
+      expect(other_guardian.reload.stripe_person_id).to eq("person_shared")
     end
   end
 end

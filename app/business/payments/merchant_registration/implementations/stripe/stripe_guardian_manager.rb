@@ -40,15 +40,15 @@ module StripeGuardianManager
   # long a process killed mid-sync blocks the next one, and a missed sync self-heals on the next
   # account update. Pinned against the client's own numbers in the spec, not hardcoded twice.
   #
-  # Sizing the lease is the fix here rather than renewing it in a background thread, and that is not
-  # a style preference: $redis is a single bare Redis connection shared process-wide
-  # (config/redis.rb), not a pool, and it is not thread-safe. A renewer thread interleaves replies on
-  # the socket the sync itself is using — verified, a threaded read of the lock key returned nil
-  # while the key was demonstrably present. So the renewer would corrupt unrelated Redis reads
-  # elsewhere in the process rather than failing where it was added.
+  # Sizing the lease is the fix here rather than renewing it in a background thread: $redis is a
+  # single bare Redis connection shared process-wide (config/redis.rb), so a renewer thread
+  # interleaves replies on the socket the sync itself is using and would corrupt unrelated Redis
+  # reads elsewhere in the process rather than failing where it was added.
   SYNC_LOCK_TTL = 20.minutes
   SYNC_LOCK_WAIT_TIMEOUT = 10.seconds
-  SYNC_LOCK_RETRY_INTERVAL_SECONDS = 0.05
+  # Coarse on purpose: the waiter is a Puma thread during account onboarding, and every retry is a
+  # SET on the shared connection. Nothing here needs sub-second granularity.
+  SYNC_LOCK_RETRY_INTERVAL_SECONDS = 0.25
   # RedisClient::Error is listed alongside Redis::BaseError because it is not a subclass of it — a
   # connection failure raised by the underlying client escapes a Redis::BaseError rescue. Same pair
   # ProductFile::EXPECTED_ENQUEUE_ERRORS carries.
@@ -367,6 +367,11 @@ module StripeGuardianManager
       rescue Stripe::InvalidRequestError => e
         # The recorded id no longer resolves — the Person was deleted on Stripe's side. Fall through
         # to the scan, then to creating a fresh one, rather than failing the sync.
+        #
+        # Matched on the structured code first, same as delete_person_by_id: a message substring
+        # alone over-matches unrelated refusals into "the Person is gone", which here means silently
+        # creating a duplicate.
+        raise unless e.code == "resource_missing"
         raise unless e.message.to_s.include?("No such person")
       end
     end

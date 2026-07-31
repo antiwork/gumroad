@@ -209,7 +209,6 @@ describe GdprDataErasureService do
 
       # "No such account" is not evidence the Person was deleted, and when it is the ONLY account
       # tried nothing has confirmed the delete — so the erasure cannot report itself complete. This
-      # example previously asserted success and was pinning that bug.
       it "does not report success when the only Stripe account tried cannot confirm the delete" do
         guardian = create(:guardian, user:, stripe_person_id: "person_erase_me", first_name: "Ellie")
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
@@ -295,6 +294,72 @@ describe GdprDataErasureService do
 
         expect(result[:success]).to be(true)
         expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      # The unreachable check keys on a Stripe row we cannot resolve an id for, NOT on the resolved
+      # set being empty. One good account alongside one unresolvable row produces a non-empty set,
+      # and the Person recorded against the unresolvable row is then looked for on the good account,
+      # where Stripe answers "no such person" — which delete_person_by_id reports as SUCCESS. Keying
+      # on the empty set therefore let this erasure report itself fulfilled with an adult's name,
+      # date of birth and tax id still standing on the account we could not reach.
+      it "reports incomplete when one Stripe row is unresolvable and another account answers no such person" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_on_lost_account")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        lost_account = create(:merchant_account, user:, charge_processor_merchant_id: "acct_lost")
+        lost_account.delete_charge_processor_account!
+        lost_account.update!(charge_processor_merchant_id: nil)
+        # The surviving account genuinely does not hold this Person.
+        allow(Stripe::Account).to receive(:delete_person).and_raise(
+          Stripe::InvalidRequestError.new("No such person: 'person_on_lost_account'", nil, code: "resource_missing")
+        )
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("no resolvable Stripe account")
+        note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+        expect(note.content).to include("person_on_lost_account")
+      end
+
+      # The guardian surface must not run at all for a seller who never had a guardian. The union of
+      # account resolutions used to run unconditionally, so every erasure on the platform took the
+      # per-account guardian sync lock — and a Redis outage then failed those erasures with a note
+      # telling a human to hand-scan Stripe for a guardian that never existed.
+      describe "a seller with no guardian at all" do
+        it "does not take the guardian sync lock" do
+          allow(StripeGuardianManager).to receive(:with_account_sync_lock).and_call_original
+
+          described_class.new(user, performed_by: admin).perform!
+
+          expect(StripeGuardianManager).not_to have_received(:with_account_sync_lock)
+        end
+
+        it "still reports success when Redis is unreachable" do
+          allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(true)
+          expect(user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE)).to be_empty
+        end
+      end
+
+      # perform_async needs Redis, and a Redis outage is the headline case the remediation exists
+      # for. Enqueueing before writing the note meant the first perform_async raised, jumped to the
+      # method rescue, and the durable note — the human's only handle — was never written.
+      it "writes the durable note even when the retry cannot be enqueued" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
+        allow(DeleteGuardianStripePersonJob).to receive(:perform_async)
+          .and_raise(RedisClient::CannotConnectError, "no connection")
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(false)
+        note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+        expect(note).to be_present
+        expect(note.content).to include("person_erase_me")
       end
 
       # A guardian sync that read the guardian before erasure anonymized it can still be mid-flight
