@@ -12,6 +12,7 @@ class GdprDataErasureService
     @user = user
     @performed_by = performed_by
     @products_deleted = 0
+    @unreachable_guardian_person_ids = []
   end
 
   def perform!
@@ -36,15 +37,18 @@ class GdprDataErasureService
     remove_profile_assets!
     retained_guardian_person_ids = delete_guardian_stripe_persons!(guardian_stripe_persons)
 
-    if retained_guardian_person_ids.any?
+    if retained_guardian_person_ids.any? || @unreachable_guardian_person_ids.any?
       # Our own copy is erased, but a third party's identity data is still at the processor. Saying
       # "success" here is what let a failed guardian deletion pass for a completed erasure, so the
       # request stays open until the retry job clears it.
+      #
+      # The note is written here rather than where the condition is detected, because it must only
+      # claim an incomplete erasure once the erasure itself committed.
+      record_incomplete_erasure_note!(retained_guardian_person_ids)
+
       return {
         success: false,
-        error: "Erasure incomplete: #{retained_guardian_person_ids.size} guardian record(s) could " \
-               "not be deleted at Stripe. Retrying in the background; re-check before confirming " \
-               "the request as fulfilled.",
+        error: incomplete_erasure_error(retained_guardian_person_ids),
         summary: erasure_summary
       }
     end
@@ -56,6 +60,38 @@ class GdprDataErasureService
   end
 
   private
+    # Durable record of what is still at Stripe, on the account rather than only in Sentry: whoever
+    # re-checks the request needs to know which Persons to look for after the alert has aged out.
+    def record_incomplete_erasure_note!(retained_guardian_person_ids)
+      stuck_person_ids = (retained_guardian_person_ids + @unreachable_guardian_person_ids).uniq
+
+      @user.add_payout_note(
+        content: "GDPR erasure incomplete: guardian Stripe person(s) #{stuck_person_ids.join(', ')} " \
+                 "still held at Stripe. #{incomplete_erasure_error(retained_guardian_person_ids)}",
+        seller_visible: false
+      )
+    rescue => e
+      Rails.logger.error("GDPR: failed to record incomplete-erasure note for user #{@user.id}: #{e.message}")
+      ErrorNotifier.notify(e)
+    end
+
+    # Two shapes of incomplete, and they need different instructions: a failed delete is being
+    # retried and will clear itself, while a Person with no resolvable account has nothing retrying
+    # it and needs someone to find the account at Stripe by hand.
+    def incomplete_erasure_error(retained_guardian_person_ids)
+      parts = []
+      if retained_guardian_person_ids.any?
+        parts << "#{retained_guardian_person_ids.size} guardian record(s) could not be deleted at " \
+                 "Stripe and are being retried in the background"
+      end
+      if @unreachable_guardian_person_ids.any?
+        parts << "#{@unreachable_guardian_person_ids.size} guardian record(s) have no resolvable " \
+                 "Stripe account and must be deleted at Stripe manually"
+      end
+
+      "Erasure incomplete: #{parts.join('; ')}. Re-check before confirming the request as fulfilled."
+    end
+
     def deactivate_account!
       return 0 if @user.deleted?
 
@@ -214,12 +250,18 @@ class GdprDataErasureService
                                 .uniq
 
       if stripe_account_ids.empty?
-        # Never silent, but only when we know there is something to reach: a recorded person id is
-        # proof Stripe holds a copy we now have no handle for.
-        synced = guardians.count { |guardian| guardian.stripe_person_id.present? }
-        if synced.positive?
-          message = "GDPR: user #{@user.id} has #{synced} guardian Stripe person(s) but no " \
-                    "resolvable Stripe account id, so their details were NOT deleted at Stripe"
+        # A recorded person id with no resolvable account is proof Stripe holds a copy we have no
+        # handle for, and nothing here can retry it — there is no account id to retry against. So it
+        # is recorded as unreachable rather than dropped: an empty list would read as "nothing to
+        # delete" and let perform! report the erasure complete. Guardians with no recorded person id
+        # were never synced, so there is nothing at Stripe to reach.
+        @unreachable_guardian_person_ids =
+          guardians.filter_map(&:stripe_person_id)
+
+        if @unreachable_guardian_person_ids.any?
+          message = "GDPR: user #{@user.id} has #{@unreachable_guardian_person_ids.size} guardian " \
+                    "Stripe person(s) but no resolvable Stripe account id, so their details were " \
+                    "NOT deleted at Stripe and cannot be retried automatically"
           Rails.logger.error(message)
           ErrorNotifier.notify(message)
         end

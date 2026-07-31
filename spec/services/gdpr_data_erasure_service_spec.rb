@@ -234,9 +234,44 @@ describe GdprDataErasureService do
 
         result = described_class.new(user, performed_by: admin).perform!
 
-        expect(result[:success]).to be(true)
+        # No deletion was attempted and none can be retried, so this must not read as fulfilled.
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("Erasure incomplete")
+        expect(result[:error]).to include("no resolvable Stripe account")
+        expect(result[:error]).to include("manually")
         expect(Stripe::Account).not_to have_received(:delete_person)
         expect(ErrorNotifier).to have_received(:notify).with(/guardian Stripe person/)
+      end
+
+      # Sentry alerts age out; whoever re-checks the request months later needs the Person id from
+      # the account itself, and the unreachable case has no retry job carrying it.
+      it "records which unreachable person is still held at Stripe on the account" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_orphaned")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        merchant_account.delete_charge_processor_account!
+        merchant_account.update!(charge_processor_merchant_id: nil)
+
+        described_class.new(user, performed_by: admin).perform!
+
+        note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+        expect(note.content).to include("person_orphaned")
+        expect(note.content).to include("still held at Stripe")
+      end
+
+      # The unreachable state is keyed on a RECORDED person id, not on having no account: a guardian
+      # that was never synced has nothing at Stripe, so an account we cannot resolve is irrelevant
+      # and the erasure is genuinely complete. Without this the fix above would fail every erasure
+      # for a seller with a dead account and an unsynced guardian.
+      it "still reports success when an unresolvable account has no synced guardian" do
+        guardian = create(:guardian, user:, stripe_person_id: nil)
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        merchant_account.delete_charge_processor_account!
+        merchant_account.update!(charge_processor_merchant_id: nil)
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(ErrorNotifier).not_to have_received(:notify)
       end
     end
 
