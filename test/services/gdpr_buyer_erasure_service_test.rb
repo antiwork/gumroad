@@ -116,7 +116,9 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
     assert_nil @purchase1.stripe_fingerprint
     assert_nil @purchase1.card_visual
     assert_nil @purchase1.card_bin
-    assert_predicate @purchase1.custom_fields, :blank?
+    # `Purchase#custom_fields` maps the purchase_custom_fields association, not this column, so
+    # asserting on the reader passes whether or not the service nulled anything.
+    assert_nil @purchase1.read_attribute(:custom_fields)
 
     @unrelated_purchase.reload
     assert_equal "other@example.com", @unrelated_purchase.email
