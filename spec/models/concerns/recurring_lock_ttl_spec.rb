@@ -48,10 +48,12 @@ describe RecurringLockTtl do
           expect(ttl).to be_positive
         end
 
-        # The safety bound, asserted against the job's own declared worst case rather than against
-        # SAFETY_MARGIN — every TTL clears the margin trivially, so that comparison pins nothing.
-        # Breaking this expires the lock under a live attempt and lets the next enqueue run a second
-        # copy concurrently.
+        # Bounds the window in which a live attempt runs with no lock held, asserted against the
+        # job's own declared worst case rather than against SAFETY_MARGIN — every TTL clears the
+        # margin trivially, so that comparison pins nothing. This does not prevent a second copy:
+        # the TTL is anchored at enqueue and never refreshed, so a queue delay of
+        # `interval - max_attempt` or more still leaves an overlap. Overlap safety comes from the
+        # job being idempotent, not from this bound.
         it "keeps the ttl above its declared worst-case attempt" do
           expect(max_attempt).to be_present,
                                  "#{klass} sets lock_ttl without going through RecurringLockTtl, " \

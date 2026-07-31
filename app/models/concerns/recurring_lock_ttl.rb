@@ -12,10 +12,11 @@
 #
 # Two bounds apply, and they are not symmetric:
 #
-#   TTL > worst-case attempt   — safety. Breaking it expires the lock under a live attempt and
-#                                lets the next enqueue run a second copy concurrently. On the
-#                                payout jobs that means paying a seller twice, which is worse
-#                                than the outage this exists to prevent.
+#   TTL > worst-case attempt   — bounds how long a live attempt runs unlocked. The lock is
+#                                PEXPIREd by the client middleware at ENQUEUE and the server
+#                                never refreshes it, so an attempt begins with
+#                                `TTL - queue_latency` remaining, not TTL. This bound therefore
+#                                shrinks the unlocked window; it cannot close it.
 #   TTL < schedule interval    — recovery. Keeps a strand costing one run instead of every run.
 #
 # The second is best-effort. `DispatchPendingFailedRefundExceptionsJob` runs every 60 seconds and
