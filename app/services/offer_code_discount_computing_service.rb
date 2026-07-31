@@ -29,12 +29,21 @@ class OfferCodeDiscountComputingService
 
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
-      if resolved_discount && eligible?(offer_code, purchase_quantity)
-        track_usage(offer_code, purchase_quantity)
+      # A fixed-amount code is an amount off the order, not off every line: applying it
+      # per line multiplies the seller's intended discount by cart breadth. Once it has
+      # landed on a line, later lines are skipped silently — that is the design, not an
+      # ineligibility, so it must not poison error_code for the whole cart.
+      next if once_per_cart?(offer_code) && already_applied?(offer_code)
+
+      units = usage_units(offer_code, purchase_quantity)
+
+      if resolved_discount && eligible?(offer_code, purchase_quantity, units)
+        track_usage(offer_code, units)
+        mark_applied(offer_code)
         products_data[link.unique_permalink] = { discount: resolved_discount }
-        optimistically_apply_to_applicable_cross_sells(products_data, link)
+        optimistically_apply_to_applicable_cross_sells(products_data, link) unless once_per_cart?(offer_code)
       else
-        track_ineligibility(offer_code, purchase_quantity, resolved_discount)
+        track_ineligibility(offer_code, purchase_quantity, units, resolved_discount)
       end
     end
 
@@ -79,10 +88,30 @@ class OfferCodeDiscountComputingService
         &.find { |offer_code| offer_code.applicable?(link) }
     end
 
-    def eligible?(offer_code, purchase_quantity)
+    def once_per_cart?(offer_code)
+      offer_code.is_cents?
+    end
+
+    def already_applied?(offer_code)
+      @applied_offer_code_ids ||= Set.new
+      @applied_offer_code_ids.include?(offer_code.id)
+    end
+
+    def mark_applied(offer_code)
+      @applied_offer_code_ids ||= Set.new
+      @applied_offer_code_ids << offer_code.id
+    end
+
+    # How much of max_purchase_count this line spends. A fixed-amount code is applied once
+    # per cart, so it costs exactly one use regardless of how many units are on the line.
+    def usage_units(offer_code, purchase_quantity)
+      once_per_cart?(offer_code) ? 1 : purchase_quantity
+    end
+
+    def eligible?(offer_code, purchase_quantity, units)
       return false if offer_code.inactive?
       return false unless meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
-      return false unless has_sufficient_times_of_use?(offer_code, purchase_quantity)
+      return false unless has_sufficient_times_of_use?(offer_code, units)
 
       true
     end
@@ -113,7 +142,7 @@ class OfferCodeDiscountComputingService
       @remaining_times_of_use[offer_code.id] -= purchase_quantity
     end
 
-    def track_ineligibility(offer_code, purchase_quantity, resolved_discount)
+    def track_ineligibility(offer_code, purchase_quantity, units, resolved_discount)
       @product_level_ineligibilities ||= {}
 
       if resolved_discount.nil? && offer_code.existing_customers_only?
@@ -124,7 +153,7 @@ class OfferCodeDiscountComputingService
         @product_level_ineligibilities[:unmet_minimum_purchase_quantity] = true
       end
 
-      unless has_sufficient_times_of_use?(offer_code, purchase_quantity)
+      unless has_sufficient_times_of_use?(offer_code, units)
         if @remaining_times_of_use[offer_code.id].positive?
           @product_level_ineligibilities[:insufficient_times_of_use] = true
         else

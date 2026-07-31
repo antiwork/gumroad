@@ -42,6 +42,45 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to be_nil
   end
 
+  describe "fixed-amount codes apply once per cart" do
+    let(:fixed_code) do
+      create(:universal_offer_code, user: seller, amount_percentage: nil,
+                                    amount_cents: 500, currency_type: product.price_currency_type)
+    end
+
+    it "discounts only the first eligible line, not every line" do
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(1)
+    end
+
+    it "spends one use regardless of cart breadth, so a capped code survives a wide cart" do
+      # The reported bug: cap 6, 18 cart lines -> whole cart rejected as "expired".
+      fixed_code.update_attribute(:max_purchase_count, 1)
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(1)
+    end
+
+    it "still reports sold_out when no uses remain at all" do
+      fixed_code.update_attribute(:max_purchase_count, 0)
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to eq(:sold_out)
+    end
+
+    it "leaves percentage codes applying per line" do
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(2)
+    end
+  end
+
   it "returns sold_out error_code in result when offer code is sold out" do
     universal_offer_code.update_attribute(:max_purchase_count, 0)
     result = OfferCodeDiscountComputingService.new(universal_offer_code.code, products_data).process
