@@ -1615,22 +1615,18 @@ class Link < ApplicationRecord
     #
     # Staged per save, drained once per commit: `saved_change_to_*` describes only
     # the LAST save, and the product editor saves twice per request
-    # (`save_custom_attributes` then `save!`), so a commit-time gate on it never
-    # fires for the flow this exists to fix. Draining a list also maps every hop
-    # when one transaction renames a slug more than once.
+    # (`save_custom_attributes`, then `save!`), so a commit-time gate on it never
+    # fires for the flow this exists to fix.
     #
-    # The unscoped lookup reads this table before the live permalink match, so a
-    # mapping for a slug a live product answers on would shadow it: never write
-    # one, and withdraw the row this call created if a claim lands between the
-    # check and the insert.
+    # An existing mapping is never taken over. `permalink` is globally unique
+    # while `custom_permalink` is unique per seller, so two sellers can have held
+    # one slug, and soft deletion is reversible (`publish!` clears `deleted_at`) —
+    # stealing a dormant row would forward that seller's shared links here the
+    # moment they restore. Such a rename keeps the 404 it already had.
     #
-    # `permalink` is globally unique while `custom_permalink` is unique per
-    # seller, so two sellers can have held one slug and an existing mapping is
-    # never taken over: soft deletion is reversible (`publish!` clears
-    # `deleted_at`), so a mapping that resolves to nothing today can start
-    # serving again, and stealing it would forward that seller's already-shared
-    # links to this product. A rename off a slug another mapping holds keeps the
-    # 404 it already had.
+    # The unscoped reader checks this table before the live match, so a mapping
+    # for a slug a live product answers on would shadow it: never write one, and
+    # withdraw the row this call created if a claim lands between check and insert.
     def stage_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
