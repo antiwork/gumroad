@@ -2,6 +2,6 @@
 <div>
   <% thing = @subscription.is_installment_plan ? "installment plan" : "membership" %>
   <p>We were not able to process the latest payment for your <%= thing %> to <%= @subscription.link.name %>. The address on it is in a location we are not able to process payments to or from, so no charge was attempted and there is nothing wrong with your card.</p>
-  <p>If that address is out of date, <%= link_to "update it from your #{thing}", manage_subscription_url(@subscription.external_id, token: @subscription.reusable_token) %> and the next payment will go through normally.</p>
+  <p>If that address is out of date, <%= link_to "update it from your #{thing}", @edit_card_url %> and the next payment will go through normally.</p>
   <p>Otherwise your <%= thing %> to <%= @subscription.link.name %> will be canceled in 5 days. You can read more about <%= link_to "why a payment can be declined", "https://gumroad.com/help/article/203-why-did-my-payment-fail#Not-available-in-your-location-Xr4mB" %>.</p>
 </div>

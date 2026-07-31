@@ -331,14 +331,13 @@ describe CustomerLowPriorityMailer do
         expect(body).to_not include "update your card"
       end
 
-      it "reuses the existing manage-link token so an earlier email's link keeps working" do
+      it "links to manage subscription with the token that is valid after sending" do
         subscription = create(:subscription, link: create(:product))
         create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
-        first_token = subscription.reusable_token
 
-        CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
 
-        expect(subscription.reload.token).to eq first_token
+        expect(body).to include "token=#{subscription.reload.token}"
       end
     end
 

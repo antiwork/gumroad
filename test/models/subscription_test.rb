@@ -1698,9 +1698,11 @@ class SubscriptionTest < ActiveSupport::TestCase
 
   # A renewal blocked by sanctions screening never reaches a charge processor:
   # `validate_sanctioned_location` is a before_create validation, so the card
-  # mailers would be describing a charge that was never attempted.
+  # mailers would be describing a charge that was never attempted. No cassette
+  # here for that same reason — unlike the rest of this section these cases must
+  # not tokenize a card, since a card that reached Stripe would mean the block
+  # leaked.
   def sanctioned_renewal_setup
-    charge_section_setup
     @subscription.original_purchase.update!(country: "Iran", ip_country: "Iran")
   end
 
