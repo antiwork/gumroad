@@ -162,6 +162,79 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
       end
     end
 
+    context "when an array with a single signed id is provided" do
+      let(:blob) do
+        ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "receipt_image.png", content_type: "image/png")
+      end
+
+      it "behaves like the singular param, including the PNG to JPG conversion" do
+        # Purging in test ENV returns Aws::S3::Errors::AccessDenied
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: [blob.signed_id] } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(true)
+        expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("receipt_image.jpg")
+        expect(dispute_evidence.customer_communication_file.content_type).to eq("image/jpeg")
+
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      end
+    end
+
+    context "when multiple signed ids are provided" do
+      let(:blobs) do
+        [
+          ["autumn-leaves-1280x720.jpeg", "image/jpeg"],
+          ["smilie.png", "image/png"],
+          ["test.pdf", "application/pdf"],
+        ].map do |fixture, content_type|
+          ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload(fixture), filename: fixture, content_type:)
+        end
+      end
+
+      before do
+        # Purging in test ENV returns Aws::S3::Errors::AccessDenied
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+      end
+
+      it "attaches a single merged PDF containing every file, in upload order" do
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+
+        dispute_evidence.reload
+        expect(dispute_evidence.customer_communication_file.attached?).to be(true)
+        expect(dispute_evidence.customer_communication_file.filename.to_s).to eq("customer_communication.pdf")
+        expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
+
+        pages = PDF::Reader.new(StringIO.new(dispute_evidence.customer_communication_file.download)).pages
+        expect(pages.size).to eq(3)
+        # Image pages are sized to their source image, so dimensions prove the order survived.
+        first_page_media_box = pages.first.attributes[:MediaBox]
+        expect((first_page_media_box[2] - first_page_media_box[0]).round).to eq(1280)
+
+        expect(dispute_evidence.seller_submitted?).to be(true)
+        expect(FightDisputeJob.jobs.size).to eq(1)
+        expect(response).to redirect_to(success_purchase_dispute_evidence_path(purchase.external_id))
+      end
+
+      context "when the merged PDF cannot fit within the size limit" do
+        before do
+          allow_any_instance_of(DisputeEvidence).to receive(:customer_communication_file_max_size).and_return(10_000)
+        end
+
+        it "fails loudly without submitting or truncating the evidence" do
+          put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+
+          dispute_evidence.reload
+          expect(dispute_evidence.customer_communication_file.attached?).to be(false)
+          expect(dispute_evidence.seller_submitted?).to be(false)
+          expect(FightDisputeJob.jobs.size).to eq(0)
+
+          expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+          expect(flash[:alert]).to eq(DisputeEvidence::MergeCustomerCommunicationFilesService::FILE_TOO_LARGE_MESSAGE)
+        end
+      end
+    end
+
     context "when the dispute evidence is invalid" do
       it "redirects with error message" do
         put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { cancellation_rebuttal: "a" * 3_001 } }

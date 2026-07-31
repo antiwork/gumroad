@@ -36,13 +36,23 @@ class Purchases::DisputeEvidenceController < ApplicationController
   end
 
   def update
-    signed_blob_id = dispute_evidence_params[:customer_communication_file_signed_blob_id]
+    signed_blob_ids = customer_communication_file_signed_blob_ids
     @dispute_evidence.assign_attributes(
       dispute_evidence_params.slice(:cancellation_rebuttal, :reason_for_winning, :refund_refusal_explanation)
     )
 
-    if signed_blob_id.present?
-      blob = covert_and_optimize_blob_if_needed(signed_blob_id)
+    if signed_blob_ids.one?
+      blob = covert_and_optimize_blob_if_needed(signed_blob_ids.first)
+      @dispute_evidence.customer_communication_file.attach(blob)
+    elsif signed_blob_ids.many?
+      # Stripe accepts a single file for this evidence field, so multiple uploads are merged
+      # into one PDF before attaching. The merge stays inline: the submit below is one-shot,
+      # and an async merge would let FightDisputeJob forward the evidence before the merged
+      # file exists.
+      blob = DisputeEvidence::MergeCustomerCommunicationFilesService.perform(
+        blobs: signed_blob_ids.map { ActiveStorage::Blob.find_signed!(_1) },
+        max_size: @dispute_evidence.customer_communication_file_max_size
+      )
       @dispute_evidence.customer_communication_file.attach(blob)
     end
     @dispute_evidence.update_as_seller_submitted!
@@ -51,6 +61,8 @@ class Purchases::DisputeEvidenceController < ApplicationController
     redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
   rescue ActiveRecord::RecordInvalid
     redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: @dispute_evidence.errors.full_messages.to_sentence
+  rescue DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError => e
+    redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: e.message
   end
 
   private
@@ -59,8 +71,17 @@ class Purchases::DisputeEvidenceController < ApplicationController
         :reason_for_winning,
         :cancellation_rebuttal,
         :refund_refusal_explanation,
-        :customer_communication_file_signed_blob_id
+        :customer_communication_file_signed_blob_id,
+        customer_communication_file_signed_blob_ids: []
       )
+    end
+
+    # Asset bundles and server code don't deploy atomically, so a seller holding the old
+    # JS bundle still submits the singular param. One file — from either param shape —
+    # keeps today's direct-attach behaviour, including the PNG conversion below.
+    def customer_communication_file_signed_blob_ids
+      signed_blob_ids = Array.wrap(dispute_evidence_params[:customer_communication_file_signed_blob_ids]).compact_blank
+      signed_blob_ids.presence || Array.wrap(dispute_evidence_params[:customer_communication_file_signed_blob_id].presence)
     end
 
     def set_dispute_evidence

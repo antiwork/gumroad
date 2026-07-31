@@ -118,6 +118,25 @@ describe DisputeEvidence do
     end
 
     describe "customer_communication_file_type" do
+      # The multi-file upload path merges into an application/pdf attachment
+      # (DisputeEvidence::MergeCustomerCommunicationFilesService), so PDF must stay allowed
+      # and the count cap the merge relies on must exist.
+      it "bounds the number of mergeable customer communication files" do
+        expect(DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES).to eq(10)
+      end
+
+      context "when a multi-page merged PDF is attached" do
+        before do
+          dispute_evidence.customer_communication_file.attach(
+            Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "billion-dollar-company-chapter-0.pdf"), "application/pdf")
+          )
+        end
+
+        it "is valid" do
+          expect(dispute_evidence.valid?).to eq(true)
+        end
+      end
+
       context "when the content type is not allowed" do
         before do
           dispute_evidence.customer_communication_file.attach(

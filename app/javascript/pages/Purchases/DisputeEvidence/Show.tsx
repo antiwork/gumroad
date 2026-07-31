@@ -16,6 +16,7 @@ import FileUtils from "$app/utils/file";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -36,6 +37,7 @@ type Props = {
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;
     customer_communication_file_max_size: number;
+    customer_communication_files_max_count: number;
     blobs: Blobs;
   };
   disputable: {
@@ -63,12 +65,19 @@ type BlobType = {
   title: string;
 };
 
+type UploadedFile = {
+  byte_size: number;
+  filename: string;
+  key: string;
+  signed_id: string;
+};
+
 type FormData = {
   dispute_evidence: {
     reason_for_winning: string;
     cancellation_rebuttal: string;
     refund_refusal_explanation: string;
-    customer_communication_file_signed_blob_id: string | null;
+    customer_communication_file_signed_blob_ids: string[];
   };
 };
 
@@ -84,15 +93,17 @@ export default function Show() {
   const [cancellationRebuttalOption, setCancellationRebuttalOption] = React.useState<CancellationRebuttalOption | null>(
     null,
   );
-  const [blobs, setBlobs] = React.useState<Blobs>(dispute_evidence.blobs);
+  const blobs = dispute_evidence.blobs;
   const [isUploading, setIsUploading] = React.useState(false);
+  const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
+  const [isConfirming, setIsConfirming] = React.useState(false);
 
   const form = useForm<FormData>({
     dispute_evidence: {
       reason_for_winning: "",
       cancellation_rebuttal: "",
       refund_refusal_explanation: "",
-      customer_communication_file_signed_blob_id: null,
+      customer_communication_file_signed_blob_ids: [],
     },
   });
 
@@ -117,10 +128,11 @@ export default function Show() {
   const isInfoProvided =
     isReasonForWinningProvided ||
     isCancellationRebuttalProvided ||
-    form.data.dispute_evidence.customer_communication_file_signed_blob_id !== null ||
+    uploadedFiles.length > 0 ||
     form.data.dispute_evidence.refund_refusal_explanation !== "";
 
   const submitDisputeEvidence = () => {
+    setIsConfirming(false);
     const reasonForWinningText =
       reasonForWinningOption === "other"
         ? form.data.dispute_evidence.reason_for_winning
@@ -140,50 +152,63 @@ export default function Show() {
         reason_for_winning: reasonForWinningText,
         cancellation_rebuttal: cancellationRebuttalText,
         refund_refusal_explanation: data.dispute_evidence.refund_refusal_explanation,
-        customer_communication_file_signed_blob_id: data.dispute_evidence.customer_communication_file_signed_blob_id,
+        customer_communication_file_signed_blob_ids: data.dispute_evidence.customer_communication_file_signed_blob_ids,
       },
     }));
     form.put(Routes.purchase_dispute_evidence_path(disputable.purchase_for_dispute_evidence_id));
   };
 
-  const handleFileUpload = () => {
-    const file = fileInputRef.current?.files?.[0];
-    if (!file) return;
+  const maxFileCount = dispute_evidence.customer_communication_files_max_count;
+  const remainingFileSlots = maxFileCount - uploadedFiles.length;
 
-    if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS))
+  // Uploads run sequentially so the order the seller picked becomes the page order of the
+  // merged PDF: for a chat log, order is part of the evidence.
+  const handleFileUpload = async () => {
+    const selectedFiles = Array.from(fileInputRef.current?.files ?? []);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (selectedFiles.length === 0) return;
+
+    if (selectedFiles.length > remainingFileSlots)
+      return showAlert(`You can attach up to ${maxFileCount} files.`, "error");
+    if (selectedFiles.some((file) => !FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)))
       return showAlert("Invalid file type.", "error");
-    if (file.size > dispute_evidence.customer_communication_file_max_size)
+    if (selectedFiles.some((file) => file.size > dispute_evidence.customer_communication_file_max_size))
       return showAlert("The file exceeds the maximum size allowed.", "error");
 
     setIsUploading(true);
-    const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
-    upload.create((error, blob) => {
-      if (error) {
-        showAlert(error.message, "error");
-      } else {
-        updateFormData({ customer_communication_file_signed_blob_id: blob.signed_id });
-        setBlobs((prev) => ({
-          ...prev,
-          customer_communication_file: {
-            byte_size: blob.byte_size,
-            filename: blob.filename,
-            key: blob.key,
-            signed_id: blob.signed_id,
-            title: "Customer communication",
-          },
-        }));
+    for (const file of selectedFiles) {
+      try {
+        const blob = await new Promise<UploadedFile>((resolve, reject) => {
+          new DirectUpload(file, Routes.rails_direct_uploads_path()).create((error, uploaded) => {
+            if (error) reject(error);
+            else
+              resolve({
+                byte_size: uploaded.byte_size,
+                filename: uploaded.filename,
+                key: uploaded.key,
+                signed_id: uploaded.signed_id,
+              });
+          });
+        });
+        setUploadedFiles((prev) => {
+          const next = [...prev, blob];
+          updateFormData({ customer_communication_file_signed_blob_ids: next.map(({ signed_id }) => signed_id) });
+          return next;
+        });
+      } catch (error) {
+        showAlert(error instanceof Error ? error.message : "There was a problem uploading your file.", "error");
+        break;
       }
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    });
+    }
+    setIsUploading(false);
   };
 
-  const removeEvidenceFile = () => {
-    updateFormData({ customer_communication_file_signed_blob_id: null });
-    setBlobs((prev) => ({
-      ...prev,
-      customer_communication_file: null,
-    }));
+  const removeEvidenceFile = (key: string) => {
+    setUploadedFiles((prev) => {
+      const next = prev.filter((file) => file.key !== key);
+      updateFormData({ customer_communication_file_signed_blob_ids: next.map(({ signed_id }) => signed_id) });
+      return next;
+    });
   };
 
   const TEXTAREA_MAX_LENGTH = 3000;
@@ -236,9 +261,9 @@ export default function Show() {
           </strong>
         </p>
         <Alert variant="warning">
-          You only have one opportunity to submit your response. We immediately forward your response and all supporting
-          files to our payment processor. You can't edit the response or submit additional information, so make sure
-          you've assembled all of your evidence before you submit.
+          <strong>Submitting is final.</strong> We forward your response and all supporting files to our payment
+          processor straight away, and they accept one submission per dispute. You can't edit it or add anything
+          afterwards — not even by contacting support — so attach everything before you submit.
         </Alert>
       </CardContent>
       <CardContent>
@@ -319,17 +344,23 @@ export default function Show() {
             <Label>Do you have additional evidence you'd like to provide?</Label>
           </FieldsetTitle>
 
-          <Files blobs={blobs} onRemoveFile={removeEvidenceFile} isSubmitting={form.processing} />
+          <Files
+            blobs={blobs}
+            uploadedFiles={uploadedFiles}
+            onRemoveFile={removeEvidenceFile}
+            isSubmitting={form.processing}
+          />
 
-          {blobs.customer_communication_file === null ? (
+          {remainingFileSlots > 0 ? (
             <>
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
                 className="sr-only"
                 tabIndex={-1}
-                onChange={handleFileUpload}
+                onChange={() => void handleFileUpload()}
               />
               <Button outline disabled={isUploading || form.processing} onClick={() => fileInputRef.current?.click()}>
                 {isUploading ? (
@@ -345,9 +376,9 @@ export default function Show() {
               <p>
                 Any communication with the customer that you feel is relevant to your case (emails, chats, etc. proving
                 that they received the product or service, or screenshots demonstrating their use of or satisfaction
-                with the product or service). Please upload one JPG, PNG, or PDF file under{" "}
-                {FileUtils.getReadableFileSize(dispute_evidence.customer_communication_file_max_size)}. If you have
-                multiple files, consolidate them into a single PDF.
+                with the product or service). You can attach up to {maxFileCount} JPG, PNG, or PDF files, each under{" "}
+                {FileUtils.getReadableFileSize(dispute_evidence.customer_communication_file_max_size)}. We combine them
+                into a single PDF in the order shown, so pick them in the order you want them read.
               </p>
             </>
           ) : null}
@@ -357,7 +388,7 @@ export default function Show() {
         <Button
           color="primary"
           disabled={!isInfoProvided || form.processing}
-          onClick={submitDisputeEvidence}
+          onClick={() => setIsConfirming(true)}
           className="grow basis-0"
         >
           {form.processing ? (
@@ -369,33 +400,55 @@ export default function Show() {
           )}
         </Button>
       </CardContent>
+      <Modal
+        open={isConfirming}
+        title="Submit your response?"
+        onClose={() => setIsConfirming(false)}
+        footer={
+          <>
+            <Button onClick={() => setIsConfirming(false)}>Cancel</Button>
+            <Button color="primary" onClick={submitDisputeEvidence}>
+              Submit evidence
+            </Button>
+          </>
+        }
+      >
+        <p>
+          You only get one submission for this dispute. We forward this to our payment processor immediately, and
+          nothing can be added or changed afterwards.
+        </p>
+        {uploadedFiles.length > 0 ? (
+          <p>
+            You are attaching {uploadedFiles.length} {uploadedFiles.length === 1 ? "file" : "files"}. Anything you meant
+            to include but have not uploaded yet cannot be sent later.
+          </p>
+        ) : (
+          <p>
+            You have not attached any files. If you have screenshots or emails to include, cancel and upload them now.
+          </p>
+        )}
+      </Modal>
     </Card>
   );
 }
 
 const Files = ({
   blobs,
+  uploadedFiles,
   onRemoveFile,
   isSubmitting,
 }: {
   blobs: Blobs;
-  onRemoveFile: () => void;
+  uploadedFiles: UploadedFile[];
+  onRemoveFile: (key: string) => void;
   isSubmitting: boolean;
 }) => {
-  const [isRemovingFile, setIsRemovingFile] = React.useState(false);
-
-  const eligibleBlobs = Object.values(blobs).filter((b): b is BlobType => b !== null);
-  if (eligibleBlobs.length < 1) return null;
-
-  const handleFileRemove = () => {
-    setIsRemovingFile(true);
-    onRemoveFile();
-    setIsRemovingFile(false);
-  };
+  const evidenceBlobs = Object.values(blobs).filter((b): b is BlobType => b !== null);
+  if (evidenceBlobs.length < 1 && uploadedFiles.length < 1) return null;
 
   return (
     <Rows role="list">
-      {eligibleBlobs.map((blob) => (
+      {evidenceBlobs.map((blob) => (
         <Row role="listitem" key={blob.key}>
           <RowContent>
             <FileDetail pack="filled" className="type-icon size-5" />
@@ -411,18 +464,38 @@ const Files = ({
             <NavigationButton outline href={Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key })} target="_blank">
               View
             </NavigationButton>
-            {blob.signed_id ? (
-              <Button
-                size="icon"
-                color="danger"
-                outline
-                aria-label="Remove"
-                disabled={isRemovingFile || isSubmitting}
-                onClick={handleFileRemove}
-              >
-                <Trash className="size-5" />
-              </Button>
-            ) : null}
+          </RowActions>
+        </Row>
+      ))}
+      {/* Numbered because the position shown is the page order of the merged PDF we send. */}
+      {uploadedFiles.map((file, index) => (
+        <Row role="listitem" key={file.key}>
+          <RowContent>
+            <FileDetail pack="filled" className="type-icon size-5" />
+            <div>
+              <h4>
+                {index + 1}. {file.filename}
+              </h4>
+              <InlineList>
+                <li>{FileUtils.getFileExtension(file.filename).toUpperCase()}</li>
+                <li>{FileUtils.getFullFileSizeString(file.byte_size)}</li>
+              </InlineList>
+            </div>
+          </RowContent>
+          <RowActions>
+            <NavigationButton outline href={Routes.s3_utility_cdn_url_for_blob_path({ key: file.key })} target="_blank">
+              View
+            </NavigationButton>
+            <Button
+              size="icon"
+              color="danger"
+              outline
+              aria-label="Remove"
+              disabled={isSubmitting}
+              onClick={() => onRemoveFile(file.key)}
+            >
+              <Trash className="size-5" />
+            </Button>
           </RowActions>
         </Row>
       ))}

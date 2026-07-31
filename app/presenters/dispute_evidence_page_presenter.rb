@@ -25,6 +25,7 @@ class DisputeEvidencePagePresenter
         purchased_at: dispute_evidence.purchased_at,
         duration_left_to_submit_evidence_formatted:,
         customer_communication_file_max_size: dispute_evidence.customer_communication_file_max_size,
+        customer_communication_files_max_count: DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES,
         blobs: blobs_props
       }
     end
