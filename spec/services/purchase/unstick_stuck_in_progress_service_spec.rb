@@ -72,7 +72,7 @@ describe Purchase::UnstickStuckInProgressService do
     it "ignores a purchase older than the maximum age" do
       stuck_purchase(created_at: 100.days.ago)
 
-      expect(described_class.process(dry_run: false)[:scanned]).to eq(0)
+      expect(described_class.process(dry_run: false, notify: false)[:scanned]).to eq(0)
     end
 
     it "restricts the run to an explicit id list" do
@@ -85,6 +85,23 @@ describe Purchase::UnstickStuckInProgressService do
 
       expect(synced).to eq([targeted.id])
       expect(untouched.reload).to be_in_progress
+    end
+
+    it "reaches a purchase past the maximum age when its id is named" do
+      purchase = stuck_purchase(created_at: 200.days.ago)
+      stub_sync(true) { |p| p.update_columns(purchase_state: "successful") }
+
+      result = described_class.process(dry_run: false, ids: [purchase.id])
+
+      expect(purchase.reload).to be_successful
+      expect(result[:recovered]).to eq(1)
+    end
+
+    it "reaches a purchase newer than the minimum age when its id is named" do
+      purchase = stuck_purchase(created_at: 1.hour.ago)
+      stub_sync(true) { |p| p.update_columns(purchase_state: "successful") }
+
+      expect(described_class.process(dry_run: false, ids: [purchase.id])[:recovered]).to eq(1)
     end
 
     it "asks the sync path not to fail the purchase" do
@@ -181,6 +198,62 @@ describe Purchase::UnstickStuckInProgressService do
       expect(ErrorNotifier).to_not receive(:notify)
 
       expect(described_class.process(dry_run: false, notify: false)[:unrecoverable]).to eq(1)
+    end
+
+    describe "rows aging past the recovery window" do
+      # A row that crossed MAX_AGE leaves the daily scan for good, so the pass names it once on the
+      # way out rather than letting it fall out silently.
+      def aged_out_purchase(created_at:, charge_processor_id: "stripe", price_cents: 500)
+        create(:purchase_in_progress, link: product, created_at:, charge_processor_id:, price_cents:)
+      end
+
+      it "reports a row that just crossed the maximum age" do
+        purchase = aged_out_purchase(created_at: 92.days.ago)
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Purchases stuck in_progress aged past the recovery window",
+          context: hash_including(purchase_ids: [purchase.id], count: 1, max_age_days: 90)
+        )
+
+        expect(described_class.process(dry_run: false)[:aging_out]).to eq(1)
+      end
+
+      it "ignores a row that never reached a processor" do
+        aged_out_purchase(created_at: 92.days.ago, charge_processor_id: nil)
+        expect(ErrorNotifier).to_not receive(:notify)
+
+        expect(described_class.process(dry_run: false)[:aging_out]).to eq(0)
+      end
+
+      it "ignores a free purchase" do
+        aged_out_purchase(created_at: 92.days.ago, price_cents: 0)
+        expect(ErrorNotifier).to_not receive(:notify)
+
+        expect(described_class.process(dry_run: false)[:aging_out]).to eq(0)
+      end
+
+      it "ignores a row well past the grace band, so the pre-2022 cohort stays out" do
+        aged_out_purchase(created_at: 200.days.ago)
+        expect(ErrorNotifier).to_not receive(:notify)
+
+        expect(described_class.process(dry_run: false)[:aging_out]).to eq(0)
+      end
+
+      it "does not report an aging-out row on an id-targeted run" do
+        aged_out_purchase(created_at: 92.days.ago)
+        targeted = stuck_purchase(created_at: 10.days.ago)
+        stub_sync(true) { |p| p.update_columns(purchase_state: "successful") }
+        expect(ErrorNotifier).to_not receive(:notify)
+
+        expect(described_class.process(dry_run: false, ids: [targeted.id])[:aging_out]).to eq(0)
+      end
+
+      it "does not report on a dry run" do
+        aged_out_purchase(created_at: 92.days.ago)
+        expect(ErrorNotifier).to_not receive(:notify)
+
+        expect(described_class.process[:aging_out]).to eq(0)
+      end
     end
 
     it "keeps going and reports the error when one row raises" do
