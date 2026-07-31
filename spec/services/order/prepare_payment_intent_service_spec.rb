@@ -565,7 +565,6 @@ describe Order::PreparePaymentIntentService, :vcr do
       it "adds Klarna to the deferred intent for a flagged seller and eligible US cart" do
         Feature.activate_user(:checkout_local_method_klarna, seller)
         order, params = build_order
-        params = params.merge(payment_element_mounted_payment_method_types: %w[card link cashapp klarna])
         order.purchases.each { _1.update!(ip_country: "United States") }
 
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
@@ -1212,9 +1211,9 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
 
       # The narrowing contract (gumroad-private#1528). The Element's method list is frozen when it
-      # mounts; this service re-resolves at pay time. Stripe rejects the ConfirmationToken on ANY
-      # difference, but only one direction is recoverable — so the intent may only ever be a SUBSET
-      # of what the page mounted, and the browser reports that list.
+      # mounts; this service re-resolves at pay time, and Stripe rejects the ConfirmationToken when
+      # the two disagree. The browser reports what it mounted so the intent can be intersected
+      # against it; every path that cannot trust the report keeps the resolved list untouched.
       context "narrowing the intent to the methods the Payment Element mounted with" do
         def prepare_with_reported_methods(reported, preview:, token:, order:, params:)
           allow(Stripe::ConfirmationToken).to receive(:retrieve)
@@ -1250,6 +1249,24 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
         ensure
           Feature.deactivate_user(:checkout_local_method_klarna, seller)
+        end
+
+        # The discriminating case for the intersection itself. Klarna cannot serve here because a
+        # non-Klarna buyer loses it to the amount-window strip anyway, so an example that drops
+        # only Klarna passes with the intersection deleted. cashapp survives every other strip on
+        # a USD intent, so the report is the only thing that can remove it.
+        it "drops a non-Klarna method the page never mounted" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          create_args, responses = prepare_with_reported_methods(
+            %w[card link],
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_drops_cashapp", order:, params:
+          )
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:payment_method_types]).to eq(%w[card link])
         end
 
         # The narrowing is one-directional: a reported list may only remove methods, never add
@@ -1307,6 +1324,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         # An empty intersection means the report does not describe this cart's element at all.
         it "ignores a reported list that intersects nothing the server resolved" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
           order, params = build_order
           order.purchases.each { _1.update!(ip_country: "United States") }
 
@@ -1316,12 +1334,15 @@ describe Order::PreparePaymentIntentService, :vcr do
             token: "ctoken_disjoint", order:, params:
           )
 
-          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
         end
 
         # A non-array report (a scalar, a hash) carries nothing to narrow against and must not
         # raise — it degrades to the older-client path.
         it "treats a malformed report as no report at all" do
+          Feature.activate_user(:checkout_local_method_klarna, seller)
           order, params = build_order
           order.purchases.each { _1.update!(ip_country: "United States") }
 
@@ -1331,12 +1352,15 @@ describe Order::PreparePaymentIntentService, :vcr do
             token: "ctoken_malformed", order:, params:
           )
 
-          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
+        ensure
+          Feature.deactivate_user(:checkout_local_method_klarna, seller)
         end
 
-        # Older checkout pages report nothing. Klarna is the one method whose gate moves with the
-        # cart total, so it is the one that must not be added to a card or Link payment.
-        it "never adds Klarna to a card payment from a page that reported no method list" do
+        # An older page sends an identical request whether or not it mounted Klarna, so there is
+        # nothing to narrow against and the resolved list has to stand. Dropping a method on a
+        # guess would hand a card buyer an intent their element never matched.
+        it "leaves the resolved list alone for a card payment from a page that reported no method list" do
           Feature.activate_user(:checkout_local_method_klarna, seller)
           order, params = build_order
           order.purchases.each { _1.update!(ip_country: "United States") }
@@ -1348,12 +1372,12 @@ describe Order::PreparePaymentIntentService, :vcr do
           )
 
           expect(responses["unique-id-0"][:success]).to eq(true)
-          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp klarna])
         ensure
           Feature.deactivate_user(:checkout_local_method_klarna, seller)
         end
 
-        # ...but a Klarna buyer on an older page still pays: only their own chosen method survives.
+        # Same for a Klarna buyer on an older page.
         it "keeps Klarna for a Klarna buyer from a page that reported no method list" do
           Feature.activate_user(:checkout_local_method_klarna, seller)
           order, params = build_order
