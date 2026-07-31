@@ -461,6 +461,23 @@ describe StripeCharge, :vcr do
         end
       end
 
+      # Pin the boundary itself, so the constant cannot drift without a red test.
+      context "just inside the grace window" do
+        let(:destination_payment_age) { described_class::DESTINATION_PAYMENT_SETTLEMENT_GRACE - 1.minute }
+
+        it "keeps waiting" do
+          expect(charge.flow_of_funds).to be_nil
+        end
+      end
+
+      context "just past the grace window" do
+        let(:destination_payment_age) { described_class::DESTINATION_PAYMENT_SETTLEMENT_GRACE + 1.minute }
+
+        it "builds the flow of funds" do
+          expect(charge.flow_of_funds).to be_present
+        end
+      end
+
       context "when the destination payment has not been captured" do
         let(:stripe_destination_payment) do
           {
