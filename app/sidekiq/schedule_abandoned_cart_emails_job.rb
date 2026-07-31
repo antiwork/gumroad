@@ -21,19 +21,24 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  # Wall-clock ceiling on one attempt. SCAN_TIME_BUDGET caps a single statement, not the run,
-  # which walks ~30 day windows and then matches workflows. Must stay under LOCK_TTL: an attempt
-  # outliving its lock lets the next enqueue take the same digest and run concurrently, and
-  # `sent_abandoned_cart_emails` has no unique index, so two live copies can email one cart twice.
+  # Wall-clock ceiling on one attempt, and the only bound when the lock's remaining life cannot be
+  # read. SCAN_TIME_BUDGET caps a single statement, not the run, which walks ~30 day windows and
+  # then matches workflows. An attempt outliving its lock lets the next enqueue take the same
+  # digest and run concurrently, and `sent_abandoned_cart_emails` has no unique index, so two live
+  # copies can email one cart twice — `attempt_deadline` therefore also clamps to the live TTL,
+  # because this constant alone assumes a queue latency nobody guarantees.
   ATTEMPT_TIME_BUDGET = 18.hours
 
   # A SIGKILL (OOM, deploy reap) skips the `ensure` that releases an `until_executed` lock and
   # leaves the digest with no expiry. This job takes no arguments, so its digest is constant and
-  # one strand drops every later enqueue forever (gumroad-private#1576). The TTL is anchored at
-  # ACQUIRE, which for a first attempt is enqueue time — the server reuses that lock without
-  # refreshing it — so it must cover queue latency plus ATTEMPT_TIME_BUDGET, and stay under the
-  # 24h schedule so a strand costs one run.
+  # one strand drops every later enqueue forever (gumroad-private#1576). Stays under the 24h
+  # schedule so a strand costs one run rather than every run.
   LOCK_TTL = 23.hours
+
+  # How much of the lock's remaining life the attempt refuses to spend, covering the gap between
+  # the deadline check and the work that follows it (a batch of `deliver_later` calls, a statement
+  # already in flight) plus Redis/Rails clock skew.
+  LOCK_SAFETY_MARGIN = 1.hour
 
   class AttemptTimeBudgetExceeded < StandardError; end
 
@@ -52,7 +57,7 @@ class ScheduleAbandonedCartEmailsJob
   end
 
   def perform
-    @deadline = Time.current + ATTEMPT_TIME_BUDGET
+    @deadline = attempt_deadline
 
     # cart_product_ids_with_cart_ids is a hash of { product_id => { cart_id => [variant_ids] } }
     cart_product_ids_with_cart_ids = {}
@@ -150,19 +155,71 @@ class ScheduleAbandonedCartEmailsJob
   end
 
   private
+    # The attempt must end while the lock it is holding is still alive, and the lock's life is not
+    # ATTEMPT_TIME_BUDGET's to assume: `lock_ttl` is anchored at ACQUIRE, which for a first attempt
+    # is enqueue time, and the server reuses that lock without refreshing it (proven against
+    # Redis: after a 6h :low-queue delay, `perform` began with 17h left of a 23h TTL). Deriving the
+    # bound from a constant meant trusting queue latency to stay under LOCK_TTL - ATTEMPT_TIME_BUDGET,
+    # so a slower-than-expected queue put the run back outside its lock. Read what is actually left
+    # instead and take whichever ceiling binds first.
+    def attempt_deadline
+      now = Time.current
+      budget_deadline = now + ATTEMPT_TIME_BUDGET
+      lock_life = remaining_lock_life
+      return budget_deadline if lock_life.nil?
+
+      lock_deadline = now + lock_life - LOCK_SAFETY_MARGIN
+
+      # Less lock life left than the margin: a retry that waited out most of the TTL. There is no
+      # safe amount of work to do, so refuse the whole attempt rather than start one that finishes
+      # unlocked. Deferring is recoverable (the enqueue loop sends oldest-first for exactly this
+      # reason); a duplicate email is not. Say so, because otherwise this reads as an instant
+      # unexplained failure.
+      if lock_deadline <= now
+        ErrorNotifier.notify(
+          "ScheduleAbandonedCartEmailsJob started with too little unique-lock life left to run safely — skipping this attempt; carts are picked up by the next run",
+          remaining_lock_life: lock_life.inspect,
+          lock_safety_margin: LOCK_SAFETY_MARGIN.inspect
+        )
+      end
+
+      [budget_deadline, lock_deadline].min
+    end
+
+    # Remaining life of this job's `until_executed` lock, or nil when it has none to spend: no key
+    # (uniqueness disabled, as in test) or no expiry (the orphaned digest of gumroad-private#1576 —
+    # a lock that cannot expire cannot expire mid-run). The digest is a pure function of class,
+    # queue and args, so it is reconstructible here without the job hash; this job takes no
+    # arguments, which is why one strand mutes it forever and also why `args` is empty.
+    def remaining_lock_life
+      item = { "class" => self.class.name, "queue" => self.class.sidekiq_options["queue"].to_s, "args" => [] }
+      SidekiqUniqueJobs::Job.prepare(item)
+      pttl = Sidekiq.redis { |conn| conn.pttl(item["lock_digest"]) }
+      return if pttl.nil? || pttl.negative?
+
+      (pttl / 1000.0).seconds
+    rescue Redis::BaseError, SidekiqUniqueJobs::UniqueJobsError => e
+      # A Redis hiccup must not take down the day's abandoned-cart emails; fall back to the
+      # constant bound, which is the behaviour this method tightens rather than replaces. Scoped to
+      # connection/lock errors on purpose: a bare `StandardError` here swallowed a NoMethodError in
+      # this very method and reported it as a healthy fallback.
+      Rails.logger.warn "ScheduleAbandonedCartEmailsJob could not read its lock TTL (#{e.class}: #{e.message}); falling back to #{ATTEMPT_TIME_BUDGET.inspect}"
+      nil
+    end
+
     def attempt_deadline_passed?
       Time.current >= @deadline
     end
 
-    # Raises once the attempt has outrun ATTEMPT_TIME_BUDGET, because an attempt that outlives
-    # LOCK_TTL is the concurrency hazard. Called from every unbounded loop that runs BEFORE any
-    # mail is enqueued — day window, scan batch, hydration batch, workflow — since a retry there
-    # has no side effects to duplicate. Miss one and the bound is only as good as the loops it
-    # covers. The enqueue loop is the exception and stops without raising; see its comment.
+    # Raises once the attempt has outrun its deadline, because an attempt that outlives its lock is
+    # the concurrency hazard. Called from every unbounded loop that runs BEFORE any mail is
+    # enqueued — day window, scan batch, hydration batch, workflow — since a retry there has no
+    # side effects to duplicate. Miss one and the bound is only as good as the loops it covers.
+    # The enqueue loop is the exception and stops without raising; see its comment.
     def check_attempt_deadline!
       return unless attempt_deadline_passed?
 
-      raise AttemptTimeBudgetExceeded, "exceeded #{ATTEMPT_TIME_BUDGET.inspect} before finishing; aborting so the run cannot outlive its #{LOCK_TTL.inspect} unique lock"
+      raise AttemptTimeBudgetExceeded, "exceeded its attempt deadline before finishing; aborting so the run cannot outlive its unique lock"
     end
 
     # Returns the ids of all abandoned carts in the given updated_at window, equivalent to

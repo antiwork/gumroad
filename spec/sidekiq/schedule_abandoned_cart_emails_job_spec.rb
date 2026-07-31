@@ -175,11 +175,90 @@ describe ScheduleAbandonedCartEmailsJob do
       expect(described_class::ATTEMPT_TIME_BUDGET).to be < described_class::LOCK_TTL
     end
 
-    # Ordering alone is not enough: the TTL is anchored at acquire, which for a first attempt is
-    # enqueue time, so the gap between the two bounds is the queue latency the lock can absorb
-    # before an attempt still inside its budget is running on an expired lock.
-    it "leaves enough headroom between the bounds to absorb :low queue latency" do
-      expect(described_class::LOCK_TTL - described_class::ATTEMPT_TIME_BUDGET).to be >= 4.hours
+    # Ordering alone is not enough, and headroom between the constants is not the guarantee it
+    # looks like: the TTL is anchored at acquire, which for a first attempt is enqueue time, so any
+    # fixed gap is just a bet on :low queue latency. The real bound is read from the live lock —
+    # see the "lock-derived deadline" examples — and the margin is what that read holds back.
+    it "keeps the safety margin smaller than the attempt budget it is subtracted from" do
+      expect(described_class::LOCK_SAFETY_MARGIN).to be_positive
+      expect(described_class::LOCK_SAFETY_MARGIN).to be < described_class::ATTEMPT_TIME_BUDGET
+    end
+  end
+
+  describe "lock-derived deadline" do
+    let(:job) { described_class.new }
+    let(:digest) { "uniquejobs:abandoned-cart-probe" }
+
+    before do
+      allow(SidekiqUniqueJobs::Job).to receive(:prepare) { |item| item["lock_digest"] = digest }
+    end
+
+    # `and_yield` would yield but return nil, so the block's value never reaches the caller —
+    # which reads exactly like a PTTL of nil and silently exercises the fallback instead.
+    def stub_pttl(value)
+      conn = instance_double(Redis)
+      allow(conn).to receive(:pttl).with(digest).and_return(value)
+      allow(Sidekiq).to receive(:redis) { |&block| block.call(conn) }
+    end
+
+    # The hazard Greptile proved against real Redis: `lock_ttl` starts at enqueue, and the server
+    # reuses that lock without refreshing it, so a long :low-queue delay leaves less lock life than
+    # ATTEMPT_TIME_BUDGET. Trusting the constant would run the tail of the attempt unlocked, and
+    # the next daily enqueue could then take the same digest and email carts twice.
+    it "ends the attempt inside the lock when queue delay left less life than the budget" do
+      stub_pttl(6.hours.in_milliseconds)
+
+      travel_to Time.current do
+        expect(job.send(:attempt_deadline)).to eq(Time.current + 6.hours - described_class::LOCK_SAFETY_MARGIN)
+      end
+    end
+
+    it "still honours the attempt budget when the lock has more life than the budget" do
+      stub_pttl(23.hours.in_milliseconds)
+
+      travel_to Time.current do
+        expect(job.send(:attempt_deadline)).to eq(Time.current + described_class::ATTEMPT_TIME_BUDGET)
+      end
+    end
+
+    # A digest with no expiry is the orphaned lock of gumroad-private#1576. It cannot expire
+    # mid-run, so there is nothing to clamp to and the constant is the correct ceiling. `-1` is
+    # Redis's no-expiry answer and `-2` its no-key answer (uniqueness disabled, as in test).
+    [-1, -2].each do |pttl|
+      it "falls back to the attempt budget when PTTL returns #{pttl}" do
+        stub_pttl(pttl)
+
+        travel_to Time.current do
+          expect(job.send(:attempt_deadline)).to eq(Time.current + described_class::ATTEMPT_TIME_BUDGET)
+        end
+      end
+    end
+
+    # Reading the TTL is a tightening, not a dependency: a Redis hiccup must not take down the
+    # day's abandoned-cart emails platform-wide, which is the exact failure gumroad-private#1198
+    # was about.
+    it "falls back to the attempt budget when Redis raises" do
+      allow(Sidekiq).to receive(:redis).and_raise(Redis::CannotConnectError, "no connection")
+
+      travel_to Time.current do
+        expect(job.send(:attempt_deadline)).to eq(Time.current + described_class::ATTEMPT_TIME_BUDGET)
+      end
+    end
+
+    # A retry can be handed a lock with almost nothing left. There is no safe amount of work then,
+    # so the attempt must decline rather than start work it will finish unlocked — and it must say
+    # why, or this looks like an instant unexplained failure in Sidekiq.
+    it "declines the attempt and alerts when less lock life remains than the safety margin" do
+      stub_pttl((described_class::LOCK_SAFETY_MARGIN - 5.minutes).in_milliseconds)
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        a_string_including("too little unique-lock life left to run safely"),
+        hash_including(lock_safety_margin: described_class::LOCK_SAFETY_MARGIN.inspect)
+      )
+
+      travel_to Time.current do
+        expect(job.send(:attempt_deadline)).to be <= Time.current
+      end
     end
   end
 
@@ -207,7 +286,7 @@ describe ScheduleAbandonedCartEmailsJob do
 
       expect do
         described_class.new.perform
-      end.to raise_error(described_class::AttemptTimeBudgetExceeded, /#{Regexp.escape(described_class::LOCK_TTL.inspect)}/)
+      end.to raise_error(described_class::AttemptTimeBudgetExceeded, /cannot outlive its unique lock/)
     end
 
     it "does not abort a run that finishes within the budget" do
