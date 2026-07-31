@@ -9,8 +9,7 @@ class SendMembershipsPriceUpdateEmailsJob
       .applicable_for_product_price_change_as_of(7.days.from_now.to_date)
       .where(notified_subscriber_at: nil)
       .find_each do |subscription_plan_change|
-        subscription = subscription_plan_change.subscription
-        next if !subscription.alive? || subscription.pending_cancellation?
+        next unless subscription_plan_change.price_change_notification_recipient_eligible?
 
         claim_id = subscription_plan_change.claim_price_change_notification
         next unless claim_id

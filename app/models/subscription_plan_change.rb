@@ -78,20 +78,38 @@ class SubscriptionPlanChange < ApplicationRecord
     end
   end
 
-  def confirm_price_change_notification(claim_id)
-    with_lock do
-      next false if notified_subscriber_at.present? || notification_claim_id != claim_id
+  def price_change_notification_recipient_eligible?
+    subscription.alive? && !subscription.pending_cancellation?
+  end
 
-      assign_attributes(
-        notification_claim_id: nil,
-        notification_claimed_at: nil,
-        notified_subscriber_at: Time.current,
-      )
-      # Runs after the mail provider has already accepted the message, so a validation failure
-      # here (a legacy row missing its tier) would leave the notice sent and the marker unset,
-      # and every later run would send it again. Skip validations, keep the paper_trail version.
-      save!(validate: false)
-      true
+  # Takes the subscription row lock that `Subscription#cancel!` takes, so a cancellation either
+  # commits before this reads it (claim released, marker stays nil) or after the marker is written
+  # (the notice genuinely preceded the cancellation). Without that ordering a cancellation landing
+  # during delivery would leave the increase pre-authorized for a later restart, which keeps the
+  # plan change alive whenever the restart is on the same plan and price.
+  def confirm_price_change_notification(claim_id)
+    subscription.with_lock do
+      recipient_eligible = price_change_notification_recipient_eligible?
+
+      with_lock do
+        next false if notified_subscriber_at.present? || notification_claim_id != claim_id
+
+        unless recipient_eligible
+          update_columns(notification_claim_id: nil, notification_claimed_at: nil)
+          next false
+        end
+
+        assign_attributes(
+          notification_claim_id: nil,
+          notification_claimed_at: nil,
+          notified_subscriber_at: Time.current,
+        )
+        # Runs after the mail provider has already accepted the message, so a validation failure
+        # here (a legacy row missing its tier) would leave the notice sent and the marker unset,
+        # and every later run would send it again. Skip validations, keep the paper_trail version.
+        save!(validate: false)
+        true
+      end
     end
   end
 

@@ -15,7 +15,9 @@ class SendMembershipPriceUpdateEmailJob < ActiveJob::Base
     subscription = subscription_plan_change.subscription
     # The subscriber can cancel between the scheduler's check and this job. Confirming anyway would
     # both mail a cancelled subscriber and leave the increase pre-authorized for a later restart.
-    if !subscription.alive? || subscription.pending_cancellation?
+    # A cancellation landing *during* delivery is caught by the same predicate inside
+    # `confirm_price_change_notification`, under the subscription row lock.
+    unless subscription_plan_change.price_change_notification_recipient_eligible?
       subscription_plan_change.release_price_change_notification_claim(claim_id)
       return
     end
