@@ -157,6 +157,15 @@ describe "app/views/home/terms.html.erb cross-references" do
     expect(cited_numbers('\d{1,2}').map(&:to_i)).to include(14, 40)
   end
 
+  # The (?!\d) guard above is what keeps "CALIFORNIA CIVIL CODE SECTION 1542" from reading as a
+  # cite to section 15. Asserted rather than trusted: widening the number pattern later would
+  # silently pull a statute into the cite set and fail as "there is no Section 1542".
+  it "reads the California Civil Code reference as a statute, not a cross-reference" do
+    expect(source).to match(/SECTION#{sp}+1542/o)
+    expect(cited_numbers('\d{1,2}').map(&:to_i)).not_to include(15)
+    expect(titled_cites('\d{1,4}').map(&:first)).not_to include("1542")
+  end
+
   it "numbers each subsection under the section it is printed beneath" do
     order = source.scan(/<strong>#{sp}*(\d{1,2})\.(\d{1,2})?#{sp}+[^<]*?<\/strong>/o)
     expect(order.count { |_, min| min.nil? }).to eq(sections.size)
