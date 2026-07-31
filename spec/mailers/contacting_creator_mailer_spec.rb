@@ -2382,7 +2382,7 @@ describe ContactingCreatorMailer do
         # Decoded, not .encoded: quoted-printable soft-wraps can split a quoted value across a
         # line break and make a negative assertion pass for the wrong reason.
         body = mail.html_part&.decoded || mail.body.decoded
-        # Positive anchor from static template text — @subject interpolations are HTML-escaped
+        # Positive anchor from static template text — the header copy's apostrophes HTML-escape
         # ("couldn&#39;t"), so anchoring on those makes the negatives below vacuous.
         expect(body).to include("double-check your details")
         expect(body).not_to include("JSCLUZ22XXX")
