@@ -278,6 +278,29 @@ describe LibraryPresenter do
         expect(purchases.first[:purchase][:download_url]).to eq(renewal.url_redirect.download_page_url)
       end
 
+      it "does not let one card's subscription owner unlock another card's renewal" do
+        transferred_owner = create(:user)
+        other_purchase = create(:membership_purchase, link: product, purchaser: buyer, stripe_refunded: true)
+        other_purchase.create_url_redirect!
+        other_purchase.subscription.update!(user: transferred_owner)
+        create(
+          :membership_purchase,
+          link: product,
+          purchaser: transferred_owner,
+          email: transferred_owner.email,
+          subscription: other_purchase.subscription,
+          is_original_subscription_purchase: false,
+          succeeded_at: 1.day.ago
+        ).tap(&:create_url_redirect!)
+        # Only eligible for the OTHER card's owner, and this card's subscription is still the viewer's.
+        create_renewal(purchaser: transferred_owner, email: transferred_owner.email).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        card = purchases.find { _1[:purchase][:id] == purchase.external_id }
+        expect(card[:purchase][:download_url]).to be_nil
+      end
+
       it "ignores unsuccessful renewal attempts" do
         create_renewal(purchase_state: "failed").tap(&:create_url_redirect!)
         create_renewal(purchase_state: "in_progress").tap(&:create_url_redirect!)
