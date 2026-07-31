@@ -32,6 +32,16 @@ module User::PingNotification
     ping_notification_targets(resource_name).post_urls
   end
 
+  # Deliverability is decided at send time from the token table, so anything that reasons about it
+  # later — the undeliverable-subscription email, rendered from a low-priority job — has to ask here
+  # rather than trust what was true when it was enqueued.
+  def ping_notification_deliverable?(resource_subscription)
+    oauth_application = resource_subscription.oauth_application
+    return false if oauth_application.nil? || oauth_application.deleted?
+
+    resource_subscription.post_url.present? && live_ping_notification_token?(oauth_application)
+  end
+
   # Single pass, because resolving deliverability costs a token query per subscription and the read
   # paths (#urls_for_ping_notification, can_ping) run on every sale JSON.
   def ping_notification_targets(resource_name)
@@ -44,7 +54,7 @@ module User::PingNotification
       # A revoked application is also a terminal state the seller chose, so it is not undeliverable-and-worth-reporting.
       next if oauth_application.nil? || oauth_application.deleted?
 
-      if resource_subscription.post_url.present? && live_ping_notification_token?(oauth_application)
+      if ping_notification_deliverable?(resource_subscription)
         deliverable << resource_subscription
       elsif reportable_undeliverable?(oauth_application)
         undeliverable << resource_subscription

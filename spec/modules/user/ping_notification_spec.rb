@@ -109,6 +109,36 @@ describe User::PingNotification do
     end
   end
 
+  describe "#ping_notification_deliverable?" do
+    let(:user) { create(:user) }
+    let(:oauth_app) { create(:oauth_application, owner: user) }
+    let(:subscription) { create(:resource_subscription, oauth_application: oauth_app, user:) }
+
+    it "is true with a post URL and a live scoped token" do
+      create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+
+      expect(user.ping_notification_deliverable?(subscription)).to be true
+    end
+
+    it "is false without a live token" do
+      expect(user.ping_notification_deliverable?(subscription)).to be false
+    end
+
+    it "is false without a post URL" do
+      create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+      subscription.update_column(:post_url, nil)
+
+      expect(user.ping_notification_deliverable?(subscription)).to be false
+    end
+
+    it "is false when the application row no longer exists" do
+      subscription
+      OauthApplication.where(id: oauth_app.id).delete_all
+
+      expect(user.ping_notification_deliverable?(subscription.reload)).to be false
+    end
+  end
+
   describe "#ping_notification_targets" do
     let(:user) { create(:user) }
     let(:oauth_app) { create(:oauth_application, owner: user) }

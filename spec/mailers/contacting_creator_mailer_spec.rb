@@ -1575,6 +1575,42 @@ describe ContactingCreatorMailer do
       expect(mail.message).to be_a ActionMailer::Base::NullMail
     end
 
+    # Same window, other direction: the whole email asks the seller to do something they have now
+    # already done, so it has to stop asking.
+    it "sends nothing once the application has a live token again by render time" do
+      create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    it "sends nothing once a post URL is set on an authorized application by render time" do
+      create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "account")
+
+      # Enqueued while the URL was blank; the factory's URL stands in for the seller filling it in.
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
+      )
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # The reason is serialized at enqueue time, so remediation text read from it can describe a
+    # state the subscription has since left.
+    it "gives the advice matching current state rather than the reason it was enqueued with" do
+      resource_subscription.update_column(:post_url, nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.body.encoded).to include "does not have a URL to send to"
+      expect(mail.body.encoded).not_to include "no longer has permission to read your sales"
+    end
+
     # A small numeric primary key matches inside the footer address, so the identifier worth
     # asserting on is the one that would actually leak: the subscription's own external id.
     it "does not leak the post URL or an identifier of the seller's subscription" do
