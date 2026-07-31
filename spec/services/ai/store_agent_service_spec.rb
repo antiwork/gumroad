@@ -99,6 +99,30 @@ describe Ai::StoreAgentService do
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
     end
 
+    it "keeps trusted proposal state after truncating an assistant history message" do
+      captured = nil
+      allow(client).to receive(:messages) do |args|
+        captured = args
+        text_result("ok")
+      end
+      proposal_state = "the proposed action was applied and cannot be confirmed again"
+
+      service.respond(messages: [
+                        { role: "user", content: "Earlier question" },
+                        {
+                          role: "assistant",
+                          content: "x" * (described_class::MAX_MESSAGE_LENGTH + 100),
+                          proposal_state:,
+                        },
+                        { role: "user", content: "What now?" },
+                      ])
+
+      assistant_message = captured[:messages].second
+      expect(assistant_message.keys).to contain_exactly(:role, :content)
+      expect(assistant_message[:content].length).to eq(described_class::MAX_MESSAGE_LENGTH)
+      expect(assistant_message[:content]).to end_with("\n\n[Server proposal state: #{proposal_state}]")
+    end
+
     context "when the model completes a turn" do
       it "rejects an untyped staging claim that the prose backstop does not recognize" do
         false_claim = "Your edit is waiting in the action panel. Use the button there."
@@ -131,6 +155,22 @@ describe Ai::StoreAgentService do
         expect(result[:reply]).to eq("I prepared that change. Review it below, then confirm it when you're ready.")
         expect(result[:outcome]).to eq("proposal_ready")
         expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "rejects server-owned confirmation copy when reply_only has no proposal" do
+        expect(described_class::STAGED_CLAIM_PATTERNS.none? { |pattern| described_class::PROPOSAL_READY_REPLY.match?(pattern) }).to be(true)
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result(described_class::PROPOSAL_READY_REPLY, outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "fix my header" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result).to include(
+          outcome: "reply_only",
+          reply: described_class::NOTHING_STAGED_REPLY,
+          proposed_action: nil,
+        )
       end
 
       it "uses the honest no-proposal fallback when proposal_ready never has a proposal" do
@@ -1742,6 +1782,24 @@ describe Ai::StoreAgentService do
       expect(order).not_to include([:token, { text: model_reply }])
       expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:outcome]).to eq("proposal_ready")
+    end
+
+    it "resets server-owned confirmation copy when no proposal backs the stream" do
+      reply = described_class::PROPOSAL_READY_REPLY
+      stub_stream_turns(
+        { stream: [reply], result: text_result(reply) },
+        { stream: [reply], result: text_result(reply) },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "fix my header" }])
+
+      fallback_index = events.index { |event, payload| event == :token && payload[:text] == described_class::NOTHING_STAGED_REPLY }
+      expect(events.count { |event, _| event == :reset }).to eq(2)
+      expect(events.rindex { |event, _| event == :reset }).to be < fallback_index
+      expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+      expect(result[:proposed_action]).to be_nil
+      expect(events.any? { |event, _| event == :proposed_action }).to be(false)
     end
 
     it "enforces custom-page reads while streaming and resets them between turns" do

@@ -876,6 +876,7 @@ class Ai::StoreAgentService
 
       reply = result.text.to_s.strip
       return { status: :invalid, reason: :blank_reply } if reply.blank?
+      return { status: :invalid, reason: :staging_claim_without_proposal } if reply == PROPOSAL_READY_REPLY
       return { status: :invalid, reason: :staging_claim_without_proposal } if phantom_staged_claim?(reply:, proposed_action:)
 
       { status: :complete, reply: }
@@ -1103,7 +1104,15 @@ class Ai::StoreAgentService
         next if content.blank?
         next unless %w[user assistant].include?(role)
 
-        { role:, content: content.truncate(MAX_MESSAGE_LENGTH, omission: "...") }
+        proposal_state = msg[:proposal_state] || msg["proposal_state"]
+        state_suffix =
+          if role == "assistant" && proposal_state.present?
+            "\n\n[Server proposal state: #{proposal_state}]"
+          else
+            ""
+          end
+        content = content.truncate(MAX_MESSAGE_LENGTH - state_suffix.length, omission: "...")
+        { role:, content: "#{content}#{state_suffix}" }
       end
 
       # Anthropic's Messages API requires the conversation to START with a user message. The web chat
