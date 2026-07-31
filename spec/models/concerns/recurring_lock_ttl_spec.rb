@@ -17,7 +17,14 @@ describe RecurringLockTtl do
 
         klass = source[/^\s*class\s+([A-Za-z0-9_:]+)/, 1]
         next unless klass && scheduled.include?(klass)
-        next unless klass.constantize.instance_method(:perform).arity.zero?
+
+        # Prepended wrappers (LongRunningJobTracking, FinanceReportCompletionTracking) report a
+        # splat arity; the job's own definition carries the real signature, and only a no-arg
+        # signature makes the lock digest constant.
+        job = klass.constantize
+        perform = job.instance_method(:perform)
+        perform = perform.super_method while perform && perform.owner != job
+        next unless perform&.arity&.zero?
 
         klass
       end
