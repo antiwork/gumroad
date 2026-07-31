@@ -80,6 +80,9 @@ class AlertOnBlockedEstablishedSubscribersJob
         next if charge_counts.empty?
 
         failures = latest_block_failures(charge_counts.keys)
+        failures = reject_recovered(failures)
+        next if failures.empty?
+
         block_dates = active_block_dates(failures)
         live_subscription_ids = live_subscription_ids_among(charge_counts.keys)
 
@@ -157,6 +160,33 @@ class AlertOnBlockedEstablishedSubscribersJob
       Purchase.where(id: newest_per_subscription.values)
               .includes(:purchaser, :gift_given, :gift_received)
               .to_a
+    end
+
+    # Drops subscriptions that renewed successfully after their newest blocked failure.
+    #
+    # Eligibility is "stranded now", and the failure scope alone cannot say that: a blocked renewal
+    # followed by a successful one means the subscriber got through, and a block re-written later on
+    # some value they share is a different event from the one that failed. Without this the report
+    # names recovered subscribers as currently blocked and sends risk staff to clear a block for
+    # someone who is not stuck behind it.
+    #
+    # Same renewal predicate as the failures, so "renewed since" means the same kind of charge that
+    # is being reported as failing — an upgrade or a gifted membership's opening purchase is not
+    # evidence that renewals are getting through.
+    def reject_recovered(failures)
+      return failures if failures.empty?
+
+      newest_success = Purchase.successful
+                               .recurring_charge
+                               .not_is_gift_receiver_purchase
+                               .where(subscription_id: failures.map(&:subscription_id))
+                               .group(:subscription_id)
+                               .maximum(:created_at)
+
+      failures.reject do |purchase|
+        renewed_at = newest_success[purchase.subscription_id]
+        renewed_at.present? && renewed_at > purchase.created_at
+      end
     end
 
     # Purchase id => date its declining block was written, absent when no block is active any more.
