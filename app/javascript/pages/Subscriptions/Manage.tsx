@@ -190,9 +190,12 @@ export default function SubscriptionsManage() {
     const oneWayNote = irreversible
       ? ` Your current ${recurrenceLabels[subscription.recurrence]} billing is no longer offered on this ${subscriptionEntity}, so as long as the seller does not offer it again you will not be able to switch back.`
       : "";
-    // Only a downgrade outside a free trial defers; upgrades, overdue subscriptions and restarts
-    // apply immediately and this screen separately says "You'll be charged X today".
-    const deferralNote = amountDueToday === 0 && !isResubscribing ? ", starting at your next renewal" : "";
+    // Mirrors `Subscription::UpdaterService#apply_plan_change_immediately?`: only a downgrade
+    // that charges nothing today defers. A free trial or a switch to a free plan also owes $0
+    // today but applies at once, so neither may be described as starting at renewal.
+    const deferredToRenewal =
+      amountDueToday === 0 && !isResubscribing && !subscription.is_in_free_trial && requirePayment;
+    const deferralNote = deferredToRenewal ? ", starting at your next renewal" : "";
     if (isQuantityChanged && isRecurrenceChanged) {
       warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.${oneWayNote}`;
     } else if (isQuantityChanged) {

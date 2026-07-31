@@ -456,6 +456,24 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
       end
     end
 
+    context "when the target billing frequency is free on the buyer's tier" do
+      before do
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "monthly").update!(price_cents: 0)
+        @product.prices.alive.is_buy.find_by!(recurrence: "monthly").update!(price_cents: 0)
+      end
+
+      it "does not promise the next renewal" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        select("Monthly", from: "Recurrence")
+
+        # A switch to a free plan owes $0 today but the updater applies it immediately
+        # (`new_plan_is_free?`), so the deferral phrasing would be wrong.
+        expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription")
+        expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
+      end
+    end
+
     context "when decreasing the seat count and decreasing the billing frequency" do
       it "displays a warning notice regarding the seat and billing frequency change" do
         visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
