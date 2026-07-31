@@ -246,6 +246,54 @@ describe Ai::StoreAgentService do
         expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
         expect(result[:proposed_action]).to be_nil
       end
+
+      it "logs a recovered missing terminal marker at info without reporting it" do
+        allow(Rails.logger).to receive(:info)
+        expect(ErrorNotifier).not_to receive(:notify)
+        allow(client).to receive(:messages).and_return(
+          untyped_text_result("Your top seller is Cool Ebook."),
+          complete_turn_result("Your top seller is Cool Ebook.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "what sells best?" }])
+
+        expect(Rails.logger).to have_received(:info).with("Store agent final turn did not match proposal state (missing_complete_turn, retrying)")
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq("Your top seller is Cool Ebook.")
+      end
+
+      it "still reports a missing terminal marker the retry could not recover" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Store agent final turn did not match proposal state",
+          reason: "missing_complete_turn",
+          outcome: "gave up",
+        )
+        allow(Rails.logger).to receive(:warn)
+        allow(client).to receive(:messages).and_return(untyped_text_result("Still no marker."))
+
+        result = service.respond(messages: [{ role: "user", content: "what sells best?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
+      end
+
+      it "still reports a non-marker proposal-state mismatch on the retry" do
+        expect(ErrorNotifier).to receive(:notify).with(
+          "Store agent final turn did not match proposal state",
+          reason: "invalid_complete_turn_outcome",
+          outcome: "retrying",
+        )
+        allow(Rails.logger).to receive(:warn)
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("Here you go.", outcome: "not_a_real_outcome"),
+          complete_turn_result("Here you go.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "what sells best?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq("Here you go.")
+      end
     end
 
     describe "api_read" do
