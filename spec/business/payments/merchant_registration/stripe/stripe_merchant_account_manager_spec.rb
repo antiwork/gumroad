@@ -9424,6 +9424,119 @@ describe StripeMerchantAccountManager, :vcr do
           expect(attributes.fetch(:individual, {})).not_to have_key(:address)
         end
       end
+
+      # gumroad-private#1575. The address is withheld because Stripe will never accept it; an
+      # identifier is different — it may be the exact thing Stripe is waiting on to lift a
+      # verification requirement, so withholding it silently parks the seller. It is sent on its
+      # own instead, so a rejection costs only the identifier.
+      describe "identity fields Stripe validates against the account country" do
+        # A changed national ID is what puts the identifier into the diff at all; without a change
+        # it is diffed out and the cohort resyncs cleanly, which is why this never showed up before.
+        let(:user_compliance_info_2) do
+          create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul",
+                                        individual_tax_id: "1234567890")
+        end
+
+        it "keeps the identifier off the main payload and sends it in its own call" do
+          calls = []
+          allow(Stripe::Account).to receive(:update) { |_id, attributes| calls << attributes }
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(calls.size).to eq(2)
+          main, identity = calls
+          # The main payload keeps everything that can land, minus the identifier.
+          expect(main[:individual]).to include(:email)
+          expect(main.fetch(:individual, {})).not_to have_key(:id_number)
+          expect(main.fetch(:individual, {})).not_to have_key(:ssn_last_4)
+          # The identifier goes alone — nothing else may ride along, or a rejection takes it down too.
+          expect(identity.keys).to eq([:individual])
+          expect(identity[:individual].keys).to contain_exactly(:id_number)
+          expect(identity[:individual][:id_number]).to eq("1234567890")
+        end
+
+        it "still lands the rest of the payload when Stripe rejects the identifier" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+
+          expect { subject.update_account(user, passphrase: "1234") }.not_to raise_error
+
+          expect(Stripe::Account).to have_received(:update).twice
+        end
+
+        it "records the rejection as a private payout note rather than losing it" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+
+          subject.update_account(user, passphrase: "1234")
+
+          note = user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                     .last
+          expect(note).to be_present
+          expect(note.content).to include("Invalid ID number")
+          expect(note.content).to include("US")
+          expect(note.json_data[PayoutNoteVisibility::SELLER_VISIBLE_FLAG]).to be(false)
+        end
+
+        # The seller retries this save repeatedly; a note per attempt buries the payout notes.
+        it "does not accumulate a note per retry for the same rejection" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+
+          expect do
+            3.times { subject.update_account(user, passphrase: "1234") }
+          end.to change {
+            user.comments.with_type_payout_note.alive
+                .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                .count
+          }.by(1)
+        end
+
+        # A stale note keeps support chasing a verification that is no longer blocked.
+        it "clears the note once the identifier is accepted" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+          subject.update_account(user, passphrase: "1234")
+          expect(user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                     .count).to eq(1)
+
+          allow(Stripe::Account).to receive(:update)
+          create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Busan",
+                                        individual_tax_id: "1234567890")
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                     .count).to eq(0)
+        end
+
+        # The split is scoped to the mismatch. On a matched account the identifier belongs on the
+        # main payload, and a second call would be a pointless extra round-trip on every save.
+        context "when the countries agree" do
+          let(:stripe_account_country) { "KR" }
+
+          it "sends the identifier on the main payload in a single call" do
+            allow(Stripe::Account).to receive(:update)
+
+            subject.update_account(user, passphrase: "1234")
+
+            expect(Stripe::Account).to have_received(:update).once do |_id, attributes|
+              expect(attributes[:individual][:id_number]).to eq("1234567890")
+            end
+          end
+        end
+      end
     end
 
     describe "updating business type" do

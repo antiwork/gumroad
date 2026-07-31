@@ -519,22 +519,32 @@ module StripeMerchantAccountManager
     # acceptance without an agreement as the full one, and which agreement these sellers belong
     # under is a compliance decision.
     #
-    # Those two fields only. The identity fields Stripe validates the same way —
-    # `individual[id_number]`, `ssn_last_4`, `company[tax_id]`, and the identifiers `update_person`
-    # sends in its own call — are not filtered here, so a mismatched seller who CHANGES an
-    # identifier still fails whole. Withholding an identifier can stall a verification Stripe is
-    # waiting on, so the disposition is a decision, not a filter entry: gumroad-private#1575.
+    # Identity fields (`individual[id_number]`, `ssn_last_4`, `company[tax_id]`) are validated the
+    # same way but are NOT held back — they are SPLIT into their own call below instead. Withholding
+    # an identifier can stall the very verification Stripe is waiting on, with no signal that it was
+    # never sent; letting it be rejected in isolation keeps the rejection loud while sparing the rest
+    # of the payload. gumroad-private#1575.
+    identity_attributes = {}
     if account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
-      attributes = without_account_country_validated_fields(diff_attributes)
+      identity_attributes = only_identity_fields(diff_attributes)
+      attributes = without_account_country_validated_fields(diff_attributes.deep_dup)
+      attributes = without_identity_fields(attributes) if identity_attributes.present?
       if attributes != diff_attributes
         record_service_agreement_failure_note(user, nil) if notify
         Rails.logger.warn "Holding back country-validated fields for user #{user&.id}: Stripe account country " \
                           "#{account_country.inspect} disagrees with the legal-entity country"
       end
-      return AccountUpdate.new(nil, attributes) if attributes.values.all?(&:blank?)
+      if attributes.values.all?(&:blank?)
+        submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify:)
+        return AccountUpdate.new(nil, attributes)
+      end
     end
 
-    AccountUpdate.new(Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes)), attributes)
+    updated = Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
+    # After the main payload lands, not before: a rejected identifier must not take the fields that
+    # would otherwise have succeeded down with it.
+    sent_identity = submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify:)
+    AccountUpdate.new(updated, sent_identity ? attributes.deep_merge(identity_attributes) : attributes)
   rescue Stripe::InvalidRequestError => e
     # Keyed off what was actually sent, not the original diff: retrying from `diff_attributes` here
     # would restore the fields the branch above deliberately held back.
@@ -594,7 +604,8 @@ module StripeMerchantAccountManager
   # The entity hashes the legal-entity address lives under. Removing the address wholesale rather
   # than just its `country` is deliberate: Stripe validates the address as a unit, so a
   # legal-entity street and postal code under a different country's account is the same rejection.
-  # Identity fields under these same hashes are NOT removed — see gumroad-private#1575.
+  # Identity fields under these same hashes are removed here too, but they are RE-SENT on their own
+  # rather than dropped — see gumroad-private#1575.
   ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS = %i[individual company].freeze
   private_constant :ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS
 
@@ -622,6 +633,100 @@ module StripeMerchantAccountManager
     end
 
     attributes
+  end
+
+  # The identity fields Stripe validates against the ACCOUNT's country rather than the legal
+  # entity's. Same validation rule as the address, deliberately handled differently — see
+  # `submit_identity_fields_in_isolation`.
+  IDENTITY_SUBHASH_KEYS = %i[id_number ssn_last_4 tax_id].freeze
+  private_constant :IDENTITY_SUBHASH_KEYS
+
+  # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
+  # address" from "Stripe refused your tax ID", because only the second is the seller's to fix.
+  IDENTITY_REJECTION_NOTE_PREFIX = "Stripe rejected tax/national ID"
+
+  private_class_method
+  def self.only_identity_fields(diff_attributes)
+    ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.each_with_object({}) do |entity_key, identity|
+      entity = diff_attributes[entity_key]
+      next unless entity.is_a?(Hash)
+
+      present = entity.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
+      identity[entity_key] = present if present.any?
+    end
+  end
+
+  private_class_method
+  def self.without_identity_fields(attributes)
+    ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.each do |entity_key|
+      entity = attributes[entity_key]
+      next unless entity.is_a?(Hash)
+
+      remaining = entity.except(*IDENTITY_SUBHASH_KEYS)
+      attributes = remaining.empty? ? attributes.except(entity_key) : attributes.merge(entity_key => remaining)
+    end
+    attributes
+  end
+
+  # Send the identifiers as their OWN all-or-nothing call, so a rejection costs only the identifier.
+  # Returns whether they landed.
+  #
+  # The rejection is swallowed rather than raised on purpose: by the time this runs the rest of the
+  # seller's payload is already on the account, and re-raising would surface as a failed save for
+  # fields that succeeded. The payout note is what carries the rejection forward — without it a
+  # withheld or refused identifier is undiagnosable, which is the failure mode that ruled out simply
+  # filtering these fields (gumroad-private#1575).
+  private_class_method
+  def self.submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify: true)
+    return false if identity_attributes.blank?
+
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(identity_attributes))
+    clear_identity_rejection_notes(user)
+    true
+  rescue Stripe::InvalidRequestError => e
+    record_identity_rejection_note(user, e, account_country) if notify
+    Rails.logger.warn "Stripe rejected the identity fields for user #{user&.id} on a " \
+                      "#{account_country.inspect} account: #{e.message}"
+    false
+  end
+
+  # One note per rejection reason, refreshed rather than accumulated: the seller retries this save
+  # repeatedly and a note per attempt would bury the payout notes (the same reasoning as the
+  # service-agreement note, which is written once per account).
+  private_class_method
+  def self.record_identity_rejection_note(user, error, account_country)
+    return if user.blank?
+
+    detail = error.respond_to?(:message) && error&.message.present? ? error.message.to_s.truncate(300) : "no reason given"
+    content = "#{IDENTITY_REJECTION_NOTE_PREFIX} — Stripe account country #{account_country.inspect} " \
+              "validates the ID against itself, not the seller's legal-entity country: #{detail}"
+
+    user.with_lock do
+      existing = user.comments.with_type_payout_note.alive
+                     .where(author_id: GUMROAD_ADMIN_ID)
+                     .where("content LIKE ?", "#{IDENTITY_REJECTION_NOTE_PREFIX}%")
+      next if existing.where(content:).exists?
+
+      existing.each { |note| note.mark_deleted! }
+      user.add_payout_note(content:, seller_visible: false)
+    end
+  rescue => e
+    Rails.logger.error "Failed to record Stripe identity-rejection payout note for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # The identifier landed, so a note saying it was refused now describes a resolved state. Leaving it
+  # would keep support chasing a verification that is no longer blocked.
+  private_class_method
+  def self.clear_identity_rejection_notes(user)
+    return if user.blank?
+
+    user.comments.with_type_payout_note.alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{IDENTITY_REJECTION_NOTE_PREFIX}%")
+        .each { |note| note.mark_deleted! }
+  rescue => e
+    Rails.logger.error "Failed to clear Stripe identity-rejection payout note for user #{user&.id}: #{e.class}: #{e.message}"
   end
 
   # One breadcrumb per account, not per attempt: the resync runs on every compliance change and
@@ -700,6 +805,18 @@ module StripeMerchantAccountManager
     # actually re-validates a previously rejected representative postal code.
     force_address_into_diff!(diff_attributes, { person: current_attributes }, :person) if force_address_resync
 
+    # `update_person` is a SEPARATE all-or-nothing payload, and it carried no country filter at all:
+    # a representative identifier Stripe validates against the account country would take the whole
+    # person update down with it, losing name/dob/address changes that were fine. Split the
+    # identifier out on a mismatched account for the same reason as the account update above
+    # (gumroad-private#1575).
+    person_identity_attributes = {}
+    account_country = stripe_account_country(stripe_account)
+    if account_country_conflicts_with_legal_entity?(account_country, user_compliance_info.legal_entity_country_code)
+      person_identity_attributes = diff_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
+      diff_attributes = diff_attributes.except(*IDENTITY_SUBHASH_KEYS) if person_identity_attributes.present?
+    end
+
     begin
       Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
     rescue Stripe::InvalidRequestError => e
@@ -723,7 +840,25 @@ module StripeMerchantAccountManager
       end
       Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
     end
+    submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country)
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+  end
+
+  # The `update_person` counterpart of `submit_identity_fields_in_isolation`. Same contract: the
+  # rejection is recorded as a payout note rather than raised, because the rest of the person update
+  # has already landed by the time this runs.
+  private_class_method
+  def self.submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, identity_attributes, account_country)
+    return false if identity_attributes.blank?
+
+    Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(identity_attributes))
+    clear_identity_rejection_notes(user)
+    true
+  rescue Stripe::InvalidRequestError => e
+    record_identity_rejection_note(user, e, account_country)
+    Rails.logger.warn "Stripe rejected the representative's identity fields for user #{user&.id} on a " \
+                      "#{account_country.inspect} account: #{e.message}"
+    false
   end
 
   private_class_method
