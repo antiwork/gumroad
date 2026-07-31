@@ -361,8 +361,8 @@ class ContactingCreatorMailer < ApplicationMailer
 
   # The two reasons need opposite advice — fill in a URL, or re-authorize the app that owns the
   # subscription — so the reason is resolved here from current state rather than flattened to one
-  # message. The enqueued reason is not read for advice, only to identify the notifier's send-once
-  # claim so a suppressed send can hand it back.
+  # message. The enqueued reason identifies the notifier's send-once claim: a suppressed send hands
+  # it back, and a send whose advice no longer matches it moves the claim to the advice given.
   def undeliverable_ping_subscription(resource_subscription_id, reason = nil)
     @resource_subscription = ResourceSubscription.alive.find_by(id: resource_subscription_id)
     # Enqueued from the sale path but rendered later, so the seller may have deleted the
@@ -380,8 +380,15 @@ class ContactingCreatorMailer < ApplicationMailer
       return do_not_send
     end
 
+    rendered_reason = UndeliverablePingSubscriptionNotifier.reason_for(@resource_subscription)
+    if reason.present? && !UndeliverablePingSubscriptionNotifier.reconcile_claim(
+      resource_subscription_id, claimed: reason, rendered: rendered_reason
+    )
+      return do_not_send
+    end
+
     @application_name = @resource_subscription.oauth_application&.name
-    @missing_post_url = @resource_subscription.post_url.blank?
+    @missing_post_url = rendered_reason == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
     @subject = "Your #{@resource_subscription.resource_name} webhook is not being sent"
   end
 

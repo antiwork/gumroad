@@ -29,6 +29,10 @@ class UndeliverablePingSubscriptionNotifier
     end
   end
 
+  def self.reason_for(resource_subscription)
+    resource_subscription.post_url.present? ? REVOKED_CREDENTIAL : MISSING_POST_URL
+  end
+
   # The claim is taken at enqueue, but the mailer suppresses the send when the subscription is
   # deliverable again by render time. Holding the claim then spends the seller's one notice on an
   # email nobody received, and the same reason breaking a second time would go unreported.
@@ -38,6 +42,32 @@ class UndeliverablePingSubscriptionNotifier
     $redis.del(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
   rescue => e
     report(e)
+  end
+
+  # The advice is chosen at render time, so the send-once claim has to be the one for the advice
+  # actually given. Keyed on the enqueued reason instead, the two drift whenever the subscription
+  # changes in the window: a seller told to fill in a URL does so, the revoked token still blocks
+  # delivery, and the notice they are owed is refused by a claim taken under a reason they were
+  # never told about. Returns false when that advice has already been sent once.
+  def self.reconcile_claim(resource_subscription_id, claimed:, rendered:)
+    return true if claimed == rendered
+
+    claimed_rendered = claim(resource_subscription_id, rendered)
+    release_claim(resource_subscription_id, claimed)
+    claimed_rendered
+  rescue => e
+    report(e)
+    # Sending on a bookkeeping failure beats withholding: the claim is wrong either way, and silence
+    # is the thing this notice exists to break.
+    true
+  end
+
+  def self.claim(resource_subscription_id, reason)
+    !!$redis.set(
+      RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason),
+      Time.current.to_i,
+      nx: true
+    )
   end
 
   def self.report(error)
@@ -58,17 +88,13 @@ class UndeliverablePingSubscriptionNotifier
     attr_reader :resource_subscription
 
     def reason
-      resource_subscription.post_url.present? ? REVOKED_CREDENTIAL : MISSING_POST_URL
+      self.class.reason_for(resource_subscription)
     end
 
     # Send once and stop. The seller cannot re-authorize an app holding no live token, and there is
     # no UI or API to delete the subscription without one, so a repeat is a nag they cannot act on.
     # Keys carry no expiry for the same reason; the mailer releases one when it suppresses the send.
     def claim_notification
-      $redis.set(
-        RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, reason),
-        Time.current.to_i,
-        nx: true
-      )
+      self.class.claim(resource_subscription.id, reason)
     end
 end

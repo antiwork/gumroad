@@ -157,4 +157,63 @@ describe UndeliverablePingSubscriptionNotifier do
       expect { described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL) }.not_to raise_error
     end
   end
+
+  describe ".reconcile_claim" do
+    def key_for(reason) = RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, reason)
+
+    it "leaves the claim alone when the advice still matches it" do
+      described_class.new(resource_subscription).notify
+
+      expect(
+        described_class.reconcile_claim(
+          resource_subscription.id,
+          claimed: described_class::REVOKED_CREDENTIAL,
+          rendered: described_class::REVOKED_CREDENTIAL
+        )
+      ).to be true
+      expect($redis.exists?(key_for(described_class::REVOKED_CREDENTIAL))).to be true
+    end
+
+    # The claim has to name the advice the seller was actually given, or the notice they are owed for
+    # the other reason is refused by a claim taken under a reason nobody told them about.
+    it "moves the claim to the advice being sent" do
+      described_class.new(resource_subscription).notify
+
+      expect(
+        described_class.reconcile_claim(
+          resource_subscription.id,
+          claimed: described_class::REVOKED_CREDENTIAL,
+          rendered: described_class::MISSING_POST_URL
+        )
+      ).to be true
+      expect($redis.exists?(key_for(described_class::MISSING_POST_URL))).to be true
+      expect($redis.exists?(key_for(described_class::REVOKED_CREDENTIAL))).to be false
+    end
+
+    it "refuses a send whose advice was already sent once under its own reason" do
+      $redis.set(key_for(described_class::MISSING_POST_URL), Time.current.to_i)
+
+      expect(
+        described_class.reconcile_claim(
+          resource_subscription.id,
+          claimed: described_class::REVOKED_CREDENTIAL,
+          rendered: described_class::MISSING_POST_URL
+        )
+      ).to be false
+    end
+
+    # The claim is wrong either way at that point, and this notice exists to break silence.
+    it "sends rather than withholds when the bookkeeping itself fails" do
+      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect(
+        described_class.reconcile_claim(
+          resource_subscription.id,
+          claimed: described_class::REVOKED_CREDENTIAL,
+          rendered: described_class::MISSING_POST_URL
+        )
+      ).to be true
+    end
+  end
 end

@@ -1640,6 +1640,42 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).not_to include "no longer has permission to read your sales"
     end
 
+    # The claim never expires, so one left on the reason that was enqueued rather than the one that
+    # was sent refuses the notice the seller is owed for the reason they were never told about.
+    it "moves the send-once claim to the advice it actually sent" do
+      resource_subscription.update_column(:post_url, nil)
+      enqueued_key = RedisKey.undeliverable_ping_subscription_notified(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+      sent_key = RedisKey.undeliverable_ping_subscription_notified(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
+      )
+      $redis.set(enqueued_key, Time.current.to_i)
+
+      ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      ).message
+
+      expect($redis.exists?(sent_key)).to be true
+      expect($redis.exists?(enqueued_key)).to be false
+    end
+
+    it "sends nothing when the advice it would give was already sent once" do
+      resource_subscription.update_column(:post_url, nil)
+      $redis.set(
+        RedisKey.undeliverable_ping_subscription_notified(
+          resource_subscription.id, UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
+        ),
+        Time.current.to_i
+      )
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
     # A small numeric primary key matches inside the footer address, so the identifier worth
     # asserting on is the one that would actually leak: the subscription's own external id.
     it "does not leak the post URL or an identifier of the seller's subscription" do
