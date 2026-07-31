@@ -203,6 +203,10 @@ class User < ApplicationRecord
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
   # Separate from the column above on purpose — see Payment#send_paypal_terminal_failure_email.
   attr_json_data_accessor :payout_date_of_last_paypal_terminal_failure_email
+  # The PayPal payout address we took off the account after PayPal permanently refused it, kept so
+  # support can put it back and so the payout code can still find the rejection that stands against
+  # it. See Payment#invalidate_paypal_payout_address.
+  attr_json_data_accessor :invalidated_paypal_payout_address
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -1286,6 +1290,19 @@ class User < ApplicationRecord
     return nil unless has_paypal_account_connected?
 
     paypal_connect_account.paypal_account_details&.dig("primary_email")
+  end
+
+  # The PayPal address whose rejection history describes this seller's situation, which is not
+  # always one we would pay to.
+  #
+  # Taking a permanently-refused address off the account (Payment#invalidate_paypal_payout_address)
+  # removes the only link between the seller and the rejection standing against them, since every
+  # part of the payout code finds those rejections by address. Without this, invalidating would
+  # silently undo the explanation the seller reads and the block that stopped the retries. So
+  # readers asking "what is wrong with this account" use this, while anything deciding where to
+  # SEND money keeps using #paypal_payout_email — which is blank, exactly as intended.
+  def paypal_payout_email_for_failure_lookup
+    paypal_payout_email.presence || invalidated_paypal_payout_address.presence
   end
 
   def purchased_small_bets?

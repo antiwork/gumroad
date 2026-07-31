@@ -235,8 +235,20 @@ class UpdatePayoutMethod
       return { error: :provide_valid_email_prompt } unless EmailFormatValidator.valid?(payment_address)
       return { error: :provide_ascii_only_email_prompt } unless payment_address.ascii_only?
       return { error: :paypal_payouts_not_supported } unless paypal_payouts_supported?
+      # Don't let the seller re-save an address PayPal has permanently refused. This is the address
+      # we took off the account for that reason (Payment#invalidate_paypal_payout_address), so
+      # accepting it would put them straight back behind the payout block with their settings page
+      # once again claiming they have a working payout method (gumroad-private#1478). Saying so here
+      # is the only chance to tell them before another payout cycle passes.
+      if PaypalPayoutProcessor.terminal_failure_for_payout_email?(user, payment_address)
+        return { error: :paypal_address_permanently_refused }
+      end
 
       user.payment_address = payment_address
+      # The seller has chosen a payout method, so the record of the one we removed has done its job.
+      # Leaving it set would keep the payout code treating the old rejection as this account's live
+      # situation if this address is ever cleared again.
+      user.invalidated_paypal_payout_address = nil
       user.save!
 
       user.forfeit_unpaid_balance!(:payout_method_change)

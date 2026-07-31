@@ -84,6 +84,11 @@ class Payment < ApplicationRecord
     after_transition %i[creating processing] => %i[cancelled failed], do: :mark_balances_as_unpaid
     after_transition processing: :failed, do: :send_cannot_pay_email, if: ->(payment) { payment.failure_reason == FailureReason::CANNOT_PAY }
     after_transition processing: :failed, do: :send_debit_card_limit_email, if: ->(payment) { payment.failure_reason == FailureReason::DEBIT_CARD_LIMIT }
+    # The invalidation runs BEFORE the note and the email, because both describe it — the copy says
+    # we removed the PayPal address, and Payment#paypal_payout_address_invalidated? reads the account
+    # to decide whether that is true. Running it after would have the first note and the first email
+    # deny what just happened.
+    after_transition processing: :failed, do: :invalidate_paypal_payout_address, if: ->(payment) { payment.terminal_paypal_failure? }
     after_transition processing: :failed, do: :send_paypal_terminal_failure_email, if: ->(payment) { payment.explained_paypal_failure? }
     after_transition processing: :failed, do: :add_payment_failure_reason_comment
 
@@ -222,6 +227,58 @@ class Payment < ApplicationRecord
     user.save!(validate: false)
   end
 
+  # Take the permanently-refused PayPal address off the account.
+  #
+  # A retry-blocking rejection means PayPal will not deliver to this address, ever, whatever we do
+  # (Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS). Stopping the retries fixed the
+  # weekly noise but left the seller's payout settings still showing that address as how they get
+  # paid, so the page contradicted the note telling them to change it. Clearing it makes the
+  # settings page true and puts the seller in the state the explanation asks for: no payout method
+  # on file, add a working one (gumroad-private#1478).
+  #
+  # Only the retry-blocking rejection invalidates. A currency rejection (14159) is repairable on the
+  # same account and we deliberately keep retrying it, so removing that address would be taking away
+  # a payout method that is about to start working.
+  #
+  # `payment_address` is the only thing removed, and only when it is what we were paying. A seller
+  # whose payout email comes from a connected PayPal account keeps it — there is nothing of ours to
+  # clear, and the address-keyed block still holds them. Clearing the column is how the rest of the
+  # codebase already says "no PayPal on file" (UpdatePayoutMethod, UpdateUserCountry), so nothing
+  # downstream has to learn a new state.
+  #
+  # Two consequences worth knowing about, both intended:
+  #
+  # - Every lookup of the rejection standing against this seller is keyed on the address, so
+  #   clearing it would erase the block and the seller's explanation along with it. The address is
+  #   therefore kept in `invalidated_paypal_payout_address` and read back by
+  #   User#paypal_payout_email_for_failure_lookup, which is what the failure lookups use. Support
+  #   can also restore it from there.
+  # - A seller with no other payment method cannot publish a NEW product while nothing is on file
+  #   (Link#publishable?). Products already published keep selling, so this costs them no revenue,
+  #   and it is the same state as never having added a payout method. Leaving an address we will
+  #   never pay to in place to avoid it would be pretending they have a working one.
+  def invalidate_paypal_payout_address
+    address = user.payment_address
+    return if address.blank?
+    # Guard against invalidating an address a later payout already succeeded to — a failure row can
+    # be transitioned late, and the retry block itself ignores rejections older than the last
+    # completed payout to the same address for the same reason.
+    return unless PaypalPayoutProcessor.terminal_failure_for_payout_email?(user, address)
+
+    user.payment_address = ""
+    user.invalidated_paypal_payout_address = address
+    # Skipping validations for the same reason send_paypal_terminal_failure_email does: these seller
+    # rows are frequently invalid for unrelated reasons, and a raise here would roll back the failure
+    # transition and leave the payout stuck in `processing`, blocking every future payout with
+    # nothing on the account to show why.
+    user.save!(validate: false)
+    user.add_payout_note(
+      content: "PayPal payout address #{address} removed because PayPal permanently refused it (#{failure_reason}). " \
+               "Kept in invalidated_paypal_payout_address; restore it there if the account is fixed.",
+      seller_visible: false
+    )
+  end
+
   def humanized_failure_reason
     if processor == PayoutProcessorType::PAYPAL
       failure_reason.present? ? "#{failure_reason}: #{PAYPAL_MASS_PAY[failure_reason]}" : nil
@@ -257,6 +314,15 @@ class Payment < ApplicationRecord
       FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.include?(failure_reason)
   end
 
+  # True when the seller is currently reading copy that says we removed their PayPal address, i.e.
+  # when the invalidation actually happened. Not every retry-blocking rejection invalidates: a seller
+  # paid through a connected PayPal account has no saved address for us to remove, and telling them
+  # we removed one would be false. Read off the account rather than recomputed, so the copy and the
+  # account cannot disagree.
+  def paypal_payout_address_invalidated?
+    user.invalidated_paypal_payout_address.present?
+  end
+
   # What to tell the seller to do about a terminal PayPal rejection, and what to expect after.
   #
   # Both halves are per-seller. Bank transfer is only a real option where Gumroad supports it —
@@ -278,9 +344,17 @@ class Payment < ApplicationRecord
         FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_PAYPAL_ONLY
       end
     elsif user.can_setup_bank_payouts?
-      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK
+      if paypal_payout_address_invalidated?
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK
+      else
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_CONNECTED_WITH_BANK
+      end
     else
-      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY
+      if paypal_payout_address_invalidated?
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY
+      else
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_CONNECTED_PAYPAL_ONLY
+      end
     end
 
     # The two pause flags are independent, so all four combinations are real. A seller who paused

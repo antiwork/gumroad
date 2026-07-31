@@ -17,10 +17,25 @@
 # the same uninformative note they have been staring at for months, so this walks the existing
 # population once and writes the note they should have had all along.
 #
-# Notes only: the one-time email to these sellers is tracked separately so its copy can be reviewed
-# before anything sends.
+# Three things happen per seller, and each is skipped independently when it is already true, so the
+# task is safe to re-run and safe to stop halfway:
+#
+# 1. The note, seller-visible on their Payouts page.
+# 2. The email, because for almost all of these sellers nothing else will ever send one. Measured on
+#    production: of 384 affected sellers, 383 are dropped by gates that sit EARLIER than the PayPal
+#    processor — an internal hold (75 sellers, $54.8K), a balance below the payout minimum (298), no
+#    payout email, the payout-cycle date — so no Payment is ever created for them, there is no
+#    processing → failed transition, and Payment#send_paypal_terminal_failure_email never fires. One
+#    seller of the 384 would be emailed by the live path. Those gates are permanent for this
+#    population: nothing about a PayPal rejection clears a hold, and a below-minimum balance on a
+#    dormant account only grows from sales they are not making. Idempotent through the same
+#    `payout_date_of_last_paypal_terminal_failure_email` marker the live path uses.
+# 3. The invalidation, for retry-blocking rejections only: the unusable address comes off the account
+#    so their payout settings stop showing a PayPal account we will never pay to. Same operation the
+#    live path now performs (Payment#invalidate_paypal_payout_address); this reaches the sellers who
+#    were already blocked and therefore have no next failure to trigger it.
 module Onetime
-  class ExplainTerminalPaypalPayoutFailures
+  class ResolveTerminalPaypalPayoutFailures
     BATCH_SIZE = 500
 
     # Reports by default; writing needs dry_run: false said out loud.
@@ -35,6 +50,8 @@ module Onetime
 
     def process(batch_size: BATCH_SIZE, dry_run: true)
       noted = 0
+      emailed = 0
+      invalidated = 0
       skipped = 0
 
       terminal_failures_by_user(batch_size:).each do |user_id, payment|
@@ -55,25 +72,75 @@ module Onetime
         # Quote the rejection the seller is actually stuck on, not merely their newest one.
         payment = latest_terminal_failure_for_current_address(user) || payment
 
-        if already_explained?(user, payment)
-          skipped += 1
-          next
+        did_something = false
+
+        # The invalidation runs first, for the same reason the live path orders it first: the note
+        # and the email both say we removed the PayPal address, and
+        # Payment#paypal_payout_address_invalidated? reads the account to decide whether that is
+        # true. Writing the note first would have it deny what this run is about to do.
+        if should_invalidate?(user, payment)
+          if dry_run
+            puts "[dry run] would remove the PayPal payout address from User #{user.id}"
+          else
+            payment.invalidate_paypal_payout_address
+            # The task and the payment hold separate copies of this seller, and the invalidation
+            # wrote through the payment's. Reload so the note written below is generated against an
+            # account that already has the address removed.
+            user.reload
+            puts "Removed the PayPal payout address from User #{user.id}"
+          end
+          invalidated += 1
+          did_something = true
         end
 
-        if dry_run
-          puts "[dry run] would explain #{payment.failure_reason} to User #{user.id}"
-        else
-          user.add_payout_note(content: payment.terminal_paypal_failure_seller_note, seller_visible: true)
-          puts "Explained #{payment.failure_reason} to User #{user.id}"
+        unless already_explained?(user, payment)
+          if dry_run
+            puts "[dry run] would explain #{payment.failure_reason} to User #{user.id}"
+          else
+            user.add_payout_note(content: payment.terminal_paypal_failure_seller_note, seller_visible: true)
+            puts "Explained #{payment.failure_reason} to User #{user.id}"
+          end
+          noted += 1
+          did_something = true
         end
-        noted += 1
+
+        if should_email?(user)
+          if dry_run
+            puts "[dry run] would email User #{user.id} about #{payment.failure_reason}"
+          else
+            payment.send_paypal_terminal_failure_email
+            puts "Emailed User #{user.id} about #{payment.failure_reason}"
+          end
+          emailed += 1
+          did_something = true
+        end
+
+        skipped += 1 unless did_something
       end
 
-      puts "Done. #{noted} sellers explained, #{skipped} skipped."
-      { noted:, skipped: }
+      puts "Done. #{noted} explained, #{emailed} emailed, #{invalidated} addresses removed, #{skipped} skipped."
+      { noted:, emailed:, invalidated:, skipped: }
     end
 
     private
+      # Whether this seller still needs the email. Same marker the live path writes, so a seller the
+      # weekly run did reach is not emailed twice, and re-running this task does not either.
+      #
+      # Deliberately not gated on the pause state or the balance minimum: those gates are exactly why
+      # these sellers never get the email from the payout run, and the copy already tells a paused
+      # seller that a hold is also in the way (Payment#terminal_paypal_failure_seller_solution).
+      def should_email?(user)
+        user.payout_date_of_last_paypal_terminal_failure_email.blank?
+      end
+
+      # Whether the unusable address still has to come off this account. Only the retry-blocking
+      # rejection invalidates, and only a saved `payment_address` can be removed — the per-seller
+      # checks live in Payment#invalidate_paypal_payout_address, which is the one place that decides,
+      # so this only asks the cheap questions that decide whether to call it at all.
+      def should_invalidate?(user, payment)
+        payment.terminal_paypal_failure? && user.payment_address.present?
+      end
+
       # One terminal failure per seller, to enumerate the population. No date bound on purpose: the
       # live block (PaypalPayoutProcessor.terminal_failure_blocking_payouts?) refuses a payout on a
       # terminal rejection of any age, so bounding the scan here would leave sellers blocked by the
