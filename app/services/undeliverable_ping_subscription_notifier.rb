@@ -79,11 +79,6 @@ class UndeliverablePingSubscriptionNotifier
   # time would leave the gap between deciding to send and recording it, which two overlapping renders
   # both fit through. Called AFTER delivery, because a claim that expires costs at worst a repeat while
   # a permanent record written for a message that never left costs the notice itself.
-  #
-  # Conditional on still holding the claim, because a claim expires: a render whose token is gone has
-  # been replaced, and rewriting the key would put a permanent record under a successor's provisional
-  # claim — which that successor then releases on a failed delivery, discarding a send that did happen.
-  # Absent is claimed too, so an expiry with nobody behind it still records the send.
   def self.record_sent(resource_subscription_id, reason, token)
     return if reason.blank? || token.blank?
 

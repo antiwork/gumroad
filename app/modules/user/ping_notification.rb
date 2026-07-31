@@ -44,13 +44,13 @@ module User::PingNotification
 
   # Whether an undeliverable subscription's silence is the seller's to act on. Selection below and the
   # mailer at render time both read this one predicate: a subscription can turn terminal inside that
-  # window — the seller disconnects the application, which soft-deletes it — and an email telling them
-  # to re-authorize an integration they just removed would be wrong, as well as spending the one notice
-  # they get. Asked only of subscriptions #ping_notification_deliverable? has already rejected.
+  # window, and an email telling the seller to re-authorize an integration they just removed would be
+  # wrong, as well as spending the one notice they get. Asked only of subscriptions
+  # #ping_notification_deliverable? has already rejected.
   def ping_notification_notice_actionable?(resource_subscription)
     oauth_application = resource_subscription.oauth_application
-    # We had a bug where we were actually deleting the application instead of setting its deleted_at. Handle those gracefully.
-    # A revoked application is also a terminal state the seller chose, so it is not undeliverable-and-worth-reporting.
+    # A hard-deleted application leaves oauth_application_id pointing at a missing row, and a revoked
+    # one is a terminal state the seller chose — neither is undeliverable-and-worth-reporting.
     return false if oauth_application.nil? || oauth_application.deleted?
 
     reportable_undeliverable?(oauth_application)

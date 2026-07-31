@@ -1611,6 +1611,7 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
       expect(mail.message).to be_a ActionMailer::Base::NullMail
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
     end
 
     # Rendering is not sending, which is why nothing is recorded here: the record has no expiry, and
@@ -1762,8 +1763,10 @@ describe ContactingCreatorMailer do
       expect(mail.message).not_to be_a ActionMailer::Base::NullMail
     end
 
+    # `:eval`, not `:set`: the claim is the `set` and recording is the Lua settle, so stubbing `set`
+    # here would fail the claim instead and only re-test the example above.
     it "sends the email even when recording that it sent fails" do
-      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify).at_least(:once)
 
       expect do
