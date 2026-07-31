@@ -110,11 +110,11 @@ module Ai::StoreAgentApiCatalog
     ep("update_user", :patch, "/user", "Update the creator's profile fields (name, bio).", scope: "edit_profile",
                                                                                            params: %w[name bio]),
     ep("get_user_custom_html", :get, "/user/custom_html", "Get the creator's profile custom HTML.", read: true, scope: "view_profile"),
-    # The store theme columns (SellerProfile#background_color/highlight_color/font). Read-only: there
-    # is no self-serve editor for them, support applies changes by request. This endpoint exists
-    # because the agent previously could not see the theme at all, and told creators their product
-    # pages could not be styled while those pages were visibly rendering these very colours.
-    ep("get_user_theme", :get, "/user/theme", "Get the creator's store theme: background color, highlight (accent) color, and font, plus the list of surfaces they render on. Those include the storefront AND every product page — product pages are NOT unstyleable. There is no self-serve screen for them and you have no endpoint to change them, so when a creator wants different colors or fonts, tell them Gumroad support can apply it and offer to note exactly what they want.", read: true, scope: "view_profile"),
+    # The store theme columns (SellerProfile#background_color/highlight_color/font). Read-only here:
+    # sellers set these in Settings > Profile > Design. This endpoint exists because the agent
+    # previously could not see the theme at all, and told creators their product pages could not be
+    # styled while those pages were visibly rendering these very colours.
+    ep("get_user_theme", :get, "/user/theme", "Get the creator's store theme: background color, highlight (accent) color, and font, plus the list of surfaces they render on. Those include the storefront AND every product page — product pages are NOT unstyleable. You have no endpoint to change them, but the creator can change them themselves in Settings > Profile > Design, which shows a live preview before saving — point them there when they want different colors or fonts.", read: true, scope: "view_profile"),
     # The DEFAULT storefront layout: the seller's own tabs and sections, each with its heading. Also
     # read-only, and for the same reason as the theme above — the agent used to be blind to this
     # surface entirely, so for a seller with no custom HTML it saw nothing and reported the

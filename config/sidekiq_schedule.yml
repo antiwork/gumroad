@@ -31,6 +31,10 @@ fight_purchase_chargebacks_worker:
   cron: "0 * * * *" # Every hour
   class: FightDisputesJob
   description: Enqueues jobs to fight disputes for purchases
+create_missing_dispute_evidence:
+  cron: "20 */6 * * *" # Every 6 hours
+  class: CreateMissingDisputeEvidenceJob
+  description: Backstop for open disputes that ended up with no evidence record, so none reaches its deadline unanswered
 sync_stuck_purchases:
   cron: "0 */6 * * *" # Every 6 hours
   class: SyncStuckPurchasesJob
@@ -150,6 +154,11 @@ expire_transcoded_videos:
   cron: "50 8 * * *" # UTC 08:50
   class: ExpireTranscodedVideosJob
   description: Marks old (in term of access) transcoded videos as deleted
+alert_on_blocked_established_subscribers:
+  cron: "0 11 * * *" # UTC 11:00
+  class: AlertOnBlockedEstablishedSubscribersJob
+  queue: low
+  description: Reports subscribers with long renewal histories whose renewals are failing on a platform block
 
 # Weekly (Payouts)
 payouts_cross_border_stripe:
@@ -285,6 +294,10 @@ payouts_stripe_connect:
 retry_failed_paypal_payouts:
   cron: "0 14 * * 5" # UTC 14:00 FRI
   class: RetryFailedPaypalPayoutsWorker
+requeue_transiently_failed_payouts:
+  cron: "0 14 * * *" # UTC 14:00 daily
+  class: RequeueTransientlyFailedPayoutsJob
+  description: Re-issue payouts that failed on a processor rate limit or an unreachable processor
 
 # Weekly (Non-Payouts)
 reindex_recommendable_products:

@@ -414,8 +414,10 @@ class Link < ApplicationRecord
   def compliance_blocked(ip)
     return false if ip.blank?
 
-    country_code = GeoIp.lookup(ip)&.country_code
-    country_code.present? && Compliance::Countries.blocked?(country_code)
+    location = GeoIp.lookup(ip)
+    return false if location.nil?
+
+    Compliance::Countries.blocked_location?(alpha2: location.country_code, subdivision_code: location.region_name)
   end
 
   def admins_can_generate_url_redirects?
@@ -601,8 +603,11 @@ class Link < ApplicationRecord
     self
   end
 
-  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false)
-    host = user.subdomain_with_protocol || UrlService.domain_with_protocol
+  # host: lets a caller serving the page on one of the seller's other hosts (their live custom
+  # domain) keep the link on that host — /l/:id is routed under UserCustomDomainConstraint too,
+  # so the same path resolves there.
+  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false, host: nil)
+    host ||= user.subdomain_with_protocol || UrlService.domain_with_protocol
     options = { host: }
     options[:recommended_by] = recommended_by if recommended_by.present?
     options[:recommender_model_name] = recommender_model_name if recommender_model_name.present?

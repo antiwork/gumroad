@@ -8,7 +8,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
   # job's own later runs) what the automated retry loop did. All of them talk about the seller
   # in the third person, so they are recorded with seller_visible: false and never appear in
   # the banner on the seller's Payouts page. Anything the SELLER needs to know is sent as an
-  # email instead (see notify_terminal_rejection! / notify_retries_exhausted!).
+  # email instead (see notify_bank_rejection! / notify_retries_exhausted!).
   RESOLVED_NOTE = "Stripe accepted the previously rejected postal code / bank account on automated retry."
   GAVE_UP_NOTE = "Automated retries to fix the rejected postal code / bank account were exhausted. " \
                  "Manual follow-up is needed."
@@ -26,6 +26,11 @@ class RetryStripeRejectedPayoutSetupForSellerJob
                               "block list, so re-sending the same saved details can never succeed. The seller has " \
                               "been emailed and has to add a different bank account."
   ABANDONED_REASON_BANK_ACCOUNT_BLOCKED = "bank_account_blocked_by_stripe"
+  BANK_TERMINAL_REJECTION_NOTE = "Automated Stripe payout-setup retry stopped: Stripe refused the bank account " \
+                                 "itself (previous payments or payouts failed, or the bank cannot receive payouts), " \
+                                 "so re-sending the same saved details can never succeed. The seller has been " \
+                                 "emailed and has to nominate a different bank account."
+  ABANDONED_REASON_BANK_TERMINAL_REJECTION = "bank_details_terminally_rejected"
   # How long one run's "I am sending this email right now" claim holds off other runs. Long
   # enough that two overlapping runs cannot both send, short enough that a run killed mid-send
   # does not delay the seller past the next weekly pass.
@@ -48,40 +53,46 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     note = oldest_outstanding_note(user)
     return if note.nil?
 
-    # A format rejection means Stripe refused the bank code as typed (wrong length, spaces, a
-    # branch suffix the country's format doesn't allow). Remediation would re-send the identical
-    # saved value, so every weekly attempt is guaranteed to fail the same way and the seller ends
-    # up waiting out the whole retry window for nothing. Stop the loop immediately instead — but
-    # only after making sure the seller has actually been told, because a note recorded during
-    # account creation (which re-raises rather than emailing) or before this field existed means
-    # nobody has told them their code needs correcting. Abandoning silently in that case would
-    # strand them worse than the retry loop did.
-    if bank_note?(note) && StripeMerchantAccountManager.bank_details_format_rejection_note?(note)
-      abandon_terminal_bank_notes!(
-        user,
-        matcher: StripeMerchantAccountManager.method(:bank_details_format_rejection_note?),
-        rejection_kind: StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
-        reason: ABANDONED_REASON_BANK_FORMAT_REJECTION,
-        note_content: BANK_FORMAT_REJECTION_NOTE
-      )
-      return
-    end
+    # Retrying any of these three re-sends the identical saved value, so the weekly sweep can only
+    # fail the same way for the whole window. Stop it — but not before the seller has been told what
+    # to change, since account creation re-raises instead of emailing and older notes predate the field.
+    #
+    # Narrowest claim first: a block names one account, terminal covers the account, format only
+    # covers how it was typed. Asking format first sends a seller whose account can never be
+    # accepted back to re-type digits that were already correct.
+    if bank_note?(note)
+      if StripeMerchantAccountManager.bank_account_blocked_note?(note)
+        abandon_unfixable_bank_notes!(
+          user,
+          matcher: StripeMerchantAccountManager.method(:bank_account_blocked_note?),
+          rejection_kind: StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED,
+          reason: ABANDONED_REASON_BANK_ACCOUNT_BLOCKED,
+          note_content: BANK_ACCOUNT_BLOCKED_NOTE
+        )
+        return
+      end
 
-    # Same shape as the format rejection above, and terminal for the same reason: Stripe refuses
-    # this specific external account because it is block-listed, so re-sending the identical
-    # saved details fails identically every week. The difference is the instruction the seller
-    # needs — their details are correct, so "re-enter them" is wrong advice and is exactly what
-    # kept a seller re-saving a valid account for three months (gumroad-private#1476). They have
-    # to add a different account, which is what BANK_REJECTION_KIND_BLOCKED makes the email say.
-    if bank_note?(note) && StripeMerchantAccountManager.bank_account_blocked_note?(note)
-      abandon_terminal_bank_notes!(
-        user,
-        matcher: StripeMerchantAccountManager.method(:bank_account_blocked_note?),
-        rejection_kind: StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED,
-        reason: ABANDONED_REASON_BANK_ACCOUNT_BLOCKED,
-        note_content: BANK_ACCOUNT_BLOCKED_NOTE
-      )
-      return
+      if StripeMerchantAccountManager.bank_details_terminal_rejection_note?(note)
+        abandon_unfixable_bank_notes!(
+          user,
+          matcher: StripeMerchantAccountManager.method(:bank_details_terminal_rejection_note?),
+          rejection_kind: StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL,
+          reason: ABANDONED_REASON_BANK_TERMINAL_REJECTION,
+          note_content: BANK_TERMINAL_REJECTION_NOTE
+        )
+        return
+      end
+
+      if StripeMerchantAccountManager.bank_details_format_rejection_note?(note)
+        abandon_unfixable_bank_notes!(
+          user,
+          matcher: StripeMerchantAccountManager.method(:bank_details_format_rejection_note?),
+          rejection_kind: StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT,
+          reason: ABANDONED_REASON_BANK_FORMAT_REJECTION,
+          note_content: BANK_FORMAT_REJECTION_NOTE
+        )
+        return
+      end
     end
 
     if RetryStripeRejectedPayoutSetupsJob.retry_count(note) >= RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES
@@ -141,15 +152,13 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       end
     end
 
-    # Abandons EVERY outstanding bank note of one terminal kind in a single pass, with a single
-    # audit note. A failing account creation retries (CreateStripeMerchantAccountWorker has
-    # retry: 5) and records a note each time, so a seller can accumulate several identical notes;
-    # doing them one per weekly run would append a duplicate audit note on each pass.
+    # Sweeps the whole class in one pass because CreateStripeMerchantAccountWorker's retries record
+    # a note each time; one-per-run would append a duplicate audit note on every pass. Notes of the
+    # other classes are left alone so each kind gets its own accurate note and email.
     #
-    # `matcher` selects the notes of this kind, and `rejection_kind` is what the seller's email
-    # branches on — the two must describe the same failure, since abandonment is terminal and
-    # that email is the seller's only instruction for getting paid.
-    def abandon_terminal_bank_notes!(user, matcher:, rejection_kind:, reason:, note_content:)
+    # `matcher` and `rejection_kind` must describe the same failure: abandonment is terminal, so
+    # that email is the seller's only remaining instruction for getting paid.
+    def abandon_unfixable_bank_notes!(user, matcher:, rejection_kind:, reason:, note_content:)
       notes = payout_setup_failure_notes(user).select do |candidate|
         candidate.json_data["abandoned_at"].blank? &&
           bank_note?(candidate) &&
@@ -160,11 +169,11 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       already_notified = notes.any? { |candidate| StripeMerchantAccountManager.bank_sync_note_seller_notified?(candidate) }
       note_to_notify = already_notified ? nil : notes.first
       if note_to_notify
-        # Abandonment is terminal and this email is the seller's only instruction to re-enter
-        # their bank code (or to add a different account), so do not abandon until the email is
-        # actually on the queue. A false return means another run holds the send claim; leave the
-        # notes outstanding and let whichever run does the sending finish the job.
-        return unless notify_terminal_rejection!(user, note_to_notify, rejection_kind:)
+        # Abandonment is terminal and this email is the seller's only instruction on what to
+        # change, so do not abandon until the email is actually on the queue. A false return means
+        # another run holds the send claim; leave the notes outstanding and let whichever run does
+        # the sending finish the job.
+        return unless notify_bank_rejection!(user, note_to_notify, rejection_kind)
       end
 
       # The abandonment and the payout note explaining it are one unit (see abandon_stale_notes!),
@@ -183,14 +192,10 @@ class RetryStripeRejectedPayoutSetupForSellerJob
       end
     end
 
-    def notify_terminal_rejection!(user, note, rejection_kind:)
+    def notify_bank_rejection!(user, note, rejection_kind)
       _code, message = StripeMerchantAccountManager.bank_sync_note_error_details(note)
       send_once!(note, marker: "seller_notified") do
-        ContactingCreatorMailer.invalid_bank_account(
-          user.id,
-          rejection_kind,
-          message
-        ).deliver_later(queue: "critical")
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, message, note.json_data["bank_account_id"]).deliver_later(queue: "critical")
       end
     end
 

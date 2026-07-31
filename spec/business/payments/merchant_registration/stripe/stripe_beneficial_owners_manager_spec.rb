@@ -182,6 +182,48 @@ describe StripeBeneficialOwnersManager do
       expect { described_class.create(user, params) }.to raise_error(Stripe::InvalidRequestError, /exceed 100/)
     end
 
+    context "when the seller's legal entity is in Colombia" do
+      let(:colombia_params) { params.deep_dup.tap { |p| p[:address] = { line1: "Cra 7 #71", city: "Bogotá", state: "DC", postal_code: "110231", country: "CO" } } }
+
+      before do
+        # alive_user_compliance_info reads the newest alive row, so this supersedes the UK one the
+        # outer before block created without touching the shared merchant account.
+        user.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:, business_country: "Colombia", country: "Colombia")
+      end
+
+      it "rejects an ID whose digit count is outside Stripe's range even though it fits the input's character limit" do
+        # 11 characters, so the form's maxLength of 13 accepts it, but only 6 digits.
+        separated_six_digits = colombia_params.deep_dup.tap { |p| p[:id_number] = "4.8.2.9.1.3" }
+        expect(Stripe::Account).not_to receive(:create_person)
+        expect { described_class.create(user, separated_six_digits) }
+          .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError, /Cédula de Ciudadanía or Cédula de Extranjería must be 7-10 digits/)
+      end
+
+      it "rejects a bare 6-digit Cédula de Extranjería and an 11-digit number" do
+        %w[482913 12345678901].each do |value|
+          out_of_range = colombia_params.deep_dup.tap { |p| p[:id_number] = value }
+          expect { described_class.create(user, out_of_range) }
+            .to raise_error(StripeBeneficialOwnersManager::InvalidFieldError)
+        end
+      end
+
+      it "sends Stripe the digits it counted, not the separators the seller typed" do
+        pasted = colombia_params.deep_dup.tap { |p| p[:id_number] = "1.123.456.789" }
+        expect(Stripe::Account).to receive(:create_person) do |_account_id, attrs|
+          expect(attrs[:id_number]).to eq("1123456789")
+          other_owner_person
+        end
+        described_class.create(user, pasted)
+      end
+
+      it "accepts an in-range ID" do
+        valid = colombia_params.deep_dup.tap { |p| p[:id_number] = "1020304050" }
+        expect(Stripe::Account).to receive(:create_person).and_return(other_owner_person)
+        expect { described_class.create(user, valid) }.not_to raise_error
+      end
+    end
+
     it "raises NotEligibleError for ineligible users" do
       allow(user).to receive(:stripe_account).and_return(nil)
       expect { described_class.create(user, params) }.to raise_error(StripeBeneficialOwnersManager::NotEligibleError)

@@ -43,6 +43,7 @@ import {
   CartItemTitle,
 } from "$app/components/CartItemList";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { useDomains } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PaginationProps } from "$app/components/Pagination";
@@ -862,18 +863,27 @@ const LicenseKeyRow = ({ licenseKey }: { licenseKey: string }) => (
 // For a licensed product where we could not identify the visitor as a past buyer, point
 // them at the existing self-serve lookup page instead of leaving them to contact the
 // seller. The page emails their receipt (including the license key) to the purchase email.
-const LicenseKeyLookupPrompt = () => (
-  <section className="border-t border-border p-6">
-    <Card>
-      <CardContent asChild>
-        <li>
-          <h3 className="grow">Already bought this?</h3>
-          <NavigationButton href={Routes.license_key_lookup_path()}>View your information</NavigationButton>
-        </li>
-      </CardContent>
-    </Card>
-  </section>
-);
+const LicenseKeyLookupPrompt = () => {
+  // Absolute root-domain URL, not a path: this section renders on the seller's subdomain
+  // and custom domain too, and /license-key-lookup is only drawn under
+  // GumroadDomainConstraint, so a relative href 404s there.
+  const { scheme, rootDomain } = useDomains();
+
+  return (
+    <section className="border-t border-border p-6">
+      <Card>
+        <CardContent asChild>
+          <li>
+            <h3 className="grow">Already bought this?</h3>
+            <NavigationButton href={Routes.license_key_lookup_url({ protocol: scheme, host: rootDomain })}>
+              View your information
+            </NavigationButton>
+          </li>
+        </CardContent>
+      </Card>
+    </section>
+  );
+};
 
 export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; percentage: number }) => {
   const formattedPercentage = `${percentage}%`;

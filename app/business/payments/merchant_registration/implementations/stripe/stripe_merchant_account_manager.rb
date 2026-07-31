@@ -17,21 +17,11 @@ module StripeMerchantAccountManager
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
 
-  # Stripe rejects bank details for two very different reasons, and sellers need different
-  # advice for each:
-  #
-  # * FORMAT rejections — the bank/routing code cannot be accepted as typed (wrong length,
-  #   lowercase, spaces, a branch suffix the country's format doesn't allow). Nothing changes
-  #   over time, so re-sending the same stored value can never succeed: only the seller
-  #   re-entering the code fixes it.
-  # * DIRECTORY misses — the code looks well-formed but the bank or branch isn't in Stripe's
-  #   records yet (common for newly opened accounts and recently added branches). These can
-  #   genuinely start working on their own, which is what the weekly automated re-check is for.
-  #
-  # Stripe signals format rejections with these error codes, and (on older error shapes that
-  # carry no code) with the messages matched by BANK_DETAILS_FORMAT_REJECTION_MESSAGE. Stripe
-  # sometimes reuses the same codes for a directory miss, so DIRECTORY_MISS_MESSAGE wins:
-  # "we don't know this bank yet" is a waiting problem, not a typo problem.
+  # Three reasons Stripe refuses bank details, each needing opposite advice: FORMAT (code
+  # unacceptable as typed — only re-entering fixes it), TERMINAL (account itself refused — only a
+  # different account will do), DIRECTORY miss (bank not in Stripe's records yet — waiting can fix
+  # it, which is what the weekly re-check is for). A directory miss reuses the format codes, so
+  # DIRECTORY_MISS_MESSAGE wins over them.
   BANK_DETAILS_FORMAT_REJECTION_CODES = %w[routing_number_invalid account_number_invalid].freeze
   BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
   BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
@@ -46,12 +36,26 @@ module StripeMerchantAccountManager
   # classification: no automated retries, and an email that says so.
   BANK_ACCOUNT_BLOCKED_MESSAGE = /because it is on your block list/i
 
+  # Terminal rejections are the ones where the account itself is refused rather than the way it
+  # was typed. `bank_account_unusable` is Stripe's code for "payments or payouts on this account
+  # failed before"; the message patterns cover the same condition on error shapes that carry no
+  # code, plus banks Stripe cannot pay out to at all.
+  BANK_DETAILS_TERMINAL_REJECTION_CODES = %w[bank_account_unusable].freeze
+  BANK_DETAILS_TERMINAL_REJECTION_MESSAGE = Regexp.union(
+    /previous payments or payouts failed/i,
+    /previous attempts to deliver payouts/i,
+    /doesn't appear to support payouts/i,
+    /unable to support this bank/i
+  )
+
   # Passed to ContactingCreatorMailer#invalid_bank_account so the email can tell the seller
-  # whether waiting might help (directory miss) or whether they must re-enter the code (format).
+  # whether waiting might help (directory miss), whether they must re-enter the code (format),
+  # or whether they need a different bank account entirely (terminal).
   BANK_REJECTION_KIND_FORMAT = "format_rejected"
   # As above, but for a block-listed external account: the seller must use a different account,
   # because correcting or re-entering this one can never succeed.
   BANK_REJECTION_KIND_BLOCKED = "account_blocked"
+  BANK_REJECTION_KIND_TERMINAL = "terminal_rejected"
   POSTAL_CODE_FAILURE_NOTE_PREFIX = "Stripe postal code rejected"
   # Prefix for the breadcrumb left when Stripe rejects account creation or an account update
   # for a reason we do not handle specifically. See record_account_rejection_note below.
@@ -276,7 +280,7 @@ module StripeMerchantAccountManager
       ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e) || postal_code_invalid_error?(e)
     end
     record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
-    record_bank_sync_failure_note(user, e) if notify && bank_account_invalid_error?(e)
+    record_bank_sync_failure_note(user, e, bank_account:) if notify && bank_account_invalid_error?(e)
     # A seller who has no connected account yet fails here, not in update_account: the settings
     # page calls create_account once the bank account exists, and every rejection used to leave
     # nothing behind except a merchant-account row created and soft-deleted in the same second.
@@ -448,7 +452,8 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
-    updated_stripe_account = update_account_attributes(user, stripe_account, diff_attributes, notify:)
+    account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
+    updated_stripe_account = account_update.stripe_account
 
     person_address_submitted = false
     if user_compliance_info.is_business?
@@ -456,12 +461,12 @@ module StripeMerchantAccountManager
       # Stripe keeps a company's payouts blocked on company.owners_provided until the platform
       # states the owner list is complete. Scoped to accounts we found blocked on it; the callee
       # re-reads the ownership before making the statement.
-      # `updated_stripe_account` is nil when the service-agreement retry had nothing left to push,
-      # so there is no fresh requirements payload to judge and the attestation is simply skipped.
       attest_owners_provided(stripe_account.id) if owner_list_complete && updated_stripe_account && owners_provided_blocking_payouts?(updated_stripe_account)
     end
 
-    if force_address_resync || address_submitted?(diff_attributes, entity_key) || person_address_submitted
+    # Keyed on what actually reached Stripe: a held-back address was never re-validated, so clearing
+    # the note would report a fix that never happened.
+    if person_address_submitted || address_submitted?(account_update.sent_attributes, entity_key)
       clear_stale_postal_code_failure_notes(user)
     end
   rescue Stripe::InvalidRequestError => e
@@ -469,28 +474,48 @@ module StripeMerchantAccountManager
     raise
   end
 
-  # Push the account diff, and if Stripe refuses only the service agreement, push everything else.
-  #
-  # We derive `tos_acceptance[:service_agreement]` from the seller's legal-entity country, but
-  # Stripe validates it against the country the connected account was created in. When those
-  # disagree (a cross-border legal entity on an account created in the platform's own country)
-  # Stripe rejects the whole call, so fields we already hold — business profile URL, phone,
-  # contact details — never land and the seller is asked for data we have. The agreement value
-  # is never diffed out either: `update_account` builds the "before" side with a nil agreement,
-  # so every retry re-sends it and fails identically, forever.
-  #
-  # Which agreement those sellers should sit under is a compliance decision, not something to
-  # settle here — dropping the whole hash rather than just `service_agreement` is deliberate,
-  # because stripping only the agreement would implicitly move them onto the full one. This only
-  # stops one rejected field from blocking the rest: retry without `tos_acceptance` and leave a
-  # private breadcrumb naming the mismatch.
-  private_class_method
-  def self.update_account_attributes(user, stripe_account, diff_attributes, notify: true)
-    Stripe::Account.update(stripe_account.id, force_utf8_encoding(diff_attributes))
-  rescue Stripe::InvalidRequestError => e
-    raise unless service_agreement_unsupported_error?(e) && diff_attributes.key?(:tos_acceptance)
+  # `stripe_account` is nil when nothing was sent, which is also the signal to the owners_provided
+  # attestation that there is no fresh requirements payload to judge.
+  AccountUpdate = Struct.new(:stripe_account, :sent_attributes)
+  private_constant :AccountUpdate
 
-    remaining_attributes = diff_attributes.except(:tos_acceptance)
+  # `legal_entity_country` must come from the same compliance record the caller built
+  # `diff_attributes` from — re-reading it here would filter one snapshot's payload against
+  # another's country. Required rather than defaulted: omitting it would silently disable the
+  # country guard and send fields Stripe can never accept.
+  private_class_method
+  def self.update_account_attributes(user, stripe_account, diff_attributes, legal_entity_country:, notify: true)
+    account_country = stripe_account_country(stripe_account)
+    attributes = diff_attributes
+    # The agreement and the legal-entity address are derived from the legal-entity country but
+    # validated against the account's, which is immutable — so while those disagree neither can
+    # ever be accepted, and the all-or-nothing API takes the whole payload down with them.
+    # `tos_acceptance` goes whole rather than just `service_agreement` because Stripe reads an
+    # acceptance without an agreement as the full one, and which agreement these sellers belong
+    # under is a compliance decision.
+    #
+    # Those two fields only. The identity fields Stripe validates the same way —
+    # `individual[id_number]`, `ssn_last_4`, `company[tax_id]`, and the identifiers `update_person`
+    # sends in its own call — are not filtered here, so a mismatched seller who CHANGES an
+    # identifier still fails whole. Withholding an identifier can stall a verification Stripe is
+    # waiting on, so the disposition is a decision, not a filter entry: gumroad-private#1575.
+    if account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
+      attributes = without_account_country_validated_fields(diff_attributes)
+      if attributes != diff_attributes
+        record_service_agreement_failure_note(user, nil) if notify
+        Rails.logger.warn "Holding back country-validated fields for user #{user&.id}: Stripe account country " \
+                          "#{account_country.inspect} disagrees with the legal-entity country"
+      end
+      return AccountUpdate.new(nil, attributes) if attributes.values.all?(&:blank?)
+    end
+
+    AccountUpdate.new(Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes)), attributes)
+  rescue Stripe::InvalidRequestError => e
+    # Keyed off what was actually sent, not the original diff: retrying from `diff_attributes` here
+    # would restore the fields the branch above deliberately held back.
+    raise unless service_agreement_unsupported_error?(e) && attributes.key?(:tos_acceptance)
+
+    remaining_attributes = attributes.except(:tos_acceptance)
     # The agreement id is the marker saying "this ToS acceptance is on file at Stripe". Stripe
     # rejected the acceptance, so moving it would claim an agreement that does not exist —
     # measured: the retry otherwise lands `tos_agreement_id` on an account whose tos_acceptance
@@ -506,9 +531,17 @@ module StripeMerchantAccountManager
     Rails.logger.warn "Stripe rejected the derived service agreement for user #{user&.id}: #{e.message}"
     # Only the agreement was on the wire, so there is nothing left to push — but the rejection
     # is recorded now, which is the part that was missing.
-    return if remaining_attributes.values.all?(&:blank?)
+    return AccountUpdate.new(nil, remaining_attributes) if remaining_attributes.values.all?(&:blank?)
 
-    Stripe::Account.update(stripe_account.id, force_utf8_encoding(remaining_attributes))
+    AccountUpdate.new(
+      Stripe::Account.update(stripe_account.id, force_utf8_encoding(remaining_attributes)),
+      remaining_attributes
+    )
+  end
+
+  private_class_method
+  def self.stripe_account_country(stripe_account)
+    stripe_account.respond_to?(:country) ? stripe_account.country : stripe_account["country"]
   end
 
   private_class_method
@@ -523,12 +556,60 @@ module StripeMerchantAccountManager
     error.message.to_s.match?(SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE)
   end
 
+  # True when Stripe would validate country-derived fields against a different country than the one
+  # we build them from. The account's country is authoritative and immutable after creation, so
+  # this cannot be reconciled from our side.
+  private_class_method
+  def self.account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
+    return false if account_country.blank? || legal_entity_country.blank?
+
+    account_country.to_s.upcase != legal_entity_country.to_s.upcase
+  end
+
+  # The entity hashes the legal-entity address lives under. Removing the address wholesale rather
+  # than just its `country` is deliberate: Stripe validates the address as a unit, so a
+  # legal-entity street and postal code under a different country's account is the same rejection.
+  # Identity fields under these same hashes are NOT removed — see gumroad-private#1575.
+  ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS = %i[individual company].freeze
+  private_constant :ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS
+
+  private_class_method
+  def self.without_account_country_validated_fields(diff_attributes)
+    attributes = diff_attributes.except(:tos_acceptance)
+
+    ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.each do |entity_key|
+      entity = attributes[entity_key]
+      next unless entity.is_a?(Hash)
+
+      remaining = entity.except(*ADDRESS_SUBHASH_KEYS)
+      if remaining.empty?
+        attributes = attributes.except(entity_key)
+      else
+        attributes = attributes.merge(entity_key => remaining)
+      end
+    end
+
+    # The agreement id marks a ToS acceptance as on file at Stripe. We are not sending the
+    # acceptance, so advancing it would claim an agreement that does not exist. The
+    # compliance-info marker still moves, because the fields under it really do land.
+    if attributes[:metadata].is_a?(Hash)
+      attributes = attributes.merge(metadata: attributes[:metadata].except(:tos_agreement_id))
+    end
+
+    attributes
+  end
+
   # One breadcrumb per account, not per attempt: the resync runs on every compliance change and
   # the mismatch does not resolve on its own, so re-noting it would bury the payout notes. Two
   # resyncs can be in flight for the same seller, so the look-then-write has to hold the user row.
   private_class_method
   def self.record_service_agreement_failure_note(user, error)
     return if user.blank?
+
+    detail = error.respond_to?(:message) && error&.message.present? ?
+      error.message.to_s.truncate(300) :
+      "the Stripe account's country does not match the seller's legal-entity country, " \
+      "so the service agreement and legal-entity address cannot be accepted on it"
 
     user.with_lock do
       next if user.comments
@@ -539,7 +620,7 @@ module StripeMerchantAccountManager
                   .exists?
 
       user.add_payout_note(
-        content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{error.message.to_s.truncate(300)}",
+        content: "#{SERVICE_AGREEMENT_REJECTION_NOTE_PREFIX} — #{detail}",
         seller_visible: false
       )
     end
@@ -842,7 +923,7 @@ module StripeMerchantAccountManager
       ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
       return :invalid_account_holder_name
     end
-    failure_note = record_bank_sync_failure_note(user, e) if notify
+    failure_note = record_bank_sync_failure_note(user, e, bank_account:) if notify
     # bank_account_invalid_error? recognizes rejections of the seller's bank details themselves
     # (unknown bank for a BIC or routing code, invalid account number). Stripe marks these via
     # the error's code or param (for example param "bank_account[routing_number]" on "We
@@ -852,12 +933,8 @@ module StripeMerchantAccountManager
     # cover older rejection shapes that carry no code or param.
     if e.code == "bank_account_unusable" || bank_account_invalid_error?(e) || e.message["Invalid account number"] || e.message["couldn't find that transit"] || e.message["previous attempts to deliver payouts"] || e.message["previous payments or payouts failed"] || e.message["doesn't appear to support payouts"]
       if notify
-        rejection_kind = if bank_account_blocked?(e)
-          BANK_REJECTION_KIND_BLOCKED
-        elsif bank_details_format_rejection?(e)
-          BANK_REJECTION_KIND_FORMAT
-        end
-        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s).deliver_later(queue: "critical")
+        rejection_kind = bank_rejection_kind_for(e)
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, e.message.to_s, bank_account.id).deliver_later(queue: "critical")
         mark_bank_sync_note_seller_notified!(failure_note)
       end
       return :invalid_bank_account
@@ -866,7 +943,7 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
     :stripe_invalid_request
   rescue Stripe::CardError => e
-    record_bank_sync_failure_note(user, e) if notify
+    record_bank_sync_failure_note(user, e, bank_account:) if notify
     # A CardError here means the debit card used for payouts was declined by the network, not
     # that a bank code was mistyped, so this is never a format rejection.
     ContactingCreatorMailer.invalid_bank_account(user.id).deliver_later(queue: "critical") if notify
@@ -881,17 +958,21 @@ module StripeMerchantAccountManager
   # Returns the note so callers that go on to email the seller can mark it — see
   # mark_bank_sync_note_seller_notified!. The structured json_data fields are what the
   # classifiers read; the human-readable content is for support staff reading the account.
-  def self.record_bank_sync_failure_note(user, error)
+  def self.record_bank_sync_failure_note(user, error, bank_account:)
     code = error.respond_to?(:code) ? error.code : nil
     message = error.message.to_s
-    note = user.add_payout_note(
+    user.add_payout_note(
       content: "#{BANK_SYNC_FAILURE_NOTE_PREFIX}: #{code || 'unknown'} — #{message.truncate(200)}",
-      seller_visible: false
+      seller_visible: false,
+      # In the insert, not a follow-up save — see add_payout_note. bank_account is the row the
+      # caller submitted rather than a re-read: the sync makes network calls, so by now the
+      # seller's active row may already be the replacement.
+      json_data: {
+        "stripe_error_code" => code,
+        "stripe_error_message" => message,
+        "bank_account_id" => bank_account&.id
+      }
     )
-    note.json_data["stripe_error_code"] = code
-    note.json_data["stripe_error_message"] = message
-    note.save!
-    note
   rescue => e
     Rails.logger.error "Failed to record payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
@@ -912,24 +993,113 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
-  # True when Stripe rejected the bank/routing code on FORMAT grounds, i.e. the value as typed
-  # can never be accepted (see BANK_DETAILS_FORMAT_REJECTION_CODES above). Waiting cannot fix
-  # these, so the seller must re-enter the code — the email and the automated retry loop both
-  # behave differently for them.
+  # Which "we can't use this bank account" story the seller should be told, or nil when it's the
+  # directory-miss case the default email copy already describes.
+  #
+  # Order matters. A block is the narrowest claim — Stripe named this one account — so it is
+  # asked first. Terminal outranks format because Stripe reuses format codes for accounts it
+  # refuses outright, and telling that seller to re-type digits is an infinite loop.
+  def self.bank_rejection_kind_for(error)
+    return BANK_REJECTION_KIND_BLOCKED if bank_account_blocked?(error)
+    return BANK_REJECTION_KIND_TERMINAL if bank_details_terminal_rejection?(error)
+    return BANK_REJECTION_KIND_FORMAT if bank_details_format_rejection?(error)
+    nil
+  end
+
+  # Format grounds: the value as typed can never be accepted, so waiting cannot fix it and the
+  # seller must re-enter the code.
   def self.bank_details_format_rejection?(error)
     code = error.respond_to?(:code) ? error.code : nil
     format_rejection_signals?(code:, message: error.message.to_s)
   end
 
-  # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb
-  # rather than a live Stripe error. Notes recorded since this classifier existed carry the
-  # error code and full message in json_data; older notes only have the human-readable content
-  # ("Stripe bank sync failed: <code> — <message truncated to 200 chars>"), so fall back to
-  # sniffing that text. The fallback is why the truncation matters: a directory-miss phrase
-  # sitting past 200 chars would be invisible, which is another reason to prefer the fields.
+  # The account itself is refused, not the way it was typed. Separate from the format predicate
+  # because "fix your code" would loop the seller forever on an account that can never be accepted.
+  def self.bank_details_terminal_rejection?(error)
+    code = error.respond_to?(:code) ? error.code : nil
+    terminal_rejection_signals?(code:, message: error.message.to_s)
+  end
+
+  # Same question as bank_details_terminal_rejection?, answered from the payout-note breadcrumb
+  # rather than a live Stripe error.
+  def self.bank_details_terminal_rejection_note?(note)
+    code, message = bank_sync_note_error_details(note)
+    terminal_rejection_signals?(code:, message:)
+  end
+
+  # Same question as bank_details_format_rejection?, answered from the payout-note breadcrumb.
+  # Notes predating the structured json_data fields only have the truncated human-readable
+  # content, so a directory-miss phrase past 200 chars is invisible there — prefer the fields.
   def self.bank_details_format_rejection_note?(note)
     code, message = bank_sync_note_error_details(note)
     format_rejection_signals?(code:, message:)
+  end
+
+  # True when Stripe could not match the routing value against its bank directory. Distinct from
+  # the format and terminal cases: the value may be perfectly real and simply absent from Stripe's
+  # records, so the advice is to check it and wait, not to replace the account.
+  def self.bank_details_directory_miss?(error)
+    bank_details_directory_miss_message?(error.message)
+  end
+
+  # Same question answered from the payout-note breadcrumb, for the surfaces that read the note
+  # rather than a live error.
+  def self.bank_details_directory_miss_note?(note)
+    _code, message = bank_sync_note_error_details(note)
+    bank_details_directory_miss_message?(message)
+  end
+
+  # Same question answered from the message string alone, for the mailer, which receives Stripe's
+  # message rather than the error object.
+  def self.bank_details_directory_miss_message?(message)
+    message.to_s.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+  end
+
+  # The sentence appended to a directory-miss rejection so it names the values that were refused.
+  #
+  # Stripe's own message ("We couldn't find the bank for that bank/branch code") names neither the
+  # values nor which of the two boxes they came from, and the page shows nothing else — so a seller
+  # cannot tell whether we objected to their bank code, their branch code, or the bank itself. The
+  # gumroad-private#1550 seller re-saved six times in eleven minutes cycling BIC spellings.
+  #
+  # For the countries that collect both halves, Stripe does not say WHICH one it could not match:
+  # the error's param is the combined `bank_account[routing_number]` and there is no directory
+  # endpoint to test either half against. So name both values and give the head-office trap as
+  # something to rule out, never as the diagnosis. Single-value countries have no such ambiguity
+  # and get the value alone.
+  #
+  # Returns nil when there is nothing specific to say, so callers can append it unconditionally.
+  def self.bank_directory_miss_detail(bank_account)
+    fields = bank_account&.routing_fields_sentence
+    return if fields.blank?
+
+    detail = "The details we sent were #{fields}."
+    return detail unless bank_account.has_separate_branch_code?
+
+    "#{detail} Our payment partner doesn't tell us which of the two it couldn't match, so please " \
+      "check both against the codes your own branch uses — a bank's head-office code is often not " \
+      "accepted as a branch code, even when the bank publishes it."
+  end
+
+  # The message shown inline on the settings page when a save is refused as a directory miss, or
+  # nil when this rejection is something else (so callers keep Stripe's own message).
+  #
+  # Stripe's string is handed to the seller verbatim today, and on its own it is unactionable: it
+  # names no value, no field, and no next step. Prefix it with our own account of what we sent and
+  # what to do about it.
+  def self.bank_directory_miss_seller_message(error, bank_account)
+    return unless error.is_a?(Stripe::InvalidRequestError)
+    return unless bank_details_directory_miss?(error)
+
+    detail = bank_directory_miss_detail(bank_account)
+    weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+    [
+      "Our payment partner couldn't match your bank details against its records.",
+      detail,
+      "Please double-check them and save again. If you're sure they're correct (for example, a " \
+        "newly opened account or a recently added branch), you don't need to do anything — we'll " \
+        "re-check once a week for up to #{weeks} weeks and only reach out if it still doesn't verify.",
+    ].compact.join(" ")
   end
 
   # True when Stripe refused this specific external account because it is block-listed on the
@@ -956,20 +1126,33 @@ module StripeMerchantAccountManager
     if json_data.key?("stripe_error_message")
       [json_data["stripe_error_code"], json_data["stripe_error_message"].to_s]
     else
-      [BANK_DETAILS_FORMAT_REJECTION_CODES.find { |code| content.include?(code) }, content]
+      # Search BOTH code lists against the legacy content string — scoping to one list would make
+      # the other classifier blind to notes predating the structured fields.
+      known_codes = BANK_DETAILS_FORMAT_REJECTION_CODES + BANK_DETAILS_TERMINAL_REJECTION_CODES
+      [known_codes.find { |code| content.include?(code) }, content]
     end
   end
 
   def self.format_rejection_signals?(code:, message:)
     return false if message.match?(BANK_DETAILS_DIRECTORY_MISS_MESSAGE)
+    # A terminal rejection can share a code with a format rejection (Stripe reuses
+    # account_number_invalid for "this account previously failed"), and telling that seller to
+    # re-type their digits would loop them forever. Terminal wins.
+    return false if terminal_rejection_signals?(code:, message:)
 
     code.to_s.in?(BANK_DETAILS_FORMAT_REJECTION_CODES) || message.match?(BANK_DETAILS_FORMAT_REJECTION_MESSAGE)
   end
 
-  # False when the note was recorded without the seller being emailed about it — account
-  # creation records a note and re-raises rather than emailing, and notes predating this
-  # field carry no answer either way. The retry loop must email before it abandons such a
-  # note, otherwise the seller is never told their bank code needs correcting.
+  def self.terminal_rejection_signals?(code:, message:)
+    # Unlike a format rejection, a directory miss does not override this: "we couldn't find the
+    # bank" is a waiting problem, but it never carries a terminal code or message, so there is
+    # nothing to disambiguate here.
+    code.to_s.in?(BANK_DETAILS_TERMINAL_REJECTION_CODES) || message.match?(BANK_DETAILS_TERMINAL_REJECTION_MESSAGE)
+  end
+
+  # False when nobody emailed the seller about this note — account creation records one and
+  # re-raises instead of emailing, and older notes carry no answer. The retry loop must email
+  # before abandoning such a note or the seller is never told what to change.
   def self.bank_sync_note_seller_notified?(note)
     note.respond_to?(:json_data) && note.json_data["seller_notified"] == true
   end

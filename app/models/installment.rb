@@ -532,11 +532,12 @@ class Installment < ApplicationRecord
     installment_events_count.nil? ? 0 : installment_events_count
   end
 
-  def full_url(purchase_id: nil)
+  def full_url(purchase_id: nil, host: nil)
     return unless slug.present?
-    if user.subdomain_with_protocol.present?
+    host ||= user.subdomain_with_protocol
+    if host.present?
       custom_domain_view_post_url(
-        host: user.subdomain_with_protocol,
+        host:,
         slug:,
         purchase_id: purchase_id.presence
       )

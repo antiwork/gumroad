@@ -10,6 +10,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
   after_action :deliver_subscription_email, only: %i[subscription_autocancelled subscription_cancelled subscription_cancelled_by_seller
                                                      subscription_card_declined subscription_card_declined_warning
                                                      subscription_charge_failed subscription_product_deleted subscription_renewal_reminder
+                                                     subscription_charge_blocked_location
                                                      subscription_price_change_notification subscription_ended free_trial_expiring_soon
                                                      credit_card_expiring_membership subscription_early_fraud_warning_notification
                                                      subscription_giftee_added_card]
@@ -114,6 +115,19 @@ class CustomerLowPriorityMailer < ApplicationMailer
         "Your installment payment failed."
       else
         "Your recurring charge failed."
+      end
+  end
+
+  def subscription_charge_blocked_location(subscription_id)
+    @subscription = Subscription.find(subscription_id)
+    # Marks the manage link as coming from a failure email, which is what makes the retry it invites
+    # charge without sending this email again on every still-blocked attempt.
+    @declined = true
+    @subject =
+      if @subscription.is_installment_plan?
+        "Your installment payment could not be processed."
+      else
+        "Your membership could not be renewed."
       end
   end
 
