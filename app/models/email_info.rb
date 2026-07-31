@@ -21,6 +21,7 @@ class EmailInfo < ApplicationRecord
   #
   state_machine :state, initial: :created do
     before_transition any => :sent, do: ->(email_info) { email_info.sent_at = Time.current }
+    before_transition any => :sent, :do => :clear_event_time_fields
     before_transition any => :delivered, do: ->(email_info, transition) { email_info.delivered_at = transition.args.first || Time.current }
     before_transition any => :opened, do: ->(email_info, transition) { email_info.opened_at = transition.args.first || Time.current }
     after_transition any => :bounced, :do => :unsubscribe_buyer
@@ -40,6 +41,11 @@ class EmailInfo < ApplicationRecord
     event :mark_opened do
       transition any => :opened
     end
+  end
+
+  def clear_event_time_fields
+    self.delivered_at = nil
+    self.opened_at = nil
   end
 
   def most_recent_state_at

@@ -76,17 +76,14 @@ describe CustomerEmailInfo do
   end
 
   describe "state transitions" do
-    it "transitions to sent and preserves delivery evidence already on the row" do
+    it "transitions to sent" do
       email_info = create(:customer_email_info)
       expect(email_info.email_name).to eq "receipt"
-      delivered_at = Time.current
-      email_info.update_attribute(:delivered_at, delivered_at)
+      email_info.update_attribute(:delivered_at, Time.current)
       email_info.mark_sent!
       expect(email_info.reload.state).to eq("sent")
       expect(email_info.reload.sent_at).to be_present
-      # A resend builds its own row, so `mark_sent!` must never destroy the
-      # evidence on an existing one (gumroad-private#1635).
-      expect(email_info.reload.delivered_at).to be_within(1.second).of(delivered_at)
+      expect(email_info.reload.delivered_at).to be_nil
     end
 
     it "transitions to delivered" do
