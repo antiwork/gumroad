@@ -853,6 +853,23 @@ describe Charge::Disputable, :vcr do
           end
         end
 
+        # A dispute with no evidence surface at all (PayPal, Stripe Connect) never gets a window, and
+        # the plain notice is the only one it will ever receive — the notice gate must not require a
+        # stamp the way the ask does.
+        context "when the dispute has no evidence record at all" do
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+          end
+
+          it "still sends the seller the plain chargeback notice" do
+            expect(ContactingCreatorMailer).to receive(:chargeback_notice).with(anything).and_call_original
+
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.dispute.dispute_evidence).to be_nil
+          end
+        end
+
         context "when the evidence has already been submitted to the processor" do
           before do
             allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
