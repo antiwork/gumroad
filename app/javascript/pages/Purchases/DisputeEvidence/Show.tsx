@@ -155,7 +155,10 @@ export default function Show() {
         reason_for_winning: reasonForWinningText,
         cancellation_rebuttal: cancellationRebuttalText,
         refund_refusal_explanation: data.dispute_evidence.refund_refusal_explanation,
-        customer_communication_file_signed_blob_ids: data.dispute_evidence.customer_communication_file_signed_blob_ids,
+        // Read off the upload list rather than form data: an upload finishing while the seller
+        // types would otherwise write back a stale copy of the whole dispute_evidence object
+        // and silently revert their text.
+        customer_communication_file_signed_blob_ids: uploadedFiles.map(({ signed_id }) => signed_id),
       },
     }));
     form.put(Routes.purchase_dispute_evidence_path(disputable.purchase_for_dispute_evidence_id));
@@ -172,7 +175,12 @@ export default function Show() {
     if (selectedFiles.length === 0) return;
 
     if (selectedFiles.length > remainingFileSlots)
-      return showAlert(`You can attach up to ${maxFileCount} files.`, "error");
+      return showAlert(
+        remainingFileSlots === maxFileCount
+          ? `You can attach up to ${maxFileCount} files.`
+          : `You can attach ${remainingFileSlots} more ${remainingFileSlots === 1 ? "file" : "files"}.`,
+        "error",
+      );
     if (selectedFiles.some((file) => !FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)))
       return showAlert("Invalid file type.", "error");
     if (selectedFiles.some((file) => file.size > dispute_evidence.customer_communication_file_max_size))
@@ -193,13 +201,12 @@ export default function Show() {
               });
           });
         });
-        setUploadedFiles((prev) => {
-          const next = [...prev, blob];
-          updateFormData({ customer_communication_file_signed_blob_ids: next.map(({ signed_id }) => signed_id) });
-          return next;
-        });
+        setUploadedFiles((prev) => [...prev, blob]);
       } catch (error) {
-        showAlert(error instanceof Error ? error.message : "There was a problem uploading your file.", "error");
+        showAlert(
+          `${file.name} could not be uploaded${error instanceof Error ? `: ${error.message}` : ""}. Any remaining files were not uploaded.`,
+          "error",
+        );
         break;
       }
     }
@@ -207,11 +214,7 @@ export default function Show() {
   };
 
   const removeEvidenceFile = (key: string) => {
-    setUploadedFiles((prev) => {
-      const next = prev.filter((file) => file.key !== key);
-      updateFormData({ customer_communication_file_signed_blob_ids: next.map(({ signed_id }) => signed_id) });
-      return next;
-    });
+    setUploadedFiles((prev) => prev.filter((file) => file.key !== key));
   };
 
   const TEXTAREA_MAX_LENGTH = 3000;

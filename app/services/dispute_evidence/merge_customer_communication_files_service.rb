@@ -27,6 +27,7 @@ class DisputeEvidence::MergeCustomerCommunicationFilesService
   FILE_TOO_LARGE_MESSAGE = "One of the uploaded files exceeds the maximum size allowed."
   FILES_TOO_LARGE_MESSAGE = "The combined size of the uploaded files exceeds the maximum allowed, even after compression. Please remove a file or upload smaller versions."
   UNPROCESSABLE_FILE_MESSAGE = "One of the uploaded files could not be processed. Please check that every PDF opens correctly and is not password-protected."
+  UNSUPPORTED_FILE_TYPE_MESSAGE = "One of the uploaded files is not a JPG, PNG, or PDF."
 
   def self.perform(blobs:, max_size:)
     new(blobs:, max_size:).perform
@@ -37,21 +38,25 @@ class DisputeEvidence::MergeCustomerCommunicationFilesService
     @max_size = max_size
   end
 
-  # Returns a new application/pdf ActiveStorage::Blob and purges the input blobs.
+  # Returns a new application/pdf ActiveStorage::Blob. The input blobs are left alone: the
+  # caller purges them once the submission has actually been persisted.
   def perform
     if blobs.size > DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES
       raise MergeError, "You can attach up to #{DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES} files."
+    end
+    # The merged output is always application/pdf, so the model's content-type validation never
+    # sees the inputs. Everything below hands seller-supplied bytes to ImageMagick and qpdf.
+    unless blobs.all? { _1.content_type.in?(DisputeEvidence::ALLOWED_FILE_CONTENT_TYPES) }
+      raise MergeError, UNSUPPORTED_FILE_TYPE_MESSAGE
     end
     raise FilesTooLargeError, FILE_TOO_LARGE_MESSAGE if blobs.any? { _1.byte_size > max_size }
 
     downloaded_files = download_blobs
     merged_path = merge_within_size_budget(downloaded_files)
 
-    merged_blob = File.open(merged_path) do |file|
+    File.open(merged_path) do |file|
       ActiveStorage::Blob.create_and_upload!(io: file, filename: MERGED_FILENAME, content_type: "application/pdf")
     end
-    blobs.each(&:purge)
-    merged_blob
   ensure
     downloaded_files&.each { _1[:tempfile].close! }
     File.unlink(merged_path) if merged_path && File.exist?(merged_path)
@@ -61,15 +66,26 @@ class DisputeEvidence::MergeCustomerCommunicationFilesService
     attr_reader :blobs, :max_size
 
     def download_blobs
-      blobs.map do |blob|
+      downloaded_files = []
+      blobs.each do |blob|
         tempfile = Tempfile.new(["dispute_evidence_input", File.extname(blob.filename.to_s)], binmode: true)
+        downloaded_files << { tempfile:, content_type: blob.content_type }
         blob.download { |chunk| tempfile.write(chunk) }
         tempfile.flush
-        { tempfile:, content_type: blob.content_type }
       end
+      downloaded_files
+    rescue StandardError
+      downloaded_files.each { _1[:tempfile].close! }
+      raise
     end
 
     def merge_within_size_budget(downloaded_files)
+      # Only image pages can shrink, so a set of PDFs already over budget can never fit and
+      # the ladder would just re-run the same merge three times with an unearned "even after
+      # compression" message.
+      incompressible_size = downloaded_files.sum { _1[:content_type].in?(IMAGE_CONTENT_TYPES) ? 0 : File.size(_1[:tempfile].path) }
+      raise FilesTooLargeError, FILES_TOO_LARGE_MESSAGE if incompressible_size > max_size
+
       compressible = downloaded_files.any? { _1[:content_type].in?(IMAGE_CONTENT_TYPES) }
       compression_steps = compressible ? IMAGE_COMPRESSION_STEPS : IMAGE_COMPRESSION_STEPS.take(1)
 
@@ -129,5 +145,8 @@ class DisputeEvidence::MergeCustomerCommunicationFilesService
     rescue MiniMagick::Error, MiniMagick::Invalid, Prawn::Errors::UnsupportedImageType => e
       Rails.logger.error("[#{self.class.name}] image conversion failed: #{e.class} => #{e.message}")
       raise MergeError, UNPROCESSABLE_FILE_MESSAGE
+    ensure
+      # MiniMagick works on its own copy, and the ladder can run this ten times per attempt.
+      image&.destroy!
     end
 end

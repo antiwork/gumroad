@@ -36,30 +36,34 @@ class Purchases::DisputeEvidenceController < ApplicationController
   end
 
   def update
-    signed_blob_ids = customer_communication_file_signed_blob_ids
+    input_blobs = customer_communication_file_blobs
     @dispute_evidence.assign_attributes(
       dispute_evidence_params.slice(:cancellation_rebuttal, :reason_for_winning, :refund_refusal_explanation)
     )
 
-    if signed_blob_ids.one?
-      blob = covert_and_optimize_blob_if_needed(signed_blob_ids.first)
-      @dispute_evidence.customer_communication_file.attach(blob)
-    elsif signed_blob_ids.many?
+    if input_blobs.one?
+      attached_blob = covert_and_optimize_blob_if_needed(input_blobs.first)
+      @dispute_evidence.customer_communication_file.attach(attached_blob)
+    elsif input_blobs.many?
       # Stripe accepts a single file for this evidence field, so multiple uploads are merged
       # into one PDF before attaching. The merge stays inline: the submit below is one-shot,
       # and an async merge would let FightDisputeJob forward the evidence before the merged
       # file exists.
-      blob = DisputeEvidence::MergeCustomerCommunicationFilesService.perform(
-        blobs: signed_blob_ids.map { ActiveStorage::Blob.find_signed!(_1) },
+      merged_blob = DisputeEvidence::MergeCustomerCommunicationFilesService.perform(
+        blobs: input_blobs,
         max_size: @dispute_evidence.customer_communication_file_max_size
       )
-      @dispute_evidence.customer_communication_file.attach(blob)
+      @dispute_evidence.customer_communication_file.attach(merged_blob)
     end
     @dispute_evidence.update_as_seller_submitted!
+    # Only once the submission is persisted: a validation failure below has to leave the
+    # seller's uploads intact, since a retry re-sends the same signed ids.
+    input_blobs.each(&:purge) if merged_blob
 
     FightDisputeJob.perform_async(@dispute_evidence.dispute.id)
     redirect_to success_purchase_dispute_evidence_path(@purchase.external_id), status: :see_other
   rescue ActiveRecord::RecordInvalid
+    merged_blob&.purge
     redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: @dispute_evidence.errors.full_messages.to_sentence
   rescue DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError => e
     redirect_to purchase_dispute_evidence_path(@purchase.external_id), alert: e.message
@@ -82,6 +86,15 @@ class Purchases::DisputeEvidenceController < ApplicationController
     def customer_communication_file_signed_blob_ids
       signed_blob_ids = Array.wrap(dispute_evidence_params[:customer_communication_file_signed_blob_ids]).compact_blank
       signed_blob_ids.presence || Array.wrap(dispute_evidence_params[:customer_communication_file_signed_blob_id].presence)
+    end
+
+    # A signed id that no longer resolves means the upload expired or the seller is retrying a
+    # submission whose blobs were already consumed — an alert, not a 500.
+    def customer_communication_file_blobs
+      customer_communication_file_signed_blob_ids.map { ActiveStorage::Blob.find_signed!(_1) }
+    rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
+      raise DisputeEvidence::MergeCustomerCommunicationFilesService::MergeError,
+            "We could not find your uploaded files. Please upload them again."
     end
 
     def set_dispute_evidence
@@ -109,8 +122,7 @@ class Purchases::DisputeEvidenceController < ApplicationController
     # > 16-bit depth or interlacing. Please convert your image to PDF or JPEG and try again.
     # Rather than blocking the user from submitting PNGs, convert to JPG and optimize the file.
     #
-    def covert_and_optimize_blob_if_needed(signed_blob_id)
-      blob = ActiveStorage::Blob.find_signed(signed_blob_id)
+    def covert_and_optimize_blob_if_needed(blob)
       return blob unless blob.content_type == "image/png"
 
       variant = blob.variant(convert: "jpg", quality: 80)

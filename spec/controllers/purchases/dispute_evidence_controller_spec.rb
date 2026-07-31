@@ -233,6 +233,40 @@ describe Purchases::DisputeEvidenceController, type: :controller, inertia: true 
           expect(flash[:alert]).to eq(DisputeEvidence::MergeCustomerCommunicationFilesService::FILE_TOO_LARGE_MESSAGE)
         end
       end
+
+      # The seller's only Stripe submission is spent on submit, so a trivial validation error
+      # must leave their uploads reusable rather than making them re-attach everything. Only
+      # the orphaned merged PDF may be purged.
+      it "keeps the uploaded files when the record is invalid" do
+        purged_keys = []
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge) { |blob| purged_keys << blob.key }
+
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id), cancellation_rebuttal: "a" * 3_001 } }
+
+        expect(dispute_evidence.reload.seller_submitted?).to be(false)
+        expect(FightDisputeJob.jobs.size).to eq(0)
+        expect(purged_keys).not_to include(*blobs.map(&:key))
+        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+      end
+
+      it "purges the uploaded files once the submission is persisted" do
+        purged_keys = []
+        allow_any_instance_of(ActiveStorage::Blob).to receive(:purge) { |blob| purged_keys << blob.key }
+
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: blobs.map(&:signed_id) } }
+
+        expect(dispute_evidence.reload.seller_submitted?).to be(true)
+        expect(purged_keys).to include(*blobs.map(&:key))
+      end
+
+      it "redirects with an alert when a signed id no longer resolves" do
+        put :update, params: { purchase_id: purchase.external_id, dispute_evidence: { customer_communication_file_signed_blob_ids: [blobs.first.signed_id, "not-a-signed-id"] } }
+
+        expect(dispute_evidence.reload.seller_submitted?).to be(false)
+        expect(FightDisputeJob.jobs.size).to eq(0)
+        expect(response).to redirect_to(purchase_dispute_evidence_path(purchase.external_id))
+        expect(flash[:alert]).to eq("We could not find your uploaded files. Please upload them again.")
+      end
     end
 
     context "when the dispute evidence is invalid" do

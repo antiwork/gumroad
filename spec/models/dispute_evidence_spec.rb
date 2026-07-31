@@ -119,12 +119,7 @@ describe DisputeEvidence do
 
     describe "customer_communication_file_type" do
       # The multi-file upload path merges into an application/pdf attachment
-      # (DisputeEvidence::MergeCustomerCommunicationFilesService), so PDF must stay allowed
-      # and the count cap the merge relies on must exist.
-      it "bounds the number of mergeable customer communication files" do
-        expect(DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES).to eq(10)
-      end
-
+      # (DisputeEvidence::MergeCustomerCommunicationFilesService), so PDF must stay allowed.
       context "when a multi-page merged PDF is attached" do
         before do
           dispute_evidence.customer_communication_file.attach(

@@ -57,14 +57,33 @@ describe DisputeEvidence::MergeCustomerCommunicationFilesService do
     expect(pages(merged_blob).size).to eq(8)
   end
 
-  it "purges the input blobs after a successful merge" do
+  # The caller purges these only once the submission is persisted, so a validation failure
+  # cannot destroy the seller's uploads before they can retry.
+  it "leaves the input blobs in place" do
     blobs = [
       create_blob("smilie.png", "chat-1.png", "image/png"),
       create_blob("test.pdf", "chat-2.pdf", "application/pdf"),
     ]
-    blobs.each { |blob| expect(blob).to receive(:purge) }
+    blobs.each { |blob| expect(blob).not_to receive(:purge) }
 
     described_class.perform(blobs:, max_size:)
+  end
+
+  it "raises MergeError for a content type outside the allowed list" do
+    blobs = [
+      create_blob("smilie.png", "chat.png", "image/png"),
+      # identify: false keeps the client-asserted type, which is what a direct upload gives us.
+      ActiveStorage::Blob.create_and_upload!(
+        io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "test.pdf"), "image/svg+xml"),
+        filename: "payload.svg",
+        content_type: "image/svg+xml",
+        identify: false
+      ),
+    ]
+
+    expect do
+      described_class.perform(blobs:, max_size:)
+    end.to raise_error(described_class::MergeError, described_class::UNSUPPORTED_FILE_TYPE_MESSAGE)
   end
 
   it "recompresses image pages instead of dropping them when the merged PDF exceeds the budget" do
