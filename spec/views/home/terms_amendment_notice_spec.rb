@@ -34,10 +34,14 @@ describe "app/views/home/terms.html.erb amendment notice" do
   let(:last_updated) { date_after("Last Updated Date") }
 
   # The notice sentence, parsed as the pair of dates it relates. nil when no notice line is present.
+  # The cohort has to be described by what was true at POSTING time, not by a calendar cutoff: an
+  # account registered earlier the same day the amendments went up already existed when notice was
+  # given, so "created before <posted>" would exclude a user §27.6 covers.
   let(:notice) do
     m = header.match(
-      /(?<posted>#{month}#{sp}+\d{1,2},#{sp}*\d{4})#{sp}+changes#{sp}+take#{sp}+effect#{sp}+
-       for#{sp}+accounts#{sp}+created#{sp}+before#{sp}+\k<posted>#{sp}+on#{sp}+
+      /Accounts#{sp}+that#{sp}+existed#{sp}+when#{sp}+the#{sp}+
+       (?<posted>#{month}#{sp}+\d{1,2},#{sp}*\d{4})#{sp}+changes#{sp}+were#{sp}+posted#{sp}+
+       are#{sp}+bound#{sp}+by#{sp}+them#{sp}+on#{sp}+
        (?<binding>#{month}#{sp}+\d{1,2},#{sp}*\d{4})/x
     )
     m && { posted: to_date(m[:posted]), binding: to_date(m[:binding]) }
@@ -62,8 +66,8 @@ describe "app/views/home/terms.html.erb amendment notice" do
 
     expect(notice).to be_present,
                       "#{last_updated} is within 30 days, so the header must say when that change " \
-                      "takes effect: '<posted> changes take effect for accounts created before " \
-                      "<posted> on <posted + 30 days>'. Header is #{header.inspect}"
+                      "takes effect: 'Accounts that existed when the <posted> changes were posted " \
+                      "are bound by them on <posted + 30 days>'. Header is #{header.inspect}"
   end
 
   # Both halves are checked against Last Updated, not just the trailing date: greening a stale line
