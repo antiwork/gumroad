@@ -141,7 +141,7 @@ describe "Video stream scenario", type: :system, js: true do
       it "does not record media_location if purchase is nil" do
         streamable_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/ScreenRecording.mov"
         installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.gum.co", seller: @product.user)
-        installment_product_file = create(:product_file, :analyze, installment:, url: streamable_url)
+        installment_product_file = create(:product_file, :analyze, installment:, link: nil, url: streamable_url)
         installment_product_file.save!(validate: false)
         no_purchase_url_redirect = installment.generate_url_redirect_for_follower
         visit("/d/#{no_purchase_url_redirect.token}/")

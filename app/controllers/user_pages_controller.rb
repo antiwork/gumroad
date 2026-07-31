@@ -48,6 +48,7 @@ class UserPagesController < ApplicationController
           #{interpolated}
           #{custom_html_navigation_bridge_script(allowed_hostnames: page_store_hostnames)}
           #{FOLLOW_BRIDGE_SCRIPT}
+          #{BACKGROUND_BRIDGE_SCRIPT}
         </body>
       </html>
     HTML
@@ -126,7 +127,7 @@ class UserPagesController < ApplicationController
               id="gumroad-landing-frame"
               src="#{iframe_src}"
               title="#{title}"
-              sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              sandbox="#{CUSTOM_HTML_SANDBOX}"
             ></iframe>
             <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
               (function () {
@@ -145,6 +146,7 @@ class UserPagesController < ApplicationController
               })();
             </script>
             #{custom_html_follow_wrapper_script(seller_external_id: @user.external_id, nonce:)}
+            #{custom_html_background_wrapper_script(nonce:)}
             #{live_reload}
           </body>
         </html>

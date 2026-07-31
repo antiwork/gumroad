@@ -3,6 +3,9 @@
 class Preorder < ApplicationRecord
   include ExternalId
   include AfterCommitEverywhere
+  # A preorder authorises at checkout and charges on release day, so the amount it charges is a
+  # later charge in the sense of gumroad-private#1322.
+  include HasLaterChargePresentments
 
   belongs_to :preorder_link, optional: true
   belongs_to :seller, class_name: "User", optional: true
@@ -148,7 +151,7 @@ class Preorder < ApplicationRecord
         rescue StateMachines::InvalidTransition => e
           logger.error "Purchase for preorder error: Could not create purchase for preorder ID #{id} because #{e}"
         end
-      else
+      elsif !purchase.pending_buyer_presentment_settlement?
         purchase.update_balance_and_mark_successful!
         after_commit do
           ActivateIntegrationsWorker.perform_async(purchase.id)

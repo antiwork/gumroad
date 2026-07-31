@@ -72,6 +72,11 @@ Rails.application.routes.draw do
       # no self-serve editor, but a caller — the store agent especially — needs to be able to SEE
       # the theme that is already rendering on the seller's storefront and product pages.
       get "/user/theme", to: "users#theme"
+      # The seller's default (non-custom-HTML) profile layout: their tabs and the sections inside
+      # them, with each section's heading. Read-only — the seller edits these in the dashboard, and
+      # the store agent needs to be able to SEE them so it stops telling sellers that headings on
+      # their own storefront do not exist (gumroad-private#1466).
+      get "/user/profile_layout", to: "users#profile_layout"
       match "/user", to: "users#update", via: [:put, :patch]
       get "/user/custom_html", to: "users#custom_html"
       match "/user/custom_html", to: "users#update_custom_html", via: [:put, :patch]
@@ -547,6 +552,9 @@ Rails.application.routes.draw do
         scope module: :users do
           get "subscribe_review_reminders", to: "review_reminders#subscribe", as: :user_subscribe_review_reminders
           get "unsubscribe_review_reminders", to: "review_reminders#unsubscribe", as: :user_unsubscribe_review_reminders
+          # Token-carrying variants for links in review reminder emails; these work without a session.
+          get "subscribe_review_reminders/:id", to: "review_reminders#subscribe_by_token", as: :user_subscribe_review_reminders_by_token
+          get "unsubscribe_review_reminders/:id", to: "review_reminders#unsubscribe_by_token", as: :user_unsubscribe_review_reminders_by_token
         end
       end
     end

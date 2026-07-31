@@ -935,6 +935,34 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  # An order (mirrors :order).
+  def create_order(purchaser: nil, **attrs)
+    Order.create!({ purchaser: purchaser || create_user }.merge(attrs))
+  end
+
+  # A combined charge (mirrors :charge) — except the merchant account: the RSpec
+  # factory builds a fresh one whose sequenced charge_processor_merchant_id
+  # ("000000001") collides with the merchant_accounts(:gumroad_stripe) fixture
+  # row ("This account is already connected with another Gumroad account"), so
+  # reuse the fixture instead.
+  def create_charge(order: nil, seller: nil, merchant_account: :default, **attrs)
+    merchant_account = merchant_accounts(:gumroad_stripe) if merchant_account == :default
+    Charge.create!({
+      order: order || create_order,
+      seller: seller || create_user,
+      processor: "stripe",
+      processor_transaction_id: "ch_#{SecureRandom.hex}",
+      payment_method_fingerprint: "pm_#{SecureRandom.hex}",
+      merchant_account:,
+      amount_cents: 10_00,
+      gumroad_amount_cents: 1_00,
+      processor_fee_cents: 20,
+      processor_fee_currency: "usd",
+      stripe_payment_intent_id: "pi_#{SecureRandom.hex}",
+      stripe_setup_intent_id: "seti_#{SecureRandom.hex}",
+    }.merge(attrs))
+  end
+
   def create_blast(post:, **attrs)
     PostEmailBlast.create!({
       post:,
@@ -947,6 +975,8 @@ module ModelFactories
     }.merge(attrs))
   end
 
+  # A file must belong to exactly one parent, so callers name the product or the
+  # post it is delivered with — the factory does not invent one.
   def create_product_file(installment: nil, link: nil, **attrs)
     ProductFile.create!({
       url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf",
@@ -976,8 +1006,11 @@ module ModelFactories
     readable_document: { url: "#{S3_BASE_URL}specs/billion-dollar-company-chapter-0.pdf", filetype: "pdf", filegroup: "document" },
   }.freeze
 
-  def create_installment_file(shape, **attrs)
-    ProductFile.create!(PRODUCT_FILE_SHAPES.fetch(shape).merge(attrs))
+  # Files delivered with a post rather than a product. The installment is
+  # required because a ProductFile must belong to exactly one parent, and these
+  # shapes exist for the post-delivery side.
+  def create_installment_file(shape, installment:, **attrs)
+    ProductFile.create!(PRODUCT_FILE_SHAPES.fetch(shape).merge(installment:).merge(attrs))
   end
 
   # A product thumbnail with the smilie.png fixture attached and analyzed

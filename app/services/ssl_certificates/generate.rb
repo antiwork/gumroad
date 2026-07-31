@@ -11,6 +11,7 @@ module SslCertificates
 
       @custom_domain = custom_domain
       @domain_verification_service = CustomDomainVerificationService.new(domain: custom_domain.domain)
+      @routability_observed_at = Time.current
     end
 
     def process
@@ -24,7 +25,7 @@ module SslCertificates
     end
 
     private
-      attr_reader :domain_verification_service
+      attr_reader :domain_verification_service, :routability_observed_at
 
       def order_certificates
         # Only order for names whose DNS actually resolves to Gumroad. A name
@@ -41,8 +42,16 @@ module SslCertificates
         end
 
         if all_certificates_generated
-          custom_domain.set_ssl_certificate_issued_at!
-          resolving_domains.each { |domain| log_message(domain, "Issued SSL certificate.") }
+          activated = custom_domain.activate_with_routability!(
+            resolving_domains.include?(custom_domain.domain),
+            checked_domain: custom_domain.domain,
+            observed_at: routability_observed_at
+          )
+          if activated
+            resolving_domains.each { |domain| log_message(domain, "Issued SSL certificate.") }
+          else
+            log_message(custom_domain.domain, "Domain changed before SSL certificate activation.")
+          end
         else
           # Reset ssl_certificate_issued_at
           custom_domain.reset_ssl_certificate_issued_at!

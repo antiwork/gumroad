@@ -46,20 +46,19 @@ describe("filesForSave", () => {
 
 describe("copyRichContentPages", () => {
   it("keeps stored source ids while assigning new page ids and clearing copied upsell ids", () => {
-    const pages = [
-      {
-        id: "source-page",
-        title: "Source",
-        updated_at: "2026-07-28T00:00:00.000Z",
-        description: {
-          type: "doc",
-          content: [
-            { type: "upsellCard", attrs: { id: "stored-upsell" } },
-            { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
-          ],
-        },
+    const sourcePage = {
+      id: "source-page",
+      title: "Source",
+      updated_at: "2026-07-28T00:00:00.000Z",
+      description: {
+        type: "doc",
+        content: [
+          { type: "upsellCard", attrs: { id: "stored-upsell" } },
+          { type: "paragraph", content: [{ type: "text", text: "Keep me" }] },
+        ],
       },
-    ];
+    };
+    const pages = [sourcePage];
 
     expect(copyRichContentPages(pages, () => "new-page", "2026-07-28T01:00:00.000Z")).toEqual([
       {
@@ -85,7 +84,7 @@ describe("copyRichContentPages", () => {
     expect(secondCopy.source_id).toBe("source-page");
     expect(secondCopy.copy_parent_id).toBe("first-copy");
 
-    const unsavedCopy = copyRichContentPages([{ ...pages[0], id: "unsaved", newlyAdded: true }], () => "copy");
+    const unsavedCopy = copyRichContentPages([{ ...sourcePage, id: "unsaved", newlyAdded: true }], () => "copy");
     expect(unsavedCopy[0]?.source_id).toBeUndefined();
     expect(unsavedCopy[0]?.copy_parent_id).toBe("unsaved");
   });
@@ -421,7 +420,6 @@ describe("save contract conflict responses", () => {
     const error = saveProductError({
       error_message: "This product changed since you opened it.",
       error_code: "stale_deletion_conflict",
-      editor_revision: "revision-issued-with-the-409",
     });
 
     expect(error).toBeInstanceOf(StaleDeletionConflictError);
@@ -429,17 +427,23 @@ describe("save contract conflict responses", () => {
     expect(error.message).toBe("This product changed since you opened it.");
   });
 
-  // The 409's fresh token must not reach the editor. Adopting it would let the
+  // A fresh token must never reach the editor: adopting it would let the
   // session's next save — still the full stale snapshot — delete AND revert
   // every field another session changed in between (gumroad-private#1532).
-  it("does not carry the fresh revision onto the error", () => {
+  // The server no longer sends one, and the payload type no longer has a field
+  // to receive it, so this pins the defence in depth: even a server that
+  // regressed and emitted the token could not get it onto the error.
+  it("does not carry a fresh revision onto the error", () => {
     const error = saveProductError({
       error_message: "Stale.",
       error_code: "stale_deletion_conflict",
+      // @ts-expect-error -- not part of SaveProductErrorPayload; a server that
+      // regressed and sent it anyway must still not have it reach the editor.
       editor_revision: "revision-issued-with-the-409",
     });
 
-    expect(Object.values({ ...error })).not.toContain("revision-issued-with-the-409");
+    expect(error).toBeInstanceOf(StaleDeletionConflictError);
+    expect(JSON.stringify({ ...error, message: error.message })).not.toContain("revision-issued-with-the-409");
   });
 
   // Pins the discrimination to error_code, not to HTTP status. stale-content and

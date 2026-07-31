@@ -261,9 +261,10 @@ class TaxRemittances::QuarterlyLiabilityCalculator
     # unresolved_country_names rather than quietly discarded. The report can
     # afford to bucket these as "Unknown" because a human reads the CSV; here
     # the output is a payment amount, so an unresolvable name means tax we
-    # collected and might not remit. ISO name matching is not exhaustive
-    # (e.g. "Slovak Republic" and "Holland" both fail), so this is a real
-    # possibility, not a theoretical one.
+    # collected and might not remit. ISO name matching is not exhaustive — the
+    # aliases in config/initializers/countries.rb exist because names keep
+    # arriving that the gem does not know — so this is a real possibility, not
+    # a theoretical one.
     #
     # leg_tax_cents is THIS leg's signed contribution, not the purchase's
     # gross tax: positive for a sale or a won dispute, negative for a refund

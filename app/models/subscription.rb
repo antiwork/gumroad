@@ -15,6 +15,9 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  # Memberships AND installment plans are both Subscriptions internally, so this one include
+  # covers two of the four product types in gumroad-private#1322.
+  include HasLaterChargePresentments
   extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
@@ -277,7 +280,17 @@ class Subscription < ApplicationRecord
                         was_product_recommended: original_purchase.was_product_recommended,
                         is_installment_payment: original_purchase.is_installment_payment }
     purchase_params.merge!(override_params)
+    # `ip_country`/`ip_state` are derived from `ip_address`, so a caller supplying a live IP must not
+    # leave the original purchase's derivations standing beside it — sanctions screening would read
+    # them as the subscriber's present location.
+    if override_params[:ip_address].present?
+      purchase_params[:ip_country] = override_params[:ip_country]
+      purchase_params[:ip_state] = override_params[:ip_state]
+    end
     purchase = Purchase.new(purchase_params)
+    # Without a live IP the fields above describe where the buyer was when they subscribed, which is
+    # not a location signal sanctions screening may act on.
+    purchase.ip_location_inherited = override_params[:ip_address].blank?
     purchase.variant_attributes = original_purchase.variant_attributes
     unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
       purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer
@@ -336,7 +349,12 @@ class Subscription < ApplicationRecord
           if purchase.has_payment_network_error?
             schedule_charge(1.hour.from_now)
           else
-            if purchase.has_payment_error?
+            if purchase.error_code == PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+              # Sanctions screening rejects the renewal in a `before_create` validation, so no charge
+              # is ever attempted. The card emails would both be false and unactionable; the address
+              # on the subscription is the only screened signal the subscriber can change.
+              CustomerLowPriorityMailer.subscription_charge_blocked_location(id).deliver_later(queue: "low")
+            elsif purchase.has_payment_error?
               CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
               ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
             else
@@ -349,6 +367,9 @@ class Subscription < ApplicationRecord
         # schedule for termination 5 days after subscription is overdue for a charge
         UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
         purchase.mark_failed!
+      elsif purchase.pending_buyer_presentment_settlement?
+        # FinalizeBuyerPresentmentPurchaseJob completes the renewal once Stripe settles it.
+        nil
       elsif purchase.in_progress? && purchase.charge_intent.is_a?(StripeChargeIntent) && (purchase.charge_intent&.processing? || purchase.charge_intent.requires_action?)
         # For recurring charges on Indian cards, the charge goes into processing state for 26 hours.
         # We'll receive a webhook once the charge succeeds/fails, and we'll transition the purchase
@@ -644,6 +665,13 @@ class Subscription < ApplicationRecord
     successful_purchases.last
   end
 
+  # A purchase stays in `successful_purchases` after being fully refunded or charged back, so
+  # anything showing the buyer "the charge you last paid for" has to filter those out. Ordered by
+  # `succeeded_at` rather than relying on the association's insertion order.
+  def last_successful_not_reversed_or_refunded_charge
+    successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first
+  end
+
   def last_successful_charge_at
     last_successful_charge&.succeeded_at
   end
@@ -880,6 +908,31 @@ class Subscription < ApplicationRecord
 
   def remaining_charges_count
     has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
+  end
+
+  # Installment plans have no cancellation exit after a chargeback: the
+  # `installment_plans_cannot_be_cancelled_by_buyer` validation rejects
+  # `cancel_effective_immediately!(by_buyer: true)`, and the resulting RecordInvalid would raise
+  # after the seller-balance decrement and before dispute-evidence creation. So the plan stays
+  # alive and keeps its place in the charge schedule.
+  #
+  # Stopping the charge rather than cancelling the plan is deliberate. The reason to stop is that
+  # we should not charge a card whose holder disputed every prior charge on it — a charging
+  # concern, not a cancellation one. Cancelling would also have to invent an actor, and
+  # `cancel_effective_immediately!` with `by_buyer: false` emails the buyer about a product
+  # deletion that never happened.
+  #
+  # Every installment must be disputed, not just one: a single disputed installment on an
+  # otherwise-paid plan can be a reversible mistake, and blocking those would strand plans whose
+  # buyer still intends to pay. Reversed chargebacks do not count, so a won dispute lets the plan
+  # resume on its own.
+  def all_charges_disputed?
+    return false unless is_installment_plan?
+
+    charges = successful_purchases.to_a
+    return false if charges.empty?
+
+    charges.all?(&:chargedback_not_reversed?)
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.
@@ -1185,7 +1238,7 @@ class Subscription < ApplicationRecord
     end
 
     def last_successful_not_reversed_or_refunded_charge_at
-      successful_purchases.not_fully_refunded.not_chargedback_or_chargedback_reversed.order(succeeded_at: :desc).first&.succeeded_at
+      last_successful_not_reversed_or_refunded_charge&.succeeded_at
     end
 
     def tier_price

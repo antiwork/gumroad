@@ -2768,7 +2768,7 @@ describe User, :vcr do
     it "returns alive product files that are unique by `url` even if there are no product files associated with the specified product" do
       product.product_files.alive.each(&:mark_deleted!)
       duplicate_file_url = "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png"
-      another_product_file = create(:product_file, link: @other_product, url: duplicate_file_url)
+      another_product_file = create(:product_file, link: another_product, url: duplicate_file_url)
       another_product.product_files << another_product_file
       create(:product_file, link: create(:product, user:), url: duplicate_file_url)
 
@@ -2778,7 +2778,7 @@ describe User, :vcr do
     it "returns alive product files associated with the specified product even if it not published" do
       product.update!(purchase_disabled_at: Time.current)
       product_file = product.product_files.alive.first
-      another_product_file = create(:product_file, link: @other_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
+      another_product_file = create(:product_file, link: another_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pencil.png")
       another_product.product_files << another_product_file
 
       expect(product.alive?).to eq(false)
@@ -3552,7 +3552,10 @@ describe User, :vcr do
   describe "#eligible_for_instant_payouts?" do
     let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }
-    let!(:payments) { create_list(:payment_completed, 4, user:) }
+    let!(:payment) { create(:payment_completed, user:) }
+    let!(:merchant_account) do
+      create(:merchant_account, user:, created_at: 90.days.ago)
+    end
 
     before do
       allow(user).to receive(:payouts_paused?).and_return(false)
@@ -3579,9 +3582,67 @@ describe User, :vcr do
       expect(user.eligible_for_instant_payouts?).to eq(false)
     end
 
-    it "returns false when user does not have 4 completed payments" do
-      user.payments.last.destroy
+    it "returns false when the seller has never had a completed payout" do
+      user.payments.destroy_all
       expect(user.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns true on the seller's very first completed payout" do
+      expect(user.payments.completed.count).to eq(1)
+      expect(user.eligible_for_instant_payouts?).to eq(true)
+    end
+
+    it "returns false when the Stripe account is younger than 60 days" do
+      merchant_account.update!(created_at: 59.days.ago)
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns true once the Stripe account is 60 days old" do
+      merchant_account.update!(created_at: 60.days.ago)
+      expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+    end
+
+    it "returns false when there is no Stripe account to season against" do
+      merchant_account.mark_deleted!
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    # A payout-method switch, country change or admin recreation makes a fresh
+    # MerchantAccount row, so a long-standing seller re-seasons from zero.
+    it "returns false when a seller with many payouts has a freshly recreated account" do
+      create_list(:payment_completed, 4, user:)
+      merchant_account.update!(created_at: 10.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns false for a Stripe Connect seller, whose account #stripe_account never returns" do
+      merchant_account.update!(json_data: { meta: { stripe_connect: "true" } })
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns false for a seller paid through PayPal, with no Stripe account to season" do
+      merchant_account.mark_deleted!
+      create(:merchant_account_paypal, user:, created_at: 90.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    # The payout is created on whichever account StripePayoutProcessor.get_payout_details picks,
+    # which can be the connected account, so seasoning the managed one alone is not enough.
+    context "when the seller also holds a connected Stripe account" do
+      it "returns false while the connected account is younger than 60 days" do
+        create(:merchant_account_stripe_connect, user:, created_at: 10.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
+
+      it "returns true once both accounts are seasoned" do
+        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+      end
     end
 
     it "returns false when user is not from the US" do

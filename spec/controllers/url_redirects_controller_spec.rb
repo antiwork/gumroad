@@ -270,6 +270,10 @@ describe UrlRedirectsController, inertia: true do
 
         before do
           purchase.create_url_redirect!
+          # The redirect sends the buyer to the library filtered by `bundles`, which matches on
+          # the member purchases' `bundle_id` — so the member rows have to exist for the
+          # destination to have anything in it.
+          purchase.create_artifacts_and_send_receipt!
         end
 
         it "redirects to the library page without creating consumption event" do
@@ -307,6 +311,114 @@ describe UrlRedirectsController, inertia: true do
           it "includes the purchase_id parameter when redirecting" do
             get :download_page, params: { id: purchase.url_redirect.token, receipt: true }
             expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, purchase_id: purchase.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when the bundle has no member purchases" do
+          before do
+            purchase.product_purchases.each(&:destroy!)
+            purchase.reload
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+        end
+
+        context "when every member purchase exists but is excluded from the library" do
+          before do
+            purchase.product_purchases.each { _1.update!(is_deleted_by_buyer: true) }
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+        end
+
+        context "when only some member purchases are excluded from the library" do
+          before do
+            purchase.product_purchases.first.update!(is_deleted_by_buyer: true)
+          end
+
+          it "still redirects to the filtered library, which has the surviving members" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when the members were reassigned to another account" do
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            # Only the parent moved. The library filters on `purchaser_id`, so the members are
+            # still `visible_in_library` yet render in nobody's library here.
+            purchase.product_purchases.each { _1.update!(purchaser: create(:user)) }
+            sign_in buyer
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+        end
+
+        context "when the members belong to the purchaser" do
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            purchase.product_purchases.each { _1.update!(purchaser: buyer) }
+            sign_in buyer
+          end
+
+          it "redirects to the filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when a team member views a purchase belonging to someone else" do
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            purchase.product_purchases.each { _1.update!(purchaser: buyer) }
+            # Pins the anchor: the guard asks whose library the MEMBERS render in, which is the
+            # purchaser's, not the viewer's. Keying on `logged_in_user` would render the bundle's
+            # own page here and silently disagree with the library it is supposed to mirror.
+            sign_in create(:user, is_team_member: true)
+          end
+
+          it "still redirects to the purchaser's filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when the purchaser claimed the parent but not the members" do
+          # add-to-library attaches only the purchase it is given, so claiming a bundle parent
+          # leaves the members unclaimed and out of the claiming account's library. Counting them
+          # as the claimer's (`purchaser_id: [id, nil]`) would redirect here, to nothing.
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            sign_in buyer
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
           end
         end
       end
@@ -1321,14 +1433,14 @@ describe UrlRedirectsController, inertia: true do
         end
 
         it "sets the correct source urls for all video attachments of an installment and returns the index of the file that should be played on load" do
-          pdf_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf")
-          video_file_1 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true, display_name: "Chapter 2", position: 2)
-          video_file_2 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4", position: 1)
+          installment = create(:installment)
+          pdf_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/manual.pdf")
+          video_file_1 = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4", is_transcoded_for_hls: true, display_name: "Chapter 2", position: 2)
+          video_file_2 = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/43a5363194e74e9ee75b6203eaea6705/original/chapter1.mp4", position: 1)
           subtitle_file_en = create(:subtitle_file, language: "English", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/english.srt", product_file: video_file_2)
           subtitle_file_fr = create(:subtitle_file, language: "Français", url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/french.srt", product_file: video_file_2)
-          video_file_3 = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter_2_no_spaces.mp4", display_name: "Chapter 2 No Spaces", position: 0)
-          mp3_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
-          installment = create(:installment)
+          video_file_3 = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter_2_no_spaces.mp4", display_name: "Chapter 2 No Spaces", position: 0)
+          mp3_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
           installment.product_files << video_file_1 << video_file_2 << pdf_file << video_file_3 << mp3_file
           url_redirect = create(:installment_url_redirect, installment:)
           get :stream, params: { id: url_redirect.token, product_file_id: video_file_3.external_id }
@@ -1655,7 +1767,7 @@ describe UrlRedirectsController, inertia: true do
 
       it "assigns @destination with nil value for an installment" do
         installment = create(:installment)
-        installment.product_files << create(:product_file)
+        installment.product_files << create(:product_file, link: nil, installment:)
         url_redirect = create(:installment_url_redirect, installment:)
 
         get :confirm_page, params: { id: url_redirect.token }

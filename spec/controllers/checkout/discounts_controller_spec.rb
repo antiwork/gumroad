@@ -550,6 +550,28 @@ describe Checkout::DiscountsController do
       expect(offer_code.products).to eq([subject_product])
     end
 
+    it "returns an error and keeps the product list when removing a product whose default discount is the offer code" do
+      subject_product = create(:product, user: seller, price_cents: 2000)
+      offer_code.update!(universal: false, products: [subject_product])
+      subject_product.update!(default_offer_code_id: offer_code.id)
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Discount 1",
+        amount_cents: 100,
+        currency_type: "usd",
+        universal: false,
+        selected_product_ids: [],
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["error_message"]).to eq("This discount code is the default discount for “#{subject_product.name}”. Please remove it from that product before removing it from the discount.")
+
+      expect(offer_code.reload.products).to eq([subject_product])
+      expect(subject_product.reload.default_offer_code_id).to eq(offer_code.id)
+    end
+
     it "preserves the ownership products when a partial update omits them" do
       owned_product = create(:product, user: seller)
       subject_product = create(:product, user: seller, price_cents: 2_00)

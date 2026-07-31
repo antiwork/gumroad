@@ -26,7 +26,7 @@ class ProductPresenter::Card
   def for_web(request: nil, recommended_by: nil, recommender_model_name: nil, target: nil, show_seller: true, affiliate_id: nil, query: nil, offer_code: nil, compute_description: true, compute_inventory: true)
     default_recurrence = product.default_price_recurrence
     base_price_cents = product.display_price_cents(for_default_duration: true)
-    price_cents = compute_discounted_price_cents(base_price_cents)
+    price_cents = product.discounted_price_cents(base_price_cents)
     original_price_cents = price_cents < base_price_cents ? base_price_cents : nil
     buyer_currency_display = request.present? ? buyer_currency_display_props(product:, price_cents:, ip: request.remote_ip) : nil
 
@@ -75,14 +75,4 @@ class ProductPresenter::Card
       },
     }
   end
-
-  private
-    def compute_discounted_price_cents(base_price_cents)
-      offer_code = product.default_offer_code
-      return base_price_cents if offer_code.blank? || offer_code.inactive?
-      return base_price_cents if offer_code.existing_customers_only?
-
-      discount_amount_cents = offer_code.amount_off(base_price_cents)
-      [base_price_cents - discount_amount_cents, 0].max
-    end
 end

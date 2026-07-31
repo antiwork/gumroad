@@ -10,6 +10,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
   after_action :deliver_subscription_email, only: %i[subscription_autocancelled subscription_cancelled subscription_cancelled_by_seller
                                                      subscription_card_declined subscription_card_declined_warning
                                                      subscription_charge_failed subscription_product_deleted subscription_renewal_reminder
+                                                     subscription_charge_blocked_location
                                                      subscription_price_change_notification subscription_ended free_trial_expiring_soon
                                                      credit_card_expiring_membership subscription_early_fraud_warning_notification
                                                      subscription_giftee_added_card]
@@ -114,6 +115,19 @@ class CustomerLowPriorityMailer < ApplicationMailer
         "Your installment payment failed."
       else
         "Your recurring charge failed."
+      end
+  end
+
+  def subscription_charge_blocked_location(subscription_id)
+    @subscription = Subscription.find(subscription_id)
+    # Marks the manage link as coming from a failure email, which is what makes the retry it invites
+    # charge without sending this email again on every still-blocked attempt.
+    @declined = true
+    @subject =
+      if @subscription.is_installment_plan?
+        "Your installment payment could not be processed."
+      else
+        "Your membership could not be renewed."
       end
   end
 
@@ -341,11 +355,11 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   def purchase_review_reminder(purchase_id)
     @purchase = Purchase.find(purchase_id)
-    return if @purchase.product_review.present? || @purchase.purchaser&.opted_out_of_review_reminders?
+    return if @purchase.product_review.present? || !@purchase.can_contact? || @purchase.purchaser&.opted_out_of_review_reminders?
 
     @product_name = @purchase.link.name
     @title = "Liked #{@product_name}? Give it a review!"
-    @unsub_link = user_unsubscribe_review_reminders_url if @purchase.purchaser
+    @unsub_link = review_reminder_unsubscribe_url(@purchase.purchaser, @purchase.email, purchase: @purchase)
     @purchaser_name = @purchase.full_name.presence || @purchase.purchaser&.name&.presence
 
     # For a bundle, the reminder is about reviewing the bundle itself. The bundle's
@@ -371,18 +385,31 @@ class CustomerLowPriorityMailer < ApplicationMailer
     order = Order.find(order_id)
     purchaser = order.purchaser
     return if purchaser&.opted_out_of_review_reminders?
-    first_purchase = order.purchases.first
+
+    # Re-checked at render time: the :low queue can lag behind a buyer unsubscribing, and for
+    # a guest the purchaser opt-out above is always nil. No purchase_for_review_reminder
+    # mapping — gift orders never reach this mailer (OrderReviewReminderJob routes them
+    # per-purchase).
+    reviewable = order.purchases.select { _1.eligible_for_review_reminder? }
+    return if reviewable.empty?
+
+    # Every recipient-shaped value comes from this one row. `order.purchases.first` can be a
+    # purchase the reminder excludes, and its email can differ from the eligible rows' (support
+    # reassignment rewrites a single purchase's email), so reading the address from it would mail
+    # a buyer this reminder is not about while the unsubscribe link cleared someone else's row.
+    # Orders whose eligible purchases no longer share one address are split per-purchase upstream.
+    recipient_purchase = reviewable.first
 
     @title = "Liked your order? Leave some reviews!"
-    @unsub_link = user_unsubscribe_review_reminders_url if purchaser
-    @purchaser_name = first_purchase.full_name.presence || purchaser&.name&.presence
+    @purchaser_name = recipient_purchase.full_name.presence || purchaser&.name&.presence
     @review_url = reviews_url
-    email = purchaser&.email || first_purchase.email
+    email = purchaser&.email || recipient_purchase.email
+    @unsub_link = review_reminder_unsubscribe_url(purchaser, email, purchase: recipient_purchase)
 
     mail(
       to: email,
       subject: @title,
-      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: first_purchase.seller, to: email)
+      delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: recipient_purchase.seller, to: email)
     )
   end
 
@@ -421,6 +448,33 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
+    # The token is a sessionless capability over the purchaser account's preference, so it may
+    # only travel to that account's own address. A purchase can be claimed into a different
+    # account (Users#add_purchase_to_library, UrlRedirects, support reassignment) while
+    # `purchase.email` keeps pointing at whoever bought it, and that recipient must not be
+    # handed the new owner's opt-out. When the two diverge, fall back to the session-gated
+    # route: the link still works, it just makes the visitor prove who they are first.
+    #
+    # Guests have no User row to hold the preference at all, so they get the receipt footer's
+    # purchase-scoped unsubscribe: broader (it clears `can_contact` for that purchase's seller,
+    # and on a multi-seller order only that one) but sessionless and honoured by
+    # `eligible_for_review_reminder?`.
+    def review_reminder_unsubscribe_url(purchaser, recipient_email, purchase:)
+      if purchaser.nil?
+        return if purchase.nil?
+
+        return unsubscribe_purchase_url(purchase.secure_external_id(scope: "unsubscribe"))
+      end
+
+      if purchaser.email.present? && recipient_email.present? && purchaser.email.casecmp?(recipient_email)
+        user_unsubscribe_review_reminders_by_token_url(
+          purchaser.secure_external_id(scope: Users::ReviewRemindersController::TOKEN_SCOPE)
+        )
+      else
+        user_unsubscribe_review_reminders_url
+      end
+    end
+
     def deliver_subscription_email
       if @subject.nil?
         Rails.logger.warn("[CustomerLowPriorityMailer] Skipping subscription email delivery because @subject is nil; action=#{action_name}; subscription_id=#{@subscription&.id}")

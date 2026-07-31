@@ -3025,6 +3025,14 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal routes.manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"), Purchase.purchase_info(nil, product, purchase)[:membership][:manage_url]
   end
 
+  test "#purchase_info omits the manage URL while a membership subscription is not created yet" do
+    purchase = create_membership_purchase(link: create_membership_product)
+    product = purchase.link
+    purchase.update!(subscription: nil)
+
+    assert_nil Purchase.purchase_info(nil, product, purchase.reload)[:membership][:manage_url]
+  end
+
   test "#purchase_info returns license_key if it exists" do
     link, purchase = setup_purchase_info_context
     link.is_licensed = true
@@ -3407,7 +3415,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_purchase(link: product)
     create_url_redirect(purchase:, link: product)
     purchase.stubs(:webhook_failed).returns(false)
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
 
     assert_equal false, purchase.has_content?
   end
@@ -3417,7 +3425,7 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_purchase(link: product)
     create_url_redirect(purchase:, link: product)
     purchase.stubs(:webhook_failed).returns(false)
-    product.product_files << create_readable_document(pdf_stamp_enabled: true)
+    product.product_files << create_readable_document(link: product, pdf_stamp_enabled: true)
 
     purchase.url_redirect.stubs(:is_done_pdf_stamping).returns(true)
     assert_equal true, purchase.has_content?
@@ -6181,7 +6189,8 @@ class PurchaseTest < ActiveSupport::TestCase
       link: create_product(user: seller),
       seller:,
       merchant_account:,
-      is_part_of_combined_charge: true
+      is_part_of_combined_charge: true,
+      flow_of_funds: nil
     )
     charge = create_charge(order: create_order, seller:, merchant_account:)
     charge.purchases << purchase
@@ -6686,6 +6695,21 @@ class PurchaseTest < ActiveSupport::TestCase
     purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
     purchase.update!(purchaser: nil)
     assert_equal true, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when the buyer unsubscribed from the seller returns false" do
+    # `can_contact: false` is set by the receipt footer's Unsubscribe link, and for a guest
+    # buyer it is the only opt-out available — there is no User row to hold
+    # `opted_out_of_review_reminders`.
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(can_contact: false)
+    assert_equal false, purchase.eligible_for_review_reminder?
+  end
+
+  test "#eligible_for_review_reminder? when a guest buyer unsubscribed from the seller returns false" do
+    purchase = create_purchase(purchaser: create_user, link: create_product(price_cents: 10_00))
+    purchase.update!(purchaser: nil, can_contact: false)
+    assert_equal false, purchase.eligible_for_review_reminder?
   end
 
   test "#eligible_for_review_reminder? when the seller has disabled review reminders returns false" do
@@ -7419,7 +7443,7 @@ class PurchaseTest < ActiveSupport::TestCase
       @purchase.chargeable = build_chargeable
       @purchase.process!
       @post = create_installment(link: @product, published_at: 1.hour.ago)
-      @post.product_files << create_product_file
+      @post.product_files << create_product_file(installment: @post)
       @workflow = create_workflow(seller: @user, link: @product, published_at: Time.current)
       @workflow_post = create_installment(link: @product, workflow: @workflow, published_at: Time.current)
       create_installment_rule(installment: @workflow_post, delayed_delivery_time: 3.days)

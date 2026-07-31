@@ -87,4 +87,49 @@ describe BankAccount do
       end
     end
   end
+
+  describe "#routing_field_descriptions" do
+    it "names both halves for a country that collects a bank code and a branch code" do
+      bank_account = build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+      expect(bank_account.routing_field_descriptions).to eq(["bank code JSCLUZ22XXX", "branch code 00401"])
+    end
+
+    it "uses the label the form shows rather than the underlying column name" do
+      bank_account = build(:canadian_bank_account, institution_number: "003", transit_number: "12345")
+
+      expect(bank_account.routing_field_descriptions).to eq(["transit number 12345", "institution number 003"])
+    end
+
+    it "describes a column reached under two labels only once, under the label the form shows" do
+      # Canada is the only shape where two labels resolve to one column: transit_number aliases
+      # branch_code, which is also a label in its own right. Without the dedupe the seller is told
+      # their transit number and their "branch code" — the same value, named twice.
+      bank_account = build(:canadian_bank_account, institution_number: "003", transit_number: "12345")
+
+      expect(bank_account.routing_field_descriptions.grep(/12345/).size).to eq(1)
+      expect(bank_account.routing_field_descriptions).to_not include("branch code 12345")
+    end
+
+    it "falls back to the routing number for a country that collects a single unlabelled value" do
+      bank_account = build(:ach_account, routing_number: "110000000")
+
+      expect(bank_account.routing_field_descriptions).to eq(["routing number 110000000"])
+    end
+  end
+
+  describe "#has_separate_branch_code?" do
+    it "is true when the seller filled in a bank code and a branch code" do
+      expect(build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401")).to have_separate_branch_code
+    end
+
+    it "is true for Hong Kong, which calls the first half a clearing code" do
+      # No HK factory exists; the attributes are what the payout form collects.
+      expect(HongKongBankAccount.new(clearing_code: "004", branch_code: "888")).to have_separate_branch_code
+    end
+
+    it "is false when the country collects one value" do
+      expect(build(:ach_account)).not_to have_separate_branch_code
+    end
+  end
 end

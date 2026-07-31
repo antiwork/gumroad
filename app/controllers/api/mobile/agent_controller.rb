@@ -118,20 +118,29 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
       # reply would leave a stray user message that gets silently replayed to the model on the
       # next turn or after a resume (the same partial-history problem the pre-service guard above
       # protects against).
+      # A persistence failure does not erase a completed read reply. A proposed write is different:
+      # without a stored message it cannot be confirmed, so its confirmation wording is replaced.
       assistant_message = nil
-      ActiveRecord::Base.transaction do
-        conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
-        record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
-        assistant_message = record_agent_assistant_message!(conversation, result)
+      begin
+        ActiveRecord::Base.transaction do
+          conversation ||= create_agent_conversation!(new_user_message || messages.last[:content])
+          record_agent_user_message!(conversation, new_user_message) if new_user_message.present?
+          assistant_message = record_agent_assistant_message!(conversation, result)
+        end
+      rescue => e
+        Rails.logger.error("Mobile store agent turn persistence failed: #{e.full_message}")
+        ErrorNotifier.notify(e)
       end
+      replace_unpersisted_proposal_reply!(result) unless assistant_message
       response_payload = {
         success: true,
         reply: result[:reply],
-        proposed_action: result[:proposed_action],
+        # A proposal can only be confirmed through its persisted message.
+        proposed_action: assistant_message ? result[:proposed_action] : nil,
         objects: result[:objects] || [],
-        conversation_id: conversation.external_id,
+        conversation_id: conversation&.persisted? ? conversation.external_id : nil,
       }
-      response_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action]
+      response_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
       render json: response_payload
     rescue ::Ai::StoreAgentService::Error => e
       render json: { success: false, error: e.message }, status: :unprocessable_entity

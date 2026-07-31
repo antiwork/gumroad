@@ -14,12 +14,17 @@ export type PurchasePaymentMethod =
   | { type: "not-applicable" }
   // Client-confirm cards live in the ConfirmationToken sent to #prepare. walletType is set when
   // a wallet (Apple Pay / Google Pay) paid through the Payment Element, for server analytics.
+  //
+  // selectedMethodType is the Payment Element row the buyer had selected. Stripe's confirm error
+  // only carries `payment_method` when it attached one, so a plain decline reports no type at all
+  // — this is the one signal that survives (gumroad-private#1514).
   | {
       type: "payment-element-client-confirm";
       confirmationTokenId: string;
       cardCountry: string | null;
       walletType: string | null;
       mountCurrency: string;
+      selectedMethodType: string;
     };
 
 export type SuccessfulLineItemResult = {

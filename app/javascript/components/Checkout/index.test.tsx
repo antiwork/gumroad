@@ -66,7 +66,7 @@ const cartProduct = (overrides: Partial<CartProduct> = {}): CartProduct => ({
   supports_paypal: null,
   has_offer_codes: false,
   has_tipping_enabled: false,
-  analytics: { google_analytics_id: null, facebook_pixel_id: null, free_sale: false },
+  analytics: { google_analytics_id: null, facebook_pixel_id: null, tiktok_pixel_id: null, free_sales: false },
   exchange_rate: 1,
   rental: null,
   shippable_country_codes: [],
@@ -158,6 +158,7 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   checkoutPayment: paymentElementConfig,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
+  recaptchaScoreBased: false,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,
@@ -249,6 +250,63 @@ describe("Checkout buyer-currency line amounts", () => {
     const { getAllByLabelText } = renderCheckout(state, cart);
 
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$3.34", "US$6.67"]);
+  });
+
+  it("renders the signed current-charge amount for an installment checkout", () => {
+    const state = buildState({
+      products: [
+        stateProduct({
+          price: 1_000,
+          payInInstallments: true,
+          installmentPlan: { numberOfInstallments: 3 },
+        }),
+      ],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          buyer_currency_quote: {
+            token: "quote-token",
+            currency: "cad",
+            canonical_total_cents: 1_000,
+            presentment_total_cents: 1_250,
+            charge_presentment_total_cents: 417,
+            rate: 1.25,
+            subunit_to_unit: 100,
+            expires_at: "2999-01-01T00:00:00Z",
+            line_allocations: [
+              {
+                permalink: "prod",
+                price_cents: 1_250,
+                tip_cents: 0,
+                tax_cents: 0,
+                shipping_cents: 0,
+                total_cents: 1_250,
+              },
+            ],
+          },
+        },
+      },
+    });
+    const cart: CartState = {
+      items: [
+        cartItem({
+          product: cartProduct({ installment_plan: { number_of_installments: 3 } }),
+          pay_in_installments: true,
+        }),
+      ],
+      discountCodes: [],
+    };
+
+    const { getByText } = renderCheckout(state, cart);
+
+    expect(getByText("Payment today")).toBeTruthy();
+    expect(getByText("CA$4.17")).toBeTruthy();
   });
 });
 

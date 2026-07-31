@@ -123,7 +123,9 @@ class Purchase < ApplicationRecord
   has_many :media_locations
   has_one :processor_payment_intent
   has_one :commission_as_deposit, class_name: "Commission", foreign_key: :deposit_purchase_id
-  has_one :commission_as_completion, class_name: "Commission", foreign_key: :completion_purchase_id
+  # Commission persists this link after processing, so saving a failed completion must not attach it.
+  has_one :commission_as_completion, class_name: "Commission", foreign_key: :completion_purchase_id,
+                                     inverse_of: :completion_purchase, autosave: false
   has_one :utm_link_driven_sale
   has_one :utm_link, through: :utm_link_driven_sale
 
@@ -373,6 +375,7 @@ class Purchase < ApplicationRecord
   before_create :perceived_price_cents_matches_price_cents
   before_create :validate_subscription
   before_create :validate_shipping
+  before_create :validate_sanctioned_location
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
@@ -613,7 +616,7 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan, :authenticated_offer_code_buyer
+                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -877,6 +880,9 @@ class Purchase < ApplicationRecord
       .not_is_archived_original_subscription_purchase
       .not_is_access_revoked
   }
+  # The rows the buyer's library can actually render. LibraryPresenter loads exactly this set, so
+  # anything excluded here has no card there and cannot stand in for a bundle it belongs to.
+  scope :visible_in_library, -> { for_library.not_rental_expired.not_is_deleted_by_buyer }
   scope :for_sales_api, -> {
     all_success_states_except_preorder_auth_and_gift.exclude_not_charged_except_free_trial
   }
@@ -1418,10 +1424,11 @@ class Purchase < ApplicationRecord
       end
       if link.is_tiered_membership?
         first_tier_name = purchase.variant_attributes.first&.name
+        subscription_external_id = purchase.subscription&.external_id
         json[:membership] = {
           tier_name: first_tier_name == "Untitled" ? purchase.link.name : first_tier_name,
           tier_description: purchase.variant_attributes.first&.description,
-          manage_url: Rails.application.routes.url_helpers.manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"),
+          manage_url: subscription_external_id.present? ? Rails.application.routes.url_helpers.manage_subscription_url(subscription_external_id, host: "#{PROTOCOL}://#{DOMAIN}") : nil,
         }
       end
       json[:enabled_integrations] = Integration.enabled_integrations_for(purchase)
@@ -1577,9 +1584,9 @@ class Purchase < ApplicationRecord
   end
 
   # True while a presentment purchase has been charged but Stripe settlement data has not
-  # arrived yet; FinalizeBuyerPresentmentChargeJob completes the purchase once it does.
+  # arrived yet; a finalization job completes the purchase once it does.
   def pending_buyer_presentment_settlement?
-    in_progress? && stripe_transaction_id.present? && charge&.charge_presentment.present?
+    in_progress? && stripe_transaction_id.present? && (buyer_presentment? || charge&.charge_presentment.present?) && flow_of_funds.blank?
   end
 
   def buyer_presentment_currency
@@ -2223,7 +2230,12 @@ class Purchase < ApplicationRecord
     self.charge_intent = create_charge_intent(chargeable, off_session:)
     return if errors.present?
 
-    save_charge_data(charge_intent.charge, chargeable:) if charge_intent.succeeded?
+    if charge_intent.succeeded?
+      charge_data_saved = save_charge_data(charge_intent.charge, chargeable:, allow_missing_flow_of_funds: buyer_presentment?)
+      unless charge_data_saved
+        FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, id)
+      end
+    end
 
     unless charge_intent.succeeded? || charge_intent.requires_action? || (charge_intent.is_a?(StripeChargeIntent) && charge_intent.processing?)
       errors.add :base, "Sorry, something went wrong."
@@ -3241,6 +3253,11 @@ class Purchase < ApplicationRecord
     all_workflows.each do |workflow|
       next unless workflow.applies_to_purchase?(self)
 
+      # Cancellation posts belong to the subscription — Subscription#schedule_member_cancellation_workflow_jobs
+      # schedules them on the next cancellation. Enqueueing them here sends them down the
+      # purchase path, which never rechecks whether the membership is still cancelled.
+      next if workflow.member_cancellation_trigger?
+
       active_workflow_installments = workflow.installments.includes(:installment_rule).alive.published
       has_any_past_workflow_installments = active_workflow_installments.any? do |installment|
         installment.installment_rule.present? && (original_purchase.created_at + installment.installment_rule.delayed_delivery_time < Time.current)
@@ -3737,9 +3754,12 @@ class Purchase < ApplicationRecord
     # two checks drift apart, buyers get a reminder email whose link opens a page
     # with no review form (e.g. purchases flagged `should_exclude_product_review`
     # after a charge reversal, or access-revoked free purchases).
+    # `can_contact` is the receipt footer's unsubscribe, and the only opt-out a guest can
+    # reach — they have no User row to carry `opted_out_of_review_reminders`.
     allows_review_to_be_counted? &&
       product_review.blank? &&
       !seller&.disable_review_reminders? &&
+      can_contact? &&
       (purchaser.present? ? !purchaser.opted_out_of_review_reminders? : true)
   end
 
@@ -4230,6 +4250,55 @@ class Purchase < ApplicationRecord
       end
     end
 
+    # Processor args for an off-session purchase whose buyer-currency price was fixed earlier.
+    # Buyer-present charges stay on the verified checkout quote path.
+    def later_charge_presentment_processor_args(off_session:)
+      return {} unless off_session
+      return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
+      return {} unless merchant_account&.stripe_charge_processor?
+      return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+
+      result = Purchase::LaterChargePresentmentService.new(
+        merchant_account:,
+        purchases: [self],
+        amount_cents: total_transaction_cents,
+        gumroad_amount_cents: total_transaction_amount_for_gumroad_cents
+      ).perform
+      return {} if result.blank?
+
+      {
+        processor_amount_cents: result.processor_amount_cents,
+        processor_currency: result.processor_currency,
+        processor_gumroad_amount_cents: result.processor_gumroad_amount_cents,
+        stripe_fx_quote_id: result.stripe_fx_quote_id,
+      }
+    end
+
+    # Converts the RBI e-mandate cap into the currency this charge will actually settle in. See
+    # Charge::CreateService#mandate_options_in_charge_currency for the full reasoning; this is the
+    # renewal-path counterpart, kept deliberately identical in behaviour.
+    def mandate_options_in_charge_currency(mandate_options, presentment_args, canonical_amount_cents)
+      return mandate_options if mandate_options.blank?
+
+      presentment_currency = presentment_args[:processor_currency]
+      return mandate_options if presentment_currency.blank? || presentment_currency == Currency::USD
+
+      canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
+      return mandate_options if canonical_cap_cents.blank?
+      return mandate_options unless canonical_amount_cents.to_i.positive?
+
+      presentment_cap_cents = (Rational(canonical_cap_cents * presentment_args[:processor_amount_cents].to_i,
+                                        canonical_amount_cents)).ceil
+      # A cap below the amount being charged would decline this very renewal.
+      presentment_cap_cents = [presentment_cap_cents, presentment_args[:processor_amount_cents].to_i].max
+
+      inner = mandate_options[:payment_method_options][:card][:mandate_options]
+                .merge(amount: presentment_cap_cents, currency: presentment_currency)
+      mandate_options.deep_merge(
+        payment_method_options: { card: { mandate_options: inner } }
+      )
+    end
+
     def create_charge_intent(chargeable, off_session: true)
       with_charge_processor_error_handler do
         amount_cents = total_transaction_cents
@@ -4243,6 +4312,17 @@ class Purchase < ApplicationRecord
         # off-session (multi-seller carts) but must not be treated that way.
         mandate_expected = is_a_saved_card_rebill?
 
+        # Delayed product charges reuse the buyer-currency price fixed at checkout.
+        #
+        # Empty hash means no valid fixing applies, so the charge keeps its canonical behavior.
+        presentment_args = later_charge_presentment_processor_args(off_session:)
+        # The RBI e-mandate cap is registered in US dollars, but Stripe reads mandate_options
+        # amounts in the mandate's own currency and the mandate inherits the intent's currency.
+        # An unconverted cap on a presentment charge registers as (say) ₹10.00 instead of $10.00
+        # and every subsequent renewal is declined off-session. Same conversion the checkout lane
+        # applies in Charge::CreateService#mandate_options_in_charge_currency.
+        mandate_options = mandate_options_in_charge_currency(mandate_options, presentment_args, amount_cents)
+
         charge_intent = ChargeProcessor.create_payment_intent_or_charge!(self.merchant_account,
                                                                          chargeable,
                                                                          amount_cents,
@@ -4254,7 +4334,8 @@ class Purchase < ApplicationRecord
                                                                          off_session:,
                                                                          setup_future_charges:,
                                                                          mandate_options:,
-                                                                         mandate_expected:)
+                                                                         mandate_expected:,
+                                                                         **presentment_args)
 
         if charge_intent.id.present?
           if processor_payment_intent.present?
@@ -4648,7 +4729,7 @@ class Purchase < ApplicationRecord
       return unless link.is_physical
       return if country.blank?
 
-      if Compliance::Countries.blocked?(Compliance::Countries.find_by_name(country)&.alpha2)
+      if Compliance::Countries.blocked_location?(alpha2: Compliance::Countries.find_by_name(country)&.alpha2, subdivision_code: state)
         self.error_code = PurchaseErrorCode::BLOCKED_SHIPPING_COUNTRY
         errors.add :base, "The creator cannot ship the product to the country you have selected."
       elsif ShippingDestination.for_product_and_country_code(product: link, country_code: Compliance::Countries.find_by_name(country)&.alpha2).nil?
@@ -4662,6 +4743,44 @@ class Purchase < ApplicationRecord
 
       self.error_code = PurchaseErrorCode::INVALID_QUANTITY
       errors.add :base, "Sorry, you've selected an invalid quantity."
+    end
+
+    # Sanctions screening for every purchase, not just physical ones. Before this, a digital product
+    # was only protected by the buy button being hidden at render time (`Link#compliance_blocked`),
+    # which a buyer reaching /checkout directly — or whose page was rendered from a different IP —
+    # never sees. Physical products keep failing in `validate_shipping` with their own error code, so
+    # we return early when it already objected. This also runs on subscription renewals, which is
+    # deliberate: continuing to bill an existing subscriber in a sanctioned jurisdiction is the same
+    # prohibited transaction as the first charge.
+    def validate_sanctioned_location
+      return if errors.present?
+      return if is_test_purchase?
+
+      return unless sanctioned_location_signals.any? do |alpha2, subdivision_code|
+        Compliance::Countries.blocked_location?(alpha2:, subdivision_code:)
+      end
+
+      self.error_code = PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      errors.add :base, "Sorry, this item is not available in your location."
+    end
+
+    # [alpha2, subdivision] pairs we know about the buyer at create time. `card_country` is not here
+    # because it is only populated once the charge comes back, which is after this callback.
+    # `ip_country`/`ip_state` are only filled in by `Order::CreateService`, so we geolocate
+    # `ip_address` ourselves as well rather than trusting one caller to have done it.
+    #
+    # A renewal's IP fields were copied off the original purchase by `Subscription#build_purchase`
+    # and describe where the buyer was when they subscribed, so they are excluded: screening them
+    # would keep rejecting a subscriber who has since moved out of a sanctioned jurisdiction, with
+    # no way for them to correct it. The declared address is still screened — the subscriber can
+    # update it from Manage subscription, so it is the signal we maintain.
+    def sanctioned_location_signals
+      signals = [[Compliance::Countries.find_by_name(country)&.alpha2, state]]
+      unless ip_location_inherited
+        signals << [Compliance::Countries.find_by_name(ip_country)&.alpha2, ip_state]
+        signals << [geo_info&.country_code, geo_info&.region_name]
+      end
+      signals.reject { |alpha2, _subdivision| alpha2.blank? }
     end
 
     def validate_offer_code

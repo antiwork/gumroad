@@ -173,6 +173,139 @@ describe DisputeEvidence do
     end
   end
 
+  describe ".hours_left_in_window" do
+    it "returns 0 without a stamp" do
+      expect(described_class.hours_left_in_window(nil)).to eq(0)
+    end
+
+    it "agrees with the instance method for the same stamp" do
+      stamp = 3.hours.ago
+      dispute_evidence.update!(seller_contacted_at: stamp)
+
+      expect(described_class.hours_left_in_window(stamp))
+        .to eq(dispute_evidence.hours_left_to_submit_evidence)
+    end
+
+    # The band where the old exact `elapsed < 72.hours` test in Charge::Disputable disagreed with
+    # this rounded one: it called the window open while the notice's own body would have read
+    # "in the next 0 hours". One predicate now answers for both, so the band cannot reopen.
+    it "reports no hours left once rounding takes the window to zero, where an exact test would not" do
+      elapsed = (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours
+
+      expect(described_class.hours_left_in_window(elapsed.ago)).to eq(0)
+      expect(Time.current - elapsed.ago).to be < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+    end
+
+    it "goes negative past the window rather than flooring" do
+      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 1).hours.ago)).to eq(-1)
+    end
+  end
+
+  describe ".accepting_evidence?" do
+    def accepting?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
+      described_class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    end
+
+    it "accepts an open window" do
+      expect(accepting?).to be(true)
+    end
+
+    # These two are what Purchases::DisputeEvidenceController#check_if_needs_redirect bounces on. A
+    # caller that asks only about the window sends an action-required email to a page that redirects.
+    it "declines once the seller has submitted" do
+      expect(accepting?(seller_submitted_at: Time.current)).to be(false)
+    end
+
+    it "declines once the row is resolved" do
+      expect(accepting?(resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines an elapsed window" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+    end
+
+    it "still quotes the last whole hour rather than declining early" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 1.4).hours.ago)).to be(true)
+      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 1.4).hours.ago)).to eq(1)
+    end
+
+    # The controller bounces an unstamped row too ("You are not allowed to perform this action"), so
+    # a nil stamp is not permission to ask — asking would quote "in the next 0 hours".
+    it "declines an unstamped row, which has no window to quote" do
+      expect(accepting?(seller_contacted_at: nil)).to be(false)
+    end
+
+    it "agrees with the instance method reading the same row" do
+      dispute_evidence.update!(seller_contacted_at: 1.hour.ago)
+      expect(dispute_evidence.accepting_evidence?).to be(true)
+
+      dispute_evidence.update!(seller_submitted_at: Time.current)
+      expect(dispute_evidence.accepting_evidence?).to be(false)
+    end
+  end
+
+  describe ".notice_worth_sending?" do
+    def worth_sending?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
+      described_class.notice_worth_sending?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    end
+
+    # This is the arm that differs from accepting_evidence?: a dispute with no evidence surface at all
+    # (PayPal, Stripe Connect) never gets a window, and must still receive its plain notice.
+    it "sends for an unstamped row, where asking for evidence would not" do
+      expect(worth_sending?(seller_contacted_at: nil)).to be(true)
+      expect(described_class.accepting_evidence?(seller_contacted_at: nil, seller_submitted_at: nil, resolved_at: nil)).to be(false)
+    end
+
+    it "declines an unstamped row that is already resolved" do
+      expect(worth_sending?(seller_contacted_at: nil, resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines once the seller has submitted or the row is resolved" do
+      expect(worth_sending?(seller_submitted_at: Time.current)).to be(false)
+      expect(worth_sending?(resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines an elapsed window" do
+      expect(worth_sending?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+    end
+  end
+
+  describe "#claim_seller_contacted_window!" do
+    before { dispute_evidence.update_as_not_seller_contacted! }
+
+    it "opens the window and reports the claim" do
+      at = 30.hours.ago
+
+      expect(dispute_evidence.claim_seller_contacted_window!(at:)).to be(true)
+      expect(dispute_evidence.reload.seller_contacted_at).to be_within(1.second).of(at)
+    end
+
+    it "leaves an already-open window alone" do
+      # Both writers of this column — formalization and CreateMissingDisputeEvidenceJob — claim
+      # here, and the sweep's stamp is deliberately backdated to beat the processor's cutoff. A
+      # later claim overwriting it with a fresh full-length window would submit evidence too late.
+      dispute_evidence.claim_seller_contacted_window!(at: 30.hours.ago)
+      original = dispute_evidence.reload.seller_contacted_at
+
+      expect(dispute_evidence.claim_seller_contacted_window!).to be(false)
+      expect(dispute_evidence.reload.seller_contacted_at).to eq(original)
+    end
+
+    it "does not touch the in-memory record, whose attachments may be mid-upload" do
+      # Callers claim inside the transaction that builds the record and attaches its images, so a
+      # reload here would reset those associations before ActiveStorage has uploaded the blobs.
+      expect(dispute_evidence.claim_seller_contacted_window!).to be(true)
+      expect(dispute_evidence.seller_contacted_at).to be_nil
+    end
+
+    it "does not open a window on resolved evidence" do
+      dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+      expect(dispute_evidence.claim_seller_contacted_window!).to be(false)
+      expect(dispute_evidence.reload.seller_contacted_at).to be_nil
+    end
+  end
+
   describe "#customer_communication_file_max_size" do
     before do
       dispute_evidence.receipt_image.attach(

@@ -404,7 +404,7 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       expect(purchase.was_purchase_taxable).to be(true)
     end
 
-    it "charges VAT for a physical product" do
+    it "does not charge VAT for a physical product shipped to the EU" do
       product = create(:physical_product, price_cents: 100_00)
       visit "/l/#{product.unique_permalink}"
       expect(page).to have_text("$100")
@@ -413,27 +413,11 @@ describe("Product Page - Tax Scenarios", type: :system, js: true) do
       check_out(product, address: { street: "Via del Governo Vecchio, 87", city: "Rome", state: "Latium", zip_code: "00186" })
 
       purchase = Purchase.last
-      expect(purchase.total_transaction_cents).to eq(122_00)
+      expect(purchase.total_transaction_cents).to eq(100_00)
       expect(purchase.price_cents).to eq(100_00)
       expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(22_00)
-      expect(purchase.was_purchase_taxable).to be(true)
-    end
-
-    it "displays the correct VAT and charges the right amount" do
-      product = create(:physical_product, price_cents: 100_00)
-      visit "/l/#{product.unique_permalink}"
-      expect(page).to have_text("$100")
-
-      add_to_cart(product)
-      check_out(product, address: { street: "Via del Governo Vecchio, 87", city: "Rome", state: "Latium", zip_code: "00186" })
-
-      purchase = Purchase.last
-      expect(purchase.total_transaction_cents).to eq(122_00)
-      expect(purchase.price_cents).to eq(100_00)
-      expect(purchase.tax_cents).to eq(0)
-      expect(purchase.gumroad_tax_cents).to eq(22_00)
-      expect(purchase.was_purchase_taxable).to be(true)
+      expect(purchase.gumroad_tax_cents).to eq(0)
+      expect(purchase.was_purchase_taxable).to be(false)
     end
   end
 

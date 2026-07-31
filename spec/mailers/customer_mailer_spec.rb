@@ -1111,6 +1111,23 @@ describe CustomerMailer do
         end
       end
 
+      context "when another delivery already recorded the send" do
+        before do
+          SentAbandonedCartEmail.create!(cart_id: cart.id, installment_id: seller1_workflow_installment.id)
+          # A pre-existing row makes `abandoned?` false, but in the race both deliveries
+          # pass that check before either row is written — stubbing it true reproduces
+          # the interleaving so the unique-indexed insert is what stops the duplicate.
+          allow(cart).to receive(:abandoned?).and_return(true)
+        end
+
+        it "does not send a duplicate email" do
+          expect do
+            mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end.not_to change { SentAbandonedCartEmail.count }
+        end
+      end
+
       context "when the provided workflow is not of 'abaonded_cart' type" do
         before do
           seller1_workflow.update!(workflow_type: Workflow::SELLER_TYPE)

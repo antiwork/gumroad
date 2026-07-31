@@ -83,7 +83,7 @@ describe PostResendApi, :freeze_time do
     end
 
     it "is included when there are attachments" do
-      @post.product_files << create(:product_file)
+      @post.product_files << create(:product_file, link: nil, installment: @post)
       url_redirect = create(:url_redirect, installment: @post)
       send_emails(recipients: [{ email: "c1@example.com", url_redirect: }])
       node = html_doc(sent_email_content).at_xpath(%(//a[@href="#{url_redirect.download_page_url}"]))
@@ -107,7 +107,7 @@ describe PostResendApi, :freeze_time do
     end
 
     it "raises an error when a post has files but no url_redirect" do
-      @post.product_files << create(:product_file)
+      @post.product_files << create(:product_file, link: nil, installment: @post)
       expect do
         send_default_email
       end.to raise_error(/must have a url_redirect/i)

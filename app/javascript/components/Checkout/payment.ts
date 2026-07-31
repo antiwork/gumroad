@@ -468,7 +468,7 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   });
   if (!display) return null;
 
-  return { currency: display.currencyCode, amountCents: display.presentmentTotalCents };
+  return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
 }
 
 // The currency the server-confirm Payment Element should mount in, or null while it cannot be
@@ -740,6 +740,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
           quantity: item.quantity,
           price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
           tip_cents: tipCents,
+          pay_in_installments: item.payInInstallments,
           subscription_id: item.subscription_id,
           recommended_by: item.recommended_by,
         };

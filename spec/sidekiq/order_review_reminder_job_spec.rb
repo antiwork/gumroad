@@ -42,7 +42,7 @@ describe OrderReviewReminderJob do
   end
 
   context "when there are multiple eligible purchases" do
-    let(:another_eligible_purchase) { create(:purchase, order: order) }
+    let(:another_eligible_purchase) { create(:purchase, order: order, email: eligible_purchase.email) }
 
     before do
       allow(order).to receive(:purchases).and_return([eligible_purchase, another_eligible_purchase])
@@ -57,6 +57,41 @@ describe OrderReviewReminderJob do
         .with(order.id)
         .on_queue(:low)
         .once
+    end
+
+    context "and they no longer share one email address" do
+      let(:another_eligible_purchase) { create(:purchase, order: order, email: "someone-else@example.com") }
+
+      it "sends a per-purchase reminder to each address instead of the order-level email" do
+        expect do
+          described_class.new.perform(order.id)
+        end.to have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+          .with(eligible_purchase.id)
+          .on_queue(:low)
+          .once
+          .and have_enqueued_mail(CustomerLowPriorityMailer, :purchase_review_reminder)
+          .with(another_eligible_purchase.id)
+          .on_queue(:low)
+          .once
+      end
+
+      it "does not send the order-level email" do
+        expect do
+          described_class.new.perform(order.id)
+        end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :order_review_reminder)
+      end
+    end
+
+    context "and their addresses differ only in case" do
+      let(:another_eligible_purchase) { create(:purchase, order: order, email: eligible_purchase.email.upcase) }
+
+      it "still sends the single order-level email" do
+        expect do
+          described_class.new.perform(order.id)
+        end.to have_enqueued_mail(CustomerLowPriorityMailer, :order_review_reminder)
+          .with(order.id)
+          .once
+      end
     end
   end
 

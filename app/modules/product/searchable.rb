@@ -3,8 +3,11 @@
 module Product::Searchable
   extend ActiveSupport::Concern
 
-  # we want to show 9 tags, but this is used as an array indexing which starts at 0
-  MAX_NUMBER_OF_TAGS = 8
+  MAX_NUMBER_OF_TAGS = 9
+  # Not a hard bound: the 5-tags-per-product limit is editor-only enforcement, so a huge
+  # catalogue can still silently truncate here. Discover keeps the small cap - it spans
+  # every seller.
+  MAX_NUMBER_OF_PROFILE_TAGS = 200
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
   MAX_OFFER_CODES_IN_INDEX = 300
@@ -163,6 +166,13 @@ module Product::Searchable
 
   class_methods do
     def search_options(params)
+      # Locals, not method calls inside the DSL block: `size` there is the DSL's own setter.
+      # Cast the flag: raw request params arrive as strings, and "false" is truthy in Ruby while
+      # the `term` filter below coerces it to false, so the tag lane would disagree with the hits.
+      # The flag alone is not enough to pick the wide lane anyway — it is spoofable on /discover
+      # and /products/search; `user_id` is what bounds the vocabulary, via `terms user_id:` below.
+      is_alive_on_profile = ActiveModel::Type::Boolean.new.cast(params[:is_alive_on_profile])
+      tags_aggregation_size = params[:user_id].present? && is_alive_on_profile ? MAX_NUMBER_OF_PROFILE_TAGS : MAX_NUMBER_OF_TAGS
       search_options = Elasticsearch::DSL::Search.search do
         size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE).to_i
         from (params[:from].to_i - 1).clamp(0, MAX_RESULT_WINDOW - size)
@@ -356,7 +366,7 @@ module Product::Searchable
         aggregation "tags.keyword" do
           terms do
             field "tags.keyword"
-            size MAX_NUMBER_OF_TAGS
+            size tags_aggregation_size
           end
         end
 

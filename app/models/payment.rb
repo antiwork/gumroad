@@ -84,6 +84,7 @@ class Payment < ApplicationRecord
     after_transition %i[creating processing] => %i[cancelled failed], do: :mark_balances_as_unpaid
     after_transition processing: :failed, do: :send_cannot_pay_email, if: ->(payment) { payment.failure_reason == FailureReason::CANNOT_PAY }
     after_transition processing: :failed, do: :send_debit_card_limit_email, if: ->(payment) { payment.failure_reason == FailureReason::DEBIT_CARD_LIMIT }
+    after_transition processing: :failed, do: :send_paypal_terminal_failure_email, if: ->(payment) { payment.explained_paypal_failure? }
     after_transition processing: :failed, do: :add_payment_failure_reason_comment
 
     after_transition %i[processing unclaimed] => :completed, do: :mark_balances_as_paid
@@ -169,9 +170,25 @@ class Payment < ApplicationRecord
     user.save!
   end
 
+  # Notifying the seller must never decide whether Gumroad's money gets reversed. Both callers run
+  # this after `mark_failed!` has already returned the balances to `unpaid` but before the internal
+  # transfer is reversed, so a raise here would strand the transfer with the seller unpaused.
+  def send_payout_failure_email_best_effort
+    send_payout_failure_email
+  rescue => e
+    # Discard the unpersisted `payout_date_of_last_payment_failure_email` assignment. The reversal
+    # and the payout hold both take `user.with_lock`, and `lock!` raises outright on a record with
+    # unsaved changes — so leaving `user` dirty here turns a mail failure back into the stranded
+    # transfer this method exists to prevent.
+    user.reload
+    ErrorNotifier.notify(e, payment_id: id, user_id:,
+                            action_required: "Payout failure email did not send. The payout reversal and any hold still ran.")
+  end
+
   def send_payout_failure_email
-    # This would already be done from callback/ We dont't to clean that up rn
-    return if failure_reason === FailureReason::CANNOT_PAY
+    # Both of these are already mailed by the `processing => failed` transition callbacks, which now
+    # see the reason because it is written by the transition itself rather than a later save.
+    return if failure_reason.in?([FailureReason::CANNOT_PAY, FailureReason::DEBIT_CARD_LIMIT])
 
     ContactingCreatorMailer.cannot_pay(id).deliver_later(queue: "critical")
 
@@ -183,12 +200,119 @@ class Payment < ApplicationRecord
     ContactingCreatorMailer.debit_card_limit_reached(id).deliver_later(queue: "critical")
   end
 
+  # Tell the seller their PayPal account cannot receive the payout, and that we have stopped
+  # retrying it.
+  #
+  # This has its own "already sent" marker rather than sharing
+  # payout_date_of_last_payment_failure_email with the other payout-failure emails. That column is
+  # written by any failure email in the period, so sharing it would mean an unrelated earlier email
+  # silently swallows this one — and because the retries stop here, there is no later period in
+  # which it would be sent instead. The seller would never be told why their money stopped moving.
+  def send_paypal_terminal_failure_email
+    return if user.payout_date_of_last_paypal_terminal_failure_email.present? &&
+              Date.parse(user.payout_date_of_last_paypal_terminal_failure_email) >= payout_period_end_date
+
+    ContactingCreatorMailer.paypal_payout_permanently_failed(id).deliver_later(queue: "critical")
+
+    user.payout_date_of_last_paypal_terminal_failure_email = payout_period_end_date
+    # Skip validations: this is bookkeeping about an email, and the seller rows that reach here are
+    # exactly the ones likely to be invalid for unrelated reasons (incomplete payout details). A
+    # raise here would roll back the whole failure transition, leaving the payout stuck in
+    # `processing`, which then blocks every future payout for that seller with nothing to show why.
+    user.save!(validate: false)
+  end
+
   def humanized_failure_reason
     if processor == PayoutProcessorType::PAYPAL
       failure_reason.present? ? "#{failure_reason}: #{PAYPAL_MASS_PAY[failure_reason]}" : nil
     else
       failure_reason
     end
+  end
+
+  # True when PayPal rejected this payout for a reason that describes the destination PayPal
+  # account rather than this attempt, so the seller has to change something before the money can
+  # move. This is what drives the seller-facing explanation and email.
+  # See Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS.
+  def explained_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
+  # True when we additionally stop re-sending this payout to the same address, because no action
+  # inside the seller's PayPal account can make it succeed. A strict subset of the above — see
+  # Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS for why 14159 is explained but
+  # still retried.
+  def terminal_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
+  # True when the seller can clear this rejection on the PayPal account they already use, by adding
+  # US dollars to the currencies it accepts. This is the reason we keep retrying it, so the copy has
+  # to offer that fix and must not claim the retries have stopped.
+  # See Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
+  def repairable_in_place_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
+  # What to tell the seller to do about a terminal PayPal rejection, and what to expect after.
+  #
+  # Both halves are per-seller. Bank transfer is only a real option where Gumroad supports it —
+  # most sellers hitting these rejections are in PayPal-only countries. And fixing the payout
+  # method is only enough when payouts for the account are otherwise free to run: under a hold,
+  # Payouts.is_user_payable rejects before it ever reaches the PayPal processor, so the seller has
+  # to be told to come to us rather than to expect money on the next payout date.
+  #
+  # A terminal rejection no longer causes a hold itself (see pause_payouts_after_repeated_failures),
+  # but the hundreds of sellers who were already stuck before that stopped are still holding one,
+  # as is anyone paused for an unrelated reason, so the paused wording still has to exist.
+  def terminal_paypal_failure_seller_solution
+    fix = if repairable_in_place_paypal_failure?
+      # The seller can clear this on the account they already use, so lead with that — see
+      # Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
+      if user.can_setup_bank_payouts?
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_WITH_BANK
+      else
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_IN_PLACE_PAYPAL_ONLY
+      end
+    elsif user.can_setup_bank_payouts?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK
+    else
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY
+    end
+
+    # The two pause flags are independent, so all four combinations are real. A seller who paused
+    # their own payouts can resume them whenever they like, so sending them to support to have that
+    # "reviewed" would be busywork for both of us — but they still cannot be told plainly to expect
+    # the next payout date, because the payout gate (Payouts.is_user_payable) checks the broader
+    # payouts_paused? and skips them while their own pause is on. When BOTH are on, each has to be
+    # named: describing only the hold would leave the seller waiting on support while their own
+    # toggle keeps the money from moving.
+    next_step = if user.payouts_paused_internally? && user.payouts_paused_by_user?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED_AND_SELF_PAUSED
+    elsif user.payouts_paused_internally?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED
+    elsif user.payouts_paused_by_user?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_SELF_PAUSED
+    else
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP
+    end
+
+    "#{fix} #{next_step}"
+  end
+
+  # The whole seller-facing explanation for a terminal PayPal rejection, as one sentence pair.
+  #
+  # Three places write this note — the payout that fails, the payout run that finds the seller can
+  # no longer see it, and the one-time backfill for sellers who were stuck before any of this
+  # existed. They have to write identical text, because the code that decides whether an
+  # explanation is already in front of the seller recognises it by its wording.
+  def terminal_paypal_failure_seller_note
+    "Your payout on #{created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
+      "#{FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(failure_reason)}. " \
+      "#{terminal_paypal_failure_seller_solution}"
   end
 
   def reversed_by?(reversing_payout_id)
@@ -273,6 +397,29 @@ class Payment < ApplicationRecord
     def pause_payouts_after_repeated_failures
       return if user.nil? || user.payouts_paused?
 
+      # A terminal PayPal rejection is handled by a narrower mechanism and must not also pause the
+      # account. Pausing would contradict what we just told the seller: the note and email say to
+      # add a bank account and they will be paid on the next payout date, but a paused account is
+      # skipped before the payout method is even considered, so they would follow our instructions
+      # and still not get paid until support noticed and resumed them by hand. That is how these
+      # sellers ended up with nothing but "payouts were paused by the system" to go on
+      # (gumroad-private#1478).
+      #
+      # Nothing is lost by skipping the pause here. This check exists to stop us hammering a
+      # destination that keeps rejecting us, and the terminal block does that job more precisely:
+      # it is keyed on the PayPal address rather than the whole account, it engages on the first
+      # rejection instead of the third, and it lifts on its own when the seller fixes their payout
+      # details rather than needing a human to resume them.
+      #
+      # Only the retry-blocking codes are skipped, because only those have something narrower doing
+      # the job instead. A rejection we still retry (14159) has no such replacement, so its
+      # failures do count here and a seller who never acts is eventually paused — which is what this
+      # check is for, since otherwise we would re-send a rejected item every week forever. They are
+      # not left in the dark by that pause: Payouts.is_user_payable suppresses the weekly
+      # "payouts were paused" note while the PayPal explanation is the newest one they can see, and
+      # it asks that question about the wider EXPLAINED set precisely so this case is covered.
+      return if terminal_paypal_failure?
+
       if bank_account_id.present?
         destination = "bank account"
         payouts_to_destination = user.payments.where(bank_account_id:)
@@ -285,7 +432,25 @@ class Payment < ApplicationRecord
 
       last_completed_at = payouts_to_destination.completed.maximum(:created_at)
       failed_payouts = payouts_to_destination.where(state: [FAILED, RETURNED])
+      # Don't count the rejections that are already handled by the terminal-failure block, for the
+      # same reason this method returns early for them: a hold undoes what we told the seller to do.
+      # Without this, a terminal rejection still contributes to the count and a couple of unrelated
+      # later rows can push the account over the threshold — unclaimed payouts to the same address
+      # turning into returns weeks afterwards is enough — and the seller who followed our
+      # instructions ends up held anyway, which is the outcome this whole change removes.
+      # `failure_reason` is NULL on most non-PayPal rows, and NOT IN never matches NULL, so the
+      # NULL case has to be spelled out or those rows silently stop counting.
+      failed_payouts = failed_payouts.where(
+        "failure_reason IS NULL OR failure_reason NOT IN (?)",
+        FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS
+      )
       failed_payouts = failed_payouts.where("created_at > ?", last_completed_at) if last_completed_at
+      # A payout we failed ourselves says nothing about the seller's bank account, so it must not
+      # push them toward the pause threshold. The IS NULL arm is load-bearing — `NOT IN` alone
+      # drops NULL rows, which is most failures, silently disabling this check.
+      failed_payouts = failed_payouts.where(
+        "failure_reason IS NULL OR failure_reason NOT IN (?)", TRANSIENT_REASONS
+      )
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS
 
@@ -375,11 +540,12 @@ class Payment < ApplicationRecord
             mark_cancelled!
             needs_reverse_transfer = true
           when "failed"
-            mark_failed!
-            if stripe_payout["failure_code"].present?
-              self.failure_reason = stripe_payout["failure_code"]
-              save!
-            end
+            # The reason rides along with the transition's own write, same as the webhook path. A
+            # `save!` of its own ran after the balances were already back to `unpaid`, so a raise
+            # from it skipped the reversal below and left Gumroad's funds on the seller's connected
+            # account with the payment already terminal — and this caller swallows the exception into
+            # `errors`, which SyncStuckPayoutsJob discards, so it was silent.
+            mark_failed!(stripe_payout["failure_code"].presence)
             needs_reverse_transfer = true
             send_failure_email = true
           end
@@ -391,8 +557,12 @@ class Payment < ApplicationRecord
         needs_reverse_transfer = true
       end
 
-      send_payout_failure_email if send_failure_email
-      StripePayoutProcessor.reverse_internal_transfer!(self) if needs_reverse_transfer
+      send_payout_failure_email_best_effort if send_failure_email
+      # Hold-aware: the `rescue` below turns a failed reversal into an `errors.add`, which
+      # SyncStuckPayoutsJob discards. Without the hold, Gumroad's funds stay on the connected
+      # account while `mark_failed!`/`mark_cancelled!` have already returned the balances to
+      # `unpaid`, so the seller's next scheduled batch would transfer the same money again.
+      StripePayoutProcessor.reverse_internal_transfer_or_hold_payouts!(self, failure_reason, reraise: true) if needs_reverse_transfer
     rescue => e
       Rails.logger.error("Error syncing Stripe payout #{id}: #{e.message}")
       errors.add :base, e.message

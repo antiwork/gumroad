@@ -12,7 +12,7 @@ class User < ApplicationRecord
           AsyncDeviseNotification, Posts, AffiliatedProducts, Followers, LowBalanceFraudCheck, MailerLevel,
           DirectAffiliates, AsJson, Tier, Recommendations, Team, AustralianBacktaxes, WithCdnUrl,
           TwoFactorAuthentication, Versionable, Comments, VipCreator, SignedUrlHelper, Purchases, SecureExternalId,
-          AttributeBlockable, PayoutInfo, EmailNormalization
+          AttributeBlockable, PayoutInfo, EmailNormalization, SingleUseResetPasswordToken
 
   has_many :user_external_authentications, dependent: :destroy
 
@@ -34,6 +34,9 @@ class User < ApplicationRecord
   MIN_AU_BACKTAX_OWED_CENTS_FOR_CONTACT = 100_00
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
+
+  # Seasoning before a seller can pull funds instantly.
+  MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS = 60.days
 
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
@@ -102,6 +105,7 @@ class User < ApplicationRecord
   has_many :invites, foreign_key: :sender_id
   has_many :offer_codes
   has_many :user_compliance_infos
+  has_many :guardians
   has_many :user_compliance_info_requests
   has_many :user_tax_forms
   has_many :scheduled_payouts
@@ -201,6 +205,8 @@ class User < ApplicationRecord
 
   attr_json_data_accessor :background_opacity_percent, default: 100
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
+  # Separate from the column above on purpose — see Payment#send_paypal_terminal_failure_email.
+  attr_json_data_accessor :payout_date_of_last_paypal_terminal_failure_email
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -718,6 +724,12 @@ class User < ApplicationRecord
     custom_html.present?
   end
 
+  # Saved custom HTML only replaces the public profile while the feature is active. Keep this
+  # separate from has_custom_landing_page?, which reports saved content for editing and recovery.
+  def custom_landing_page_visible?
+    Feature.active?(:custom_html_pages, self) && has_custom_landing_page?
+  end
+
   def valid_password?(password)
     super(password)
   rescue BCrypt::Errors::InvalidHash
@@ -830,10 +842,22 @@ class User < ApplicationRecord
     super || build_seller_profile
   end
 
+  # seller_profiles predates a uniqueness constraint. Lock the seller before a locking/current
+  # profile read so first saves serialize without establishing a stale repeatable-read snapshot.
+  def with_locked_seller_profile
+    with_lock do
+      profile_association = association(:seller_profile)
+      profile_association.reset
+      profile = SellerProfile.lock.find_by(seller_id: id) || build_seller_profile
+      profile_association.target = profile
+      yield profile
+    end
+  end
+
   # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
   # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
   # they take this lock and re-read the sections inside it to avoid clobbering each other. The
-  # profile editor holds the same row via seller_profile.lock!, so all writers serialize on it.
+  # profile editor holds the same row via #with_locked_seller_profile, so all writers serialize on it.
   # Looked up directly (not via #seller_profile, which builds a record) so callers like product
   # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
   # saved profile has nothing to serialize against, so it just runs the block.
@@ -1039,6 +1063,11 @@ class User < ApplicationRecord
     hostnames.compact.uniq
   end
 
+  # Exact-host DNS is refreshed by the verification worker, never while rendering a profile.
+  def store_host_with_protocol
+    custom_domain&.strictly_routable? ? "#{PROTOCOL}://#{custom_domain.domain}" : subdomain_with_protocol
+  end
+
   def auto_transcode_videos?
     tier >= TIER_3
   end
@@ -1106,9 +1135,25 @@ class User < ApplicationRecord
   def eligible_for_instant_payouts?
     compliant? &&
       !payouts_paused? &&
-      payments.completed.count >= 4 &&
+      payments.completed.exists? &&
+      stripe_accounts_seasoned_for_instant_payouts? &&
       alive_user_compliance_info&.legal_entity_country_code == "US"
   end
+
+  # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
+  # account for years before connecting one. A recreated payout account resets this.
+  #
+  # Every account a payout could land on has to season: the destination is picked at payout time,
+  # so seasoning only the managed account leaves a fresh connected account as a hole.
+  def stripe_accounts_seasoned_for_instant_payouts?
+    managed_account = stripe_account
+    return false if managed_account.nil?
+
+    [managed_account, stripe_connect_account].compact.all? do |account|
+      account.created_at <= MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
+    end
+  end
+  private :stripe_accounts_seasoned_for_instant_payouts?
 
   def instant_payouts_supported?
     eligible_for_instant_payouts? && (active_bank_account&.supports_instant_payouts? || false)

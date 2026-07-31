@@ -233,7 +233,6 @@ const PdfReader = ({
 
       const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
       pdfjs.GlobalWorkerOptions.workerSrc = typia.assert<{ default: string }>(
-        // @ts-expect-error pdfjs-dist worker is not typed
         await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url"),
       ).default;
 

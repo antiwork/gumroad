@@ -52,13 +52,38 @@ module RendersCustomHtmlPages
     </style>
   HTML
 
+  # Every custom-page surface must sandbox identically, so they all read this one
+  # list rather than repeating the tokens: the wrapper iframes in
+  # UsersController/UserPagesController/LinksController and the CSP directive
+  # below. Adding a token here widens all four at once; that is the point.
+  CUSTOM_HTML_SANDBOX_TOKENS = %w[
+    allow-scripts
+    allow-forms
+    allow-popups
+    allow-popups-to-escape-sandbox
+  ].freeze
+
+  # This frame renders seller-supplied markup, so widening it to any of these is
+  # a buyer-safety decision and a spec fails if one appears. allow-downloads is
+  # here by decision: it would let a page hand a visitor a file from any host
+  # under the seller's own subdomain. The cost is that a download link does
+  # nothing and the browser says nothing, so the docs have to carry that limit.
+  CUSTOM_HTML_SANDBOX_FORBIDDEN_TOKENS = %w[
+    allow-downloads
+    allow-downloads-without-user-activation
+    allow-same-origin
+    allow-top-navigation
+    allow-top-navigation-by-user-activation
+  ].freeze
+
+  CUSTOM_HTML_SANDBOX = CUSTOM_HTML_SANDBOX_TOKENS.join(" ").freeze
+
   CUSTOM_HTML_CSP = [
     # Sandbox the response itself, not just the wrapper's iframe attribute.
     # A visitor can navigate straight to the /landing/embed endpoint (top-level,
     # not framed), where the iframe sandbox doesn't apply — without this the
-    # seller's inline scripts would run on the real subdomain origin. Matches
-    # the wrapper iframe's sandbox: scripts + forms + popups, no same-origin/top-nav.
-    "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
+    # seller's inline scripts would run on the real subdomain origin.
+    "sandbox #{CUSTOM_HTML_SANDBOX}",
     "default-src 'none'",
     "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
     "style-src 'unsafe-inline' #{PAGES_TAILWIND_ASSET_HOST} https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",
@@ -202,6 +227,205 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  # Shared by both halves so they cannot disagree about modern color syntax.
+  # Alpha follows the slash in modern functions or is the fourth legacy
+  # comma-separated channel; a positional match mistakes black's last channel
+  # for transparency.
+  CANVAS_OPAQUE_FN = <<~JS
+    function colorAlpha(color) {
+      if (!color || color === "transparent") return 0;
+      var body = color.match(/\\(([^)]*)\\)\\s*$/);
+      if (!body) return color.indexOf("(") === -1 ? 1 : null;
+      var parts = body[1].split("/");
+      var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
+      if (alpha === null) {
+        var channels = body[1].split(",");
+        if (channels.length > 3) alpha = channels[3];
+      }
+      if (alpha === null) return 1;
+      var value = parseFloat(alpha);
+      if (!isFinite(value)) return null;
+      return alpha.indexOf("%") === -1 ? value : value / 100;
+    }
+    function opaque(color) {
+      return colorAlpha(color) === 1;
+    }
+  JS
+
+  # How often the sandboxed page re-reads its own canvas color as a backstop for
+  # rethemes that leave no DOM mutation to observe (see the bridge script). A
+  # second is short enough that a wrong tint is not something a visitor sits
+  # with, and long enough that the cost stays immeasurable on a quiet page.
+  BACKGROUND_POLL_INTERVAL_MS = 1000
+
+  # Report only flat, opaque canvas paint; mirroring translucent paint under
+  # the iframe would composite it twice.
+  BACKGROUND_BRIDGE_SCRIPT = <<~HTML
+    <script data-cfasync="false" data-gumroad-background-bridge>
+      (function () {
+        // Viewed directly (not framed) there is no wrapper to color.
+        if (window.parent === window) return;
+        #{CANVAS_OPAQUE_FN}
+        function flatRootPaint(style) {
+          return style.opacity === "1" &&
+            style.filter === "none" &&
+            style.clipPath === "none" &&
+            style.maskImage === "none" &&
+            (!style.webkitMaskImage || style.webkitMaskImage === "none") &&
+            (!style.maskBorderSource || style.maskBorderSource === "none") &&
+            (!style.webkitMaskBoxImage || style.webkitMaskBoxImage === "none") &&
+            style.mixBlendMode === "normal" &&
+            style.display !== "none";
+        }
+        function establishesContainment(style) {
+          return style.contain !== "none" ||
+            (style.contentVisibility && style.contentVisibility !== "visible") ||
+            (style.containerType && style.containerType !== "normal");
+        }
+        function paint(color, colorScheme) {
+          return { color: color, colorScheme: colorScheme };
+        }
+        function schemeBackplate(style) {
+          if (!style.colorScheme || style.colorScheme === "normal") return paint(null, null);
+          // The trusted wrapper resolves Canvas. Probing here would alter the
+          // seller's DOM, including :last-child selectors.
+          return paint(null, style.colorScheme);
+        }
+        function canvasPaint() {
+          var rootStyle = window.getComputedStyle(document.documentElement);
+          if (!flatRootPaint(rootStyle)) return paint(null, null);
+          var root = rootStyle.backgroundColor;
+          var rootAlpha = colorAlpha(root);
+          if (rootStyle.backgroundImage !== "none") return paint(null, null);
+          if (rootAlpha === 1) return paint(root, null);
+          if (rootAlpha !== 0 || !document.body) return paint(null, null);
+          var bodyStyle = window.getComputedStyle(document.body);
+          if (
+            bodyStyle.display === "none" ||
+            establishesContainment(rootStyle) ||
+            establishesContainment(bodyStyle)
+          ) return schemeBackplate(rootStyle);
+          var body = bodyStyle.backgroundColor;
+          if (bodyStyle.backgroundImage !== "none") return paint(null, null);
+          if (opaque(body)) return paint(body, null);
+          if (colorAlpha(body) !== 0) return paint(null, null);
+          return schemeBackplate(rootStyle);
+        }
+        var reportedColor = null;
+        var reportedColorScheme = null;
+        var hasReported = false;
+        function report(force) {
+          var current = canvasPaint();
+          if (
+            !force &&
+            hasReported &&
+            current.color === reportedColor &&
+            current.colorScheme === reportedColorScheme
+          ) return;
+          reportedColor = current.color;
+          reportedColorScheme = current.colorScheme;
+          hasReported = true;
+          // The first null matters after an iframe reload: its wrapper may
+          // still hold the previous document's tint.
+          parent.postMessage({
+            type: "gumroad:background",
+            color: current.color,
+            colorScheme: current.colorScheme
+          }, "*");
+        }
+        window.addEventListener("message", function (e) {
+          var d = e.data;
+          if (e.source === parent && d && d.type === "gumroad:background:request") report(true);
+        });
+        var queued = false;
+        var queuedForce = false;
+        function queueReport(force) {
+          if (force === true) queuedForce = true;
+          if (queued) return;
+          queued = true;
+          requestAnimationFrame(function () {
+            var shouldForce = queuedForce;
+            queued = false;
+            queuedForce = false;
+            report(shouldForce);
+          });
+        }
+        // Ignore ordinary DOM churn; only selectors and stylesheets can move
+        // the canvas color.
+        function stylesheetNode(node) {
+          var name = node && node.localName;
+          return name === "style" || name === "link";
+        }
+        // A link repaints after insertion, when its own load event fires.
+        function watchStylesheetLoad(node) {
+          if (node && node.localName === "link") node.addEventListener("load", queueReport);
+        }
+        function eachStylesheet(node, fn) {
+          if (!node) return;
+          if (stylesheetNode(node)) fn(node);
+          if (!node.querySelectorAll) return;
+          var found = node.querySelectorAll("style,link");
+          for (var i = 0; i < found.length; i++) fn(found[i]);
+        }
+        function affectsCanvas(records) {
+          var affects = false;
+          for (var i = 0; i < records.length; i++) {
+            var record = records[i];
+            if (record.type === "attributes") {
+              if (
+                record.target === document.documentElement ||
+                record.target === document.body ||
+                stylesheetNode(record.target)
+              ) affects = true;
+              // href swapped on a <link> that is already in the document — the
+              // new sheet lands late too.
+              if (stylesheetNode(record.target)) watchStylesheetLoad(record.target);
+            }
+            if (stylesheetNode(record.target)) affects = true;
+            if (stylesheetNode(record.target.parentNode)) affects = true;
+            for (var j = 0; j < record.addedNodes.length; j++) {
+              eachStylesheet(record.addedNodes[j], function (sheet) {
+                affects = true;
+                watchStylesheetLoad(sheet);
+              });
+            }
+            for (var k = 0; k < record.removedNodes.length; k++) {
+              eachStylesheet(record.removedNodes[k], function () { affects = true; });
+            }
+          }
+          return affects;
+        }
+        report();
+        // After load the stylesheet and any seller scripts have applied, so
+        // this is the first reading that reflects the finished page.
+        window.addEventListener("load", queueReport);
+        try {
+          new MutationObserver(function (records) {
+            if (affectsCanvas(records)) queueReport();
+          }).observe(document.documentElement, {
+            attributes: true,
+            childList: true,
+            characterData: true,
+            subtree: true
+          });
+        } catch (_err) {}
+        try {
+          window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+            // The declared scheme can stay "dark light" while Canvas changes.
+            queueReport(true);
+          });
+        } catch (_err) {}
+        // CSSOM writes emit no mutation, so poll a clean style tree as a backstop.
+        try {
+          setInterval(function () {
+            if (!document.hidden) queueReport();
+          }, #{BACKGROUND_POLL_INTERVAL_MS});
+          document.addEventListener("visibilitychange", queueReport);
+        } catch (_err) {}
+      })();
+    </script>
+  HTML
+
   POLL_INTERVAL_MS = 2000
 
   # The HTML comment the agent-preview endpoint splices in front of an edit's replacement so the
@@ -249,7 +473,9 @@ module RendersCustomHtmlPages
         if (!d || d.type !== "gumroad:profile-fields") return;
         ["name", "bio"].forEach(function (field) {
           var value = d[field] == null ? "" : String(d[field]);
-          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]');
+          // Product-scoped elements belong to the prices payload; the server-side interpolator
+          // never answers them with profile fields, so the preview must not either.
+          var nodes = document.querySelectorAll('[data-gumroad-field="' + field + '"]:not([data-gumroad-product])');
           for (var i = 0; i < nodes.length; i++) nodes[i].textContent = value;
         });
       });
@@ -466,6 +692,93 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # Resolve the untrusted report in this document before painting the wrapper
+    # and theme-color. A detached probe would accept unresolved var()/keywords;
+    # backgroundColor cannot fetch a URL.
+    def custom_html_background_wrapper_script(nonce:)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-background-wrapper>
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var meta = null;
+            #{CANVAS_OPAQUE_FN}
+            // Must be IN the document: computed values resolve against the
+            // element's context, and a detached node has none.
+            var probe = document.createElement("div");
+            probe.setAttribute("aria-hidden", "true");
+            probe.style.display = "none";
+            var probeAttached = false;
+            // A computed color is well under this; the cap just stops a hostile
+            // child from making us parse megabyte strings in a loop.
+            var MAX_VALUE_LENGTH = 128;
+            function resolve(value, colorScheme) {
+              if (!probeAttached) {
+                document.body.appendChild(probe);
+                probeAttached = true;
+              }
+              probe.style.colorScheme = "";
+              probe.style.backgroundColor = "";
+              if (colorScheme !== null) {
+                probe.style.colorScheme = colorScheme;
+                var computedScheme = window.getComputedStyle(probe).colorScheme;
+                if (!probe.style.colorScheme || !computedScheme || computedScheme === "normal") return null;
+                value = "Canvas";
+              }
+              // Must stay `backgroundColor` — a color property cannot fetch, so
+              // `var(--x, url(https://evil.example/pixel))` never dereferences.
+              // The `background` shorthand or `backgroundImage` would fire it.
+              probe.style.backgroundColor = value;
+              var computed = window.getComputedStyle(probe).backgroundColor;
+              if (!opaque(computed)) return null;
+              return computed;
+            }
+            function clear() {
+              document.documentElement.style.backgroundColor = "";
+              if (meta) {
+                meta.parentNode.removeChild(meta);
+                meta = null;
+              }
+            }
+            frame.addEventListener("load", function () {
+              clear();
+              frame.contentWindow.postMessage({ type: "gumroad:background:request" }, "*");
+            });
+            window.addEventListener("message", function (e) {
+              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
+              var colorScheme = d.colorScheme == null ? null : d.colorScheme;
+              // The page went transparent after having a color: drop the tint
+              // rather than leaving the previous theme painted under it.
+              if (d.color === null && colorScheme === null) return clear();
+              var color;
+              if (colorScheme !== null) {
+                if (
+                  d.color !== null ||
+                  typeof colorScheme !== "string" ||
+                  colorScheme.length > MAX_VALUE_LENGTH
+                ) return;
+                color = resolve("", colorScheme);
+              } else {
+                if (typeof d.color !== "string" || d.color.length > MAX_VALUE_LENGTH) return;
+                color = resolve(d.color, null);
+              }
+              // An unresolvable value is refused outright — it is not evidence
+              // that the page has no background, so whatever is applied stays.
+              if (!color) return;
+              document.documentElement.style.backgroundColor = color;
+              if (!meta) {
+                meta = document.createElement("meta");
+                meta.setAttribute("name", "theme-color");
+                document.head.appendChild(meta);
+              }
+              meta.setAttribute("content", color);
+            });
+          })();
+        </script>
+      HTML
+    end
+
     def render_landing_version(visible:, page:)
       render json: { present: visible, version: visible ? page&.updated_at&.to_i : nil }
     end
@@ -478,7 +791,7 @@ module RendersCustomHtmlPages
     # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
     # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
     # comment, so an edit further down the page opens in view instead of hiding below the fold.
-    def profile_custom_html_document(custom_html, data_json: "{}", live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
+    def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>
         <html>
@@ -491,9 +804,11 @@ module RendersCustomHtmlPages
           </head>
           <body>
             <script id="gumroad-data" type="application/json">#{data_json}</script>
+            #{prices_json.present? ? %(<script id="gumroad-prices" type="application/json">#{prices_json}</script>) : ""}
             #{custom_html}
             #{navigation_bridge}
             #{follow_bridge}
+            #{BACKGROUND_BRIDGE_SCRIPT}
             #{live_fields ? PROFILE_FIELDS_PREVIEW_SCRIPT : ""}
             #{scroll_to_change ? PREVIEW_SCROLL_TO_CHANGE_SCRIPT : ""}
           </body>

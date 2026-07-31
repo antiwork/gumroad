@@ -146,6 +146,28 @@ describe Collaborator do
 
       expect(collaborator.as_json[:invitation_accepted]).to be false
     end
+
+    # The inviting seller reads this flag as "not receiving payouts". A Brazilian connected account
+    # cannot receive a Gumroad-held balance, so with no other rail it must not report a complete
+    # setup. payment_address is cleared because the factory sets one and that alone satisfies the
+    # PayPal processor, which would mask the Stripe verdict this example is about.
+    it "marks the setup incomplete for a collaborator on a Brazilian connected account" do
+      collaborator = create(:collaborator)
+      collaborator.affiliate_user.update!(payment_address: "")
+      allow_any_instance_of(User).to receive(:merchant_migration_enabled?).and_return(true)
+      create(:merchant_account_stripe_connect, user: collaborator.affiliate_user, country: "BR", currency: "brl")
+
+      expect(collaborator.reload.as_json[:setup_incomplete]).to be true
+    end
+
+    it "marks the setup complete for a collaborator on a non-Brazilian connected account" do
+      collaborator = create(:collaborator)
+      collaborator.affiliate_user.update!(payment_address: "")
+      allow_any_instance_of(User).to receive(:merchant_migration_enabled?).and_return(true)
+      create(:merchant_account_stripe_connect, user: collaborator.affiliate_user, country: "US", currency: "usd")
+
+      expect(collaborator.reload.as_json[:setup_incomplete]).to be false
+    end
   end
 
   describe "#mark_deleted!" do

@@ -40,6 +40,7 @@ class Ai::StoreAgentService
   # below when the normal budget no longer has room for them.
   MAX_TOOL_ITERATIONS = 25
   MAX_MESSAGE_LENGTH = 2_000
+  MISSING_REQUIRED_READ_MESSAGE = "Store agent write proposal blocked by missing required full read"
   # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
   # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
   # long description's full HTML) inside the tool call's JSON arguments. A cap sized only for text
@@ -377,14 +378,31 @@ class Ai::StoreAgentService
     /ix,
   ].freeze
 
-  # How many times we re-ask the model to actually stage the change it claimed to have staged
-  # before giving up and telling the creator the truth. One retry is enough in practice and keeps
-  # the worst-case turn cost bounded.
-  MAX_STAGED_CLAIM_RETRIES = 1
-  # The correction itself needs one model turn. If it calls api_write, Anthropic's tool protocol
-  # needs one more turn for the final seller-facing reply. Reserve both even when the false claim
-  # arrives on the last normal iteration.
-  STAGED_CLAIM_RECOVERY_ITERATIONS = 2
+  COMPLETE_TURN_TOOL = "complete_turn"
+  TURN_OUTCOME_REPLY_ONLY = "reply_only"
+  TURN_OUTCOME_PROPOSAL_READY = "proposal_ready"
+  TURN_OUTCOMES = [TURN_OUTCOME_REPLY_ONLY, TURN_OUTCOME_PROPOSAL_READY].freeze
+  # The card owns every action-specific detail. Keeping the confirmation sentence server-owned
+  # means a creator only sees it after this process has a real proposal to persist with the turn.
+  PROPOSAL_READY_REPLY = "I prepared that change. Review it below, then confirm it when you're ready."
+  TURN_CONTRACT_FAILURE_REPLY = "I couldn't finish that response. Please try again."
+  # One correction is enough to repair a missing or contradictory terminal outcome without turning
+  # every response into an open-ended retry loop.
+  MAX_TURN_CONTRACT_RETRIES = 1
+  # A correction may need one turn to call api_write and one more to return the typed final outcome.
+  # Reserve both even when the invalid final turn arrives at the normal iteration cap.
+  TURN_CONTRACT_RECOVERY_ITERATIONS = 2
+  TURN_CONTRACT_CORRECTION = <<~TEXT.strip
+    Your last response did not finish with a valid complete_turn call. Repeat the response, write the
+    creator-facing text before the tool call, then call complete_turn exactly once and as the only
+    tool in that response. Use outcome reply_only when this turn has no proposed change. Use outcome
+    proposal_ready only after api_write returned proposed: true in this same turn.
+  TEXT
+  PROPOSAL_OUTCOME_CORRECTION = <<~TEXT.strip
+    This turn already has a proposed change from api_write, but your final outcome did not report it.
+    Do not call api_write again. Finish with complete_turn as the only tool and use outcome
+    proposal_ready.
+  TEXT
   # Fed back to the model when it claimed a staged change without calling api_write, so it can
   # either make the call for real or correct itself. Phrased as the tool-protocol fact it is.
   STAGED_CLAIM_CORRECTION = <<~TEXT.strip
@@ -433,12 +451,14 @@ class Ai::StoreAgentService
     You are Gumroad's store assistant. You help a creator understand and manage their own Gumroad
     store through a chat interface in their dashboard.
 
-    You have two tools that together expose the creator's ENTIRE Gumroad API:
+    You have three tools:
     - api_read: run any READ endpoint to fetch live data (products, sales, payouts, discounts,
       subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
     - api_write: prepare any change (create/update/delete products, discounts, variants, upsells,
       emails, refunds, shipping, licenses, webhooks, profile, and more). Writes never take effect
       immediately — they produce a proposed change the creator reviews and confirms in the UI.
+    - complete_turn: finish every creator-facing reply with a typed outcome after all api_read or
+      api_write results are back.
 
     To call a tool you pass `endpoint` (one of the ids listed below), `path_params` (the ids the
     endpoint's path needs, e.g. the product id), and `params` (query for reads, body for writes).
@@ -455,8 +475,10 @@ class Ai::StoreAgentService
       and keep going until the response has no next_page_key. Any task covering "all" of something
       (all products, all sales, the whole catalog) requires walking every page first. Never state or
       imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
-    - Never claim a change has already been made. After api_write, tell the creator you've prepared it
-      and it's ready for them to confirm.
+    - Never claim a change has already been made. On a turn where you called api_write, your final
+      text is replaced with fixed server copy telling the creator the change is ready to confirm, so
+      answer any informational part of their request BEFORE calling api_write — in the text you write
+      before the call, or in an earlier turn — and keep the final text after api_write minimal.
     - You cannot see the creator's dashboard. Never invent or describe dashboard screens, settings
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
@@ -474,13 +496,32 @@ class Ai::StoreAgentService
       "legacy setting", an "older per-product option"). Say you can't see that from here, look it up
       in the help center, and if it's outside what you can read or change, offer to hand it to
       Gumroad support with the details.
+    - The creator's storefront has THREE separate content surfaces, and you must not confuse them or
+      deny the ones you have fewer tools for:
+        1. The profile page itself. Either the creator's own tabs and sections (Gumroad's normal
+           profile — read it with get_user_profile_layout) or a custom HTML takeover
+           (get_user_custom_html), never both at once. get_user_custom_html coming back empty means
+           only "no custom HTML" — it does NOT mean the storefront is Gumroad's untouched default.
+           Headings the creator sees on their storefront are their own section headers, so read
+           get_user_profile_layout before you say anything about a heading, and never claim the
+           default profile ships a heading of its own.
+        2. Standalone pages under the creator's store url, listed with list_pages. These are real:
+           the creator manages them under "Pages" in the dashboard, and Gumroad's CLI drives them
+           with `gumroad pages pull/preview/push`. You can list them with list_pages and read one
+           with get_page, but you cannot create, update, or delete them. NEVER tell a creator that
+           standalone pages don't exist on Gumroad, or that those CLI commands aren't real features.
+        3. Each product's own landing page (get_product_custom_html), separate from both of the
+           above.
+      When a creator describes content you cannot find, first read the surface they named. If the
+      surface is unclear, inspect the profile layout and compact standalone-page list before fetching
+      a full page body. Do not claim content is missing until you have checked the relevant surfaces.
     - Store colors and fonts come from the creator's store theme: a background color, a highlight
       (accent) color, and a font. Read them with get_user_theme, which also lists the surfaces they
       cover. They apply to the storefront AND to every product page — product pages ARE themed, so
-      never tell a creator their product pages can't be styled. There is no self-serve
-      fonts-and-colors screen in the dashboard, and you have no endpoint to change the theme: when
-      the creator wants different colors or a different font, say Gumroad support applies those, and
-      offer to write down exactly what they want (which color, where) so support can action it. A
+      never tell a creator their product pages can't be styled. You have no endpoint to change the
+      theme, but the creator changes it themselves in Settings > Profile > Design, which previews
+      the change before saving: when they want different colors or a different font, send them
+      there. A
       custom HTML page is a separate thing — it brings its own design and does not follow the theme
       — so only reach for it when the creator wants a custom page, not as a workaround for a color
       change.
@@ -491,15 +532,27 @@ class Ai::StoreAgentService
     - When the creator has NO custom HTML page yet and wants a custom page — a layout, structure, or
       imagery the default storefront doesn't give them — author a COMPLETE page with
       update_user_custom_html. A colour or font change is NOT that: colours and fonts are the store
-      theme, which support applies, so never author a whole custom page as a way to change a colour.
+      theme, so never author a whole custom page as a way to change a colour.
       Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
       type="application/json"> element, refreshed on every page load. That JSON holds exactly
-      three keys and NOTHING else: products (name, url, price, native_type, thumbnail_url,
-      cover_url, description), posts (name, url, published_at), and pages (name). Those are
+      five keys and NOTHING else: products (name, url, price, native_type, thumbnail_url,
+      cover_url, description), posts (name, url, published_at), pages (name), and the counts
+      products_total and posts_total. Those are
       the ONLY field names that exist — reading any other name (say a field you'd expect but
       that isn't in this list) gives undefined and renders blank or broken, so never invent
-      one. It does NOT contain the
+      one. The JSON is injected on the PROFILE page only, never on a page you author at its
+      own slug — a page reading it there sees nothing and its product grid renders empty, so
+      build slugged pages from HTML you write rather than from this JSON. The url values are
+      built on the creator's own store host (their custom domain when they have a live one,
+      their gumroad.com subdomain otherwise) and are safe to use verbatim; the page must not
+      rewrite them onto another host, which breaks the link. The products and posts arrays are
+      capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
+      catalogue products_total exceeds products.length, and on a long archive posts_total
+      exceeds posts.length. Whenever either total exceeds the array the page renders, the page
+      MUST show a visible count for that section (for example "Showing 100 of 114 products",
+      "Showing 100 of 260 posts") — a grid or archive that quietly renders only part of what the
+      creator has reads to them as items having vanished. It does NOT contain the
       creator's name, bio, avatar, or any user object — a page that tries to read those from
       the JSON renders them blank. Build the page to READ that JSON and render the product grid
       and links from it, so the storefront stays current as products are added, renamed, or
@@ -509,6 +562,26 @@ class Ai::StoreAgentService
       src, which shows a broken-image icon. If the products array is empty,
       render a visible empty state (like "No products yet") so the page still reads as a real
       storefront and not a broken or unfinished page.
+    - Whenever a page displays a price, render it from the gumroad-prices JSON — a separate
+      <script id="gumroad-prices" type="application/json"> element, rebuilt on every request,
+      keyed by the last path segment of each product's url. The price in the gumroad-data JSON
+      is the creator's raw set price: always their own currency, never discounted, and for
+      memberships it can quote a recurrence no buyer selects — so treat it as a fallback string
+      only. Each gumroad-prices entry holds price (a formatted string, in the visitor's own
+      currency when Gumroad can localize this checkout), price_cents, currency_code, localized
+      (true when converted for this visitor), and — only while the creator's default offer code
+      discounts the product — original_price and original_price_cents, for rendering the
+      struck-through pre-sale price next to the live one. Equivalently, mark up one element per
+      price with both data-gumroad-product set to that permalink and data-gumroad-field="price"
+      (or "original-price", or "currency"), and the server fills it in server-side — use that
+      form when the price is static markup rather than built by a script, since it then renders
+      without JavaScript. Whichever you use, write the creator's own price as the element's text
+      so the page still reads correctly if a permalink stops matching (except original-price,
+      which must stay empty — it renders only during a sale). The prices are served only to
+      pages that reference them, so reference the blob by its literal id ("gumroad-prices"),
+      never a computed string. The priced set is the same capped product list gumroad-data
+      carries, so never write price markup for a product outside it. Both mechanisms exist
+      only on the profile page — a slugged page gets neither, so never put price markup there.
     - To put the creator's name and bio on a page, write elements carrying
       data-gumroad-field="name" and data-gumroad-field="bio" (for example
       <h1 data-gumroad-field="name">Store</h1>) — the server replaces their text with the live
@@ -534,7 +607,8 @@ class Ai::StoreAgentService
       <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
       Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
       data-gumroad-field="name", "price", or "description" with the product's live values on every
-      render.
+      render. That price is the amount a first-time buyer pays — default offer code applied, and
+      memberships quoted at their default recurrence — matching the native page it replaces.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
@@ -554,6 +628,11 @@ class Ai::StoreAgentService
     - Prepare at most one change per reply. If the creator asks for several, do the first and tell
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
+    - End EVERY final reply by calling complete_turn exactly once, as the only tool in that response.
+      Write the creator-facing text before the call; on a proposal turn that text is replaced with
+      fixed server copy and never shown, so keep it minimal there. Use reply_only when this turn has
+      no proposed change. Use proposal_ready only after api_write returned proposed: true in this
+      same turn. Never mix complete_turn with api_read or api_write.
 
     How to write:
     - Write like a person: warm, plain, and direct. Short sentences. No corporate filler.
@@ -590,7 +669,9 @@ class Ai::StoreAgentService
     proposed_action = nil
     # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
     @objects = []
-    staged_claim_retries = 0
+    @completed_read_targets = {}
+    @reads_completed_in_tool_batch = nil
+    turn_contract_retries = 0
 
     remaining_iterations = MAX_TOOL_ITERATIONS
     while remaining_iterations.positive?
@@ -606,35 +687,31 @@ class Ai::StoreAgentService
       # call has unusable arguments, and a cut-off text answer would read as a complete reply when
       # it isn't — so stop here with an honest message instead of acting on a truncated turn.
       if result.stop_reason == "max_tokens"
-        return { reply: TRUNCATED_REPLY, proposed_action: proposed_action&.as_json, objects: deduped_objects }
+        reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
+        return turn_result(reply:, proposed_action:)
       end
 
-      if result.tool_uses.blank?
-        reply = result.text.to_s.strip
-
-        # The reply claims a change is staged but nothing was: there is no card to confirm, so the
-        # claim is false. Re-ask the model to actually stage it; if it still won't, tell the
-        # creator the truth rather than sending them after a button that does not exist.
-        if phantom_staged_claim?(reply:, proposed_action:)
-          if staged_claim_retries < MAX_STAGED_CLAIM_RETRIES
-            staged_claim_retries += 1
-            remaining_iterations = [remaining_iterations, STAGED_CLAIM_RECOVERY_ITERATIONS].max
-            log_phantom_staged_claim(retrying: true)
-            append_staged_claim_correction(conversation, reply)
-            next
-          end
-
-          log_phantom_staged_claim(retrying: false)
-          return { reply: NOTHING_STAGED_REPLY, proposed_action: nil, objects: deduped_objects }
+      decision = final_turn_decision(result:, proposed_action:)
+      case decision.fetch(:status)
+      when :complete
+        return turn_result(reply: decision.fetch(:reply), proposed_action:)
+      when :invalid
+        retrying = turn_contract_retries < MAX_TURN_CONTRACT_RETRIES
+        log_turn_contract_mismatch(reason: decision.fetch(:reason), retrying:)
+        unless retrying
+          return turn_result(reply: fallback_reply_for(decision:, proposed_action:), proposed_action:)
         end
 
-        return { reply:, proposed_action: proposed_action&.as_json, objects: deduped_objects }
+        turn_contract_retries += 1
+        remaining_iterations = [remaining_iterations, TURN_CONTRACT_RECOVERY_ITERATIONS].max
+        append_turn_contract_correction(conversation, result:, decision:, proposed_action:)
+        next
       end
 
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
     end
 
-    { reply: tool_cap_reply(proposed_action), proposed_action: proposed_action&.as_json, objects: deduped_objects }
+    turn_result(reply: tool_cap_reply(proposed_action), proposed_action:)
   end
 
   # Streaming counterpart of #respond. Runs the same read/propose tool loop, but streams the final
@@ -647,7 +724,7 @@ class Ai::StoreAgentService
   #   [:suggestions, { suggestions: }]    — up to three "what next" prompts
   # Returns the same hash shape as #respond (plus :suggestions) once the stream is complete.
   #
-  # `on_reply_complete` (optional) is invoked with { reply:, proposed_action:, objects: } the
+  # `on_reply_complete` (optional) is invoked with { outcome:, reply:, proposed_action:, objects: } the
   # moment the reply is final — BEFORE any trailing event is written to the (possibly already
   # dead) client socket and before the extra follow-up-suggestions LLM call. Callers use it to
   # persist the turn: if the client's connection died mid-stream, the very next socket write
@@ -658,7 +735,9 @@ class Ai::StoreAgentService
     last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
     @objects = []
-    staged_claim_retries = 0
+    @completed_read_targets = {}
+    @reads_completed_in_tool_batch = nil
+    turn_contract_retries = 0
 
     remaining_iterations = MAX_TOOL_ITERATIONS
     while remaining_iterations.positive?
@@ -667,86 +746,204 @@ class Ai::StoreAgentService
       # intermediate tool-use turn that happens to include preamble text, so track whether anything
       # was streamed: if the turn turns out to be a tool-use turn, we emit :reset to discard its
       # preamble from the UI, and only the final (tool_uses-blank) turn's text survives on screen.
-      streamed_any = false
-      result = client.stream_messages(
-        system: system_prompt,
-        messages: conversation,
-        tools: tool_schemas,
-        max_tokens: MAX_REPLY_TOKENS,
-        # A corrupted tool call is recovered by replaying the turn without streaming, which
-        # regenerates the reply from the start. Tool-use turns usually stream a sentence of
-        # preamble first, so without a way to clear it that recovery could never run — the client
-        # refuses to replay over text the seller can still see. This is the same :reset the normal
-        # tool-use path below uses to discard preamble, so the seller ends up in the identical
-        # state: an empty transcript that the recovered turn then fills in.
-        on_discard_streamed_text: -> {
-          emit.call(:reset, {}) if streamed_any
-          streamed_any = false
-        },
-      ) do |text|
-        streamed_any = true
-        emit.call(:token, { text: })
-      end
+      emitted_any = false
+      # Once api_write produced a proposal, the model no longer owns the confirmation sentence.
+      # Buffer any final prose and emit the fixed server copy only after the proposal is persisted.
+      suppress_model_text = proposed_action.present?
+      result =
+        begin
+          client.stream_messages(
+            system: system_prompt,
+            messages: conversation,
+            tools: tool_schemas,
+            max_tokens: MAX_REPLY_TOKENS,
+            # A corrupted tool call is recovered by replaying the turn without streaming, which
+            # regenerates the reply from the start. Tool-use turns usually stream a sentence of
+            # preamble first, so without a way to clear it that recovery could never run — the
+            # client refuses to replay over text the seller can still see. This is the same :reset
+            # the normal tool-use path below uses to discard preamble, so the seller ends up in the
+            # identical state: an empty transcript that the recovered turn then fills in.
+            on_discard_streamed_text: -> {
+              emit.call(:reset, {}) if emitted_any
+              emitted_any = false
+            },
+          ) do |text|
+            unless suppress_model_text
+              emitted_any = true
+              emit.call(:token, { text: })
+            end
+          end
+        rescue
+          # The terminal outcome never arrived, so text already on the client was not validated or
+          # persisted. Clear it before the controller reports the error; the web client otherwise
+          # keeps the partial answer visible beside that error.
+          emit.call(:reset, {}) if emitted_any
+          raise
+        end
 
       # Same truncation handling as #respond. Anything this turn streamed is incomplete, so tell
       # the UI to discard it and stream the honest fallback instead of leaving half an answer (or
       # half a tool call's preamble) on screen as if it were the finished reply.
       if result.stop_reason == "max_tokens"
-        emit.call(:reset, {}) if streamed_any
-        emit.call(:token, { text: TRUNCATED_REPLY })
-        return finish_stream(reply: TRUNCATED_REPLY, proposed_action:, last_user_message:, emit:, on_reply_complete:)
+        reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
+        return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
+          emit.call(:reset, {}) if emitted_any
+          emit.call(:token, { text: turn[:reply] })
+        end
       end
 
-      if result.tool_uses.blank?
-        reply = result.text.to_s.strip
-
-        # Same phantom-staging guard as #respond. The claim already streamed to the seller, so tell
-        # the UI to discard it before either replaying the turn (the model gets one chance to
-        # actually call api_write) or streaming the honest "nothing staged" line — otherwise the
-        # false claim stays on screen next to a card that will never appear.
-        if phantom_staged_claim?(reply:, proposed_action:)
-          if staged_claim_retries < MAX_STAGED_CLAIM_RETRIES
-            emit.call(:reset, {}) if streamed_any
-            staged_claim_retries += 1
-            remaining_iterations = [remaining_iterations, STAGED_CLAIM_RECOVERY_ITERATIONS].max
-            log_phantom_staged_claim(retrying: true)
-            append_staged_claim_correction(conversation, reply)
-            next
-          end
-
-          log_phantom_staged_claim(retrying: false)
-          return finish_stream(
-            reply: NOTHING_STAGED_REPLY,
-            proposed_action: nil,
-            last_user_message:,
-            emit:,
-            on_reply_complete:,
-          ) do
-            # Persist the final fallback before either socket write. A disconnect here must not lose
-            # a fully determined turn; exact-turn recovery can then adopt the stored honest reply.
-            emit.call(:reset, {}) if streamed_any
-            emit.call(:token, { text: NOTHING_STAGED_REPLY })
+      decision = final_turn_decision(result:, proposed_action:)
+      case decision.fetch(:status)
+      when :complete
+        reply = decision.fetch(:reply)
+        return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
+          # Normal reply text was already streamed. Proposal copy was deliberately withheld, and a
+          # buffered client may also return final text without yielding a delta.
+          emit.call(:token, { text: turn[:reply] }) if suppress_model_text || !emitted_any
+        end
+      when :invalid
+        retrying = turn_contract_retries < MAX_TURN_CONTRACT_RETRIES
+        log_turn_contract_mismatch(reason: decision.fetch(:reason), retrying:)
+        unless retrying
+          reply = fallback_reply_for(decision:, proposed_action:)
+          return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
+            emit.call(:reset, {}) if emitted_any
+            emit.call(:token, { text: turn[:reply] })
           end
         end
 
-        return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
+        emit.call(:reset, {}) if emitted_any
+        turn_contract_retries += 1
+        remaining_iterations = [remaining_iterations, TURN_CONTRACT_RECOVERY_ITERATIONS].max
+        append_turn_contract_correction(conversation, result:, decision:, proposed_action:)
+        next
       end
 
       # Intermediate tool-use turn: any text it streamed was preamble, not the answer. Tell the UI to
       # clear it so the seller never sees an interim claim that gets replaced by the real reply.
-      emit.call(:reset, {}) if streamed_any
+      emit.call(:reset, {}) if emitted_any
       proposed_action = apply_tool_uses(text: result.text, tool_uses: result.tool_uses, conversation:, proposed_action:)
     end
 
-    # Hit the tool-iteration cap. Stream the fallback line as a single token so the UI still renders a
-    # reply, then close out with the same objects/action/suggestions as a normal turn.
+    # Hit the tool-iteration cap. Persist the server-owned fallback before its first socket write.
     reply = tool_cap_reply(proposed_action)
-    emit.call(:token, { text: reply })
-    finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:)
+    finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
+      emit.call(:token, { text: turn[:reply] })
+    end
   end
 
   private
     attr_reader :seller, :pundit_user
+
+    def turn_result(reply:, proposed_action:)
+      {
+        outcome: proposed_action ? TURN_OUTCOME_PROPOSAL_READY : TURN_OUTCOME_REPLY_ONLY,
+        reply:,
+        proposed_action: proposed_action&.as_json,
+        objects: deduped_objects,
+      }
+    end
+
+    # A final model turn is valid only when its typed outcome agrees with the proposal this service
+    # actually built. API calls remain ordinary intermediate turns. We reject a terminal marker
+    # mixed with any other tool before dispatching those tools, because otherwise the marker could
+    # certify a state that changed while we processed the same response.
+    def final_turn_decision(result:, proposed_action:)
+      tool_uses = Array(result.tool_uses)
+      complete_turn_calls = tool_uses.select { |tool_use| tool_use[:name] == COMPLETE_TURN_TOOL }
+
+      if complete_turn_calls.empty?
+        return { status: :tools } if tool_uses.any?
+
+        reply = result.text.to_s.strip
+        reason = phantom_staged_claim?(reply:, proposed_action:) ? :staging_claim_without_proposal : :missing_complete_turn
+        return { status: :invalid, reason: }
+      end
+
+      return { status: :invalid, reason: :mixed_or_duplicate_complete_turn } unless tool_uses.one? && complete_turn_calls.one?
+      return { status: :invalid, reason: :invalid_complete_turn_stop_reason } unless result.stop_reason == "tool_use"
+
+      outcome = sanitize_param_hash(complete_turn_calls.first[:input])["outcome"]
+      return { status: :invalid, reason: :invalid_complete_turn_outcome } unless TURN_OUTCOMES.include?(outcome)
+
+      if proposed_action.present?
+        return { status: :invalid, reason: :proposal_not_reported } unless outcome == TURN_OUTCOME_PROPOSAL_READY
+
+        return { status: :complete, reply: PROPOSAL_READY_REPLY }
+      end
+
+      return { status: :invalid, reason: :proposal_ready_without_proposal } unless outcome == TURN_OUTCOME_REPLY_ONLY
+
+      reply = result.text.to_s.strip
+      return { status: :invalid, reason: :blank_reply } if reply.blank?
+      return { status: :invalid, reason: :staging_claim_without_proposal } if reply == PROPOSAL_READY_REPLY
+      return { status: :invalid, reason: :staging_claim_without_proposal } if phantom_staged_claim?(reply:, proposed_action:)
+
+      { status: :complete, reply: }
+    end
+
+    def fallback_reply_for(decision:, proposed_action:)
+      return PROPOSAL_READY_REPLY if proposed_action.present?
+      return NOTHING_STAGED_REPLY if [:staging_claim_without_proposal, :proposal_ready_without_proposal].include?(decision.fetch(:reason))
+
+      TURN_CONTRACT_FAILURE_REPLY
+    end
+
+    def turn_contract_correction(decision:, proposed_action:)
+      return PROPOSAL_OUTCOME_CORRECTION if proposed_action.present?
+      return STAGED_CLAIM_CORRECTION if [:staging_claim_without_proposal, :proposal_ready_without_proposal].include?(decision.fetch(:reason))
+
+      TURN_CONTRACT_CORRECTION
+    end
+
+    # When the rejected response contains tool calls, replay every call and answer every id with an
+    # error. Anthropic requires each assistant tool_use to be followed immediately by matching
+    # tool_result blocks; sending a plain correction after it would make the next request invalid.
+    # No rejected tool runs, including an api_write mixed with complete_turn.
+    def append_turn_contract_correction(conversation, result:, decision:, proposed_action: nil)
+      correction = turn_contract_correction(decision:, proposed_action:)
+      tool_uses = Array(result.tool_uses)
+
+      if tool_uses.any?
+        assistant_content = []
+        assistant_content << { type: "text", text: result.text.to_s } if result.text.to_s.strip.present?
+        assistant_content.concat(
+          tool_uses.map do |tool_use|
+            {
+              type: "tool_use",
+              id: tool_use[:id],
+              name: tool_use[:name],
+              input: tool_use[:input].is_a?(Hash) ? tool_use[:input] : {},
+            }
+          end,
+        )
+        conversation << { role: "assistant", content: assistant_content }
+        conversation << {
+          role: "user",
+          content: tool_uses.map do |tool_use|
+            { type: "tool_result", tool_use_id: tool_use[:id], content: { error: correction }.to_json }
+          end,
+        }
+      else
+        conversation << { role: "assistant", content: result.text.to_s } if result.text.to_s.strip.present?
+        conversation << { role: "user", content: correction }
+      end
+    end
+
+    def log_turn_contract_mismatch(reason:, retrying:)
+      if reason == :staging_claim_without_proposal
+        log_phantom_staged_claim(retrying:)
+        return
+      end
+
+      outcome = retrying ? "retrying" : "gave up"
+      Rails.logger.warn("Store agent final turn did not match proposal state (#{reason}, #{outcome})")
+      ErrorNotifier.notify(
+        "Store agent final turn did not match proposal state",
+        reason: reason.to_s,
+        outcome:,
+      )
+    end
 
     # Echo the assistant's tool-use turn back into the conversation, run each requested tool, and
     # append a single user message carrying the tool_result blocks (the Anthropic tool-use protocol).
@@ -761,6 +958,10 @@ class Ai::StoreAgentService
       end
       conversation << { role: "assistant", content: assistant_content }
 
+      # A read only satisfies a write precondition after its result has gone back to the model.
+      # Otherwise the model could request a read and a speculative write in the same tool-use batch,
+      # before it had seen the page it was supposed to preserve.
+      @reads_completed_in_tool_batch = {}
       tool_results = tool_uses.map do |tool_use|
         arguments = sanitize_param_hash(tool_use[:input])
         result, action = run_tool(name: tool_use[:name], arguments:)
@@ -776,6 +977,8 @@ class Ai::StoreAgentService
         end
         { type: "tool_result", tool_use_id: tool_use[:id], content: result.to_json }
       end
+      @completed_read_targets.merge!(@reads_completed_in_tool_batch)
+      @reads_completed_in_tool_batch = nil
       conversation << { role: "user", content: tool_results }
 
       proposed_action
@@ -804,15 +1007,6 @@ class Ai::StoreAgentService
       STAGED_CLAIM_PATTERNS.any? { |pattern| candidate.match?(pattern) }
     end
 
-    # Replay the model's own false claim back at it as an assistant turn, followed by a user turn
-    # stating the tool-protocol fact, so the next iteration can either call api_write for real or
-    # correct itself. Using the normal message roles (rather than mutating the system prompt) keeps
-    # the correction visible in exactly the place the model reads context from.
-    def append_staged_claim_correction(conversation, reply)
-      conversation << { role: "assistant", content: reply }
-      conversation << { role: "user", content: STAGED_CLAIM_CORRECTION }
-    end
-
     # Before this, a phantom staging claim was invisible outside a database read: no metric, no log
     # line, nothing to alert on. Log and report it so the rate is trackable and a regression shows up
     # without anyone querying ai_messages by hand.
@@ -831,7 +1025,7 @@ class Ai::StoreAgentService
     # confirmation when there is actually a proposed action to confirm.
     def tool_cap_reply(proposed_action)
       if proposed_action
-        "I gathered the details but need you to confirm the next step before I continue."
+        PROPOSAL_READY_REPLY
       else
         "I gathered the details but couldn't finish in one go. Please rephrase or ask again."
       end
@@ -844,12 +1038,12 @@ class Ai::StoreAgentService
     # and abandon the turn) and before the seller waits out the extra suggestions LLM call.
     def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil, &before_trailing_events)
       objects = deduped_objects
-      result = { reply:, proposed_action: proposed_action&.as_json, objects: }
+      result = turn_result(reply:, proposed_action:)
       on_reply_complete&.call(result)
-      before_trailing_events&.call
+      before_trailing_events&.call(result)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: proposed_action.as_json }) if proposed_action
-      suggestions = follow_up_suggestions(reply:, last_user_message:)
+      suggestions = follow_up_suggestions(reply: result[:reply], last_user_message:)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
       result.merge(suggestions:)
     end
@@ -910,7 +1104,15 @@ class Ai::StoreAgentService
         next if content.blank?
         next unless %w[user assistant].include?(role)
 
-        { role:, content: content.truncate(MAX_MESSAGE_LENGTH, omission: "...") }
+        proposal_state = msg[:proposal_state] || msg["proposal_state"]
+        state_suffix =
+          if role == "assistant" && proposal_state.present?
+            "\n\n[Server proposal state: #{proposal_state}]"
+          else
+            ""
+          end
+        content = content.truncate(MAX_MESSAGE_LENGTH - state_suffix.length, omission: "...")
+        { role:, content: "#{content}#{state_suffix}" }
       end
 
       # Anthropic's Messages API requires the conversation to START with a user message. The web chat
@@ -932,8 +1134,9 @@ class Ai::StoreAgentService
       )
     end
 
-    # Two generic tools drive the whole catalog. `api_read` runs a read endpoint immediately;
-    # `api_write` turns a write endpoint into a single proposed action (never mutates here).
+    # Two generic API tools drive the whole catalog. `complete_turn` is a terminal marker: unlike
+    # the API tools it never runs an operation, and the service validates it before accepting the
+    # model's text as the final seller-facing reply.
     def run_tool(name:, arguments:)
       case name
       when "api_read" then run_api_read(arguments)
@@ -962,7 +1165,16 @@ class Ai::StoreAgentService
       end
 
       path = endpoint.expand_path(arguments["path_params"])
-      result = api_client.get(path, sanitize_param_hash(arguments["params"]))
+      params = sanitize_param_hash(arguments["params"])
+      if (error = endpoint.unknown_param_keys_error(params))
+        return [{ error: }, nil]
+      end
+
+      # Catalog-owned values win over model input, so a specialized read can share a controller
+      # route without exposing its fixed query contract to the model or adding endpoint-id branches.
+      params.merge!(endpoint.forced_params)
+      result = api_client.get(path, params)
+      record_successful_read(endpoint:, expanded_path: path, result:)
       # Collect any renderable objects from the response so the chat can show them inline as cards.
       @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result)) if @objects
       [result, nil]
@@ -999,6 +1211,42 @@ class Ai::StoreAgentService
         return [{ error: e.message }, nil]
       end
 
+      if endpoint.requires_read.present?
+        required_read = Ai::StoreAgentApiCatalog.find(endpoint.requires_read)
+        unless required_read&.read?
+          raise Error, "Catalog endpoint #{endpoint.id} requires invalid read endpoint #{endpoint.requires_read}"
+        end
+
+        required_path = required_read.expand_path(path_params)
+        required_target = [required_read.id, required_path]
+        unless @completed_read_targets&.key?(required_target)
+          log_missing_required_read(endpoint:, required_read:)
+          return [
+            {
+              error: "#{endpoint.id} requires a successful full read of this exact target first. Only if the seller explicitly requested this custom-page work, call #{required_read.id} with api_read, wait for its result, then retry #{endpoint.id} in this turn. Otherwise, do not read the page body and do not retry the write. Status or metadata-only reads do not count.",
+              corrective_action: {
+                condition: "The seller explicitly requested this custom-page work.",
+                if_requested: {
+                  tool: "api_read",
+                  endpoint: required_read.id,
+                  path_params: path_params.slice(*required_read.path_params),
+                  after_success: {
+                    action: "retry_write",
+                    endpoint: endpoint.id,
+                    timing: "this_turn",
+                  },
+                },
+                otherwise: {
+                  action: "do_not_read_or_retry",
+                  instruction: "Do not read the page body and do not retry the write.",
+                },
+              },
+            },
+            nil,
+          ]
+        end
+      end
+
       # Refuse to stage a body carrying keys the endpoint doesn't declare. The v2 API silently
       # ignores unknown body keys, so without this check a write like create_product with
       # "price_cents" (instead of the declared "price") sails through to the API missing its real
@@ -1008,6 +1256,7 @@ class Ai::StoreAgentService
       if (error = unknown_body_keys_error(endpoint, body))
         return [{ error: }, nil]
       end
+      normalize_product_currency_param!(endpoint, body)
 
       summary = write_summary(endpoint, path_params, body)
       action = ProposedAction.new(
@@ -1020,6 +1269,38 @@ class Ai::StoreAgentService
         fields: write_fields(endpoint, path_params, body),
       )
       [{ proposed: true, summary: }, action]
+    end
+
+    # A read precondition is satisfied only by a successful response from the exact catalog endpoint
+    # and expanded target path the write names. A status endpoint may share the same HTTP route, but
+    # its distinct catalog id cannot unlock a body-changing write.
+    def record_successful_read(endpoint:, expanded_path:, result:)
+      return unless successful_api_read?(result)
+
+      (@reads_completed_in_tool_batch || @completed_read_targets)[[endpoint.id, expanded_path]] = true
+    end
+
+    def successful_api_read?(result)
+      return false unless result.is_a?(Hash)
+      return false if result["success"] == false || result[:success] == false
+
+      status = result["http_status"] || result[:http_status]
+      status.blank? || status.to_i.between?(200, 299)
+    end
+
+    # Keep the message fixed in both logs and Sentry so every blocked proposal groups together.
+    # Endpoint ids and the catalog path template are safe structured context. Never report the
+    # expanded path because its model-supplied target id could contain seller text. The notifier
+    # also strips ambient request data from this event.
+    def log_missing_required_read(endpoint:, required_read:)
+      Rails.logger.warn(MISSING_REQUIRED_READ_MESSAGE)
+      ErrorNotifier.notify(
+        MISSING_REQUIRED_READ_MESSAGE,
+        exclude_request_context: true,
+        write_endpoint: endpoint.id,
+        required_read_endpoint: required_read.id,
+        required_read_path: required_read.path,
+      )
     end
 
     # A human-readable description of the pending change for the confirmation card. Built from the
@@ -1145,6 +1426,12 @@ class Ai::StoreAgentService
       requested if CURRENCY_CHOICES.key?(requested)
     end
 
+    def normalize_product_currency_param!(endpoint, body)
+      return unless endpoint.id.in?(%w[create_product update_product]) && body.key?("price_currency_type")
+
+      body["price_currency_type"] = body["price_currency_type"].to_s.strip.downcase
+    end
+
     def preview_field(label, value)
       stringified = value.to_s.strip
       { label:, value: stringified } if stringified.present?
@@ -1192,10 +1479,10 @@ class Ai::StoreAgentService
       @_client ||= Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
     end
 
-    # Two generic tools. The endpoint id (constrained to the catalog by an enum) selects which of the
-    # ~60 real API endpoints to hit; path_params/params carry the ids and payload. Keeping the schema
-    # this small avoids a 60-function tool list while still reaching the entire API. Anthropic tool
-    # schemas use `input_schema` (JSON Schema) instead of OpenAI's `function.parameters`.
+    # Two generic API tools plus one terminal marker. The endpoint id (constrained to the catalog by
+    # an enum) selects which of the ~60 real API endpoints to hit; path_params/params carry the ids
+    # and payload. Anthropic tool schemas use `input_schema` instead of OpenAI's
+    # `function.parameters`.
     def tool_schemas
       [
         tool_schema(
@@ -1217,6 +1504,18 @@ class Ai::StoreAgentService
             params: { type: "object", description: "Request body. Monetary amounts are in cents (integer). Omit if none." },
           },
           required: ["endpoint"],
+        ),
+        tool_schema(
+          COMPLETE_TURN_TOOL,
+          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Write the reply text before this call; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write returned proposed: true in this same turn; otherwise use reply_only.",
+          {
+            outcome: {
+              type: "string",
+              enum: TURN_OUTCOMES,
+              description: "Whether this turn has a real proposed change waiting for confirmation.",
+            },
+          },
+          required: ["outcome"],
         ),
       ]
     end

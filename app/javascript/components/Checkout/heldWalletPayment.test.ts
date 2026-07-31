@@ -102,10 +102,12 @@ const state = (overrides: Partial<State> = {}): State => ({
   paymentMethod: "card",
   paymentElementType: "card",
   willSaveCard: false,
+  usingSavedCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   status: { type: "starting" },
   recaptchaKey: null,
+  recaptchaScoreBased: false,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,
@@ -121,6 +123,7 @@ const clientConfirmPaymentMethod: PurchasePaymentMethod = {
   cardCountry: "US",
   walletType: "apple_pay",
   mountCurrency: "usd",
+  selectedMethodType: "card",
 };
 
 // The held payment was tokenized while surcharges showed no tax (total 1000), so those are the
@@ -142,7 +145,7 @@ describe("resolveHeldWalletPayment", () => {
       ).toEqual({ type: "wait" });
       expect(
         resolveHeldWalletPayment(
-          state({ checkoutPayment, surcharges: { type: "loading", abort: () => {} } }),
+          state({ checkoutPayment, surcharges: { type: "loading", requestId: 1, abort: () => {} } }),
           held(paymentMethod),
         ),
       ).toEqual({ type: "wait" });

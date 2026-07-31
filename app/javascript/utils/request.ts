@@ -1,12 +1,16 @@
-export type RequestSettings = {
+type RequestSettingsBase = {
   accept: "json" | "html" | "csv";
   url: string;
   abortSignal?: AbortSignal | undefined;
   headers?: Record<string, string> | undefined;
-} & (
-  | { method: "GET" | "HEAD" }
-  | { method: "POST" | "PUT" | "PATCH" | "DELETE"; data?: Record<string, unknown> | FormData }
-);
+};
+
+// `data?: never` on the bodyless member keeps `settings.data` readable without narrowing (TypeScript
+// can't subtract single literals from the union-typed `method` discriminant) while still rejecting a
+// GET/HEAD call that tries to pass a body.
+export type RequestSettings =
+  | (RequestSettingsBase & { method: "GET" | "HEAD"; data?: never })
+  | (RequestSettingsBase & { method: "POST" | "PUT" | "PATCH" | "DELETE"; data?: Record<string, unknown> | FormData });
 
 export class AbortError extends Error {
   constructor() {

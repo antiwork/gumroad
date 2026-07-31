@@ -221,6 +221,27 @@ describe UpdatePayoutMethod do
         expect(bank_account.send(:account_number_decrypted)).to eq(clean_iban)
         expect(bank_account.account_number_last_four).to eq("BH00")
       end
+
+      it "strips the hyphens New Zealand account numbers are printed with" do
+        # New Zealand numbers are written bank-branch-account-suffix with hyphens on statements and
+        # in banking apps, so this is the form a seller copies. The model wants the bare 16 digits.
+        params = ActionController::Parameters.new(
+          bank_account: {
+            type: NewZealandBankAccount.name,
+            account_holder_full_name: "Named User",
+            account_number: "11-0000-00000000-10",
+            account_number_confirmation: "11-0000-00000000-10",
+          }
+        )
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(success: true)
+        bank_account = user.reload.active_bank_account
+        expect(bank_account).to be_a(NewZealandBankAccount)
+        expect(bank_account.send(:account_number_decrypted)).to eq("1100000000000010")
+        expect(bank_account.account_number_last_four).to eq("0010")
+      end
     end
 
     describe "switching to card payouts" do

@@ -22,6 +22,8 @@ module PageMeta::User
       set_meta_tag(property: "og:description", content: description)
 
       if user.subscribe_preview_url.present?
+        set_meta_tag(property: "og:image", content: user.subscribe_preview_url)
+        set_meta_tag(property: "og:image:alt", content: user.name_or_username)
         set_meta_tag(property: "twitter:card", content: "summary_large_image")
         set_meta_tag(property: "twitter:image", content: user.subscribe_preview_url)
         set_meta_tag(property: "twitter:image:alt", content: user.name_or_username)
@@ -29,7 +31,11 @@ module PageMeta::User
         if user.name.present?
           set_meta_tag(property: "og:title", content: user.name)
         end
-        if user.avatar_url.present?
+        # avatar_url always returns something — it falls back to Gumroad's default
+        # avatar — so a presence check here would advertise that placeholder as the
+        # seller's share image. Only a real upload is worth announcing; with neither
+        # a card nor an avatar, omitting the tag lets scrapers use their own fallback.
+        if user.avatar.attached?
           set_meta_tag(property: "og:image", content: user.avatar_url)
           set_meta_tag(property: "og:image:alt", content: "#{user.name_or_username}'s profile picture")
         end

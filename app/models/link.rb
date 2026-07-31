@@ -246,8 +246,17 @@ class Link < ApplicationRecord
 
   before_save :downcase_filetype
   before_save :remove_xml_tags
+  # The offer code guards only watch visible products, so a default discount can
+  # detach while a product is deleted, and a currency change detaches a universal
+  # code no OfferCode save ever sees. Both repair here, in the same write.
+  # Persisted-only: on a duplicate every attribute reads as changed, and the
+  # join rows that make the code applicable are copied after this first save.
+  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) || (!new_record? && will_save_change_to_price_currency_type?) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
+  after_save :note_default_offer_code_assignment
+  after_commit :repair_detached_default_offer_code, if: -> { @default_offer_code_assignment_pending }
+  after_rollback :forget_default_offer_code_assignment
   after_update :create_licenses_for_existing_customers,
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
@@ -414,8 +423,10 @@ class Link < ApplicationRecord
   def compliance_blocked(ip)
     return false if ip.blank?
 
-    country_code = GeoIp.lookup(ip)&.country_code
-    country_code.present? && Compliance::Countries.blocked?(country_code)
+    location = GeoIp.lookup(ip)
+    return false if location.nil?
+
+    Compliance::Countries.blocked_location?(alpha2: location.country_code, subdivision_code: location.region_name)
   end
 
   def admins_can_generate_url_redirects?
@@ -601,8 +612,11 @@ class Link < ApplicationRecord
     self
   end
 
-  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false)
-    host = user.subdomain_with_protocol || UrlService.domain_with_protocol
+  # host: lets a caller serving the page on one of the seller's other hosts (their live custom
+  # domain) keep the link on that host — /l/:id is routed under UserCustomDomainConstraint too,
+  # so the same path resolves there.
+  def long_url(recommended_by: nil, recommender_model_name: nil, include_protocol: true, layout: nil, affiliate_id: nil, query: nil, code: nil, autocomplete: false, host: nil)
+    host ||= user.subdomain_with_protocol || UrlService.domain_with_protocol
     options = { host: }
     options[:recommended_by] = recommended_by if recommended_by.present?
     options[:recommender_model_name] = recommender_model_name if recommender_model_name.present?
@@ -940,6 +954,16 @@ class Link < ApplicationRecord
 
   def find_offer_code(code:)
     offer_codes.alive.find_by_code(code) || universal_offer_codes.find_by_code(code)
+  end
+
+  # A default discount buyers can no longer redeem: the code was deleted,
+  # carries no code (checkout resolves defaults by code, and legacy rows could
+  # point at codeless upsell discounts), or stopped applying to this product.
+  # Checkout refuses such a discount while card surfaces still quote it.
+  def default_offer_code_detached?
+    return false if default_offer_code_id.nil?
+
+    default_offer_code.nil? || default_offer_code.deleted? || default_offer_code.code.blank? || !default_offer_code.applicable?(self)
   end
 
   def find_offer_code_by_external_id(external_id)
@@ -1431,12 +1455,47 @@ class Link < ApplicationRecord
       errors.add(:custom_permalink, "is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.")
     end
 
+    def clear_detached_default_offer_code
+      self.default_offer_code = nil if default_offer_code_detached?
+    end
+
+    # saved_changes only reflects the last save in a transaction, and flows like
+    # LinksController#update save the product more than once; accumulate the
+    # assignment signal until commit.
+    def note_default_offer_code_assignment
+      @default_offer_code_assignment_pending ||= saved_change_to_default_offer_code_id? && default_offer_code_id.present?
+    end
+
+    def forget_default_offer_code_assignment
+      @default_offer_code_assignment_pending = false
+    end
+
+    # Closes the write-skew race with a concurrent discount edit: each side
+    # validates against its own snapshot, so an assignment and a detaching code
+    # edit can both commit. Whichever commits second re-checks fresh state here
+    # and clears the pointer, compare-and-set so a newer assignment survives.
+    # OfferCode#repair_detached_default_discounts covers the other commit order.
+    # Checks a fresh instance so this instance's association cache stays intact.
+    def repair_detached_default_offer_code
+      forget_default_offer_code_assignment
+      return if default_offer_code_id.nil?
+
+      fresh = Link.includes(:default_offer_code).find_by(id:)
+      return if fresh.nil? || !fresh.default_offer_code_detached?
+
+      updated = Link.where(id:, default_offer_code_id: fresh.default_offer_code_id).update_all(default_offer_code_id: nil)
+      invalidate_cache if updated > 0
+    end
+
     def default_offer_code_must_be_valid
       return unless default_offer_code.present?
       return if being_marked_as_deleted?
       return unless new_record? || default_offer_code_id_changed?
 
-      if !user.offer_codes.alive.where(id: default_offer_code.id).exists?
+      # Codeless discounts (upsells, cancellation offers) are excluded: their own
+      # flows rewrite their product lists outside the detachment guards, and the
+      # discounts dashboard never offers them as defaults.
+      if !user.offer_codes.alive.where.not(code: nil).where(id: default_offer_code.id).exists?
         errors.add(:default_offer_code, "must belong to your offer codes")
       elsif default_offer_code.inactive?
         errors.add(:default_offer_code, "cannot be expired")

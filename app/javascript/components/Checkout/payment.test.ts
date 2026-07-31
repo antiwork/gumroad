@@ -39,6 +39,7 @@ const paymentElementConfig: CheckoutPaymentConfig = {
     buyer_currency_presentment: false,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
+    stripe_link_enabled: false,
   },
 };
 
@@ -160,12 +161,14 @@ const state = (overrides: Partial<State> = {}): State => ({
   paymentMethod: "card",
   paymentElementType: "card",
   willSaveCard: false,
+  usingSavedCard: false,
   savedCreditCard: null,
   checkoutPayment: paymentElementConfig,
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
+  recaptchaScoreBased: false,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,
@@ -461,6 +464,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
               tax_cents: 0,
               tax_included_cents: 0,
               subtotal: stripePaymentElementMinimumCharge - 1,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -562,6 +566,7 @@ describe("getStripePaymentElementAmount", () => {
               tax_cents: 100,
               tax_included_cents: 0,
               subtotal: 1_000,
+              buyer_currency_quote: null,
             },
           },
         }),
@@ -651,6 +656,7 @@ describe("buyer-currency presentment lane", () => {
     currency: "cad" as const,
     canonical_total_cents: 1_300,
     presentment_total_cents: 1_625,
+    charge_presentment_total_cents: 625,
     rate: 1.25,
     subunit_to_unit: 100,
     expires_at: "2026-07-10T00:00:00Z",
@@ -678,13 +684,13 @@ describe("buyer-currency presentment lane", () => {
     },
   };
 
-  it("mounts the element with the quote's currency and locked local-currency total", () => {
+  it("mounts the element with the quote's currency and locked current-charge amount", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
       surcharges: loadedSurchargesWithQuote,
     });
-    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 1_625 });
-    expect(getStripePaymentElementAmount(s)).toBe(1_625);
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+    expect(getStripePaymentElementAmount(s)).toBe(625);
   });
 
   it("mounts canonical USD when the surcharge response has no quote", () => {
@@ -1367,7 +1373,7 @@ describe("reduceCheckoutState", () => {
       for (const action of [
         { type: "set-value", tip: { type: "fixed", amount: 2_00 } } as const,
         { type: "set-value", gift: { type: "normal", email: "friend@example.com", note: "" } } as const,
-        { type: "update-products", products: [product({ price: 2_000 })] } as const,
+        { type: "update-products" as const, products: [product({ price: 2_000 })] },
       ]) {
         const next = reduceCheckoutState(state({ status: finished }), action);
         expect(next.surcharges).toEqual({ type: "pending" });

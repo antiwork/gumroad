@@ -115,7 +115,8 @@ gumroad products page publish <permalink> ./landing.html`}
     </CodeSnippet>
     <p>
       Your HTML is sanitized — disallowed tags and attributes are stripped — then served inside a sandboxed iframe (
-      <code>sandbox="allow-scripts allow-forms"</code>).
+      <code>sandbox=&quot;allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox&quot;</code>
+      ).
     </p>
     <p>It can:</p>
     <ul>
@@ -124,11 +125,18 @@ gumroad products page publish <permalink> ./landing.html`}
       <li>Load fonts from Google Fonts and Bunny Fonts.</li>
       <li>Load images and media from Gumroad only — e.g. your product's covers and thumbnail.</li>
       <li>Submit forms in-page with JavaScript.</li>
+      <li>Open links in a new tab or window.</li>
     </ul>
     <p>It can't:</p>
     <ul>
       <li>Read your Gumroad cookies or session — it runs on an opaque origin.</li>
-      <li>Touch or navigate the parent page, or open popups.</li>
+      <li>Touch the parent page.</li>
+      <li>
+        Download files. The sandbox omits <code>allow-downloads</code>, so a link to a PDF, zip, or any other file the
+        browser would download is cancelled — silently, with no error anywhere, so the link just looks dead.{" "}
+        <code>target=&quot;_blank&quot;</code> does not work around it. Deliver the file as product content and link to
+        the product instead.
+      </li>
       <li>
         Make <code>fetch</code>, <code>XHR</code>, or WebSocket requests (<code>connect-src 'none'</code>).
       </li>
@@ -149,7 +157,9 @@ gumroad products page publish <permalink> ./landing.html`}
     <ul>
       <li>
         <code>data-gumroad-field="name|price|description"</code> — the element's contents are replaced with the
-        product's current value (HTML-escaped).
+        product's current value (HTML-escaped). <code>price</code> is the amount a first-time buyer pays: your default
+        offer code is applied, and a membership is quoted at its default recurrence — matching the native product page
+        this HTML replaces.
       </li>
       <li>
         <code>data-gumroad-action="buy"</code> — wires the element up to launch the Gumroad checkout. Works on any tag (

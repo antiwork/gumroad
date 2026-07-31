@@ -8,7 +8,9 @@ import { CardPayoutError, prepareCardTokenForPayouts, type CardPayoutToken } fro
 import { SavedCreditCard } from "$app/parsers/card";
 import { SettingPage } from "$app/parsers/settings";
 import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCardData } from "$app/types/payments";
+import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -42,17 +44,12 @@ import { WithTooltip } from "$app/components/WithTooltip";
 const KANA_NAME_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\-.]*$/u;
 const KANA_ADDRESS_REGEX = /^[\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\p{Script=Latin}\d\s\-.]*$/u;
 
-// GambiaBankAccount requires exactly 18 letters or digits (/^[0-9A-Za-z]{18}$/). The account-number
-// input carries a matching `pattern`, but the Save button runs this page's own validation and posts
-// through Inertia rather than submitting the form element, so the browser never enforces that
-// pattern. Re-check the same shape here so a wrong-length number is caught before the request goes
-// out instead of coming back as a generic server-side save failure.
-const GAMBIA_ACCOUNT_NUMBER_REGEX = /^[0-9A-Za-z]{18}$/u;
-
 // GambiaBankAccount's bank code is a SWIFT/BIC of 8 to 11 letters or digits
-// (/^[0-9A-Za-z]{8,11}$/), e.g. AGIXGMGM. Same story as the account number above: the input's
-// `pattern` never runs because the page posts through Inertia instead of submitting the form, so
-// a malformed code would only surface as a generic "The bank code is invalid." from the server.
+// (/^[0-9A-Za-z]{8,11}$/), e.g. AGIXGMGM. The input carries a matching `pattern`, but the Save
+// button runs this page's own validation and posts through Inertia rather than submitting the form
+// element, so the browser never enforces that pattern. Re-check the shape here so a malformed code
+// is caught before the request goes out instead of coming back as a generic "The bank code is
+// invalid." from the server.
 const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
@@ -703,12 +700,15 @@ export default function PaymentsPage() {
     }
     if (!form.data.bank_account.account_number) {
       markFieldInvalid("account_number");
-    } else if (
-      form.data.bank_account.type === "GambiaBankAccount" &&
-      !GAMBIA_ACCOUNT_NUMBER_REGEX.test(form.data.bank_account.account_number)
-    ) {
-      markFieldInvalid("account_number");
-      setClientErrorMessage({ message: "Account number must be exactly 18 letters or digits." });
+    } else {
+      // The account-number inputs advertise a per-country `pattern`, but the browser never enforces
+      // it here (this page posts through Inertia instead of submitting the form), so run the same
+      // check ourselves. Countries with no entry in the hints table fall through to the server.
+      const formatError = accountNumberFormatError(props.user.country_code, form.data.bank_account.account_number);
+      if (formatError) {
+        markFieldInvalid("account_number");
+        setClientErrorMessage({ message: formatError });
+      }
     }
     if (!form.data.bank_account.account_number_confirmation) {
       markFieldInvalid("account_number_confirmation");
@@ -873,6 +873,17 @@ export default function PaymentsPage() {
         message:
           "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.",
       });
+    }
+    const colombiaIdRequired = form.data.user.is_business
+      ? form.data.user.business_country === "CO"
+      : form.data.user.country === "CO";
+    if (
+      colombiaIdRequired &&
+      form.data.user.individual_tax_id &&
+      !isValidColombiaIdNumber(form.data.user.individual_tax_id)
+    ) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({ message: COLOMBIA_ID_NUMBER_ERROR_MESSAGE });
     }
     if (form.data.user.is_business) {
       if (!form.data.user.business_type) {

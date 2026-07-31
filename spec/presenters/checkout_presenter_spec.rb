@@ -946,6 +946,7 @@ describe CheckoutPresenter do
                                  is_overdue_for_charge: false,
                                  is_gift: false,
                                  is_installment_plan: false,
+                                 current_recurrence_available: true,
                                },
                                contact_info: { city: "San Francisco", country: "US", email: @subscription.email, full_name: "Jane Gumroad", state: "CA", street: "100 Main St", zip: "00000" },
                                discover_url: discover_url(protocol: PROTOCOL, host: DISCOVER_DOMAIN),
@@ -967,6 +968,17 @@ describe CheckoutPresenter do
 
         # One successful charge (the original purchase) out of three has been collected.
         expect(result[:subscription][:remaining_charges_count]).to eq(2)
+      end
+
+      it "reports the buyer's recurrence as unavailable once the seller retires it",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        @product.prices.alive.is_buy.find_by!(recurrence: @subscription.recurrence).mark_deleted!
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        expect(result[:subscription][:current_recurrence_available]).to eq(false)
+        # Still offered, so the buyer's own plan stays selected rather than shifting to a neighbour.
+        expect(result[:product][:recurrences].map { _1[:recurrence] }).to include(@subscription.recurrence)
       end
 
       it "requests Apple Pay merchant tokens when the seller is in the rollout",

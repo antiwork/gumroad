@@ -225,8 +225,9 @@ class CheckoutPresenter
       variants: subscription.original_purchase.tiers,
       price_cents: subscription.current_plan_displayed_price_cents(authenticated_offer_code_buyer: logged_in_user) / subscription.original_purchase.quantity,
     }
+    current_recurrence_alive = product.recurrence_price_enabled?(subscription.recurrence)
     show_current_prices = subscription.deactivated? ||
-      (subscription.alive? && !subscription.overdue_for_charge? && product.recurrence_price_enabled?(subscription.recurrence))
+      (subscription.alive? && !subscription.overdue_for_charge? && current_recurrence_alive)
     options = (variant_category = product.variant_categories_alive.first) ? variant_category.variants.in_order.alive.map do
       |variant| show_current_prices ? variant.to_option : variant.to_option(subscription_attrs: tier_attrs)
     end : []
@@ -290,6 +291,9 @@ class CheckoutPresenter
         is_overdue_for_charge: subscription.overdue_for_charge?,
         is_gift: subscription.gift?,
         is_installment_plan: subscription.is_installment_plan,
+        # False when the seller has retired the recurrence this buyer is on; the row is still
+        # offered above only because it is theirs.
+        current_recurrence_available: current_recurrence_alive,
       }
     }
   end

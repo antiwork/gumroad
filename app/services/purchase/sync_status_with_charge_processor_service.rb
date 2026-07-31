@@ -26,8 +26,8 @@ class Purchase::SyncStatusWithChargeProcessorService
       charge_succeeded = charge && success_statuses.include?(charge.status) &&
                          !charge.try(:refunded) && !charge.try(:refunded?) && !charge.try(:disputed)
 
-      if charge_succeeded && purchase.is_part_of_combined_charge? && charge.flow_of_funds.nil?
-        # Transient unsettled state: the underlying combined Stripe charge succeeded but
+      if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
+        # Transient unsettled state: the underlying Stripe charge succeeded but
         # `balance_transaction` (and therefore `flow_of_funds`) hasn't been produced yet.
         # Leave the purchase `in_progress` so a subsequent SyncStuckPurchasesJob run can
         # re-attempt once Stripe settles, rather than permanently failing a purchase whose
@@ -44,9 +44,12 @@ class Purchase::SyncStatusWithChargeProcessorService
         purchase.merchant_account = purchase.send(:prepare_merchant_account, purchase.charge_processor_id) unless purchase.merchant_account.present?
         if purchase.balance_transactions.exists?
           purchase.mark_successful!
+        elsif purchase.buyer_presentment? && purchase.is_recurring_subscription_charge
+          purchase.subscription.handle_purchase_success(purchase)
         else
           Purchase::MarkSuccessfulService.new(purchase).perform
         end
+        complete_later_charge_owner if purchase.buyer_presentment?
         true
       elsif charge.nil? && purchase.free_purchase?
         Purchase::MarkSuccessfulService.new(purchase).perform
@@ -61,4 +64,13 @@ class Purchase::SyncStatusWithChargeProcessorService
     purchase.mark_failed! if mark_as_failed
     false
   end
+
+  private
+    def complete_later_charge_owner
+      if purchase.is_preorder_charge? && purchase.preorder.is_authorization_successful?
+        purchase.preorder.mark_charge_successful!
+      elsif purchase.is_commission_completion_purchase? && purchase.commission.present? && !purchase.commission.is_completed?
+        purchase.commission.update!(status: Commission::STATUS_COMPLETED, completion_purchase: purchase)
+      end
+    end
 end

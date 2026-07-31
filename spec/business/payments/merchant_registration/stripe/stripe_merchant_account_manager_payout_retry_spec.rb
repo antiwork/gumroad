@@ -203,6 +203,42 @@ describe StripeMerchantAccountManager do
         expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
       end
 
+      it "names the bank row Stripe rejected, so the settings banner can't blame a replacement" do
+        # SettingsPresenter#current_bank_sync_failure_note keys off this. Without it the note is
+        # indistinguishable from a legacy one and falls back to a timestamp comparison, which a
+        # rejection landing after the seller re-saved details wins — blaming the new row.
+        expect do
+          described_class.create_account(user, passphrase:)
+        end.to raise_error(Stripe::InvalidRequestError)
+
+        note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+        expect(note.json_data["bank_account_id"]).to eq(bank_account.id)
+      end
+
+      it "carries the attribution from the note's first save, never a follow-up write" do
+        # The note is readable the moment it is inserted, so an id written by a second save leaves
+        # a window in which the banner treats it as unattributed. Assert the shape, not the odds:
+        # one INSERT and no UPDATE means there is no such window.
+        statements = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          statements << payload[:sql] if payload[:sql]&.match?(/\A(INSERT INTO|UPDATE) `comments`/)
+        end
+
+        begin
+          expect do
+            described_class.create_account(user, passphrase:)
+          end.to raise_error(Stripe::InvalidRequestError)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        expect(statements.grep(/\AINSERT INTO `comments`/).count).to eq(1)
+        expect(statements.grep(/\AUPDATE `comments`/)).to be_empty
+        # Asserted here too, so this example pins atomic ATTRIBUTION rather than just "no comment
+        # updates happened".
+        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last.json_data["bank_account_id"]).to eq(bank_account.id)
+      end
+
       it "does not record a payout note when notify is false" do
         expect do
           described_class.create_account(user, passphrase:, notify: false)
@@ -414,7 +450,9 @@ describe StripeMerchantAccountManager do
           described_class.create_account(user, passphrase:)
         end.to raise_error(Stripe::CardError)
 
-        expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+        notes = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX)
+        expect(notes.count).to eq(1)
+        expect(notes.last.json_data["bank_account_id"]).to eq(bank_account.id)
       end
     end
 
@@ -476,7 +514,7 @@ describe StripeMerchantAccountManager do
       expect do
         described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number", user.active_bank_account.id)
 
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
     end
@@ -506,11 +544,201 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, nil, "We couldn't find the bank for that BIC")
+        .with(user.id, nil, "We couldn't find the bank for that BIC", user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
       expect(ErrorNotifier).not_to have_received(:notify)
       expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).count).to eq(1)
+      expect(payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last.json_data["bank_account_id"]).to eq(bank_account.id)
+    end
+
+    it "names the row the sync submitted even when the seller replaces it mid-sync" do
+      # The reason the row is passed down rather than re-read. Stripe's call is over the network,
+      # so the seller can save replacement details before the rejection lands; a re-read would
+      # then stamp the note with the replacement and blame details Stripe never saw.
+      replacement = nil
+      allow(Stripe::Account).to receive(:update) do
+        bank_account.mark_deleted!
+        replacement = create(:ach_account, user: user.reload)
+        raise Stripe::InvalidRequestError.new("We couldn't find the bank for that BIC", "bank_account[routing_number]")
+      end
+
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["bank_account_id"]).to eq(bank_account.id)
+      expect(note.json_data["bank_account_id"]).to_not eq(replacement.id)
+    end
+  end
+
+  describe "bank account refused outright during a bank account sync" do
+    let(:zip_code) { "94107" }
+    let(:error_message) do
+      "This bank account can't be used because previous payments or payouts failed. Contact support at https://support.stripe.com/contact if you think this is an error."
+    end
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(error_message, "bank_account", code: "bank_account_unusable")
+      )
+    end
+
+    it "tells the mailer this is a terminal rejection so the seller is asked for a different account" do
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message, user.active_bank_account.id)
+
+      expect(result).to eq(:invalid_bank_account)
+    end
+
+    it "records the error details and marks the note so the retry loop knows the seller was told" do
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["stripe_error_code"]).to eq("bank_account_unusable")
+      expect(note.json_data["bank_account_id"]).to eq(bank_account.id)
+      expect(described_class.bank_details_terminal_rejection_note?(note)).to be(true)
+      expect(described_class.bank_details_format_rejection_note?(note)).to be(false)
+      expect(note.json_data["seller_notified"]).to be(true)
+    end
+  end
+
+  describe "classifying a bank rejection" do
+    let(:zip_code) { "94107" }
+
+    def error_for(message, code: nil)
+      Stripe::InvalidRequestError.new(message, "bank_account", code:)
+    end
+
+    it "calls a previously-failed account terminal, not a format problem" do
+      error = error_for("This bank account can't be used because previous payments or payouts failed.", code: "bank_account_unusable")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
+    end
+
+    it "calls a bank outside payout coverage terminal even with no error code" do
+      error = error_for("Stripe is unable to support this bank at this time.")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
+    end
+
+    it "prefers terminal over format when Stripe reuses a format code for a refused account" do
+      error = error_for("Invalid account number: previous attempts to deliver payouts to this account failed.", code: "account_number_invalid")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL)
+    end
+
+    it "still calls a plain mistyped code a format rejection" do
+      error = error_for("Invalid routing number for PK.", code: "routing_number_invalid")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT)
+    end
+
+    it "leaves a directory miss unclassified so the wait-and-re-check copy is used" do
+      error = error_for("We couldn't find the bank for that BIC")
+
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_rejection_kind_for(error)).to be_nil
+    end
+
+    it "classifies an old note that carries only the human-readable content" do
+      note = double(json_data: {}, content: "Stripe bank sync failed: bank_account_unusable — This bank account can't be used because previous payments or payouts failed.")
+
+      expect(described_class.bank_details_terminal_rejection_note?(note)).to be(true)
+      expect(described_class.bank_details_format_rejection_note?(note)).to be(false)
+    end
+  end
+
+  describe "naming the value a directory miss refused" do
+    let(:zip_code) { "94107" }
+
+    def error_for(message, code: nil)
+      Stripe::InvalidRequestError.new(message, "bank_account[routing_number]", code:)
+    end
+
+    let(:uz_bank_account) { build(:uzbekistan_bank_account, bank_code: "JSCLUZ22XXX", branch_code: "00401") }
+
+    it "recognises a directory miss separately from format and terminal rejections" do
+      error = error_for("We couldn't find the bank for that bank/branch code")
+
+      expect(described_class.bank_details_directory_miss?(error)).to be(true)
+      expect(described_class.bank_details_format_rejection?(error)).to be(false)
+      expect(described_class.bank_details_terminal_rejection?(error)).to be(false)
+    end
+
+    it "does not call a mistyped code a directory miss" do
+      expect(described_class.bank_details_directory_miss?(error_for("Invalid routing number for PK.", code: "routing_number_invalid"))).to be(false)
+    end
+
+    it "quotes back both halves without claiming which one was refused when the country collects two" do
+      detail = described_class.bank_directory_miss_detail(uz_bank_account)
+
+      expect(detail).to include("bank code JSCLUZ22XXX and branch code 00401")
+      expect(detail).to include("doesn't tell us which of the two")
+      expect(detail).to include("check both")
+      expect(detail).to include("head-office code")
+    end
+
+    # The reviewer's case: Stripe's error names neither half, so the copy must not pin the failure on
+    # the branch code. A seller whose BANK code is the unmatched one has to be told to check it too.
+    it "does not blame the branch code, so a refused bank code is still covered" do
+      detail = described_class.bank_directory_miss_detail(uz_bank_account)
+
+      expect(detail).not_to match(/branch code is the half/i)
+      expect(detail).not_to match(/the branch code is (the one|what)/i)
+      # Both boxes are named as things to check, not just the branch code.
+      expect(detail).to match(/check both/i)
+    end
+
+    it "names the bank code for a country that collects only that half" do
+      detail = described_class.bank_directory_miss_detail(build(:armenia_bank_account, bank_code: "AAAAAMNNXXX"))
+
+      expect(detail).to eq("The details we sent were bank code AAAAAMNNXXX.")
+      # No branch code was collected, so there is no two-field ambiguity to explain.
+      expect(detail).not_to match(/branch code/i)
+    end
+
+    it "quotes back the single value without the branch-code advice when there is only one" do
+      detail = described_class.bank_directory_miss_detail(build(:ach_account, routing_number: "110000000"))
+
+      expect(detail).to eq("The details we sent were routing number 110000000.")
+    end
+
+    it "returns nothing when there is no bank account to describe" do
+      expect(described_class.bank_directory_miss_detail(nil)).to be_nil
+    end
+
+    it "builds a seller message that names the value, the field and what to do" do
+      message = described_class.bank_directory_miss_seller_message(
+        error_for("We couldn't find the bank for that bank/branch code"), uz_bank_account
+      )
+
+      expect(message).to start_with("Our payment partner couldn't match your bank details against its records.")
+      expect(message).to include("bank code JSCLUZ22XXX and branch code 00401")
+      expect(message).to include("up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks")
+    end
+
+    it "declines to speak for a rejection that is not a directory miss, so Stripe's own message survives" do
+      expect(
+        described_class.bank_directory_miss_seller_message(
+          error_for("Invalid routing number for PK.", code: "routing_number_invalid"), uz_bank_account
+        )
+      ).to be_nil
     end
   end
 
@@ -537,7 +765,7 @@ describe StripeMerchantAccountManager do
       expect do
         result = described_class.update_bank_account(user, passphrase:)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message, user.active_bank_account.id)
 
       expect(result).to eq(:invalid_bank_account)
     end
@@ -548,6 +776,55 @@ describe StripeMerchantAccountManager do
       note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
       expect(note.json_data["stripe_error_code"]).to eq("routing_number_invalid")
       expect(note.json_data["stripe_error_message"]).to eq(error_message)
+      expect(note.json_data["bank_account_id"]).to eq(bank_account.id)
+      expect(note.json_data["seller_notified"]).to be(true)
+    end
+  end
+
+  describe "block-listed external account during a bank account sync" do
+    let(:zip_code) { "94107" }
+    let(:error_message) do
+      "You cannot use this external account because it is on your block list. Please contact us via https://support.stripe.com/contact if you think this is an error."
+    end
+
+    before do
+      described_class.create_account(user, passphrase:)
+      user.reload
+      merchant_id = user.stripe_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+        Stripe::Account.construct_from(id: merchant_id, metadata: {}, external_accounts: { object: "list", data: [] })
+      )
+      # The real error carries neither a code nor a param, which is why the classification has
+      # to match on the message.
+      allow(Stripe::Account).to receive(:update).and_raise(
+        Stripe::InvalidRequestError.new(error_message, nil)
+      )
+    end
+
+    it "tells the mailer this is a block, not a format rejection, so the seller is asked for a different account" do
+      result = nil
+      expect do
+        result = described_class.update_bank_account(user, passphrase:)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, error_message, user.active_bank_account.id)
+
+      expect(result).to eq(:invalid_bank_account)
+    end
+
+    it "treats the rejection as expected seller-input without paging Sentry" do
+      allow(ErrorNotifier).to receive(:notify)
+
+      described_class.update_bank_account(user, passphrase:)
+
+      expect(ErrorNotifier).not_to have_received(:notify)
+    end
+
+    it "records the error details and marks the note so the retry loop knows the seller was told" do
+      described_class.update_bank_account(user, passphrase:)
+
+      note = payout_notes(StripeMerchantAccountManager::BANK_SYNC_FAILURE_NOTE_PREFIX).last
+      expect(note.json_data["stripe_error_message"]).to eq(error_message)
+      expect(note.json_data["bank_account_id"]).to eq(bank_account.id)
       expect(note.json_data["seller_notified"]).to be(true)
     end
   end

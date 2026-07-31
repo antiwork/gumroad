@@ -18,6 +18,8 @@ class Api::V2::UsersController < Api::V2::BaseController
   ].freeze
 
   before_action -> { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }, only: [:show, :ifttt_sale_trigger, :custom_html, :theme]
+  before_action(only: [:profile_layout]) { doorkeeper_authorize! :view_profile }
+  before_action(only: [:profile_layout]) { require_oauth_scope! :view_profile }
   before_action(only: [:update, :update_custom_html, :edit_custom_html, :preview_custom_html]) { doorkeeper_authorize! :edit_profile }
   before_action :ensure_custom_html_pages_enabled, only: [:custom_html, :update_custom_html, :edit_custom_html, :preview_custom_html]
 
@@ -150,9 +152,8 @@ class Api::V2::UsersController < Api::V2::BaseController
   end
 
   # The seller's store theme: the background colour, highlight (accent) colour, and font stored on
-  # their SellerProfile. Read-only on purpose — these have no self-serve editor in the dashboard,
-  # support changes them by request — but they were previously invisible to any API caller, which
-  # left the store agent unable to see a theme the seller could plainly see on their own pages.
+  # their SellerProfile. Read-only here: sellers edit these directly in Settings > Profile > Design,
+  # while the agent can read them and point the seller to that screen.
   # The theme is not profile-page-only: the same values render into the stylesheet served with the
   # storefront, every product page, checkout when the cart is all one seller's, the pages buyers see
   # for what they bought, posts, and the emails a seller sends to their own audience — see
@@ -167,8 +168,77 @@ class Api::V2::UsersController < Api::V2::BaseController
         highlight_color: profile.highlight_color,
         font: profile.font,
         applies_to: THEME_SURFACES,
-        editable_by_seller: false,
-        how_to_change: "Gumroad has no self-serve fonts-and-colors screen. To change these, the seller asks Gumroad support and support applies it.",
+        editable_by_seller: true,
+        how_to_change: "The seller changes these themselves in Settings > Profile > Design, which previews the change before saving.",
+      }
+    )
+  end
+
+  # The layout of the seller's DEFAULT (non-custom-HTML) storefront profile: the tabs they created
+  # in the profile editor and the sections inside them, each with its heading.
+  #
+  # Read-only, and it exists purely so a caller can see this surface at all. The store agent could
+  # previously read only the profile's custom HTML, so for a seller who has never published custom
+  # HTML it saw nothing and concluded the storefront was Gumroad's untouched default. A seller who
+  # then asked about a heading they could see on their own page — a section header they typed
+  # themselves — was told it did not exist, that the default template had a different heading, and
+  # that their browser cache was to blame (gumroad-private#1466). Headings on the default profile
+  # come from `SellerProfileSection#header`, so they are readable; nothing was wrong except the
+  # blindness.
+  #
+  # Writes stay out: the section editor is a structured, drag-and-drop surface the seller owns, and
+  # the agent's only appearance write path is deliberately custom HTML (gumroad-private#984).
+  def profile_layout
+    seller = current_resource_owner
+    profile = seller.seller_profile
+    sections = seller.seller_profile_sections.on_profile.to_a
+    sections_by_id = sections.index_by(&:id)
+    tabs = profile.json_data["tabs"] || []
+    if ProfileSectionsPresenter.default_products_section_available?(seller:, sections:)
+      tabs = [{
+        "name" => ProfileSectionsPresenter::DEFAULT_PRODUCTS_TAB_NAME,
+        "sections" => [ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID],
+      }]
+    end
+
+    render_response(
+      true,
+      profile_layout: {
+        # The profile root custom HTML takes over the whole storefront when present, in which case
+        # none of the tabs/sections below are rendered. Say which one the buyer actually sees so a
+        # caller does not describe a layout that is not on screen.
+        rendering: seller.custom_landing_page_visible? ? "custom_html" : "tabs_and_sections",
+        # The public profile hides the tab bar entirely while there is only one tab
+        # (Profile/index.tsx). A seller who made exactly one named tab sees its sections render with
+        # the name nowhere, which reads as "my page didn't save" — so state it rather than leaving a
+        # caller to infer it.
+        tab_bar_visible: tabs.length > 1,
+        tabs: tabs.map do |tab|
+          {
+            name: tab["name"],
+            sections: (tab["sections"] || []).filter_map do |section_id|
+              if section_id == ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID
+                {
+                  header: nil,
+                  type: ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_TYPE,
+                }
+              else
+                section = sections_by_id[section_id]
+                next if section.nil?
+
+                {
+                  # The heading text rendered as an <h2> above the section, when the seller set one
+                  # and did not hide it. This is the field that answers "where is this heading coming
+                  # from?".
+                  header: section.hide_header? ? nil : section.header.presence,
+                  type: section.type,
+                }
+              end
+            end,
+          }
+        end,
+        editable_by_seller: true,
+        how_to_change: "The seller edits these in the dashboard under Settings > Profile. You have no endpoint for them — you can read this layout but not change it.",
       }
     )
   end

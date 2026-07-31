@@ -127,6 +127,87 @@ describe Payment do
     end
   end
 
+  describe "a terminal PayPal rejection" do
+    let(:compliant_creator) { create(:user, user_risk_state: "compliant") }
+    let(:payment) do
+      create(:payment, state: "processing", processor: PayoutProcessorType::PAYPAL,
+                       processor_fee_cents: 0, user: compliant_creator, payment_address: "seller@example.com")
+    end
+
+    it "emails the seller the reason and the fix" do
+      expect do
+        payment.mark_failed!("PAYPAL 3148")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+    end
+
+    it "emails only once per payout period" do
+      compliant_creator.update!(payout_date_of_last_paypal_terminal_failure_email: payment.payout_period_end_date)
+
+      expect do
+        payment.reload.mark_failed!("PAYPAL 3148")
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+    end
+
+    it "still emails when an unrelated payout-failure email already went out this period" do
+      compliant_creator.update!(payout_date_of_last_payment_failure_email: payment.payout_period_end_date)
+
+      expect do
+        payment.reload.mark_failed!("PAYPAL 3148")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+    end
+
+    it "records the failure even when the seller's record is invalid for unrelated reasons" do
+      compliant_creator.update_columns(name: "x" * 1_000)
+
+      expect do
+        payment.mark_failed!("PAYPAL 3148")
+      end.to have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed).with(payment.id)
+      expect(payment.reload.state).to eq("failed")
+    end
+
+    it "does not pause the whole account, so adding a bank account is enough to get paid" do
+      2.times do
+        create(:payment_failed, user: compliant_creator, payment_address: payment.payment_address,
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+      end
+
+      payment.mark_failed!("PAYPAL 3148")
+
+      expect(compliant_creator.reload.payouts_paused?).to eq(false)
+    end
+
+    it "still pauses the account after repeated retryable failures" do
+      2.times do
+        create(:payment_failed, user: compliant_creator, payment_address: payment.payment_address,
+                                failure_reason: "PAYPAL 3015", txn_id: nil, processor_fee_cents: nil)
+      end
+
+      payment.mark_failed!("PAYPAL 3015")
+
+      expect(compliant_creator.reload.payouts_paused?).to eq(true)
+    end
+
+    it "does not let a terminal rejection push later returned payouts over the pause threshold" do
+      payment.mark_failed!("PAYPAL 3148")
+      # PayPal payouts to an address with no account behind it sit unclaimed and are returned about
+      # 30 days later, so these rows can land well after the rejection that stopped the retries.
+      returned_payouts = 2.times.map do
+        create(:payment_unclaimed, user: compliant_creator, payment_address: payment.payment_address,
+                                   created_at: 1.day.from_now)
+      end
+
+      returned_payouts.each(&:mark_returned!)
+
+      expect(compliant_creator.reload.payouts_paused?).to eq(false)
+    end
+
+    it "does not email for a retryable PayPal rejection" do
+      expect do
+        payment.mark_failed!("PAYPAL 3015")
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
+    end
+  end
+
   describe "send_payout_failure_email" do
     let(:compliant_creator) { create(:user, user_risk_state: "compliant") }
     let(:payment) { create(:payment, state: "processing", processor: PayoutProcessorType::PAYPAL, processor_fee_cents: 0, failure_reason: "account_closed", user: compliant_creator) }
@@ -146,6 +227,36 @@ describe Payment do
       expect do
         payment.reload.send_payout_failure_email
       end.to_not have_enqueued_mail(ContactingCreatorMailer, :cannot_pay).with(payment.id)
+    end
+
+    it "does not send the payout failure email if failure_reason is debit_card_limit" do
+      # Both skipped reasons are mailed by the `processing => failed` callbacks, which see the reason
+      # now that the transition itself writes it. Without this arm the seller is mailed twice.
+      payment.failure_reason = Payment::FailureReason::DEBIT_CARD_LIMIT
+      payment.save!
+
+      expect do
+        payment.reload.send_payout_failure_email
+      end.to_not have_enqueued_mail(ContactingCreatorMailer, :cannot_pay).with(payment.id)
+    end
+  end
+
+  describe "send_payout_failure_email_best_effort" do
+    let(:compliant_creator) { create(:user, user_risk_state: "compliant") }
+    let(:payment) { create(:payment, state: "processing", processor: PayoutProcessorType::STRIPE, processor_fee_cents: 0, failure_reason: "account_closed", user: compliant_creator) }
+
+    it "leaves the user lockable after a real save failure so the reversal can still run" do
+      # A genuine validation failure, not a stubbed raise: `send_payout_failure_email` assigns
+      # `payout_date_of_last_payment_failure_email` and then calls `user.save!`, so the record is
+      # left dirty when the save is what raised.
+      allow(compliant_creator).to receive(:save!).and_raise(ActiveRecord::RecordInvalid.new(compliant_creator))
+      allow(payment).to receive(:user).and_return(compliant_creator)
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect { payment.send_payout_failure_email_best_effort }.to_not raise_error
+
+      expect(compliant_creator.has_changes_to_save?).to be(false)
+      expect { compliant_creator.with_lock { nil } }.to_not raise_error
     end
   end
 
@@ -375,6 +486,61 @@ describe Payment do
         expect(payment.failure_reason).to eq("account_closed")
         expect(StripePayoutProcessor).to have_received(:reverse_internal_transfer!).with(payment)
         expect(payment).to have_received(:send_payout_failure_email)
+      end
+
+      it "pauses payouts when the reversal fails, so nothing re-pays the returned balances" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_rev_fail", stripe_connect_account_id: "acct_rev_fail",
+                                   stripe_internal_transfer_id: "tr_rev_fail", created_at: 3.days.ago)
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_rev_fail", { stripe_account: "acct_rev_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!).and_raise(Stripe::APIConnectionError.new("Connection refused"))
+        allow(payment).to receive(:send_payout_failure_email)
+        allow(ErrorNotifier).to receive(:notify)
+
+        payment.send(:sync_with_stripe)
+
+        # SyncStuckPayoutsJob discards these errors, so the hold is the only thing standing between
+        # the seller's next scheduled batch and a second transfer of the same balances.
+        expect(payment.errors[:base]).to include("Connection refused")
+        expect(payment.user.reload.payouts_paused_internally?).to be(true)
+        expect(payment.user.payouts_paused_by).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(ErrorNotifier).to have_received(:notify)
+      end
+
+      it "still pauses payouts end to end when the failure email's real save raises" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_save_fail", stripe_connect_account_id: "acct_save_fail",
+                                   stripe_internal_transfer_id: "tr_save_fail", created_at: 3.days.ago)
+        # Fail only the notification's own `save!` — the one persisting
+        # `payout_date_of_last_payment_failure_email` — and let the hold's writes run for real.
+        # Stubbed on the class because `payment.with_lock` above clears the association cache, so the
+        # `User` object the notification dirties, and the hold then locks, does not exist yet here.
+        notified_key = "payout_date_of_last_payment_failure_email"
+        allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+          before, after = original.receiver.json_data_change || []
+          if after&.key?(notified_key) && before&.dig(notified_key) != after[notified_key]
+            raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock"
+          end
+
+          original.call(*args)
+        end
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_save_fail", { stripe_account: "acct_save_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!).and_raise(Stripe::APIConnectionError.new("Connection refused"))
+        allow(ErrorNotifier).to receive(:notify)
+
+        payment.send(:sync_with_stripe)
+
+        # A dirty seller used to crash the hold itself, which is the part that matters: the balances
+        # are already back to `unpaid`, so an unpaused seller gets paid the same money again.
+        seller = payment.user.reload
+        expect(seller.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(seller.comments.with_type_on_probation.last.content).to include("could not be accounted for")
+        expect(payment.errors[:base]).to include("Connection refused")
       end
 
       it "uses a default failure reason when no failure_code is present" do
@@ -884,6 +1050,12 @@ describe Payment do
       payment
     end
 
+    def failed_payout_with_reason(reason)
+      payment = create(:payment, user:, bank_account:, processor: PayoutProcessorType::STRIPE, state: "processing")
+      payment.mark_failed!(reason)
+      payment
+    end
+
     it "pauses payouts and flags the account once the consecutive failure limit is reached" do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
       expect(user.reload.payouts_paused?).to be(false)
@@ -911,6 +1083,43 @@ describe Payment do
 
       expect(user.reload.payouts_paused?).to be(false)
       expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a payout we failed ourselves via a processor rate limit" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      failed_payout_with_reason(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a payout that failed because Stripe was unreachable" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      failed_payout_with_reason(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "still pauses when the threshold is reached by non-transient failures alone" do
+      # The nil-reason rows are the point: most failures store nothing in failure_reason, and a
+      # `NOT IN` filter without the IS NULL arm drops them and disables this check entirely.
+      failed_payout_with_reason(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times { failed_payout }
+
+      expect(user.reload.payouts_paused_internally).to be(true)
+    end
+
+    it "keeps counting failures whose reason is set but not transient" do
+      # The IS NULL arm covers reason-less rows; this covers the other side of the OR, so the
+      # filter cannot be widened into excluding every reasoned failure without reddening here.
+      Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS.times do
+        failed_payout_with_reason(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+      end
+
+      expect(user.reload.payouts_paused_internally).to be(true)
     end
 
     it "counts only failures after the most recent completed payout to the bank account" do
