@@ -72,6 +72,14 @@ module PurchaseExportTestHelpers
   def totals_row
     CSV.parse(generate_csv).last
   end
+
+  # The gift tests only exercise the export's giftee indirection while the giftee itself stays out
+  # of scope. gift_receiver_purchase_successful is not in NON_GIFT_SUCCESS_STATES, so it does — but
+  # a fixture drifting back to "successful" puts the giftee in scope with the highest id, making it
+  # last_data_row and every assertion below read its own columns instead.
+  def assert_exported_row_is(purchase, row)
+    assert_equal csv_safe(purchase.external_id.to_s), field_value(row, "Purchase ID")
+  end
 end
 
 class PurchaseExportServiceTest < ActiveSupport::TestCase
@@ -161,6 +169,7 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
     create_gift(link: @product, gifter_purchase: @purchase, giftee_purchase:)
     create_product_review(purchase: giftee_purchase, rating: 5)
 
+    assert_exported_row_is @purchase, last_data_row
     assert_equal "5", field_value(last_data_row, "Rating")
   end
 
@@ -398,6 +407,7 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
 
     assert @purchase.license_key.blank?
     assert giftee_purchase.license_key.present?
+    assert_exported_row_is @purchase, last_data_row
     assert_equal giftee_purchase.license_key, field_value(last_data_row, "License Key")
   end
 
@@ -420,6 +430,7 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
     giftee_purchase.create_license!
     giftee_purchase.license.update!(uses: 3)
 
+    assert_exported_row_is @purchase, last_data_row
     assert_equal "3", field_value(last_data_row, "License Key Activation Count")
   end
 
