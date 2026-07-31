@@ -132,6 +132,9 @@ export default function Show() {
     form.data.dispute_evidence.refund_refusal_explanation !== "";
 
   const submitDisputeEvidence = () => {
+    // The submission is one-shot, so a click that beats the last upload would spend it on a
+    // partial packet. The buttons are already disabled while uploading; this is the backstop.
+    if (isUploading) return;
     setIsConfirming(false);
     const reasonForWinningText =
       reasonForWinningOption === "other"
@@ -387,7 +390,7 @@ export default function Show() {
       <CardContent>
         <Button
           color="primary"
-          disabled={!isInfoProvided || form.processing}
+          disabled={!isInfoProvided || isUploading || form.processing}
           onClick={() => setIsConfirming(true)}
           className="grow basis-0"
         >
@@ -407,7 +410,7 @@ export default function Show() {
         footer={
           <>
             <Button onClick={() => setIsConfirming(false)}>Cancel</Button>
-            <Button color="primary" onClick={submitDisputeEvidence}>
+            <Button color="primary" disabled={isUploading || form.processing} onClick={submitDisputeEvidence}>
               Submit evidence
             </Button>
           </>
