@@ -52,7 +52,7 @@ class OfferCodeDiscountComputingService
     # greedily, so iteration order decides which lines win a scarce discount.
     def links
       @_links ||= begin
-        permalinks = products.values.map { it[:permalink] }
+        permalinks = products.values.map { it[:permalink] }.uniq
         by_permalink = Link.visible
           .includes({ available_cross_sells: :product })
           .where(unique_permalink: permalinks)
