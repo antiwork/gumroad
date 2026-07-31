@@ -69,6 +69,166 @@ class PaypalPayoutProcessor
       return false
     end
 
+    # Stop re-sending a payout PayPal has permanently refused for this address.
+    #
+    # A retry-blocking rejection (see Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS)
+    # is a fact about the destination PayPal account that the seller cannot change from inside it:
+    # the country on that account's address cannot receive PayPal payments at all. Every weekly
+    # batch that re-attempted it got the same rejection back. Rejections the seller CAN repair in
+    # place are deliberately still retried — they get the same explanation, just not the block.
+    # Sellers sat through dozens of identical failures with their balance frozen
+    # and nothing but a generic "payouts were paused" note to go on (gumroad-private#1478).
+    #
+    # Deliberately no note is written here. The failure that ended the retries already recorded a
+    # seller-facing note naming PayPal and the fix, and a weekly internal note would add another
+    # row to the hundreds of automated comments these accounts already carry without telling the
+    # seller anything new. Sellers who were already stuck before this check existed have no such
+    # failure to have written one, so Onetime::ExplainTerminalPaypalPayoutFailures backfilled the
+    # note for them.
+    #
+    # Staying silent is not on its own enough to keep that explanation in front of the seller: the
+    # Payouts banner shows the newest note the seller may see, and a held account also gets a
+    # weekly "payouts were paused" note from Payouts.is_user_payable. That note is suppressed from
+    # the seller's view while the explanation is the newest one they can see, which is what keeps
+    # the explanation from being buried.
+    #
+    # Three things lift the block on their own, so this is not a dead end: adding a bank account
+    # (handled at the top of this method, and the fix we point sellers at), switching to a
+    # different PayPal address (the check is keyed on the address, so a new one has no terminal
+    # failure against it), and a support-issued payout from admin, which is how we pay someone
+    # whose PayPal account has genuinely been fixed in place.
+    if !from_admin && terminal_failure_for_payout_email?(user, payout_email)
+      # Re-explain if the seller can no longer see the explanation.
+      #
+      # Silence assumes the note written by the failing payout is still on their Payouts page, and
+      # for most sellers it is. But a note written for a different, true blocker can legitimately
+      # take its place — "the account is under review", say, which Payouts.is_user_payable writes
+      # seller-visible every week for a flagged account — and once that blocker clears, this path
+      # is reached and says nothing, leaving the seller looking at a note about a review that is
+      # over with no idea their PayPal account is what is holding the money now. Same for a seller
+      # who was suspended when the one-time backfill ran and has since been reinstated: they never
+      # had an explanation at all.
+      #
+      # So the explanation is restored, not repeated: nothing is written while one is already the
+      # newest note they can see, which is the ordinary case and keeps this off the weekly-note
+      # treadmill these accounts are already buried under.
+      ensure_terminal_failure_explanation_visible(user) if add_comment
+
+      return false
+    end
+
+    true
+  end
+
+  # Whether PayPal has already refused a payout to this address for this seller with one of
+  # `reasons`. Scoped to failures since the seller's last completed payout to the same address, so
+  # an account that was paid successfully after the rejection is not held back by the old row.
+  #
+  # The caller chooses the code set because the two questions differ. Refusing to retry is asked
+  # about RETRY_BLOCKING_PAYPAL_FAILURE_REASONS only, since that is the claim needing proof the
+  # seller cannot repair the account. Everything to do with EXPLAINING the block — the note, the
+  # email, and not also pausing the account on top of it — is asked about the wider
+  # EXPLAINED_PAYPAL_FAILURE_REASONS, because a seller we still retry deserves the explanation just
+  # as much as one we have given up on.
+  def self.terminal_failure_for_payout_email?(user, payout_email, reasons: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+    payouts_to_address = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email)
+    terminal_failures = payouts_to_address.where(
+      state: Payment::FAILED,
+      failure_reason: reasons
+    )
+    # Check for a rejection before looking up the last completed payout. Almost every seller in the
+    # weekly payout walk has never had one, and this method runs for each of them — the walk has
+    # twice been slow enough to cause problems (gumroad-private#1021, #1284), so the second query
+    # only runs for the rare seller who actually has a rejection on record.
+    return false unless terminal_failures.exists?
+
+    last_completed_at = payouts_to_address.completed.maximum(:created_at)
+    return true if last_completed_at.nil?
+
+    terminal_failures.where("created_at > ?", last_completed_at).exists?
+  end
+
+  # Whether this seller's payouts are stopped right now by a permanent PayPal refusal.
+  #
+  # The same question as the block above, asked about the seller rather than one address, for
+  # callers outside the PayPal payout path: the payout pipeline uses it to decide whether the
+  # explanation note is still the seller's live situation, and the one-time backfill uses it to
+  # decide who to write that note to. Keeping it in one place is the point — a second copy would
+  # drift from the block itself, and then we would be telling sellers things the code no longer
+  # does.
+  #
+  # A seller with a bank account on file is not stopped by this, even with a PayPal address still
+  # on record: the top of is_user_payable pays them by bank instead. Nor is a seller on Stripe
+  # Connect, for the same reason one step further down — is_user_payable hands them to
+  # StripePayoutProcessor, which pays a connected non-Brazilian account with no bank account at
+  # all. Stripe payouts carry no payment_address, so they never clear the address-keyed rejection
+  # below; without this check a seller paid weekly through Stripe Connect would still look stuck.
+  #
+  # `reasons` is which rejections count, and the default is the retry-blocking set because the
+  # primary caller asks "are this seller's payouts stopped". Callers deciding what to TELL the
+  # seller pass the wider explained set — see terminal_failure_for_payout_email? for why the two
+  # questions differ.
+  def self.terminal_failure_blocking_payouts?(user, reasons: Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_REASONS)
+    return false if user.active_bank_account.present?
+    return false if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
+
+    payout_email = user.paypal_payout_email
+    return false if payout_email.blank?
+
+    terminal_failure_for_payout_email?(user, payout_email, reasons:)
+  end
+
+  # The rejection the seller has to act on, out of the ones standing against the address on file.
+  #
+  # Newest is the wrong pick when the rejections disagree with each other. 3148 stops the retries
+  # and 14159 does not, so an address carrying both is held by the 3148 whichever of the two came
+  # last. Quoting the newer 14159 would send the seller to add US dollars to an account whose
+  # country cannot receive PayPal payments at all, and this processor would go on refusing the
+  # payout after they had done it — the same dead end this change exists to remove, just better
+  # worded. So a retry-blocking rejection outranks a newer one that is not.
+  #
+  # Rejections from before a payout that later succeeded are dropped: they are history rather than
+  # the seller's situation. If that leaves nothing, the whole set is used instead, so a caller that
+  # has already decided the seller is blocked cannot end up writing no explanation at all.
+  def self.rejection_to_explain(user, payout_email = user.paypal_payout_email)
+    return nil if payout_email.blank?
+
+    payouts_to_address = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email)
+    failures = payouts_to_address
+                 .where(state: Payment::FAILED, failure_reason: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS)
+                 .order(created_at: :desc, id: :desc)
+
+    last_completed_at = payouts_to_address.completed.maximum(:created_at)
+    standing = last_completed_at.nil? ? failures : failures.where("created_at > ?", last_completed_at)
+    candidates = standing.to_a.presence || failures.to_a
+
+    candidates.find(&:terminal_paypal_failure?) || candidates.first
+  end
+
+  # Put the terminal-PayPal explanation back in front of the seller if they can no longer see it.
+  #
+  # Called from two places that both leave a blocked seller with nothing to read otherwise: this
+  # processor's block above, and the weekly "payouts were paused" note in Payouts.is_user_payable
+  # for a seller who is also under an internal hold. That second caller matters because the hold is
+  # checked first and returns before any processor runs, so a held seller never reaches the block
+  # here — and holds are common in this population, since dozens of failed payouts trip the
+  # automatic one (Payment#pause_payouts_after_repeated_failures).
+  #
+  # Writes nothing when the explanation of THIS rejection is already the newest note the seller can
+  # see, so a seller who has one keeps the one they have rather than collecting a fresh copy every
+  # payout run. Deliberately not "already has any terminal-PayPal explanation": a seller rejected
+  # on one PayPal address and now blocked on another carries an explanation naming the address they
+  # abandoned, and leaving that as the only thing they can read means a stale date and possibly the
+  # wrong restriction of the two. Returns true when a note was written.
+  def self.ensure_terminal_failure_explanation_visible(user)
+    rejection = rejection_to_explain(user)
+    return false if rejection.nil?
+
+    return false if Payment::FailureReason.terminal_paypal_explanation_note_for?(
+      user.latest_seller_visible_payout_note&.content, rejection
+    )
+
+    user.add_payout_note(content: rejection.terminal_paypal_failure_seller_note, seller_visible: true)
     true
   end
 
@@ -326,6 +486,12 @@ class PaypalPayoutProcessor
 
       split_payment_info["txn_id"] = paypal_event["masspay_txn_id"]
       split_payment_info["state"] = paypal_event["status"].try(:downcase)
+      # Keep the rejection code PayPal sent for this part. Without it a split payout that PayPal
+      # refuses is marked failed with no reason at all, which means none of the failure-reason
+      # handling applies to it — no support-facing solution, and no way to tell a permanent
+      # rejection from a retryable one, so a doomed split payout would be re-attempted every week
+      # forever (gumroad-private#1478).
+      split_payment_info["reason_code"] = paypal_event["reason_code"] if paypal_event["reason_code"].present?
       payment.processor_fee_cents += 100 * paypal_event["mc_fee"].to_f if paypal_event["mc_fee"]
       payment.save!
 
@@ -350,11 +516,38 @@ class PaypalPayoutProcessor
       payment.txn_id = SPLIT_PAYMENT_TXN_ID
       payment.mark_completed!
     elsif all_split_payments_failed
-      payment.mark_failed!
+      payment.mark_failed!(split_payment_failure_reason(payment))
     elsif no_split_payments_are_processing
       # This means that no split payments are in the processing state. It also means that some of them have failed and some have succeeded.
       ErrorNotifier.notify("Payment id #{payment.id} was split and some of the split payments failed and some succeeded")
     end
+  end
+
+  # Why the whole split payout failed, in the same "PAYPAL <code>" form a single payout records.
+  #
+  # Every part of a split payout goes to the same PayPal address, so when they all fail they nearly
+  # always fail for the same reason. Taking one code is enough to classify the payout, and it is
+  # what lets a permanently-refused split payout stop retrying like any other.
+  #
+  # Only codes PayPal actually sent are considered: a part with no code contributes nothing rather
+  # than forcing the generic reason, so one part reporting 3148 classifies the payout even if a
+  # sibling part reported nothing. That is deliberate — the parts share one destination, so a
+  # restriction on that account explains all of them.
+  #
+  # A retry-blocking code wins over any other code for the same reason, and this is the case worth
+  # being careful about: a part rejected for the address's country (3148) and a part rejected for
+  # the account's currencies (14159) are both true, but only the first says re-sending is pointless.
+  # Choosing the generic reason there would leave a permanently unreachable address collecting a
+  # weekly rejection forever. Falling back to the generic reason is only right when no code claims
+  # the destination is unusable — then no single code describes the whole payout.
+  def self.split_payment_failure_reason(payment)
+    reasons = payment.split_payments_info
+                     .filter_map { |split_payment_info| split_payment_info["reason_code"] }
+                     .uniq
+                     .map { |reason_code| "PAYPAL #{reason_code}" }
+
+    reasons.find { |reason| Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS.include?(reason) } ||
+      (reasons.one? ? reasons.first : Payment::FailureReason::PAYPAL_PAYOUT_FAILED)
   end
 
   def self.get_latest_payment_state_from_paypal(amount_cents, transaction_id, start_date, current_state)

@@ -661,6 +661,8 @@ class LinksController < ApplicationController
       end
       return render json: { error_message: }, status: :unprocessable_entity
     end
+    report_unapplied_deletions!
+
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
     end.map(&:code)
@@ -1350,6 +1352,91 @@ class LinksController < ApplicationController
       count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
     end
 
+    # A save that named deletions and applied fewer of them than it named is a
+    # success response the seller cannot tell apart from a real one
+    # (gumroad-private#1508). Under the save contract an unstated removal is a
+    # no-op by design, so the failure mode that used to be a wrong deletion is
+    # now a silent non-deletion: 200, nothing gone, nothing logged.
+    #
+    # Runs only on the success path, after the transaction committed, and only
+    # when the client actually stated deletions — so it costs one reload plus
+    # two id reads on the small minority of saves that delete something, and
+    # nothing at all on the rest.
+    #
+    # Never raises. This is a report, not a guard: the write already happened
+    # and failing the response here would tell the seller a committed save
+    # failed.
+    def report_unapplied_deletions!
+      contract = product_save_contract
+      return unless contract.enforced?
+      return unless contract.requested_deletion?
+
+      requested_variants = contract.deleted_ids(:variants)
+      requested_pages = contract.deleted_ids(:rich_content)
+      return if requested_variants.empty? && requested_pages.empty?
+
+      @product.reload
+      surviving_variants = surviving_variant_ids(requested_variants)
+      surviving_pages = surviving_rich_content_ids(requested_pages)
+      return if surviving_variants.empty? && surviving_pages.empty?
+
+      ErrorNotifier.notify(
+        "Product save applied fewer deletions than it named",
+        product_id: @product.id,
+        seller_id: @product.user_id,
+        request_id: request.request_id,
+        requested_variant_ids: requested_variants,
+        surviving_variant_ids: surviving_variants,
+        requested_rich_content_ids: requested_pages,
+        surviving_rich_content_ids: surviving_pages,
+      )
+    rescue StandardError => e
+      ErrorNotifier.notify(e)
+    end
+
+    # Survivors are looked up by the requested id rather than by walking the
+    # product's live parents. Deleting a grouping does not soft-delete the
+    # versions inside it, so a version (or its page) whose grouping went away in
+    # this same save is still alive and still unapplied, while being unreachable
+    # through `current_base_variants` — exactly the rows this report exists to
+    # name.
+    def surviving_variant_ids(requested_ids)
+      return [] if requested_ids.empty?
+
+      BaseVariant.alive.by_external_ids(requested_ids)
+        .select { variant_belongs_to_product?(_1) }
+        .map(&:external_id)
+    end
+
+    # A page under a version this save DID delete is not a survivor: version
+    # deletion hands its pages to DeleteProductRichContentWorker, so the row is
+    # still alive at commit by design and reporting it would fire on every
+    # successful version removal.
+    def surviving_rich_content_ids(requested_ids)
+      return [] if requested_ids.empty?
+
+      RichContent.alive.by_external_ids(requested_ids)
+        .select { rich_content_survived?(_1) }
+        .map(&:external_id)
+    end
+
+    # A version reaches the product either directly (SKUs) or through its
+    # grouping, and the grouping may itself be soft-deleted by this save —
+    # `belongs_to` is unscoped, so the link is still readable.
+    def variant_belongs_to_product?(variant)
+      return true if variant.link_id == @product.id
+
+      variant.try(:variant_category)&.link_id == @product.id
+    end
+
+    def rich_content_survived?(page)
+      entity = page.entity
+      return entity.id == @product.id if entity.is_a?(Link)
+      return variant_belongs_to_product?(entity) && entity.alive? if entity.is_a?(BaseVariant)
+
+      false
+    end
+
     # Accumulates client id → canonical server id for records this save
     # creates (pages and variants submitted under client-generated ids).
     # Returned to the editor so its next save addresses the created records
@@ -1949,7 +2036,7 @@ class LinksController < ApplicationController
               id="gumroad-landing-frame"
               src="#{iframe_src}"
               title="#{title}"
-              sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              sandbox="#{CUSTOM_HTML_SANDBOX}"
             ></iframe>
             <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
               var frame = document.getElementById("gumroad-landing-frame");

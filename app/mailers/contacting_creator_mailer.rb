@@ -152,7 +152,11 @@ class ContactingCreatorMailer < ApplicationMailer
 
   # The three rejection kinds need opposite advice — correct the value, use a different account,
   # or wait — so the kind has to reach the template rather than being flattened to one message.
-  def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil)
+  #
+  # bank_account_id names the row Stripe actually refused. The mail renders asynchronously, and a
+  # seller who re-saves while the rejection is in flight would otherwise be shown their newest
+  # values under "the details we sent" — values that were never sent (gumroad-private#1550).
+  def invalid_bank_account(user_id, rejection_kind = nil, stripe_error_message = nil, bank_account_id = nil)
     @seller = User.find(user_id)
     @format_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT
     # A block-listed account is the third case, and the only one where re-entering the SAME
@@ -162,6 +166,15 @@ class ContactingCreatorMailer < ApplicationMailer
     @account_blocked = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED
     @terminal_rejected = rejection_kind.to_s == StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL
     @expected_format_hint = expected_bank_code_format_hint(stripe_error_message) if @format_rejected
+    # Gated on the message rather than on "no kind was classified": an unclassified rejection is
+    # not necessarily a directory miss (a declined debit card and a bank-country mismatch both
+    # arrive here with no kind), and quoting routing values at those sellers points them at a
+    # field that had nothing to do with the failure.
+    if StripeMerchantAccountManager.bank_details_directory_miss_message?(stripe_error_message)
+      @directory_miss_detail = StripeMerchantAccountManager.bank_directory_miss_detail(
+        rejected_bank_account(bank_account_id)
+      )
+    end
     @subject = if @account_blocked
       "Please add a different bank account for payouts."
     elsif @format_rejected
@@ -184,6 +197,53 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = @payment.user
     @subject = "We were unable to pay you."
     @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
+  end
+
+  # PayPal refused a payout for a reason about the seller's PayPal account rather than the attempt:
+  # their country cannot receive PayPal payments (3148), or the account cannot receive US dollars
+  # (14159). Either way nothing will change until they act, so this email says what is wrong and
+  # what to change — otherwise their balance just sits there.
+  #
+  # The two cases differ in what is true about the retries, and the copy has to match: 3148 stops
+  # them, 14159 does not (see Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).
+  def paypal_payout_permanently_failed(payment_id)
+    @payment = Payment.find(payment_id)
+    @seller = @payment.user
+    @subject = "Your PayPal account can't receive your payout."
+    @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
+    @reason = Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(
+      @payment.failure_reason,
+      # Reached by the mailer preview, which renders against whatever payout rows the local
+      # database happens to have. It is also the safety net if this mailer is ever enqueued for a
+      # payment whose failure_reason is not one we explain — the copy would then name the wrong
+      # restriction, so keep the caller gated on Payment#explained_paypal_failure?.
+      Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
+    )
+    # Never claim the retries have stopped unless they have. A seller rejected for the currency
+    # keeps being paid on schedule, and telling them otherwise would be false and would push them
+    # to change accounts when they do not have to.
+    @retries_stopped = @payment.terminal_paypal_failure?
+    # ...and never promise a retry that a pause is already stopping. Payouts.is_user_payable exits
+    # on the broader payouts_paused? long before any processor runs, so for a paused seller "we'll
+    # keep trying on your usual payout schedule" is false and contradicts the pause this same email
+    # goes on to describe. Covers both a hold we placed and the seller's own toggle.
+    @retries_paused_by_pause = !@retries_stopped && @seller.payouts_paused?
+    # And when they can clear it on the account they already have, lead with that fix.
+    @can_receive_us_dollars_on_same_account = @payment.repairable_in_place_paypal_failure?
+    # Ask the seller to reply rather than promising the next payout date, because an admin or
+    # system hold outlives the payout-method fix this email prescribes and only support can lift
+    # it. A hold Stripe placed is lifted automatically when the seller changes their payout details
+    # (UpdatePayoutMethod), so for them the ask is merely over-cautious rather than wrong. A seller
+    # who paused their own payouts is pointed at their own toggle instead of at support. Both flags
+    # are read independently because both can be on: the template names each one it finds, since
+    # clearing only the hold still leaves the seller's own pause stopping the money, and they
+    # cannot be told plainly to expect the next payout date either — the payout gate checks the
+    # broader payouts_paused? and skips them while either is on.
+    @payouts_on_hold = @seller.payouts_paused_internally?
+    @payouts_paused_by_seller = @seller.payouts_paused_by_user?
+    # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
+    # PayPal-only countries, where "add a bank account" is advice they cannot act on.
+    @can_use_bank_account = @seller.can_setup_bank_payouts?
   end
 
   def flagged_for_explicit_nsfw_tos_violation(user_id)
@@ -606,6 +666,16 @@ class ContactingCreatorMailer < ApplicationMailer
     # seller as the format their bank expects. Anything implausibly long isn't the terse format
     # sentence we're after either, so drop it rather than pasting a wall of text into the email.
     MAX_FORMAT_HINT_LENGTH = 200
+
+    # The row Stripe refused, and only that row. An unnamed id (a job enqueued before this
+    # argument existed) resolves to nothing rather than to the active account: the seller may have
+    # saved a replacement since, and quoting those values as "the details we sent" points them at
+    # a row Stripe never saw. No row means no quoted values, which is the pre-existing copy.
+    def rejected_bank_account(bank_account_id)
+      return if bank_account_id.blank?
+
+      @seller.bank_accounts.find_by(id: bank_account_id)
+    end
 
     def expected_bank_code_format_hint(stripe_error_message)
       message = stripe_error_message.to_s

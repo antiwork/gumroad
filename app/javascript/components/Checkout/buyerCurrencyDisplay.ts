@@ -30,6 +30,7 @@ export type CheckoutBuyerCurrencyDisplay = {
   // each row itself: independent per-row rounding can visibly disagree with the locked
   // total by a cent, and with the amounts the charge later persists for the receipt.
   presentmentTotalCents: number;
+  chargePresentmentTotalCents: number;
   lineAllocations: BuyerCurrencyLineAllocation[];
 };
 
@@ -90,6 +91,7 @@ export const getCheckoutBuyerCurrencyDisplay = (
     rate: quote.rate,
     subunitToUnit: quote.subunit_to_unit,
     presentmentTotalCents: quote.presentment_total_cents,
+    chargePresentmentTotalCents: quote.charge_presentment_total_cents ?? quote.presentment_total_cents,
     lineAllocations,
   };
 };

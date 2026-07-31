@@ -142,6 +142,14 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
+  it "allows products in a preorder state when the later-charge ramp is enabled" do
+    Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+    product.update!(is_in_preorder_state: true)
+
+    expect(decision).to be_eligible
+    expect(decision.fallback_reason).to be_nil
+  end
+
   it "falls back for free-trial products" do
     free_trial_product = create(:membership_product, :with_free_trial_enabled, user: seller, price_currency_type: Currency::USD)
     purchase.update!(link: free_trial_product)
@@ -150,13 +158,13 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
-  it "falls back for products offering an installment plan" do
+  it "allows pay-in-full purchases of products offering an installment plan" do
     installment_product = create(:product, user: seller, price_cents: 9_00, price_currency_type: Currency::USD)
     create(:product_installment_plan, link: installment_product, number_of_installments: 3)
     purchase.update!(link: installment_product.reload)
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:unsupported_product_type)
+    expect(decision).to be_eligible
+    expect(decision.fallback_reason).to be_nil
   end
 
   it "falls back for buyer currencies Gumroad stores in different minor units than Stripe charges" do

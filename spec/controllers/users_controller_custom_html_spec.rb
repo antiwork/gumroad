@@ -25,7 +25,7 @@ describe UsersController, :vcr, type: :controller do
 
     it "sandboxes the iframe without same-origin or top-navigation" do
       get :show
-      expect(response.body).to include(%(sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"))
+      expect(response.body).to include(%(sandbox="#{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}"))
       expect(response.body).not_to include("allow-same-origin")
       expect(response.body).not_to include("allow-top-navigation")
     end
@@ -88,7 +88,7 @@ describe UsersController, :vcr, type: :controller do
     it "applies the strict CSP and iframe-friendly response headers" do
       get :landing_iframe_content
       expect(response.headers["Content-Security-Policy"]).to eq(CUSTOM_HTML_CSP)
-      expect(response.headers["Content-Security-Policy"]).to include("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox")
+      expect(response.headers["Content-Security-Policy"]).to include("sandbox #{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}")
       expect(response.headers["Content-Security-Policy"]).not_to include("allow-same-origin")
       expect(response.headers["Content-Security-Policy"]).not_to include("allow-top-navigation")
       expect(response.headers["X-Frame-Options"]).to eq("SAMEORIGIN")

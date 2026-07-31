@@ -19,6 +19,12 @@ class Payouts
   # Delay added per slice when fanning slices out to their own jobs, so the whole cohort's
   # payout jobs don't hit the payout processors at once. See .enqueue_user_slices.
   SLICE_ENQUEUE_STAGGER = 10.seconds
+  # Recognises the weekly "payouts were paused" note this class writes, whatever the payout date or
+  # pause source in it. Used to avoid writing another one when the newest note already is one.
+  PAUSED_PAYOUT_NOTE_REGEX = /\APayout on .+ was skipped because payouts on the account were paused by the .+\.\z/
+  # Same idea for the daily "not eligible for instant payouts" note below: recognise one this class
+  # already wrote, whatever payout date it names.
+  INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX = /\APayout on .+ was skipped because the account is not eligible for instant payouts\.\z/
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -42,8 +48,106 @@ class Payouts
     end
 
     if user.payouts_paused?
-      payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}.") if add_comment
+      if add_comment
+        payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
+        content = "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}."
+
+        # Don't let this weekly note bury the terminal-PayPal explanation.
+        #
+        # The Payouts banner shows only the newest note the seller is allowed to see. A seller
+        # whose PayPal account can never receive the money is told so once — by the payout that
+        # failed, or by the one-time backfill for sellers who were already stuck — and that note
+        # is the only thing telling them what to actually do. Written seller-visible every week,
+        # this note would replace it within one payout cycle and put them back to reading
+        # "payouts were paused by the system", which is exactly the dead end gumroad-private#1478
+        # exists to remove. Support gets one standing note either way; repeats are skipped (see
+        # the dedup below).
+        #
+        # Only while that explanation is still true of the account, and only for a hold we placed.
+        # Hiding a pause note is taking information away from the seller, so it is tied to the live
+        # PayPal block rather than to the wording of an old note: a seller who has since fixed their
+        # PayPal account, or been paid, still carries the explanation as their newest visible note,
+        # and keying only on that text would hide every future pause note from them — including
+        # pauses placed for reasons that have nothing to do with PayPal.
+        #
+        # A seller who paused their own payouts in settings is excluded for the opposite reason:
+        # for them the weekly note naming that switch IS the actionable message, and the
+        # explanation they would see instead had its next-step wording chosen when it was written,
+        # so it can be promising a payout date that their own pause now prevents. A seller carrying
+        # BOTH pauses falls in with the hold here, which costs them nothing: the weekly note they
+        # lose names only the internal source (User#payouts_paused_by_source), and the explanation
+        # kept in its place names both pauses.
+        #
+        # The liveness check costs a few queries, and it runs for every internally-held seller in
+        # the walk rather than only the PayPal-blocked ones, because both branches below need the
+        # answer. Measured on production in July 2026: 3,989 of the 240,341 sellers holding an
+        # unpaid balance are held internally, so 1.7% of the walk pays for it, and the queries are
+        # cheap existence checks. That is not the shape that caused the walk's past latency
+        # incidents (#1021, #1284), which were per-seller work across the whole cohort.
+        # The WIDER explained set, not the retry-blocking one. This variable only ever decides what
+        # the seller gets to read, and a seller rejected for a currency PayPal still lets them add
+        # (14159, which we deliberately keep retrying) is just as much in the dark as one we have
+        # given up retrying — arguably more so, since their payouts keep failing weekly. Using the
+        # narrow set here would leave exactly those sellers reading "payouts were paused by the
+        # system" with nothing naming PayPal, which is the gumroad-private#1478 dead end.
+        terminal_paypal_block = user.payouts_paused_internally? &&
+                                PaypalPayoutProcessor.terminal_failure_blocking_payouts?(
+                                  user, reasons: Payment::FailureReason::EXPLAINED_PAYPAL_FAILURE_REASONS
+                                )
+
+        # Make sure the seller can read an explanation of the block they are under NOW, before
+        # deciding anything about this week's pause note.
+        #
+        # This runs first because "can the seller see an explanation of THIS rejection" is a
+        # narrower question than "can the seller see an explanation at all", and only the narrow one
+        # is safe to skip a restore on. A seller rejected on one PayPal address, who switched to
+        # another and was rejected again, carries an explanation naming the address they abandoned:
+        # a payout date that is not the one that stopped their money, and — since the two rejections
+        # say different things — possibly the wrong restriction. Asking the broad question first
+        # would count that stale note as an explanation and never reach the restore, and because a
+        # held seller never reaches PaypalPayoutProcessor's own re-explain (the hold is checked
+        # here, before any processor runs), nothing else would ever correct it.
+        #
+        # Writes nothing in the ordinary case: PaypalPayoutProcessor.ensure_terminal_failure_
+        # explanation_visible returns false when the explanation of the current rejection is
+        # already the newest note the seller can see.
+        #
+        # A held seller reaches this every week and would otherwise never be told. Holds are the
+        # norm in this population, since dozens of failed payouts trip the automatic one. Measured
+        # on production in July 2026, 24 sellers are simultaneously held and carrying a terminal
+        # PayPal rejection, 19 of them holding $5,020.87 in unpaid balance between them. Without
+        # this, a seller whose explanation was buried by another blocker's note (an account under
+        # review, say) stays permanently in the gumroad-private#1478 dead end: they read "payouts
+        # were paused by the system" every week, with nothing telling them PayPal is what stopped
+        # the money, and so no reason to contact us. Same for anyone who was suspended when the
+        # one-time backfill ran and has since been reinstated.
+        explanation_restored = terminal_paypal_block &&
+                               PaypalPayoutProcessor.ensure_terminal_failure_explanation_visible(user)
+
+        # Whether to hide this week's pause note. Deliberately the BROAD question — any
+        # terminal-PayPal explanation the seller is reading answers "would this note bury something
+        # more useful than itself", which is all this decides.
+        keep_explanation_visible =
+          explanation_restored ||
+          (terminal_paypal_block &&
+            Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content))
+
+        # Don't stack identical hidden notes. Suppressed or not, each run adds a payout_note row,
+        # and both the note lookups and the Payouts banner only scan back
+        # PayoutNoteVisibility::MAX_NOTES_SCANNED notes — so a seller on daily payouts would push
+        # the explanation out of that window within a month, at which point the lookups return nil
+        # and the suppression disarms itself. Skipping the repeat also spares these accounts, which
+        # already carry hundreds of automated comments, one row per payout run.
+        #
+        # Not skipped on the run that just restored the explanation: the pause note above it is
+        # what makes the restored note the newest visible one, and support still gets its standing
+        # record. From the next run on this settles into the ordinary suppressed-and-deduped state.
+        if keep_explanation_visible && !explanation_restored
+          return false if newest_note_is_hidden_repeat?(user, PAUSED_PAYOUT_NOTE_REGEX)
+        end
+
+        user.add_payout_note(content:, seller_visible: !keep_explanation_visible)
+      end
       return false
     end
 
@@ -59,7 +163,36 @@ class Payouts
 
     if payout_type == Payouts::PAYOUT_TYPE_INSTANT
       if !user.instant_payouts_supported?
-        user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts.") if add_comment
+        # Recorded for support only when the seller is currently reading the terminal-PayPal
+        # explanation. This note repeats on every daily run, so for a seller on daily payouts whose
+        # PayPal account can never receive the money it would bury the one note telling them why —
+        # the same burial the weekly pause note is suppressed for above. Instant payouts are not
+        # what stopped their money, so the explanation is the more useful of the two to show.
+        #
+        # Tied to the live PayPal block, not just to the wording of the note the seller happens to
+        # be reading, for the same reason the weekly pause note is: a seller who has since fixed
+        # their PayPal account still carries the old explanation as their newest visible note, and
+        # hiding today's note from them would leave a stale explanation on their page as the only
+        # thing they can read.
+        if add_comment
+          content = "Payout on #{payout_date} was skipped because the account is not eligible for instant payouts."
+          explanation_visible =
+            Payment::FailureReason.terminal_paypal_explanation_note?(user.latest_seller_visible_payout_note&.content) &&
+            PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user)
+
+          # Don't stack identical hidden notes. Suppressed or not, every daily run adds a
+          # payout_note row, and both the lookup above and the Payouts banner only scan back
+          # PayoutNoteVisibility::MAX_NOTES_SCANNED notes — so within a month of daily runs these
+          # rows would push the explanation out of the window, the lookup would return nil, and
+          # this note would go back to being written seller-visible, re-burying the explanation the
+          # suppression exists to protect. Skipping the repeat keeps that from happening at all,
+          # and spares accounts that already carry hundreds of automated comments one row a day.
+          if explanation_visible
+            return false if newest_note_is_hidden_repeat?(user, INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX)
+          end
+
+          user.add_payout_note(content:, seller_visible: !explanation_visible)
+        end
         return false
       end
 
@@ -76,6 +209,24 @@ class Payouts
       ::PayoutProcessorType.get(payout_processor_type).is_user_payable(user, amount_payable, add_comment:, from_admin:, payout_type:)
     end
   end
+
+  # True when the newest payout note on the account is already a hidden note of the given shape,
+  # i.e. one this class wrote and suppressed on an earlier run of the same repeating note.
+  #
+  # Both places that suppress a repeating note use this. It has to read the same rows the
+  # "can the seller see an explanation" lookup reads, or the two can disagree about which note is
+  # newest and the suppression will keep writing rows it meant to skip — so both go through
+  # User#latest_payout_note / #latest_seller_visible_payout_note rather than an inline scope.
+  #
+  # Shape rather than exact text, because these notes embed their own payout date and so are never
+  # byte-identical between runs.
+  def self.newest_note_is_hidden_repeat?(user, note_regex)
+    newest_note = user.latest_payout_note
+    newest_note.present? &&
+      !PayoutNoteVisibility.seller_visible?(newest_note) &&
+      newest_note.content.to_s.match?(note_regex)
+  end
+  private_class_method :newest_note_is_hidden_repeat?
 
   def self.add_below_minimum_payout_note(user, payout_date, account_balance)
     current_balance = user.formatted_dollar_amount(account_balance)

@@ -9839,7 +9839,7 @@ describe StripeMerchantAccountManager, :vcr do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number")
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, "Invalid account number", user.active_bank_account.id)
         end
       end
 
@@ -9853,7 +9853,7 @@ describe StripeMerchantAccountManager, :vcr do
           expect do
             subject.update_bank_account(user, passphrase: "1234")
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.")
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "You cannot use this bank account because previous attempts to deliver payouts to this account have failed.", user.active_bank_account.id)
         end
       end
 
@@ -9869,7 +9869,7 @@ describe StripeMerchantAccountManager, :vcr do
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message, user.active_bank_account.id)
           expect(result).to eq(:invalid_bank_account)
         end
       end
@@ -9886,7 +9886,7 @@ describe StripeMerchantAccountManager, :vcr do
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
           end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, error_message, user.active_bank_account.id)
           expect(result).to eq(:invalid_bank_account)
         end
       end
@@ -9907,7 +9907,7 @@ describe StripeMerchantAccountManager, :vcr do
           result = nil
           expect do
             result = subject.update_bank_account(user, passphrase: "1234")
-          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, described_class::BANK_REJECTION_KIND_BLOCKED, error_message)
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account).with(user.id, described_class::BANK_REJECTION_KIND_BLOCKED, error_message, user.active_bank_account.id)
           expect(result).to eq(:invalid_bank_account)
         end
 

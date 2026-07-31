@@ -11,13 +11,29 @@ class UserComplianceInfo < ApplicationRecord
   stripped_fields :first_name, :last_name, :street_address, :city, :zip_code, :business_name, :business_street_address, :business_city, :business_zip_code, on: :create
 
   MINIMUM_DATE_OF_BIRTH_AGE = 13
+  # Below this, our payment partner will not verify the account holder on their own and requires a
+  # legal guardian on the account instead. See Guardian.
+  GUARDIAN_REQUIRED_BELOW_AGE = 18
+  # Countries where our payment partner supports a legal guardian on a minor's payout account.
+  # Stripe documents the guardian requirement for US accounts only and does not publish a wider
+  # list, so this starts as the US alone and grows as each country is confirmed.
+  GUARDIAN_SUPPORTED_COUNTRY_CODES = %w[US].freeze
   KANA_NAME_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\s\u3000\-.]*\z/
   KANA_ADDRESS_REGEX = /\A[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F\p{Latin}\d\s\u3000\-.]*\z/
   HAS_KATAKANA = /[\p{In_Katakana}\p{In_Katakana_Phonetic_Extensions}\uFF65-\uFF9F]/
   ROMAJI_REGEX = /\A[^\p{Han}\p{Hiragana}\p{Katakana}]*\z/
 
   belongs_to :user, optional: true
+  # Held on the compliance record rather than the user so that the guardian travels with the
+  # legal-entity details Stripe verifies them against. This is the one attribute that can change on
+  # an otherwise immutable record, because Stripe only raises the guardian requirement once it sees
+  # the minor's date of birth, so the guardian is attached after the seller's own details exist.
+  belongs_to :guardian, optional: true
+  attr_mutable :guardian_id
+
   validates_presence_of :user
+  validate :guardian_is_only_attached_once_to_a_live_revision, on: :update
+  validate :guardian_belongs_to_the_same_seller
 
   encrypt_with_public_key :individual_tax_id,
                           symmetric: :never,
@@ -72,6 +88,11 @@ class UserComplianceInfo < ApplicationRecord
   # Public: Returns if the UserComplianceInfo record has all it's critical compliance related fields completed, these are:
   # Individual: First Name, Last Name, Address, DOB
   # Business: First Name, Last Name, Address, DOB, Business Name, Business Type, Business Address
+  #
+  # Deliberately does NOT consider the legal guardian. This answers "do we know who this person
+  # is", which is what tax reporting needs, and a seller under 18 is no less reportable for having
+  # no guardian on file yet. The guardian is a payout-setup requirement — see
+  # has_completed_payout_compliance_info?.
   def has_completed_compliance_info?
     first_name.present? &&
       last_name.present? &&
@@ -94,6 +115,48 @@ class UserComplianceInfo < ApplicationRecord
           business_zip_code.present?
         )
       )
+  end
+
+  # Whether we hold everything our payment partner needs before it will verify the account. Adds
+  # the legal guardian to the checks above, because a seller under 18 cannot be verified on their
+  # own.
+  #
+  # Deliberately has no payout-eligibility caller yet, and must not gain one before the guardian
+  # form ships: 187 US under-18 sellers hold a balance today and 65 have already been paid, so
+  # wiring this into Payouts.is_user_payable now would strand them with no surface on which to
+  # supply the guardian it demands. Wire it in the same change that gives them one.
+  def has_completed_payout_compliance_info?
+    return false unless has_completed_compliance_info?
+    # An unsupported country is not the same as no requirement. There is no guardian path to
+    # complete there, so the account can never be verified and must not read as ready.
+    return false if legal_guardian_unsupported?
+    return true unless requires_legal_guardian?
+
+    guardian&.has_completed_info?.present?
+  end
+
+  # Too young for our payment partner to verify on their own. False when the birthday is missing
+  # rather than assuming the worse case: such a record is already incomplete by the checks above,
+  # and treating an unknown birthday as under-18 would demand a guardian from every seller who has
+  # not filled in their date of birth yet.
+  def under_legal_guardian_age?
+    birthday.present? && birthday > GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date
+  end
+
+  # Whether to ask this seller for a guardian. Country-gated because the guardian path is not
+  # universal: Stripe documents guardian requirements for US accounts only, and some countries
+  # (Brazil) are 18+ with no guardian path at all, so asking a minor elsewhere would collect an
+  # adult's details for a verification that cannot succeed. Countries are added here as Stripe
+  # confirms support.
+  def requires_legal_guardian?
+    under_legal_guardian_age? && GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
+  end
+
+  # A minor our payment partner offers no guardian path for. Deliberately distinct from
+  # requires_legal_guardian? being false: we neither ask them for a guardian nor let the absence of
+  # that ask read as payout readiness. Their route is a supported country or turning 18.
+  def legal_guardian_unsupported?
+    under_legal_guardian_age? && !GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
   end
 
   # Public: Returns the ISO_3166-1 Alpha-2 country code for the country stored in this compliance info.
@@ -251,5 +314,27 @@ class UserComplianceInfo < ApplicationRecord
 
     def birthday_is_over_minimum_age
       errors.add :base, "You must be 13 years old to use Gumroad." if birthday && birthday > MINIMUM_DATE_OF_BIRTH_AGE.years.ago
+    end
+
+    # attr_mutable lets guardian_id be set after creation, which the attach flow needs. It must not
+    # become a general edit: repointing a guardian in place, or attaching one to a superseded
+    # revision, would rewrite compliance history that the rest of this record refuses to change.
+    # Replacing a guardian means a new revision, the same as every other detail.
+    def guardian_is_only_attached_once_to_a_live_revision
+      return unless guardian_id_changed?
+
+      previous_guardian_id = guardian_id_was
+      errors.add :base, "The legal guardian cannot be changed once set." if previous_guardian_id.present?
+      errors.add :base, "The legal guardian can only be set on the current compliance details." if deleted?
+    end
+
+    # The guardian's PII is erased along with the seller it belongs to, so a revision pointing at
+    # another seller's guardian would make one seller's erasure blank out the other's payout
+    # compliance. Guardian#user_id is the boundary; this is what stops a revision crossing it.
+    def guardian_belongs_to_the_same_seller
+      return if guardian.nil?
+      return if guardian.user_id == user_id
+
+      errors.add :base, "The legal guardian must belong to the same account."
     end
 end

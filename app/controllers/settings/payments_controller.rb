@@ -143,6 +143,10 @@ class Settings::PaymentsController < Settings::BaseController
         if e.is_a?(MerchantRegistrationUserNotReadyError)
           return redirect_with_error("Bank payouts are not supported in your country yet. Please use PayPal instead.")
         end
+        # Stripe's own directory-miss wording names neither the value it refused nor which field it
+        # came from, and this is the path a first-time payout setup fails on.
+        directory_miss = StripeMerchantAccountManager.bank_directory_miss_seller_message(e, current_seller.active_bank_account)
+        return redirect_with_error(directory_miss) if directory_miss
         return redirect_with_error(e.try(:message) || "Something went wrong.")
       end
     end

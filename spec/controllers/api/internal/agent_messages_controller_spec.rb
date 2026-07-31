@@ -81,7 +81,7 @@ describe Api::Internal::AgentMessagesController do
         service_double = instance_double(Ai::StoreAgentService)
         allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
         allow(service_double).to receive(:respond).and_return(store_agent_turn(
-          reply: "Sales are up.",
+          reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
           proposed_action: { "type" => "api_write", "summary" => "Create a discount" },
         ))
 
@@ -92,7 +92,7 @@ describe Api::Internal::AgentMessagesController do
         conversation = seller.ai_conversations.sole
         expect(conversation.title).to eq("How are my sales?")
         expect(conversation.ai_messages.map { |m| [m.role, m.content] }).to eq(
-          [["user", "How are my sales?"], ["assistant", "Sales are up."]]
+          [["user", "How are my sales?"], ["assistant", Ai::StoreAgentService::PROPOSAL_READY_REPLY]]
         )
         # The proposal rides along in metadata so reloaded history re-renders its card.
         expect(conversation.ai_messages.last.metadata["proposed_action"]).to eq(
@@ -114,7 +114,11 @@ describe Api::Internal::AgentMessagesController do
         expect(service_double).to receive(:respond).with(
           messages: [
             { role: "user", content: "Earlier question" },
-            { role: "assistant", content: "Earlier answer" },
+            {
+              role: "assistant",
+              content: "Earlier answer",
+              proposal_state: "no proposed action was recorded for this message",
+            },
             { role: "user", content: "And this month?" },
           ]
         ).and_return(store_agent_turn(reply: "Also up.", proposed_action: nil))
@@ -144,7 +148,11 @@ describe Api::Internal::AgentMessagesController do
         expect(service_double).to receive(:respond).with(
           messages: [
             { role: "user", content: "Kept question" },
-            { role: "assistant", content: "Kept answer" },
+            {
+              role: "assistant",
+              content: "Kept answer",
+              proposal_state: "no proposed action was recorded for this message",
+            },
             { role: "user", content: "And this month?" },
           ]
         ).and_return(store_agent_turn(reply: "Capped.", proposed_action: nil))
@@ -154,6 +162,32 @@ describe Api::Internal::AgentMessagesController do
              format: :json
 
         expect(response.parsed_body["success"]).to eq(true)
+      end
+
+      it "replays each assistant turn with its server-known proposal state" do
+        conversation = create(:ai_conversation, seller:)
+        proposal = { "type" => "api_write", "params" => { "endpoint" => "create_offer_code" } }
+        [
+          ["No proposal", nil],
+          ["Pending proposal", { "proposed_action" => proposal }],
+          ["Executing proposal", { "proposed_action" => proposal, "action_status" => "executing" }],
+          ["Applied proposal", { "proposed_action" => proposal, "action_status" => "applied" }],
+          ["Unknown proposal", { "proposed_action" => proposal, "action_status" => "unknown" }],
+        ].each do |content, metadata|
+          create(:ai_message, ai_conversation: conversation, role: "assistant", content:, metadata:)
+        end
+
+        history = controller.send(:agent_conversation_history, conversation)
+
+        expect(history.map { |message| message[:proposal_state] }).to eq(
+          [
+            "no proposed action was recorded for this message",
+            "a proposed action was recorded for this message; confirmation outcome and card visibility are unknown",
+            "proposal execution started; do not confirm again",
+            "the proposed action was applied and cannot be confirmed again",
+            "proposal outcome is unknown; do not confirm again",
+          ],
+        )
       end
 
       it "404s when the conversation belongs to another seller" do
@@ -248,6 +282,28 @@ describe Api::Internal::AgentMessagesController do
         )
         expect(response.parsed_body["proposed_action"]).to be_nil
         expect(response.parsed_body).not_to have_key("outcome")
+      end
+
+      it "rejects and replaces server-owned confirmation copy without a proposal" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond).and_return(store_agent_turn(
+          reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY,
+          proposed_action: nil,
+        ))
+        expect(ErrorNotifier).to receive(:notify).with(
+          an_instance_of(ArgumentError).and(having_attributes(
+            message: "Store agent proposal reply requires a proposed action.",
+          )),
+        )
+
+        expect do
+          post :create, params: valid_params, format: :json
+        end.to not_change { seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["reply"]).to eq(Ai::StoreAgentService::NOTHING_STAGED_REPLY)
+        expect(response.parsed_body["proposed_action"]).to be_nil
       end
 
       it "rejects an empty message list" do

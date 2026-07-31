@@ -380,9 +380,8 @@ class UrlRedirectsController < ApplicationController
       # bundle row itself in exactly this case, and the two must agree (gumroad-private#1585).
       #
       # Scoped to the parent's purchaser because `User#purchases` is keyed on `purchaser_id`: a
-      # member reassigned to (or never claimed by) that account still satisfies `visible_in_library`
-      # yet renders in a different library, or none. This runs before `check_permissions`, so anchor
-      # on the purchase rather than the signed-in user.
+      # member reassigned to (or never claimed by) that account still satisfies `visible_in_library`.
+      # This runs before `check_permissions`, so anchor on the purchase, not the signed-in user.
       return if purchase.product_purchases.visible_in_library.where(purchaser_id: purchase.purchaser_id).none?
 
       # Build the library URL on the main app domain explicitly. This request can arrive on

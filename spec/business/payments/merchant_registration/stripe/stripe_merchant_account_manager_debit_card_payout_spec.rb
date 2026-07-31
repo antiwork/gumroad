@@ -36,7 +36,7 @@ describe StripeMerchantAccountManager do
         expect do
           result = described_class.update_bank_account(user, passphrase: "1234")
         end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-          .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "This card doesn't appear to support payouts.")
+          .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, "This card doesn't appear to support payouts.", user.active_bank_account.id)
         expect(result).to eq(:invalid_bank_account)
       end
 
