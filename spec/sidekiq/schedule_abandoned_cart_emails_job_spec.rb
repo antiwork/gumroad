@@ -100,6 +100,14 @@ describe ScheduleAbandonedCartEmailsJob do
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
         end
 
+        it "does not schedule an email for a guest cart whose email already bought the product" do
+          create(:purchase, link: seller1_product1, email: guest_cart1.email, purchaser: nil)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
+        end
+
         it "still schedules an email when a refunded purchase is the only one for a carted product" do
           create(:purchase, :refunded, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
 

@@ -1208,6 +1208,14 @@ describe CustomerMailer do
           expect(mail.body.sanitized).to_not have_text("S1 Product 1")
           expect(mail.body.sanitized).to have_text("S1 Product 2")
         end
+
+        it "still renders the owned product in a preview" do
+          create(:purchase, link: seller1.products.first, email: cart.user.email, purchaser: cart.user)
+
+          mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys, true)
+
+          expect(mail.body.sanitized).to have_text("S1 Product 1")
+        end
       end
 
       context "when multiple workflows are provided" do
