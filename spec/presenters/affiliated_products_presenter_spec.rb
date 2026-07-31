@@ -196,35 +196,6 @@ describe AffiliatedProductsPresenter do
       expect(props[:affiliates_disabled_reason]).to be nil
     end
 
-    it "marks direct affiliations as removable and global ones as not" do
-      props = described_class.new(affiliate_user, can_remove_affiliations: true).affiliated_products_page_props
-
-      direct = props[:affiliated_products].find { _1[:affiliate_type] == "direct_affiliate" && _1[:product_name] == "Creator 1 Product 1" }
-      expect(direct[:affiliate_id]).to eq(direct_affiliate_one.external_id)
-      expect(direct[:seller_name]).to eq(creator_one.name_or_username)
-
-      global = props[:affiliated_products].find { _1[:affiliate_type] == "global_affiliate" }
-      expect(global[:affiliate_id]).to be_nil
-      expect(global[:seller_name]).to be_nil
-    end
-
-    it "marks nothing removable for a viewer who cannot end affiliations" do
-      props = described_class.new(affiliate_user).affiliated_products_page_props
-
-      expect(props[:affiliated_products]).to be_present
-      expect(props[:affiliated_products].map { _1[:affiliate_id] }).to all(be_nil)
-    end
-
-    it "counts only creators the user is still affiliated with" do
-      expect(described_class.new(affiliate_user).affiliated_products_page_props[:stats][:total_affiliated_creators]).to eq(3)
-
-      direct_affiliate_two.mark_deleted!
-
-      props = described_class.new(affiliate_user).affiliated_products_page_props
-      expect(props[:stats][:total_affiliated_creators]).to eq(2)
-      expect(props[:affiliated_products].map { _1[:product_name] }).not_to include("Creator 2 Product 2")
-    end
-
     it "returns affiliates_disabled_reason if using Brazilian Stripe Connect account" do
       brazilian_stripe_account = create(:merchant_account_stripe_connect, user: affiliate_user, country: "BR")
       affiliate_user.update!(check_merchant_account_is_linked: true)
@@ -643,6 +614,54 @@ describe AffiliatedProductsPresenter do
       expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
       expect(props[:global_affiliates_data][:cookie_expiry_days]).to eq GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS
       expect(props[:global_affiliates_data][:affiliate_query_param]).to eq Affiliate::SHORT_QUERY_PARAM
+    end
+  end
+
+  # Kept out of the `:vcr` block above: nothing here needs a purchase, so these
+  # examples do not have to sit behind that block's Stripe cassettes.
+  describe "#affiliated_products_page_props removal keys" do
+    let(:affiliate_user) { create(:affiliate_user) }
+    let(:creator) { create(:user, username: "removalcreator") }
+    let!(:product) { create(:product, name: "Removal Product", user: creator) }
+    # The global row is wired up directly rather than through the `:recommendable`
+    # trait, which creates a purchase (and so needs this file's Stripe cassettes).
+    let!(:global_product) { create(:product, name: "Global Product") }
+    let!(:global_row) { create(:product_affiliate, affiliate: affiliate_user.global_affiliate, product: global_product, affiliate_basis_points: 10_00) }
+
+    let!(:direct_affiliate) do
+      affiliate = create(:direct_affiliate, affiliate_user:, seller: creator, affiliate_basis_points: 15_00)
+      create(:product_affiliate, affiliate:, product:, affiliate_basis_points: 15_00)
+      affiliate
+    end
+
+    it "marks direct affiliations as removable and global ones as not" do
+      props = described_class.new(affiliate_user, can_remove_affiliations: true).affiliated_products_page_props
+
+      direct = props[:affiliated_products].find { _1[:affiliate_type] == "direct_affiliate" }
+      expect(direct[:affiliate_id]).to eq(direct_affiliate.external_id)
+      expect(direct[:seller_name]).to eq(creator.name_or_username)
+
+      global = props[:affiliated_products].find { _1[:affiliate_type] == "global_affiliate" }
+      expect(global[:product_name]).to eq("Global Product")
+      expect(global[:affiliate_id]).to be_nil
+      expect(global[:seller_name]).to be_nil
+    end
+
+    it "marks nothing removable for a viewer who cannot end affiliations" do
+      props = described_class.new(affiliate_user).affiliated_products_page_props
+
+      expect(props[:affiliated_products]).to be_present
+      expect(props[:affiliated_products].map { _1[:affiliate_id] }).to all(be_nil)
+    end
+
+    it "counts only creators the user is still affiliated with" do
+      expect(described_class.new(affiliate_user).affiliated_products_page_props[:stats][:total_affiliated_creators]).to eq(2)
+
+      direct_affiliate.mark_deleted!
+
+      props = described_class.new(affiliate_user).affiliated_products_page_props
+      expect(props[:stats][:total_affiliated_creators]).to eq(1)
+      expect(props[:affiliated_products].map { _1[:product_name] }).not_to include("Removal Product")
     end
   end
 
