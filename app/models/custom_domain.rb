@@ -151,8 +151,24 @@ class CustomDomain < ApplicationRecord
     failed_verification_attempts_count >= MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT
   end
 
+  # Certificates are regenerated on the cadence in config/ssl_certificates.yml.erb
+  # (renew_in, currently 75 days). Asking for a stricter window than that marks a domain
+  # inactive for the whole gap between renewals even though its certificate is perfectly
+  # valid — with a 1-week window that was ~68 of every 75 days, which silently dropped
+  # sellers back to their *.gumroad.com subdomain.
+  #
+  # Read from the config rather than SslCertificates::Base, which only has entries for
+  # staging and production and raises in every other environment. Memoized because this
+  # runs on the profile render path.
+  def self.certificate_validity_window
+    @certificate_validity_window ||= begin
+      config = YAML.load(ERB.new(File.read(SslCertificates::Base::CONFIG_FILE)).result, aliases: true)
+      (config[Rails.env] || config["production"]).fetch("renew_in").seconds
+    end
+  end
+
   def active?
-    verified? && has_valid_certificate?(1.week)
+    verified? && has_valid_certificate?(self.class.certificate_validity_window)
   end
 
   private

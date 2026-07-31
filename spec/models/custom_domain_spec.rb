@@ -297,7 +297,9 @@ describe CustomDomain do
 
     it "does not use a positive result after the certificate expires" do
       custom_domain.set_routability!(true)
-      custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+      # Past the renewal cadence, not merely past a week — a week-old certificate is still
+      # valid, since certificates are only regenerated every renew_in.
+      custom_domain.update_columns(ssl_certificate_issued_at: (CustomDomain.certificate_validity_window + 1.day).ago)
 
       expect(custom_domain.strictly_routable?).to be(false)
       expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
@@ -554,6 +556,33 @@ describe CustomDomain do
 
       it "returns true" do
         expect(domain.active?).to eq(true)
+      end
+    end
+
+    context "when the certificate is older than a week but within the renewal cadence" do
+      let(:domain) { create(:custom_domain, state: "verified") }
+
+      before do
+        # Certificates are only regenerated every renew_in (75 days), so a 30-day-old
+        # certificate is the normal steady state, not a stale one. The old 1.week window
+        # called this inactive and dropped the seller back to their subdomain.
+        domain.update!(ssl_certificate_issued_at: 30.days.ago)
+      end
+
+      it "returns true" do
+        expect(domain.active?).to eq(true)
+      end
+    end
+
+    context "when the certificate is older than the renewal cadence" do
+      let(:domain) { create(:custom_domain, state: "verified") }
+
+      before do
+        domain.update!(ssl_certificate_issued_at: (CustomDomain.certificate_validity_window + 1.day).ago)
+      end
+
+      it "returns false" do
+        expect(domain.active?).to eq(false)
       end
     end
   end
