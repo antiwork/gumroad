@@ -87,6 +87,18 @@ describe Purchase::UnstickStuckInProgressService do
       expect(untouched.reload).to be_in_progress
     end
 
+    it "selects nothing when the explicit id list is empty" do
+      stuck_purchase(created_at: 10.days.ago)
+      expect(Purchase::SyncStatusWithChargeProcessorService).to_not receive(:new)
+      expect(ErrorNotifier).to_not receive(:notify)
+
+      result = described_class.process(dry_run: false, ids: [])
+
+      expect(result[:scanned]).to eq(0)
+      expect(result[:eligible_ids]).to be_empty
+      expect(result[:aging_out]).to eq(0)
+    end
+
     it "reaches a purchase past the maximum age when its id is named" do
       purchase = stuck_purchase(created_at: 200.days.ago)
       stub_sync(true) { |p| p.update_columns(purchase_state: "successful") }
@@ -229,9 +241,8 @@ describe Purchase::UnstickStuckInProgressService do
     end
 
     describe "rows aging past the recovery window" do
-      # A row that crossed MAX_AGE leaves the daily scan for good, so the pass names it once on the
-      # way out rather than letting it fall out silently.
-      def aged_out_purchase(created_at:, charge_processor_id: "stripe", price_cents: 500)
+      # Rows in the grace band are repeated daily until someone targets them explicitly.
+      def aged_out_purchase(created_at:, charge_processor_id: StripeChargeProcessor.charge_processor_id, price_cents: 500)
         create(:purchase_in_progress, link: product, created_at:, charge_processor_id:, price_cents:)
       end
 
@@ -276,11 +287,24 @@ describe Purchase::UnstickStuckInProgressService do
         expect(described_class.process(dry_run: false, ids: [targeted.id])[:aging_out]).to eq(0)
       end
 
-      it "does not report on a dry run" do
-        aged_out_purchase(created_at: 92.days.ago)
+      it "returns aging-out rows on a dry run without alerting" do
+        purchase = aged_out_purchase(created_at: 92.days.ago)
         expect(ErrorNotifier).to_not receive(:notify)
 
-        expect(described_class.process[:aging_out]).to eq(0)
+        result = described_class.process
+
+        expect(result[:aging_out]).to eq(1)
+        expect(result[:aging_out_ids]).to eq([purchase.id])
+      end
+
+      it "returns aging-out rows when notifications are disabled" do
+        purchase = aged_out_purchase(created_at: 92.days.ago)
+        expect(ErrorNotifier).to_not receive(:notify)
+
+        result = described_class.process(dry_run: false, notify: false)
+
+        expect(result[:aging_out]).to eq(1)
+        expect(result[:aging_out_ids]).to eq([purchase.id])
       end
     end
 

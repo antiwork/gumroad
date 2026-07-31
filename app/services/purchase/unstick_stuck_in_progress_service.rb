@@ -1,27 +1,14 @@
 # frozen_string_literal: true
 
-# Recovers purchases left `in_progress` after their charge already succeeded.
-#
-# `SyncStuckPurchasesJob` only looks at purchases created in the last 3 days, so anything that
-# outlives that window stops being retried entirely and stays `in_progress` forever: the buyer is
-# charged, gets no product, and the seller is never credited. This service is the backstop for that
-# tail, and is safe to run either on a schedule or by hand against an explicit id list after an
-# incident — the id form ignores the age bounds, so it can reach rows the schedule cannot.
-#
-# It only ever drives `Purchase::SyncStatusWithChargeProcessorService`, which is the same code path
-# the normal flow uses, so a row is healed only when the processor now returns everything the row
-# legitimately needs. Rows that cannot be healed that way are reported, never forced: a purchase
-# whose seller amount cannot be derived from processor data is left alone and surfaced for a human,
-# because guessing it would write a wrong number into a money ledger.
+# Retries `in_progress` purchases after SyncStuckPurchasesJob's three-day window.
+# Explicit ids bypass age bounds. Scheduled scans stop at MAX_AGE and report rows crossing it.
+# Finalization stays in SyncStatusWithChargeProcessorService; rows it cannot safely heal are reported.
 class Purchase::UnstickStuckInProgressService
   # SyncStuckPurchasesJob owns rows up to 3 days old and retries them every 6 hours. Starting where
   # it gives up keeps the two out of each other's way.
   MIN_AGE = 3.days
-  # The scheduled scan stops here because everything older is a pre-2022 cohort that predates the
-  # current checkout: ~52k rows, 41.5k of which never chose a processor at all and so have nothing
-  # to consult. Scanning them daily would spend the whole run on rows that cannot move and bury the
-  # recoverable ones. Rows crossing this line are reported (see REPORT_AGING_OUT_GRACE) rather than
-  # dropped, and an explicit `ids:` list ignores the bound entirely.
+  # The scheduled scan excludes a large pre-2022 cohort that mostly has no processor to consult.
+  # Explicit ids can still reach those rows.
   MAX_AGE = 90.days
   # A row crossing MAX_AGE unrecovered is about to leave the scan for good, so it is surfaced while
   # it sits in this band past the bound. Bounded on both sides so the pre-2022 cohort stays out.
@@ -87,17 +74,20 @@ class Purchase::UnstickStuckInProgressService
       ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
     end
 
+    aging_out_ids = []
+    if @ids.nil?
+      aging_out_scope = aging_out
+      stats[:aging_out] = aging_out_scope.count
+      aging_out_ids = aging_out_scope.limit(500).pluck(:id)
+    end
+
     if @notify && !@dry_run
       report_unrecoverable(stats, unrecoverable_ids) if unrecoverable_ids.any?
       report_other_states(other_ids_by_outcome) if other_ids_by_outcome.any?
-      # Only on a full scan: an id-targeted run is a human working a named list and has no window to
-      # age out of.
-      aging_out_ids = @ids.present? ? [] : aging_out.limit(500).pluck(:id)
-      report_aging_out(aging_out_ids) if aging_out_ids.any?
-      stats[:aging_out] = aging_out_ids.size
+      report_aging_out(stats[:aging_out], aging_out_ids) if aging_out_ids.any?
     end
 
-    stats.merge(eligible_ids:, unrecoverable_ids:, other_ids_by_outcome:, dry_run: @dry_run)
+    stats.merge(eligible_ids:, unrecoverable_ids:, other_ids_by_outcome:, aging_out_ids:, dry_run: @dry_run)
   end
 
   private
@@ -121,12 +111,9 @@ class Purchase::UnstickStuckInProgressService
       sync.charge_outcome || :unknown
     end
 
-    # An explicit id list is a human naming exactly which rows to work, which is the escape hatch
-    # for anything the scheduled window cannot reach — so it selects on id alone. Applying the age
-    # bounds on top would make the hatch unable to open past them, which is the one case it exists
-    # for. `in_progress` still holds: this pass only ever heals rows in that state.
+    # A supplied id list is the complete manual scope and intentionally bypasses age bounds.
     def candidates
-      return Purchase.in_progress.where(id: @ids) if @ids.present?
+      return Purchase.in_progress.where(id: @ids) unless @ids.nil?
 
       Purchase.in_progress.where(created_at: @max_age.ago..@min_age.ago)
     end
@@ -138,7 +125,7 @@ class Purchase::UnstickStuckInProgressService
       Purchase.in_progress
         .where(created_at: (@max_age + REPORT_AGING_OUT_GRACE).ago..@max_age.ago)
         .where.not(charge_processor_id: nil)
-        .where("price_cents > 0")
+        .non_free
     end
 
     # These rows are invisible otherwise: nothing fails, so nobody hears about a charged buyer
@@ -170,16 +157,14 @@ class Purchase::UnstickStuckInProgressService
       )
     end
 
-    # Last call on these ids: the daily scan will not see them again, so without this they leave the
-    # recovery path with no terminal event at all. Re-run the pass over them explicitly to work them
-    # (`UnstickStuckInProgressPurchasesJob.new.perform(ids)`), which ignores the age bounds.
-    def report_aging_out(ids)
+    # Repeat during the final grace band so rows leaving the scheduled scan stay visible.
+    def report_aging_out(count, ids)
       ErrorNotifier.notify(
         "Purchases stuck in_progress aged past the recovery window",
         context: {
-          count: ids.size,
+          count:,
           purchase_ids: ids.first(50),
-          truncated: ids.size > 50,
+          truncated: count > 50,
           max_age_days: (@max_age / 1.day).to_i
         }
       )
