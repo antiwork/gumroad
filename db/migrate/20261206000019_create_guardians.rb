@@ -2,7 +2,11 @@
 
 class CreateGuardians < ActiveRecord::Migration[7.1]
   def change
-    create_table :guardians do |t|
+    # Guarded because this migration was renumbered from 20261206000015 after that version had
+    # already been recorded in production's schema_migrations. Environments that applied it under
+    # the old number — production included — already have the table, and db:migrate will now run
+    # this one against them.
+    create_table :guardians, if_not_exists: true do |t|
       t.bigint :user_id, null: false, index: true
 
       t.string :first_name
