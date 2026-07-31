@@ -30,25 +30,28 @@ describe "app/views/home/terms.html.erb amendment notice" do
     expect(header).to include("Effective Date", "Last Updated Date")
   end
 
-  # The Agreement's own Effective Date is load-bearing elsewhere — §25's arbitration clause reaches
-  # "disputes that arose before the effective date of the Agreement" — so a per-amendment date must
-  # be added alongside it, never written over it.
-  it "leaves the Agreement's Effective Date alone" do
-    expect(date_after("Effective Date")).to eq(Date.new(2025, 1, 1))
+  # Anchored on the notice line's OWN posting date, not on Last Updated. Last Updated moves for any
+  # edit including a typo fix, while this date may only move when a MATERIAL change is posted — a
+  # materiality call no spec can make. Coupling the two would redden CI on an innocent edit and the
+  # only way to green it would be publishing a 30-day claim with no material change behind it.
+  it "states a binding date 30 days after the amendment it describes was posted" do
+    notice = header[/((?:January|February|March|April|May|June|July|August|September|October|November|December)#{SPACE}+\d{1,2},#{SPACE}*\d{4})#{SPACE}+changes#{SPACE}+take#{SPACE}+effect#{SPACE}+for#{SPACE}+existing#{SPACE}+accounts#{SPACE}+on#{SPACE}+((?:January|February|March|April|May|June|July|August|September|October|November|December)#{SPACE}+\d{1,2},#{SPACE}*\d{4})/o]
+    expect(notice).to be_present,
+                      "header must state when a posted amendment takes effect for existing accounts, " \
+                      "in the form '<posted date> changes take effect for existing accounts on <date>'; " \
+                      "header is #{header.inspect}"
+
+    posted, binding_date = Regexp.last_match.captures.map { |d| Date.parse(d.gsub(/#{SPACE}+/o, " ")) }
+
+    expect(binding_date).to eq(posted + 30),
+                            "§27.5 gives the EARLIER of 30 days after posting or 30 days after an " \
+                            "emailed notice, so a posting on #{posted} binds an existing account on " \
+                            "#{posted + 30}, not #{binding_date}"
   end
 
-  it "states when the latest changes bind an existing account, 30 days after posting" do
-    posted = date_after("Last Updated Date")
-    binding_date = posted + 30
-
-    expect(header).to match(/take#{SPACE}+effect#{SPACE}+for#{SPACE}+existing#{SPACE}+accounts/o),
-                      "header must say when the posted changes become effective for existing accounts"
-
-    stated = header.scan(/([A-Z][a-z]+#{SPACE}+\d{1,2},#{SPACE}*\d{4})/o)
-                   .map { |(d)| Date.parse(d.gsub(/#{SPACE}+/o, " ")) }
-
-    expect(stated).to include(binding_date),
-                      "expected the header to name #{binding_date} (Last Updated #{posted} + 30 days); " \
-                      "it names #{stated.inspect}"
+  # The amendment date must be additive. Reusing this field would move the arbitration boundary in
+  # §25 ("disputes that arose ... before the effective date of the Agreement").
+  it "states the amendment date without disturbing the Agreement's own Effective Date" do
+    expect(date_after("Effective Date")).to eq(Date.new(2025, 1, 1))
   end
 end
