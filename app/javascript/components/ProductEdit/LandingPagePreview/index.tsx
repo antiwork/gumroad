@@ -28,12 +28,34 @@ const buildCheckoutUrl = (uniquePermalink: string, params: Record<string, unknow
   return url.pathname + url.search;
 };
 
+// Mirrors gumroadNavigationTarget in RendersCustomHtmlPages (the single predicate
+// the four sandbox bridge sites share). Returns the URL to open, or null to refuse.
+// Seller-controlled hosts keep the URL as written; Gumroad's own account/cart pages
+// live on a host no seller controls, so they are admitted only on an exact path with
+// query and fragment dropped — nothing from the sandbox reaches a Gumroad page.
+const navigationTarget = (
+  url: URL,
+  storeHostnames: string[],
+  globalNavHosts: string[],
+  globalNavPaths: string[],
+): string | null => {
+  if (storeHostnames.includes(url.hostname)) return url.href;
+  if (!globalNavHosts.includes(url.hostname)) return null;
+  const path = url.pathname.replace(/\/+$/, "");
+  if (!globalNavPaths.includes(path)) return null;
+  return url.origin + path;
+};
+
 export const LandingPagePreview = ({
   uniquePermalink,
   storeHostnames,
+  globalNavHosts,
+  globalNavPaths,
 }: {
   uniquePermalink: string;
   storeHostnames: string[];
+  globalNavHosts: string[];
+  globalNavPaths: string[];
 }) => {
   const frameRef = React.useRef<HTMLIFrameElement>(null);
 
@@ -59,9 +81,16 @@ export const LandingPagePreview = ({
         // The message is only as trustworthy as the HTML that sent it, which
         // the seller wrote, so apply the same two checks the public wrapper
         // does: http(s) only (a page can't turn a click into javascript:/data:)
-        // and the destination host must be one the seller controls. Without the
-        // host check any script on the page could pop open an arbitrary site
-        // from inside the Gumroad dashboard.
+        // and the destination must clear the same allowlist. Without that any
+        // script on the page could pop open an arbitrary site from inside the
+        // Gumroad dashboard.
+        //
+        // This is the FIFTH bridge site. The other four share one server-emitted
+        // gumroadNavigationTarget; this one cannot (it is dashboard React, not
+        // injected sandbox JS), so the predicate is mirrored here and the two
+        // must be kept in step — the iframe interceptor decides which clicks to
+        // hand up, and a wrapper that admits less than the interceptor
+        // intercepts turns those clicks into silent dead clicks.
         let destination;
         try {
           destination = new URL(e.data.url, window.location.origin);
@@ -69,8 +98,9 @@ export const LandingPagePreview = ({
           return;
         }
         if (destination.protocol !== "https:" && destination.protocol !== "http:") return;
-        if (!storeHostnames.includes(destination.hostname)) return;
-        window.open(destination.href, "_blank", "noopener");
+        const target = navigationTarget(destination, storeHostnames, globalNavHosts, globalNavPaths);
+        if (target === null) return;
+        window.open(target, "_blank", "noopener");
         return;
       } else {
         return;
@@ -80,7 +110,7 @@ export const LandingPagePreview = ({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [uniquePermalink, storeHostnames]);
+  }, [uniquePermalink, storeHostnames, globalNavHosts, globalNavPaths]);
 
   return (
     <iframe

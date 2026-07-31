@@ -517,6 +517,8 @@ describe ProductPresenter do
           price_checker_enabled: false,
           custom_html_pages_enabled: false,
           custom_html_store_hostnames: product.user.custom_html_store_hostnames,
+          custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
+          custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
           ai_generated: false,
           dropbox_api_key: DROPBOX_PICKER_API_KEY,
         }
@@ -585,6 +587,24 @@ describe ProductPresenter do
 
       it "never includes a shared Gumroad host" do
         expect(presenter.edit_props[:custom_html_store_hostnames]).not_to include(*VALID_REQUEST_HOSTS)
+      end
+    end
+
+    describe "custom_html_global_nav_hosts / _paths" do
+      # The negative above ("never includes a shared Gumroad host") is only safe
+      # because the shared hosts arrive in a SEPARATE key that is reachable on an
+      # exact path only. Without this positive twin, deleting the global-nav keys
+      # entirely would leave that negative passing.
+      it "passes the shared Gumroad hosts and the exact blessed paths separately" do
+        expect(presenter.edit_props[:custom_html_global_nav_hosts]).to match_array(VALID_REQUEST_HOSTS)
+        expect(presenter.edit_props[:custom_html_global_nav_paths]).to eq(["/library", "/checkout"])
+      end
+
+      # Both halves of the bridge must decide identically or a click is intercepted
+      # in the iframe and then refused by the wrapper — a silent dead click.
+      it "matches the values the sandbox bridge is served" do
+        expect(presenter.edit_props[:custom_html_global_nav_paths])
+          .to eq(RendersCustomHtmlPages::GLOBAL_NAV_PATHS)
       end
     end
 
@@ -839,6 +859,8 @@ describe ProductPresenter do
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
             custom_html_store_hostnames: membership.user.custom_html_store_hostnames,
+            custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
+            custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
@@ -1074,6 +1096,8 @@ describe ProductPresenter do
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
             custom_html_store_hostnames: new_product.user.custom_html_store_hostnames,
+            custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
+            custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
             ai_generated: false,
             dropbox_api_key: DROPBOX_PICKER_API_KEY,
           }
