@@ -149,9 +149,9 @@ describe ContactingCreatorMailer do
           end
         end
 
-        # The sweep clears the stamp when its own notice fails to enqueue, so an evidence row can
-        # exist with no window while a notice for it is still queued. The form rejects that state
-        # too, and quoting its window would read "in the next 0 hours".
+        # An evidence row can exist with no window while a notice for it is still queued: the
+        # sweep's push succeeded and the stamp write then failed. The form rejects that state too,
+        # and quoting its window would read "in the next 0 hours".
         context "when the row exists but its window was never opened" do
           before { dispute_evidence.update!(seller_contacted_at: nil) }
 

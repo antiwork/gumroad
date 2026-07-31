@@ -96,9 +96,11 @@ class ContactingCreatorMailer < ApplicationMailer
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
     # none, and the seller may have answered or the row been resolved in between. Asking through the
     # same predicate the submission endpoint enforces keeps the ask from outliving the page it links to.
-    asking_for_evidence = dispute_evidence&.accepting_evidence?
-    # Read once, so the sentence cannot quote a different window than the gate just allowed.
+    #
+    # hours_left is read FIRST and the gate is ANDed with it: accepting_evidence? reads its own clock,
+    # so the two calls can straddle the window's end and quote "the next 0 hours" past the gate.
     hours_left = dispute_evidence&.hours_left_to_submit_evidence
+    asking_for_evidence = dispute_evidence&.accepting_evidence? && hours_left&.positive?
     @dispute_evidence_content = \
       if asking_for_evidence
         safe_join(
