@@ -474,6 +474,23 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
       end
     end
 
+    context "when the price of the user's current tier has dropped" do
+      before do
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "quarterly").update!(price_cents: 100)
+      end
+
+      it "warns that a seat decrease takes effect at renewal" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        fill_in "Seats", with: 1
+
+        # Deferral is a property of the whole pending change, not of the recurrence half. One seat
+        # at the reduced price is below the locked-in two-seat price, so nothing is owed today and
+        # the updater applies it at renewal — the seat-only sentence has to say so.
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $1 every 3 months per seat, starting at your next renewal.")
+      end
+    end
+
     context "when decreasing the seat count and decreasing the billing frequency" do
       it "displays a warning notice regarding the seat and billing frequency change" do
         visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
@@ -501,8 +518,10 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
           fill_in "Seats", with: 1
 
-          # A seat decrease collects nothing today, so the updater defers it to renewal.
-          expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $40 every 3 months per seat, starting at your next renewal.")
+          # Prices went UP here, so one seat at the new price still exceeds the buyer's locked-in
+          # two-seat price: this is an upgrade charged today, not a deferred change.
+          expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $40 every 3 months per seat.")
+          expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
         end
       end
 
