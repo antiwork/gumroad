@@ -202,9 +202,25 @@ describe UndeliverablePingSubscriptionNotifier do
       ).to be false
     end
 
+    # Both keys are permanent, so a half-applied move is not self-healing: the enqueued reason would
+    # stay claimed under advice nobody was given, and refuse the notice owed when it breaks again.
+    it "claims and releases in one step, so a failure cannot leave both keys" do
+      described_class.new(resource_subscription).notify
+      expect($redis).to receive(:eval).once.and_raise(Redis::BaseError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      described_class.reconcile_claim(
+        resource_subscription.id,
+        claimed: described_class::REVOKED_CREDENTIAL,
+        rendered: described_class::MISSING_POST_URL
+      )
+
+      expect($redis.exists?(key_for(described_class::MISSING_POST_URL))).to be false
+    end
+
     # The claim is wrong either way at that point, and this notice exists to break silence.
     it "sends rather than withholds when the bookkeeping itself fails" do
-      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify)
 
       expect(

@@ -44,6 +44,17 @@ class UndeliverablePingSubscriptionNotifier
     report(e)
   end
 
+  # Claims the rendered reason and drops the enqueued one in a single step. Both keys are permanent,
+  # so the two writes cannot be separate commands: a failure between them leaves the seller claimed
+  # under a reason they were never told about, and that claim refuses the notice owed the next time
+  # that reason breaks. Returns 1 when the rendered reason was claimed here, 0 when it was already
+  # claimed — the old key is released either way, since it named advice this send did not give.
+  MOVE_CLAIM_SCRIPT = <<~LUA
+    local claimed = redis.call('SET', KEYS[2], ARGV[1], 'NX')
+    redis.call('DEL', KEYS[1])
+    if claimed then return 1 else return 0 end
+  LUA
+
   # The advice is chosen at render time, so the send-once claim has to be the one for the advice
   # actually given. Keyed on the enqueued reason instead, the two drift whenever the subscription
   # changes in the window: a seller told to fill in a URL does so, the revoked token still blocks
@@ -52,9 +63,14 @@ class UndeliverablePingSubscriptionNotifier
   def self.reconcile_claim(resource_subscription_id, claimed:, rendered:)
     return true if claimed == rendered
 
-    claimed_rendered = claim(resource_subscription_id, rendered)
-    release_claim(resource_subscription_id, claimed)
-    claimed_rendered
+    $redis.eval(
+      MOVE_CLAIM_SCRIPT,
+      keys: [
+        RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, claimed),
+        RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, rendered)
+      ],
+      argv: [Time.current.to_i]
+    ) == 1
   rescue => e
     report(e)
     # Sending on a bookkeeping failure beats withholding: the claim is wrong either way, and silence
