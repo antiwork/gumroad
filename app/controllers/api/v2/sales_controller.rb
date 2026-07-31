@@ -209,19 +209,16 @@ class Api::V2::SalesController < Api::V2::BaseController
   end
 
   private
-    # Resolve the per-query cap, clamped to stay strictly under the live Rack::Timeout
-    # budget. Reads the budget from the installed middleware rather than a duplicated
-    # constant so the two cannot drift.
+    # Resolve the per-query cap, clamped to stay strictly under the live request budget.
+    # Reads the budget from the same resolver the middleware uses so the two cannot drift;
+    # that resolver refuses budgets under 2s, which is what leaves room for the -1 here.
     def query_timeout_seconds(redis_key)
       stored = $redis.get(redis_key)
       seconds = stored.to_s.match?(/\A\d+\z/) ? stored.to_i : QUERY_TIMEOUT_DEFAULT_SECONDS
       seconds = QUERY_TIMEOUT_DEFAULT_SECONDS unless seconds.positive?
 
-      middleware = Rails.application.config.middleware.find { _1.klass == Rack::Timeout }
-      budget = middleware&.args&.first&.dig(:service_timeout)
-      seconds = [seconds, budget - 1].min if budget.is_a?(Numeric) && budget.positive?
-
-      [seconds, QUERY_TIMEOUT_MIN_SECONDS].max
+      budget = BudgetedRequestTimeout::Budget.general
+      [[seconds, budget - 1].min, QUERY_TIMEOUT_MIN_SECONDS].max
     end
 
     def success_with_sale(sale = nil)
