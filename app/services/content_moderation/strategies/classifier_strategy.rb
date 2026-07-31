@@ -30,6 +30,10 @@ class ContentModeration::Strategies::ClassifierStrategy
   # over what the endpoint accepts and 400 the batch. Over the ceiling counts as
   # unmoderated (which blocks a full-coverage caller) rather than as absent.
   MAX_DATA_IMAGE_BYTES = 200_000
+  # Distinguishes "the deadline passed before we asked about this image" from
+  # "we asked and OpenAI would not answer" (nil). Both leave the image
+  # unmoderated and both block a full-coverage caller; only the logs differ.
+  UNREACHED = :unreached
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
 
   DEFAULT_THRESHOLDS = {
@@ -87,19 +91,24 @@ class ContentModeration::Strategies::ClassifierStrategy
     # Walking it (rather than taking the first MAX) means an image OpenAI refuses
     # to fetch falls through to the next instead of costing a slot.
     urls_to_moderate = ContentModeration::ImageSelection.ordered(@image_urls)
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + IMAGE_PHASE_DEADLINE_IN_SECONDS
+    @image_phase_deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + IMAGE_PHASE_DEADLINE_IN_SECONDS
 
     urls_to_moderate.each_slice(IMAGES_PER_REQUEST) do |batch|
       remaining = @max_images == :all ? batch.size : @max_images - moderated_count
       break if remaining <= 0
 
       selected = batch.first(remaining)
-      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      if deadline_expired?
         unreached_urls.concat(selected)
         next
       end
 
       moderate_images(selected).each do |url, scores|
+        if scores == UNREACHED
+          unreached_urls << url
+          next
+        end
+
         if scores.nil?
           skipped_urls << url
           next
@@ -188,13 +197,32 @@ class ContentModeration::Strategies::ClassifierStrategy
       refused = oversized.map { |url| [url, nil] }
 
       return refused if sendable.empty?
-      return refused + sendable.map { |url| [url, moderate_one_image(url)] } if sendable.size == 1
+      return refused + individually(sendable) if sendable.size == 1
 
       input = sendable.map { |url| { type: "image_url", image_url: { url: url } } }
       scores = moderate_batch(input)
       return refused + sendable.each_with_index.map { |url, index| [url, scores[index]] } unless scores.nil?
 
-      refused + sendable.map { |url| [url, moderate_one_image(url)] }
+      refused + individually(sendable)
+    end
+
+    # The per-image fallback is where the phase can overrun: one failed batch
+    # turns into `urls.size` more requests, each with its own attempt budget, so
+    # a five-image slice can spend minutes past the deadline still holding the
+    # save's row lock. Check between requests and report the rest as unreached
+    # rather than as clean.
+    def individually(urls)
+      urls.map do |url|
+        next [url, UNREACHED] if deadline_expired?
+
+        [url, moderate_one_image(url)]
+      end
+    end
+
+    def deadline_expired?
+      return false if @image_phase_deadline.nil?
+
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) >= @image_phase_deadline
     end
 
     def oversized_data_image?(url)
@@ -243,7 +271,10 @@ class ContentModeration::Strategies::ClassifierStrategy
         response = client.moderations(parameters: { model: "omni-moderation-latest", input: input })
         response.dig("results", 0, "category_scores") || {}
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ParsingError, Faraday::ServerError => e
-        if attempts < MAX_MODERATION_ATTEMPTS
+        # Retrying past the phase deadline is the same overrun one level down: the
+        # image is going to count as unmoderated either way, so spend nothing more
+        # on it.
+        if attempts < MAX_MODERATION_ATTEMPTS && !deadline_expired?
           Rails.logger.warn("ContentModeration::ClassifierStrategy #{e.class.name.demodulize} on attempt #{attempts}/#{MAX_MODERATION_ATTEMPTS}, retrying: #{e.message}")
           retry
         end

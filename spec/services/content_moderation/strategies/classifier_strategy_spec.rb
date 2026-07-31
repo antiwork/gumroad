@@ -129,6 +129,52 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(Rails.logger).to have_received(:warn).with(/5 not reached within #{described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS}s/o)
   end
 
+  it "stops the per-image fallback at the deadline instead of spending an attempt budget per image" do
+    image_urls = (1..5).map { |n| "https://cdn.example.com/#{n}.png" }
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed = 0
+    allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
+    single_input_calls = 0
+    allow(client).to receive(:moderations) do |parameters:|
+      if parameters[:input].size > 1
+        # The batch fails, which is what sends the slice down the fallback path.
+        raise Faraday::ServerError.new("boom")
+      end
+      single_input_calls += 1
+      # Each fallback request burns the rest of the phase budget.
+      elapsed = described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS + 1
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    # One fallback request lands; the deadline stops the other four rather than
+    # letting each spend up to three 10-second attempts inside the row lock.
+    expect(single_input_calls).to eq(1)
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(Rails.logger).to have_received(:warn).with(/4 not reached within #{described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS}s/o)
+  end
+
+  it "does not retry a timed-out image once the phase deadline has passed" do
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed = 0
+    allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
+    calls = 0
+    allow(client).to receive(:moderations) do |parameters:|
+      raise Faraday::ServerError.new("boom") if parameters[:input].size > 1
+
+      calls += 1
+      elapsed = described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS + 1
+      raise Faraday::TimeoutError.new("too slow")
+    end
+
+    described_class.new(text: "", image_urls: (1..2).map { |n| "https://cdn.example.com/#{n}.png" }, max_images: :all).perform
+
+    # Without the deadline check this image alone would take MAX_MODERATION_ATTEMPTS.
+    expect(calls).to eq(1)
+  end
+
   it "retries a single image on the short timeout, not the batch timeout" do
     # The fallback fires routinely (an expired signed product URL 400s its
     # batch), so it must not carry the batch's longer budget.
