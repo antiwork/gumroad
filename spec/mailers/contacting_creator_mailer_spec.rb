@@ -25,15 +25,16 @@ describe ContactingCreatorMailer do
   end
 
   describe "paypal payout permanently failed" do
-    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
+    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13, payment_address: "refused@example.com") }
 
     before do
       # Gumroad supports bank payouts here, so the email may suggest one. Sellers in PayPal-only
       # countries — the majority of those hitting these rejections — are covered separately below.
       create(:user_compliance_info, user: payment.user, country: "United States")
       # The retry-blocking rejection took the PayPal address off the account before this email was
-      # enqueued, which is the state the copy describes.
-      payment.user.update!(payment_address: "", invalidated_paypal_payout_address: "refused@example.com")
+      # enqueued, which is the state the copy describes. The removal is keyed on the address THIS
+      # payout was sent to, so the payment has to carry it too.
+      payment.user.update!(payment_address: "", invalidated_paypal_payout_address: payment.payment_address)
     end
 
     it "names PayPal, the restriction, and the fix" do
