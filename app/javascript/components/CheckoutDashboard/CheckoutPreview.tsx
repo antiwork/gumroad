@@ -83,6 +83,8 @@ export const CheckoutPreview = ({
         paypalClientId: "",
         recaptchaKey: "",
         recaptchaScoreBased: false,
+        checkoutPaymentStale: false,
+        resumeSubmitAfterCheckoutPayment: false,
       },
       () => undefined,
     ],
