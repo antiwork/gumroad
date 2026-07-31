@@ -41,6 +41,17 @@ describe UndeliverablePingSubscriptionNotifier do
       expect($redis.ttl(key)).to be_between(1, described_class::ENQUEUE_THROTTLE.to_i)
     end
 
+    # The throttle exists to stop duplicate renders, so holding a window open against an enqueue that
+    # never happened would suppress the notice instead.
+    it "releases the throttle when the enqueue fails" do
+      allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_raise(StandardError)
+
+      expect { described_class.new(resource_subscription).notify }.to raise_error(StandardError)
+
+      key = RedisKey.undeliverable_ping_subscription_enqueued(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      expect($redis.exists?(key)).to be false
+    end
+
     it "does not email about a subscription predating the subscription-cleanup cutover" do
       resource_subscription.update_column(:created_at, described_class::SUBSCRIPTION_CLEANUP_CUTOVER - 1.day)
 

@@ -1622,6 +1622,15 @@ describe ContactingCreatorMailer do
       expect(second.message).to be_a ActionMailer::Base::NullMail
     end
 
+    # The recording hook is scoped to this action, and `only:` on a deliver callback is worth pinning
+    # because an unscoped hook would record against whatever the last-rendered mailer left behind.
+    it "records nothing when an unrelated email is delivered" do
+      product = create(:product, user: seller)
+      expect(UndeliverablePingSubscriptionNotifier).not_to receive(:record_sent)
+
+      ContactingCreatorMailer.unstampable_pdf_notification(product.id).deliver_now
+    end
+
     # A delivery that raises spends nothing, or the seller's one notice goes on an email that never
     # left — the same permanent silence a claim taken before sending causes.
     it "still reports the reason after a delivery failure" do
@@ -1634,6 +1643,16 @@ describe ContactingCreatorMailer do
       retried = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
       expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    # `deliver_email` returns before `mail` for an address it will not send to, so the delivery
+    # succeeds with nothing sent — recording there would burn the notice permanently and silently.
+    it "records nothing when the seller's address is not one we will send to" do
+      allow_any_instance_of(User).to receive(:form_email).and_return("not-an-email")
+
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
     end
 
     # The advice comes from current state, so the reason recorded has to be the reason the seller was

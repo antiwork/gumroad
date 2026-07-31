@@ -754,10 +754,13 @@ class ContactingCreatorMailer < ApplicationMailer
       mail(mailer_args)
     end
 
-    # Only reached when the message was actually handed to the delivery method, so a raise or a
-    # declined address leaves the notice unspent and a later event can still report it.
+    # Only reached once the message has been handed to the delivery method, so a raise leaves the
+    # notice unspent and a later event can still report it. `deliver_email` declines an unusable
+    # address by returning before `mail`, which delivers an empty message rather than raising —
+    # hence the recipient check, not just the ivars.
     def record_undeliverable_ping_subscription_sent
       return if @resource_subscription.nil? || @undeliverable_ping_subscription_reason.blank?
+      return if message.to.blank?
 
       UndeliverablePingSubscriptionNotifier.record_sent(
         @resource_subscription.id, @undeliverable_ping_subscription_reason

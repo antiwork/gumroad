@@ -79,18 +79,32 @@ class UndeliverablePingSubscriptionNotifier
     return unless resource_subscription.created_at >= SUBSCRIPTION_CLEANUP_CUTOVER
     return unless throttle_enqueue
 
-    ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_later(queue: "low")
+    begin
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_later(queue: "low")
+    rescue
+      # Nothing was enqueued, so the throttle is holding a window against a render that will never
+      # happen. Unlike the send-once record this key expires, so a failed release self-heals.
+      release_throttle
+      raise
+    end
   end
 
   private
     attr_reader :resource_subscription
 
-    def throttle_enqueue
-      !!$redis.set(
-        RedisKey.undeliverable_ping_subscription_enqueued(resource_subscription.id, self.class.reason_for(resource_subscription)),
-        Time.current.to_i,
-        nx: true,
-        ex: ENQUEUE_THROTTLE.to_i
+    def throttle_key
+      RedisKey.undeliverable_ping_subscription_enqueued(
+        resource_subscription.id, self.class.reason_for(resource_subscription)
       )
+    end
+
+    def release_throttle
+      $redis.del(throttle_key)
+    rescue => e
+      self.class.send(:report, e)
+    end
+
+    def throttle_enqueue
+      !!$redis.set(throttle_key, Time.current.to_i, nx: true, ex: ENQUEUE_THROTTLE.to_i)
     end
 end
