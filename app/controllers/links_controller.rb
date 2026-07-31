@@ -623,12 +623,21 @@ class LinksController < ApplicationController
       # must NOT clear its pending-removal state on this response — the whole
       # point is that the seller's deletion has not happened yet.
       #
-      # A fresh token rides along so the editor can reconcile and retry after
-      # showing the seller what changed, rather than forcing a full page reload.
+      # Deliberately NO fresh `editor_revision` here, unlike the success
+      # response. Adopting a token on this path can only authorise the session's
+      # NEXT save — which is the same stale full snapshot — so the deletion
+      # would land while every field a co-editor changed in between was reverted
+      # to this session's values (proved in LinksControllerSaveContractTest,
+      # "resending a stale snapshot with the 409's fresh token deletes as asked
+      # AND reverts the other session's edit"). It was emitted here for a
+      # reconcile-and-retry affordance that does not exist and cannot be built
+      # client-side; the client threw it away (see saveProductError). Both
+      # candidate retries in gumroad-private#1532 — a deletion-only write, or
+      # re-fetch-then-reconcile — get a current token from the reload they
+      # already have to do, so neither needs one on the refusal.
       return render json: {
         error_message: e.message,
         error_code: "stale_deletion_conflict",
-        editor_revision: Product::EditorRevision.current(@product.reload),
       }, status: :conflict
     rescue Product::RichContentDeletionGuard::HiddenVariantContentConflict => e
       # The fail-closed inconsistent-content case: hidden version-level pages
