@@ -504,6 +504,52 @@ describe StripeGuardianManager do
           .with(stripe_account_id, "person_guardian_new")
       end
 
+      # An unread page is not a deferred cleanup: the next sync takes the recorded id and does not
+      # scan, so nothing revisits the orphans left on it. Erasure fails its request closed on this
+      # same condition, and the reconcile discarding it silently is what hides the account until
+      # then.
+      it "reports an incomplete scan when Stripe promises more persons but returns no cursor" do
+        create_compliance_info(guardian_record: guardian)
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          if params[:limit] == 1
+            Stripe::ListObject.construct_from(data: [])
+          else
+            # has_more with an empty page: Stripe says there are more and hands back nothing to
+            # page on, so the orphans it is describing can never be read.
+            Stripe::ListObject.construct_from(data: [], has_more: true)
+          end
+        end
+
+        expect(described_class.sync(user, stripe_account, passphrase:).id).to eq("person_guardian_new")
+
+        expect(ErrorNotifier).to have_received(:notify)
+          .with(/reconciliation scanned only part of Stripe account #{stripe_account_id}/)
+      end
+
+      # The complement: a scan that finished having deleted nothing is the ordinary case and must
+      # stay silent, or the alert it raises above means nothing.
+      it "stays silent when the scan completes with no orphans" do
+        create_compliance_info(guardian_record: guardian)
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          if params[:limit] == 1
+            Stripe::ListObject.construct_from(data: [])
+          else
+            Stripe::ListObject.construct_from(data: [{ id: "person_guardian_new" }], has_more: false)
+          end
+        end
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
       # existing_person takes ONE Person, so an account already holding several legal-guardian
       # Persons had the rest left standing when the reconcile only ran after a create. No later sync
       # revisits them either — the next one takes the now-recorded id and never scans.

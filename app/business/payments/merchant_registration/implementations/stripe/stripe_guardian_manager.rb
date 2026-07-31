@@ -172,7 +172,7 @@ module StripeGuardianManager
   def self.reconcile_duplicate_persons!(guardian, stripe_account_id)
     recorded_ids = Guardian.where(user_id: guardian.user_id).pluck(:stripe_person_id).compact.to_set
 
-    each_legal_guardian_person(stripe_account_id) do |person|
+    complete = each_legal_guardian_person(stripe_account_id) do |person|
       next if recorded_ids.include?(person.id)
 
       # Per-person rescue, so one refused delete does not abandon the orphans after it. The
@@ -187,6 +187,19 @@ module StripeGuardianManager
       rescue => e
         ErrorNotifier.notify(e)
       end
+    end
+
+    # A scan that could not finish is the one case where this method's silence would be wrong. It
+    # deletes what it does not find recorded, so an unread page is not a deferred cleanup — it is an
+    # orphan this seller's next sync will never revisit either, because that sync takes the recorded
+    # id and does not scan at all. Erasure fails its own request closed on the same condition, so the
+    # notification is what gets the account looked at before an erasure request ever arrives.
+    unless complete
+      ErrorNotifier.notify(
+        "Guardian duplicate reconciliation scanned only part of Stripe account #{stripe_account_id} " \
+        "for guardian #{guardian.id}: Stripe reported more legal-guardian persons but returned no " \
+        "cursor. Orphaned persons on the unread pages are still at Stripe."
+      )
     end
   rescue => e
     ErrorNotifier.notify(e)
