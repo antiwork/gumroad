@@ -149,7 +149,7 @@ class PaypalChargeProcessor
       refund_amount_cents = scaled_refund_amount.to_i
       valid_amount = scaled_refund_amount == refund_amount_cents && refund_amount_cents.positive?
       usd_amount_cents = get_usd_cents(refund_currency, refund_amount_cents) if valid_amount
-    rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
+    rescue ArgumentError, TypeError, FloatDomainError
       usd_amount_cents = nil
     end
 
@@ -266,15 +266,18 @@ class PaypalChargeProcessor
 
       refundable_cents = purchase.gross_amount_refundable_cents
       unless refundable_cents.positive?
-        # PayPal moved money for a purchase our books already consider fully refunded — a
-        # divergence someone has to reconcile, so don't let it vanish.
-        ErrorNotifier.notify(
-          "PayPal refund webhook: purchase has nothing left to refund; skipping automatic refund",
-          capture_id:,
-          purchase_id: purchase.id,
-          usd_amount_cents:,
-          processor_refund_id: processor_refund&.id
-        )
+        # An item-level refund whose money we can't book: PayPal moved funds for a purchase
+        # our books already consider fully refunded, so someone has to reconcile it. A DENIED
+        # capture (no amount) reaching here just means both sides already agree.
+        if usd_amount_cents.present?
+          ErrorNotifier.notify(
+            "PayPal refund webhook: purchase has nothing left to refund; skipping automatic refund",
+            capture_id:,
+            purchase_id: purchase.id,
+            usd_amount_cents:,
+            processor_refund_id: processor_refund&.id
+          )
+        end
         next
       end
 

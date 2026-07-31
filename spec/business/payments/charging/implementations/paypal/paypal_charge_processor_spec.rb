@@ -778,6 +778,25 @@ describe PaypalChargeProcessor, :vcr do
         end.not_to change { @purchase.reload.refunds.count }
       end
 
+      it "stays silent when a DENIED capture lands on a purchase with nothing left to refund" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        create(:refund, purchase: @purchase, amount_cents: @purchase.price_cents)
+        expect(@purchase.reload.gross_amount_refundable_cents).to eq(0)
+        # DENIED carries no amount: PayPal never moved money, so both sides already agree.
+        event_info = {
+          "id" => "WEBHOOK-DENIED-NOTHING-LEFT",
+          "event_type" => "PAYMENT.CAPTURE.DENIED",
+          "resource" => { "id" => capture_id }
+        }
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect do
+          described_class.handle_order_events(event_info)
+        end.not_to change { @purchase.reload.refunds.count }
+      end
+
       it "skips automatic processing and alerts for nonpositive or over-precise amounts" do
         capture_id = "0JF852973C016714D"
         @purchase.update!(stripe_transaction_id: capture_id)
