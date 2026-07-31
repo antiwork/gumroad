@@ -3507,7 +3507,7 @@ class Purchase < ApplicationRecord
   end
 
   def is_an_off_session_charge_on_indian_card?
-    stripe_charge_processor? && card_country == "IN" && is_a_saved_card_rebill?
+    stripe_charge_processor? && !credit_card&.upi? && card_country == "IN" && is_a_saved_card_rebill?
   end
 
   # Indian cards must register an RBI e-mandate when a recurring payment is first set up;
@@ -4251,18 +4251,27 @@ class Purchase < ApplicationRecord
     end
 
     # Processor args for an off-session purchase whose buyer-currency price was fixed earlier.
-    # Buyer-present charges stay on the verified checkout quote path.
+    # UPI renewals require their stored INR terms; other rails retain the canonical-USD fallback.
     def later_charge_presentment_processor_args(off_session:)
       return {} unless off_session
-      return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
-      return {} unless merchant_account&.stripe_charge_processor?
-      return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+
+      upi_autopay = credit_card&.upi?
+      if upi_autopay
+        fail_upi_recurring_authorization!("charge processor changed") unless charge_processor_id == StripeChargeProcessor.charge_processor_id
+        fail_upi_recurring_authorization!("merchant account changed") unless merchant_account&.stripe_charge_processor?
+        fail_upi_recurring_authorization!("purchase is not a subscription renewal") if subscription.blank? || is_original_subscription_purchase?
+      else
+        return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
+        return {} unless merchant_account&.stripe_charge_processor?
+        return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      end
 
       result = Purchase::LaterChargePresentmentService.new(
         merchant_account:,
         purchases: [self],
         amount_cents: total_transaction_cents,
-        gumroad_amount_cents: total_transaction_amount_for_gumroad_cents
+        gumroad_amount_cents: total_transaction_amount_for_gumroad_cents,
+        required_currency: (Currency::INR if upi_autopay)
       ).perform
       return {} if result.blank?
 
@@ -4272,6 +4281,14 @@ class Purchase < ApplicationRecord
         processor_gumroad_amount_cents: result.processor_gumroad_amount_cents,
         stripe_fx_quote_id: result.stripe_fx_quote_id,
       }
+    end
+
+    def fail_upi_recurring_authorization!(reason)
+      ErrorNotifier.notify("UPI Autopay renewal rejected before Stripe submit", reason:, purchase_id: id)
+      raise ChargeProcessorCardError.new(
+        PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
+        StripeChargeProcessor::UPI_REAUTHORIZATION_MESSAGE
+      )
     end
 
     # Converts the RBI e-mandate cap into the currency this charge will actually settle in. See

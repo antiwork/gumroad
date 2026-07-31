@@ -64,6 +64,10 @@ module PurchaseErrorCode
   # would reject the confirm deterministically, so failing it here with its own code keeps the
   # rejection visible in monitoring instead of hiding inside generic processing errors.
   PIX_AMOUNT_OUTSIDE_WINDOW = "pix_amount_outside_window"
+  # Gumroad rejects this deterministic UPI cap violation before creating an intent.
+  UPI_AUTOPAY_AMOUNT_OUTSIDE_WINDOW = "upi_autopay_amount_outside_window"
+  # A saved UPI instrument cannot prove the exact INR authorization required for this debit.
+  UPI_RECURRING_AUTHORIZATION_REQUIRED = "upi_recurring_authorization_required"
   # Off-session renewal on an Indian card that has no registered RBI e-mandate to reference.
   # We fail these ourselves instead of submitting them to Stripe, because Indian issuers
   # decline mandate-less recurring charges (as transaction_not_allowed) every time.

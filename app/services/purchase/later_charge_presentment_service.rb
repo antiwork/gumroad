@@ -26,29 +26,27 @@ class Purchase::LaterChargePresentmentService
 
   include CurrencyHelper
 
-  attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason
+  attr_reader :charge, :merchant_account, :purchases, :amount_cents, :gumroad_amount_cents, :fallback_reason, :required_currency
 
-  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil)
+  def initialize(merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, charge: nil, required_currency: nil)
     @charge = charge
     @merchant_account = merchant_account
     @purchases = purchases
     @amount_cents = amount_cents
     @gumroad_amount_cents = gumroad_amount_cents
+    @required_currency = required_currency&.to_s&.downcase
   end
 
   # Returns a Result in the stored currency, or nil to leave the caller charging canonical USD.
   #
-  # Every refusal here is a FALLBACK, not a failure. This differs deliberately from the card
-  # lane, which fails closed: there, a buyer is watching a confirmed local total and charging
-  # anything else would break the amount they agreed to. Here there is no browser and no
-  # confirmed total for this charge. Failing it outright over an FX-quote hiccup is worse than
-  # the canonical USD behavior these paths used before the fixing existed.
+  # Ordinary cards fall back to canonical USD; a required-currency rail fails for reauthorization.
   def perform
     presentment = stored_presentment
     return fallback(:no_stored_presentment) if presentment.blank?
 
     purchase = purchases.first
     currency = presentment.presentment_currency
+    return fallback(:required_currency_mismatch) if required_currency.present? && currency != required_currency
     return fallback(:unsupported_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
     return fallback(:unsupported_charge_model) unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
     return fallback(:settlement_currency_mismatch) unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: currency)
@@ -122,6 +120,8 @@ class Purchase::LaterChargePresentmentService
       processor_gumroad_amount_cents: presentment_gumroad_amount_cents,
       stripe_fx_quote_id: quote.id
     )
+  rescue ChargeProcessorCardError
+    raise
   rescue StandardError => e
     # An unexpected failure must not cost the seller a delayed charge.
     ErrorNotifier.notify(e, context: { charge_id: charge&.id, purchase_id: purchases.first&.id })
@@ -195,6 +195,20 @@ class Purchase::LaterChargePresentmentService
     def fallback(reason)
       @fallback_reason = reason
       Rails.logger.info("Later-charge presentment fallback for #{charge.present? ? "charge #{charge.external_id}" : "purchase #{purchases.first&.id}"}: #{reason}")
+      if required_currency.present?
+        ErrorNotifier.notify(
+          "Required-currency renewal rejected before processor submit",
+          reason:,
+          required_currency:,
+          purchase_id: purchases.first&.id,
+          charge_id: charge&.id
+        )
+        raise ChargeProcessorCardError.new(
+          PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
+          StripeChargeProcessor::UPI_REAUTHORIZATION_MESSAGE
+        )
+      end
+
       nil
     end
 end

@@ -32,8 +32,8 @@ describe Purchase::LaterChargePresentmentService do
   let(:quote) { double(id: "fxq_test_1", fx_rate: 0.8, expires_at: 1.day.from_now) }
 
   def service(purchases: [renewal_purchase], amount_cents: 1000, gumroad_amount_cents: 100, charge: self.charge,
-              merchant_account: self.merchant_account)
-    described_class.new(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:)
+              merchant_account: self.merchant_account, **options)
+    described_class.new(charge:, merchant_account:, purchases:, amount_cents:, gumroad_amount_cents:, **options)
   end
 
   before do
@@ -252,5 +252,55 @@ describe Purchase::LaterChargePresentmentService do
                  presentment.presentment_seller_tax_cents + presentment.presentment_gumroad_tax_cents +
                  presentment.presentment_shipping_cents
     expect(components).to eq(presentment.presentment_total_cents)
+  end
+
+  context "when the saved rail requires INR" do
+    it "charges a valid INR fixing" do
+      create(
+        :later_charge_presentment,
+        owner: subscription,
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 899,
+        signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
+        effective_from: 1.day.ago
+      )
+
+      result = service(required_currency: Currency::INR).perform
+
+      expect(result.processor_currency).to eq(Currency::INR)
+    end
+
+    it "requests re-authorization instead of using a fixing in another currency" do
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal rejected before processor submit",
+        reason: :required_currency_mismatch,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      )
+
+      expect do
+        service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+      end
+    end
+
+    it "requests re-authorization instead of falling back to USD when the fixing is missing" do
+      stored.destroy!
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal rejected before processor submit",
+        reason: :no_stored_presentment,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      )
+
+      expect do
+        service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+      end
+    end
   end
 end

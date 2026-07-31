@@ -15,8 +15,9 @@ class Checkout::PaymentMethodResolver
   # Buyer-present single-seller dynamic set. Apple Pay / Google Pay ride on "card" in the Payment
   # Element, so they are not separate types here.
   ONE_TIME_PAYMENT_METHOD_TYPES = %w[card link klarna afterpay_clearpay affirm ideal bancontact upi pix cashapp us_bank_account alipay].freeze
-  # Dropped on a recurring lifecycle:
-  #   - afterpay_clearpay, affirm, upi: one-time, buyer-present only.
+  # Dropped on the general recurring lifecycle:
+  #   - afterpay_clearpay, affirm, upi: buyer-present only. The narrowly scoped UPI Autopay
+  #     registration path below replaces this set with card + UPI.
   #   - ideal, bancontact, pix: one-shot bank approvals with no stored mandate. Re-billing
   #     iDEAL/Bancontact needs a SEPA Direct Debit mandate we don't collect; Pix cannot re-bill.
   #   - alipay: Stripe gates recurring Alipay behind approval and excludes it from subscription mode.
@@ -34,6 +35,10 @@ class Checkout::PaymentMethodResolver
   # downstream gate, so opting in cannot widen the set past what the buyer could complete.
   SELLER_OPT_IN_PAYMENT_METHOD_TYPES = %w[us_bank_account].freeze
   LINK_PAYMENT_METHOD_TYPE = "link"
+  UPI_PAYMENT_METHOD_TYPE = "upi"
+  UPI_RECURRING_LAUNCH_FEATURE = :checkout_local_method_upi_recurring
+  # Stripe caps each UPI recurring debit at INR 15,000. Gumroad stores INR in paise.
+  UPI_RECURRING_MAX_INR_CENTS = 1_500_000
   # Per-seller Flipper flag so it can ramp and roll back independently (gumroad-private#933).
   # Klarna forces no presentment currency, so it rides the canonical-USD lane and is absent from
   # Checkout::BuyerCurrencyEligibility's forced-currency registry.
@@ -134,7 +139,7 @@ class Checkout::PaymentMethodResolver
   # intent's FINAL amount, which can drift out of it after the Element mounts — that is
   # Order::PreparePaymentIntentService#block_klarna_final_amount_outside_window's job, not this
   # input's.
-  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil, cart_total_usd_cents: nil)
+  def initialize(sellers:, recurring: false, commission: false, setup_for_future: false, buyer_country: nil, ppp_discounted: false, cart_product_currency: nil, cart_total_usd_cents: nil, recurring_upi_registration: false)
     @sellers = sellers
     @recurring = recurring
     @commission = commission
@@ -143,17 +148,25 @@ class Checkout::PaymentMethodResolver
     @ppp_discounted = ppp_discounted
     @cart_product_currency = cart_product_currency
     @cart_total_usd_cents = cart_total_usd_cents
+    @recurring_upi_registration = recurring_upi_registration
   end
 
   def resolve
     @resolution ||= begin
       reason = ineligibility_reason
       eligible = eligible_method_policy
+      payment_method_types = reason.nil? ? launched_method_set(eligible) : nil
+      # Do not enable a new card-only recurring lane when UPI falls out of the acquisition gates.
+      if reason.nil? && recurring_upi_registration && !payment_method_types.include?(UPI_PAYMENT_METHOD_TYPE)
+        reason = "recurring_upi_unavailable"
+        payment_method_types = nil
+      end
+
       resolution = Resolution.new(
         client_confirm_eligible: reason.nil?,
         # Nil on Lane A carts: they never mount the client-confirmed Payment Element, so there is no
         # Stripe method list to hand them. Non-nil only when the cart confirms client-side.
-        payment_method_types: reason.nil? ? launched_method_set(eligible) : nil,
+        payment_method_types:,
         eligible_payment_method_types: eligible,
         fallback_reason: reason,
         stripe_connect_account_id: reason.nil? ? stripe_connect_account_id : nil
@@ -164,14 +177,14 @@ class Checkout::PaymentMethodResolver
   end
 
   private
-    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted, :cart_product_currency, :cart_total_usd_cents
+    attr_reader :sellers, :recurring, :commission, :setup_for_future, :buyer_country, :ppp_discounted, :cart_product_currency, :cart_total_usd_cents, :recurring_upi_registration
 
     # The client-confirm cart-shape gates (single-seller, non-connect, one-time), owned here and applied
     # as an ordered set of reasons so a blocked cart records *why* it stayed on Lane A.
     def ineligibility_reason
       return "multi_seller" unless sellers.one?
       return "direct_charge_account_unlinked" if direct_charge_seller? && stripe_connect_account_id.blank?
-      return "recurring_charge" if recurring
+      return "recurring_charge" if recurring && !recurring_upi_registration
       return "commission" if commission
       return "setup_flow" if setup_for_future
       nil
@@ -188,6 +201,8 @@ class Checkout::PaymentMethodResolver
 
     def eligible_method_policy
       return LANE_A_PAYMENT_METHOD_TYPES unless sellers.one?
+
+      return %w[card upi] if recurring_upi_registration
 
       methods = ONE_TIME_PAYMENT_METHOD_TYPES
       methods -= RECURRING_INELIGIBLE_PAYMENT_METHOD_TYPES if recurring
@@ -321,6 +336,14 @@ class Checkout::PaymentMethodResolver
       end
       return [] if methods_for_cart_currency.empty?
 
+      # Registering a reusable UPI authorization has its own acquisition flag. Pulling it stops
+      # new registrations while existing subscriptions continue through the renewal path.
+      if recurring_upi_registration
+        return [] unless Feature.active?(UPI_RECURRING_LAUNCH_FEATURE, sellers.first)
+
+        methods_for_cart_currency &= [UPI_PAYMENT_METHOD_TYPE]
+      end
+
       # Do not add a settlement-currency gate here. These carts are always priced wholly in the
       # forced currency (the select above), so the listed price is charged with no FX quote anywhere
       # and the charging account's balance currency cannot make it fail; account_supported_methods is
@@ -351,7 +374,7 @@ class Checkout::PaymentMethodResolver
         "[#{self.class.name}] client_confirm_eligible=#{resolution.client_confirm_eligible} " \
         "seller_ids=#{sellers.map { _1&.id }} recurring=#{recurring} commission=#{commission} " \
         "setup_for_future=#{setup_for_future} buyer_country=#{buyer_country.inspect} " \
-        "ppp_discounted=#{ppp_discounted} " \
+        "ppp_discounted=#{ppp_discounted} recurring_upi_registration=#{recurring_upi_registration} " \
         "fallback_reason=#{resolution.fallback_reason.inspect} " \
         "eligible=#{resolution.eligible_payment_method_types} enabled=#{resolution.payment_method_types.inspect} " \
         "launch_gated_out=#{launch_gated_out} stripe_connect_account_id=#{resolution.stripe_connect_account_id.inspect}"

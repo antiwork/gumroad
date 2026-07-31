@@ -102,8 +102,20 @@ class Purchase::FixLaterChargePresentmentService
       end
 
       presentment = purchase.purchase_presentment
-      fx_rate = presentment&.charge_presentment&.fx_rate&.to_d
-      return if presentment.blank? || fx_rate.blank?
+      return if presentment.blank?
+
+      fx_rate = presentment.charge_presentment&.fx_rate&.to_d
+      if fx_rate.blank?
+        # A product already listed in the presentment currency does not need a Stripe FX
+        # quote. Its stored product rate points in the opposite direction from a quote, so
+        # invert it here and let #perform keep its single units-per-dollar write convention.
+        return unless purchase.link.price_currency_type.to_s.downcase == presentment.presentment_currency
+
+        currency_units_per_usd = purchase.rate_converted_to_usd&.to_d
+        return unless currency_units_per_usd&.positive?
+
+        fx_rate = 1 / currency_units_per_usd
+      end
 
       presentment_price_cents = if purchase.is_installment_payment?
         presentment_cents_for(canonical_price_cents, fx_rate, presentment.presentment_currency)
