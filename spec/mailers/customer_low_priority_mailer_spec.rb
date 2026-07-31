@@ -305,6 +305,72 @@ describe CustomerLowPriorityMailer do
     end
   end
 
+  describe "subscription_charge_blocked_location" do
+    context "memberships" do
+      it "explains the location block without blaming the card, and links to manage subscription" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        mail = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id)
+
+        expect(mail.subject).to eq "Your membership could not be renewed."
+        expect(mail.body.encoded).to include subscription.link.name
+        expect(mail.body.encoded).to include "United States sanctions"
+        expect(mail.body.encoded).to include "no charge was attempted"
+        expect(mail.body.encoded).to include "nothing wrong with your card"
+        expect(mail.body.encoded).to include "/manage"
+      end
+
+      it "does not tell the subscriber to update or re-authorize their card" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to_not include "attempted to charge your card"
+        expect(body).to_not include "re-authorize"
+        expect(body).to_not include "update your card"
+      end
+
+      it "links to manage subscription with the token that is valid after sending" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "token=#{subscription.reload.token}"
+      end
+
+      it "marks the manage link as coming from a failure email so the retry it invites does not re-send it" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "declined=true"
+      end
+    end
+
+    context "installment plans" do
+      let(:installment_plan_purchase) { create(:installment_plan_purchase) }
+      let(:subscription) { installment_plan_purchase.subscription }
+
+      it "uses installment-plan wording" do
+        mail = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id)
+
+        expect(mail.subject).to eq "Your installment payment could not be processed."
+        expect(mail.body.encoded).to include "installment plan"
+      end
+
+      it "says the plan will be paused rather than canceled" do
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "will be paused"
+        expect(body).to_not include "will be canceled"
+      end
+    end
+  end
+
   describe "subscription_ended" do
     context "memberships" do
       before do
