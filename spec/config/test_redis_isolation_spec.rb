@@ -8,8 +8,9 @@ require "spec_helper"
 #
 # The lease examples run against the LIVE Redis this suite is already connected to,
 # because the bug is a real concurrency bug and a mocked registry would prove nothing
-# about it. They lease under a private key prefix and release in an `ensure`, so they
-# cannot take the slot this run itself holds or leak into a sibling run.
+# about it. Every claim goes through a private key prefix and is released in an
+# `ensure`, so no example can take the slot this run itself holds or leak into a
+# sibling run.
 describe TestRedisIsolation do
   # The four *_REDIS_HOST env vars, in assignment order.
   let(:stores) { described_class::STORE_ENV_VARS.length }
@@ -23,8 +24,8 @@ describe TestRedisIsolation do
     described_class.send(:parse, value)
   end
 
-  def claim(count: databases, warn_io: StringIO.new)
-    described_class.claim_slot(server:, databases: count, warn_io:, key_prefix: test_prefix)
+  def claim(count: databases, reserved: described_class::RESERVED_DATABASES, warn_io: StringIO.new)
+    described_class.claim_slot(server:, databases: count, reserved:, warn_io:, key_prefix: test_prefix)
   end
 
   def with_registry(count = databases)
@@ -34,10 +35,18 @@ describe TestRedisIsolation do
     registry&.close
   end
 
-  def all_blocks(count = databases)
-    Array.new(described_class.slot_count(databases: count)) do |slot|
-      described_class.databases_for_slot(slot, databases: count)
+  def all_blocks(count = databases, reserved: described_class::RESERVED_DATABASES)
+    Array.new(described_class.slot_count(databases: count, reserved:)) do |slot|
+      described_class.databases_for_slot(slot, databases: count, reserved:)
     end
+  end
+
+  # Drops the lease AND the refresh thread install! started, so an example cannot leave
+  # a thread ticking a deleted key for the rest of the suite.
+  def discard(claimed)
+    return if claimed.nil?
+    claimed[:refresh_thread]&.kill
+    with_registry { |registry| registry.del(claimed[:key]) }
   end
 
   describe ".databases_for_slot" do
@@ -72,10 +81,47 @@ describe TestRedisIsolation do
       expect(described_class.databases_for_slot(slots, databases: 64)).to be_nil
     end
 
-    it "fits only two runs on a stock 16-database server" do
-      # The number that makes the compose `--databases 64` change load-bearing.
+    it "fits only two runs on a stock 16-database server at the bare floor" do
+      # The number that makes the compose `--databases 64` change load-bearing. The real
+      # floor is higher than 4 once .env.test's own indexes are excluded, which is why a
+      # stock 16-database server ends up with no slots at all.
       expect(described_class.slot_count(databases: 16)).to eq(2)
       expect(described_class.slot_count(databases: 64)).to eq(14)
+    end
+  end
+
+  describe ".reserved_databases" do
+    # The invariant that keeps the fallback safe. A run that skips leasing keeps the
+    # .env.test indexes and flushes them, so no leased block may contain one — otherwise
+    # the skipping run wipes an isolated run's keys while that run holds a valid lease.
+    let(:fallback) { [10, 11, 12, 13] }
+    let(:endpoints) { fallback.map { { server:, database: it } } }
+
+    it "puts the floor above every database the env vars name" do
+      expect(described_class.reserved_databases(endpoints)).to eq(fallback.max + 1)
+    end
+
+    it "never drops below the .env.development reservation for low fallback indexes" do
+      # The CI images pin 0..3, where the .env.development reservation is the binding one.
+      low = [0, 1, 2, 3].map { { server:, database: it } }
+
+      expect(described_class.reserved_databases(low)).to eq(described_class::RESERVED_DATABASES)
+    end
+
+    it "keeps every leased block disjoint from the fallback databases" do
+      reserved = described_class.reserved_databases(endpoints)
+      assigned = all_blocks(64, reserved:).flatten
+
+      expect(assigned).to be_present
+      expect(assigned & fallback).to be_empty
+      expect(assigned & (0...described_class::RESERVED_DATABASES).to_a).to be_empty
+      expect(assigned).not_to include(described_class.registry_database(64))
+    end
+
+    it "leaves no assignable block on a stock 16-database server rather than reusing one" do
+      reserved = described_class.reserved_databases(endpoints)
+
+      expect(described_class.slot_count(databases: 16, reserved:)).to eq(0)
     end
   end
 
@@ -146,8 +192,8 @@ describe TestRedisIsolation do
       warnings = StringIO.new
 
       begin
-        # Two slots is a stock 16-database Redis; a third run must be told it is falling
-        # back rather than silently handed a block someone else is flushing.
+        # Two slots is a stock 16-database Redis at the bare floor; a third run must be
+        # told it is falling back rather than handed a block someone else is flushing.
         2.times { taken << claim(count: 16) }
         expect(taken.compact.length).to eq(2)
 
@@ -171,26 +217,48 @@ describe TestRedisIsolation do
       }
     end
 
+    # install! claims a real lease, so these examples route it through the spec's own
+    # prefix and capture the claim in order to release it and stop its refresh thread.
+    attr_reader :claimed
+
+    def install(env, warn_io: StringIO.new)
+      allow(described_class).to receive(:claim_slot).and_wrap_original do |original, **kwargs|
+        @claimed = original.call(**kwargs)
+      end
+      described_class.install!(env:, warn_io:, key_prefix: test_prefix)
+    end
+
+    after { discard(claimed) }
+
     it "rewrites all four store env vars to the one block it leased" do
       env = base_env.dup
-      slot = described_class.install!(env:, warn_io: StringIO.new)
 
-      begin
-        expect(slot).to be_present
+      expect(install(env)).to be_present
 
-        rewritten = described_class::STORE_ENV_VARS.map { parse(env.fetch(it)) }
-        expect(rewritten.map { it.fetch(:database) })
-          .to eq(described_class.databases_for_slot(slot, databases:))
-        expect(rewritten.map { it.fetch(:server) }.uniq).to eq([server])
-      ensure
-        with_registry { |registry| registry.del(described_class.lease_key(slot)) } if slot
-      end
+      rewritten = described_class::STORE_ENV_VARS.map { parse(env.fetch(it)) }
+      expect(rewritten.map { it.fetch(:database) }).to eq(claimed.fetch(:databases))
+      expect(rewritten.map { it.fetch(:server) }.uniq).to eq([server])
+    end
+
+    it "leases a block that a run falling back to .env.test would not flush" do
+      # The regression for the overlap the arithmetic originally had: slots were dealt
+      # from database 4 up, so slot 1 covered 10 and 11 — two of the .env.test indexes a
+      # fallback run flushes, while the leaseholder believed it was isolated. Asserting
+      # the FLOOR rather than just the first block is what makes this load-bearing: slot 0
+      # ([4..7]) missed the fallback by luck even before the fix, and every later slot hit it.
+      env = base_env.dup
+
+      expect(install(env)).to be_present
+
+      fallback = described_class::STORE_ENV_VARS.map { parse(base_env.fetch(it)).fetch(:database) }
+      expect(claimed.fetch(:databases).min).to be > fallback.max
+      expect(claimed.fetch(:databases) & fallback).to be_empty
     end
 
     it "leaves the env alone when isolation is opted out of" do
       env = base_env.merge("DISABLE_TEST_REDIS_ISOLATION" => "1")
 
-      expect(described_class.install!(env:, warn_io: StringIO.new)).to be_nil
+      expect(install(env)).to be_nil
       expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
     end
 
@@ -198,7 +266,7 @@ describe TestRedisIsolation do
       env = base_env.merge("RAILS_ENV" => "development")
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
 
-      expect(described_class.install!(env:, warn_io: StringIO.new)).to be_nil
+      expect(install(env)).to be_nil
       expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
     end
 
@@ -206,15 +274,38 @@ describe TestRedisIsolation do
       env = base_env.merge("RACK_ATTACK_REDIS_HOST" => "other-host:6379/13")
       warnings = StringIO.new
 
-      expect(described_class.install!(env:, warn_io: warnings)).to be_nil
+      expect(install(env, warn_io: warnings)).to be_nil
       expect(warnings.string).to include("point at 2 servers")
+      expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
+    end
+
+    it "names the var it could not parse instead of skipping silently" do
+      # A silent skip is indistinguishable from working isolation, and knowing which of
+      # the two you have is the whole point of this file.
+      env = base_env.merge("RPUSH_REDIS_HOST" => "redis://#{server}/12")
+      warnings = StringIO.new
+
+      expect(install(env, warn_io: warnings)).to be_nil
+      expect(warnings.string).to include("RPUSH_REDIS_HOST")
       expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
     end
 
     it "skips when a store env var is blank rather than leasing a partial block" do
       env = base_env.merge("RPUSH_REDIS_HOST" => "")
+      warnings = StringIO.new
 
-      expect(described_class.install!(env:, warn_io: StringIO.new)).to be_nil
+      expect(install(env, warn_io: warnings)).to be_nil
+      expect(warnings.string).to include("RPUSH_REDIS_HOST")
+      expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
+    end
+
+    it "skips under spring, whose per-command forks would share one leased block" do
+      env = base_env.dup
+      warnings = StringIO.new
+      allow(described_class).to receive(:spring_preload?).and_return(true)
+
+      expect(install(env, warn_io: warnings)).to be_nil
+      expect(warnings.string).to include("spring")
       expect(env.fetch("REDIS_HOST")).to eq("#{server}/10")
     end
 
@@ -223,7 +314,6 @@ describe TestRedisIsolation do
       # same databases — this file's own race, with nothing to point at. So the rescue has
       # to swallow anything, and that has to be proven rather than asserted.
       env = base_env.dup
-      slot = nil
       refreshed = Queue.new
       attempt = 0
 
@@ -237,15 +327,29 @@ describe TestRedisIsolation do
         original.call(*args)
       end
 
-      begin
-        slot = described_class.install!(env:, warn_io: StringIO.new)
-        expect(slot).to be_present
+      expect(install(env)).to be_present
 
-        # A later tick landing at all is the proof: the thread outlived the raise.
-        expect(Timeout.timeout(5) { refreshed.pop }).to be(true)
-        expect(attempt).to be >= 2
+      # A later tick landing at all is the proof: the thread outlived the raise.
+      expect(Timeout.timeout(5) { refreshed.pop }).to be(true)
+      expect(attempt).to be >= 2
+    end
+  end
+
+  describe ".release_lease_at_exit" do
+    it "does not let a forked child release the lease its parent is still using" do
+      # at_exit handlers are inherited across fork and the child holds the parent's exact
+      # token, so the token compare cannot tell them apart — only the pid can.
+      claimed = claim
+
+      begin
+        described_class.send(:release_lease_at_exit, claimed)
+        Process.wait(fork { nil })
+
+        with_registry do |registry|
+          expect(registry.get(claimed[:key])).to eq(claimed[:token])
+        end
       ensure
-        with_registry { |registry| registry.del(described_class.lease_key(slot)) } if slot
+        described_class.release_lease(claimed)
       end
     end
   end

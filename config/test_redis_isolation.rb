@@ -5,32 +5,35 @@ require "socket"
 
 # Gives each concurrent test run its own block of Redis databases.
 #
-# MySQL and Elasticsearch are already isolated per run — the database name comes from
-# TEST_DATABASE_NAME (config/database.yml) and ES index names are namespaced with it
-# (test/support/real_elasticsearch_bridge.rb). Redis was not: .env.test pins fixed
-# database indexes, and both suites call `flushdb` before every test
-# (test/test_helper.rb, spec/spec_helper.rb). Each flush is correct alone and is
-# load-bearing for per-test isolation, but two runs on one Redis server flush each
-# other's keys mid-test. A test whose subject reads Redis then asserts against a key
-# a sibling process erased, and it fails looking like a logic bug.
+# MySQL and Elasticsearch already isolate per run off TEST_DATABASE_NAME
+# (config/database.yml, test/support/real_elasticsearch_bridge.rb). Redis did not:
+# .env.test pins fixed indexes and both suites `flushdb` before every test
+# (test/test_helper.rb, spec/spec_helper.rb), so two runs on one server wipe each
+# other's keys mid-test. The flushes are load-bearing, so isolate the databases.
 #
-# So: lease a private block of database indexes at boot and rewrite the *_REDIS_HOST
-# env vars before anything connects. The lease lives in the highest database index on
-# the same server, holds a TTL, and is refreshed by a background thread, so a run
-# killed with SIGKILL frees its block on its own.
+# Leases a block at boot and rewrites the *_REDIS_HOST env vars before anything
+# connects. The lease holds a TTL refreshed by a background thread, so a run killed
+# with SIGKILL frees its block on its own.
 #
-# Capacity is the constraint — Redis ships with 16 databases, and four of those are
-# the developer's own .env.development block. Raise it (`redis-server --databases 64`,
-# already set in docker/docker-compose-local.yml and
-# docker/docker-compose-test-and-ci.yml) to get more concurrent runs. When every block
-# is leased this warns and leaves the env vars alone rather than raising: falling back
-# to today's shared behavior keeps a run working, and the warning says what to do.
+# Two invariants the arithmetic must keep, both load-bearing:
+#   - Leased blocks never include a database any *fallback* run uses. A run that skips
+#     leasing keeps the .env.test indexes and flushes them; if a leased block covered
+#     one, the skipping run would wipe an isolated run's keys — the original race, now
+#     invisible because the victim holds a valid lease. So the floor is derived from
+#     the env vars themselves (`reserved_databases`), not hardcoded.
+#   - Leased blocks never include 0..3 (.env.development) or the registry index.
+#
+# Capacity is the constraint: 16 databases is one concurrent run, hence
+# `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
+# block this warns and leaves the env vars alone — the fallback block is disjoint from
+# every leased block, so sharing it is the old behavior rather than a new hazard.
 module TestRedisIsolation
   # One env var per store, in the order their databases are assigned.
   STORE_ENV_VARS = %w[REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST].freeze
 
   # Databases 0..3 belong to .env.development. Never hand them to a test run — a test
-  # flushing one would wipe the developer's own Redis data.
+  # flushing one would wipe the developer's own Redis data. This is only the floor;
+  # `reserved_databases` raises it above whatever .env.test pins.
   RESERVED_DATABASES = 4
 
   LEASE_KEY_PREFIX = "gumroad:test-redis-slot:"
@@ -51,13 +54,27 @@ module TestRedisIsolation
 
   class << self
     # Rewrites ENV in place. Returns the claimed slot number, or nil when isolation was
-    # skipped (not the test env, opted out, unparseable env, or no free block).
-    def install!(env: ENV, warn_io: $stderr)
+    # skipped (not the test env, opted out, unparseable env, spring, or no free block).
+    def install!(env: ENV, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
       return nil unless env["RAILS_ENV"] == "test" || Rails.env.test?
       return nil if truthy?(env["DISABLE_TEST_REDIS_ISOLATION"])
 
+      # Under a spring server the app boots once and every `bin/rspec` is a fork of it,
+      # sharing the already-open connections — so a lease claimed here would isolate the
+      # server, not the runs, while every concurrent run still shared one block. Leaving
+      # the fallback in place is the honest outcome; the block is disjoint from leased
+      # ones either way.
+      if spring_preload?
+        warn_io.puts("[test-redis-isolation] skipped: running under spring, whose forks would share one leased block. Use DISABLE_SPRING=1 to isolate concurrent runs.")
+        return nil
+      end
+
       endpoints = STORE_ENV_VARS.map { |var| parse(env[var]) }
-      return nil if endpoints.any?(&:nil?)
+      if endpoints.any?(&:nil?)
+        unparseable = STORE_ENV_VARS.reject.with_index { |_, index| endpoints[index] }
+        warn_io.puts("[test-redis-isolation] skipped: cannot parse #{unparseable.join(', ')} as host:port/db; falling back to the values as set.")
+        return nil
+      end
 
       servers = endpoints.map { |endpoint| endpoint[:server] }.uniq
       if servers.length > 1
@@ -67,9 +84,14 @@ module TestRedisIsolation
 
       server = servers.first
       databases = database_count(server)
-      return nil if databases.nil?
+      if databases.nil?
+        warn_io.puts("[test-redis-isolation] skipped: #{server} does not answer CONFIG GET databases, so the ceiling is unknown.")
+        return nil
+      end
 
-      claim = claim_slot(server:, databases:, warn_io:)
+      # The floor sits above every database a fallback run would flush.
+      reserved = reserved_databases(endpoints)
+      claim = claim_slot(server:, databases:, reserved:, warn_io:, key_prefix:)
       return nil if claim.nil?
 
       claim[:databases].each_with_index do |database, index|
@@ -87,20 +109,28 @@ module TestRedisIsolation
       nil
     end
 
+    # The first database a slot may use: above .env.development AND above every index
+    # the passed-in env vars name, so a run that falls back to them cannot flush a
+    # leased block. See the invariants at the top of this file.
+    def reserved_databases(endpoints)
+      [RESERVED_DATABASES, endpoints.map { |endpoint| endpoint[:database] }.max + 1].max
+    end
+
     # Pure: which database indexes slot N gets, given a server's database count.
     # nil when the slot does not fit. The last database is the lease registry, so it is
     # excluded from the assignable range.
-    def databases_for_slot(slot, databases:, stores: STORE_ENV_VARS.length, reserved: RESERVED_DATABASES)
+    def databases_for_slot(slot, databases:, reserved: RESERVED_DATABASES)
+      stores = STORE_ENV_VARS.length
       first = reserved + (slot * stores)
       last = first + stores - 1
       return nil if last > registry_database(databases) - 1
       (first..last).to_a
     end
 
-    def slot_count(databases:, stores: STORE_ENV_VARS.length, reserved: RESERVED_DATABASES)
+    def slot_count(databases:, reserved: RESERVED_DATABASES)
       assignable = registry_database(databases) - reserved
       return 0 if assignable <= 0
-      assignable / stores
+      assignable / STORE_ENV_VARS.length
     end
 
     def registry_database(databases)
@@ -126,8 +156,8 @@ module TestRedisIsolation
     # Claims the first free slot. Returns {slot:, databases:, token:, key:, registry:} or nil.
     # `key_prefix` exists so the spec can lease against this same live Redis without
     # competing for the slot its own run holds.
-    def claim_slot(server:, databases:, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
-      slots = slot_count(databases:)
+    def claim_slot(server:, databases:, reserved: RESERVED_DATABASES, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
+      slots = slot_count(databases:, reserved:)
       if slots.zero?
         warn_io.puts(capacity_warning(server:, databases:, slots: 0))
         return nil
@@ -139,7 +169,7 @@ module TestRedisIsolation
       slots.times do |slot|
         key = "#{key_prefix}#{slot}"
         next unless registry.set(key, token, nx: true, ex: LEASE_TTL_SECONDS)
-        return { slot:, databases: databases_for_slot(slot, databases:), token:, key:, registry: }
+        return { slot:, databases: databases_for_slot(slot, databases:, reserved:), token:, key:, registry: }
       end
 
       registry.close
@@ -171,26 +201,38 @@ module TestRedisIsolation
         { server: match[1], database: (match[2] || "0").to_i }
       end
 
+      # Returns the thread so a caller (the spec) can stop it; nothing in boot needs it.
       def keep_lease_alive(claim)
-        # Its own connection: a Redis client is not thread-safe, and this thread would
-        # otherwise share one with the at_exit release running on the main thread.
+        # Its own connection, so a tick sleeping mid-command cannot delay the exit-time
+        # release sharing the same one.
         connection = Redis.new(url: claim.fetch(:registry).id)
 
-        Thread.new do
+        thread = Thread.new do
           loop do
             sleep(LEASE_REFRESH_SECONDS)
             connection.eval(REFRESH_SCRIPT, keys: [claim[:key]], argv: [claim[:token], LEASE_TTL_SECONDS])
           rescue StandardError
-            # Deliberately every error, not a list: if this thread dies the lease quietly
-            # expires mid-run and another run leases the same databases — the exact race
-            # this file exists to prevent, with no failure to point at. A missed tick is
-            # harmless (the TTL outlives several), so retrying forever is the safe shape.
+            # Every error, not a list: if this thread dies the lease expires mid-run and
+            # another run leases the same databases — this file's own race, with nothing
+            # to point at. A missed tick is harmless, so retrying forever is the safe shape.
           end
-        end.tap { |thread| thread.name = "test-redis-isolation-lease" }
+        end
+        thread.name = "test-redis-isolation-lease"
+        claim[:refresh_thread] = thread
       end
 
       def release_lease_at_exit(claim)
-        at_exit { release_lease(claim) }
+        # at_exit handlers are inherited across fork, and a child holds the parent's exact
+        # token — so without this an exiting child releases the lease the parent is still
+        # using, and the token compare cannot tell them apart.
+        owner = Process.pid
+        at_exit { release_lease(claim) if Process.pid == owner }
+      end
+
+      # True inside a spring server's preloaded application, whose per-command forks would
+      # all share one leased block. Spring only defines this while serving.
+      def spring_preload?
+        defined?(Spring::Application) ? true : false
       end
 
       def truthy?(value)
