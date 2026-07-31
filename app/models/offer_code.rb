@@ -595,11 +595,12 @@ class OfferCode < ApplicationRecord
       # A code switching from universal to product-specific removes nothing, but
       # every product defaulting to it that isn't in the new list detaches.
       return Link.visible.where(default_offer_code_id: id).where.not(id: products.map(&:id)).pluck(:id) if universal_changed?(from: true, to: false)
+      return [] if @removed_product_ids.blank?
 
       # Subtract the current list: a product removed and re-added in the same
       # edit is recorded by after_remove but ends up attached, so it detaches
       # nothing.
-      (@removed_product_ids || []) - products.map(&:id)
+      @removed_product_ids - products.map(&:id)
     end
 
     def to_product_sentence(names, total)
