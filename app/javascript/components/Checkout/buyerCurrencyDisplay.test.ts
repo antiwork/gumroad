@@ -28,6 +28,7 @@ const surcharges = (overrides: Partial<SurchargesResponse> = {}): SurchargesResp
     currency: "cad",
     canonical_total_cents: 1_000,
     presentment_total_cents: 1_250,
+    charge_presentment_total_cents: 500,
     rate: 1.25,
     subunit_to_unit: 100,
     expires_at: "2026-07-01T00:00:00Z",
@@ -50,6 +51,7 @@ describe("getCheckoutBuyerCurrencyDisplay", () => {
       rate: 1.25,
       subunitToUnit: 100,
       presentmentTotalCents: 1_250,
+      chargePresentmentTotalCents: 500,
       lineAllocations: [
         { permalink: "prod", price_cents: 1_250, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_250 },
       ],
