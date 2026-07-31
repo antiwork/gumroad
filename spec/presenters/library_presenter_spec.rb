@@ -183,6 +183,139 @@ describe LibraryPresenter do
       end
     end
 
+    context "when the original membership purchase was fully refunded" do
+      def create_renewal(attributes = {})
+        create(
+          :membership_purchase,
+          link: product,
+          purchaser: buyer,
+          email: buyer.email,
+          subscription: purchase.subscription,
+          is_original_subscription_purchase: false,
+          succeeded_at: 1.day.ago,
+          **attributes
+        )
+      end
+
+      before do
+        purchase.update!(stripe_refunded: true)
+      end
+
+      it "links the Library card to a later paid renewal" do
+        renewal = create_renewal.tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        expect(purchases.first[:purchase][:download_url]).to eq(renewal.url_redirect.download_page_url)
+        expect(purchases.first[:purchase][:download_url]).not_to eq(purchase.url_redirect.download_page_url)
+      end
+
+      it "does not publish the refunded URL when there is no paid renewal" do
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
+        expect(purchases.first[:purchase][:download_url]).to be_nil
+      end
+
+      it "skips a fully refunded renewal" do
+        create_renewal(stripe_refunded: true).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to be_nil
+      end
+
+      it "skips a renewal with an unreversed chargeback" do
+        create_renewal(chargeback_date: Time.current).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to be_nil
+      end
+
+      it "allows partially refunded renewals and reversed chargebacks" do
+        renewal = create_renewal(
+          stripe_partially_refunded: true,
+          chargeback_date: 2.days.ago,
+          chargeback_reversed: true
+        ).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to eq(renewal.url_redirect.download_page_url)
+      end
+
+      it "falls back to an older eligible redirect" do
+        eligible_renewal = create_renewal(succeeded_at: 3.days.ago).tap(&:create_url_redirect!)
+        create_renewal(succeeded_at: 2.days.ago, stripe_refunded: true).tap(&:create_url_redirect!)
+        create_renewal(succeeded_at: 2.days.ago, is_access_revoked: true).tap(&:create_url_redirect!)
+        create_renewal(succeeded_at: 1.day.ago)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to eq(eligible_renewal.url_redirect.download_page_url)
+      end
+
+      it "falls back past newer purchases for another buyer or product" do
+        eligible_renewal = create_renewal(succeeded_at: 3.days.ago, email: "updated@example.com").tap(&:create_url_redirect!)
+        create_renewal(succeeded_at: 2.days.ago, purchaser: create(:user)).tap(&:create_url_redirect!)
+        create_renewal(succeeded_at: 1.day.ago, link: create(:membership_product, user: creator)).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to eq(eligible_renewal.url_redirect.download_page_url)
+      end
+
+      it "ignores unsuccessful renewal attempts" do
+        create_renewal(purchase_state: "failed").tap(&:create_url_redirect!)
+        create_renewal(purchase_state: "in_progress").tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to be_nil
+      end
+
+      it "uses the newest renewal deterministically when timestamps match" do
+        succeeded_at = 1.day.ago
+        create_renewal(succeeded_at:).tap(&:create_url_redirect!)
+        newest_renewal = create_renewal(succeeded_at:).tap(&:create_url_redirect!)
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(purchases.first[:purchase][:download_url]).to eq(newest_renewal.url_redirect.download_page_url)
+      end
+
+      it "loads replacement redirects in one query for multiple Library cards" do
+        other_purchase = create(:membership_purchase, link: product, purchaser: buyer, stripe_refunded: true)
+        other_purchase.create_url_redirect!
+        create_renewal.tap(&:create_url_redirect!)
+        create(
+          :membership_purchase,
+          link: product,
+          purchaser: buyer,
+          email: buyer.email,
+          subscription: other_purchase.subscription,
+          is_original_subscription_purchase: false,
+          succeeded_at: 1.day.ago
+        ).tap(&:create_url_redirect!)
+        replacement_queries = []
+        subscription_probes = []
+        callback = lambda do |*, payload|
+          sql = payload[:sql]
+          replacement_queries << sql if sql.include?("LEFT OUTER JOIN `url_redirects`") && sql.include?("`purchases`.`subscription_id`")
+          subscription_probes << sql if sql.include?("FROM `subscriptions`") && sql.include?("LIMIT 1")
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          described_class.new(buyer).library_cards
+        end
+
+        expect(replacement_queries.size).to eq(1)
+        expect(subscription_probes).to be_empty
+      end
+    end
+
     context "when the user has a gifted membership purchase" do
       let(:gifted_product) { create(:membership_product, name: "Gifted Membership", user: creator) }
       let(:subscription) { create(:subscription, link: gifted_product, user: buyer) }
@@ -198,8 +331,55 @@ describe LibraryPresenter do
       it "includes gifted membership purchases in the library" do
         purchases, _ = described_class.new(buyer).library_cards
 
-        gift_purchase_ids = purchases.map { |p| p[:purchase][:id] }
-        expect(gift_purchase_ids).to include(gift_receiver_purchase.external_id)
+        gift_purchase = purchases.find { _1[:purchase][:id] == gift_receiver_purchase.external_id }
+        expect(gift_purchase[:purchase][:download_url]).to eq(gift_receiver_purchase.url_redirect.download_page_url)
+      end
+
+      it "links a refunded gift-receiver card to the giftee's paid renewal" do
+        gift_subscription = create(:subscription, link: gifted_product, user: buyer)
+        gifter = create(
+          :membership_purchase,
+          link: gifted_product,
+          subscription: gift_subscription,
+          purchaser: create(:user),
+          is_gift_sender_purchase: true,
+          succeeded_at: 3.days.ago
+        )
+        refunded_gift_purchase = create(
+          :purchase,
+          :gift_receiver,
+          link: gifted_product,
+          purchaser: buyer,
+          subscription: gift_subscription,
+          is_original_subscription_purchase: false
+        ).tap(&:create_url_redirect!)
+        create(
+          :gift,
+          link: gifted_product,
+          gifter_purchase: gifter,
+          giftee_purchase: refunded_gift_purchase,
+          gifter_email: gifter.email,
+          giftee_email: buyer.email
+        )
+        gift_subscription.reload
+        renewal = create(
+          :membership_purchase,
+          link: gifted_product,
+          subscription: gift_subscription,
+          purchaser: buyer,
+          email: buyer.email,
+          is_original_subscription_purchase: false,
+          succeeded_at: 1.day.ago
+        ).tap(&:create_url_redirect!)
+        gifter.reload.mark_giftee_purchase_as_refunded
+        refunded_gift_purchase.reload
+
+        purchases, _ = described_class.new(buyer).library_cards
+
+        expect(refunded_gift_purchase).to be_stripe_refunded
+        gift_purchase = purchases.find { _1[:purchase][:id] == refunded_gift_purchase.external_id }
+        expect(gift_purchase[:purchase][:download_url]).to eq(renewal.url_redirect.download_page_url)
+        expect(gifter.url_redirect).to be_nil
       end
     end
 
