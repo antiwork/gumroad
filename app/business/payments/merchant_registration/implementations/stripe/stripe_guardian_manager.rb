@@ -68,12 +68,19 @@ module StripeGuardianManager
     guardian = user_compliance_info.guardian
     return unless guardian&.has_completed_info?
 
-    # Serialized across the whole lookup-create-adopt sequence, per guardian and account. Two
+    # Serialized across the whole lookup-create-adopt-reconcile sequence, per Stripe ACCOUNT. Two
     # overlapping syncs — account creation racing an update, or two updates — can otherwise both
     # find no Person and both create one, and only the last id written survives locally. The other
     # Person keeps the adult's name, date of birth and address at Stripe with no handle erasure can
     # select on. Deciding by Stripe idempotency key instead would not help: the two calls carry
     # different keys only because neither knows the other exists.
+    #
+    # Keyed on the account and not the guardian because everything under this lock is account-scoped:
+    # the relationship scan and the reconcile both see every legal-guardian Person on the account, so
+    # two syncs carrying DIFFERENT guardian rows of one seller must still exclude each other. They
+    # can — guardian_id is mutable on a live compliance revision, so a request that read the old
+    # guardian can overlap one that read the new. Per-guardian locks let the reconcile of one delete
+    # the Person the other had just created but not yet recorded.
     with_sync_lock(guardian, stripe_account) do
       # Re-read inside the lock: the sync we waited on may have just created the Person and written
       # its id, and this stale copy would otherwise still look unsynced and create a second one.
@@ -143,14 +150,14 @@ module StripeGuardianManager
   end
   private_class_method :reconcile_duplicate_persons!
 
-  # Holds a Redis lock for the duration of one guardian sync.
+  # Holds a Redis lock for the duration of one guardian sync, keyed on the Stripe account.
   #
   # Raises rather than proceeding when the lock cannot be taken, including when Redis itself is
   # unreachable: both call sites rescue and report, and a missed sync self-heals on the next account
   # update, whereas an unserialized one leaves an untracked Person holding a third party's identity
   # data at Stripe. Failing closed is the cheaper side of that trade.
   def self.with_sync_lock(guardian, stripe_account)
-    lock_key = "stripe_guardian_sync:#{stripe_account.id}:#{guardian.id}"
+    lock_key = "stripe_guardian_sync:#{stripe_account.id}"
     token = SecureRandom.uuid
     lock_acquired = false
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + SYNC_LOCK_WAIT_TIMEOUT

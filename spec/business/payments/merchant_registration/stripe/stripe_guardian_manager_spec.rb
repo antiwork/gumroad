@@ -338,14 +338,14 @@ describe StripeGuardianManager do
         create_compliance_info(guardian_record: guardian)
         held = nil
         allow(Stripe::Account).to receive(:create_person) do
-          held = $redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")
+          held = $redis.get("stripe_guardian_sync:#{stripe_account_id}")
           Stripe::StripeObject.construct_from(id: "person_guardian_new")
         end
 
         described_class.sync(user, stripe_account, passphrase:)
 
         expect(held).to be_present
-        expect($redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")).to be_nil
+        expect($redis.get("stripe_guardian_sync:#{stripe_account_id}")).to be_nil
       end
 
       # Failing closed: a missed sync self-heals on the next account update, an unserialized one
@@ -353,13 +353,13 @@ describe StripeGuardianManager do
       it "sends nothing to Stripe when the lock is already held" do
         create_compliance_info(guardian_record: guardian)
         stub_const("#{described_class}::SYNC_LOCK_WAIT_TIMEOUT", 0.seconds)
-        $redis.set("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}", "someone-else")
+        $redis.set("stripe_guardian_sync:#{stripe_account_id}", "someone-else")
 
         expect { described_class.sync(user, stripe_account, passphrase:) }
           .to raise_error(StripeGuardianManager::SyncLockUnavailable)
         expect(Stripe::Account).not_to have_received(:create_person)
         # The other holder's lock must survive: releasing it would let both syncs run after all.
-        expect($redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")).to eq("someone-else")
+        expect($redis.get("stripe_guardian_sync:#{stripe_account_id}")).to eq("someone-else")
       end
 
       # A long lease makes lock expiry rare; it cannot make an orphan impossible. No lock spans the
@@ -424,6 +424,24 @@ describe StripeGuardianManager do
         expect(described_class.sync(user, stripe_account, passphrase:).id).to eq("person_guardian_new")
         expect(guardian.reload.stripe_person_id).to eq("person_guardian_new")
         expect(ErrorNotifier).to have_received(:notify)
+      end
+
+      # The scan and the reconcile are account-scoped, so a lock scoped to one guardian row does not
+      # cover them: guardian_id is mutable on a live compliance revision, so two syncs of the same
+      # seller can carry different guardian rows, and then the reconcile of one deletes the Person
+      # the other created but had not yet recorded.
+      it "excludes a concurrent sync carrying a different guardian row of the same seller" do
+        create_compliance_info(guardian_record: guardian)
+        other_guardian = create(:guardian, user:)
+        allow(Stripe::Account).to receive(:delete_person)
+        $redis.set("stripe_guardian_sync:#{stripe_account_id}", "sync-holding-other-guardian")
+        stub_const("#{described_class}::SYNC_LOCK_WAIT_TIMEOUT", 0.seconds)
+
+        expect { described_class.sync(user, stripe_account, passphrase:) }
+          .to raise_error(StripeGuardianManager::SyncLockUnavailable)
+        expect(Stripe::Account).not_to have_received(:create_person)
+        expect(Stripe::Account).not_to have_received(:delete_person)
+        expect(other_guardian.reload.stripe_person_id).to be_nil
       end
 
       # The lock is held across two Stripe round trips, so a TTL shorter than a worst-case call
