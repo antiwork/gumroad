@@ -9,8 +9,9 @@ class MoroccoBankAccount < BankAccount
   # Morocco IBAN: MA + 2 check digits + 24 digits = 28 chars, fixed. Stripe rejects anything else,
   # including a 28-char value whose mod-97 check digits don't compute, so a length-only check would
   # still let a bad value save here and fail later at bank-sync. Ibandit's own `valid?` is unusable
-  # for the same bundled-data reason as Niger (#471, #775): its MA structure has no per-field format
-  # regexes, and the nil formats compile to /\A\z/, rejecting every valid MA IBAN.
+  # for the same bundled-data problem Niger, Côte d'Ivoire and Sweden work around (ibandit #471,
+  # #775): the MA structure has no per-field format regexes, and the nil formats compile to /\A\z/,
+  # rejecting every valid MA IBAN.
   IBAN_FORMAT_REGEX = /\AMA[0-9]{26}\z/
   private_constant :IBAN_FORMAT_REGEX
 
@@ -59,8 +60,10 @@ class MoroccoBankAccount < BankAccount
     def validate_account_number
       decrypted = account_number_decrypted
       if decrypted.present?
+        # Match the raw value, not `iban.iban`: Ibandit upcases and strips whitespace, so matching
+        # its normalized form would accept a value we then store and send to Stripe as typed.
         iban = Ibandit::IBAN.new(decrypted)
-        return if IBAN_FORMAT_REGEX.match?(iban.iban) &&
+        return if IBAN_FORMAT_REGEX.match?(decrypted) &&
                   iban.valid_country_code? &&
                   iban.valid_check_digits? &&
                   iban.valid_length? &&

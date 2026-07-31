@@ -1,7 +1,7 @@
 // Some payout countries are not in `country_supports_iban?` (so the payout settings form shows them
 // the generic "Account #" box rather than the dedicated IBAN box), yet their bank-account models
 // still require a specific format the generic box does not hint at. Morocco, for example, wants an
-// IBAN-shaped value (MoroccoBankAccount's /^MA[0-9]{20,26}$/) and Gambia wants a fixed 18-character
+// IBAN-shaped value (MoroccoBankAccount's /\AMA[0-9]{26}\z/) and Gambia wants a fixed 18-character
 // number (GambiaBankAccount's /^[0-9A-Za-z]{18}$/). Showing the generic "1234567890" hint there
 // tells sellers to enter their short local account number, which is always rejected on save.
 //
