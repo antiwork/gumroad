@@ -20,6 +20,12 @@
 module PayoutNoteVisibility
   SELLER_VISIBLE_FLAG = "seller_visible"
 
+  # How far back to walk when looking for the newest note a seller may be shown. Visibility is
+  # stored in json_data, which MySQL cannot filter on usefully, so the scan happens in memory and
+  # has to be bounded — and a seller-facing note buried under this many newer notes is too stale
+  # to act on anyway.
+  MAX_NOTES_SCANNED = 25
+
   # Prefixes/contents of internal-only payout notes written before the flag existed.
   #
   # "Payout via PayPal" is in here because the Payouts page has always excluded those notes from

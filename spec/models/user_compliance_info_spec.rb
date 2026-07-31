@@ -86,6 +86,208 @@ describe UserComplianceInfo do
         end
       end
     end
+
+    describe "under 18 (payout readiness)" do
+      let(:birthday) { 15.years.ago.to_date }
+      let(:seller) { create(:user) }
+
+      describe "no guardian attached" do
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:) }
+
+        it "returns false" do
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "guardian attached but their own details are incomplete" do
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:, guardian: create(:guardian, user: seller, street_address: nil)) }
+
+        it "returns false" do
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "guardian has been removed" do
+        let(:guardian) { create(:guardian, user: seller) }
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:, guardian:) }
+
+        it "returns false" do
+          user_compliance_info
+          guardian.mark_deleted!
+
+          expect(user_compliance_info.reload.has_completed_payout_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "guardian attached with complete details" do
+        let(:user_compliance_info) { create(:user_compliance_info, user: seller, birthday:, guardian: create(:guardian, user: seller)) }
+
+        it "returns true" do
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(true)
+        end
+      end
+
+      describe "an adult seller" do
+        let(:user_compliance_info) { create(:user_compliance_info, birthday: 30.years.ago.to_date) }
+
+        it "returns true with no guardian" do
+          expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(true)
+        end
+      end
+
+      # A country with no guardian path is not a country with no requirement. Reading the absent ask
+      # as readiness would send a minor our payment partner will never verify through payout setup.
+      describe "a minor in a country where the guardian path does not exist" do
+        let(:user_compliance_info) { create(:user_compliance_info, country: "Brazil", birthday:) }
+
+        it "returns false even though no guardian is asked for" do
+          expect(user_compliance_info).to have_attributes(
+            requires_legal_guardian?: false,
+            legal_guardian_unsupported?: true,
+            has_completed_payout_compliance_info?: false
+          )
+        end
+
+        it "returns false even with an otherwise complete guardian attached" do
+          user_compliance_info.update!(guardian: create(:guardian, user: user_compliance_info.user))
+
+          expect(user_compliance_info.reload.has_completed_payout_compliance_info?).to eq(false)
+        end
+      end
+
+      describe "an adult in a country where the guardian path does not exist" do
+        let(:user_compliance_info) { create(:user_compliance_info, country: "Brazil", birthday: 30.years.ago.to_date) }
+
+        it "returns true, since the country gate only ever concerns minors" do
+          expect(user_compliance_info).to have_attributes(
+            legal_guardian_unsupported?: false,
+            has_completed_payout_compliance_info?: true
+          )
+        end
+      end
+    end
+  end
+
+  describe "#has_completed_compliance_info? for a seller under 18" do
+    # Tax reporting reads this predicate. There are ~16,000 live compliance records with an
+    # under-18 birthday, and folding the guardian requirement in here would have dropped every one
+    # of them from the tax-summary export silently, because the export just returns nil.
+    let(:user_compliance_info) { create(:user_compliance_info, birthday: 15.years.ago.to_date) }
+
+    it "is complete without a guardian, because knowing who the person is does not depend on one" do
+      expect(user_compliance_info.has_completed_compliance_info?).to eq(true)
+    end
+
+    it "is not payout-ready without one" do
+      expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
+    end
+
+    it "still exports a tax summary" do
+      expect(Exports::TaxSummary::Payable.new(user: user_compliance_info.user, year: Time.current.year).send(:compliance_info)&.has_completed_compliance_info?).to eq(true)
+    end
+  end
+
+  describe "#requires_legal_guardian?" do
+    it "is true for a seller who is 13" do
+      expect(build(:user_compliance_info, country: "United States", birthday: 13.years.ago.to_date).requires_legal_guardian?).to be(true)
+    end
+
+    it "is true for a seller who is 17" do
+      expect(build(:user_compliance_info, country: "United States", birthday: 17.years.ago.to_date).requires_legal_guardian?).to be(true)
+    end
+
+    it "is false for a seller who turned 18 today" do
+      expect(build(:user_compliance_info, country: "United States", birthday: 18.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false when the birthday is unknown, so we do not demand a guardian from sellers who have not filled it in" do
+      expect(build(:user_compliance_info, country: "United States", birthday: nil).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false for a minor outside the supported countries, where the guardian path does not exist" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false for a minor in a country we have not confirmed with Stripe yet" do
+      expect(build(:user_compliance_info, country: "United Kingdom", birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+
+    it "is false when the country is unknown" do
+      expect(build(:user_compliance_info, country: nil, birthday: 15.years.ago.to_date).requires_legal_guardian?).to be(false)
+    end
+  end
+
+  # The unsupported case is split out from requires_legal_guardian? precisely so payout readiness can
+  # tell "no guardian needed" apart from "no guardian possible".
+  describe "#legal_guardian_unsupported?" do
+    it "is true for a minor in a country with no guardian path" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: 15.years.ago.to_date).legal_guardian_unsupported?).to be(true)
+    end
+
+    it "is false for a minor in a supported country, who is asked for one instead" do
+      expect(build(:user_compliance_info, country: "United States", birthday: 15.years.ago.to_date).legal_guardian_unsupported?).to be(false)
+    end
+
+    it "is false for an adult in a country with no guardian path" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: 30.years.ago.to_date).legal_guardian_unsupported?).to be(false)
+    end
+
+    it "is false when the birthday is unknown, matching requires_legal_guardian?" do
+      expect(build(:user_compliance_info, country: "Brazil", birthday: nil).legal_guardian_unsupported?).to be(false)
+    end
+  end
+
+  describe "the guardian association" do
+    let(:seller) { create(:user) }
+
+    it "can be attached after the record is created, unlike the rest of this immutable record" do
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date)
+      guardian = create(:guardian, user: seller)
+
+      expect { user_compliance_info.update!(guardian:) }.not_to raise_error
+      expect(user_compliance_info.reload.guardian).to eq(guardian)
+    end
+
+    it "still refuses edits to the seller's own details" do
+      user_compliance_info = create(:user_compliance_info)
+
+      expect { user_compliance_info.update!(first_name: "Someone else") }.to raise_error(Immutable::RecordImmutable)
+    end
+
+    # A guardian's details are erased with the seller they belong to, so a revision pointing at
+    # another seller's guardian would let one erasure blank out the other's payout compliance.
+    it "refuses a guardian belonging to another seller" do
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date)
+
+      expect(user_compliance_info.update(guardian: create(:guardian, user: create(:user)))).to be(false)
+      expect(user_compliance_info.errors.full_messages).to include("The legal guardian must belong to the same account.")
+      expect(user_compliance_info.reload.guardian_id).to be_nil
+    end
+
+    it "refuses to swap one guardian for another in place, so compliance history is not rewritten" do
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian: create(:guardian, user: seller))
+
+      expect(user_compliance_info.update(guardian: create(:guardian, user: seller))).to be(false)
+      expect(user_compliance_info.errors.full_messages).to include("The legal guardian cannot be changed once set.")
+    end
+
+    it "refuses to attach a guardian to a superseded revision" do
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date)
+      user_compliance_info.mark_deleted!
+
+      expect(user_compliance_info.update(guardian: create(:guardian, user: seller))).to be(false)
+      expect(user_compliance_info.errors.full_messages).to include("The legal guardian can only be set on the current compliance details.")
+    end
+
+    it "keeps the reference when the guardian's details are erased, so the audit trail survives" do
+      guardian = create(:guardian, user: seller)
+      user_compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+      guardian.anonymize!
+
+      expect(user_compliance_info.reload.guardian_id).to eq(guardian.id)
+      expect(user_compliance_info.has_completed_payout_compliance_info?).to eq(false)
+    end
   end
 
   describe "legal entity fields" do

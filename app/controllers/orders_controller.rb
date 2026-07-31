@@ -112,6 +112,7 @@ class OrdersController < ApplicationController
       order_id: order.id,
       stage: params[:stage].to_s.first(50),
       payment_method_type: params[:payment_method_type].to_s.first(50),
+      selected_payment_method_type: params[:selected_payment_method_type].to_s.first(50),
       stripe_error_type: params[:stripe_error_type].to_s.first(100),
       stripe_error_code: params[:stripe_error_code].to_s.first(100),
       stripe_error_message: params[:stripe_error_message].to_s.first(500),
@@ -137,7 +138,11 @@ class OrdersController < ApplicationController
     # Methods that confirm in-page: a failed attempt transitions the intent, so
     # `payment_intent.payment_failed` fires and `Purchase::ChargeEventsHandler#handle_event_failed!`
     # writes the code to `purchases.stripe_error_code`.
-    CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link].freeze
+    #
+    # `apple_pay`/`google_pay` are here because they are how the Payment Element names a wallet ROW
+    # (see `isWalletPaymentElementType`), and only the selected-row fallback below ever carries
+    # them — the resulting PaymentMethod is a card, so Stripe's own value says `card`.
+    CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES = %w[card link apple_pay google_pay].freeze
 
     # The error type that proves a charge was actually attempted, and therefore that
     # `payment_intent.payment_failed` fired at all.
@@ -150,12 +155,22 @@ class OrdersController < ApplicationController
     # intent in an unexpected state) never transitions the intent and never webhooks. Suppressing
     # on the method alone would make those log-only.
     #
+    # `payment_method_type` comes from Stripe's error object and is ABSENT on most declines — it is
+    # only set when Stripe attached a payment method to the error, which a plain issuer decline
+    # does not. So the buyer's selected Payment Element row is the fallback: without it a card
+    # decline is indistinguishable from a redirect-leg failure and every one of them reports
+    # (gumroad-private#1514). Stripe's value wins when present; the two disagreeing is itself worth
+    # seeing, and Stripe is the authority on what it actually charged.
+    #
     # Denylist rather than allowlist so an unrecognised or blank type keeps reporting: a method
-    # added later must not go unmonitored because nobody updated this list.
+    # added later must not go unmonitored because nobody updated this list, and a buyer who
+    # suppresses their own report only loses their own signal.
     def confirm_error_reportable?(error_details)
       return true unless error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
 
-      !error_details[:payment_method_type].in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
+      method_type = error_details[:payment_method_type].presence ||
+                    error_details[:selected_payment_method_type]
+      !method_type.in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
     end
 
     # Fail-open per-order throttle for confirm_error Sentry reports. Counts reports per order

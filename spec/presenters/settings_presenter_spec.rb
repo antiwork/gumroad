@@ -897,6 +897,45 @@ describe SettingsPresenter do
           )
         end
 
+        it "quotes back the refused values on a directory miss so the seller knows what to check" do
+          rejected = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+          note = seller.add_payout_note(content: bank_note_content)
+          note.json_data["stripe_error_message"] = "We couldn't find the bank for that bank/branch code"
+          note.json_data["bank_account_id"] = rejected.id
+          note.save!
+
+          message = presenter.payments_props[:account_status][:compliance_actions].first[:message]
+          expect(message).to include("bank code JSCLUZ22XXX and branch code 00401")
+          expect(message).to include("check both")
+          expect(message).not_to include("branch code is the half")
+        end
+
+        it "does not quote values for an unstamped note that may describe a replaced row" do
+          # A note written before we stamped bank_account_id reaches the banner through the
+          # selector's timestamp fallback, so it can outlive the row it was about. Nothing here can
+          # tell whether the active codes are the ones Stripe refused, so quote neither.
+          rejected = create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+          rejected.mark_deleted!
+          create(:uzbekistan_bank_account, user: seller, bank_code: "KACHUZ22XXX", branch_code: "01158")
+          note = seller.add_payout_note(content: bank_note_content)
+          note.json_data["stripe_error_message"] = "We couldn't find the bank for that bank/branch code"
+          note.save!
+
+          message = presenter.payments_props[:account_status][:compliance_actions].first[:message]
+          expect(message).to include("couldn't verify the bank account you entered")
+          expect(message).not_to include("KACHUZ22XXX")
+          expect(message).not_to include("JSCLUZ22XXX")
+          expect(message).not_to include("check both")
+        end
+
+        it "does not quote values for a rejection that is not a directory miss" do
+          create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+          seller.add_payout_note(content: bank_note_content)
+
+          message = presenter.payments_props[:account_status][:compliance_actions].first[:message]
+          expect(message).to_not include("JSCLUZ22XXX")
+        end
+
         it "tells a block-listed seller their details were fine, not to re-check them" do
           # Asked BEFORE the terminal branch: both ask for a different account, but only this copy
           # says the details were correct, which is what kept the gumroad-private#1476 seller

@@ -309,11 +309,18 @@ class CustomerMailer < ApplicationMailer
 
     return if @installments.empty?
 
-    @installments.each do |installment|
-      SentAbandonedCartEmail.create!(cart_id: cart.id, installment_id: installment[:id])
-    rescue ActiveRecord::RecordNotUnique
-      # NoOp
-    end unless is_preview
+    unless is_preview
+      # Concurrent deliveries for the same cart can both pass the `cart.abandoned?` check
+      # above, so the unique-indexed insert is the arbiter: an installment whose row lost
+      # the race must not be mailed again (gumroad-private#1576).
+      @installments = @installments.select do |installment|
+        SentAbandonedCartEmail.create!(cart_id: cart.id, installment_id: installment[:id])
+        true
+      rescue ActiveRecord::RecordNotUnique
+        false
+      end
+      return if @installments.empty?
+    end
 
     subject = @installments.one? ? @installments.first[:subject] : "You left something in your cart"
     mail(

@@ -123,6 +123,7 @@ const clientConfirmPaymentMethod: PurchasePaymentMethod = {
   cardCountry: "US",
   walletType: "apple_pay",
   mountCurrency: "usd",
+  selectedMethodType: "card",
   mountedPaymentMethodTypes: ["card", "link"],
 };
 

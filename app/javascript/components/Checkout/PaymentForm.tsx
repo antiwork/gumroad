@@ -894,6 +894,7 @@ const CreditCardContent = ({
             stripePaymentElementConfig,
             "`stripePaymentElementConfig` should be defined when confirming via the Payment Element",
           ).currency,
+          selectedMethodType: paymentElementTypeRef.current,
           mountedPaymentMethodTypes: mountedPaymentMethodTypesRef.current,
         };
         if (tokenResult.wallet && !hasShipping(state)) {

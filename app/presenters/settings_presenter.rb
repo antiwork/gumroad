@@ -517,7 +517,17 @@ class SettingsPresenter
           "We've been re-checking the bank account you added, but our payment partner still hasn't been able to verify it. Please double-check your details and re-save them. If everything looks correct, contact support and we'll look into it." if abandoned_reason.blank?
         else
           # Cadence wording must match ContactingCreatorMailer#invalid_bank_account.
-          "Our payment partner couldn't verify the bank account you entered. Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."
+          # Quote the row the note names, not the active one. A legacy note with no
+          # bank_account_id reaches here through the selector's timestamp fallback and may
+          # describe a row the seller has already replaced, so it quotes nothing and keeps the
+          # generic sentence. Mirrors ContactingCreatorMailer#rejected_bank_account.
+          if StripeMerchantAccountManager.bank_details_directory_miss_note?(bank_note)
+            refused_bank_account = seller.bank_accounts.find_by(id: bank_note.json_data["bank_account_id"])
+            directory_detail = StripeMerchantAccountManager.bank_directory_miss_detail(refused_bank_account)
+          end
+          ["Our payment partner couldn't verify the bank account you entered.",
+           directory_detail,
+           "Please double-check your details and re-save them. If you're sure they're correct (for example, a newly opened account), you don't need to do anything — we'll automatically re-check it once a week for up to #{RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS} weeks."].compact.join(" ")
         end
         compliance_actions << { message: bank_message, href: nil } if bank_message.present?
       end

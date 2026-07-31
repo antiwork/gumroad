@@ -25,15 +25,18 @@ const getStripeInstanceMock = vi.mocked(getStripeInstance);
 
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
+const clientConfirmPaymentMethod = {
+  type: "payment-element-client-confirm",
+  confirmationTokenId: "ct_123",
+  cardCountry: "US",
+  walletType: null,
+  mountCurrency: "usd",
+  selectedMethodType: "card",
+  mountedPaymentMethodTypes: ["card", "link"],
+} as const;
+
 const requestData: StartCartPurchaseRequestPayload = {
-  paymentMethod: {
-    type: "payment-element-client-confirm",
-    confirmationTokenId: "ct_123",
-    cardCountry: "US",
-    walletType: null,
-    mountCurrency: "usd",
-    mountedPaymentMethodTypes: ["card", "link"],
-  },
+  paymentMethod: clientConfirmPaymentMethod,
   email: "buyer@example.com",
   fullName: "Buyer",
   zipCode: "10001",
@@ -115,7 +118,7 @@ describe("startClientConfirmOrderCreation", () => {
   it("sends the Payment Element mount currency when preparing a client-confirm checkout", async () => {
     requestMock.mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
 
-    await startClientConfirmOrderCreation(requestData, "ct_123");
+    await startClientConfirmOrderCreation(requestData, "ct_123", "card");
 
     expect(requestMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -152,7 +155,9 @@ describe("startClientConfirmOrderCreation", () => {
       }),
     );
 
-    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toBeInstanceOf(PaymentConfirmedError);
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123", "card")).rejects.toBeInstanceOf(
+      PaymentConfirmedError,
+    );
   });
 
   it("carries the return-page URL on the error so the buyer can land on a durable outcome", async () => {
@@ -162,7 +167,7 @@ describe("startClientConfirmOrderCreation", () => {
         jsonResponse({ success: true, line_items: {}, can_buyer_sign_up: false, offer_codes: [] }),
       );
 
-    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toMatchObject({
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123", "card")).rejects.toMatchObject({
       returnUrl: "https://gumroad.test/checkout/returns/order-token?payment_intent=pi",
     });
   });
@@ -170,7 +175,7 @@ describe("startClientConfirmOrderCreation", () => {
   it("carries the return-page URL even when the finalize request itself fails", async () => {
     requestMock.mockResolvedValueOnce(jsonResponse(prepareResponse)).mockRejectedValueOnce(new Error("network down"));
 
-    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toMatchObject({
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123", "card")).rejects.toMatchObject({
       returnUrl: "https://gumroad.test/checkout/returns/order-token?payment_intent=pi",
     });
   });
@@ -182,7 +187,9 @@ describe("startClientConfirmOrderCreation", () => {
         jsonResponse({ success: true, line_items: {}, can_buyer_sign_up: false, offer_codes: [] }),
       );
 
-    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toBeInstanceOf(PaymentConfirmedError);
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123", "card")).rejects.toBeInstanceOf(
+      PaymentConfirmedError,
+    );
   });
 
   it("throws a non-resubmittable error when finalize returns processing after capture", async () => {
@@ -195,7 +202,9 @@ describe("startClientConfirmOrderCreation", () => {
       }),
     );
 
-    await expect(startClientConfirmOrderCreation(requestData, "ct_123")).rejects.toBeInstanceOf(PaymentConfirmedError);
+    await expect(startClientConfirmOrderCreation(requestData, "ct_123", "card")).rejects.toBeInstanceOf(
+      PaymentConfirmedError,
+    );
   });
 
   it("reports a confirm failure to the server so redirect-method errors are visible in production", async () => {
@@ -208,7 +217,7 @@ describe("startClientConfirmOrderCreation", () => {
     });
     getStripeInstanceMock.mockResolvedValue(stripe);
 
-    const result = await startClientConfirmOrderCreation(requestData, "ct_123");
+    const result = await startClientConfirmOrderCreation(requestData, "ct_123", "card");
 
     expect(requestMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -224,5 +233,34 @@ describe("startClientConfirmOrderCreation", () => {
     );
     // The buyer still sees the failure — reporting must not change the outcome.
     expect(Object.values(result.lineItems).every((lineItem) => !lineItem.success)).toBe(true);
+  });
+
+  it("reports the selected Payment Element row, which is the only method signal a decline carries", async () => {
+    // A plain decline: Stripe returns no payment_method, so the server can only tell this is a
+    // card from the selected row (gumroad-private#1514).
+    requestMock
+      .mockResolvedValueOnce(jsonResponse(prepareResponse))
+      .mockResolvedValueOnce(jsonResponse({ success: true }));
+    const stripe: Stripe = Object.create(null);
+    stripe.confirmPayment = vi.fn().mockResolvedValue({
+      error: { type: "card_error", code: "card_declined", message: "Your card was declined." },
+    });
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    await startClientConfirmOrderCreation(
+      { ...requestData, paymentMethod: { ...clientConfirmPaymentMethod, selectedMethodType: "ideal" } },
+      "ct_123",
+      "ideal",
+    );
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/orders/order-token/confirm_error",
+        data: expect.objectContaining({
+          payment_method_type: null,
+          selected_payment_method_type: "ideal",
+        }),
+      }),
+    );
   });
 });

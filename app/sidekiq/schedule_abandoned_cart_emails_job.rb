@@ -21,7 +21,19 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  sidekiq_options queue: :low, retry: 5, lock: :until_executed
+  # Bound on SQL IN-list length. Past roughly 10k ids MySQL's range optimizer exhausts
+  # range_optimizer_max_mem_size and silently falls back to a full table scan.
+  IN_LIST_BATCH_SIZE = 5_000
+
+  # A SIGKILL (OOM, deploy pod reap) skips the `ensure` that releases an `until_executed`
+  # lock, and this job's digest is constant because it takes no arguments — so a stranded
+  # lock silently dropped every subsequent daily enqueue (gumroad-private#1576). Kept under
+  # the 24h schedule so a strand costs one run, not every run. Duplicate sends from an
+  # overlapping run are prevented by the unique index on sent_abandoned_cart_emails, not
+  # by this lock.
+  LOCK_TTL = 23.hours
+
+  sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
   # This job failed silently every day for 3.5 months (gumroad-private#1198): it landed in
   # the Sidekiq dead set with no alert, and no abandoned-cart emails went out platform-wide.
@@ -35,17 +47,29 @@ class ScheduleAbandonedCartEmailsJob
     )
   end
 
+  # One day's window is scanned, matched, and delivered before the next begins: a mid-run
+  # kill costs only the window in flight, not the whole run. The previous version
+  # accumulated all 30 days in memory and sent nothing until the very end, so it needed
+  # hours of uninterrupted runtime and rarely survived a weekday's deploys — sends
+  # flatlined platform-wide (gumroad-private#1576). Re-scanning finished windows after a
+  # restart is safe and cheap: delivered carts are excluded by Cart.abandoned, and a cart
+  # whose mail is enqueued but undelivered re-enqueues into the mailer's unique-indexed
+  # insert, which drops the duplicate.
   def perform
-    # cart_product_ids_with_cart_ids is a hash of { product_id => { cart_id => [variant_ids] } }
-    cart_product_ids_with_cart_ids = {}
-
     days_to_process = (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i)
     (1..days_to_process).each do |day|
       day_start = day.days.ago.beginning_of_day
       day_end = day == 1 ? Cart::ABANDONED_IF_UPDATED_BEFORE_AGO.ago : (day - 1).days.ago.beginning_of_day
+      schedule_emails_for_window(day_start..day_end)
+    end
+  end
 
+  private
+    def schedule_emails_for_window(window)
       start_time = Time.current
-      cart_ids = abandoned_cart_ids(day_start..day_end)
+      # { product_id => { cart_id => [variant_ids] } }
+      cart_product_ids_with_cart_ids = {}
+      cart_ids = abandoned_cart_ids(window)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
         Cart.includes(:alive_cart_products).where(id: batch_ids).each do |cart|
           next if cart.user_id.blank? && cart.email.blank?
@@ -59,38 +83,50 @@ class ScheduleAbandonedCartEmailsJob
           end
         end
       end
-      Rails.logger.info "Fetched #{cart_ids.count} carts for #{day_start} to #{day_end} in #{(Time.current - start_time).round(2)} seconds"
+      Rails.logger.info "Fetched #{cart_ids.count} carts for #{window.begin} to #{window.end} in #{(Time.current - start_time).round(2)} seconds"
+
+      start_time = Time.current
+      cart_ids_with_matched_workflow_ids_and_product_ids = matched_workflow_ids_and_product_ids_by_cart_id(cart_product_ids_with_cart_ids)
+
+      cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
+        CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
+      end
+      Rails.logger.info "Scheduled abandoned cart emails for #{cart_ids_with_matched_workflow_ids_and_product_ids.count} carts for #{window.begin} to #{window.end} in #{(Time.current - start_time).round(2)} seconds"
     end
 
-    # cart_ids_with_matched_workflow_ids_and_product_ids is a hash of { cart_id => { workflow_id => [product_ids] } }
-    cart_ids_with_matched_workflow_ids_and_product_ids = {}
+    # Returns { cart_id => { workflow_id => [product_ids] } } for the given
+    # { product_id => { cart_id => [variant_ids] } } map. Candidate workflows are looked up
+    # through the carted products' sellers rather than by walking every published
+    # abandoned-cart workflow — the full walk dominated the old single-pass runtime
+    # (gumroad-private#1576) and would have run once per window here.
+    def matched_workflow_ids_and_product_ids_by_cart_id(cart_product_ids_with_cart_ids)
+      matches = {}
+      seller_ids = []
+      cart_product_ids_with_cart_ids.keys.each_slice(IN_LIST_BATCH_SIZE) do |product_ids|
+        seller_ids |= Link.visible_and_not_archived.where(id: product_ids).distinct.pluck(:user_id)
+      end
 
-    start_time = Time.current
-    Workflow.distinct.alive.abandoned_cart_type.published.joins(seller: :links).merge(User.alive.not_suspended).merge(Link.visible_and_not_archived).includes(:seller).find_each do |workflow|
-      next unless workflow.seller&.eligible_for_abandoned_cart_workflows?
+      seller_ids.each_slice(IN_LIST_BATCH_SIZE) do |batch_seller_ids|
+        Workflow.alive.abandoned_cart_type.published.where(seller_id: batch_seller_ids).joins(:seller).merge(User.alive.not_suspended).includes(:seller).find_each do |workflow|
+          next unless workflow.seller&.eligible_for_abandoned_cart_workflows?
 
-      workflow.abandoned_cart_products(only_product_and_variant_ids: true).each do |product_id, variant_ids|
-        next unless cart_product_ids_with_cart_ids.key?(product_id)
+          workflow.abandoned_cart_products(only_product_and_variant_ids: true).each do |product_id, variant_ids|
+            next unless cart_product_ids_with_cart_ids.key?(product_id)
 
-        cart_product_ids_with_cart_ids[product_id].each do |cart_id, cart_variant_ids|
-          has_matching_variants = variant_ids.empty? || (variant_ids & cart_variant_ids).any?
-          next unless has_matching_variants
+            cart_product_ids_with_cart_ids[product_id].each do |cart_id, cart_variant_ids|
+              has_matching_variants = variant_ids.empty? || (variant_ids & cart_variant_ids).any?
+              next unless has_matching_variants
 
-          cart_ids_with_matched_workflow_ids_and_product_ids[cart_id] ||= {}
-          cart_ids_with_matched_workflow_ids_and_product_ids[cart_id][workflow.id] ||= []
-          cart_ids_with_matched_workflow_ids_and_product_ids[cart_id][workflow.id] << product_id
+              matches[cart_id] ||= {}
+              matches[cart_id][workflow.id] ||= []
+              matches[cart_id][workflow.id] << product_id
+            end
+          end
         end
       end
+      matches
     end
 
-    Rails.logger.info "Fetched #{cart_ids_with_matched_workflow_ids_and_product_ids.count} cart ids with matched workflow ids and product ids in #{(Time.current - start_time).round(2)} seconds"
-
-    cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
-      CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
-    end
-  end
-
-  private
     # Returns the ids of all abandoned carts in the given updated_at window, equivalent to
     # `Cart.abandoned(updated_at: window).pluck(:id)` but walked in id-ordered keyset batches
     # so no single statement has to materialize the whole window. The cursor advances past
