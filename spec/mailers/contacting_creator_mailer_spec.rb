@@ -1587,10 +1587,10 @@ describe ContactingCreatorMailer do
       expect(mail.message).to be_a ActionMailer::Base::NullMail
     end
 
-    # The claim is taken here rather than at enqueue precisely so a suppressed send claims nothing:
-    # the key never expires, and one written for an email nobody received would refuse the notice the
-    # seller is owed when the same reason breaks again.
-    it "claims nothing when it suppresses the send" do
+    # Rendering is not sending, which is why nothing is recorded here: the record has no expiry, and
+    # one written for an email nobody received would refuse the notice the seller is owed when the
+    # same reason breaks again.
+    it "records nothing when it suppresses the send" do
       create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
 
       ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
@@ -1598,8 +1598,14 @@ describe ContactingCreatorMailer do
       expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
     end
 
-    it "claims the reason it sent, with no expiry" do
+    it "records nothing on a render that is never delivered" do
       ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    it "records the reason it sent, with no expiry" do
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
 
       key = notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL)
       expect($redis.exists?(key)).to be true
@@ -1608,20 +1614,35 @@ describe ContactingCreatorMailer do
 
     # The seller cannot act on a repeat: there is no way to re-authorize an app holding no live token,
     # and no UI or API to delete the subscription without one.
-    it "sends once for the same reason however many times it renders" do
-      first = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+    it "sends once for the same reason however many times it is delivered" do
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+
       second = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
-      expect(first.message).not_to be_a ActionMailer::Base::NullMail
       expect(second.message).to be_a ActionMailer::Base::NullMail
     end
 
-    # The advice comes from current state, so the reason it claims has to be the reason it told them
-    # about — the other reason is still a notice the seller is owed.
-    it "claims only the reason it gave, leaving the other one reportable" do
+    # A delivery that raises spends nothing, or the seller's one notice goes on an email that never
+    # left — the same permanent silence a claim taken before sending causes.
+    it "still reports the reason after a delivery failure" do
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(StandardError, "transport down")
+      expect do
+        ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+      end.to raise_error(StandardError, "transport down")
+
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
+      retried = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    # The advice comes from current state, so the reason recorded has to be the reason the seller was
+    # told about — the other reason is still a notice they are owed.
+    it "records only the reason it gave, leaving the other one reportable" do
       resource_subscription.update_column(:post_url, nil)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+      mail.deliver_now
 
       expect(mail.body.encoded).to include "does not have a URL to send to"
       expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::MISSING_POST_URL))).to be true
@@ -1629,7 +1650,7 @@ describe ContactingCreatorMailer do
     end
 
     it "still sends the second reason after the first was already sent" do
-      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
       resource_subscription.update_column(:post_url, nil)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
@@ -1639,13 +1660,22 @@ describe ContactingCreatorMailer do
 
     # Silence is what this notice exists to break, so a failure in the send-once bookkeeping has to
     # cost a possible repeat rather than the email itself.
-    it "sends when the claim cannot be recorded" do
-      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+    it "sends when the send-once state cannot be read" do
+      allow($redis).to receive(:exists?).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
       expect(mail.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    it "sends the email even when recording that it sent fails" do
+      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect do
+        ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+      end.to change { ActionMailer::Base.deliveries.size }.by(1)
     end
 
     # A small numeric primary key matches inside the footer address, so the identifier worth

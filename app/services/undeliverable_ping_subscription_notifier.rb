@@ -40,27 +40,32 @@ class UndeliverablePingSubscriptionNotifier
 
   # Send once and stop, keyed on the advice actually given. The seller cannot re-authorize an app
   # holding no live token, and there is no UI or API to delete the subscription without one, so a
-  # repeat is a nag they cannot act on — which is also why this key carries no expiry.
+  # repeat is a nag they cannot act on — which is also why these keys carry no expiry.
   #
-  # The mailer takes it, not the enqueue path, and that placement is the whole safety property: the
-  # reason and the decision to send at all are both render-time state, so claiming earlier meant
-  # writing a permanent key for advice that might never be sent and then moving it afterwards. A move
-  # is a write plus a delete, and a delete that fails leaves a permanent claim on a reason the seller
-  # was never told, silently refusing the notice owed when that reason breaks. Claimed here it is one
-  # atomic SET NX with nothing to undo.
-  def self.claim(resource_subscription_id, reason)
-    return false if reason.blank?
+  # Recorded AFTER delivery, never at enqueue or render. The reason and the decision to send are both
+  # render-time state, so claiming at enqueue meant writing a permanent key for advice that might
+  # never be sent and then moving it — a write plus a delete, whose failed delete leaves a permanent
+  # claim on advice nobody was given. Claiming at render has the same shape one step later: the
+  # deliver can still raise, and `deliver_email` itself declines an invalid address, either of which
+  # spends the seller's one notice on an email that never went out.
+  def self.record_sent(resource_subscription_id, reason)
+    return if reason.blank?
 
-    !!$redis.set(
-      RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason),
-      Time.current.to_i,
-      nx: true
-    )
+    $redis.set(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason), Time.current.to_i)
   rescue => e
     report(e)
-    # Sending on a bookkeeping failure beats withholding: silence is the thing this notice exists to
-    # break, and the cost of getting it wrong is one repeat email rather than a permanent gap.
-    true
+  end
+
+  # Read-only, so a render decides on what has actually been sent. Two renders inside the throttle
+  # window can both pass this and send twice; a duplicate is the failure direction this whole notice
+  # accepts, unlike the permanent silence a pre-emptive claim causes.
+  def self.already_sent?(resource_subscription_id, reason)
+    return false if reason.blank?
+
+    $redis.exists?(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
+  rescue => e
+    report(e)
+    false
   end
 
   def self.report(error)
