@@ -529,6 +529,42 @@ describe GdprDataErasureService do
           expect(note.content).to include("person_erase_me")
         end
 
+        # The same backstop, for the guardian that has never been synced. There is no id to enqueue,
+        # so the earlier shape returned a bare failure and recorded nothing — and this is precisely
+        # the case where the scan that raised was the only thing that could have found a Person at
+        # Stripe, since a Person created by a sync that died before writing its id has no local
+        # handle at all.
+        it "names the unscanned account when the deletion step raises with no recorded person id" do
+          guardian = create(:guardian, user:, stripe_person_id: nil)
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow(StripeGuardianManager).to receive(:stripe_person_ids_for_erasure)
+            .and_raise(StandardError, "unexpected")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+          expect(note.content).to include("acct_erasure_test")
+          expect(note.content).to include("could not be fully scanned")
+        end
+
+        # An account whose scan completed is not unverified just because something later raised —
+        # otherwise every such failure would tell a human to hand-scan an account we already listed,
+        # and the note stops meaning anything.
+        it "does not name an account whose scan completed before the failure" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow_any_instance_of(described_class).to receive(:erasure_summary)
+            .and_raise(StandardError, "after the scan")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+          expect(note.content).to include("person_erase_me")
+          expect(note.content).not_to include("could not be fully scanned")
+        end
+
         # A failure before the anonymize erased nothing, so the Person at Stripe still belongs to a
         # live account that needs it. Deleting it would break the account's verification.
         it "does not touch the guardian person when the erasure failed before anonymizing" do

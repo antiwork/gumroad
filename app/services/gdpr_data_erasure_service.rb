@@ -14,6 +14,7 @@ class GdprDataErasureService
     @products_deleted = 0
     @unreachable_guardian_person_ids = []
     @unscanned_guardian_account_ids = []
+    @scanned_guardian_account_ids = []
     @local_erasure_committed = false
   end
 
@@ -89,15 +90,22 @@ class GdprDataErasureService
     # handle left once the identifying columns are nil.
     def remediate_guardian_persons_after_failure!(stripe_account_ids)
       return unless @local_erasure_committed
+      return if stripe_account_ids.blank?
+
+      # Any account this failure prevented us from finishing a scan on. Marked before the person-id
+      # check below, because the two are independent: a guardian with no recorded id can still have
+      # a Person at Stripe, and the scan that raised was the only thing that could have found it.
+      # Keying remediation on "we have an id to retry" reported a bare failure precisely then.
+      @unscanned_guardian_account_ids |= (stripe_account_ids - @scanned_guardian_account_ids)
 
       person_ids = @user.guardians.reload.filter_map(&:stripe_person_id).uniq
-      return if person_ids.empty? || stripe_account_ids.blank?
-
       person_ids.each do |stripe_person_id|
         stripe_account_ids.each do |stripe_account_id|
           DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
         end
       end
+
+      return if person_ids.empty? && @unscanned_guardian_account_ids.empty?
 
       record_incomplete_erasure_note!(person_ids)
     rescue => e
@@ -322,6 +330,11 @@ class GdprDataErasureService
             retained << stripe_person_id
           end
         end
+
+        # Recorded only once the locked scan for this account returned. The rescue in perform! uses
+        # it to tell an account whose Persons are known from one whose scan never ran: an exception
+        # escaping mid-scan leaves an unrecorded Person discoverable by nothing else.
+        @scanned_guardian_account_ids << stripe_account_id
       rescue StripeGuardianManager::SyncLockUnavailable => e
         # Deleting without the lock would race the very sync the lock exists to order, and skipping
         # the account silently would report a complete erasure. So the recorded Persons go to the
