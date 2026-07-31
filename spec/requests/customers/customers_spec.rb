@@ -929,6 +929,63 @@ describe "Sales page", type: :system, js: true do
           expect(copy_button).to have_tooltip(text: "Copied")
         end
       end
+
+      it "adjusts the license uses count" do
+        purchase2.license.update!(uses: 4)
+        visit customer_sale_path(purchase2.external_id)
+
+        within_section "License key", section_element: :section do
+          expect(page).to have_text("Uses 4", normalize_ws: true)
+
+          click_on "Increase uses"
+          wait_for_ajax
+        end
+        expect(page).to have_alert(text: "License uses updated")
+        expect(purchase2.license.reload.uses).to eq 5
+
+        within_section "License key", section_element: :section do
+          expect(page).to have_text("Uses 5", normalize_ws: true)
+
+          click_on "Decrease uses"
+          wait_for_ajax
+        end
+        expect(purchase2.license.reload.uses).to eq 4
+
+        # The steppers send a delta, so an activation that lands after the page rendered survives
+        # the seller's click instead of being overwritten by the browser's stale count.
+        purchase2.license.increment!(:uses)
+        within_section "License key", section_element: :section do
+          click_on "Increase uses"
+          wait_for_ajax
+        end
+        expect(purchase2.license.reload.uses).to eq 6
+        within_section "License key", section_element: :section do
+          expect(page).to have_text("Uses 6", normalize_ws: true)
+        end
+
+        within_section "License key", section_element: :section do
+          click_on "Edit"
+          fill_in "Uses", with: 12
+          click_on "Save"
+          wait_for_ajax
+        end
+        expect(purchase2.license.reload.uses).to eq 12
+
+        within_section "License key", section_element: :section do
+          expect(page).to have_text("Uses 12", normalize_ws: true)
+          click_on "Reset uses"
+        end
+        within_modal("Reset license uses?") { click_on "Reset" }
+        wait_for_ajax
+        expect(purchase2.license.reload.uses).to eq 0
+
+        within_section "License key", section_element: :section do
+          expect(page).to have_text("Uses 0", normalize_ws: true)
+          # Decrement cannot take the count below zero, so it stops being available at the floor.
+          expect(page).to have_button("Decrease uses", disabled: true)
+          expect(page).to_not have_button("Reset uses")
+        end
+      end
     end
 
     describe "shipping" do

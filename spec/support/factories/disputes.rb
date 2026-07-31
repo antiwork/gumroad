@@ -15,6 +15,9 @@ FactoryBot.define do
     reason { Dispute::REASON_FRAUDULENT }
     state { :formalized }
     formalized_at { Time.current }
+    # A formalized dispute has normally finished its side effects; the migration backfilled every
+    # dispute that predates the marker. Override with nil to model a formalization still in flight.
+    formalized_side_effects_finished_at { Time.current }
   end
 
   factory :dispute_formalized_on_charge, parent: :dispute_on_charge do

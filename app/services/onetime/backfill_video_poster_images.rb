@@ -40,14 +40,26 @@ module Onetime
                           .where(ActiveStorage::Blob.arel_table[:content_type].matches("video%"))
       scope = scope.where("asset_previews.id <= ?", end_id) if end_id
 
-      scope.includes(file_attachment: { blob: { preview_image_attachment: :blob } })
-           .in_batches(of: batch_size) do |batch|
+      # Keep `includes` off the batching scope: with it, in_batches' internal id
+      # pluck and any aggregate over the batch drag the eager-load's LEFT JOINs
+      # and GROUP BY into what should be a cheap indexed id scan. Batching over
+      # the join-only scope and eager-loading inside the block keeps every
+      # statement a light id lookup — the records themselves are loaded once
+      # either way.
+      scope.in_batches(of: batch_size) do |batch|
+        ids = batch.ids
+
         # Generation is a download plus an ffmpeg run per cover. Pace the enqueues
         # against replica lag so the backfill can't outrun the database the way a
         # tight loop over a large table would.
         ReplicaLagWatcher.watch
 
-        batch.each do |asset_preview|
+        # Load through `batch` (still the eligibility scope, narrowed to these
+        # ids), not a bare AssetPreview lookup: a cover can be deleted, detached,
+        # or swapped to a non-video while we wait on replica lag above, and only
+        # the scope's predicates still exclude it.
+        batch.includes(file_attachment: { blob: { preview_image_attachment: :blob } })
+             .each do |asset_preview|
           blob = asset_preview.file.blob
           if blob&.preview_image&.attached?
             skipped += 1
@@ -58,7 +70,7 @@ module Onetime
           enqueued += 1
         end
 
-        puts "Video poster backfill: enqueued=#{enqueued} already_persisted=#{skipped} (through id=#{batch.maximum(:id)})"
+        puts "Video poster backfill: enqueued=#{enqueued} already_persisted=#{skipped} (through id=#{ids.max})"
       end
 
       { enqueued:, skipped: }

@@ -246,28 +246,22 @@ class AssetPreview < ApplicationRecord
   # created and does the generation in the background. Renders only ever read
   # an already-generated result.
   #
-  # Where that result lives matters, and getting it wrong caused a real bug.
-  # Originally the poster URL was kept *only* in Rails.cache. In production the
-  # cache store is namespaced by the deploy revision
-  # (config/environments/production.rb: `namespace: ENV.fetch("REVISION")`), so
-  # every deploy moved the whole cache to a fresh namespace and every poster URL
-  # became unreachable at once. Video covers went back to rendering as a black
-  # rectangle on every deploy — measured at 60% of the newest 1,200 video covers
-  # missing a poster, across 240 distinct sellers (gumroad-private#1491).
-  #
-  # The durable artifact was always there: `file.preview(...).processed` persists
-  # an ActiveStorage preview_image attachment on the blob, and that survives
-  # deploys. We were only throwing away the pointer to it. So the read order is:
+  # Where that result lives matters. In production the cache store is namespaced
+  # by the deploy revision (config/environments/production.rb:
+  # `namespace: ENV.fetch("REVISION")`), so every deploy is a full cache clear —
+  # a poster kept only in Rails.cache disappears on every deploy. Hence the read
+  # order:
   #
   #   1. Rails.cache, a memo for the URL string of a poster we have already
   #      confirmed, so the common render costs no queries;
-  #   2. otherwise the blob's persisted preview_image, if ActiveStorage has one —
-  #      a cache miss must never hide a poster we demonstrably have;
+  #   2. otherwise the blob's persisted preview_image, which is a real database
+  #      record and survives deploys — a cache miss must never hide a poster we
+  #      demonstrably have;
   #   3. otherwise nil, and enqueue a generation so the poster appears on later
   #      views (the player shows its plain idle state this time).
   #
-  # Failures still cache an empty-string sentinel for an hour so the worker's
-  # retries don't re-download and re-run ffmpeg on a video ffmpeg cannot preview.
+  # Failures cache an empty-string sentinel for an hour so the worker's retries
+  # don't re-download and re-run ffmpeg on a video ffmpeg cannot preview.
   FAILED_POSTER_SENTINEL = ""
   FAILED_POSTER_RETRY_INTERVAL = 1.hour
 
@@ -325,9 +319,9 @@ class AssetPreview < ApplicationRecord
     nil
   end
 
-  # Does the actual download + ffmpeg frame extraction. Only called from
-  # GenerateVideoPosterWorker — web requests read the cached result via
-  # video_poster_url above.
+  # Extracts a poster frame, reusing the persisted preview when one already
+  # exists instead of re-running ffmpeg. Only called from
+  # GenerateVideoPosterWorker.
   def generate_video_poster!
     return nil unless file.attached? && file.video? && file.previewable?
 
@@ -463,8 +457,9 @@ class AssetPreview < ApplicationRecord
     # indexed row read.
     #
     # Returning false when we can't tell is deliberate: the caller then reports
-    # "no poster yet", which enqueues GenerateVideoPosterWorker, and the worker
-    # makes the resized copy off the request path.
+    # "no poster yet", which enqueues GenerateVideoPosterWorker unless the
+    # failure sentinel is still live, and the worker makes the resized copy off
+    # the request path.
     def resized_poster_exists?(variant)
       return false unless ActiveStorage.track_variants
 

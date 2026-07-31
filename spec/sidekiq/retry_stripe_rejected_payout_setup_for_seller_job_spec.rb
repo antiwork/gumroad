@@ -294,7 +294,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
     end
 
     it "still classifies a format rejection as a format rejection" do
-      # The two terminal branches sit next to each other and both abandon, so a spec that only
+      # The three unfixable branches sit next to each other and all abandon, so a spec that only
       # checked "was abandoned" would pass even if the block branch swallowed format rejections
       # and sent them the wrong email. Pin the reason.
       note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
@@ -304,6 +304,81 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       described_class.new.perform(user.id)
 
       expect(note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
+    end
+  end
+
+  describe "bank account refused outright by Stripe" do
+    let!(:merchant_account) { create(:merchant_account, user:) }
+    let(:unusable_message) do
+      "This bank account can't be used because previous payments or payouts failed."
+    end
+
+    def add_terminal_rejection_note(notified: true)
+      note = user.add_payout_note(content: "#{bank_prefix}: bank_account_unusable — #{unusable_message}")
+      note.json_data["stripe_error_code"] = "bank_account_unusable"
+      note.json_data["stripe_error_message"] = unusable_message
+      note.json_data["seller_notified"] = true if notified
+      note.save!
+      note
+    end
+
+    it "stops retrying instead of re-sending an account Stripe will never accept" do
+      note = add_terminal_rejection_note
+      expect(StripeMerchantAccountManager).not_to receive(:update_bank_account)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note.json_data["abandoned_at"]).to be_present
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_TERMINAL_REJECTION)
+      expect(note.json_data["retry_count"]).to be_nil
+      expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::BANK_TERMINAL_REJECTION_NOTE)
+    end
+
+    it "does not email the seller that retries were exhausted" do
+      # Seeded at the retry ceiling so that WITHOUT the early exit this note would fall through to
+      # give_up!, which does send the exhausted email.
+      note = add_terminal_rejection_note
+      note.json_data["retry_count"] = RetryStripeRejectedPayoutSetupsJob::MAX_RETRIES
+      note.save!
+
+      expect do
+        described_class.new.perform(user.id)
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :payout_setup_retry_exhausted)
+
+      expect(note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_TERMINAL_REJECTION)
+    end
+
+    it "emails the seller to use a different account before abandoning an unnotified note" do
+      note = add_terminal_rejection_note(notified: false)
+
+      expect do
+        described_class.new.perform(user.id)
+      end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, unusable_message)
+
+      note.reload
+      expect(note.json_data["seller_notified"]).to be(true)
+      expect(note.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_TERMINAL_REJECTION)
+    end
+
+    it "abandons a format note and a terminal note separately, each with its own audit note" do
+      # A seller can accumulate both kinds. Sweeping them together would label half of them with
+      # the wrong reason and tell the seller to fix a code when the account itself is refused.
+      terminal_note = add_terminal_rejection_note
+      format_note = user.add_payout_note(content: "#{bank_prefix}: routing_number_invalid — Invalid routing number for PK. Should be in the format AAAAPKBB.")
+      format_note.json_data["seller_notified"] = true
+      format_note.save!
+
+      described_class.new.perform(user.id)
+      described_class.new.perform(user.id)
+
+      expect(terminal_note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_TERMINAL_REJECTION)
+      expect(format_note.reload.json_data["abandoned_reason"]).to eq(described_class::ABANDONED_REASON_BANK_FORMAT_REJECTION)
+
+      audit_notes = user.comments.alive.with_type_payout_note.map(&:content)
+      expect(audit_notes).to include(described_class::BANK_TERMINAL_REJECTION_NOTE)
+      expect(audit_notes).to include(described_class::BANK_FORMAT_REJECTION_NOTE)
     end
   end
 

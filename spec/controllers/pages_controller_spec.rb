@@ -202,6 +202,37 @@ describe PagesController, type: :controller, inertia: true do
       expect(response.body).to include("Home takeover")
     end
 
+    # The live embed serves gumroad-data and, when the page references it, gumroad-prices;
+    # a preview without them renders a catalog-driven page as an empty storefront.
+    it "serves the profile preview with the same payloads as the live embed" do
+      create(:product, user: seller, name: "Cool thing", price_cents: 1400)
+      seller.update!(custom_html: %(<main><script>document.getElementById("gumroad-prices")</script></main>))
+
+      get :preview, params: { slug: "profile" }
+
+      expect(response.body).to include(%(id="gumroad-data"))
+      prices = JSON.parse(response.body[%r{<script id="gumroad-prices"[^>]*>(.*?)</script>}m, 1])
+      expect(prices.values.first["price"]).to eq("$14")
+      # Prices derive from the requester's IP, so the preview response must never be shared.
+      expect(response.headers["Cache-Control"]).to include("no-store")
+    end
+
+    it "omits the price payload when the profile page references none" do
+      seller.update!(custom_html: "<h1>Home takeover</h1>")
+
+      get :preview, params: { slug: "profile" }
+
+      expect(response.body).to include(%(id="gumroad-data"))
+      expect(response.body).not_to include("gumroad-prices")
+    end
+
+    it "keeps slugged previews payload-free, matching their live embed" do
+      get :preview, params: { slug: "about" }
+
+      expect(response.body).not_to include(%(id="gumroad-data"))
+      expect(response.body).not_to include("gumroad-prices")
+    end
+
     it "renders the styled public document for a rich text page" do
       page.update!(custom_html: nil, content: "<p>Rich text</p>")
 

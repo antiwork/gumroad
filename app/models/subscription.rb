@@ -277,7 +277,17 @@ class Subscription < ApplicationRecord
                         was_product_recommended: original_purchase.was_product_recommended,
                         is_installment_payment: original_purchase.is_installment_payment }
     purchase_params.merge!(override_params)
+    # `ip_country`/`ip_state` are derived from `ip_address`, so a caller supplying a live IP must not
+    # leave the original purchase's derivations standing beside it — sanctions screening would read
+    # them as the subscriber's present location.
+    if override_params[:ip_address].present?
+      purchase_params[:ip_country] = override_params[:ip_country]
+      purchase_params[:ip_state] = override_params[:ip_state]
+    end
     purchase = Purchase.new(purchase_params)
+    # Without a live IP the fields above describe where the buyer was when they subscribed, which is
+    # not a location signal sanctions screening may act on.
+    purchase.ip_location_inherited = override_params[:ip_address].blank?
     purchase.variant_attributes = original_purchase.variant_attributes
     unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
       purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer
@@ -887,6 +897,31 @@ class Subscription < ApplicationRecord
 
   def remaining_charges_count
     has_fixed_length? ? charge_occurrence_count - successful_purchases.count : 0
+  end
+
+  # Installment plans have no cancellation exit after a chargeback: the
+  # `installment_plans_cannot_be_cancelled_by_buyer` validation rejects
+  # `cancel_effective_immediately!(by_buyer: true)`, and the resulting RecordInvalid would raise
+  # after the seller-balance decrement and before dispute-evidence creation. So the plan stays
+  # alive and keeps its place in the charge schedule.
+  #
+  # Stopping the charge rather than cancelling the plan is deliberate. The reason to stop is that
+  # we should not charge a card whose holder disputed every prior charge on it — a charging
+  # concern, not a cancellation one. Cancelling would also have to invent an actor, and
+  # `cancel_effective_immediately!` with `by_buyer: false` emails the buyer about a product
+  # deletion that never happened.
+  #
+  # Every installment must be disputed, not just one: a single disputed installment on an
+  # otherwise-paid plan can be a reversible mistake, and blocking those would strand plans whose
+  # buyer still intends to pay. Reversed chargebacks do not count, so a won dispute lets the plan
+  # resume on its own.
+  def all_charges_disputed?
+    return false unless is_installment_plan?
+
+    charges = successful_purchases.to_a
+    return false if charges.empty?
+
+    charges.all?(&:chargedback_not_reversed?)
   end
 
   # Certain events should transition the subscription from pending cancellation to cancelled thus not allowing the customer access to updates.

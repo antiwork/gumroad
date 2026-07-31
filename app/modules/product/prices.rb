@@ -94,8 +94,34 @@ module Product::Prices
     format_price(rental_display_price)
   end
 
-  def price_formatted_verbose
-    "#{price_formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_long_indicator(display_recurrence)}" : ''}"
+  # `for_default_duration` quotes the product the way the native card does: amount AND
+  # recurrence wording from the default duration (passing the flag to display_price_cents alone
+  # pairs a default-duration amount with the cheapest tier's wording), plus the finite-term
+  # forms ("once", "a month x 6") for fixed-length memberships. `discounted` takes the default
+  # offer code off, which is what checkout actually charges a first-time buyer.
+  def price_formatted_verbose(for_default_duration: false, discounted: false)
+    price_cents = display_price_cents(for_default_duration:)
+    price_cents = discounted_price_cents(price_cents) if discounted
+    price_formatted_verbose_for_price_cents(
+      price_cents,
+      recurrence: for_default_duration ? subscription_duration : display_recurrence,
+      duration_in_months: for_default_duration ? duration_in_months : nil
+    )
+  end
+
+  # price_formatted_verbose over an arbitrary amount, for surfaces that show a price other than
+  # the product's set one (a default-offer-code discount, say) and still need the "+" and
+  # recurrence wording that make the number read correctly.
+  #
+  # Pass `recurrence:` when the amount came from a specific duration rather than from
+  # display_price_cents: the default display_recurrence is the *cheapest* tier's recurrence, so
+  # labelling a default-duration amount with it quotes a monthly price as a yearly one.
+  # Pass `duration_in_months:` to engage the finite-term wording the native card renders
+  # ("once" for a single-charge term, "a month x 6" for a longer fixed one); nil keeps the
+  # open-ended label every existing caller shows today.
+  def price_formatted_verbose_for_price_cents(price_cents, recurrence: display_recurrence, duration_in_months: nil)
+    formatted = format_price(display_price_for_price_cents(price_cents))
+    "#{formatted}#{show_customizable_price_indicator? ? '+' : ''}#{is_recurring_billing ? " #{recurrence_label(recurrence, duration_in_months)}" : ''}"
   end
 
   def price_formatted_including_rental_verbose
@@ -172,6 +198,28 @@ module Product::Prices
       # raising NoMethodError on nil + integer.
       (default_price_cents || 0) + (lowest_variant_price_difference_cents || 0)
     end
+  end
+
+  # The default offer code taken off a base price, which is what a buyer would be charged
+  # buying one of this product right now. A surface showing a lower number quotes a price
+  # checkout will not honour, so every code the default one-product checkout rejects is left on
+  # the shelf: existing-customers-only (a first-time visitor does not get it), a quantity
+  # minimum above one (the native page shows the quantity-1 price undiscounted for those, per
+  # ProductPresenter::ProductProps#discounted_price_cents), a spend minimum this product alone
+  # cannot meet (Purchase::CreateService raises below it), and a spent use cap. Erring the
+  # other way is safe — a buyer who qualifies later sees the price drop at checkout, where the
+  # binding amount is minted. PPP stays out entirely: it needs per-cart context.
+  def discounted_price_cents(base_price_cents)
+    offer_code = default_offer_code
+    return base_price_cents if offer_code.blank? || offer_code.deleted? || offer_code.inactive? || offer_code.existing_customers_only?
+    # A fixed-cents code stops matching after a product currency change; checkout's
+    # find_offer_code refuses that pair, so the quote must too.
+    return base_price_cents unless offer_code.is_currency_valid?(self)
+    return base_price_cents if offer_code.minimum_quantity.to_i > 1
+    return base_price_cents if offer_code.minimum_amount_cents.to_i > base_price_cents
+    return base_price_cents unless default_offer_code_uses_left?(offer_code)
+
+    [base_price_cents - offer_code.amount_off(base_price_cents), 0].max
   end
 
   def display_price(additional_attrs = {})
@@ -316,6 +364,23 @@ module Product::Prices
       number_of_months_in_recurrence = BasePrice::Recurrence.number_of_months_in_recurrence(recurrence)
       suggested_price_cents = (default_price_cents / number_of_months_in_default_price_recurrence.to_f) * number_of_months_in_recurrence
       suggested_price_cents
+    end
+
+    # The uses-left read is a purchases aggregate, so it runs only for capped codes and its
+    # result is shared across every card on the page that carries the same default code
+    # (Current resets between requests, so a redemption is reflected on the next one).
+    # Every cap is checked, however large: the aggregate ranges the offer_code_id index over
+    # redemptions actually made, not over the cap, so a millions-high "unlimited" cap with a
+    # handful of sales costs what a cap of ten does — and checkout pays this same read on every
+    # attempt. Pages::ProductPrices, which prices up to 100 products uncached, seeds this memo
+    # in one grouped query (OfferCode.uses_left_by_id).
+    def default_offer_code_uses_left?(offer_code)
+      return true if offer_code.max_purchase_count.nil?
+
+      cache = (Current.default_offer_code_uses_left ||= {})
+      return cache[offer_code.id] if cache.key?(offer_code.id)
+
+      cache[offer_code.id] = offer_code.is_valid_for_purchase?
     end
 
     def show_customizable_price_indicator?
