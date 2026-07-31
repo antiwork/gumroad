@@ -30,8 +30,8 @@ export type CountryAccountNumberHint = {
 export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHint> = {
   MA: {
     placeholder: "MA64011519000001205000534921",
-    pattern: "MA[0-9]{20,26}",
-    title: "Enter your IBAN, starting with MA",
+    pattern: "MA[0-9]{26}",
+    title: "Enter your 28-character IBAN: MA followed by 26 digits, not your RIB",
   },
   SN: {
     placeholder: "SN08SN0100152000048500003035",
