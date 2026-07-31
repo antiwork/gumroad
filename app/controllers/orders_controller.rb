@@ -151,13 +151,15 @@ class OrdersController < ApplicationController
     # of the API rejection, so `invalid_request_error` covers both "your request was malformed"
     # (no charge, no webhook) and "this intent already failed authentication" (charge attempted,
     # webhook fired) — the second is what production actually produces, and using the type as the
-    # proxy misses it. Matched by prefix because
-    # `StripeChargeProcessor.error_code_from_last_payment_error` appends `_<decline_code>`, so a
-    # new decline code extends an existing prefix rather than creating one.
+    # proxy misses it.
     #
-    # `payment_intent_unexpected_state` is deliberately absent: it is the genuinely unrecorded case
-    # (1 occurrence in 3 days of production against 1,700+ for the two below) and must keep
-    # reporting.
+    # Prefix rather than exact match purely so a sibling code Stripe adds later is covered by
+    # default: the browser posts Stripe.js's raw `error.code`, and no code in Stripe's enum has
+    # either of these as a proper prefix. It cannot over-suppress on today's code space.
+    #
+    # `payment_intent_unexpected_state` and `payment_intent_mandate_invalid` are deliberately
+    # absent — both are confirm-time rejections that never transition the intent, so nothing else
+    # records them and they must keep reporting.
     CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_CODE_PREFIXES = %w[
       payment_intent_authentication_failure
       payment_intent_payment_attempt_failed
@@ -188,15 +190,14 @@ class OrdersController < ApplicationController
       !method_type.in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
     end
 
-    # Whether a charge was attempted, so `payment_intent.payment_failed` fired and the code is
-    # already on the purchase. Deliberately not a `purchases.stripe_error_code` lookup: the webhook
-    # lands anywhere from 0 to ~690s after the browser posts here (measured over the reported
-    # window), so reading the row would suppress or report by luck of the race.
+    # Whether a charge was attempted, so `payment_intent.payment_failed` fires and lands the code
+    # on the purchase. Deliberately not a `purchases.stripe_error_code` lookup: that write arrives
+    # anywhere from 0 to ~690s after the browser posts here, so reading the row would suppress or
+    # report by luck of the race.
     def confirm_error_charge_attempted?(error_details)
       return true if error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
 
-      code = error_details[:stripe_error_code].to_s
-      CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_CODE_PREFIXES.any? { |prefix| code.start_with?(prefix) }
+      error_details[:stripe_error_code].start_with?(*CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_CODE_PREFIXES)
     end
 
     # Fail-open per-order throttle for confirm_error Sentry reports. Counts reports per order

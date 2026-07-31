@@ -2849,8 +2849,9 @@ describe OrdersController, :vcr do
       end
 
       # The type says invalid_request_error, but the code proves an attempt happened, so
-      # `payment_intent.payment_failed` already wrote it to purchases.stripe_error_code.
-      # Production shape: 5 of 5 survivors on gumroad-private#1514.
+      # `payment_intent.payment_failed` records it on the purchase. The bare codes are what a
+      # browser posts; the suffixed pair pins the prefix match, which exists so a sibling code
+      # Stripe adds later is covered.
       {
         "payment_intent_authentication_failure" => "card",
         "payment_intent_authentication_failure_generic_decline" => "card",
@@ -2893,8 +2894,9 @@ describe OrdersController, :vcr do
       end
 
       it "notifies for an attempt code on a redirect method, whose failure nothing else records" do
-        # The prefix match must not swallow the signal the endpoint exists for: an attempted
-        # iDEAL payment is still only witnessed here.
+        # The suppression is two mandatory conditions, and this pins the second: a redirect method
+        # is never in the server-recorded denylist, so an attempt code cannot suppress it. The
+        # denylist is deliberately short — an unrecognised method must stay visible.
         params = { line_items: line_items.map(&:dup) }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
 
