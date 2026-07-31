@@ -5,6 +5,19 @@ class StripeCharge < BaseProcessorCharge
   # (gumroad-private#1608).
   DESTINATION_PAYMENT_SETTLEMENT_GRACE = 24.hours
 
+  # Shared with the refund path, which must reverse an uncredited destination payment to the same
+  # zero-in-account-currency the charge recorded. Fails closed: without the payment object or the
+  # account's currency we cannot tell "never credited" from "not settled yet", so keep waiting.
+  def self.destination_payment_permanently_uncredited?(stripe_destination_payment, merchant_account_currency:)
+    return false if stripe_destination_payment.nil? || merchant_account_currency.blank?
+    return false unless stripe_destination_payment[:status] == "succeeded" && stripe_destination_payment[:captured]
+
+    created = stripe_destination_payment[:created]
+    return false if created.blank?
+
+    Time.zone.at(created) <= DESTINATION_PAYMENT_SETTLEMENT_GRACE.ago
+  end
+
   # Public: Create a BaseProcessorCharge from a Stripe::Charge and a Stripe::BalanceTransaction
   #
   # merchant_account_currency is the DESTINATION account's, not the charge's — see
@@ -42,18 +55,10 @@ class StripeCharge < BaseProcessorCharge
   end
 
   private
-    # True when Stripe accepted the destination payment but will never credit it. An unsettled or
-    # uncaptured payment is still pending and must keep waiting. Fails closed: without the payment
-    # object or the account's currency the two are indistinguishable, so we keep waiting.
     def destination_payment_permanently_uncredited?
-      return false if @stripe_destination_payment.nil?
-      return false if @merchant_account_currency.blank?
-      return false unless @stripe_destination_payment[:status] == "succeeded" && @stripe_destination_payment[:captured]
-
-      created = @stripe_destination_payment[:created]
-      return false if created.blank?
-
-      Time.zone.at(created) <= DESTINATION_PAYMENT_SETTLEMENT_GRACE.ago
+      self.class.destination_payment_permanently_uncredited?(
+        @stripe_destination_payment, merchant_account_currency: @merchant_account_currency
+      )
     end
 
     def fetch_risk_level(stripe_charge)

@@ -343,7 +343,9 @@ describe StripeChargeProcessor, :vcr do
         allow(Stripe::Charge).to receive(:retrieve).with(hash_including(id: "py_test_1608"), anything)
           .and_return(Stripe::Charge.construct_from(id: "py_test_1608", status: "succeeded", captured: true,
                                                     currency: "usd", amount: 1, balance_transaction: nil,
-                                                    created: 48.hours.ago.to_i))
+                                                    created: 48.hours.ago.to_i,
+                                                    refunds: Stripe::ListObject.construct_from(object: "list", data: []),
+                                                    application_fee: nil))
         allow(Stripe::Transfer).to receive(:retrieve)
           .and_return(Stripe::Transfer.construct_from(id: "tr_test_1608", amount: 1, currency: "usd",
                                                       destination: "acct_test_1608", destination_payment: "py_test_1608"))
@@ -365,6 +367,31 @@ describe StripeChargeProcessor, :vcr do
         expect(flow_of_funds).to be_present
         expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::EUR)
         expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(0)
+      end
+
+      # The reversal must be told the same thing, or the refund debits a different Balance row
+      # than the credit it reverses.
+      describe "and the charge is later refunded" do
+        let(:stripe_refund) do
+          Stripe::Refund.construct_from(id: "re_test_1608", charge: "ch_test_1608",
+                                        currency: "usd", amount: 93,
+                                        balance_transaction: Stripe::BalanceTransaction.construct_from(
+                                          id: "txn_test_1608r", currency: "usd", amount: -93
+                                        ))
+        end
+
+        before do
+          allow(Stripe::Refund).to receive(:retrieve).with(hash_including(id: "re_test_1608")).and_return(stripe_refund)
+        end
+
+        it "reverses to zero in the account's own currency" do
+          flow_of_funds = subject.get_refund("re_test_1608").flow_of_funds
+
+          expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::EUR)
+          expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(0)
+          expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::EUR)
+          expect(flow_of_funds.merchant_account_net_amount.cents).to eq(0)
+        end
       end
     end
   end
