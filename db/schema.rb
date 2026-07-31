@@ -2274,7 +2274,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000016) do
     t.bigint "installment_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["cart_id"], name: "index_sent_abandoned_cart_emails_on_cart_id"
+    t.index ["cart_id", "installment_id"], name: "index_sent_abandoned_cart_emails_on_cart_id_and_installment_id", unique: true
     t.index ["installment_id"], name: "index_sent_abandoned_cart_emails_on_installment_id"
   end
 
