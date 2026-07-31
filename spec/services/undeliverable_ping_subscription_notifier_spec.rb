@@ -158,9 +158,9 @@ describe UndeliverablePingSubscriptionNotifier do
     # The claim is what makes the send-once decision exclusive: two overlapping renders both reading an
     # absent record would both send, so the render takes the notice with one write.
     it "gives the notice to the first caller only" do
-      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be_present
 
-      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be false
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be_nil
     end
 
     # A claim is not evidence the seller was told. It expires so a render that dies before settling
@@ -172,24 +172,74 @@ describe UndeliverablePingSubscriptionNotifier do
     end
 
     it "keeps a recorded send forever rather than letting it expire into a repeat email" do
-      described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
-      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL, token)
 
       expect($redis.ttl(key_for(described_class::REVOKED_CREDENTIAL))).to eq(-1)
     end
 
     # Releasing is what keeps a render that sent nothing from spending the notice.
     it "lets a later render take a released claim" do
-      described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
-      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL, token)
 
-      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be_present
+    end
+
+    # A claim expires, so a slow render can find its claim replaced. Releasing by key alone would then
+    # delete whatever replaced it: a successor's live claim, or the record of a send that completed.
+    it "leaves a replacement claim alone when a render whose claim expired releases" do
+      expired_token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      $redis.del(key_for(described_class::REVOKED_CREDENTIAL))
+      successor_token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+
+      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL, expired_token)
+
+      expect($redis.get(key_for(described_class::REVOKED_CREDENTIAL))).to eq(successor_token)
+    end
+
+    # The whole point of the send-once record: a stale renderer must not delete the evidence that the
+    # seller was emailed, because the next event would then claim a free key and email them again.
+    it "leaves a completed send in place when a render whose claim expired releases" do
+      expired_token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      $redis.del(key_for(described_class::REVOKED_CREDENTIAL))
+      successor_token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL, successor_token)
+
+      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL, expired_token)
+
+      expect($redis.get(key_for(described_class::REVOKED_CREDENTIAL))).to eq(described_class::SENT)
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be_nil
+    end
+
+    # The mirror image: a stale render that DID deliver must not overwrite a successor's provisional
+    # claim with a permanent record, because the successor releases that key when its own send fails.
+    it "does not record a send over a replacement claim" do
+      expired_token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      $redis.del(key_for(described_class::REVOKED_CREDENTIAL))
+      successor_token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+
+      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL, expired_token)
+
+      expect($redis.get(key_for(described_class::REVOKED_CREDENTIAL))).to eq(successor_token)
+    end
+
+    # An expiry with nobody behind it is still this render's send to record — otherwise a claim that
+    # timed out mid-delivery loses the record of an email that did go out.
+    it "records a send when the claim expired and nothing replaced it" do
+      token = described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      $redis.del(key_for(described_class::REVOKED_CREDENTIAL))
+
+      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL, token)
+
+      expect($redis.get(key_for(described_class::REVOKED_CREDENTIAL))).to eq(described_class::SENT)
+      expect($redis.ttl(key_for(described_class::REVOKED_CREDENTIAL))).to eq(-1)
     end
 
     it "claims each reason separately" do
       described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
 
-      expect(described_class.claim_send(resource_subscription.id, described_class::MISSING_POST_URL)).to be true
+      expect(described_class.claim_send(resource_subscription.id, described_class::MISSING_POST_URL)).to be_present
     end
 
     # Silence is what this notice exists to break, so unusable bookkeeping costs a possible repeat
@@ -198,30 +248,39 @@ describe UndeliverablePingSubscriptionNotifier do
       allow($redis).to receive(:set).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify)
 
-      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be_present
     end
 
     it "swallows a failure to record rather than failing the delivery" do
-      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify)
 
-      expect { described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL) }.not_to raise_error
+      expect { described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL, "token") }.not_to raise_error
     end
 
     it "swallows a failure to release rather than failing the delivery" do
-      allow($redis).to receive(:del).and_raise(Redis::BaseError)
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify)
 
-      expect { described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL) }.not_to raise_error
+      expect { described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL, "token") }.not_to raise_error
     end
 
     it "ignores a blank reason on every side" do
       expect($redis).not_to receive(:set)
-      expect($redis).not_to receive(:del)
+      expect($redis).not_to receive(:eval)
 
-      expect(described_class.claim_send(resource_subscription.id, nil)).to be false
-      described_class.record_sent(resource_subscription.id, nil)
-      described_class.release_claim(resource_subscription.id, nil)
+      expect(described_class.claim_send(resource_subscription.id, nil)).to be_nil
+      described_class.record_sent(resource_subscription.id, nil, "token")
+      described_class.release_claim(resource_subscription.id, nil, "token")
+    end
+
+    # Without a token there is nothing to compare, so settling would be an unconditional write over
+    # whatever the key holds — exactly what the token exists to prevent.
+    it "ignores a blank token on both settle paths" do
+      expect($redis).not_to receive(:eval)
+
+      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL, nil)
+      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL, nil)
     end
   end
 end

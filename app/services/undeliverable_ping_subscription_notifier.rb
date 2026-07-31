@@ -25,6 +25,28 @@ class UndeliverablePingSubscriptionNotifier
   # expiring is the backstop for a render that dies before it can say the send did not happen.
   SEND_CLAIM_TTL = 10.minutes
 
+  # Settle only what this render holds. A claim expires, so the key may already carry a successor's
+  # token or the permanent record of a send that successor completed; overwriting either would let a
+  # later release discard a real send, or a later event repeat one. An absent key is settled too — an
+  # expiry nobody claimed behind is still this render's send to record.
+  SETTLE_IF_HELD = <<~LUA
+    local current = redis.call('GET', KEYS[1])
+    if current == false or current == ARGV[1] then
+      return redis.call('SET', KEYS[1], ARGV[2])
+    end
+    return nil
+  LUA
+
+  # Release only what this render holds, and never an absent key: absent means the claim expired and
+  # a DEL would be a no-op anyway, while a different value means a successor's claim or a completed
+  # send that must survive.
+  RELEASE_IF_HELD = <<~LUA
+    if redis.call('GET', KEYS[1]) == ARGV[1] then
+      return redis.call('DEL', KEYS[1])
+    end
+    return 0
+  LUA
+
   def initialize(resource_subscription)
     @resource_subscription = resource_subscription
   end
@@ -44,6 +66,11 @@ class UndeliverablePingSubscriptionNotifier
     resource_subscription.post_url.present? ? REVOKED_CREDENTIAL : MISSING_POST_URL
   end
 
+  # Written into the key once a message has actually been transmitted, in place of the claiming
+  # render's token. Distinguishable from a token on purpose: settling and releasing both have to tell
+  # "the claim I took is still here" from "someone else's claim, or a send that already happened".
+  SENT = "sent"
+
   # Send once and stop, keyed on the advice actually given. The seller cannot re-authorize an app
   # holding no live token, and there is no UI or API to delete the subscription without one, so a
   # repeat is a nag they cannot act on — which is also why the record carries no expiry.
@@ -52,41 +79,57 @@ class UndeliverablePingSubscriptionNotifier
   # time would leave the gap between deciding to send and recording it, which two overlapping renders
   # both fit through. Called AFTER delivery, because a claim that expires costs at worst a repeat while
   # a permanent record written for a message that never left costs the notice itself.
-  def self.record_sent(resource_subscription_id, reason)
-    return if reason.blank?
+  #
+  # Conditional on still holding the claim, because a claim expires: a render whose token is gone has
+  # been replaced, and rewriting the key would put a permanent record under a successor's provisional
+  # claim — which that successor then releases on a failed delivery, discarding a send that did happen.
+  # Absent is claimed too, so an expiry with nobody behind it still records the send.
+  def self.record_sent(resource_subscription_id, reason, token)
+    return if reason.blank? || token.blank?
 
-    $redis.set(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason), Time.current.to_i)
+    $redis.eval(
+      SETTLE_IF_HELD,
+      keys: [RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason)],
+      argv: [token, SENT]
+    )
   rescue => e
     report(e)
   end
 
-  # Takes the notice, or reports that someone else holds it. This is the render's decision to send, so
-  # it has to be one write rather than a read followed by one: overlapping renders both reading an
-  # absent record would both send. The claim is provisional until `record_sent` makes it permanent —
-  # a claim is not evidence the seller was told, which is why it expires and why the send path gives
-  # it back the moment it knows nothing went out.
+  # Takes the notice and returns the token proving this render holds it, or nil when someone else does.
+  # This is the render's decision to send, so it has to be one write rather than a read followed by
+  # one: overlapping renders both reading an absent record would both send. The claim is provisional
+  # until `record_sent` makes it permanent — a claim is not evidence the seller was told, which is why
+  # it expires and why the send path gives it back the moment it knows nothing went out.
   #
   # An unusable store sends. Silence is the failure this notice exists to break, and the cost of the
   # other direction is a possible repeat.
   def self.claim_send(resource_subscription_id, reason)
-    return false if reason.blank?
+    return nil if reason.blank?
 
-    !!$redis.set(
+    token = SecureRandom.hex(16)
+    claimed = $redis.set(
       RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason),
-      Time.current.to_i, nx: true, ex: SEND_CLAIM_TTL.to_i
+      token, nx: true, ex: SEND_CLAIM_TTL.to_i
     )
+    claimed ? token : nil
   rescue => e
     report(e)
-    true
+    token
   end
 
-  # Only ever called on a claim this process took and did not spend. Deleting unconditionally is safe
-  # for that reason: a permanent record is written after the message is handed to the delivery method,
-  # so there is nothing to delete here that another render could still be owed.
-  def self.release_claim(resource_subscription_id, reason)
-    return if reason.blank?
+  # Gives back a claim this render took and did not spend, and only that claim. Deleting the key
+  # unconditionally would let a render whose claim has already expired delete what replaced it: a
+  # successor's live claim, or the permanent record of a send that successor completed — and then the
+  # next event claims a free key and emails the seller a second time.
+  def self.release_claim(resource_subscription_id, reason, token)
+    return if reason.blank? || token.blank?
 
-    $redis.del(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
+    $redis.eval(
+      RELEASE_IF_HELD,
+      keys: [RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason)],
+      argv: [token]
+    )
   rescue => e
     report(e)
   end
