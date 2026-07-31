@@ -179,7 +179,7 @@ class ContentModeration::ModerateRecordService
     # would otherwise be written during saves that go on to succeed.
     if reasons.any? { |r| spam_reason?(r) } && spam_flag_should_not_block?
       downgraded, reasons = reasons.partition { |r| spam_reason?(r) }
-      audit_reasons += downgraded.map { |r| "#{r} (not blocked: listing has content attached)" }
+      audit_reasons += downgraded.map { |r| "#{r} (#{spam_downgrade_note_reason})" }
     end
 
     leave_admin_comment(audit_reasons, blocked: false) if audit_reasons.any?
@@ -243,17 +243,36 @@ class ContentModeration::ModerateRecordService
     # Posts are unaffected: they have no deliverable of their own, so a spam
     # flag on a post keeps blocking as before.
     #
-    # A page is a note as well, always. A custom page is a landing page — its
-    # entire job is the sales copy the spam preset misreads, and it has no
-    # deliverable of its own to weigh that against, so the product test above
-    # can't be applied to it. Blocking on tone here would mean an agent that
-    # wrote a perfectly ordinary sales page cannot save it and cannot be told
-    # what to change. The presets that key on concrete content — the blocklist,
-    # the classifier, and adult content — still block a page.
+    # A page has no deliverable of its own, so the product test above can't be
+    # applied to it. What stands in for it is whether the page belongs to a real
+    # storefront: a seller with live products or completed sales has something
+    # the page is plausibly selling, and blocking on tone there would mean an
+    # agent that wrote a perfectly ordinary sales page cannot save it and cannot
+    # be told what to change. A seller with neither is the shape this change
+    # exists to stop — an agent or the CLI standing up a link farm on a
+    # gumroad.com subdomain — and the spam preset (whose flag conditions name
+    # link farms and keyword stuffing explicitly) is the only preset that reads
+    # it, so for them a corroborated spam flag keeps blocking.
     def spam_flag_should_not_block?
-      return true if entity_type == :page
+      return seller_has_storefront? if entity_type == :page
 
       entity_type == :product && product_has_substantive_deliverable?
+    end
+
+    # Why an admin is reading a downgraded spam flag rather than a block. A page
+    # is not a listing and has nothing attached, so it can't borrow the product
+    # wording.
+    def spam_downgrade_note_reason
+      entity_type == :page ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
+    end
+
+    # Whether the page's owner has anything on Gumroad besides the page. Kept to
+    # two indexed existence checks: this is asked inside a save, and only when
+    # there is a spam flag to downgrade.
+    def seller_has_storefront?
+      return false if user.blank?
+
+      user.links.alive.exists? || user.sales.successful.exists?
     end
 
     # The stricter half of "does this listing deliver anything", used only to
@@ -543,6 +562,14 @@ class ContentModeration::ModerateRecordService
     # so downgraded flags stay countable against blocked ones.
     def leave_admin_comment(reasons, blocked: true)
       return if user.blank?
+      # The dry-run preview endpoints validate an unsaved candidate to tell an
+      # agent what a publish WOULD do. Nothing was published, so a note here
+      # would let an agent iterating on borderline copy accrue moderation history
+      # against the seller for content that never went live — and the preview
+      # response already carries the reason back to the caller. Keyed on the
+      # explicit flag rather than `new_record?`, which is also true for a real
+      # create.
+      return if record.try(:moderation_preview)
 
       record_label = case entity_type
                      when :product then "Product ##{record.id} (#{record.name})"
@@ -566,7 +593,7 @@ class ContentModeration::ModerateRecordService
       @user ||= case entity_type
                 when :product then record.user
                 when :post then record.user
-                when :page then record.pageable.is_a?(User) ? record.pageable : record.pageable.try(:user)
+                when :page then record.seller
       end
     end
 

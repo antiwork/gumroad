@@ -220,8 +220,27 @@ RSpec.describe ContentModeration::ContentExtractor do
 
       result = extractor.extract_from_page(page)
 
-      expect(result.text.length).to eq(described_class::MAX_PAGE_TEXT_LENGTH)
+      expect(result.text.length).to be <= described_class::MAX_PAGE_TEXT_LENGTH + described_class::MAX_PAGE_LINK_TEXT_LENGTH
+      expect(result.text).to end_with("word")
       expect(result.image_urls.size).to eq(described_class::MAX_PAGE_IMAGE_URLS)
+    end
+
+    it "keeps link targets when the prose alone would exhaust the whole text budget" do
+      padding = "word " * 8_000
+      page = page_for(custom_html: %(<p>#{padding}</p><a href="https://linkfarm.example/deals">deals</a>))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.text).to include("https://linkfarm.example/deals")
+    end
+
+    it "samples the capped image URLs so images past the cap are still reachable" do
+      images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: images)
+
+      sampled = 5.times.flat_map { extractor.extract_from_page(page).image_urls }.uniq
+
+      expect(sampled.size).to be > described_class::MAX_PAGE_IMAGE_URLS
     end
 
     it "reads a product landing page takeover, whose owner is the product's seller" do

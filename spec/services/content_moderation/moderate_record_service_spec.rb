@@ -97,7 +97,8 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(page, :page).passed).to eq(false)
       end
 
-      it "keeps a spam flag as a note instead of blocking, since a landing page is sales copy with no deliverable" do
+      it "keeps a spam flag as a note instead of blocking for a seller with a live storefront" do
+        create(:product, user: seller)
         allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
           instance_double(ContentModeration::Strategies::PromptStrategy,
                           perform: strategy_result.new(status: "flagged", reasoning: ["spam: reads like a sales pitch"]))
@@ -108,6 +109,31 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         )
 
         expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      it "blocks a spam flag when the seller has no products and no sales, the link-farm shape" do
+        expect(seller.links.alive).to be_empty
+        allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::PromptStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["spam: outbound link farm"]))
+        )
+
+        result = described_class.check(page, :page)
+
+        expect(result.passed).to eq(false)
+        expect(result.reasons).to eq(["spam: outbound link farm"])
+      end
+
+      it "leaves no admin note for a dry-run preview candidate, which was never published" do
+        allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:new).and_return(
+          instance_double(ContentModeration::Strategies::BlocklistStrategy,
+                          perform: strategy_result.new(status: "flagged", reasoning: ["Matched blocked word: forbidden"]))
+        )
+        candidate = Page.new(pageable: seller, custom_html: "<p>forbidden</p>", moderation_preview: true)
+
+        expect(ContentModerationAdminCommentJob).not_to receive(:perform_async)
+
+        expect(described_class.check(candidate, :page).passed).to eq(false)
       end
 
       it "still blocks a page on a flag that keys on concrete content" do

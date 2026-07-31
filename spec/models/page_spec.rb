@@ -98,14 +98,25 @@ describe Page do
     end
 
     it "moderates the submitted HTML rather than the sanitized result" do
-      # The sanitizer strips a script tag entirely, so text hidden inside one
-      # would never reach moderation if the check ran after sanitization.
+      # marquee is dropped by the sanitizer but its text is visible to the
+      # extractor, so this text only reaches moderation if the check runs on the
+      # submitted document.
       expect(ContentModeration::Strategies::BlocklistStrategy).to receive(:new) do |text:, image_urls:|
-        expect(text).to include("Visible copy")
+        expect(text).to include("hiddenFromSanitizer")
         instance_double(ContentModeration::Strategies::BlocklistStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
       end
 
-      described_class.new(pageable: user, slug: "about", title: "About", custom_html: %(<p>Visible copy</p><script src="https://evil.com/x.js"></script>)).valid?
+      described_class.new(pageable: user, slug: "about", title: "About", custom_html: "<p>Visible copy</p><marquee>hiddenFromSanitizer</marquee>").valid?
+    end
+
+    it "lets a seller unpublish a page without waiting on the moderation service" do
+      page = described_class.create!(pageable: user, custom_html: "<p>Hand-lettered posters</p>")
+      stub_strategies(blocklist: "flagged", reasons: ["Matched blocked word: forbidden"])
+      expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+      page.custom_html = nil
+
+      expect(page).to be_valid
     end
   end
 

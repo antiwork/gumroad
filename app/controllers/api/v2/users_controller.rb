@@ -136,11 +136,10 @@ class Api::V2::UsersController < Api::V2::BaseController
 
     result = Ai::PageSanitizer.sanitize_with_report(custom_html)
     sanitized = result.html.presence
-    candidate_page = Page.new(pageable: current_resource_owner, custom_html: sanitized)
+    candidate_page = Page.new(pageable: current_resource_owner, custom_html: sanitized, moderation_preview: true)
     candidate_page.validate
-    # :base as well as :custom_html — content moderation reports on :base (see
-    # Page#content_moderation_check), and a preview that ignored it would tell
-    # the agent a page is publishable that the real write then rejects.
+    # :base as well as :custom_html: moderation reports on :base, and a preview
+    # that ignored it would call a page publishable that the real write rejects.
     errors = candidate_page.errors.where(:custom_html) + candidate_page.errors.where(:base)
 
     if errors.any?

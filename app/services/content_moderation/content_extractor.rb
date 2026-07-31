@@ -7,16 +7,20 @@ class ContentModeration::ContentExtractor
   PERMITTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 
   # Storefront pages carry up to Page::MAX_CUSTOM_HTML_LENGTH (500k) characters
-  # of seller-authored HTML, an order of magnitude more prose than a product
-  # listing. The visible text is what the moderation strategies read, so it is
-  # truncated to keep one page save from becoming a very large, very slow model
-  # call. Abuse worth catching (keyword farms, adult copy, off-platform pitches)
-  # is never confined to the tail of a document — it is the page's subject.
+  # of seller-authored HTML, so the extracted text is truncated to keep one page
+  # save from becoming a very large, very slow model call.
   MAX_PAGE_TEXT_LENGTH = 20_000
+
+  # Link targets get their own slice of the budget, taken before the prose.
+  # Concatenating them after the visible text and truncating the result put them
+  # at the tail by construction, so a page with 20k characters of benign copy in
+  # front of a link farm extracted zero destinations — the one signal a
+  # publishing surface's abuse is most likely to be carried by.
+  MAX_PAGE_LINK_TEXT_LENGTH = 5_000
 
   # Also bounded, for the same reason: a generated page can reference hundreds
   # of images, while ClassifierStrategy moderates the first few
-  # (MAX_IMAGES_TO_MODERATE) and PromptStrategy sends what it is given.
+  # (MAX_IMAGES_TO_MODERATE) and PromptStrategy samples from what it is given.
   MAX_PAGE_IMAGE_URLS = 20
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
@@ -39,11 +43,10 @@ class ContentModeration::ContentExtractor
   # A storefront page: either the profile/product custom HTML takeover or a
   # slugged page, carrying rich text `content` or a full `custom_html` document.
   #
-  # Both representations are read the same way — as a document whose visible
-  # text and images are what a visitor sees. Link targets are included in the
-  # text because a page is a publishing surface: the abuse that shows up here is
-  # usually a set of outbound links (an SEO farm, a redirect to an off-platform
-  # storefront) rather than the prose around them.
+  # Link targets come FIRST and carry their own budget: a page is a publishing
+  # surface, so the abuse here is usually a set of outbound links (an SEO farm, a
+  # redirect to an off-platform storefront) rather than the prose around them,
+  # and prose is what a spammer can pad without limit.
   def extract_from_page(page)
     document = Nokogiri::HTML(page.custom_html.presence || page.content.to_s)
 
@@ -52,16 +55,37 @@ class ContentModeration::ContentExtractor
     # moderated text to what a visitor actually reads.
     document.css("script, style, noscript, template").each(&:remove)
 
-    text = "Title: #{page.title} #{document.text} #{link_targets(document).join(" ")}".squish
-    text = strip_seller_first_party_urls(text, page_seller(page))
+    links = strip_seller_first_party_urls(link_targets(document).join(" "), page.seller)
+    prose = strip_seller_first_party_urls("Title: #{page.title} #{document.text}".squish, page.seller)
+
+    # Truncate each part on its own so neither can starve the other, and cut on a
+    # whitespace boundary so a bisected word or URL can't manufacture a token the
+    # blocklist's word-boundary matching would then match.
+    text = "#{truncate_on_boundary(links, MAX_PAGE_LINK_TEXT_LENGTH)} " \
+           "#{truncate_on_boundary(prose, MAX_PAGE_TEXT_LENGTH)}".squish
 
     Result.new(
-      text: text[0, MAX_PAGE_TEXT_LENGTH],
-      image_urls: page_image_urls(document).first(MAX_PAGE_IMAGE_URLS)
+      text: text,
+      # Sampled rather than taken in document order: the classifier and the
+      # prompt presets each read only a few of these, so a fixed prefix would let
+      # 20 benign images at the top of the document guarantee the rest are never
+      # eligible.
+      image_urls: page_image_urls(document).sample(MAX_PAGE_IMAGE_URLS)
     )
   end
 
   private
+    # Cut at the last whitespace at or before `max` so a truncation can't leave a
+    # half word or half URL behind — the blocklist matches on word boundaries, so
+    # a bisected token is a token it can match.
+    def truncate_on_boundary(text, max)
+      return text if text.length <= max
+
+      cut = text[0, max]
+      boundary = cut.rindex(/\s/)
+      boundary ? cut[0, boundary] : cut
+    end
+
     # Where a page's links point. Kept as bare URLs so the blocklist's
     # word-boundary matching and the prompt strategies see the destination, and
     # so `strip_seller_first_party_urls` can neutralize the seller's own hosts
@@ -83,13 +107,6 @@ class ContentModeration::ContentExtractor
         src = img["src"].to_s.strip
         src if src.start_with?("http://", "https://")
       end.uniq
-    end
-
-    # A page belongs to a user (storefront/slugged pages) or a product (the
-    # product page takeover); first-party host stripping needs the seller either
-    # way.
-    def page_seller(page)
-      page.pageable.is_a?(User) ? page.pageable : page.pageable.try(:user)
     end
 
     # A seller linking to their OWN storefront/profile (or one of their own
