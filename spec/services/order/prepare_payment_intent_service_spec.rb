@@ -1340,21 +1340,22 @@ describe Order::PreparePaymentIntentService, :vcr do
         end
 
         # The parameter is merged straight from the request, so its length is whatever the caller
-        # sends. The cap bounds the work before the list is discarded and leaves the methods a real
-        # element could have mounted intact.
-        it "caps an oversized report and still narrows against the entries it keeps" do
+        # sends. Padding first so the real methods sit past the cap: they are dropped, the
+        # intersection empties, and the fail-safe returns the resolved list. Padding last would
+        # pass with or without the cap.
+        it "caps an oversized report, so entries past the cap cannot narrow the intent" do
           order, params = build_order
           order.purchases.each { _1.update!(ip_country: "United States") }
 
           padding = Array.new(described_class::MAX_REPORTED_MOUNTED_PAYMENT_METHOD_TYPES) { "pad_#{_1}" }
 
           create_args, = prepare_with_reported_methods(
-            %w[card link] + padding,
+            padding + %w[card link],
             preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
             token: "ctoken_oversized", order:, params:
           )
 
-          expect(create_args[:payment_method_types]).to eq(%w[card link])
+          expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
         end
 
         # A non-array report (a scalar, a hash) carries nothing to narrow against and must not
