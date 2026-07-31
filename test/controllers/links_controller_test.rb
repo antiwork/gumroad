@@ -8098,4 +8098,69 @@ class LinksControllerSaveContractTest < ActionController::TestCase
       end
     end
   end
+
+  # --- a 200 that applied fewer deletions than it named (gumroad-private#1508)
+  #
+  # The reported failure was a save that returned 200, deleted nothing, and
+  # left no audit row — indistinguishable from success. Under the contract that
+  # shape can only come from a payload whose stated deletions did not take
+  # effect, so the server compares what was named against what survived.
+
+  test "flag on: a save whose named variant deletion did not take effect is reported" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    survivor = create_variant(variant_category: @category, name: "Should have gone")
+
+    # Make the deletion a no-op without changing the response: the contract
+    # still reports the id as requested, the variants updater never removes it.
+    Product::VariantCategoryUpdaterService.any_instance.stubs(:perform)
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [survivor.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert survivor.reload.alive?, "precondition: the stubbed updater really did leave the version alive"
+    report = notified.find { |message, _| message == "Product save applied fewer deletions than it named" }
+    assert report, "expected the unapplied-deletion report (got: #{notified.inspect})"
+    assert_equal [survivor.external_id], report.last[:surviving_variant_ids]
+    assert_equal [survivor.external_id], report.last[:requested_variant_ids]
+  end
+
+  test "flag on: a save whose named deletions all took effect reports nothing" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params.merge(
+      variants: [{ id: kept.external_id, name: "Kept" }],
+      editor_revision: current_revision,
+      deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+    ), format: :json
+    assert_response :success
+
+    assert_not removed.reload.alive?
+    assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
+  end
+
+  test "flag on: a save that names no deletions never runs the discrepancy check" do
+    enable_contract!
+    create_variant(variant_category: @category, name: "Kept")
+
+    notified = []
+    ErrorNotifier.stubs(:notify).with { |message, **context| notified << [message, context]; true }
+
+    post :update, params: @params, format: :json
+    assert_response :success
+
+    assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
+  end
 end

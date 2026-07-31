@@ -661,6 +661,8 @@ class LinksController < ApplicationController
       end
       return render json: { error_message: }, status: :unprocessable_entity
     end
+    report_unapplied_deletions!
+
     invalid_currency_offer_codes = @product.product_and_universal_offer_codes.reject do |offer_code|
       offer_code.is_currency_valid?(@product)
     end.map(&:code)
@@ -1348,6 +1350,50 @@ class LinksController < ApplicationController
     def submitted_page_count
       count = params[:rich_content].is_a?(Array) ? params[:rich_content].size : 0
       count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
+    end
+
+    # A save that named deletions and applied fewer of them than it named is a
+    # success response the seller cannot tell apart from a real one
+    # (gumroad-private#1508). Under the save contract an unstated removal is a
+    # no-op by design, so the failure mode that used to be a wrong deletion is
+    # now a silent non-deletion: 200, nothing gone, nothing logged.
+    #
+    # Runs only on the success path, after the transaction committed, and only
+    # when the client actually stated deletions — so it costs one reload plus
+    # two id reads on the small minority of saves that delete something, and
+    # nothing at all on the rest.
+    #
+    # Never raises. This is a report, not a guard: the write already happened
+    # and failing the response here would tell the seller a committed save
+    # failed.
+    def report_unapplied_deletions!
+      contract = product_save_contract
+      return unless contract.enforced?
+      return unless contract.requested_deletion?
+
+      requested_variants = contract.deleted_ids(:variants)
+      requested_pages = contract.deleted_ids(:rich_content)
+      return if requested_variants.empty? && requested_pages.empty?
+
+      @product.reload
+      surviving_variants = requested_variants & @product.alive_variants.map(&:external_id)
+      alive_page_ids = @product.alive_rich_contents.map(&:external_id) +
+        @product.current_base_variants.flat_map { |variant| variant.alive_rich_contents.map(&:external_id) }
+      surviving_pages = requested_pages & alive_page_ids
+      return if surviving_variants.empty? && surviving_pages.empty?
+
+      ErrorNotifier.notify(
+        "Product save applied fewer deletions than it named",
+        product_id: @product.id,
+        seller_id: @product.user_id,
+        request_id: request.request_id,
+        requested_variant_ids: requested_variants,
+        surviving_variant_ids: surviving_variants,
+        requested_rich_content_ids: requested_pages,
+        surviving_rich_content_ids: surviving_pages,
+      )
+    rescue StandardError => e
+      ErrorNotifier.notify(e)
     end
 
     # Accumulates client id → canonical server id for records this save
