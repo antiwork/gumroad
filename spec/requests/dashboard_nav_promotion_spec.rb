@@ -55,13 +55,19 @@ describe DashboardNavPromotion, type: :request do
   end
 
   it "credits the destination a redirect lands on, not the one it left" do
-    # /affiliates bounces a seller with no affiliates to the onboarding page, which is itself under
-    # the affiliates prefix — so the promotion comes from the page that actually rendered.
-    get affiliates_path
+    # /emails bounces to the published tab, which is itself under the emails prefix — the promotion
+    # comes from the request that actually rendered, not the one that redirected.
+    get emails_path
+
+    expect(response).to be_redirect
+    # The redirect seeds (it is still a dashboard request) but promotes nothing, because no page
+    # rendered yet.
+    expect(seller.reload.promoted_nav_item_keys).to eq []
+
     follow_redirect!
 
     expect(response).to be_successful
-    expect(seller.reload.promoted_nav_item_keys).to include "affiliates"
+    expect(seller.reload.promoted_nav_item_keys).to include "emails"
   end
 
   it "promotes on an Inertia visit, which is how in-app navigation arrives" do
