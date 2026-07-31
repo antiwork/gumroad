@@ -108,6 +108,35 @@ describe ScheduleAbandonedCartEmailsJob do
           end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
         end
 
+        it "schedules nothing for a cart whose every matched product is owned, and leaves it eligible" do
+          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+          create(:purchase, link: seller1_product2, email: cart1.user.email, purchaser: cart1.user, variant_attributes: [seller1_product2_variant1])
+
+          expect do
+            described_class.new.perform
+          end.not_to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, anything)
+
+          # No mail means no SentAbandonedCartEmail row, which is what keeps the cart inside
+          # Cart.abandoned — suppression must not spend the cart's one eligibility.
+          expect(cart1.reload.sent_abandoned_cart_emails).to be_empty
+          expect(cart1).to be_abandoned
+        end
+
+        it "schedules an email for an all-owned cart once an unowned product is added to it" do
+          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+          create(:purchase, link: seller1_product2, email: cart1.user.email, purchaser: cart1.user, variant_attributes: [seller1_product2_variant1])
+          described_class.new.perform
+
+          create(:cart_product, cart: cart1, product: seller2_product1)
+          # Adding to a cart touches it, so it only becomes stale again a day later — the
+          # point being that the earlier suppressed run left it eligible to get here at all.
+          cart1.update!(updated_at: 2.days.ago)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
+        end
+
         it "still schedules an email when a refunded purchase is the only one for a carted product" do
           create(:purchase, :refunded, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
 
