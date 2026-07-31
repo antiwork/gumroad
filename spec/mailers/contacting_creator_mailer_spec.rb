@@ -147,6 +147,31 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to_not include("on hold")
     end
 
+    # The two pause flags are independent, so both can be on. Naming only the hold would tell the
+    # seller support can release the balance while their own pause still blocks it. Reviewer
+    # finding on #6526.
+    it "names both pauses when the account is held and the seller paused their own payouts" do
+      payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("resume payouts in your settings")
+      expect(mail.body.encoded).to include("review the hold")
+      expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "names both pauses for a retried rejection whose retries a pause is stopping" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Two separate pauses are on your account")
+      expect(mail.body.encoded).to include("resume payouts in your settings")
+      expect(mail.body.encoded).to include("review the hold")
+    end
+
     it "does not tell a seller in a PayPal-only country to add a bank account" do
       payment.user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info, user: payment.user, country: "Ukraine")

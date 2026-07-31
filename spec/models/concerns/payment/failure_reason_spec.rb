@@ -192,6 +192,22 @@ describe Payment::FailureReason do
             expect(note.content).to_not include("contact support")
           end
 
+          # Both flags are independent, so the combined state is real: naming only the hold would
+          # imply support can release the balance while the seller's own pause still blocks it.
+          # Reviewer finding on #6526.
+          it "names both pauses for a seller who is held and paused their own payouts" do
+            payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+            payment.mark_failed!("PAYPAL 3148")
+
+            note = payment.user.comments.last
+            expect(note.content).to include("also on hold, and paused in your settings")
+            expect(note.content).to include("resume payouts in your settings")
+            expect(note.content).to include("contact support")
+            expect(note.content).to_not include("on the next payout date")
+            expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+          end
+
           it "names the currency restriction when PayPal cannot send US dollars to the account" do
             payment.mark_failed!("PAYPAL 14159")
 

@@ -223,6 +223,12 @@ module Payment::FailureReason
   TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_SELF_PAUSED =
     "Your balance is safe. Payouts on your account are paused in your settings, so once a working payout method " \
     "is on file and you resume payouts there, your balance will be paid out on the next payout date."
+  # Both pauses can be on at once, and naming only the hold would hide the half the seller has to
+  # clear themselves — leaving them waiting on support for money their own toggle is still blocking.
+  TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED_AND_SELF_PAUSED =
+    "Your balance is safe. Payouts on your account are also on hold, and paused in your settings. Once a working " \
+    "payout method is on file, resume payouts in your settings and contact support so we can review the hold — " \
+    "your balance will be paid out once both are cleared."
 
   PAYPAL_MASS_PAY = {
     PAYPAL_PAYOUT_FAILED => "PayPal rejected the payout without returning a reason code",

@@ -283,12 +283,16 @@ class Payment < ApplicationRecord
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY
     end
 
-    # Only a hold WE placed. A seller who paused their own payouts in their settings can resume
-    # them whenever they like, so sending them to support to have it "reviewed" would be busywork
-    # for both of us. They still cannot be told plainly to expect the next payout date, because the
-    # payout gate (Payouts.is_user_payable) checks the broader payouts_paused? and skips them while
-    # their own pause is on — so they get wording that names the switch they own.
-    next_step = if user.payouts_paused_internally?
+    # The two pause flags are independent, so all four combinations are real. A seller who paused
+    # their own payouts can resume them whenever they like, so sending them to support to have that
+    # "reviewed" would be busywork for both of us — but they still cannot be told plainly to expect
+    # the next payout date, because the payout gate (Payouts.is_user_payable) checks the broader
+    # payouts_paused? and skips them while their own pause is on. When BOTH are on, each has to be
+    # named: describing only the hold would leave the seller waiting on support while their own
+    # toggle keeps the money from moving.
+    next_step = if user.payouts_paused_internally? && user.payouts_paused_by_user?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED_AND_SELF_PAUSED
+    elsif user.payouts_paused_internally?
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_PAUSED
     elsif user.payouts_paused_by_user?
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP_WHILE_SELF_PAUSED

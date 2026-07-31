@@ -3,15 +3,18 @@
 # Explain the stopped payouts to the sellers who were already stuck when we shipped the fix.
 #
 # PayPal rejections 3148 and 14159 describe the receiving PayPal account, so re-sending the same
-# payout can never succeed. The payout pipeline used to retry them every week anyway — sellers here
-# have a median of 22 identical failures each, worst case 37 — and told the seller nothing beyond a
-# generic "payouts were paused by the system" note (gumroad-private#1478).
+# payout can never succeed until the seller changes something. The payout pipeline retried them
+# every week anyway — sellers here have a median of 22 identical failures each, worst case 37 — and
+# told the seller nothing beyond a generic "payouts were paused by the system" note
+# (gumroad-private#1478).
 #
-# The fix stops the retries and writes a seller-visible note explaining why, but both only happen on
-# a new payout failure. For sellers who were already stuck, the block means there is no next failure,
-# so nothing would ever fire and they would keep seeing the same uninformative note they have been
-# staring at for months. This walks the existing population once and writes the note they should
-# have had all along.
+# The fix explains both codes and stops the retries for 3148 only: a 14159 seller can add US
+# dollars to the account we already pay, which an address-keyed block would never notice, so they
+# keep being retried. Either way the explanation only gets written on a new payout failure. For
+# sellers already stuck behind the 3148 block there is no next failure at all, so nothing would
+# ever fire and they would keep seeing the same uninformative note they have been staring at for
+# months. This walks the existing population once and writes the note they should have had all
+# along.
 #
 # Notes only: the one-time email to these sellers is tracked separately so its copy can be reviewed
 # before anything sends.

@@ -33,7 +33,18 @@
       <a href='<%= settings_payments_url %>'>use a different PayPal account</a> that can receive US dollars.
     </p>
   <% end %>
-  <% if @payouts_on_hold %>
+  <% if @payouts_on_hold && @payouts_paused_by_seller %>
+    <p>
+      <%# Both pauses are on. Naming only the hold would leave them waiting on us while their own
+          toggle is still stopping the money. %>
+      <% if @retries_paused_by_pause %>
+        Two separate pauses are on your account: a hold on our side, which is ours to lift, and your own pause in your payout settings. Once a working payout method is on file,
+      <% else %>
+        Payouts on your account are also on hold on our side, and paused in your own payout settings. Once a working payout method is on file,
+      <% end %>
+      <a href='<%= settings_payments_url %>'>resume payouts in your settings</a> and reply to this email so we can review the hold and release your balance.
+    </p>
+  <% elsif @payouts_on_hold %>
     <p>
       <%# The pause is already named above when it is what stopped the retries, so don't restate it. %>
       <% if @retries_paused_by_pause %>

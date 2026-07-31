@@ -214,15 +214,15 @@ class ContactingCreatorMailer < ApplicationMailer
     @can_receive_us_dollars_on_same_account = @payment.repairable_in_place_paypal_failure?
     # Ask the seller to reply rather than promising the next payout date, because an admin or
     # system hold outlives the payout-method fix this email prescribes and only support can lift
-    # it. Two narrower cases are deliberately swept in with it: a hold Stripe placed is lifted
-    # automatically when the seller changes their payout details (UpdatePayoutMethod), so for them
-    # the ask is merely over-cautious rather than wrong. A seller who paused their own payouts is
-    # excluded entirely — that is their own toggle to flip, so they are pointed at the toggle
-    # instead of at support (@payouts_paused_by_seller). They cannot be told plainly to expect the
-    # next payout date either: the payout gate checks the broader payouts_paused? and skips them
-    # while their own pause is on.
+    # it. A hold Stripe placed is lifted automatically when the seller changes their payout details
+    # (UpdatePayoutMethod), so for them the ask is merely over-cautious rather than wrong. A seller
+    # who paused their own payouts is pointed at their own toggle instead of at support. Both flags
+    # are read independently because both can be on: the template names each one it finds, since
+    # clearing only the hold still leaves the seller's own pause stopping the money, and they
+    # cannot be told plainly to expect the next payout date either — the payout gate checks the
+    # broader payouts_paused? and skips them while either is on.
     @payouts_on_hold = @seller.payouts_paused_internally?
-    @payouts_paused_by_seller = !@payouts_on_hold && @seller.payouts_paused_by_user?
+    @payouts_paused_by_seller = @seller.payouts_paused_by_user?
     # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
     # PayPal-only countries, where "add a bank account" is advice they cannot act on.
     @can_use_bank_account = @seller.can_setup_bank_payouts?
