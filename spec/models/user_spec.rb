@@ -3629,6 +3629,22 @@ describe User, :vcr do
       expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
+    # The payout is created on whichever account StripePayoutProcessor.get_payout_details picks,
+    # which can be the connected account, so seasoning the managed one alone is not enough.
+    context "when the seller also holds a connected Stripe account" do
+      it "returns false while the connected account is younger than 60 days" do
+        create(:merchant_account_stripe_connect, user:, created_at: 10.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
+
+      it "returns true once both accounts are seasoned" do
+        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+      end
+    end
+
     it "returns false when user is not from the US" do
       user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info_canada, user:)
