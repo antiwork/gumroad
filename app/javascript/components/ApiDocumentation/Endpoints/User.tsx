@@ -123,6 +123,59 @@ const ProfileCustomHtmlDocumentation = () => (
       <code>data-gumroad-action="buy"</code> and the <code>gumroad:checkout</code> bridge don't apply. Link to your
       products or profile sections instead.
     </p>
+    <h5>Your catalogue as JSON</h5>
+    <p>
+      Your profile page is served with a <code>&lt;script type="application/json" id="gumroad-data"&gt;</code> blob
+      carrying your products, posts and the names of the pages on your profile, so the page can render its own cards
+      instead of hardcoding them. Read it with{" "}
+      <code>JSON.parse(document.getElementById("gumroad-data").textContent)</code>. The page's{" "}
+      <code>connect-src 'none'</code> policy means this blob is the only catalogue source available to it — it can't
+      fetch one.
+    </p>
+    <p>
+      Only the profile page gets it. Product landing pages and your slug pages are served without the element, so guard
+      the lookup (<code>const el = document.getElementById("gumroad-data")</code>) if you share one script across pages
+      — reading <code>.textContent</code> off a missing element throws and leaves the page blank.
+    </p>
+    <p>
+      Each entry in <code>products</code> has:
+    </p>
+    <ul>
+      <li>
+        <code>name</code>, <code>url</code>, <code>description</code> (plain text, truncated to 200 characters) and{" "}
+        <code>native_type</code>.
+      </li>
+      <li>
+        <code>url</code> is absolute and already on the host visitors should stay on: your custom domain when that exact
+        hostname points at Gumroad and has a certificate, otherwise your <code>gumroad.com</code> subdomain, which
+        serves the same product. Because a certificate covering <code>example.com</code> may not cover{" "}
+        <code>www.example.com</code>, the counterpart of your domain isn't assumed to work. Use these URLs as given
+        rather than rebuilding them from a name or a permalink.
+      </li>
+      <li>
+        <code>price</code> — the price you set, formatted in the product's own currency, e.g. <code>$14</code> or{" "}
+        <code>$0+</code>. This blob is cached per seller rather than per visitor, so the figure is identical for every
+        visitor and is not converted to their local currency. To display a price, prefer the <code>gumroad-prices</code>{" "}
+        blob or <code>data-gumroad-field=&quot;price&quot;</code> described above: those are priced per request in the
+        visitor's currency, with your default offer code applied.
+      </li>
+      <li>
+        <code>thumbnail_url</code> and <code>cover_url</code> — either or both may be null, so fall back from one to the
+        other and render a text-only card when neither is set.
+      </li>
+    </ul>
+    <p>
+      <code>posts</code> entries carry <code>name</code>, <code>url</code> (built on the same host as product URLs) and{" "}
+      <code>published_at</code>, and <code>pages</code> entries carry a <code>name</code> — the pages of your profile,
+      the ones visitors switch between, not the sections inside them. At most 100 products and 100 posts are included;{" "}
+      <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 100 of
+      114" rather than implying the catalogue is complete.
+    </p>
+    <p>
+      The blob is cached per seller and rebuilt when a product, a post or your page layout changes — including a price
+      edit, whether you change the base price or a version's. Editing what's inside a section doesn't rebuild it, since
+      no section content is carried here.
+    </p>
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/user/custom_html \\
   -X PUT \\
