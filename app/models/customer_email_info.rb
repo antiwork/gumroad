@@ -43,6 +43,13 @@ class CustomerEmailInfo < EmailInfo
   # Rows are oldest-first. Without a timestamp, or when every send postdates the
   # event (clock skew, or a row whose send was never recorded), fall back to the
   # newest row rather than dropping the event.
+  #
+  # This narrows misattribution, it does not eliminate it: the event carries no
+  # message identifier, so once two sends both predate it, picking the newer one
+  # is a guess. Anything that must be defensible per send — chargeback evidence —
+  # therefore treats a multi-send purchase's delivery events as unattributed
+  # (DisputeEvidence::GenerateAccessActivityLogsService). Identity-based routing
+  # needs the provider's message id persisted; gumroad-private#1635.
   def self.newest_sent_before(email_infos, sent_before)
     return email_infos.last if sent_before.blank?
 

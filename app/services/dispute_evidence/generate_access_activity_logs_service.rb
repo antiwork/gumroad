@@ -76,27 +76,41 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       content << "\n"
     end
 
-    # The ORIGINAL send is the evidence: a resend is often triggered BY the
+    # The ORIGINAL send dates the receipt: a resend is often triggered BY the
     # dispute, so citing the newest one would date the receipt after the
     # complaint. Later attempts are named separately rather than replacing it.
     def email_activity
-      receipt_email_infos = purchase.receipt_email_infos.select { _1.sent_at.present? }
-      original = receipt_email_infos.first
-      return unless original.present?
+      sends = purchase.receipt_email_infos.select { _1.sent_at.present? }
+      return if sends.empty?
 
-      content = "The receipt email was sent at #{send_activity(original)}."
+      return single_send_activity(sends.first) if sends.one?
 
-      resends = receipt_email_infos.drop(1)
-      content << " The receipt was sent again at #{resends.map { send_activity(_1) }.join('; ')}." if resends.any?
-      content
+      content = "The receipt email was sent at #{sends.first.sent_at}."
+      content << " The receipt was sent again at #{sends.drop(1).map { _1.sent_at }.join('; ')}."
+      content << unattributed_event_activity(sends)
     end
 
-    # Delivery events attach to the newest send, so when a buyer opens the
-    # resent receipt the open lands here and not on the original row.
-    def send_activity(email_info)
-      activity = email_info.sent_at.to_s
-      activity << ", delivered at #{email_info.delivered_at}" if email_info.delivered_at.present?
-      activity << ", opened at #{email_info.opened_at}" if email_info.opened_at.present?
-      activity
+    def single_send_activity(email_info)
+      content = "The receipt email was sent at #{email_info.sent_at}"
+      content << ", delivered at #{email_info.delivered_at}" if email_info.delivered_at.present?
+      content << ", opened at #{email_info.opened_at}" if email_info.opened_at.present?
+      content << "."
+    end
+
+    # Providers give us no message identifier on a delivery or open event, so
+    # with several sends outstanding we know a receipt was delivered and opened
+    # but not WHICH send earned it — an event routes to the newest send that
+    # predates it, which is a guess once two sends do. So report the earliest
+    # of each across all sends and claim nothing per send: the card network
+    # needs "it was delivered and read", and a per-send claim here would be
+    # evidence we cannot stand behind. Tracked in gumroad-private#1635.
+    def unattributed_event_activity(sends)
+      delivered_at = sends.filter_map(&:delivered_at).min
+      opened_at = sends.filter_map(&:opened_at).min
+
+      content = +""
+      content << " A receipt was delivered at #{delivered_at}." if delivered_at.present?
+      content << " A receipt was opened at #{opened_at}." if opened_at.present?
+      content
     end
 end
