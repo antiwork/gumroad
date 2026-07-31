@@ -667,11 +667,12 @@ class ContactingCreatorMailer < ApplicationMailer
     # sentence we're after either, so drop it rather than pasting a wall of text into the email.
     MAX_FORMAT_HINT_LENGTH = 200
 
-    # The row Stripe refused, or the current one when the caller could not name it (legacy calls
-    # and the debit-card path). A missing id must not fall back silently to nothing: without a row
-    # there is nothing to quote, which is the correct outcome, not an error.
+    # The row Stripe refused, and only that row. An unnamed id (a job enqueued before this
+    # argument existed) resolves to nothing rather than to the active account: the seller may have
+    # saved a replacement since, and quoting those values as "the details we sent" points them at
+    # a row Stripe never saw. No row means no quoted values, which is the pre-existing copy.
     def rejected_bank_account(bank_account_id)
-      return @seller.active_bank_account if bank_account_id.blank?
+      return if bank_account_id.blank?
 
       @seller.bank_accounts.find_by(id: bank_account_id)
     end

@@ -2372,6 +2372,23 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).not_to include("check both")
       end
 
+      it "quotes nothing when the caller could not name the refused row" do
+        # A job enqueued before the id argument existed. The seller may have re-saved since, so
+        # naming the active row would attribute values Stripe never saw.
+        create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message)
+
+        # Decoded, not .encoded: quoted-printable soft-wraps can split a quoted value across a
+        # line break and make a negative assertion pass for the wrong reason.
+        body = mail.html_part&.decoded || mail.body.decoded
+        # Positive anchor from static template text — the header copy's apostrophes HTML-escape
+        # ("couldn&#39;t"), so anchoring on those makes the negatives below vacuous.
+        expect(body).to include("double-check your details")
+        expect(body).not_to include("JSCLUZ22XXX")
+        expect(body).not_to include("The details we sent were")
+      end
+
       it "quotes the row Stripe refused, not whatever the seller has saved since" do
         # The mail renders asynchronously, and the #1550 seller re-saved six times in eleven
         # minutes. Re-saving soft-deletes the old row and makes the newest one active, so reading
