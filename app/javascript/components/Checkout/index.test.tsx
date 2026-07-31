@@ -35,7 +35,6 @@ const paymentElementConfig: CheckoutPaymentConfig = {
     buyer_currency_presentment: true,
     payment_method_types: ["card"],
     payment_method_creation: "manual",
-    payment_method_list_token: null,
     stripe_link_enabled: true,
   },
 };
