@@ -17,7 +17,10 @@ class MoroccoBankAccount < BankAccount
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
-  validate :validate_account_number, if: -> { Rails.env.production? }
+  # Only on write: 397 live rows predate the fixed-length rule, and re-validating them would raise
+  # on unrelated saves (mark_deleted! when a seller switches to PayPal, which runs after the balance
+  # forfeit and outside any transaction).
+  validate :validate_account_number, if: -> { Rails.env.production? && will_save_change_to_account_number? }
 
   def routing_number
     "#{bank_code}"

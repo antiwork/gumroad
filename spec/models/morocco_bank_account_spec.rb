@@ -57,9 +57,31 @@ describe MoroccoBankAccount do
         expect(ma_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid. Enter your 28-character IBAN: MA followed by 26 digits, not your RIB.")
       end
 
-      # A blank number also trips the base class's own presence error, so assert ours is present
-      # rather than that it is the only one.
+      # A blank number never marks the attribute dirty, so the format check is skipped and the
+      # base class's presence validation is what rejects it.
       ma_bank_account = build(:morocco_bank_account, account_number: "")
+      expect(ma_bank_account).to_not be_valid
+      expect(ma_bank_account.errors.full_messages).to include("Account number We could not save your bank account information.")
+    end
+
+    it "leaves an already-persisted non-conforming account number alone on an unrelated save" do
+      ma_bank_account = build(:morocco_bank_account, account_number: "MA62370400440532013001", account_number_last_four: "3001")
+      ma_bank_account.save!(validate: false)
+
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      # Soft-deleting happens when a seller switches to PayPal, after their balance is already
+      # forfeited, so re-validating the stored number here would raise mid-way through.
+      expect { ma_bank_account.reload.mark_deleted! }.to_not raise_error
+      expect(ma_bank_account.reload).to be_deleted
+    end
+
+    it "still rejects a non-conforming account number when one is being written to an existing record" do
+      ma_bank_account = create(:morocco_bank_account)
+
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      ma_bank_account.account_number = "MA62370400440532013001"
       expect(ma_bank_account).to_not be_valid
       expect(ma_bank_account.errors.full_messages).to include("The account number is invalid. Enter your 28-character IBAN: MA followed by 26 digits, not your RIB.")
     end
