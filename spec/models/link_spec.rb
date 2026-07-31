@@ -98,5 +98,37 @@ describe Link do
 
       expect(product.reload.default_offer_code_id).to eq(offer_code.id)
     end
+
+    it "keeps a valid default another request assigned while this undelete was in flight" do
+      detached = create(:offer_code, user: seller, products: [product])
+      product.update!(default_offer_code_id: detached.id)
+      product.update!(deleted_at: Time.current)
+      detached.products.delete(product)
+      replacement = create(:offer_code, user: seller, products: [product], amount_cents: 300)
+
+      # Stand in for a concurrent request assigning a valid default after this
+      # save decided the old one was detached but before the clearing write lands.
+      allow(Link).to receive(:with_detached_default_offer_code).and_wrap_original do |original, *args|
+        Link.where(id: product.id).update_all(default_offer_code_id: replacement.id)
+        original.call(*args)
+      end
+
+      product.update!(deleted_at: nil)
+
+      expect(product.reload.default_offer_code_id).to eq(replacement.id)
+    end
+
+    it "leaves the in-memory product agreeing with the cleared row" do
+      offer_code = create(:offer_code, user: seller, products: [product])
+      product.update!(default_offer_code_id: offer_code.id)
+      product.update!(deleted_at: Time.current)
+      offer_code.products.delete(product)
+
+      product.update!(deleted_at: nil)
+
+      expect(product.default_offer_code_id).to be_nil
+      expect(product.default_offer_code).to be_nil
+      expect(product.changed?).to eq(false)
+    end
   end
 end

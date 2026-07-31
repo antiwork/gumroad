@@ -251,7 +251,9 @@ class Link < ApplicationRecord
   # code no OfferCode save ever sees. Both repair here, in the same write.
   # Persisted-only: on a duplicate every attribute reads as changed, and the
   # join rows that make the code applicable are copied after this first save.
-  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) || (!new_record? && will_save_change_to_price_currency_type?) }
+  # After, not before: the detachment predicate runs in SQL against the row's new
+  # currency, so it has to see the saved value.
+  after_save :clear_detached_default_offer_code, if: -> { saved_change_to_deleted_at?(to: nil) || (!previously_new_record? && saved_change_to_price_currency_type?) }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
   after_save :note_default_offer_code_assignment
@@ -1488,8 +1490,22 @@ class Link < ApplicationRecord
       errors.add(:custom_permalink, "is in use by another Gumroad account, so it can't be used for a product with license keys. Pick a different one.")
     end
 
+    # Runs after the row is written, as a predicated UPDATE rather than a nil
+    # assignment on this instance: writing the column from our own snapshot would
+    # overwrite a valid default a concurrent request assigned between our read and
+    # our write, and that clear marks no assignment pending, so nothing repairs it.
+    # Same transaction as the undelete/currency change, so the product is never
+    # visible carrying a default checkout refuses.
     def clear_detached_default_offer_code
-      self.default_offer_code = nil if default_offer_code_detached?
+      return if default_offer_code_id.nil?
+      return if self.class.where(id:).with_detached_default_offer_code.update_all(default_offer_code_id: nil).zero?
+
+      # Mirror the clear locally without dirtying the attribute — a later save in
+      # the same request would otherwise write this nil back over an assignment
+      # that landed in between.
+      write_attribute(:default_offer_code_id, nil)
+      clear_attribute_change(:default_offer_code_id)
+      association(:default_offer_code).reset
     end
 
     # saved_changes only reflects the last save in a transaction, and flows like
