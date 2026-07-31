@@ -41,7 +41,7 @@ const navigationTarget = (
 ): string | null => {
   if (storeHostnames.includes(url.hostname)) return url.href;
   if (!globalNavHosts.includes(url.hostname)) return null;
-  const path = url.pathname.replace(/\/+$/, "");
+  const path = url.pathname.replace(/\/+$/u, "");
   if (!globalNavPaths.includes(path)) return null;
   return url.origin + path;
 };

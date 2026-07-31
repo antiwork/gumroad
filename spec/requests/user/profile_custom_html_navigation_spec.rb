@@ -97,7 +97,9 @@ describe "Profile custom HTML page store navigation", type: :system, js: true do
     # A signed-out visitor gets Gumroad's own login bounce, which happens
     # server-side after the navigation — the iframe never supplies a redirect.
     expect(page).to have_current_path(%r{/(library|login)}, url: true, wait: 10)
-    expect(page.current_url).to include(UrlService.root_domain_with_protocol.split("//").last.split(":").first)
+    # Exact host, not a substring: the seller's own subdomain CONTAINS the root
+    # host, so `include` would pass on a navigation that never left the profile.
+    expect(URI(page.current_url).host).to eq(UrlService.root_domain_with_protocol.split("//").last.split(":").first)
   end
 
   it "strips the query when forwarding a blessed Gumroad path" do
