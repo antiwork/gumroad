@@ -76,14 +76,17 @@ describe CustomerEmailInfo do
   end
 
   describe "state transitions" do
-    it "transitions to sent" do
+    it "transitions to sent and preserves delivery evidence already on the row" do
       email_info = create(:customer_email_info)
       expect(email_info.email_name).to eq "receipt"
-      email_info.update_attribute(:delivered_at, Time.current)
+      delivered_at = Time.current
+      email_info.update_attribute(:delivered_at, delivered_at)
       email_info.mark_sent!
       expect(email_info.reload.state).to eq("sent")
       expect(email_info.reload.sent_at).to be_present
-      expect(email_info.reload.delivered_at).to be_nil
+      # A resend builds its own row, so `mark_sent!` must never destroy the
+      # evidence on an existing one (gumroad-private#1635).
+      expect(email_info.reload.delivered_at).to be_within(1.second).of(delivered_at)
     end
 
     it "transitions to delivered" do
@@ -104,6 +107,88 @@ describe CustomerEmailInfo do
       email_info.mark_opened!
       expect(email_info.reload.state).to eq("opened")
       expect(email_info.reload.opened_at).to be_present
+    end
+  end
+
+  describe ".build_for_charge" do
+    let(:purchase) { create(:purchase) }
+    let(:charge) { create(:charge, purchases: [purchase]) }
+
+    it "builds a new row even when one already exists for the charge" do
+      existing = create(
+        :customer_email_info,
+        purchase_id: nil,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+        email_info_charge_attributes: { charge_id: charge.id }
+      )
+
+      email_info = CustomerEmailInfo.build_for_charge(
+        charge_id: charge.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      )
+
+      expect(email_info.persisted?).to be(false)
+      expect(email_info).not_to eq(existing)
+      expect(email_info.charge_id).to eq(charge.id)
+    end
+  end
+
+  describe ".build_for_purchase" do
+    let(:purchase) { create(:purchase) }
+
+    it "builds a new row even when one already exists for the purchase" do
+      existing = create(:customer_email_info, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD, purchase:)
+
+      email_info = CustomerEmailInfo.build_for_purchase(
+        purchase_id: purchase.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      )
+
+      expect(email_info.persisted?).to be(false)
+      expect(email_info).not_to eq(existing)
+      expect(email_info.purchase_id).to eq(purchase.id)
+    end
+  end
+
+  # gumroad-private#1635: a seller reported "the receipt took five days to
+  # arrive". It had not. He resent on day five, and the resend overwrote the
+  # original send's row, so the only surviving record claimed the first send
+  # happened then.
+  describe "a resend after the original send was delivered" do
+    let(:purchase) { create(:purchase) }
+
+    it "keeps the original send's delivery evidence on its own row" do
+      original = CustomerEmailInfo.build_for_purchase(
+        purchase_id: purchase.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      )
+      original.mark_sent!
+      original.mark_delivered!(Time.current)
+      original_sent_at = original.reload.sent_at
+      original_delivered_at = original.reload.delivered_at
+
+      travel_to 5.days.from_now do
+        resend = CustomerEmailInfo.build_for_purchase(
+          purchase_id: purchase.id,
+          email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+        )
+        resend.mark_sent!
+
+        expect(resend.id).not_to eq(original.id)
+        expect(original.reload.sent_at).to be_within(1.second).of(original_sent_at)
+        expect(original.reload.delivered_at).to be_within(1.second).of(original_delivered_at)
+        expect(original.reload.state).to eq("delivered")
+
+        # Readers take the newest row, so the resend is what a delivery event
+        # and the seller-facing "Receipt" row both resolve to.
+        expect(purchase.reload.receipt_email_info).to eq(resend)
+        expect(
+          CustomerEmailInfo.find_or_initialize_for_purchase(
+            purchase_id: purchase.id,
+            email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+          )
+        ).to eq(resend)
+      end
     end
   end
 
