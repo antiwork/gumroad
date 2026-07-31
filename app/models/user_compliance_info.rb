@@ -126,24 +126,37 @@ class UserComplianceInfo < ApplicationRecord
   # wiring this into Payouts.is_user_payable now would strand them with no surface on which to
   # supply the guardian it demands. Wire it in the same change that gives them one.
   def has_completed_payout_compliance_info?
-    has_completed_compliance_info? &&
-      (!requires_legal_guardian? || guardian&.has_completed_info?.present?)
+    return false unless has_completed_compliance_info?
+    # An unsupported country is not the same as no requirement. There is no guardian path to
+    # complete there, so the account can never be verified and must not read as ready.
+    return false if legal_guardian_unsupported?
+    return true unless requires_legal_guardian?
+
+    guardian&.has_completed_info?.present?
   end
 
-  # Whether the seller is old enough to hold an account but too young for our payment partner to
-  # verify them alone. Answers false when the birthday is missing rather than assuming the worse
-  # case: an incomplete record is already incomplete by the checks above, and treating an unknown
-  # birthday as under-18 would demand a guardian from every seller who has not filled in their date
-  # of birth yet.
-  #
-  # Country-gated because the guardian path is not universal. Stripe documents guardian
-  # requirements for US accounts only, and some countries (Brazil) are 18+ with no guardian path at
-  # all, so asking a minor elsewhere for a guardian would collect their details for a verification
-  # that cannot succeed. Countries are added here as Stripe confirms support.
-  def requires_legal_guardian?
-    return false unless GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
-
+  # Too young for our payment partner to verify on their own. False when the birthday is missing
+  # rather than assuming the worse case: such a record is already incomplete by the checks above,
+  # and treating an unknown birthday as under-18 would demand a guardian from every seller who has
+  # not filled in their date of birth yet.
+  def under_legal_guardian_age?
     birthday.present? && birthday > GUARDIAN_REQUIRED_BELOW_AGE.years.ago.to_date
+  end
+
+  # Whether to ask this seller for a guardian. Country-gated because the guardian path is not
+  # universal: Stripe documents guardian requirements for US accounts only, and some countries
+  # (Brazil) are 18+ with no guardian path at all, so asking a minor elsewhere would collect an
+  # adult's details for a verification that cannot succeed. Countries are added here as Stripe
+  # confirms support.
+  def requires_legal_guardian?
+    under_legal_guardian_age? && GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
+  end
+
+  # A minor our payment partner offers no guardian path for. Deliberately distinct from
+  # requires_legal_guardian? being false: we neither ask them for a guardian nor let the absence of
+  # that ask read as payout readiness. Their route is a supported country or turning 18.
+  def legal_guardian_unsupported?
+    under_legal_guardian_age? && !GUARDIAN_SUPPORTED_COUNTRY_CODES.include?(country_code)
   end
 
   # Public: Returns the ISO_3166-1 Alpha-2 country code for the country stored in this compliance info.

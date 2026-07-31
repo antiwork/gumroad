@@ -93,6 +93,16 @@ describe Guardian do
       expect(build(:guardian, stripe_tos_accepted: false).has_completed_info?).to be(false)
     end
 
+    # The sync omits additional_tos_acceptances entirely unless it has all three, so the flag on its
+    # own would call the record ready while producing an account that stays incomplete.
+    it "is false when the acceptance flag is set without the timestamp our payment partner is sent" do
+      expect(build(:guardian, stripe_tos_accepted_at: nil).has_completed_info?).to be(false)
+    end
+
+    it "is false when the acceptance flag is set without the originating IP address" do
+      expect(build(:guardian, stripe_tos_ip: nil).has_completed_info?).to be(false)
+    end
+
     it "is false once the guardian is removed, since nothing clears the reference to them" do
       guardian = create(:guardian)
 

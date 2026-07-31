@@ -107,7 +107,7 @@ class Guardian < ApplicationRecord
       zip_code.present? &&
       country.present? &&
       has_individual_tax_id? &&
-      stripe_tos_accepted?
+      has_accepted_terms?
   end
 
   # Removes the guardian's own identifying details while keeping the row, so the compliance
@@ -122,6 +122,13 @@ class Guardian < ApplicationRecord
     individual_tax_id.present?
   end
   alias_method :has_individual_tax_id, :has_individual_tax_id?
+
+  # The flag alone is not the evidence. Stripe's additional_tos_acceptances takes a date and an IP
+  # alongside it and the sync omits the whole block when either is missing, so a guardian with only
+  # the flag set produces an account that stays incomplete while this predicate calls it ready.
+  def has_accepted_terms?
+    stripe_tos_accepted? && stripe_tos_accepted_at.present? && stripe_tos_ip.present?
+  end
 
   private
     # Stripe asks for a state only where it has a subdivision list, and rejects one elsewhere. Reuses

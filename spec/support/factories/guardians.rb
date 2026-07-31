@@ -15,5 +15,7 @@ FactoryBot.define do
     country { "United States" }
     individual_tax_id { "000000000" }
     stripe_tos_accepted { true }
+    stripe_tos_accepted_at { Time.current }
+    stripe_tos_ip { "1.2.3.4" }
   end
 end
