@@ -1143,10 +1143,8 @@ class User < ApplicationRecord
   # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
   # account for years before connecting one. A recreated payout account resets this.
   #
-  # The payout is created on whichever account StripePayoutProcessor.get_payout_details picks at
-  # payout time, and that can be the connected account rather than the Gumroad-managed one. Season
-  # every account it could pick, so a seller holding an old managed account alongside a fresh
-  # connected one cannot pull instantly from the account that has not seasoned.
+  # Every account a payout could land on has to season: the destination is picked at payout time,
+  # so seasoning only the managed account leaves a fresh connected account as a hole.
   def stripe_accounts_seasoned_for_instant_payouts?
     managed_account = stripe_account
     return false if managed_account.nil?

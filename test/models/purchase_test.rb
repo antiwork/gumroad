@@ -3025,6 +3025,14 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal routes.manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"), Purchase.purchase_info(nil, product, purchase)[:membership][:manage_url]
   end
 
+  test "#purchase_info omits the manage URL while a membership subscription is not created yet" do
+    purchase = create_membership_purchase(link: create_membership_product)
+    product = purchase.link
+    purchase.update!(subscription: nil)
+
+    assert_nil Purchase.purchase_info(nil, product, purchase.reload)[:membership][:manage_url]
+  end
+
   test "#purchase_info returns license_key if it exists" do
     link, purchase = setup_purchase_info_context
     link.is_licensed = true
@@ -6181,7 +6189,8 @@ class PurchaseTest < ActiveSupport::TestCase
       link: create_product(user: seller),
       seller:,
       merchant_account:,
-      is_part_of_combined_charge: true
+      is_part_of_combined_charge: true,
+      flow_of_funds: nil
     )
     charge = create_charge(order: create_order, seller:, merchant_account:)
     charge.purchases << purchase

@@ -2,6 +2,10 @@
 
 class Commission < ApplicationRecord
   include ExternalId
+  # A commission takes a deposit at checkout and the balance later, when the seller marks the
+  # work complete — so the balance payment is a later charge in the sense of
+  # gumroad-private#1322.
+  include HasLaterChargePresentments
 
   COMMISSION_DEPOSIT_PROPORTION = 0.5
   STATUSES = ["in_progress", "completed", "cancelled"].freeze
@@ -17,7 +21,7 @@ class Commission < ApplicationRecord
   end
 
   belongs_to :deposit_purchase, class_name: "Purchase"
-  belongs_to :completion_purchase, class_name: "Purchase", optional: true
+  belongs_to :completion_purchase, class_name: "Purchase", optional: true, inverse_of: :commission_as_completion
 
   has_many_attached :files
 
@@ -61,9 +65,11 @@ class Commission < ApplicationRecord
         raise ActiveRecord::RecordInvalid.new(completion_purchase)
       end
 
-      completion_purchase.update_balance_and_mark_successful!
-      self.status = STATUS_COMPLETED
       self.completion_purchase = completion_purchase
+      unless completion_purchase.pending_buyer_presentment_settlement?
+        completion_purchase.update_balance_and_mark_successful!
+        self.status = STATUS_COMPLETED
+      end
       save!
     end
   end
