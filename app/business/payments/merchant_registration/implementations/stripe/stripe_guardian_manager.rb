@@ -186,7 +186,7 @@ module StripeGuardianManager
           "Deleted orphaned legal-guardian Stripe person for guardian #{guardian.id} on #{stripe_account_id}"
         )
       rescue => e
-        ErrorNotifier.notify(e)
+        notify_without_raising(e)
       end
     end
 
@@ -215,16 +215,26 @@ module StripeGuardianManager
         )
       end
 
-      ErrorNotifier.notify(
+      notify_without_raising(
         "Guardian duplicate reconciliation scanned only part of Stripe account #{stripe_account_id} " \
         "for guardian #{guardian.id}: Stripe reported more legal-guardian persons but returned no " \
         "cursor. Orphaned persons on the unread pages are still at Stripe."
       )
     end
   rescue => e
-    ErrorNotifier.notify(e)
+    notify_without_raising(e)
   end
   private_class_method :reconcile_duplicate_persons!
+
+  # Reporting must not be able to fail the sync. Every notify on the reconcile path is inside a
+  # rescue whose own handler notifies, so a notifier that is itself down would raise out of the
+  # handler and abort merchant-account creation over a lost alert.
+  def self.notify_without_raising(payload)
+    ErrorNotifier.notify(payload)
+  rescue => e
+    Rails.logger.error("Failed to report guardian reconcile problem: #{e.class}: #{e.message}")
+  end
+  private_class_method :notify_without_raising
 
   # Every legal-guardian Person on the account, across all pages.
   #

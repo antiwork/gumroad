@@ -556,6 +556,29 @@ describe StripeGuardianManager do
           .with(stripe_account_id, hash_including(limit: 100)).twice
       end
 
+      # The reporting itself must not be able to fail the sync: the method-level rescue notifies too,
+      # so a notifier that is down would raise out of the handler and abort account creation.
+      it "still completes the sync when reporting the incomplete scan raises" do
+        create_compliance_info(guardian_record: guardian)
+        allow(ErrorNotifier).to receive(:notify).and_raise(StandardError.new("sentry down"))
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          if params[:limit] == 1
+            Stripe::ListObject.construct_from(data: [])
+          else
+            Stripe::ListObject.construct_from(data: [], has_more: true)
+          end
+        end
+
+        expect(described_class.sync(user, stripe_account, passphrase:).id).to eq("person_guardian_new")
+
+        # The durable half is written first, so it survives the notifier being down.
+        expect(user.reload.comments.last.content)
+          .to include("Guardian reconciliation scan incomplete on Stripe account #{stripe_account_id}")
+      end
+
       # The complement: a scan that finished having deleted nothing is the ordinary case and must
       # stay silent, or the alert it raises above means nothing.
       it "stays silent when the scan completes with no orphans" do
