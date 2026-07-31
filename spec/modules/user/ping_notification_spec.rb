@@ -107,5 +107,48 @@ describe User::PingNotification do
       sale_post_urls = user.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME)
       expect(sale_post_urls).to match_array([])
     end
+
+    it "does not report a subscription that resolves to a post URL" do
+      user = create(:user)
+      oauth_app = create(:oauth_application, owner: user)
+      create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+      create(:resource_subscription, oauth_application: oauth_app, user:)
+
+      expect(ErrorNotifier).not_to receive(:notify)
+      expect(user.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME).size).to eq(1)
+    end
+
+    it "reports an alive resource subscription that resolves to no post URL" do
+      user = create(:user)
+      oauth_app = create(:oauth_application, owner: user)
+      token = create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
+      subscription = create(:resource_subscription, oauth_application: oauth_app, user:)
+      # The Store Agent revokes its own token in the same request that created the subscription, so
+      # the subscription outlives every credential that could satisfy the gate.
+      token.update!(revoked_at: Time.current)
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Resource subscription is undeliverable: no post URL resolved for an alive subscription",
+        hash_including(
+          resource_subscription_id: subscription.id,
+          resource_name: ResourceSubscription::SALE_RESOURCE_NAME,
+          seller_id: user.id,
+          oauth_application_id: oauth_app.id,
+          post_url_present: true,
+          live_view_sales_token: false
+        )
+      )
+      expect(user.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME)).to match_array([])
+    end
+
+    it "does not report a subscription whose application was deleted" do
+      user = create(:user)
+      oauth_app = create(:oauth_application, owner: user)
+      create(:resource_subscription, oauth_application: oauth_app, user:)
+      oauth_app.mark_deleted!
+
+      expect(ErrorNotifier).not_to receive(:notify)
+      expect(user.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME)).to match_array([])
+    end
   end
 end
