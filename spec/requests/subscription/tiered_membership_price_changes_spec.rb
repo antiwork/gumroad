@@ -425,9 +425,9 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
         select("Monthly", from: "Recurrence")
 
-        # A frequency change is a deferred plan change that collects nothing today, so the warning
-        # is the only signal it happened — it must not depend on the price also having moved
-        # (gumroad-private#1577).
+        # A frequency change is a deferred plan change that collects nothing today when it is a
+        # downgrade, so the warning is the only signal it happened — it must not depend on the
+        # price also having moved (gumroad-private#1577).
         expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $3 a month per seat, starting at your next renewal.")
       end
 
@@ -436,6 +436,8 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
         select("Monthly", from: "Recurrence")
 
+        # Assert the base warning is present too, or this passes when no warning renders at all.
+        expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription")
         expect(page).to_not have_selector("[role='status']", text: "you will not be able to switch back")
       end
     end
@@ -450,7 +452,7 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
         select("Monthly", from: "Recurrence")
 
-        expect(page).to have_selector("[role='status']", text: "Your current every 3 months billing is no longer offered on this membership, so you will not be able to switch back.")
+        expect(page).to have_selector("[role='status']", text: "Your current every 3 months billing is no longer offered on this membership, so as long as the seller does not offer it again you will not be able to switch back.")
       end
     end
 
@@ -490,7 +492,10 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
           select("Yearly", from: "Recurrence")
 
-          expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $50 a year per seat, starting at your next renewal.")
+          # Yearly ($50) is above the current quarterly price ($40), so this is an upgrade: it
+          # applies immediately and is charged today. The warning must not promise the renewal.
+          expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $50 a year per seat.")
+          expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
         end
       end
 

@@ -273,9 +273,8 @@ class CheckoutPresenter
         is_overdue_for_charge: subscription.overdue_for_charge?,
         is_gift: subscription.gift?,
         is_installment_plan: subscription.is_installment_plan,
-        # False when the seller has retired the recurrence this buyer is on. That row is still
-        # offered above (only because it is theirs), but once a plan change applies at renewal it
-        # is gone from the dropdown for good — so the client warns that the switch is one-way.
+        # False when the seller has retired the recurrence this buyer is on; the row is still
+        # offered above only because it is theirs.
         current_recurrence_available: current_recurrence_alive,
       }
     }

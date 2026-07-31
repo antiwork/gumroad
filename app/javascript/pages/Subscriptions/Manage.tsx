@@ -168,26 +168,6 @@ export default function SubscriptionsManage() {
   const noChangesToNonPriceOptions =
     selection.optionId === subscription.option_id && !isRecurrenceChanged && !isQuantityChanged && !isResubscribing;
 
-  let warning = null;
-  if (selection.optionId === subscription.option_id && (hasPriceChanged || isRecurrenceChanged)) {
-    const price = `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, { symbolFormat: "long" })} ${recurrenceLabels[selection.recurrence ?? subscription.recurrence]}`;
-    // A retired recurrence is only in the dropdown because it is currently this buyer's. Once the
-    // plan change applies at renewal it stops being re-added, so they cannot switch back.
-    const irreversible = isRecurrenceChanged && !subscription.current_recurrence_available;
-    const oneWayNote = irreversible
-      ? ` Your current ${recurrenceLabels[subscription.recurrence]} billing is no longer offered on this ${subscriptionEntity}, so you will not be able to switch back.`
-      : "";
-    if (isQuantityChanged && isRecurrenceChanged) {
-      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.${oneWayNote}`;
-    } else if (isQuantityChanged) {
-      warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat.`;
-    } else if (isRecurrenceChanged) {
-      warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat, starting at your next renewal.${oneWayNote}`;
-    } else if (isResubscribing) {
-      warning = `Restarting will update your subscription to the current price of ${price} per seat.`;
-    }
-  }
-
   const price =
     (isPWYW || noChangesToNonPriceOptions ? (selection.price.value ?? discountedPriceCents) : discountedPriceCents) *
     selection.quantity;
@@ -200,6 +180,30 @@ export default function SubscriptionsManage() {
       ? 0
       : Math.max(price - subscription.prorated_discount_price_cents, 0);
   if (amountDueToday > 0) amountDueToday = Math.max(amountDueToday, getMinPriceCents(product.currency_code));
+
+  let warning = null;
+  if (selection.optionId === subscription.option_id && (hasPriceChanged || isRecurrenceChanged)) {
+    const price = `${formatPriceCentsWithCurrencySymbol(product.currency_code, discountedPriceCents, { symbolFormat: "long" })} ${recurrenceLabels[selection.recurrence ?? subscription.recurrence]}`;
+    // A retired recurrence is only in the dropdown because it is currently this buyer's. Once the
+    // plan change applies at renewal it stops being re-added, so they cannot switch back.
+    const irreversible = isRecurrenceChanged && !subscription.current_recurrence_available;
+    const oneWayNote = irreversible
+      ? ` Your current ${recurrenceLabels[subscription.recurrence]} billing is no longer offered on this ${subscriptionEntity}, so as long as the seller does not offer it again you will not be able to switch back.`
+      : "";
+    // Only a downgrade outside a free trial defers; upgrades, overdue subscriptions and restarts
+    // apply immediately and this screen separately says "You'll be charged X today".
+    const deferralNote = amountDueToday === 0 && !isResubscribing ? ", starting at your next renewal" : "";
+    if (isQuantityChanged && isRecurrenceChanged) {
+      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.${oneWayNote}`;
+    } else if (isQuantityChanged) {
+      warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat.`;
+    } else if (isRecurrenceChanged) {
+      warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat${deferralNote}.${oneWayNote}`;
+    } else if (isResubscribing) {
+      warning = `Restarting will update your subscription to the current price of ${price} per seat.`;
+    }
+  }
+
   // Facts about the FUTURE payments of this subscription, declared as a recurring agreement on
   // the Apple Pay sheet (when the seller is in the merchant-token rollout) so Apple issues a
   // device-independent merchant token. `price` here is the currently selected plan's per-period
