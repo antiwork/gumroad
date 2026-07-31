@@ -45,6 +45,10 @@ module StripeGuardianManager
   SYNC_LOCK_TTL = 20.minutes
   SYNC_LOCK_WAIT_TIMEOUT = 10.seconds
   SYNC_LOCK_RETRY_INTERVAL_SECONDS = 0.05
+  # RedisClient::Error is listed alongside Redis::BaseError because it is not a subclass of it — a
+  # connection failure raised by the underlying client escapes a Redis::BaseError rescue. Same pair
+  # ProductFile::EXPECTED_ENQUEUE_ERRORS carries.
+  REDIS_TRANSPORT_ERRORS = [Redis::BaseError, RedisClient::Error].freeze
   SYNC_LOCK_RELEASE_SCRIPT = <<~LUA.squish
     if redis.call('get', KEYS[1]) == ARGV[1] then
       return redis.call('del', KEYS[1])
@@ -178,24 +182,46 @@ module StripeGuardianManager
   # unreachable: both sync call sites rescue and report, and a missed sync self-heals on the next
   # account update, whereas an unserialized one leaves an untracked Person holding a third party's
   # identity data at Stripe. Failing closed is the cheaper side of that trade.
+  #
+  # A transport error is reported as SyncLockUnavailable rather than escaping as a Redis error,
+  # because the callers select on this class to remediate — erasure hands its recorded Persons to
+  # the retry job and reports itself incomplete. A raw Redis::BaseError bypasses that and reads as
+  # a generic failure, which is the one outcome that leaves a guardian's data at Stripe with
+  # nothing retrying it.
+  #
+  # Release is deliberately NOT translated: by then the protected work has run, so raising would
+  # report completed deletes as a lock failure. A lock we could not release just stands until its
+  # TTL, which the next sync waits out.
   def self.with_account_sync_lock(stripe_account_id, description)
     lock_key = "stripe_guardian_sync:#{stripe_account_id}"
     token = SecureRandom.uuid
     lock_acquired = false
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + SYNC_LOCK_WAIT_TIMEOUT
 
-    until $redis.set(lock_key, token, ex: SYNC_LOCK_TTL.to_i, nx: true)
-      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
-        raise SyncLockUnavailable, "Timed out waiting to #{description} on #{stripe_account_id}"
-      end
+    begin
+      until $redis.set(lock_key, token, ex: SYNC_LOCK_TTL.to_i, nx: true)
+        if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+          raise SyncLockUnavailable, "Timed out waiting to #{description} on #{stripe_account_id}"
+        end
 
-      sleep SYNC_LOCK_RETRY_INTERVAL_SECONDS
+        sleep SYNC_LOCK_RETRY_INTERVAL_SECONDS
+      end
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      raise SyncLockUnavailable, "Redis unavailable while waiting to #{description} on #{stripe_account_id}: #{e.message}"
     end
 
     lock_acquired = true
     yield
   ensure
-    $redis.eval(SYNC_LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [token]) if lock_acquired
+    if lock_acquired
+      begin
+        $redis.eval(SYNC_LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [token])
+      rescue *REDIS_TRANSPORT_ERRORS => e
+        # Swallowed, not translated: the block already ran, and raising from here would replace its
+        # result — or mask its own exception — with a lock error that misdescribes what happened.
+        ErrorNotifier.notify(e)
+      end
+    end
   end
 
   # Points this guardian at a Stripe Person, taking the id from whichever other row of the same

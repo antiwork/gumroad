@@ -353,6 +353,94 @@ describe GdprDataErasureService do
           expect($redis.get("stripe_guardian_sync:acct_erasure_test")).to eq("a-sync-is-running")
         end
       end
+
+      # A Redis outage is not a lock that is merely busy — the calls themselves raise. Those errors
+      # used to escape as Redis errors rather than SyncLockUnavailable, so they missed the rescue
+      # that remediates and landed in perform!'s generic one: the local copy anonymized, the
+      # guardian's data still at Stripe, nothing retrying it and nothing recorded.
+      describe "Redis being unreachable while locking" do
+        it "reports the erasure incomplete and retries when the lock cannot be acquired" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          expect(result[:error]).to include("Erasure incomplete")
+          expect(DeleteGuardianStripePersonJob).to have_enqueued_sidekiq_job(
+            "person_erase_me", "acct_erasure_test", user.id
+          )
+          note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+          expect(note.content).to include("person_erase_me")
+        end
+
+        # RedisClient::Error is not a Redis::BaseError, so a rescue naming only the latter lets this
+        # one through — the shape most likely to be missed.
+        it "treats a RedisClient error the same as a Redis error" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow($redis).to receive(:set).and_raise(RedisClient::ConnectionError, "closed")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          expect(result[:error]).to include("Erasure incomplete")
+          expect(DeleteGuardianStripePersonJob).to have_enqueued_sidekiq_job(
+            "person_erase_me", "acct_erasure_test", user.id
+          )
+        end
+
+        # Release runs after the deletes, so a failure there must not turn confirmed deletions into
+        # a reported lock failure.
+        it "still reports success when only the lock release fails" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow($redis).to receive(:eval).and_raise(Redis::CannotConnectError, "no connection")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(true)
+          expect(Stripe::Account).to have_received(:delete_person)
+            .with("acct_erasure_test", "person_erase_me")
+          expect(DeleteGuardianStripePersonJob).not_to have_enqueued_sidekiq_job(
+            "person_erase_me", "acct_erasure_test", user.id
+          )
+        end
+
+        # The backstop for anything that escapes the per-person and per-account rescues entirely.
+        # Without it, the anonymize has committed and the Person at Stripe has nothing behind it.
+        it "retries and records when the deletion step raises outright" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow(StripeGuardianManager).to receive(:stripe_person_ids_for_erasure)
+            .and_raise(StandardError, "unexpected")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          expect(DeleteGuardianStripePersonJob).to have_enqueued_sidekiq_job(
+            "person_erase_me", "acct_erasure_test", user.id
+          )
+          note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+          expect(note.content).to include("person_erase_me")
+        end
+
+        # A failure before the anonymize erased nothing, so the Person at Stripe still belongs to a
+        # live account that needs it. Deleting it would break the account's verification.
+        it "does not touch the guardian person when the erasure failed before anonymizing" do
+          guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+          create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+          allow_any_instance_of(described_class).to receive(:anonymize_user_pii!)
+            .and_raise(StandardError, "failed early")
+
+          result = described_class.new(user, performed_by: admin).perform!
+
+          expect(result[:success]).to be(false)
+          expect(DeleteGuardianStripePersonJob.jobs).to be_empty
+          expect(guardian.reload.stripe_person_id).to eq("person_erase_me")
+        end
+      end
     end
 
     it "anonymizes buyer purchases" do

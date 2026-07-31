@@ -13,6 +13,7 @@ class GdprDataErasureService
     @performed_by = performed_by
     @products_deleted = 0
     @unreachable_guardian_person_ids = []
+    @local_erasure_committed = false
   end
 
   def perform!
@@ -36,6 +37,10 @@ class GdprDataErasureService
       anonymize_buyer_purchases!(anonymized_email:, original_email:)
       log_erasure!
     end
+    # Set only once the anonymize has committed, because it is what makes an unfinished Stripe
+    # deletion a retained-PII problem. A failure BEFORE this point erased nothing, and remediating
+    # there would delete the guardian Person of an account that is still live and still needs it.
+    @local_erasure_committed = true
 
     remove_profile_assets!
     retained_guardian_person_ids = delete_guardian_stripe_persons!(stripe_account_ids)
@@ -59,10 +64,38 @@ class GdprDataErasureService
     { success: true, summary: erasure_summary }
   rescue => e
     Rails.logger.error("GDPR erasure failed for user #{@user.id}: #{e.message}")
+    # Last resort for the same problem the branch above handles: our copy is already anonymized and
+    # something on the way to Stripe raised, so a guardian Person may still stand there with nothing
+    # retrying it. Only reached when the failure escaped delete_guardian_stripe_persons!'s own
+    # handling entirely — a Redis error on the lock used to land here, and anything else reaching
+    # past its per-person and per-account rescues still can.
+    remediate_guardian_persons_after_failure!(stripe_account_ids)
     { success: false, error: e.message }
   end
 
   private
+    # Hands every recorded guardian Person to the retry job and leaves the durable note. Selects on
+    # the recorded stripe_person_id, which anonymize! deliberately does not clear — it is the only
+    # handle left once the identifying columns are nil.
+    def remediate_guardian_persons_after_failure!(stripe_account_ids)
+      return unless @local_erasure_committed
+
+      person_ids = @user.guardians.reload.filter_map(&:stripe_person_id).uniq
+      return if person_ids.empty? || stripe_account_ids.blank?
+
+      person_ids.each do |stripe_person_id|
+        stripe_account_ids.each do |stripe_account_id|
+          DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
+        end
+      end
+
+      record_incomplete_erasure_note!(person_ids)
+    rescue => e
+      # Never let the remediation replace the original failure the caller is reporting.
+      Rails.logger.error("GDPR: failed to remediate guardian Stripe persons for user #{@user.id}: #{e.message}")
+      ErrorNotifier.notify(e)
+    end
+
     # Durable record of what is still at Stripe, on the account rather than only in Sentry: whoever
     # re-checks the request needs to know which Persons to look for after the alert has aged out.
     def record_incomplete_erasure_note!(retained_guardian_person_ids)

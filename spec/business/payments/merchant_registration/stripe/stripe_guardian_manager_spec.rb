@@ -371,6 +371,38 @@ describe StripeGuardianManager do
         expect($redis.get("stripe_guardian_sync:#{stripe_account_id}")).to eq("someone-else")
       end
 
+      # Callers select on SyncLockUnavailable to remediate. A raw Redis error escapes that and is
+      # handled generically, which for erasure means the guardian's data stays at Stripe untracked.
+      it "reports Redis being unreachable as a lock failure, not a Redis error" do
+        create_compliance_info(guardian_record: guardian)
+        allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
+
+        expect { described_class.sync(user, stripe_account, passphrase:) }
+          .to raise_error(StripeGuardianManager::SyncLockUnavailable, /Redis unavailable/)
+        expect(Stripe::Account).not_to have_received(:create_person)
+      end
+
+      it "reports a RedisClient error as a lock failure too" do
+        create_compliance_info(guardian_record: guardian)
+        allow($redis).to receive(:set).and_raise(RedisClient::ConnectionError, "closed")
+
+        expect { described_class.sync(user, stripe_account, passphrase:) }
+          .to raise_error(StripeGuardianManager::SyncLockUnavailable)
+        expect(Stripe::Account).not_to have_received(:create_person)
+      end
+
+      # The protected work has already run by then, so raising would misreport a completed sync as
+      # a lock failure. The lock just stands until its TTL.
+      it "does not fail the sync when only the lock release fails" do
+        create_compliance_info(guardian_record: guardian)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow($redis).to receive(:eval).and_raise(Redis::CannotConnectError, "no connection")
+
+        expect { described_class.sync(user, stripe_account, passphrase:) }.not_to raise_error
+        expect(guardian.reload.stripe_person_id).to eq("person_guardian_new")
+      end
+
       # A long lease makes lock expiry rare; it cannot make an orphan impossible. No lock spans the
       # gap between Stripe accepting the create and the id reaching our row, so the guarantee has to
       # be after-the-fact detection.
