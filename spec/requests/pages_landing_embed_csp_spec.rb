@@ -40,8 +40,9 @@ describe "GET /l/:id/landing/embed CSP", type: :request do
     csp = response.headers["Content-Security-Policy"]
     # CSP sandbox applies whether the doc is framed or loaded directly — the
     # iframe attribute alone wouldn't cover a direct navigation to this URL.
-    expect(csp).to include("sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox")
+    expect(csp).to include("sandbox #{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}")
     expect(csp).to include("allow-popups")
+    expect(csp).not_to include("allow-downloads")
     expect(csp).not_to include("allow-same-origin")
     expect(csp).not_to include("allow-top-navigation")
   end

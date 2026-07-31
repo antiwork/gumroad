@@ -52,13 +52,38 @@ module RendersCustomHtmlPages
     </style>
   HTML
 
+  # Every custom-page surface must sandbox identically, so they all read this one
+  # list rather than repeating the tokens: the wrapper iframes in
+  # UsersController/UserPagesController/LinksController and the CSP directive
+  # below. Adding a token here widens all four at once; that is the point.
+  CUSTOM_HTML_SANDBOX_TOKENS = %w[
+    allow-scripts
+    allow-forms
+    allow-popups
+    allow-popups-to-escape-sandbox
+  ].freeze
+
+  # This frame renders seller-supplied markup, so widening it to any of these is
+  # a buyer-safety decision and a spec fails if one appears. allow-downloads is
+  # here by decision: it would let a page hand a visitor a file from any host
+  # under the seller's own subdomain. The cost is that a download link does
+  # nothing and the browser says nothing, so the docs have to carry that limit.
+  CUSTOM_HTML_SANDBOX_FORBIDDEN_TOKENS = %w[
+    allow-downloads
+    allow-downloads-without-user-activation
+    allow-same-origin
+    allow-top-navigation
+    allow-top-navigation-by-user-activation
+  ].freeze
+
+  CUSTOM_HTML_SANDBOX = CUSTOM_HTML_SANDBOX_TOKENS.join(" ").freeze
+
   CUSTOM_HTML_CSP = [
     # Sandbox the response itself, not just the wrapper's iframe attribute.
     # A visitor can navigate straight to the /landing/embed endpoint (top-level,
     # not framed), where the iframe sandbox doesn't apply — without this the
-    # seller's inline scripts would run on the real subdomain origin. Matches
-    # the wrapper iframe's sandbox: scripts + forms + popups, no same-origin/top-nav.
-    "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox",
+    # seller's inline scripts would run on the real subdomain origin.
+    "sandbox #{CUSTOM_HTML_SANDBOX}",
     "default-src 'none'",
     "script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com",
     "style-src 'unsafe-inline' #{PAGES_TAILWIND_ASSET_HOST} https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.bunny.net",

@@ -3552,7 +3552,10 @@ describe User, :vcr do
   describe "#eligible_for_instant_payouts?" do
     let(:user) { create(:compliant_user) }
     let!(:compliance_info) { create(:user_compliance_info, user:) }
-    let!(:payments) { create_list(:payment_completed, 4, user:) }
+    let!(:payment) { create(:payment_completed, user:) }
+    let!(:merchant_account) do
+      create(:merchant_account, user:, created_at: 90.days.ago)
+    end
 
     before do
       allow(user).to receive(:payouts_paused?).and_return(false)
@@ -3579,9 +3582,29 @@ describe User, :vcr do
       expect(user.eligible_for_instant_payouts?).to eq(false)
     end
 
-    it "returns false when user does not have 4 completed payments" do
-      user.payments.last.destroy
+    it "returns false when the seller has never had a completed payout" do
+      user.payments.destroy_all
       expect(user.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns true on the seller's very first completed payout" do
+      expect(user.payments.completed.count).to eq(1)
+      expect(user.eligible_for_instant_payouts?).to eq(true)
+    end
+
+    it "returns false when the Stripe account is younger than 60 days" do
+      merchant_account.update!(created_at: 59.days.ago)
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns true once the Stripe account is 60 days old" do
+      merchant_account.update!(created_at: 60.days.ago)
+      expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+    end
+
+    it "returns false when there is no Stripe account to season against" do
+      merchant_account.mark_deleted!
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
     it "returns false when user is not from the US" do
