@@ -214,15 +214,20 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(extractor.extract_from_page(page).image_urls).to eq(["https://cdn.example.com/remote.png"])
     end
 
-    it "truncates the text and caps the image URLs so one page cannot make an unbounded moderation call" do
-      many_images = (1..30).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
-      page = page_for(custom_html: "<p>#{"word " * 8_000}</p>#{many_images}")
+    it "truncates the text so one page cannot make an unbounded moderation call" do
+      page = page_for(custom_html: "<p>#{"word " * 8_000}</p>")
 
       result = extractor.extract_from_page(page)
 
       expect(result.text.length).to be <= described_class::MAX_PAGE_TEXT_LENGTH + described_class::MAX_PAGE_LINK_TEXT_LENGTH
       expect(result.text).to end_with("word")
-      expect(result.image_urls.size).to eq(described_class::MAX_PAGE_IMAGE_URLS)
+    end
+
+    it "returns every remote image, so the caller can reject a page it cannot fully review" do
+      many_images = (1..30).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+      page = page_for(custom_html: many_images)
+
+      expect(extractor.extract_from_page(page).image_urls.size).to eq(30)
     end
 
     it "keeps link targets when the prose alone would exhaust the whole text budget" do
@@ -234,48 +239,23 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to include("https://linkfarm.example/deals")
     end
 
-    it "picks the same images on every extraction, so re-saving cannot grind out a subset that omits one" do
+    it "orders the images the same way on every extraction, so re-saving cannot change which are moderated first" do
       images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
       page = page_for(custom_html: images)
 
       selections = 5.times.map { extractor.extract_from_page(page).image_urls }
 
       expect(selections.uniq.size).to eq(1)
-      expect(selections.first.size).to eq(described_class::MAX_PAGE_IMAGE_URLS)
+      expect(selections.first.size).to eq(60)
     end
 
-    it "does not take the images in document order, so they cannot be parked past the cap" do
+    it "does not return the images in document order, so a prefix-shaped cap could not be gamed" do
       images = (1..60).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
       page = page_for(custom_html: images)
 
-      selected = extractor.extract_from_page(page).image_urls
-      document_order_prefix = (1..described_class::MAX_PAGE_IMAGE_URLS).map { |n| "https://cdn.example.com/#{n}.png" }
+      document_order = (1..60).map { |n| "https://cdn.example.com/#{n}.png" }
 
-      expect(selected).not_to eq(document_order_prefix)
-    end
-
-    it "logs the images it could not cover when a page carries more than the cap" do
-      allow(Rails.logger).to receive(:warn)
-      images = (1..30).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
-
-      extractor.extract_from_page(page_for(custom_html: images))
-
-      expect(Rails.logger).to have_received(:warn).with(
-        /bounded page .* images to #{described_class::MAX_PAGE_IMAGE_URLS} of 30/o
-      )
-    end
-
-    it "does not log when every image fits inside the cap" do
-      allow(Rails.logger).to receive(:warn)
-
-      extractor.extract_from_page(page_for(custom_html: %(<img src="https://cdn.example.com/only.png">)))
-
-      expect(Rails.logger).not_to have_received(:warn).with(/bounded page/)
-    end
-
-    it "caps images at what the classifier will moderate, so every extracted URL gets an attempt" do
-      expect(described_class::MAX_PAGE_IMAGE_URLS)
-        .to eq(ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE)
+      expect(extractor.extract_from_page(page).image_urls).not_to eq(document_order)
     end
 
     it "reads a product landing page takeover, whose owner is the product's seller" do

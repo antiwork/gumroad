@@ -14,7 +14,12 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     allow(Rails.logger).to receive(:error)
     allow(Rails.logger).to receive(:warn)
     allow(ErrorNotifier).to receive(:notify)
+    # Images get their own client with a longer timeout, since a batch of image
+    # URLs is a batch of downloads on OpenAI's side. Same double either way.
     allow(OpenAI::Client).to receive(:new).with(access_token: "test-key", request_timeout: 10).and_return(client)
+    allow(OpenAI::Client).to receive(:new)
+      .with(access_token: "test-key", request_timeout: described_class::IMAGE_BATCH_REQUEST_TIMEOUT_IN_SECONDS)
+      .and_return(client)
   end
 
   it "returns compliant when the API key is blank" do
@@ -56,54 +61,112 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([])
   end
 
-  it "sends one image per moderation request" do
-    many_image_urls = [
-      "https://cdn.example.com/1.png",
-      "https://cdn.example.com/2.png",
-      "https://cdn.example.com/3.png",
-    ]
+  it "batches image URLs into one request per IMAGES_PER_REQUEST" do
+    many_image_urls = 12.times.map { |i| "https://cdn.example.com/#{i}.png" }
+    captured_inputs = []
+    allow(client).to receive(:moderations) do |parameters:|
+      captured_inputs << parameters[:input]
+      { "results" => parameters[:input].map { { "category_scores" => {} } } }
+    end
+
+    described_class.new(text:, image_urls: many_image_urls, max_images: :all).perform
+
+    image_batches = captured_inputs.select { |input| input.first[:type] == "image_url" }
+    expect(image_batches.map(&:size)).to eq([5, 5, 2])
+    expect(image_batches.flatten.map { |part| part[:image_url][:url] }).to match_array(many_image_urls)
+  end
+
+  it "pairs each batched result with the URL at the same position" do
+    image_urls = ["https://cdn.example.com/clean.png", "https://cdn.example.com/violent.png"]
+    allow(client).to receive(:moderations) do |parameters:|
+      results = parameters[:input].map do |part|
+        scores = part[:type] == "image_url" && part[:image_url][:url].include?("violent") ? { "violence" => 0.95 } : {}
+        { "category_scores" => scores }
+      end
+      { "results" => results }
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
+  end
+
+  it "retries a batch one image at a time when the whole request fails, so one bad URL cannot drop the rest" do
+    image_urls = ["blob:https://gumroad.com/bad", "https://cdn.example.com/violent.png"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "invalid_image_url" } } },
+      bad_response
+    )
+
+    allow(client).to receive(:moderations) do |parameters:|
+      input = parameters[:input]
+      raise bad_error if input.any? { |part| part[:type] == "image_url" && part[:image_url][:url].start_with?("blob:") }
+
+      { "results" => input.map { { "category_scores" => { "violence" => 0.95 } } } }
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
+    expect(Rails.logger).to have_received(:warn).with(/image batch of 2 failed.*retrying images individually/)
+  end
+
+  it "falls back to one image at a time when a batch answers with fewer results than inputs" do
+    image_urls = 3.times.map { |i| "https://cdn.example.com/#{i}.png" }
     captured_inputs = []
     allow(client).to receive(:moderations) do |parameters:|
       captured_inputs << parameters[:input]
       { "results" => [{ "category_scores" => {} }] }
     end
 
-    described_class.new(text:, image_urls: many_image_urls).perform
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
 
-    captured_inputs.each do |input|
-      image_parts = input.select { |part| part[:type] == "image_url" }
-      expect(image_parts.size).to be <= 1
-    end
+    expect(result.status).to eq("compliant")
+    # One short-answered batch, then one request per image rather than three
+    # verdicts read off the wrong pictures.
+    expect(captured_inputs.map(&:size)).to eq([3, 1, 1, 1])
   end
 
-  it "moderates text and every image (up to the cap) in separate requests" do
+  it "moderates text and the first MAX_IMAGES_TO_MODERATE images by default" do
     image_urls = 7.times.map { |i| "https://cdn.example.com/#{i}.png" }
     captured_inputs = []
     allow(client).to receive(:moderations) do |parameters:|
       captured_inputs << parameters[:input]
-      { "results" => [{ "category_scores" => {} }] }
+      { "results" => parameters[:input].map { { "category_scores" => {} } } }
     end
 
     described_class.new(text:, image_urls:).perform
 
-    expect(captured_inputs.size).to eq(1 + described_class::MAX_IMAGES_TO_MODERATE)
     expect(captured_inputs.first).to eq([{ type: "text", text: }])
-    image_calls = captured_inputs.drop(1)
-    expect(image_calls).to all(satisfy { |input| input.size == 1 && input.first[:type] == "image_url" })
-    tested_urls = image_calls.map { |input| input.first[:image_url][:url] }
-    expect(tested_urls).to all(satisfy { |u| image_urls.include?(u) })
+    tested_urls = captured_inputs.drop(1).flatten.map { |part| part[:image_url][:url] }
     expect(tested_urls.uniq.size).to eq(described_class::MAX_IMAGES_TO_MODERATE)
+    expect(tested_urls).to all(satisfy { |u| image_urls.include?(u) })
   end
 
-  it "moderates the same images on every run, so a retry cannot draw a subset that omits one" do
+  it "moderates every image when the caller asks for full coverage" do
+    image_urls = 40.times.map { |i| "https://cdn.example.com/#{i}.png" }
+    tested = []
+    allow(client).to receive(:moderations) do |parameters:|
+      tested.concat(parameters[:input].filter_map { |part| part[:image_url][:url] if part[:type] == "image_url" })
+      { "results" => parameters[:input].map { { "category_scores" => {} } } }
+    end
+
+    described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(tested).to match_array(image_urls)
+  end
+
+  it "moderates the same images in the same order on every run, so a retry cannot draw a different subset" do
     image_urls = 20.times.map { |i| "https://cdn.example.com/#{i}.png" }
 
     runs = 3.times.map do
       tested = []
       allow(client).to receive(:moderations) do |parameters:|
-        part = parameters[:input].first
-        tested << part[:image_url][:url] if part[:type] == "image_url"
-        { "results" => [{ "category_scores" => {} }] }
+        tested.concat(parameters[:input].filter_map { |part| part[:image_url][:url] if part[:type] == "image_url" })
+        { "results" => parameters[:input].map { { "category_scores" => {} } } }
       end
       described_class.new(text:, image_urls:).perform
       tested
@@ -145,7 +208,8 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "", image_urls:).perform
 
     expect(result.status).to eq("compliant")
-    expect(call_inputs.size).to eq(3)
+    # The batch, rejected because of the blob: URL, then one request per image.
+    expect(call_inputs.size).to eq(4)
     expect(Rails.logger).to have_received(:warn).with(/skipping unmoderatable image URL=blob:https:\/\/gumroad\.com\/bad-1/).once
   end
 

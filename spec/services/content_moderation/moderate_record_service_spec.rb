@@ -152,6 +152,50 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
 
         expect(described_class.check(product_page, :page).passed).to eq(true)
       end
+
+      it "asks the classifier to moderate every image, so no displayed image is approved unseen" do
+        expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+          .with(hash_including(max_images: :all))
+          .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                      perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+        expect(described_class.check(page, :page).passed).to eq(true)
+      end
+
+      context "when the page carries more images than we will review" do
+        let(:over_budget_html) do
+          count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
+          (1..count).map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+        end
+        let(:over_budget_page) { Page.new(pageable: seller, slug: "gallery", title: "Gallery", custom_html: over_budget_html) }
+
+        it "blocks the page instead of approving it on a subset of its images" do
+          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+
+          result = described_class.check(over_budget_page, :page)
+
+          expect(result.passed).to eq(false)
+          expect(result.reasons).to eq(
+            ["#{described_class::TOO_MANY_IMAGES_REASON_PREFIX} " \
+             "(#{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1})"]
+          )
+        end
+
+        it "tells the seller the limit rather than naming a content violation" do
+          message = described_class.seller_message(described_class.check(over_budget_page, :page).reasons, "page")
+
+          expect(message).to include("more images than we can review")
+          expect(message).to include(ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS.to_s)
+          expect(message).not_to include("content guidelines")
+        end
+
+        it "moderates a page that sits exactly at the limit" do
+          at_limit = (1..ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
+                       .map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
+
+          expect(described_class.check(Page.new(pageable: seller, custom_html: at_limit), :page).passed).to eq(true)
+        end
+      end
     end
 
     context "when blocklist flags the content" do

@@ -1,22 +1,25 @@
 # frozen_string_literal: true
 
-# Which images a moderation attempt looks at when the content carries more than
-# the budget allows.
+# Which images a moderation attempt looks at, and in what order.
 #
 # The order is deterministic in the URL, so re-validating unchanged content
-# always moderates the same images: a seller cannot re-save a page (or an agent
-# retry a publish) until a subset comes up that happens to omit the one
-# prohibited image. Randomizing per attempt made that grind succeed eventually
-# with probability approaching 1, which is a worse failure than a bounded subset.
+# always moderates the same images in the same order: a seller cannot re-save a
+# page (or an agent retry a publish) until a draw comes up that happens to omit
+# the one prohibited image. Randomizing per attempt made that grind succeed
+# eventually with probability approaching 1.
 #
-# It is also not document order, so the images cannot simply be parked past a
-# fixed cutoff, and it is keyed on `secret_key_base` so which of a seller's own
-# images fall inside the budget is not something they can compute and aim at.
+# It is also not document order, so images cannot simply be parked past a cap,
+# and it is keyed on `secret_key_base` so which of a seller's own images a
+# bounded caller looks at is not something they can compute and aim at.
+#
+# `bounded` is for callers that genuinely can only carry a few images (the
+# prompt strategy's per-preset sample). Coverage of every image is
+# ClassifierStrategy's job — it batches them, so bounding is not what keeps that
+# affordable.
 module ContentModeration::ImageSelection
-  # Every URL, in the deterministic moderation order. Callers that can retry an
-  # individual image (the classifier drops ones OpenAI refuses to fetch) walk
-  # this and stop once they have enough, so a rejected image falls through to the
-  # next one instead of costing a slot.
+  # Every URL, in the deterministic moderation order. The classifier walks this
+  # (rather than taking a prefix) so an image OpenAI refuses to fetch falls
+  # through to the next instead of costing a slot.
   def self.ordered(urls)
     urls.sort_by { |url| digest(url) }
   end

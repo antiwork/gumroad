@@ -18,12 +18,16 @@ class ContentModeration::ContentExtractor
   # publishing surface's abuse is most likely to be carried by.
   MAX_PAGE_LINK_TEXT_LENGTH = 5_000
 
-  # A generated page can reference hundreds of images, so the set is bounded
-  # here — once, deliberately — rather than left for each strategy to reduce on
-  # its own. Sized to what the classifier will actually moderate so every URL a
-  # page contributes gets an attempt, and the prompt presets draw their images
-  # from that same set instead of a separately-narrowed one.
-  MAX_PAGE_IMAGE_URLS = ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE
+  # How many remote images one page may carry and still be moderated. Every image
+  # inside this budget IS moderated (ClassifierStrategy batches them, so the cost
+  # is one request per five, not one per image); a page carrying more is rejected
+  # rather than approved on a subset, because the approval covers what the page
+  # displays and a page can display an image we never looked at only if we let it.
+  #
+  # Sized so the worst case is a handful of batched requests inside one save. It
+  # is far above what a real storefront page uses; the shape it stops is a
+  # generated document with hundreds of image tags.
+  MAX_PAGE_IMAGE_URLS = 25
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
@@ -50,12 +54,7 @@ class ContentModeration::ContentExtractor
   # redirect to an off-platform storefront) rather than the prose around them,
   # and prose is what a spammer can pad without limit.
   def extract_from_page(page)
-    document = Nokogiri::HTML(page.custom_html.presence || page.content.to_s)
-
-    # Script and style bodies are code, not content, and a page built on a CSS
-    # framework carries far more of them than prose. Dropping them keeps the
-    # moderated text to what a visitor actually reads.
-    document.css("script, style, noscript, template").each(&:remove)
+    document = page_document(page)
 
     links = strip_seller_first_party_urls(link_targets(document).join(" "), page.seller)
     prose = strip_seller_first_party_urls("Title: #{page.title} #{document.text}".squish, page.seller)
@@ -68,28 +67,23 @@ class ContentModeration::ContentExtractor
 
     Result.new(
       text: text,
-      image_urls: bounded_page_image_urls(page, page_image_urls(document))
+      # Every remote image, not a subset: the service rejects a page carrying more
+      # than MAX_PAGE_IMAGE_URLS rather than silently narrowing here, so it needs
+      # the real count. Deterministically ordered so a re-save moderates the same
+      # images in the same batches.
+      image_urls: ContentModeration::ImageSelection.ordered(page_image_urls(document))
     )
   end
 
   private
-    # Bounded by ContentModeration::ImageSelection rather than by document order
-    # (which the images could be parked past) or by a fresh random sample per
-    # attempt (which a seller could re-save against until the prohibited image
-    # fell outside it). Every URL returned gets a classifier attempt, and the
-    # prompt presets narrow this same ordered set rather than re-drawing from a
-    # wider pool.
-    def bounded_page_image_urls(page, urls)
-      if urls.size > MAX_PAGE_IMAGE_URLS
-        # Partial image coverage is a real gap in the verdict, so say so once per
-        # extraction: a page over the budget was judged on some of its pictures.
-        Rails.logger.warn(
-          "ContentModeration::ContentExtractor bounded page #{page.id || "(unsaved)"} images to " \
-          "#{MAX_PAGE_IMAGE_URLS} of #{urls.size}; the remainder is not moderated on this attempt"
-        )
-      end
-
-      ContentModeration::ImageSelection.bounded(urls, MAX_PAGE_IMAGE_URLS)
+    # The page as a document, either representation. Script and style bodies are
+    # code, not content, and a page built on a CSS framework carries far more of
+    # them than prose — dropping them keeps the moderated text to what a visitor
+    # actually reads.
+    def page_document(page)
+      document = Nokogiri::HTML(page.custom_html.presence || page.content.to_s)
+      document.css("script, style, noscript, template").each(&:remove)
+      document
     end
 
     # Cut at the last whitespace at or before `max` so a truncation can't leave a

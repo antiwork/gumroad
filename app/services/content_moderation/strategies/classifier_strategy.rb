@@ -3,8 +3,20 @@
 class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
+  # Image batches carry up to IMAGES_PER_REQUEST downloads on OpenAI's side, so
+  # they get their own, longer timeout: reusing the single-input budget would
+  # turn a healthy batch into three timed-out attempts and a "try again later"
+  # for the seller.
+  IMAGE_BATCH_REQUEST_TIMEOUT_IN_SECONDS = 30
   MAX_MODERATION_ATTEMPTS = 3
+  # How many images one save spends a moderation attempt on when the caller
+  # doesn't say otherwise (products and posts, whose image sets come from our own
+  # uploads rather than arbitrary seller HTML).
   MAX_IMAGES_TO_MODERATE = 5
+  # The moderations endpoint takes an array of inputs and returns one result per
+  # input, so a page's images cost one request per five rather than one each.
+  # That is what makes moderating EVERY image a page displays affordable.
+  IMAGES_PER_REQUEST = 5
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
 
   DEFAULT_THRESHOLDS = {
@@ -23,9 +35,14 @@ class ContentModeration::Strategies::ClassifierStrategy
     "violence/graphic" => 0.9,
   }.freeze
 
-  def initialize(text:, image_urls: [])
+  # `max_images:` is how many images this content is allowed to spend moderation
+  # attempts on. `:all` means every image — used by pages, where the images are
+  # arbitrary URLs the seller wrote into a public document and approving the page
+  # on a subset would approve whatever the rest displays.
+  def initialize(text:, image_urls: [], max_images: MAX_IMAGES_TO_MODERATE)
     @text = text
     @image_urls = image_urls
+    @max_images = max_images
   end
 
   def perform
@@ -35,6 +52,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
 
     @client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
+    @image_client = OpenAI::Client.new(access_token: api_key, request_timeout: IMAGE_BATCH_REQUEST_TIMEOUT_IN_SECONDS)
     thresholds = load_thresholds
 
     flagged_categories = []
@@ -54,20 +72,24 @@ class ContentModeration::Strategies::ClassifierStrategy
     # Deterministic in the URL, not shuffled per attempt: re-validating unchanged
     # content must moderate the same images, or a retry loop eventually draws a
     # subset omitting the prohibited one. Not document order either, so the images
-    # cannot be parked past the cap. Walking the full order (rather than taking
-    # the first MAX) means an image OpenAI refuses to fetch falls through to the
-    # next instead of costing a slot.
-    ContentModeration::ImageSelection.ordered(@image_urls).each do |url|
-      break if moderated_count >= MAX_IMAGES_TO_MODERATE
+    # cannot be parked past the cap. Walking the order (rather than taking the
+    # first MAX) means an image OpenAI refuses to fetch falls through to the next
+    # instead of costing a slot.
+    urls_to_moderate = ContentModeration::ImageSelection.ordered(@image_urls)
 
-      scores = moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url)
-      if scores.nil?
-        skipped_urls << url
-        next
+    urls_to_moderate.each_slice(IMAGES_PER_REQUEST) do |batch|
+      remaining = @max_images == :all ? batch.size : @max_images - moderated_count
+      break if remaining <= 0
+
+      moderate_images(batch.first(remaining)).each do |url, scores|
+        if scores.nil?
+          skipped_urls << url
+          next
+        end
+
+        moderated_count += 1
+        flagged_categories.concat(collect_flagged(scores, thresholds))
       end
-
-      moderated_count += 1
-      flagged_categories.concat(collect_flagged(scores, thresholds))
     end
 
     if @image_urls.any? && moderated_count == 0
@@ -109,11 +131,54 @@ class ContentModeration::Strategies::ClassifierStrategy
   end
 
   private
-    def moderate(input, skip_url: nil)
+    # One request per batch of image URLs, returning `[url, scores_or_nil]` pairs
+    # in the order given. The endpoint answers an array of inputs with one result
+    # per input, positionally.
+    #
+    # A single unfetchable URL 400s the WHOLE batch (a recurring upstream
+    # condition: expired signed attachment URLs, hosts that block OpenAI), so a
+    # rejected batch is retried one image at a time. Otherwise one bad image would
+    # drop four good ones from the verdict — the failure mode this batching exists
+    # to avoid.
+    def moderate_images(urls)
+      return [] if urls.empty?
+      return urls.map { |url| [url, moderate_one_image(url)] } if urls.size == 1
+
+      input = urls.map { |url| { type: "image_url", image_url: { url: url } } }
+      scores = moderate_batch(input)
+      return urls.each_with_index.map { |url, index| [url, scores[index]] } unless scores.nil?
+
+      urls.map { |url| [url, moderate_one_image(url)] }
+    end
+
+    def moderate_one_image(url)
+      moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url, client: @image_client)
+    end
+
+    # Per-input category scores for a multi-input request, or nil when the whole
+    # request failed and the caller should fall back to one image at a time.
+    def moderate_batch(input)
+      response = @image_client.moderations(parameters: { model: "omni-moderation-latest", input: input })
+      results = response["results"]
+      # A short results array would silently pair scores with the wrong URLs, and
+      # a wrong-image verdict is worse than an unmoderated one: fall back.
+      return nil unless results.is_a?(Array) && results.size == input.size
+
+      results.map { |result| result["category_scores"] || {} }
+    rescue Faraday::BadRequestError, Faraday::TimeoutError, Faraday::ConnectionFailed,
+           Faraday::ParsingError, Faraday::ServerError => e
+      Rails.logger.warn(
+        "ContentModeration::ClassifierStrategy image batch of #{input.size} failed " \
+        "(#{e.class.name.demodulize}), retrying images individually: #{e.message[0, 300]}"
+      )
+      nil
+    end
+
+    def moderate(input, skip_url: nil, client: @client)
       attempts = 0
       begin
         attempts += 1
-        response = @client.moderations(parameters: { model: "omni-moderation-latest", input: input })
+        response = client.moderations(parameters: { model: "omni-moderation-latest", input: input })
         response.dig("results", 0, "category_scores") || {}
       rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ParsingError, Faraday::ServerError => e
         if attempts < MAX_MODERATION_ATTEMPTS

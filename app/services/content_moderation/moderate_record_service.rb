@@ -89,6 +89,11 @@ class ContentModeration::ModerateRecordService
     "directs buyers to message you on another platform to get it, which we don’t allow. Add the files, " \
     "videos, or written content buyers should get when they buy, then publish again."
 
+  # A page carrying more images than we will review is rejected rather than
+  # approved on a sample (see `check`), so the reason is about the page's size,
+  # not its content, and gets its own sentence saying what to change.
+  TOO_MANY_IMAGES_REASON_PREFIX = "too many images to review"
+
   # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
   # (score: 0.86, threshold: 0.9)" or "spam: repeated unrelated slogans") into
   # a friendly, de-duplicated phrase the seller can act on — without leaking
@@ -112,6 +117,10 @@ class ContentModeration::ModerateRecordService
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
+      "This #{noun} has more images than we can review, so we can’t publish it as is. " \
+      "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \
+      "(or split it across several #{noun}s) and try again."
     elsif rs.any? { |r| off_platform_fulfillment_reason?(r) }
       message = format(OFF_PLATFORM_FULFILLMENT_MESSAGE, noun: noun)
       # A run can flag off-platform fulfillment alongside another violation
@@ -147,6 +156,17 @@ class ContentModeration::ModerateRecordService
 
     content = extract_content
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
+
+    if entity_type == :page && content.image_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
+      # Approving a page approves what the page DISPLAYS, so we do not approve one
+      # on a sample of its images: a page over the budget is rejected instead.
+      # Rejecting is also what makes the moderated set safe to bound at all — the
+      # alternative, moderating some and publishing anyway, is the same as not
+      # moderating the rest.
+      reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
+      leave_admin_comment(reasons)
+      return CheckResult.new(passed: false, reasons: reasons)
+    end
 
     blocklist_result = ContentModeration::Strategies::BlocklistStrategy
                          .new(text: content.text, image_urls: content.image_urls)
@@ -483,7 +503,16 @@ class ContentModeration::ModerateRecordService
 
     def run_ai_strategies(content)
       strategies = [
-        ContentModeration::Strategies::ClassifierStrategy.new(text: content.text, image_urls: content.image_urls),
+        ContentModeration::Strategies::ClassifierStrategy.new(
+          text: content.text,
+          image_urls: content.image_urls,
+          # A page's images are arbitrary URLs the seller wrote into a public
+          # document, and the page is only allowed through if all of them were
+          # reviewed (`check` rejects a page over the budget), so every one gets a
+          # moderation attempt. Products and posts keep the default cap: their
+          # images come from our own uploads and their galleries are unbounded.
+          max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
+        ),
         # `corroborate_judgment_flags` makes a spam or off-platform-fulfillment
         # flag block only when it reproduces on resampling; a lone flag is
         # returned as audit_reasoning and recorded as a non-blocking note

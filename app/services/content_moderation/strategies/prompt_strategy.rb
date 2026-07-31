@@ -429,6 +429,11 @@ class ContentModeration::Strategies::PromptStrategy
     # inspect a different subset. Bounded deterministically so the set is also
     # the same across attempts — a random draw per validation would let a retry
     # loop eventually pick images that omit the prohibited one.
+    #
+    # This is a sample by design: a chat completion carrying every image would be
+    # a very large request, and image coverage is ClassifierStrategy's job — it
+    # moderates each image URL in its own batched request, so an image outside
+    # this preset sample is still reviewed.
     def sampled_image_urls
       @sampled_image_urls ||= ContentModeration::ImageSelection.bounded(
         @image_urls.select { |url| supported_image_url?(url) }, MAX_IMAGES_PER_PRESET
