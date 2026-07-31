@@ -12,9 +12,9 @@
 #   * the buyer's country, from the checkout page's own remote_ip vs. the ip_country stamped at
 #     order creation (a VPN toggled mid-checkout diverges them with no bug in either path).
 #
-# Seven production confirm failures over 45h came from exactly those two, always with the Element
-# holding MORE methods than the intent (gumroad-private#1528). So the list is issued once, signed,
-# and echoed back at prepare rather than re-derived: one authority, sampled once.
+# Both divergences fail the same way — the Element holding MORE methods than the intent
+# (gumroad-private#1528) — so the list is issued once, signed, and echoed back at prepare rather
+# than re-derived: one authority, sampled once.
 #
 # Signing (rather than trusting a plain parameter) is what keeps the echo from being a way to widen
 # past a rollout gate — a client-supplied "us_bank_account" would otherwise re-enable ACH for a

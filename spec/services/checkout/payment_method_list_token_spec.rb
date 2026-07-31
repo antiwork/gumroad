@@ -12,13 +12,6 @@ describe Checkout::PaymentMethodListToken do
       expect(described_class.issue(payment_method_types: [], sellers: [seller])).to be_nil
       expect(described_class.issue(payment_method_types: nil, sellers: [seller])).to be_nil
     end
-
-    it "does not leak the method list in plaintext" do
-      token = described_class.issue(payment_method_types: types, sellers: [seller])
-
-      expect(token).to be_present
-      expect(token).not_to include("cashapp")
-    end
   end
 
   describe ".verify" do

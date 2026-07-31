@@ -167,6 +167,44 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     expect(data.payment_details_source).toBe("payment_element");
   });
 
+  // The token is the whole point of the client-confirm lane's method-list pin: if it never leaves
+  // the browser the server silently re-resolves and gumroad-private#1528 is back, so the presence
+  // and the absence branches are both pinned here.
+  it("sends the mounted method-list token on the client-confirm lane", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({
+        type: "payment-element-client-confirm",
+        confirmationTokenId: "ctoken_123",
+        cardCountry: "GR",
+        walletType: null,
+        mountCurrency: "usd",
+        methodListToken: "signed-method-list-token",
+        selectedMethodType: "card",
+      }),
+      {},
+    );
+
+    expect(data.payment_method_list_token).toBe("signed-method-list-token");
+    expect(data.payment_element_mount_currency).toBe("usd");
+  });
+
+  it("sends no method-list token when the page mounted without one", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({
+        type: "payment-element-client-confirm",
+        confirmationTokenId: "ctoken_123",
+        cardCountry: "GR",
+        walletType: null,
+        mountCurrency: "usd",
+        methodListToken: null,
+        selectedMethodType: "card",
+      }),
+      {},
+    );
+
+    expect(data.payment_method_list_token).toBeUndefined();
+  });
+
   it("sends no wallet_type for a plain card through the Payment Element", () => {
     const data = createPurchasesRequestData(
       payloadWith({ type: "new", cardParamsResult: { type: "cc", cardParams, keepOnFile: false, zipCode: null } }),

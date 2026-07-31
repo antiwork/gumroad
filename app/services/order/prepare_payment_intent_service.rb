@@ -707,12 +707,9 @@ class Order::PreparePaymentIntentService
     #
     # The checkout page's own signed list wins over a second resolver run when it verifies. Two of
     # the resolver's inputs are sampled from a different request here than at page load — the buyer's
-    # country (this service's ip_country, stamped at order creation, vs. the page's live remote_ip)
-    # and the Klarna amount window (the persisted purchase amounts vs. the mount-time cart total) —
-    # so re-resolving is what produced the seven observed confirm failures (gumroad-private#1528).
-    # Re-resolving is still the fallback for pages that predate the token, and the strips below run
-    # over either list: the token settles which methods the Element offered, never whether a method
-    # may ride an intent in this currency or at this final amount.
+    # country and the Klarna amount window — so re-resolving is what produced the confirm failures
+    # in gumroad-private#1528. Re-resolving stays the fallback for pages that predate the token, and
+    # the strips below run over either list.
     def resolved_payment_method_types
       issued_payment_method_types || payment_method_resolution.payment_method_types
     end
@@ -720,14 +717,16 @@ class Order::PreparePaymentIntentService
     def issued_payment_method_types
       return @issued_payment_method_types if defined?(@issued_payment_method_types)
 
-      issued = Checkout::PaymentMethodListToken.verify(
-        params[:payment_method_list_token], sellers: [seller]
-      )
+      submitted = params[:payment_method_list_token].presence
+      issued = Checkout::PaymentMethodListToken.verify(submitted, sellers: [seller])
+      # A token the buyer sent that does not verify means the seam broke — a tampered token, or the
+      # presenter and this service disagreeing about the seller set. Falling back is correct, but
+      # silently is how #1528 stayed invisible for 45 hours, so say something.
+      Rails.logger.info("[prepare] unverifiable payment_method_list_token for seller #{seller.id}") if submitted.present? && issued.nil?
       # The token proves the list came from us, not that every method on it may still be offered:
       # it was signed before a flag could roll back or a connected account could lose a capability.
       # So each method still passes the same policy allowlist a client-supplied ConfirmationToken
-      # type does (gumroad-private#1143) — the token settles the sampling divergence it was issued
-      # for, never a rollout gate. Dropping to nil when nothing survives falls back to re-resolving.
+      # type does (gumroad-private#1143). Dropping to nil when nothing survives re-resolves.
       @issued_payment_method_types = issued&.select { payment_method_offerable?(_1) }.presence
     end
 
@@ -847,7 +846,7 @@ class Order::PreparePaymentIntentService
       # after the Element mounts must not re-append alipay onto a non-US connected account's
       # intent, where the incompatible entry fails the whole intent create
       # (gumroad-private#1026). See Checkout::PaymentMethodResolver#alipay_methods. The
-      # per-account capability re-check below still applies on top of it.
+      # per-account capability re-check inside payment_method_offerable? applies on top of it.
       return nil unless payment_method_offerable?(method_type)
 
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
