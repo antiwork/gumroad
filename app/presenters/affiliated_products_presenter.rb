@@ -8,11 +8,12 @@ class AffiliatedProductsPresenter
 
   PER_PAGE = 20
 
-  def initialize(user, query: nil, page: nil, sort: nil)
+  def initialize(user, query: nil, page: nil, sort: nil, can_remove_affiliations: false)
     @user = user
     @query = query.presence
     @page = page
     @sort = sort
+    @can_remove_affiliations = can_remove_affiliations
   end
 
   def affiliated_products_page_props
@@ -27,7 +28,7 @@ class AffiliatedProductsPresenter
   end
 
   private
-    attr_reader :user, :query, :page, :sort
+    attr_reader :user, :query, :page, :sort, :can_remove_affiliations
 
     def affiliated_products_data
       # Pagy's default count for a grouped relation (COUNT(*) OVER ()) executes
@@ -80,6 +81,8 @@ class AffiliatedProductsPresenter
     # excluded: those are the user's own Gumroad Affiliates enrollment, not a seller's addition.
     # One extra query per page rather than joining users into the grouped revenue query above.
     def removable_affiliates_by_id(records)
+      return {} unless can_remove_affiliations
+
       direct_ids = records.filter_map { _1.affiliate_id if _1.affiliate_type == DirectAffiliate.name }
       return {} if direct_ids.empty?
 
@@ -102,9 +105,9 @@ class AffiliatedProductsPresenter
         # products, that unbounded grouped query took multiple seconds and was
         # the main source of slow requests on this page.
         total_products: affiliated_products_scope.distinct.count("affiliates_links.link_id"),
-        # Derived from the same alive scope as the list rather than User#affiliated_creators, which
-        # goes through every affiliate row including soft-deleted ones — so an ended affiliation
-        # kept counting here after its products had already left the table.
+        # Derived from the same alive scope as the list rather than User#affiliated_creators, so the
+        # count always matches the table: that association walks every affiliate row including
+        # soft-deleted ones and collaborations, and does not filter deleted or banned products.
         total_affiliated_creators: affiliated_products_scope.distinct.count("links.user_id"),
       }
     end

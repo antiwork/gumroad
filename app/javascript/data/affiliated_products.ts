@@ -30,12 +30,18 @@ export const getPagedAffiliatedProducts = (page?: number, query?: string, sort?:
 
 type AffiliationRemovedData = PagedAffiliatedProductsData & { stats: AffiliatedPageStats };
 
-export const removeSelfAsAffiliate = async (affiliateId: string): Promise<AffiliationRemovedData> => {
+export const removeSelfAsAffiliate = async (
+  affiliateId: string,
+  { query, sort }: { query?: string; sort?: Sort<SortKey> | null } = {},
+): Promise<AffiliationRemovedData> => {
   const response = await request({
     method: "DELETE",
     accept: "json",
-    url: Routes.products_affiliated_path(affiliateId),
+    url: Routes.products_affiliated_path(affiliateId, { query, sort }),
   });
-  if (!response.ok) throw new ResponseError();
-  return typia.assert<AffiliationRemovedData>(await response.json());
+  const json: unknown = await response.json();
+  // A role that may view this page but not remove affiliations gets a 401 naming the role — worth
+  // showing rather than replacing with a generic failure.
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<AffiliationRemovedData>(json);
 };

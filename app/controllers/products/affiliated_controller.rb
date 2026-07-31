@@ -18,7 +18,10 @@ class Products::AffiliatedController < Sellers::BaseController
   def destroy
     authorize [:products, :affiliated, @direct_affiliate]
 
-    @direct_affiliate.mark_deleted!
+    # Skip validations: this is a state transition, not a creation, and a legacy row that no longer
+    # satisfies today's rules (basis points out of range, no destination URL and no seller username)
+    # would otherwise raise and leave the affiliate with no exit — the thing this endpoint exists for.
+    @direct_affiliate.mark_deleted(validate: false)
     AffiliateMailer.direct_affiliate_removal_by_affiliate_user(@direct_affiliate.id).deliver_later
 
     # The affiliation covers every product the seller enabled, so the headline stats move too, not
@@ -35,7 +38,11 @@ class Products::AffiliatedController < Sellers::BaseController
       AffiliatedProductsPresenter.new(current_seller,
                                       query: affiliated_products_params[:query],
                                       page: affiliated_products_params[:page],
-                                      sort: affiliated_products_params[:sort])
+                                      sort: affiliated_products_params[:sort],
+                                      # Only admins can end an affiliation, while four roles can view
+                                      # the page — without this the other three get a Remove button
+                                      # that always fails.
+                                      can_remove_affiliations: Pundit.policy!(pundit_user, [:products, :affiliated, DirectAffiliate]).destroy?)
                                  .affiliated_products_page_props
     end
 

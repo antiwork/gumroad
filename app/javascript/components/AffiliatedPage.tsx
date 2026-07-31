@@ -98,6 +98,7 @@ type AffiliatedProductsTableProps = {
     pagination: PaginationProps;
     stats: AffiliatedPageStats;
   }) => void;
+  query: string;
   isLoading: boolean;
 };
 
@@ -108,6 +109,7 @@ const AffiliatedProductsTable = ({
   pagination,
   loadAffiliatedProducts,
   onAffiliationRemoved,
+  query,
   isLoading,
 }: AffiliatedProductsTableProps) => {
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
@@ -123,13 +125,11 @@ const AffiliatedProductsTable = ({
     if (product.affiliate_id === null) return;
     try {
       setRemoving({ product, inFlight: true });
-      // Ending an affiliation drops every product that seller enabled and moves the headline
-      // stats, so the endpoint answers with the whole refreshed page rather than one row.
       const {
         affiliated_products: affiliatedProducts,
         pagination,
         stats,
-      } = await removeSelfAsAffiliate(product.affiliate_id);
+      } = await removeSelfAsAffiliate(product.affiliate_id, { query, sort });
       setRemoving(null);
       onAffiliationRemoved({ affiliatedProducts, pagination, stats });
       showAlert("You're no longer an affiliate for these products.", "success");
@@ -191,6 +191,8 @@ const AffiliatedProductsTable = ({
                       Copy link
                     </Button>
                   </CopyToClipboard>
+                  {/* nil affiliate_id means either a Gumroad Affiliates row or a viewer role that
+                      cannot end affiliations, so the control simply does not exist for them. */}
                   {affiliatedProduct.affiliate_id !== null ? (
                     <Button
                       aria-label={`Remove yourself as an affiliate for ${affiliatedProduct.product_name}`}
@@ -376,6 +378,7 @@ const AffiliatedPage = ({
                   onAffiliationRemoved={({ affiliatedProducts, pagination, stats }) =>
                     setState((prevState) => ({ ...prevState, affiliatedProducts, pagination, stats }))
                   }
+                  query={state.query}
                   isLoading={isLoading}
                 />
               )}

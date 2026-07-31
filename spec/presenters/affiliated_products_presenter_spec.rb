@@ -197,7 +197,7 @@ describe AffiliatedProductsPresenter do
     end
 
     it "marks direct affiliations as removable and global ones as not" do
-      props = described_class.new(affiliate_user).affiliated_products_page_props
+      props = described_class.new(affiliate_user, can_remove_affiliations: true).affiliated_products_page_props
 
       direct = props[:affiliated_products].find { _1[:affiliate_type] == "direct_affiliate" && _1[:product_name] == "Creator 1 Product 1" }
       expect(direct[:affiliate_id]).to eq(direct_affiliate_one.external_id)
@@ -206,6 +206,13 @@ describe AffiliatedProductsPresenter do
       global = props[:affiliated_products].find { _1[:affiliate_type] == "global_affiliate" }
       expect(global[:affiliate_id]).to be_nil
       expect(global[:seller_name]).to be_nil
+    end
+
+    it "marks nothing removable for a viewer who cannot end affiliations" do
+      props = described_class.new(affiliate_user).affiliated_products_page_props
+
+      expect(props[:affiliated_products]).to be_present
+      expect(props[:affiliated_products].map { _1[:affiliate_id] }).to all(be_nil)
     end
 
     it "counts only creators the user is still affiliated with" do

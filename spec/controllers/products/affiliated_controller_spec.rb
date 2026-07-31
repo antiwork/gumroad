@@ -164,6 +164,19 @@ describe Products::AffiliatedController, inertia: true do
       expect(products[global_affiliate_eligible_product.name]["affiliate_id"]).to be_nil
       expect(products[global_affiliate_eligible_product.name]["seller_name"]).to be_nil
     end
+
+    context "when signed in as a role that cannot end affiliations" do
+      include_context "with user signed in as marketing for seller" do
+        let(:seller) { affiliate_user }
+      end
+
+      it "marks no row removable, so the Remove control never renders" do
+        get :index, format: :json
+
+        expect(response.parsed_body["affiliated_products"]).to be_present
+        expect(response.parsed_body["affiliated_products"].map { _1["affiliate_id"] }).to all(be_nil)
+      end
+    end
   end
 
   describe "DELETE destroy" do
@@ -213,6 +226,16 @@ describe Products::AffiliatedController, inertia: true do
       end.to raise_error(ActionController::RoutingError)
 
       expect(global_affiliate.reload.alive?).to be(true)
+    end
+
+    it "removes a legacy row that no longer passes model validations" do
+      direct_affiliate.update_columns(affiliate_basis_points: 9999)
+      expect(direct_affiliate.reload).not_to be_valid
+
+      delete :destroy, params: { id: direct_affiliate.external_id }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(direct_affiliate.reload.deleted?).to be(true)
     end
   end
 end
