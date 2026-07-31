@@ -195,7 +195,7 @@ describe("PaymentElementInput", () => {
   // deferred intent against the reported list, which therefore has to be the list the element was
   // actually created with — reporting the current config would defeat the whole narrowing.
   it("reports the method list the element was created with, and keeps it frozen across a config change", () => {
-    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[]) => void>();
+    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[] | null) => void>();
     const { rerender } = render(
       <PaymentElementInput
         {...props}
@@ -228,7 +228,7 @@ describe("PaymentElementInput", () => {
 
   // A currency change DOES remount Elements, so the new instance's list is the one that counts.
   it("re-reports the method list when a currency change remounts the element", () => {
-    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[]) => void>();
+    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[] | null) => void>();
     const { rerender } = render(
       <PaymentElementInput
         {...props}
@@ -258,10 +258,12 @@ describe("PaymentElementInput", () => {
 
   // The mode is the other half of the remount key, so it needs the same re-capture as the currency:
   // a mode flip that reused the previous mount's list would report a list the new element does not
-  // have. Unreachable while the config is fixed at page load, reachable once it is reloaded after a
-  // cart change (antiwork/gumroad#6486).
-  it("re-reports the method list when a mode change remounts the element", () => {
-    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[]) => void>();
+  // have. Setup mode is server-confirm only and its token never reaches #prepare, so the report
+  // clears rather than describing an element the server will never hear about. Unreachable while
+  // the config is fixed at page load, reachable once it is reloaded after a cart change
+  // (antiwork/gumroad#6486).
+  it("clears the reported method list when a mode change remounts the element in setup mode", () => {
+    const onMountedPaymentMethodTypes = vi.fn<(paymentMethodTypes: readonly string[] | null) => void>();
     const { rerender } = render(
       <PaymentElementInput
         {...props}
@@ -284,7 +286,7 @@ describe("PaymentElementInput", () => {
 
     expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link", "klarna"], ["card"]]);
     expect(elementsMounts.unmounts).toBe(1);
-    expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(["card"]);
+    expect(onMountedPaymentMethodTypes).toHaveBeenLastCalledWith(null);
   });
 
   it("keeps the mounted currency while a surcharge refresh is in flight", () => {

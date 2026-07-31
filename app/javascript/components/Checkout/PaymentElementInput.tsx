@@ -81,7 +81,7 @@ export const PaymentElementInput = ({
   elementsOptions: CheckoutPaymentElementOptions;
   // Reports the method list each Elements instance was CREATED with — see the creation capture in
   // StripePaymentElementProvider for why the current config is the wrong answer.
-  onMountedPaymentMethodTypes?: ((paymentMethodTypes: readonly string[]) => void) | undefined;
+  onMountedPaymentMethodTypes?: ((paymentMethodTypes: readonly string[] | null) => void) | undefined;
   // Per-seller rollout flag (payment_element_wallets): show Apple Pay/Google Pay inside the
   // Payment Element instead of via the separate Payment Request Button.
   walletsEnabled: boolean;
@@ -375,7 +375,7 @@ const StripePaymentElementProvider = ({
   amount: number | null;
   currencyOverride?: string | null | undefined;
   elementsOptions: CheckoutPaymentElementOptions;
-  onMountedPaymentMethodTypes?: ((paymentMethodTypes: readonly string[]) => void) | undefined;
+  onMountedPaymentMethodTypes?: ((paymentMethodTypes: readonly string[] | null) => void) | undefined;
   flatLayout: boolean;
   children: React.ReactNode;
 }) => {
@@ -407,9 +407,14 @@ const StripePaymentElementProvider = ({
     setCreation({ mode, currency, amount, paymentMethodTypes: elementsOptions.payment_method_types });
   const initialAmount = creation.amount;
   const mountedPaymentMethodTypes = creation.paymentMethodTypes;
+  // Setup mode is server-confirm only, so its token never reaches #prepare and its list would be
+  // indistinguishable from a real one on the server. Report null instead, so a mode flip clears
+  // the previous mount's list rather than leaving a stale one behind.
+  const reportedPaymentMethodTypes =
+    creation.mode === STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT ? null : mountedPaymentMethodTypes;
   React.useEffect(() => {
-    onMountedPaymentMethodTypes?.(mountedPaymentMethodTypes);
-  }, [mountedPaymentMethodTypes, onMountedPaymentMethodTypes]);
+    onMountedPaymentMethodTypes?.(reportedPaymentMethodTypes);
+  }, [reportedPaymentMethodTypes, onMountedPaymentMethodTypes]);
   const font = useFont();
   const checkoutTheme = useCheckoutTheme();
   const neutralColors = useNeutralCheckoutThemeColors();

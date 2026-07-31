@@ -739,7 +739,7 @@ const CreditCardContent = ({
   // it is only read when the token is minted — it must not re-render the form or feed back into the
   // element's own options.
   const mountedPaymentMethodTypesRef = React.useRef<readonly string[] | null>(null);
-  const handleMountedPaymentMethodTypes = React.useCallback((paymentMethodTypes: readonly string[]) => {
+  const handleMountedPaymentMethodTypes = React.useCallback((paymentMethodTypes: readonly string[] | null) => {
     mountedPaymentMethodTypesRef.current = paymentMethodTypes;
   }, []);
   const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
