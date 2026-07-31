@@ -1412,6 +1412,77 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal ctx[:product_2], Link.fetch_leniently("custom", user: ctx[:user_1])
   end
 
+  # --- custom permalink rename redirects (gumroad-private#1619) --------------
+
+  test "renaming a custom permalink records a legacy mapping so the old URL still resolves" do
+    user = create_user
+    product = create_product(user:, unique_permalink: "aaa", custom_permalink: "old-slug")
+
+    product.update!(custom_permalink: "new-slug")
+
+    assert_equal product.id, LegacyPermalink.find_by(permalink: "old-slug")&.product_id
+    assert_equal product, Link.fetch_leniently("old-slug")
+    assert_equal product, Link.fetch_leniently("new-slug", user:)
+  end
+
+  test "renaming twice keeps every earlier slug pointing at the product" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "one")
+    product.update!(custom_permalink: "two")
+    product.update!(custom_permalink: "three")
+
+    assert_equal product, Link.fetch_leniently("one")
+    assert_equal product, Link.fetch_leniently("two")
+  end
+
+  test "clearing a custom permalink still records the outgoing slug" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: nil)
+
+    assert_equal product, Link.fetch_leniently("old-slug")
+  end
+
+  test "a rename does not map a slug another live product still answers on" do
+    other = create_product(unique_permalink: "bbb", custom_permalink: "shared")
+    product = create_product(unique_permalink: "aaa", custom_permalink: "shared")
+
+    product.update!(custom_permalink: "mine")
+
+    assert_nil LegacyPermalink.find_by(permalink: "shared")
+    # `other` keeps answering on the slug it still holds.
+    assert_equal other, Link.fetch_leniently("shared")
+  end
+
+  test "the first writer keeps a legacy mapping when a second product releases the same slug" do
+    first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-new")
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+
+    second = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+    second.update!(custom_permalink: "second-new")
+
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+  end
+
+  test "claiming a slug that a stale legacy mapping shadows drops the mapping" do
+    old = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    old.update!(custom_permalink: "moved")
+    assert_equal old.id, LegacyPermalink.find_by(permalink: "slug").product_id
+
+    claimant = create_product(unique_permalink: "bbb")
+    claimant.update!(custom_permalink: "slug")
+
+    assert_nil LegacyPermalink.find_by(permalink: "slug")
+    # The live claim wins the lookup instead of being shadowed by the mapping.
+    assert_equal claimant, Link.fetch_leniently("slug")
+  end
+
+  test "saving a product without touching the custom permalink writes no mapping" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    assert_no_difference -> { LegacyPermalink.count } do
+      product.update!(name: "Renamed product")
+    end
+  end
+
   # --- .fetch ----------------------------------------------------------------
 
   test "fetch matches by unique permalink only, scopes to user, and skips deleted" do

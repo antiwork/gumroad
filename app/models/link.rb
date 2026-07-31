@@ -187,6 +187,7 @@ class Link < ApplicationRecord
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
+  after_save :redirect_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
   # Keep in sync with Product::BulkUpdateSupportEmailService.
@@ -1597,6 +1598,38 @@ class Link < ApplicationRecord
     def release_custom_permalink_if_possible
       deleted_product = user.links.deleted.find_by(custom_permalink:)
       deleted_product&.update(custom_permalink: nil)
+    end
+
+    # Renaming a product's URL used to 404 every link the seller had already
+    # shared: `custom_permalink` is a single overwritten column, so the outgoing
+    # slug stopped matching `by_general_permalink`. `fetch_leniently` already
+    # reads `legacy_permalinks`, so recording the outgoing slug here is enough to
+    # forward the old address (gumroad-private#1619).
+    #
+    # Two ordering traps, both load-bearing:
+    #
+    # 1. `legacy_permalinks.permalink` is globally unique while
+    #    `custom_permalink` is only unique per seller, so two sellers can
+    #    legitimately have held the same slug. First writer keeps the mapping —
+    #    stealing it would redirect the other seller's shared links to a
+    #    stranger's product, which is worse than the 404 this fixes.
+    # 2. `fetch_leniently` checks the legacy table BEFORE the live permalink
+    #    match, so a mapping for a slug some live product still answers on would
+    #    shadow that product. Hence: never write a mapping over a live claim
+    #    here, and drop any mapping the incoming claim would be shadowed by.
+    def redirect_renamed_custom_permalink
+      claimed = custom_permalink.presence
+      LegacyPermalink.where(permalink: claimed).where.not(product_id: id).delete_all if claimed
+
+      outgoing = custom_permalink_previously_was.presence
+      return if outgoing.blank?
+      return if Link.visible.by_general_permalink(outgoing).exists?
+      return if LegacyPermalink.where(permalink: outgoing).exists?
+
+      LegacyPermalink.create(permalink: outgoing, product_id: id)
+    rescue ActiveRecord::RecordNotUnique
+      # A concurrent rename won the row; first writer keeps it (see 1 above).
+      nil
     end
 
     def create_licenses_for_existing_customers
