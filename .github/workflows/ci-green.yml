@@ -19,6 +19,7 @@ on:
     types: [completed]
 
 permissions:
+  contents: read
   statuses: write
 
 jobs:
@@ -31,14 +32,47 @@ jobs:
       (github.event.workflow_run.event == 'pull_request_target' &&
        github.event.workflow_run.head_repository.full_name != github.repository)
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # ci/green is the only status the main ruleset requires, so this is the
+      # single place green is granted -- and the only place a migration-version
+      # check cannot be outrun by main moving. A run that passed against an
+      # older main (or a re-run of failed shards) must not carry its stale
+      # verdict past a collision that landed since.
+      - name: Re-check migration versions against current main
+        id: migrations
+        if: github.event.workflow_run.conclusion == 'success'
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -uo pipefail
+          if ! git cat-file -e "$SHA^{commit}" 2>/dev/null && ! git fetch --no-tags origin "$SHA" 2>/dev/null; then
+            # Fork heads are not in this repo. Their PR-time run already checked
+            # against main, and the push:main guard still covers them.
+            echo "collision=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ruby bin/check-migration-versions origin/main "$SHA"; then
+            echo "collision=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "collision=yes" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set ci/green status on the tested commit
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
+          COLLISION: ${{ steps.migrations.outputs.collision }}
         run: |
-          if [ "$CONCLUSION" = "success" ]; then
+          if [ "$CONCLUSION" = "success" ] && [ "$COLLISION" = "yes" ]; then
+            STATE=failure
+            DESC="Migration version collides with main. Rebase and renumber."
+          elif [ "$CONCLUSION" = "success" ]; then
             STATE=success
             DESC="Test suite passed"
           elif [ "$CONCLUSION" = "failure" ] || [ "$CONCLUSION" = "timed_out" ] || [ "$CONCLUSION" = "action_required" ]; then

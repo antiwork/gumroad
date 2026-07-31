@@ -19,21 +19,29 @@ CHECKER = File.expand_path("../../bin/check-migration-versions", __dir__)
 $failures = []
 $count = 0
 
+def version_of(filename)
+  filename[/\A\d+/]
+end
+
 def build_repo(dir, base_migrations:, head_migrations:, base_schema: nil, head_schema: nil)
-  base_schema ||= base_migrations.max
-  head_schema ||= head_migrations.max
+  base_schema ||= base_migrations.map { |name| version_of(name) }.max
+  head_schema ||= head_migrations.map { |name| version_of(name) }.max
 
   Dir.chdir(dir) do
     system("git init -q .", exception: true)
     system("git config user.email t@t.t", exception: true)
     system("git config user.name t", exception: true)
+    # A developer with global commit signing on would otherwise fail or hang
+    # here for reasons having nothing to do with the checker.
+    system("git config commit.gpgsign false", exception: true)
     FileUtils.mkdir_p("db/migrate")
 
     write = lambda do |migrations, schema_version|
       FileUtils.rm_rf("db/migrate")
       FileUtils.mkdir_p("db/migrate")
       migrations.each { |name| File.write("db/migrate/#{name}", "# noop\n") }
-      grouped = schema_version.to_s.scan(/\d{4}|\d{2}/).join("_")
+      s = schema_version.to_s
+      grouped = s.length == 14 ? [s[0, 4], s[4, 2], s[6, 2], s[8, 6]].join("_") : s
       File.write("db/schema.rb", "ActiveRecord::Schema[7.1].define(version: #{grouped}) do\nend\n")
       system("git add -A", exception: true)
       system("git commit -q -m x --allow-empty", exception: true)
@@ -108,6 +116,31 @@ check(
   head_schema: "20261206000014",
   expect: :fail,
   expect_output: "db/schema.rb is at version 20261206000014"
+)
+
+# The suggested literal has to be Rails' YYYY_MM_DD_HHMMSS grouping, or the
+# author pastes a number that reads as a different date.
+check(
+  "schema.rb suggestion uses Rails' date grouping",
+  base_migrations: %w[20261206000014_a.rb],
+  head_migrations: %w[20261206000014_a.rb 20261206000020_b.rb],
+  head_schema: "20261206000014",
+  expect: :fail,
+  expect_output: "define(version: 2026_12_06_000020)"
+)
+
+# Engine-installed migrations carry a dotted infix
+# (`..._add_service_name_to_active_storage_blobs.active_storage.rb`). Rails
+# parses a version out of them and aborts on the duplicate; a stricter filename
+# pattern here would leave four migrations on main invisible to every rule.
+check(
+  "duplicate against an engine migration's dotted filename",
+  base_migrations: %w[20261206000014_a.rb 20261206000020_create_active_storage_tables.active_storage.rb],
+  head_migrations: %w[20261206000014_a.rb 20261206000020_create_active_storage_tables.active_storage.rb 20261206000020_mine.rb],
+  base_schema: "20261206000020",
+  head_schema: "20261206000020",
+  expect: :fail,
+  expect_output: "Duplicate migration version 20261206000020"
 )
 
 # Must not fire on the ordinary case, or it teaches people to ignore it.

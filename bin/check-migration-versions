@@ -15,12 +15,15 @@
 #
 # Refs default to origin/main and HEAD. Exit 0 clean, 1 on a finding.
 
-require "set"
-
 BASE_REF = ARGV[0] || "origin/main"
 HEAD_REF = ARGV[1] || "HEAD"
 
-MIGRATION_FILENAME = /\A(\d{14})_(\w+)\.rb\z/
+# Rails' own MigrationFilenameRegexp (activerecord migration.rb). Anything
+# looser and we accept a filename Rails rejects; anything stricter and we go
+# blind to one it accepts -- engine-installed migrations carry a dotted infix
+# (`..._add_service_name_to_active_storage_blobs.active_storage.rb`), and
+# versions are not required to be 14 digits.
+MIGRATION_FILENAME = /\A([0-9]+)_([_a-z0-9]*)\.?([_a-z0-9]*)?\.rb\z/
 
 def git(*args)
   out = IO.popen(["git", *args], err: File::NULL, &:read)
@@ -28,20 +31,27 @@ def git(*args)
   out
 end
 
-# version => filename, for every migration in db/migrate at `ref`.
+# version (Integer) => filenames, for every migration in db/migrate at `ref`.
 def migrations_at(ref)
   git("ls-tree", "--name-only", "#{ref}:db/migrate").lines(chomp: true).each_with_object({}) do |name, acc|
     next unless (m = MIGRATION_FILENAME.match(name))
-    (acc[m[1]] ||= []) << name
+    (acc[m[1].to_i] ||= []) << name
   end
 end
 
 # The version schema.rb claims to be at. Everything at or below it is treated as
 # already applied when a fresh database loads the schema.
 def schema_version_at(ref)
-  git("show", "#{ref}:db/schema.rb")[/define\(version:\s*([\d_]+)\)/, 1]&.delete("_")
+  git("show", "#{ref}:db/schema.rb")[/define\(version:\s*([\d_]+)\)/, 1]&.delete("_")&.to_i
 rescue RuntimeError
   nil
+end
+
+# Rails writes schema.rb versions as YYYY_MM_DD_HHMMSS.
+def schema_literal(version)
+  s = version.to_s
+  return s unless s.length == 14
+  [s[0, 4], s[4, 2], s[6, 2], s[8, 6]].join("_")
 end
 
 base = migrations_at(BASE_REF)
@@ -64,12 +74,6 @@ end
 # 2. A version the base branch already spent on a different migration. This is
 #    the cross-PR collision, and it only becomes visible once the other PR
 #    merges -- which is why this check re-runs against main on every push.
-#
-#    Renumbering away from it is necessary but not sufficient: the old version
-#    may already be recorded in a deployed database's schema_migrations, where
-#    Rails keys completion on the number alone. Migrations moved off a version
-#    that has shipped must be idempotent, and their `down` must leave the schema
-#    alone while the superseded version is still recorded.
 head.each do |version, names|
   base_names = base[version]
   next if base_names.nil?
@@ -78,7 +82,9 @@ head.each do |version, names|
     Version #{version} is already used on #{BASE_REF} by a different migration
       #{BASE_REF}: #{base_names.sort.join(', ')}
       #{HEAD_REF}: #{names.sort.join(', ')}
-    Renumber to a version above #{BASE_REF}'s newest (#{base.keys.max}).
+    Renumber to a version above #{BASE_REF}'s newest (#{base.keys.max}). If your
+    branch simply predates a rename of that migration on #{BASE_REF}, rebase
+    instead -- renumbering a migration you do not own is the wrong fix.
   MSG
 end
 
@@ -100,14 +106,16 @@ if base_schema_version
 end
 
 # 4. schema.rb must name the newest migration, or a database built from it is
-#    missing whatever the migrations past that line create.
+#    missing whatever the migrations past that line create. This is also what
+#    turns the `define(version:` line into a git conflict against main, so a
+#    stale branch cannot merge a migration numbered under main's schema.
 head_schema_version = schema_version_at(HEAD_REF)
 newest = head.keys.max
 if head_schema_version && newest && head_schema_version != newest
   failures << <<~MSG
     db/schema.rb is at version #{head_schema_version}, but the newest migration is #{newest}
       #{head[newest].join("\n  ")}
-    Set `define(version: #{newest.scan(/\d{4}|\d{2}/).join('_')})`.
+    Set `define(version: #{schema_literal(newest)})`.
   MSG
 end
 
