@@ -111,6 +111,9 @@ class UpdateUserComplianceInfo
       singapore_nric_error = singapore_individual_nric_error(old_compliance_info)
       return { success: false, error_message: singapore_nric_error } if singapore_nric_error
 
+      colombia_id_error = colombia_individual_id_error(old_compliance_info)
+      return { success: false, error_message: colombia_id_error } if colombia_id_error
+
       saved, new_compliance_info = if encrypted_compliance_info_params_present?
         dup_and_save_compliance_info(old_compliance_info)
       else
@@ -183,8 +186,8 @@ class UpdateUserComplianceInfo
       new_compliance_info.business_zip_code =       compliance_params[:business_zip_code]       if compliance_params[:business_zip_code].present?
       new_compliance_info.business_type =           compliance_params[:business_type]           if compliance_params[:business_type].present?
       new_compliance_info.is_business =             compliance_params[:is_business]             unless compliance_params[:is_business].nil?
-      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four))     if submitted_tax_id_for(:ssn_last_four).present?
-      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id)) if submitted_tax_id_for(:individual_tax_id).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:ssn_last_four), country_code: new_compliance_info.legal_entity_country_code)     if submitted_tax_id_for(:ssn_last_four).present?
+      new_compliance_info.individual_tax_id =       normalize_individual_tax_id(submitted_tax_id_for(:individual_tax_id), country_code: new_compliance_info.legal_entity_country_code) if submitted_tax_id_for(:individual_tax_id).present?
       if submitted_tax_id_for(:business_tax_id).present?
         new_compliance_info.business_tax_id = normalize_business_tax_id(
           submitted_tax_id_for(:business_tax_id),
@@ -267,9 +270,15 @@ class UpdateUserComplianceInfo
     end
 
     def encrypted_compliance_info_changed?(old_compliance_info)
+      raw_individual_tax_id = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
       submitted_individual_tax_id = normalize_individual_tax_id(
-        submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+        raw_individual_tax_id,
+        country_code: old_compliance_info.legal_entity_country_code,
       )
+      # A value the seller typed that normalizes away entirely ("n/a", "-") counts as a change so
+      # the country guards below get to reject it. Treating it as "nothing changed" would return
+      # success for a save that stored nothing.
+      return true if raw_individual_tax_id.present? && submitted_individual_tax_id.blank?
       return true if submitted_individual_tax_id.present? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id) != submitted_individual_tax_id
 
       submitted_business_tax_id = normalize_business_tax_id(
@@ -301,12 +310,17 @@ class UpdateUserComplianceInfo
       value.gsub(/[[:space:]-]+/, "")
     end
 
-    def normalize_individual_tax_id(value)
+    def normalize_individual_tax_id(value, country_code: nil)
       return nil if value.blank?
       # Same Unicode-whitespace hazard as normalize_business_tax_id above. Only strip
       # whitespace here — dashes can be a meaningful part of individual IDs (for example
       # Peru DNIs are entered with the verification digit as "12345678-9").
-      value.gsub(/[[:space:]]+/, "")
+      stripped = value.gsub(/[[:space:]]+/, "")
+      # Colombia is the exception: the number is digits-only, sellers paste it with thousands
+      # separators, and the length guard counts digits. Storing the separators would send Stripe a
+      # longer string than the guard measured, so strip them and keep the two in agreement.
+      return Compliance::ColombiaIdNumber.normalize(stripped) if country_code == Compliance::Countries::COL.alpha2
+      stripped
     end
 
     def peru_individual_dni_error(old_compliance_info)
@@ -328,6 +342,14 @@ class UpdateUserComplianceInfo
       # matching what the browser-side check accepts.
       return if submitted.gsub(/[[:space:]-]/, "").match?(SINGAPORE_NRIC_FIN_PATTERN)
       "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID."
+    end
+
+    def colombia_individual_id_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id)
+      return if submitted.blank?
+      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::COL.alpha2
+      return if Compliance::ColombiaIdNumber.valid?(submitted)
+      Compliance::ColombiaIdNumber::ERROR_MESSAGE
     end
 
     def effective_legal_entity_country_code(old_compliance_info)

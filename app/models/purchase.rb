@@ -373,6 +373,7 @@ class Purchase < ApplicationRecord
   before_create :perceived_price_cents_matches_price_cents
   before_create :validate_subscription
   before_create :validate_shipping
+  before_create :validate_sanctioned_location
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
@@ -613,7 +614,7 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan, :authenticated_offer_code_buyer
+                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -877,6 +878,9 @@ class Purchase < ApplicationRecord
       .not_is_archived_original_subscription_purchase
       .not_is_access_revoked
   }
+  # The rows the buyer's library can actually render. LibraryPresenter loads exactly this set, so
+  # anything excluded here has no card there and cannot stand in for a bundle it belongs to.
+  scope :visible_in_library, -> { for_library.not_rental_expired.not_is_deleted_by_buyer }
   scope :for_sales_api, -> {
     all_success_states_except_preorder_auth_and_gift.exclude_not_charged_except_free_trial
   }
@@ -4720,7 +4724,7 @@ class Purchase < ApplicationRecord
       return unless link.is_physical
       return if country.blank?
 
-      if Compliance::Countries.blocked?(Compliance::Countries.find_by_name(country)&.alpha2)
+      if Compliance::Countries.blocked_location?(alpha2: Compliance::Countries.find_by_name(country)&.alpha2, subdivision_code: state)
         self.error_code = PurchaseErrorCode::BLOCKED_SHIPPING_COUNTRY
         errors.add :base, "The creator cannot ship the product to the country you have selected."
       elsif ShippingDestination.for_product_and_country_code(product: link, country_code: Compliance::Countries.find_by_name(country)&.alpha2).nil?
@@ -4734,6 +4738,44 @@ class Purchase < ApplicationRecord
 
       self.error_code = PurchaseErrorCode::INVALID_QUANTITY
       errors.add :base, "Sorry, you've selected an invalid quantity."
+    end
+
+    # Sanctions screening for every purchase, not just physical ones. Before this, a digital product
+    # was only protected by the buy button being hidden at render time (`Link#compliance_blocked`),
+    # which a buyer reaching /checkout directly — or whose page was rendered from a different IP —
+    # never sees. Physical products keep failing in `validate_shipping` with their own error code, so
+    # we return early when it already objected. This also runs on subscription renewals, which is
+    # deliberate: continuing to bill an existing subscriber in a sanctioned jurisdiction is the same
+    # prohibited transaction as the first charge.
+    def validate_sanctioned_location
+      return if errors.present?
+      return if is_test_purchase?
+
+      return unless sanctioned_location_signals.any? do |alpha2, subdivision_code|
+        Compliance::Countries.blocked_location?(alpha2:, subdivision_code:)
+      end
+
+      self.error_code = PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+      errors.add :base, "Sorry, this item is not available in your location."
+    end
+
+    # [alpha2, subdivision] pairs we know about the buyer at create time. `card_country` is not here
+    # because it is only populated once the charge comes back, which is after this callback.
+    # `ip_country`/`ip_state` are only filled in by `Order::CreateService`, so we geolocate
+    # `ip_address` ourselves as well rather than trusting one caller to have done it.
+    #
+    # A renewal's IP fields were copied off the original purchase by `Subscription#build_purchase`
+    # and describe where the buyer was when they subscribed, so they are excluded: screening them
+    # would keep rejecting a subscriber who has since moved out of a sanctioned jurisdiction, with
+    # no way for them to correct it. The declared address is still screened — the subscriber can
+    # update it from Manage subscription, so it is the signal we maintain.
+    def sanctioned_location_signals
+      signals = [[Compliance::Countries.find_by_name(country)&.alpha2, state]]
+      unless ip_location_inherited
+        signals << [Compliance::Countries.find_by_name(ip_country)&.alpha2, ip_state]
+        signals << [geo_info&.country_code, geo_info&.region_name]
+      end
+      signals.reject { |alpha2, _subdivision| alpha2.blank? }
     end
 
     def validate_offer_code

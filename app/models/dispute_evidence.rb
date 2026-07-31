@@ -93,6 +93,36 @@ class DisputeEvidence < ApplicationRecord
     self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
   end
 
+  # Both terminal states make Purchases::DisputeEvidenceController redirect away, so no notice may
+  # reference the form once either is set.
+  def self.evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+    seller_submitted_at.present? || resolved_at.present?
+  end
+
+  # May we ask this seller for a statement and link them to the form? Requires an OPEN window:
+  # check_if_needs_redirect bounces an unstamped row too, so a nil stamp is not permission to ask.
+  #
+  # Takes raw column values so a caller holding them without a trustworthy record can still ask —
+  # the sweep must not #reload mid-transaction (see claim_seller_contacted_window!).
+  def self.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    return false if evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+
+    seller_contacted_at.present? && hours_left_in_window(seller_contacted_at).positive?
+  end
+
+  # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with
+  # no evidence surface at all (PayPal, Stripe Connect) never gets a window and still needs its
+  # plain notice, so an unstamped row is accepted here and refused by accepting_evidence?.
+  def self.notice_worth_sending?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    return false if evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+
+    seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?
+  end
+
+  def accepting_evidence?
+    self.class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+  end
+
   # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
   #
   # Two paths open it — formalization and CreateMissingDisputeEvidenceJob — and they can run against

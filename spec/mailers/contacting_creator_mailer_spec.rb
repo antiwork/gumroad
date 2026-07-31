@@ -115,6 +115,54 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).not_to include "Any additional information you can provide"
             expect(mail.body.encoded).not_to include "in the next 0 hours"
             expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        # The mailer renders whenever the queue gets to it, so the seller may have answered the ask —
+        # or the row may have been resolved — after the notice was enqueued. Both states make
+        # Purchases::DisputeEvidenceController redirect away, so the button would go nowhere.
+        context "when the seller has already submitted evidence by the time the mail renders" do
+          before { dispute_evidence.update!(seller_submitted_at: Time.current) }
+
+          it "does not ask again for evidence the submission page will not accept" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        context "when the evidence has been resolved by the time the mail renders" do
+          before { dispute_evidence.update!(resolved_at: Time.current, resolution: DisputeEvidence::RESOLUTION_SUBMITTED) }
+
+          it "does not ask for evidence the submission page will not accept" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
+            expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        # An evidence row can exist with no window while a notice for it is still queued: the
+        # sweep's push succeeded and the stamp write then failed. The form rejects that state too,
+        # and quoting its window would read "in the next 0 hours".
+        context "when the row exists but its window was never opened" do
+          before { dispute_evidence.update!(seller_contacted_at: nil) }
+
+          it "sends the plain notice without asking for evidence" do
+            mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
+
+            expect(dispute_evidence.reload.hours_left_to_submit_evidence).to eq(0)
+            expect(mail.body.encoded).not_to include "Any additional information you can provide"
+            expect(mail.body.encoded).not_to include "in the next 0 hours"
+            expect(mail.body.encoded).not_to include "Submit additional information"
+            expect(mail.subject).to eq "A sale has been disputed"
             expect(mail.body.encoded).to include "We fight every dispute."
           end
         end

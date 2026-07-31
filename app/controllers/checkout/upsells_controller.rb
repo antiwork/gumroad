@@ -46,7 +46,7 @@ class Checkout::UpsellsController < Sellers::BaseController
 
     @upsell = SaveUpsellService.new(seller: current_seller, params:).perform
 
-    if @upsell.save
+    if @upsell.errors.empty?
       pagination, upsells = fetch_upsells
       render json: { success: true, upsells:, pagination: }
     else
@@ -60,7 +60,7 @@ class Checkout::UpsellsController < Sellers::BaseController
 
     SaveUpsellService.new(seller: current_seller, params:, upsell: @upsell).perform
 
-    if @upsell.save
+    if @upsell.errors.empty?
       pagination, upsells = fetch_upsells
       render json: { success: true, upsells:, pagination: }
     else

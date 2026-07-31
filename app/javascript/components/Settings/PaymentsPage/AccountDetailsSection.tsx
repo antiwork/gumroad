@@ -4,6 +4,7 @@ import * as React from "react";
 import typia from "typia";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
+import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
 import { Button } from "$app/components/Button";
@@ -209,13 +210,8 @@ const AccountDetailsSection = ({
         // resident reads "Cédula de Ciudadanía" and concludes their ID cannot be used.
         label: "Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)",
         placeholder: "1234567890",
-        // Colombian ID numbers vary in length: Cédula de Extranjería numbers are commonly six or
-        // seven digits, citizen numbers eight to ten. A single exact length would block most of that
-        // range, so only a loose range is enforced here (the upper bound leaves room for a number
-        // pasted with thousands separators, e.g. "1.123.123.123"). Stripe does the authoritative
-        // validation on individual.id_number.
-        minLength: 6,
-        maxLength: 13,
+        minLength: COLOMBIA_ID_MIN_DIGITS,
+        maxLength: COLOMBIA_ID_MAX_INPUT_LENGTH,
         idSuffix: "colombia-id-number",
       },
       UY: {
