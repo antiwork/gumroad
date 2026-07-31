@@ -259,11 +259,14 @@ describe Purchase::PresentmentRefund do
     end
 
     # The nil-account save fails `financial_transaction_validation`; skip validations
-    # uniformly so all four shapes go through the same path.
+    # uniformly so every shape goes through the same path. The post-reload assertion is
+    # the tripwire's own tripwire: a future callback that normalized `merchant_account`
+    # on save would silently collapse these shapes into one and defuse both examples.
     def use_charge_model(merchant_account)
       purchase.merchant_account = merchant_account
       purchase.save!(validate: false)
       purchase.reload
+      expect(purchase.merchant_account_id).to eq(merchant_account&.id)
     end
 
     def snapshot_for(merchant_account)
@@ -324,8 +327,11 @@ describe Purchase::PresentmentRefund do
 
       # Value parity, not just boundary parity: a charge-model branch that only fires once
       # prior refunds exist would keep the 81/82 boundary and still derive a different amount.
+      # The nil arm matters here too — a guard reading `merchant_account.nil?` on the
+      # prior-refund path would escape an example that only varies the three real shapes.
       expect(remaining_on.call(destination_charge_account)).to eq(direct)
       expect(remaining_on.call(platform_account)).to eq(direct)
+      expect(remaining_on.call(nil)).to eq(direct)
       expect(direct.first).to eq(60)
     end
   end
