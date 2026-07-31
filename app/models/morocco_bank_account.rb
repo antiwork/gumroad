@@ -9,18 +9,17 @@ class MoroccoBankAccount < BankAccount
   # Morocco IBAN: MA + 2 check digits + 24 digits = 28 chars, fixed. Stripe rejects anything else,
   # including a 28-char value whose mod-97 check digits don't compute, so a length-only check would
   # still let a bad value save here and fail later at bank-sync. Ibandit's own `valid?` is unusable
-  # for the same bundled-data problem Niger, Côte d'Ivoire and Sweden work around (ibandit #471,
-  # #775): the MA structure has no per-field format regexes, and the nil formats compile to /\A\z/,
-  # rejecting every valid MA IBAN.
+  # for the same bundled-data reason Niger works around: the MA structure has no per-field format
+  # regexes, and the nil formats compile to /\A\z/, rejecting every valid MA IBAN.
   IBAN_FORMAT_REGEX = /\AMA[0-9]{26}\z/
   private_constant :IBAN_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
-  # Only on write: 397 live rows predate the fixed-length rule, and re-validating them would raise
-  # on unrelated saves (mark_deleted! when a seller switches to PayPal, which runs after the balance
-  # forfeit and outside any transaction).
+  # Only on write: 397 live rows predate the fixed-length rule, and re-validating them would raise on
+  # unrelated saves — mark_deleted! when a seller switches to PayPal aborts the switch after their
+  # Stripe account has already been deleted externally, which no rollback undoes.
   validate :validate_account_number, if: -> { Rails.env.production? && will_save_change_to_account_number? }
 
   def routing_number

@@ -52,6 +52,8 @@ describe MoroccoBankAccount do
         "8937040044053201300000",
         "CRABCDE",
         # Ibandit upcases and strips, so these are only rejected because we match the raw value.
+        # The web path strips spaces before the model sees them, so the spaced row is a
+        # model-level contract for other writers rather than a reachable form submission.
         "ma64011519000001205000534921",
         "MA64 0115 1900 0001 2050 0053 4921",
       ].each do |account_number|
