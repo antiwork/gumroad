@@ -18,6 +18,8 @@ class BudgetedRequestTimeout < Rack::Timeout
     %r{\A/purchases/[^/]+/confirm\z},
     %r{\A/service_charges(\z|/[^/]+/confirm\z)},
     %r{\A/preorders/[^/]+/charge_preorder\z},
+    # PUT /subscriptions/:id -> Subscription::UpdaterService, which charges the upgrade inline.
+    %r{\A/subscriptions/[^/]+\z},
   ].freeze
 
   # Single source of truth for both budgets, so in-request guards can size themselves against

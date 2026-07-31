@@ -63,6 +63,7 @@ describe BudgetedRequestTimeout do
         "/service_charges",
         "/service_charges/abc123/confirm",
         "/preorders/abc123/charge_preorder",
+        "/subscriptions/abc123",
       ].each do |path|
         expect(described_class.extended_budget_path?(path)).to be(true), "#{path} must get the checkout budget"
       end
@@ -78,6 +79,7 @@ describe BudgetedRequestTimeout do
         "/purchases/abc123/subscribe",
         "/library",
         "/service_charges_report",
+        "/subscriptions/abc123/manage",
         nil,
         "",
       ].each do |path|
