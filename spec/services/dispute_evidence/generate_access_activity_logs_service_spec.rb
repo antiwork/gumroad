@@ -254,6 +254,34 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
             )
           end
         end
+
+        # A resend is often triggered BY the dispute, so the evidence must date
+        # the receipt from the ORIGINAL send (gumroad-private#1635).
+        context "when the receipt was resent after the original send" do
+          before do
+            create(
+              :customer_email_info_opened,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at:,
+              delivered_at: sent_at + 1.hour,
+              opened_at: sent_at + 2.hours
+            )
+            create(
+              :customer_email_info_sent,
+              email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD,
+              purchase: purchase,
+              sent_at: sent_at + 5.days,
+            )
+          end
+
+          it "cites the original send and names the resend separately" do
+            expect(email_activity).to eq(
+              "The receipt email was sent at 2024-05-07 00:00:00 UTC, delivered at 2024-05-07 01:00:00 UTC, " \
+              "opened at 2024-05-07 02:00:00 UTC. The receipt was sent again at 2024-05-12 00:00:00 UTC."
+            )
+          end
+        end
       end
 
       context "when the email info is associated with a charge" do

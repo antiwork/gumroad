@@ -187,6 +187,35 @@ describe CustomerEmailInfo do
         ).to eq(resend)
       end
     end
+
+    it "resolves the newest row per charge, so a delivery event lands on the latest send" do
+      charge = create(:charge, purchases: [purchase])
+
+      first = CustomerEmailInfo.build_for_charge(
+        charge_id: charge.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      )
+      first.mark_sent!
+
+      resend = CustomerEmailInfo.build_for_charge(
+        charge_id: charge.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      )
+      resend.mark_sent!
+
+      # Pins ordering on the charge side: `.first` here would route every event
+      # onto the original row and re-create the overwrite this fix removes.
+      expect(charge.reload.receipt_email_info).to eq(resend)
+      expect(
+        CustomerEmailInfo.find_or_initialize_for_charge(
+          charge_id: charge.id,
+          email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+        )
+      ).to eq(resend)
+
+      # ...while the full history stays oldest-first for evidence readers.
+      expect(charge.reload.receipt_email_infos.map(&:id)).to eq([first.id, resend.id])
+    end
   end
 
   describe "#mark_bounced!" do

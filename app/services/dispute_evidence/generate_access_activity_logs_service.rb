@@ -76,13 +76,21 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       content << "\n"
     end
 
+    # The ORIGINAL send is the evidence: a resend is often triggered BY the
+    # dispute, so citing the newest one would date the receipt after the
+    # complaint. Later attempts are named separately rather than replacing it.
     def email_activity
-      receipt_email_info = purchase.receipt_email_info
-      return unless receipt_email_info.present? && receipt_email_info.sent_at.present?
+      receipt_email_infos = purchase.receipt_email_infos.select { _1.sent_at.present? }
+      original = receipt_email_infos.first
+      return unless original.present?
 
-      content = "The receipt email was sent at #{receipt_email_info.sent_at}"
-      content << ", delivered at #{receipt_email_info.delivered_at}" if receipt_email_info.delivered_at.present?
-      content << ", opened at #{receipt_email_info.opened_at}" if receipt_email_info.opened_at.present?
+      content = "The receipt email was sent at #{original.sent_at}"
+      content << ", delivered at #{original.delivered_at}" if original.delivered_at.present?
+      content << ", opened at #{original.opened_at}" if original.opened_at.present?
       content << "."
+
+      resends = receipt_email_infos.drop(1)
+      content << " The receipt was sent again at #{resends.map(&:sent_at).join(', ')}." if resends.any?
+      content
     end
 end
