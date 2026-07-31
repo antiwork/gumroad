@@ -102,18 +102,14 @@ class LibraryPresenter
       return {} if refunded_originals.empty?
 
       purchase_pairs = refunded_originals.map { [_1.subscription_id, _1.link_id] }.uniq
-      # A transfer moves the signup purchase's purchaser but can leave earlier renewals on the
-      # previous owner, so the viewer's id alone would exclude the only paid renewal. Subscription
-      # ownership is what the content page authorizes the viewer against, and the subscriptions are
-      # already preloaded, so widening to it costs no extra query.
-      permitted_owner_ids = refunded_originals.to_h do |purchase|
-        [purchase.id, [purchase.subscription&.user_id, logged_in_user.id].compact.uniq]
-      end
-      # Union across cards so this stays one query; each card re-checks its own owners below,
-      # since grouping by subscription/link would otherwise let one card's owner satisfy another's.
+      # Only the viewer's own renewals are eligible, even though a transfer can leave the one paid
+      # renewal on the previous owner. UrlRedirectsController#check_permissions authorizes against
+      # the RENDERED purchase's purchaser, so publishing that renewal's redirect would bounce the
+      # viewer to purchaser verification they cannot clear (it wants the previous owner's email).
+      # A transferred membership whose signup was refunded therefore keeps no link here.
       candidates = Purchase
         .where([:subscription_id, :link_id] => purchase_pairs)
-        .where(purchaser_id: permitted_owner_ids.values.flatten.uniq, purchase_state: %w[successful test_successful])
+        .where(purchaser_id: logged_in_user.id, purchase_state: %w[successful test_successful])
         .not_fully_refunded
         .not_chargedback_or_chargedback_reversed
         .not_is_access_revoked
@@ -125,10 +121,8 @@ class LibraryPresenter
 
       refunded_originals.to_h do |purchase|
         successful_state = purchase.subscription.is_test_subscription? ? "test_successful" : "successful"
-        owner_ids = permitted_owner_ids.fetch(purchase.id)
         renewal = candidates.fetch([purchase.subscription_id, purchase.link_id], []).find do |candidate|
-          owner_ids.include?(candidate.purchaser_id) &&
-            candidate.purchase_state == successful_state &&
+          candidate.purchase_state == successful_state &&
             candidate.url_redirect.present?
         end
 

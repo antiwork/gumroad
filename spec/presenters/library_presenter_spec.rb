@@ -267,38 +267,27 @@ describe LibraryPresenter do
         expect(purchases.first[:purchase][:download_url]).to eq(eligible_renewal.url_redirect.download_page_url)
       end
 
-      it "links a transferred card to a renewal still owned by the subscription's user" do
+      it "does not link a transferred card to a renewal left on the previous owner" do
         previous_owner = create(:user)
         purchase.subscription.update!(user: previous_owner)
-        renewal = create_renewal(purchaser: previous_owner, email: previous_owner.email).tap(&:create_url_redirect!)
+        create_renewal(purchaser: previous_owner, email: previous_owner.email).tap(&:create_url_redirect!)
 
         purchases, _ = described_class.new(buyer).library_cards
 
+        # UrlRedirectsController#check_permissions authorizes against the rendered purchase's
+        # purchaser, so this renewal's redirect would bounce the viewer to purchaser verification
+        # keyed to the previous owner's email. No link beats a link that cannot resolve.
         expect(purchases.first[:purchase][:id]).to eq(purchase.external_id)
-        expect(purchases.first[:purchase][:download_url]).to eq(renewal.url_redirect.download_page_url)
+        expect(purchases.first[:purchase][:download_url]).to be_nil
       end
 
-      it "does not let one card's subscription owner unlock another card's renewal" do
-        transferred_owner = create(:user)
-        other_purchase = create(:membership_purchase, link: product, purchaser: buyer, stripe_refunded: true)
-        other_purchase.create_url_redirect!
-        other_purchase.subscription.update!(user: transferred_owner)
-        create(
-          :membership_purchase,
-          link: product,
-          purchaser: transferred_owner,
-          email: transferred_owner.email,
-          subscription: other_purchase.subscription,
-          is_original_subscription_purchase: false,
-          succeeded_at: 1.day.ago
-        ).tap(&:create_url_redirect!)
-        # Only eligible for the OTHER card's owner, and this card's subscription is still the viewer's.
-        create_renewal(purchaser: transferred_owner, email: transferred_owner.email).tap(&:create_url_redirect!)
+      it "does not select another user's renewal on the viewer's own subscription" do
+        other_user = create(:user)
+        create_renewal(purchaser: other_user, email: other_user.email).tap(&:create_url_redirect!)
 
         purchases, _ = described_class.new(buyer).library_cards
 
-        card = purchases.find { _1[:purchase][:id] == purchase.external_id }
-        expect(card[:purchase][:download_url]).to be_nil
+        expect(purchases.first[:purchase][:download_url]).to be_nil
       end
 
       it "ignores unsuccessful renewal attempts" do
