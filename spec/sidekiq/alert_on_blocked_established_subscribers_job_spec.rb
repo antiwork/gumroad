@@ -253,10 +253,7 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 
-  # Eligibility is "stranded now". A blocked renewal followed by a successful one means the
-  # subscriber got through, and a block written later on some value they share is a different event
-  # from the one that failed — reporting it sends risk staff to clear a block for someone who is
-  # not stuck behind it.
+  # Eligibility is "stranded now", not "was ever blocked".
   it "ignores a subscription that renewed successfully after its blocked failure" do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     failed_renewal(subscription:, created_at: 20.days.ago)
@@ -272,6 +269,38 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
     successful_renewal(subscription:, created_at: 20.days.ago)
     failed_renewal(subscription:, created_at: 10.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+    end
+  end
+
+  # An upgrade charge settles the overdue period, so the subscriber is not stranded when the report
+  # runs. Pinned because it is a judgment call, not an oversight: the upgrade carries a live
+  # browser_guid, so a guid-blocked subscriber who self-rescues this way is only reported again
+  # after their next renewal fails.
+  it "treats a successful upgrade charge as recovery" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, created_at: 20.days.ago)
+    create(:purchase, link: subscription.link, subscription:, is_original_subscription_purchase: false,
+                      is_upgrade_purchase: true, purchase_state: "successful", created_at: 10.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  # created_at is second-precision, so an import can land both rows in the same second. An
+  # ambiguous ordering should produce a human-reviewed report entry, not a silent drop.
+  it "reports a subscription whose successful renewal shares a timestamp with the blocked failure" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_at = 10.days.ago.change(usec: 0)
+    failed_renewal(subscription:, created_at: failed_at)
+    successful_renewal(subscription:, created_at: failed_at)
     PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
 
     described_class.new.perform

@@ -162,17 +162,16 @@ class AlertOnBlockedEstablishedSubscribersJob
               .to_a
     end
 
-    # Drops subscriptions that renewed successfully after their newest blocked failure.
+    # Drops subscriptions whose newest successful renewal postdates their newest blocked failure:
+    # eligibility is "stranded now", and a failure row alone cannot say that. A block re-written
+    # after a charge got through is a different event from the one that failed.
     #
-    # Eligibility is "stranded now", and the failure scope alone cannot say that: a blocked renewal
-    # followed by a successful one means the subscriber got through, and a block re-written later on
-    # some value they share is a different event from the one that failed. Without this the report
-    # names recovered subscribers as currently blocked and sends risk staff to clear a block for
-    # someone who is not stuck behind it.
-    #
-    # Same renewal predicate as the failures, so "renewed since" means the same kind of charge that
-    # is being reported as failing — an upgrade or a gifted membership's opening purchase is not
-    # evidence that renewals are getting through.
+    # A successful UPGRADE charge counts as recovery and is deliberately not excluded. It settles
+    # the overdue period, so the subscriber is not stranded at report time — but it carries the
+    # buyer's live browser_guid while renewals keep copying the original purchase's, so a
+    # guid-blocked subscriber who self-rescues this way reappears only after the next cycle fails.
+    # Ties go to the report: a same-second pair is an ambiguous ordering, and a human reading a
+    # false positive beats a silent drop.
     def reject_recovered(failures)
       return failures if failures.empty?
 
