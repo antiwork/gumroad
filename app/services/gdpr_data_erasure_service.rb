@@ -17,6 +17,10 @@ class GdprDataErasureService
   def perform!
     original_email = @user.email
     credit_card_ids = credit_card_ids_for_erasure
+    # Read before the transaction soft-deletes the account holder, and before anonymize_compliance_info!
+    # runs: the Stripe deletion below needs the account id and the guardians' Person ids, and the
+    # account id is derived from associations the deactivation touches.
+    guardian_stripe_persons = guardian_stripe_persons_for_erasure
 
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
@@ -30,6 +34,7 @@ class GdprDataErasureService
     end
 
     remove_profile_assets!
+    delete_guardian_stripe_persons!(guardian_stripe_persons)
 
     { success: true, summary: erasure_summary }
   rescue => e
@@ -143,6 +148,33 @@ class GdprDataErasureService
       # seller, so this also reaches a guardian whose details were entered before any revision
       # pointed at them, and can never reach another seller's.
       @user.guardians.each(&:anonymize!)
+    end
+
+    # The guardian's details are also held by Stripe, as the legal-guardian Person on the seller's
+    # payout account. Anonymizing our row does not reach that copy, so erasure has to delete it
+    # there too or the adult's name, date of birth and address survive the request at our processor.
+    #
+    # Outside the transaction on purpose: this is a network call, and holding a write transaction
+    # open across it would keep locks on the rows above for the duration of Stripe's response.
+    # Per-guardian rescue for the same reason the file purge has one — one failed delete must not
+    # skip the rest. A failure here leaves a Person at Stripe that our row no longer describes, so
+    # it is reported rather than logged quietly.
+    def delete_guardian_stripe_persons!(guardian_stripe_persons)
+      guardian_stripe_persons.each do |guardian, stripe_account_id|
+        StripeGuardianManager.delete_person(guardian, stripe_account_id)
+      rescue => e
+        Rails.logger.error("GDPR: Failed to delete Stripe guardian person for user #{@user.id}: #{e.message}")
+        ErrorNotifier.notify(e)
+      end
+    end
+
+    # Pairs each guardian with the Stripe account its Person lives on, resolved while the account is
+    # still active. Only guardians we actually created a Person for are returned.
+    def guardian_stripe_persons_for_erasure
+      stripe_account_id = @user.stripe_account&.charge_processor_merchant_id
+      return [] if stripe_account_id.blank?
+
+      @user.guardians.where.not(stripe_person_id: nil).map { |guardian| [guardian, stripe_account_id] }
     end
 
     def anonymize_carts!(anonymized_email)

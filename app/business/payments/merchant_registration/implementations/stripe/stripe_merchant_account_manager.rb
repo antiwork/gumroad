@@ -233,6 +233,17 @@ module StripeMerchantAccountManager
       Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
     end
 
+    # An under-18 seller cannot be verified alone, so the guardian goes on the account as a second
+    # Person. Failing to sync them must not fail account creation: the account and the merchant
+    # record above are already live, and the guardian is re-synced by every later update_account.
+    # Without a guardian the account simply sits on Stripe's legal-guardian requirement, which is
+    # the same place it would be if we had never tried.
+    begin
+      StripeGuardianManager.sync(user, stripe_account, passphrase:)
+    rescue Stripe::StripeError => e
+      ErrorNotifier.notify(e)
+    end
+
     # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
     # It is a property on the `person` entity associated with the Stripe::Account.
     # Ref: https://stripe.com/docs/api/persons/object#person_object-full_name_aliases
@@ -462,6 +473,17 @@ module StripeMerchantAccountManager
       # states the owner list is complete. Scoped to accounts we found blocked on it; the callee
       # re-reads the ownership before making the statement.
       attest_owners_provided(stripe_account.id) if owner_list_complete && updated_stripe_account && owners_provided_blocking_payouts?(updated_stripe_account)
+    end
+
+    # Re-sync the guardian on every account update, not only when their own details changed: the
+    # seller's legal-entity country and date of birth are what decide whether a guardian is required
+    # at all, so a change to the seller can start or end that requirement. Guarded the same way as
+    # at creation — a Stripe failure here must not lose the seller's own saved details, which are
+    # already on the account by this point.
+    begin
+      StripeGuardianManager.sync(user, stripe_account, passphrase:)
+    rescue Stripe::StripeError => e
+      ErrorNotifier.notify(e)
     end
 
     # Keyed on what actually reached Stripe: a held-back address was never re-validated, so clearing

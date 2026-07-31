@@ -86,6 +86,49 @@ describe GdprDataErasureService do
       expect(other_guardian.reload.first_name).to eq("Someone")
     end
 
+    describe "the guardian's copy held by our payment processor" do
+      let!(:merchant_account) do
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_erasure_test")
+      end
+
+      before { allow(Stripe::Account).to receive(:delete_person) }
+
+      # Anonymizing our row does not reach Stripe, so without this the adult's name, date of birth
+      # and address survive the erasure request at our processor.
+      it "deletes the guardian's person from Stripe" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
+      end
+
+      it "does not call Stripe for a guardian that was never synced" do
+        guardian = create(:guardian, user:)
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(Stripe::Account).not_to have_received(:delete_person)
+      end
+
+      # The local row must still be anonymized and the erasure must still report success: a
+      # processor-side failure is worth reporting, but it cannot be a reason to leave the seller's
+      # own data in place.
+      it "still anonymizes the local row when the Stripe deletion fails" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_locked", first_name: "Ellie")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:delete_person)
+          .and_raise(Stripe::InvalidRequestError.new("Cannot delete", nil))
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(guardian.reload.first_name).to be_nil
+      end
+    end
+
     it "anonymizes buyer purchases" do
       purchase = create(
         :free_purchase,
