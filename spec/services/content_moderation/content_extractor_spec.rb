@@ -238,6 +238,25 @@ RSpec.describe ContentModeration::ContentExtractor do
                                                                           ])
     end
 
+    it "extracts images whose scheme is not lowercase, which browsers render all the same" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="HTTPS://cdn.example.com/upper.png">
+        <img srcset="Http://cdn.example.com/mixed.png 1x">
+        <video poster="HTTPS://cdn.example.com/poster.jpg"></video>
+        <a href="HTTPS://elsewhere.example/shop">Shop</a>
+      HTML
+
+      result = extractor.extract_from_page(page)
+      # URI schemes are case-insensitive, so a case-sensitive predicate would let
+      # a seller display an image the moderation pass never sees.
+      expect(result.image_urls).to match_array([
+                                                 "HTTPS://cdn.example.com/upper.png",
+                                                 "Http://cdn.example.com/mixed.png",
+                                                 "HTTPS://cdn.example.com/poster.jpg",
+                                               ])
+      expect(result.text).to include("HTTPS://elsewhere.example/shop")
+    end
+
     it "extracts inline data: images, which render without ever being uploaded" do
       page = page_for(custom_html: <<~HTML)
         <img src="data:image/png;base64,AAAA">

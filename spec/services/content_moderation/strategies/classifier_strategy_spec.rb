@@ -205,6 +205,40 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(calls).to eq(1)
   end
 
+  it "clamps a fallback request that starts just inside the deadline to the time that is left" do
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed = 0
+    allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
+    clamped_client = instance_double(OpenAI::Client)
+    allow(clamped_client).to receive(:moderations).and_return({ "results" => [{ "category_scores" => {} }] })
+    clamped_timeouts = []
+    allow(OpenAI::Client).to receive(:new) do |access_token:, request_timeout:|
+      if request_timeout < described_class::OPENAI_REQUEST_TIMEOUT_IN_SECONDS
+        clamped_timeouts << request_timeout
+        clamped_client
+      else
+        client
+      end
+    end
+    allow(client).to receive(:moderations) do |parameters:|
+      # The batch fails at 59.9s, leaving the first fallback request 0.1s of the
+      # phase. Unclamped it would spend a full 10s and return past the deadline,
+      # still holding the save's row lock.
+      if parameters[:input].size > 1
+        elapsed = described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS - 0.1
+        raise Faraday::ServerError.new("boom")
+      end
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    described_class.new(text: "", image_urls: (1..2).map { |n| "https://cdn.example.com/#{n}.png" }, max_images: :all).perform
+
+    # Both fallback images are still inside the phase, so both are asked — each on
+    # the 0.1s that is left rather than on a fresh 10s.
+    expect(clamped_timeouts.size).to eq(2)
+    expect(clamped_timeouts).to all(be_within(0.001).of(0.1))
+  end
+
   it "retries a single image on the short timeout, not the batch timeout" do
     # The fallback fires routinely (an expired signed product URL 400s its
     # batch), so it must not carry the batch's longer budget.

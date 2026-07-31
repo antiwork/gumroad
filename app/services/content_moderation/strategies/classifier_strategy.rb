@@ -68,6 +68,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     api_key = GlobalConfig.get("OPENAI_ACCESS_TOKEN")
     return Result.new(status: "compliant", reasoning: []) if api_key.blank?
 
+    @api_key = api_key
     @client = OpenAI::Client.new(access_token: api_key, request_timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
     @image_client = OpenAI::Client.new(access_token: api_key, request_timeout: IMAGE_BATCH_REQUEST_TIMEOUT_IN_SECONDS)
     thresholds = load_thresholds
@@ -217,9 +218,13 @@ class ContentModeration::Strategies::ClassifierStrategy
     end
 
     def deadline_expired?
-      return false if @image_phase_deadline.nil?
+      remaining_image_phase_seconds <= 0
+    end
 
-      Process.clock_gettime(Process::CLOCK_MONOTONIC) >= @image_phase_deadline
+    def remaining_image_phase_seconds
+      return Float::INFINITY if @image_phase_deadline.nil?
+
+      @image_phase_deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def oversized_data_image?(url)
@@ -235,13 +240,15 @@ class ContentModeration::Strategies::ClassifierStrategy
     end
 
     def moderate_one_image(url)
-      moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url)
+      moderate([{ type: "image_url", image_url: { url: url } }],
+               skip_url: url,
+               timeout: OPENAI_REQUEST_TIMEOUT_IN_SECONDS)
     end
 
     # Per-input category scores for a multi-input request, or nil when the whole
     # request failed and the caller should fall back to one image at a time.
     def moderate_batch(input)
-      response = @image_client.moderations(parameters: { model: "omni-moderation-latest", input: input })
+      response = moderations(input, client: @image_client, timeout: IMAGE_BATCH_REQUEST_TIMEOUT_IN_SECONDS)
       results = response["results"]
       # A short results array would silently pair scores with the wrong URLs, and
       # a wrong-image verdict is worse than an unmoderated one: fall back.
@@ -261,11 +268,11 @@ class ContentModeration::Strategies::ClassifierStrategy
       nil
     end
 
-    def moderate(input, skip_url: nil, client: @client)
+    def moderate(input, skip_url: nil, timeout: nil, client: @client)
       attempts = 0
       begin
         attempts += 1
-        response = client.moderations(parameters: { model: "omni-moderation-latest", input: input })
+        response = moderations(input, client:, timeout:)
         scores = response.dig("results", 0, "category_scores")
         # A 200 whose payload carries no scores is an input we did NOT get a
         # verdict for. `{}` would read as "no category over threshold" — the same
@@ -292,6 +299,26 @@ class ContentModeration::Strategies::ClassifierStrategy
         Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{loggable_url(skip_url)} error=#{body[0..500]}")
         nil
       end
+    end
+
+    # Issues one request, clamped to what is left of the image phase when the
+    # caller declared a timeout. Without the clamp a request that starts a tenth
+    # of a second inside the deadline still spends its full budget, so the phase
+    # overruns by one request timeout per late image — and on a page that overrun
+    # is time held `with_lock` on the users row, not merely slow moderation.
+    def moderations(input, client:, timeout:)
+      client = rebudgeted(client, timeout) if timeout
+      client.moderations(parameters: { model: "omni-moderation-latest", input: })
+    end
+
+    def rebudgeted(client, timeout)
+      remaining = remaining_image_phase_seconds
+      return client if remaining >= timeout
+
+      # Callers check the deadline before asking, so `remaining` is positive here;
+      # the floor is only so a clock edge can't hand Faraday a zero budget, which
+      # it reads as "no timeout" — the opposite of what this is for.
+      OpenAI::Client.new(access_token: @api_key, request_timeout: [remaining, 0.001].max)
     end
 
     def collect_flagged(category_scores, thresholds)

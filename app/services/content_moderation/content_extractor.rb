@@ -121,7 +121,7 @@ class ContentModeration::ContentExtractor
     def link_targets(document)
       document.css("a[href]").filter_map do |anchor|
         href = anchor["href"].to_s.strip
-        href if href.start_with?("http://", "https://")
+        href if remote_url?(href)
       end.uniq
     end
 
@@ -147,8 +147,20 @@ class ContentModeration::ContentExtractor
 
       sources.filter_map do |value|
         src = value.to_s.strip
-        src if src.start_with?("http://", "https://") || src.downcase.start_with?("data:image/")
+        src if remote_url?(src) || inline_image_url?(src)
       end.uniq
+    end
+
+    # URI schemes are case-insensitive and a browser renders `<img src="HTTPS://…">`
+    # exactly like the lowercase form, so a case-sensitive predicate here would drop
+    # the image from the set that gets moderated while the page still displays it.
+    # The original casing is what we return — only the test is normalized.
+    def remote_url?(value)
+      value.downcase.start_with?("http://", "https://")
+    end
+
+    def inline_image_url?(value)
+      value.downcase.start_with?("data:image/")
     end
 
     # `srcset` is a comma-separated candidate list, each entry a URL followed by an
