@@ -2,9 +2,10 @@
 
 class CreateLaterChargePresentments < ActiveRecord::Migration[7.1]
   def change
-    # Guarded because this migration was renumbered from 20261206000013 after main took that
-    # version for an unrelated table. Environments built earlier in this branch's life already
-    # created the table under the old number, and db:migrate will now run this one against them.
+    # Guarded because this migration has been renumbered twice — from 20261206000013, then from
+    # 20261206000015 — each time because main took the version for an unrelated table first.
+    # Environments built earlier already created the table under an old number, and db:migrate
+    # will now run this one against them.
     create_table :later_charge_presentments, if_not_exists: true do |t|
       # Polymorphic because four different things control a charge that happens after checkout,
       # and they share nothing else: a Subscription (memberships and installment plans, which are

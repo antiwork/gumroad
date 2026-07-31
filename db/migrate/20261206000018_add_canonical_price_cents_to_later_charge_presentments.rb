@@ -9,7 +9,7 @@
 # dollars when they disagree. Without it a reader cannot tell a still-valid fixing from one that
 # silently under- or over-charges after a price change.
 #
-# This lives in its own migration rather than in CreateLaterChargePresentments (20261206000015)
+# This lives in its own migration rather than in CreateLaterChargePresentments (20261206000017)
 # because that migration had already run on environments built earlier in this branch's life —
 # preview apps and developer databases. Rails records a migration by version number, so editing an
 # already-applied migration adds nothing: db:migrate sees that version in schema_migrations,
