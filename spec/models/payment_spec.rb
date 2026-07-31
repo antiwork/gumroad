@@ -276,6 +276,17 @@ describe Payment do
         expect(compliant_creator.reload.payment_address).to eq("seller@example.com")
       end
 
+      # A failure row can be transitioned after the seller has already moved on. Removing whatever
+      # is on the account now would take away an address PayPal never refused.
+      it "does not remove an address this payout was never sent to" do
+        compliant_creator.update!(payment_address: "new@example.com")
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.payment_address).to eq("new@example.com")
+        expect(compliant_creator.invalidated_paypal_payout_address).to be_blank
+      end
+
       # There is nothing of ours to remove, and the copy must not claim otherwise. The address-keyed
       # block still holds them.
       it "claims no removal for a seller paid through a connected PayPal account" do

@@ -43,7 +43,7 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq("Your PayPal account can't receive your payout.")
       expect(mail.body.encoded).to include("$439.13")
       expect(mail.body.encoded).to include("payments cannot be received in the country on that account&#39;s address")
-      expect(mail.body.encoded).to include("We&#39;ve removed that PayPal account from your payout settings")
+      expect(mail.body.encoded).to include("We've removed that PayPal account from your payout settings")
       expect(mail.body.encoded).to include("add a bank account there")
       expect(mail.body.encoded).to include("stopped retrying it")
     end
@@ -71,7 +71,7 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to_not include("We&#39;ve removed")
+      expect(mail.body.encoded).to_not include("We've removed")
       expect(mail.body.encoded).to include("connect a PayPal account registered in a country that can receive PayPal payments")
     end
 

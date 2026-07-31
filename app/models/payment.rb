@@ -260,10 +260,16 @@ class Payment < ApplicationRecord
   def invalidate_paypal_payout_address
     address = user.payment_address
     return if address.blank?
-    # Guard against invalidating an address a later payout already succeeded to — a failure row can
-    # be transitioned late, and the retry block itself ignores rejections older than the last
-    # completed payout to the same address for the same reason.
-    return unless PaypalPayoutProcessor.terminal_failure_for_payout_email?(user, address)
+    # Only remove the address this payout was actually sent to. A payout carries the address it was
+    # attempted against (Payouts.create_payment sets it from User#paypal_payout_email), so a
+    # rejection of an address the seller has since replaced must not take the new one away.
+    return unless payment_address == address
+    # And not an address a later payout already succeeded to: a failure row can be transitioned
+    # late, and the retry block ignores rejections older than the last completed payout to the same
+    # address for the same reason.
+    last_completed_at = user.payments.completed.where(processor: PayoutProcessorType::PAYPAL, payment_address: address)
+                            .maximum(:created_at)
+    return if last_completed_at.present? && last_completed_at > created_at
 
     user.payment_address = ""
     user.invalidated_paypal_payout_address = address
