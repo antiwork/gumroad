@@ -1012,6 +1012,30 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_collaborator_can_access(:put, :update, product: @product, params: @params, status: 200)
   end
 
+  test "PUT update records a legacy mapping when the seller renames the product URL" do
+    @product.update!(custom_permalink: "old-slug")
+
+    put :update, params: @params.merge(custom_permalink: "new-slug"), as: :json
+
+    assert_response :success
+    assert_equal "new-slug", @product.reload.custom_permalink
+    # The editor saves the product twice per request, so a commit-time
+    # `saved_change_to_custom_permalink?` gate never fires here.
+    assert_equal @product.id, LegacyPermalink.find_by(permalink: "old-slug")&.product_id
+    assert_equal @product, Link.fetch_leniently("old-slug", user: @seller)
+  end
+
+  test "PUT update writes no legacy mapping when the product URL is untouched" do
+    @product.update!(custom_permalink: "kept-slug")
+
+    assert_no_difference -> { LegacyPermalink.count } do
+      put :update, params: @params, as: :json
+    end
+
+    assert_response :success
+    assert_equal "kept-slug", @product.reload.custom_permalink
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)

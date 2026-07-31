@@ -187,7 +187,9 @@ class Link < ApplicationRecord
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
-  after_commit :redirect_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
+  after_save :stage_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
+  after_commit :redirect_renamed_custom_permalinks
+  after_rollback :discard_renamed_custom_permalinks
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
   # Keep in sync with Product::BulkUpdateSupportEmailService.
@@ -1608,14 +1610,19 @@ class Link < ApplicationRecord
       deleted_product&.update(custom_permalink: nil)
     end
 
-    # Records the outgoing slug so `fetch_leniently` forwards the old URL
+    # Records outgoing slugs so `fetch_leniently` forwards the old URL
     # (gumroad-private#1619).
+    #
+    # Staged per save, drained once per commit: `saved_change_to_*` describes only
+    # the LAST save, and the product editor saves twice per request
+    # (`save_custom_attributes` then `save!`), so a commit-time gate on it never
+    # fires for the flow this exists to fix. Draining a list also maps every hop
+    # when one transaction renames a slug more than once.
     #
     # The unscoped lookup reads this table before the live permalink match, so a
     # mapping for a slug a live product answers on would shadow it: never write
     # one, and withdraw the row this call created if a claim lands between the
-    # check and the insert. `after_commit`, not `after_save`, so that re-check
-    # can see a claim committed meanwhile.
+    # check and the insert.
     #
     # `permalink` is globally unique while `custom_permalink` is unique per
     # seller, so two sellers can have held one slug and an existing mapping is
@@ -1623,12 +1630,30 @@ class Link < ApplicationRecord
     # `deleted_at`), so a mapping that resolves to nothing today can start
     # serving again, and stealing it would forward that seller's already-shared
     # links to this product. A rename off a slug another mapping holds keeps the
-    # 404 it already had. Taking over only rows whose product is hard-deleted
-    # would be safe but dead: zero of the table's 3.7M rows are hard-missing,
-    # every unresolvable one is a restorable soft delete.
-    def redirect_renamed_custom_permalink
+    # 404 it already had.
+    def stage_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
+
+      @staged_renamed_custom_permalinks ||= []
+      @staged_renamed_custom_permalinks << outgoing
+    end
+
+    def discard_renamed_custom_permalinks
+      @staged_renamed_custom_permalinks = nil
+    end
+
+    def redirect_renamed_custom_permalinks
+      outgoing_slugs = @staged_renamed_custom_permalinks
+      discard_renamed_custom_permalinks
+      return if outgoing_slugs.blank?
+
+      # A slug renamed away from and back to within one transaction is still live
+      # here, and `live_product_answers_on?` refuses it anyway.
+      outgoing_slugs.uniq.each { redirect_renamed_custom_permalink(_1) }
+    end
+
+    def redirect_renamed_custom_permalink(outgoing)
       return if live_product_answers_on?(outgoing)
       return if LegacyPermalink.exists?(permalink: outgoing)
 
@@ -1645,8 +1670,7 @@ class Link < ApplicationRecord
       Link.uncached { Link.visible.by_general_permalink(permalink).exists? }
     end
 
-    # Scoped to `id` so this only ever removes a row this call owns, never a
-    # mapping a concurrent rename wrote.
+    # Scoped to `id` so this only ever removes a row this call owns.
     def withdraw_legacy_permalink(mapping_id)
       LegacyPermalink.where(id: mapping_id, product_id: id).delete_all
     end
