@@ -546,6 +546,9 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
           fill_in "Seats", with: 3
 
           expect(page).to have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of $30 a month per seat.")
+          # More seats at the raised monthly price is owed today, so this is the combined case that
+          # must NOT carry the deferral clause the other combined example asserts.
+          expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
         end
       end
     end
