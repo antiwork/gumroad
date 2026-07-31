@@ -69,8 +69,9 @@ class StripePayoutProcessor
   end
 
   def self.has_valid_payout_info?(user)
-    # Return true if user has a Stripe account connected
-    return true if user.has_stripe_account_connected?
+    # Same carve-out as is_user_payable above: a Brazilian connected account is paid by Stripe
+    # directly and has no rail for Gumroad-held balances, so it must still satisfy the bank checks.
+    return true if user.has_stripe_account_connected? && !user.has_brazilian_stripe_connect_account?
     # Don't payout users who don't have a bank account
     return false if user.active_bank_account.nil?
     # Don't payout users whose bank account is not linked to a bank account at Stripe

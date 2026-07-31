@@ -47,6 +47,9 @@ module PurchaseErrorCode
   NOT_FOR_RENT = "not_for_rent"
   NO_SHIPPING_COUNTRY_CONFIGURED = "cant_ship_to_country"
   BLOCKED_SHIPPING_COUNTRY = "compliance_blocked_country"
+  # The buyer's billing address or geolocated location is a comprehensively sanctioned jurisdiction.
+  # Distinct from BLOCKED_SHIPPING_COUNTRY, which is only reachable on physical products.
+  BLOCKED_SANCTIONED_LOCATION = "compliance_blocked_location"
   PPP_CARD_COUNTRY_NOT_MATCHING = "ppp_card_country_not_matching"
   PAYPAL_MERCHANT_ACCOUNT_RESTRICTED = "paypal_merchant_account_restricted"
   PAYPAL_PAYER_CANCELLED_BILLING_AGREEMENT = "paypal_payer_cancelled_billing_agreement"

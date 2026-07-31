@@ -201,6 +201,75 @@ describe DisputeEvidence do
     end
   end
 
+  describe ".accepting_evidence?" do
+    def accepting?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
+      described_class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    end
+
+    it "accepts an open window" do
+      expect(accepting?).to be(true)
+    end
+
+    # These two are what Purchases::DisputeEvidenceController#check_if_needs_redirect bounces on. A
+    # caller that asks only about the window sends an action-required email to a page that redirects.
+    it "declines once the seller has submitted" do
+      expect(accepting?(seller_submitted_at: Time.current)).to be(false)
+    end
+
+    it "declines once the row is resolved" do
+      expect(accepting?(resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines an elapsed window" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+    end
+
+    it "still quotes the last whole hour rather than declining early" do
+      expect(accepting?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 1.4).hours.ago)).to be(true)
+      expect(described_class.hours_left_in_window((DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 1.4).hours.ago)).to eq(1)
+    end
+
+    # The controller bounces an unstamped row too ("You are not allowed to perform this action"), so
+    # a nil stamp is not permission to ask — asking would quote "in the next 0 hours".
+    it "declines an unstamped row, which has no window to quote" do
+      expect(accepting?(seller_contacted_at: nil)).to be(false)
+    end
+
+    it "agrees with the instance method reading the same row" do
+      dispute_evidence.update!(seller_contacted_at: 1.hour.ago)
+      expect(dispute_evidence.accepting_evidence?).to be(true)
+
+      dispute_evidence.update!(seller_submitted_at: Time.current)
+      expect(dispute_evidence.accepting_evidence?).to be(false)
+    end
+  end
+
+  describe ".notice_worth_sending?" do
+    def worth_sending?(seller_contacted_at: 1.hour.ago, seller_submitted_at: nil, resolved_at: nil)
+      described_class.notice_worth_sending?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    end
+
+    # This is the arm that differs from accepting_evidence?: a dispute with no evidence surface at all
+    # (PayPal, Stripe Connect) never gets a window, and must still receive its plain notice.
+    it "sends for an unstamped row, where asking for evidence would not" do
+      expect(worth_sending?(seller_contacted_at: nil)).to be(true)
+      expect(described_class.accepting_evidence?(seller_contacted_at: nil, seller_submitted_at: nil, resolved_at: nil)).to be(false)
+    end
+
+    it "declines an unstamped row that is already resolved" do
+      expect(worth_sending?(seller_contacted_at: nil, resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines once the seller has submitted or the row is resolved" do
+      expect(worth_sending?(seller_submitted_at: Time.current)).to be(false)
+      expect(worth_sending?(resolved_at: Time.current)).to be(false)
+    end
+
+    it "declines an elapsed window" do
+      expect(worth_sending?(seller_contacted_at: (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago)).to be(false)
+    end
+  end
+
   describe "#claim_seller_contacted_window!" do
     before { dispute_evidence.update_as_not_seller_contacted! }
 
