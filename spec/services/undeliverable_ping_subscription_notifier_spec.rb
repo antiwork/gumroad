@@ -274,8 +274,6 @@ describe UndeliverablePingSubscriptionNotifier do
       described_class.release_claim(resource_subscription.id, nil, "token")
     end
 
-    # Without a token there is nothing to compare, so settling would be an unconditional write over
-    # whatever the key holds — exactly what the token exists to prevent.
     it "ignores a blank token on both settle paths" do
       expect($redis).not_to receive(:eval)
 

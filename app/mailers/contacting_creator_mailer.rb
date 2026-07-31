@@ -380,8 +380,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
     # Setting a URL or re-authorizing the app makes it deliverable again, and this email would then
     # ask the seller to repair something already working. A disconnect in the same window soft-deletes
-    # the application, which is not deliverable either but is also not the seller's to fix, so both
-    # halves of selection's rule are re-asked here rather than only the deliverability one.
+    # the application, which is not deliverable either but is also not the seller's to fix.
     return do_not_send if @seller.ping_notification_deliverable?(@resource_subscription)
     return do_not_send unless @seller.ping_notification_notice_actionable?(@resource_subscription)
 

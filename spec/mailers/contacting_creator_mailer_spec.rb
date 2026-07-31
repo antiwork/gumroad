@@ -1587,10 +1587,8 @@ describe ContactingCreatorMailer do
       expect(mail.message).to be_a ActionMailer::Base::NullMail
     end
 
-    # A disconnect in the enqueue-to-render window soft-deletes the application, which is not
-    # deliverable either — so re-asking deliverability alone still renders "re-authorize" advice for an
-    # integration the seller just removed, and spends their one notice on it. Selection excludes those
-    # subscriptions; the render has to exclude them for the same reason.
+    # A disconnect in the window soft-deletes the application; deliverability alone still renders
+    # "re-authorize" advice for an app the seller removed.
     it "sends nothing when the application was deleted by render time" do
       oauth_application.mark_deleted!
       # mark_deleted! soft-deletes the subscriptions too; this isolates the application's own state,

@@ -67,8 +67,7 @@ class UndeliverablePingSubscriptionNotifier
   end
 
   # Written into the key once a message has actually been transmitted, in place of the claiming
-  # render's token. Distinguishable from a token on purpose: settling and releasing both have to tell
-  # "the claim I took is still here" from "someone else's claim, or a send that already happened".
+  # render's token.
   SENT = "sent"
 
   # Send once and stop, keyed on the advice actually given. The seller cannot re-authorize an app
@@ -115,8 +114,7 @@ class UndeliverablePingSubscriptionNotifier
 
   # Gives back a claim this render took and did not spend, and only that claim. Deleting the key
   # unconditionally would let a render whose claim has already expired delete what replaced it: a
-  # successor's live claim, or the permanent record of a send that successor completed — and then the
-  # next event claims a free key and emails the seller a second time.
+  # successor's live claim, or the permanent record of a send that successor completed.
   def self.release_claim(resource_subscription_id, reason, token)
     return if reason.blank? || token.blank?
 

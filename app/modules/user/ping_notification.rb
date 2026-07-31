@@ -43,10 +43,8 @@ module User::PingNotification
   end
 
   # Whether an undeliverable subscription's silence is the seller's to act on. Selection below and the
-  # mailer at render time both read this one predicate: a subscription can turn terminal inside that
-  # window, and an email telling the seller to re-authorize an integration they just removed would be
-  # wrong, as well as spending the one notice they get. Asked only of subscriptions
-  # #ping_notification_deliverable? has already rejected.
+  # mailer at render time both read this one predicate, because a subscription can turn terminal inside
+  # that window. Asked only of subscriptions #ping_notification_deliverable? has already rejected.
   def ping_notification_notice_actionable?(resource_subscription)
     oauth_application = resource_subscription.oauth_application
     # A hard-deleted application leaves oauth_application_id pointing at a missing row, and a revoked
