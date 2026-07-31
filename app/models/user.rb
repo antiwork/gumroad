@@ -201,6 +201,8 @@ class User < ApplicationRecord
 
   attr_json_data_accessor :background_opacity_percent, default: 100
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
+  # Separate from the column above on purpose — see Payment#send_paypal_terminal_failure_email.
+  attr_json_data_accessor :payout_date_of_last_paypal_terminal_failure_email
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone

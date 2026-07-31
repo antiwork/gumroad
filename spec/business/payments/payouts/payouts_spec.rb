@@ -3,6 +3,37 @@
 require "spec_helper"
 
 describe Payouts do
+  # A wording the broad "can this seller see an explanation of a terminal PayPal block" check
+  # recognises. It matches any note containing one of the seller-facing rejection reasons, current or
+  # historical, so this is one example of that shape rather than the only string that works.
+  #
+  # Deliberately NOT the explanation of any particular rejection: the date is not one a real note
+  # carries, which is what the narrower "is this the explanation of THIS rejection" check keys on.
+  # Use seller_blocked_by_paypal_reading_the_explanation when the seller has to be reading the
+  # genuine explanation of the rejection blocking them.
+  def terminal_paypal_explanation_note_content
+    "Your payout on July 1st, 2026 could not be sent because " \
+      "#{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch("PAYPAL 3148")}. " \
+      "Add a bank account in your payout settings."
+  end
+
+  # A seller under a live terminal PayPal rejection — no bank account, no Stripe Connect route, and
+  # a failed payout to the address on file — who is currently reading the explanation of it.
+  #
+  # The note is generated from the rejection itself rather than hand-written, because the payout walk
+  # decides whether the seller still needs telling by asking whether the note on their page explains
+  # that specific rejection (its payout date plus its restriction). A hand-typed date would make this
+  # seller look unexplained and every example built on it would silently exercise the restore path.
+  def seller_blocked_by_paypal_reading_the_explanation
+    seller = create(:compliant_user, payment_address: "stuck@example.com")
+    create(:user_compliance_info, user: seller)
+    create(:balance, user: seller, amount_cents: 100_00, date: Date.today - 3)
+    rejection = create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                        failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+    seller.add_payout_note(content: rejection.terminal_paypal_failure_seller_note, seller_visible: true)
+    seller
+  end
+
   describe "is_user_payable" do
     let(:payout_date) { Date.today - 1 }
 
@@ -203,6 +234,65 @@ describe Payouts do
         allow_any_instance_of(User).to receive(:unpaid_balance_cents_up_to_date).and_return(200_00)
         expect(StripePayoutProcessor).to receive(:is_user_payable).with(seller, 100_00, add_comment: false, from_admin: false, payout_type: anything)
         described_class.is_user_payable(seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      end
+
+      it "shows the ineligible-for-instant-payouts note to a seller with nothing else to read" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
+
+        described_class.is_user_payable(seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)
+
+        expect(PayoutNoteVisibility.seller_visible?(seller.comments.with_type_payout_note.last)).to eq(true)
+      end
+
+      # This note repeats on every daily run, so for a seller whose PayPal account can never receive
+      # the money it would bury the one note telling them why — the same burial the weekly pause
+      # note is suppressed for. Instant payouts are not what stopped their money.
+      it "does not let the ineligible-for-instant-payouts note bury a terminal PayPal explanation" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
+        blocked_seller = seller_blocked_by_paypal_reading_the_explanation
+
+        described_class.is_user_payable(blocked_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)
+
+        skipped_note = blocked_seller.comments.with_type_payout_note.last
+        expect(skipped_note.content).to include("not eligible for instant payouts")
+        expect(PayoutNoteVisibility.seller_visible?(skipped_note)).to eq(false)
+        expect(blocked_seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+      end
+
+      # Every daily run adds a row whether or not the seller sees it, and the note lookups only scan
+      # back 25 notes — so repeating the hidden note would push the explanation out of that window,
+      # at which point this note would go back to being written visible and re-bury the explanation
+      # the suppression exists to protect.
+      it "does not write a second hidden ineligible-for-instant-payouts note on the next run" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
+        blocked_seller = seller_blocked_by_paypal_reading_the_explanation
+
+        described_class.is_user_payable(blocked_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)
+
+        expect do
+          described_class.is_user_payable(blocked_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)
+        end.to_not change { blocked_seller.comments.with_type_payout_note.count }
+
+        expect(blocked_seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+      end
+
+      # A seller who has since fixed their PayPal account still carries the old explanation as their
+      # newest visible note. Hiding today's note from them would leave that stale explanation as the
+      # only thing they can read, so the suppression is tied to the live block, not to the wording.
+      it "shows the ineligible-for-instant-payouts note when the PayPal block is no longer live" do
+        allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(false)
+        recovered_seller = create(:compliant_user)
+        create(:ach_account, user: recovered_seller)
+        create(:balance, user: recovered_seller, amount_cents: 100_00, date: payout_date - 3)
+        recovered_seller.add_payout_note(content: terminal_paypal_explanation_note_content, seller_visible: true)
+
+        described_class.is_user_payable(recovered_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)
+
+        skipped_note = recovered_seller.comments.with_type_payout_note.last
+        expect(skipped_note.content).to include("not eligible for instant payouts")
+        expect(PayoutNoteVisibility.seller_visible?(skipped_note)).to eq(true)
       end
     end
 
@@ -937,6 +1027,176 @@ describe Payouts do
         date = Time.current.to_fs(:formatted_date_full_month)
         content = "Payout on #{date} was skipped because payouts on the account were paused by the user."
         expect(seller.comments.with_type_payout_note.last.content).to eq(content)
+      end
+
+      # A seller whose PayPal account can never receive the money is told so once, and that note is
+      # the only thing on their Payouts page telling them what to do about it. The banner shows the
+      # newest note they are allowed to see, so writing this weekly note seller-visible would put
+      # them back to reading "payouts were paused by the system" within one payout cycle.
+      it "does not let the paused-payout note bury a terminal PayPal explanation" do
+        seller = seller_blocked_by_paypal_reading_the_explanation
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to change { seller.comments.with_type_payout_note.count }.by(1)
+
+        # Support still gets the note; the seller keeps seeing the explanation.
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(paused_note.content).to include("payouts on the account were paused by the system")
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(false)
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+      end
+
+      it "still shows the paused-payout note to a seller with no terminal PayPal explanation" do
+        seller = create(:compliant_user)
+        create(:ach_account, user: seller)
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
+
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
+      end
+
+      # Hiding a pause note takes information away from the seller, so it lasts only as long as the
+      # PayPal block does. The explanation stays their newest visible note forever once written, so
+      # keying on its wording alone would hide every future pause note — including pauses placed for
+      # reasons that have nothing to do with PayPal.
+      it "shows the paused-payout note again once the seller is no longer blocked by PayPal" do
+        seller = seller_blocked_by_paypal_reading_the_explanation
+        # The seller fixed it the way we asked them to.
+        create(:ach_account, user: seller)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(paused_note.content).to include("payouts on the account were paused by the system")
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
+      end
+
+      # For a seller who paused their own payouts, the note naming that switch is the actionable
+      # message — and the explanation they would see instead may promise a payout date their own
+      # pause now prevents, because its wording was chosen when it was written.
+      it "still shows the paused-payout note to a seller who paused their own payouts" do
+        seller = seller_blocked_by_paypal_reading_the_explanation
+        seller.update!(payouts_paused_by_user: true)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        paused_note = seller.comments.with_type_payout_note.last
+        expect(paused_note.content).to include("payouts on the account were paused by the user")
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(true)
+      end
+
+      # Every run adds a row whether or not the seller sees it, and the note lookups only scan back
+      # 25 notes — so repeating the hidden note would push the explanation out of that window and
+      # silently disarm the suppression, besides flooding accounts that already carry hundreds of
+      # automated comments.
+      it "does not write a second hidden paused-payout note on the next run" do
+        seller = seller_blocked_by_paypal_reading_the_explanation
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to_not change { seller.comments.with_type_payout_note.count }
+
+        # And the explanation is still what the seller sees.
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+      end
+
+      # A held seller can be reading an explanation of a rejection they have already left behind:
+      # rejected on one PayPal address, switched to another, rejected again. The note on their page
+      # names the address they abandoned, so it quotes a payout date that is not the one that
+      # stopped their money and — because the two rejections say different things — possibly the
+      # wrong restriction. They are held, so the PayPal processor's own re-explain never runs for
+      # them; this walk is the only thing that can correct it.
+      it "restores the explanation for a held seller reading one about an address they left" do
+        seller = create(:compliant_user, payment_address: "old@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        old_rejection = create(:payment_failed, user: seller, payment_address: "old@example.com",
+                                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller.add_payout_note(content: old_rejection.terminal_paypal_failure_seller_note, seller_visible: true)
+
+        # They moved to a different PayPal account, which PayPal refused for a different reason.
+        seller.update!(payment_address: "new@example.com")
+        create(:payment_failed, user: seller, payment_address: "new@example.com",
+                                failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("your PayPal account cannot receive US dollars")
+      end
+
+      # The hold is checked before any processor runs, so a held seller never reaches the PayPal
+      # processor's own re-explain. Without a restore here they read "payouts were paused by the
+      # system" every week with nothing telling them PayPal is what stopped the money — the exact
+      # dead end gumroad-private#1478 exists to remove, and permanent, because nothing else writes
+      # the explanation again.
+      it "restores the explanation for a held seller whose explanation was buried" do
+        seller = create(:compliant_user, payment_address: "stuck@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        # A different, true blocker took the explanation's place on their Payouts page.
+        seller.add_payout_note(content: "Payout on July 8th, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payments cannot be received in the country on that account's address")
+        # Support still gets the pause note, hidden, exactly as when an explanation is visible.
+        paused_note = seller.comments.with_type_payout_note.order(created_at: :desc, id: :desc).find do |note|
+          note.content.include?("payouts on the account were paused by the")
+        end
+        expect(PayoutNoteVisibility.seller_visible?(paused_note)).to eq(false)
+      end
+
+      # Once restored, the next run must settle into the ordinary suppressed-and-deduped state
+      # rather than writing the explanation again every week.
+      it "does not restore the explanation again on the next run" do
+        seller = create(:compliant_user, payment_address: "stuck@example.com")
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        create(:payment_failed, user: seller, payment_address: "stuck@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        seller.add_payout_note(content: "Payout on July 8th, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+
+        expect do
+          described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::PAYPAL, [seller])
+        end.to_not change { seller.comments.with_type_payout_note.count }
+      end
+
+      # A seller who is NOT blocked by PayPal must not be handed an explanation of a block they are
+      # not under — the restore is tied to the live block, like the suppression it sits beside.
+      it "does not restore an explanation for a held seller who is not blocked by PayPal" do
+        seller = create(:compliant_user)
+        create(:ach_account, user: seller)
+        create(:user_compliance_info, user: seller)
+        create(:balance, user: seller, date: Date.today - 3, amount_cents: 1000)
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+
+        described_class.create_payments_for_balances_up_to_date_for_users(Date.today - 1, PayoutProcessorType::STRIPE, [seller])
+
+        expect(seller.reload.latest_seller_visible_payout_note.content)
+          .to include("payouts on the account were paused by the system")
       end
     end
 

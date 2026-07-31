@@ -199,6 +199,53 @@ class ContactingCreatorMailer < ApplicationMailer
     @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
   end
 
+  # PayPal refused a payout for a reason about the seller's PayPal account rather than the attempt:
+  # their country cannot receive PayPal payments (3148), or the account cannot receive US dollars
+  # (14159). Either way nothing will change until they act, so this email says what is wrong and
+  # what to change — otherwise their balance just sits there.
+  #
+  # The two cases differ in what is true about the retries, and the copy has to match: 3148 stops
+  # them, 14159 does not (see Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS).
+  def paypal_payout_permanently_failed(payment_id)
+    @payment = Payment.find(payment_id)
+    @seller = @payment.user
+    @subject = "Your PayPal account can't receive your payout."
+    @amount = Money.new(@payment.amount_cents, @payment.currency).format(no_cents_if_whole: true, symbol: true)
+    @reason = Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.fetch(
+      @payment.failure_reason,
+      # Reached by the mailer preview, which renders against whatever payout rows the local
+      # database happens to have. It is also the safety net if this mailer is ever enqueued for a
+      # payment whose failure_reason is not one we explain — the copy would then name the wrong
+      # restriction, so keep the caller gated on Payment#explained_paypal_failure?.
+      Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_REASONS.values.first
+    )
+    # Never claim the retries have stopped unless they have. A seller rejected for the currency
+    # keeps being paid on schedule, and telling them otherwise would be false and would push them
+    # to change accounts when they do not have to.
+    @retries_stopped = @payment.terminal_paypal_failure?
+    # ...and never promise a retry that a pause is already stopping. Payouts.is_user_payable exits
+    # on the broader payouts_paused? long before any processor runs, so for a paused seller "we'll
+    # keep trying on your usual payout schedule" is false and contradicts the pause this same email
+    # goes on to describe. Covers both a hold we placed and the seller's own toggle.
+    @retries_paused_by_pause = !@retries_stopped && @seller.payouts_paused?
+    # And when they can clear it on the account they already have, lead with that fix.
+    @can_receive_us_dollars_on_same_account = @payment.repairable_in_place_paypal_failure?
+    # Ask the seller to reply rather than promising the next payout date, because an admin or
+    # system hold outlives the payout-method fix this email prescribes and only support can lift
+    # it. A hold Stripe placed is lifted automatically when the seller changes their payout details
+    # (UpdatePayoutMethod), so for them the ask is merely over-cautious rather than wrong. A seller
+    # who paused their own payouts is pointed at their own toggle instead of at support. Both flags
+    # are read independently because both can be on: the template names each one it finds, since
+    # clearing only the hold still leaves the seller's own pause stopping the money, and they
+    # cannot be told plainly to expect the next payout date either — the payout gate checks the
+    # broader payouts_paused? and skips them while either is on.
+    @payouts_on_hold = @seller.payouts_paused_internally?
+    @payouts_paused_by_seller = @seller.payouts_paused_by_user?
+    # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
+    # PayPal-only countries, where "add a bank account" is advice they cannot act on.
+    @can_use_bank_account = @seller.can_setup_bank_payouts?
+  end
+
   def flagged_for_explicit_nsfw_tos_violation(user_id)
     @seller = User.find(user_id)
     @subject = "Your account has been temporarily suspended for selling sexually explicit / fetish-related content"

@@ -24,6 +24,165 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "paypal payout permanently failed" do
+    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
+
+    before do
+      # Gumroad supports bank payouts here, so the email may suggest one. Sellers in PayPal-only
+      # countries — the majority of those hitting these rejections — are covered separately below.
+      create(:user_compliance_info, user: payment.user, country: "United States")
+    end
+
+    it "names PayPal, the restriction, and the fix" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.to).to eq [payment.user.email]
+      expect(mail.subject).to eq("Your PayPal account can't receive your payout.")
+      expect(mail.body.encoded).to include("$439.13")
+      expect(mail.body.encoded).to include("payments cannot be received in the country on that account&#39;s address")
+      expect(mail.body.encoded).to include("add a bank account in your payout settings")
+      expect(mail.body.encoded).to include("stopped retrying it")
+    end
+
+    it "names the currency restriction for a currency rejection" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("your PayPal account cannot receive US dollars")
+    end
+
+    # A currency rejection does not stop the retries, so the email must not say it did — and the
+    # seller can clear it on the account they already use. Reviewer finding on #6526.
+    it "does not claim the retries stopped for a rejection we keep retrying" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("stopped retrying")
+      expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("add US dollars as a currency you accept")
+    end
+
+    it "still says the retries stopped for a rejection that blocks them" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("stopped retrying it")
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+    end
+
+    # The payout gate exits on payouts_paused? before any processor runs, so a paused seller is not
+    # being retried on schedule whatever the rejection code says. Promising it contradicts the pause
+    # this same email describes further down. Reviewer finding on #6526.
+    it "does not promise schedule retries to a seller whose payouts we have paused" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Payouts on your account are paused right now")
+      # The pause is named once, so the later paragraph must not reintroduce it as a second,
+      # distinct restriction.
+      expect(mail.body.encoded).to_not include("are also on hold")
+      expect(mail.body.encoded).to include("That hold is ours to lift")
+    end
+
+    it "does not promise schedule retries to a seller who paused their own payouts" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Payouts on your account are paused right now")
+      expect(mail.body.encoded).to_not include("also paused in your settings")
+      expect(mail.body.encoded).to include("You paused them yourself")
+    end
+
+    it "promises schedule retries for a retried rejection when nothing is paused" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to_not include("paused right now")
+    end
+
+    it "does not promise a payout date when the account is also under a payout hold" do
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("Payouts on your account are also on hold")
+      expect(mail.body.encoded).to include("reply to this email")
+      expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "does not blame the hold on the failed payouts, since support or Stripe may have placed it" do
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("placed a hold")
+    end
+
+    # The payout gate checks the broader payouts_paused?, so this seller is skipped too — but the
+    # switch is theirs, so they are pointed at it rather than at support.
+    it "points a seller who paused their own payouts at their own setting, not at support" do
+      payment.user.update!(payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("paused in your settings")
+      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to_not include("on hold")
+      expect(mail.body.encoded).to_not include("reply to this email")
+    end
+
+    it "promises the next payout date when the account is not under a payout hold" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to_not include("on hold")
+    end
+
+    # The two pause flags are independent, so both can be on. Naming only the hold would tell the
+    # seller support can release the balance while their own pause still blocks it. Reviewer
+    # finding on #6526.
+    it "names both pauses when the account is held and the seller paused their own payouts" do
+      payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("resume payouts in your settings")
+      expect(mail.body.encoded).to include("review the hold")
+      expect(mail.body.encoded).to_not include("next payout date")
+    end
+
+    it "names both pauses for a retried rejection whose retries a pause is stopping" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.update!(payouts_paused_internally: true, payouts_paused_by_user: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Two separate pauses are on your account")
+      expect(mail.body.encoded).to include("resume payouts in your settings")
+      expect(mail.body.encoded).to include("review the hold")
+    end
+
+    it "does not tell a seller in a PayPal-only country to add a bank account" do
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("PayPal is the only payout method we can offer in your country")
+      expect(mail.body.encoded).to_not include("add a bank account")
+    end
+  end
+
   describe "purchase refunded" do
     it "sends notification to the seller about refunded purchase" do
       purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
