@@ -33,22 +33,27 @@ class Onetime::ClearDetachedDefaultOfferCodes
       end
 
       ReplicaLagWatcher.watch
-      product.with_lock do
-        # The seller may have repointed the default between the batch read and
-        # the lock; with_lock reloads, so re-check before writing.
-        next unless product.default_offer_code_detached?
 
-        detached_offer_code_id = product.default_offer_code_id
-        # update_attribute: legacy products invalid under current rules are the
-        # likeliest carriers of detached defaults, and full validations would
-        # skip exactly those rows. Callbacks still run, so caches invalidate.
-        product.update_attribute(:default_offer_code_id, nil)
-        cleared << { product_id: product.id, offer_code_id: detached_offer_code_id }
+      begin
+        product.with_lock do
+          # The seller may have repointed the default between the batch read and
+          # the lock; with_lock reloads, so re-check before writing.
+          next unless product.default_offer_code_detached?
+
+          detached_offer_code_id = product.default_offer_code_id
+          # update_attribute: legacy products invalid under current rules are the
+          # likeliest carriers of detached defaults, and full validations would
+          # skip exactly those rows. Callbacks still run, so caches invalidate.
+          product.update_attribute(:default_offer_code_id, nil)
+          cleared << { product_id: product.id, offer_code_id: detached_offer_code_id }
+        end
+      rescue => e
+        # A per-row data failure shouldn't stall the cleanup; log it and move on.
+        # The run is safe to repeat. Deliberately scoped to the write: a
+        # ReplicaLagWatcher failure is an infrastructure problem and must abort
+        # the run rather than be logged once per row.
+        Rails.logger.warn("[ClearDetachedDefaultOfferCodes] skipped product #{product.id}: #{e.class}: #{e.message}")
       end
-    rescue => e
-      # An unexpected per-row failure shouldn't stall the cleanup; log it and
-      # move on. The run is safe to repeat.
-      Rails.logger.warn("[ClearDetachedDefaultOfferCodes] skipped product #{product.id}: #{e.class}: #{e.message}")
     end
 
     Rails.logger.info("[ClearDetachedDefaultOfferCodes] #{dry_run ? "found" : "cleared"} #{cleared.size} detached default discount(s)")

@@ -124,4 +124,27 @@ describe Onetime::ClearDetachedDefaultOfferCodes do
     expect(described_class.new.process).to eq([{ product_id: product.id, offer_code_id: offer_code.id }])
     expect(product.reload.default_offer_code_id).to eq(offer_code.id)
   end
+
+  it "aborts on a replica lag failure instead of logging it once per row" do
+    offer_code = create(:offer_code, user: seller, products: [product])
+    product.update!(default_offer_code_id: offer_code.id)
+    offer_code.products.delete(product)
+    # The console-pod failure mode: SHOW SLAVE STATUS comes back empty. Swallowed
+    # per row this reports "cleared 0" and exits successfully, which is
+    # indistinguishable from a clean no-op run.
+    allow(ReplicaLagWatcher).to receive(:watch).and_raise(NoMethodError.new("undefined method '[]' for nil"))
+
+    expect { described_class.new(dry_run: false).process }.to raise_error(NoMethodError)
+    expect(product.reload.default_offer_code_id).to eq(offer_code.id)
+  end
+
+  it "logs and continues when a single row fails to write" do
+    offer_code = create(:offer_code, user: seller, products: [product])
+    product.update!(default_offer_code_id: offer_code.id)
+    offer_code.products.delete(product)
+    allow_any_instance_of(Link).to receive(:with_lock).and_raise(ActiveRecord::LockWaitTimeout.new("busy"))
+
+    expect(Rails.logger).to receive(:warn).with(/skipped product #{product.id}/)
+    expect(described_class.new(dry_run: false).process).to eq([])
+  end
 end

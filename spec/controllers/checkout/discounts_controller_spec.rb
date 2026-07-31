@@ -566,7 +566,7 @@ describe Checkout::DiscountsController do
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(false)
-      expect(response.parsed_body["error_message"]).to eq("This discount code is the default discount for one or more of the removed products. Please remove it from those products before removing them from the discount.")
+      expect(response.parsed_body["error_message"]).to eq("This discount code is the default discount for “#{subject_product.name}”. Please remove it from that product before removing it from the discount.")
 
       expect(offer_code.reload.products).to eq([subject_product])
       expect(subject_product.reload.default_offer_code_id).to eq(offer_code.id)

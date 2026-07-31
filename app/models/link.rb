@@ -247,9 +247,9 @@ class Link < ApplicationRecord
   before_save :downcase_filetype
   before_save :remove_xml_tags
   # The offer code guards only watch visible products, so a default discount can
-  # detach while a product is deleted; every undelete path (admin restore,
-  # publish!) repairs it here, in the same write that makes the product visible.
-  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) }
+  # detach while a product is deleted, and a currency change detaches a universal
+  # code no OfferCode save ever sees. Both repair here, in the same write.
+  before_save :clear_detached_default_offer_code, if: -> { deleted_at_changed?(to: nil) || will_save_change_to_price_currency_type? }
   after_save :set_customizable_price
   after_update :invalidate_cache, if: ->(link) { (link.saved_changes.keys - PURCHASE_PROPERTIES).present? }
   after_save :note_default_offer_code_assignment
