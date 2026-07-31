@@ -144,11 +144,11 @@ class GdprDataErasureService
                  "Stripe account and must be deleted at Stripe manually"
       end
       if @unscanned_guardian_account_ids.any?
-        # A third shape: nothing is known to be retained, but nothing was confirmed deleted either,
-        # because the account could not be locked to scan it. Worded as unverified rather than
-        # retained — that is what someone re-checking has to go and establish.
+        # A third shape: nothing is known to be retained, but the account was never fully listed —
+        # the lock could not be taken, or the Person pages ran out partway. Worded as unverified
+        # rather than retained; that is what someone re-checking has to go and establish.
         parts << "#{@unscanned_guardian_account_ids.uniq.size} Stripe account(s) could not be " \
-                 "scanned for guardian records and must be checked at Stripe manually"
+                 "fully scanned for guardian records and must be checked at Stripe manually"
       end
 
       "Erasure incomplete: #{parts.join('; ')}. Re-check before confirming the request as fulfilled."
@@ -301,8 +301,15 @@ class GdprDataErasureService
           # Re-read the guardians inside the lock. A sync that finished while erasure waited may have
           # written a stripe_person_id the snapshot above does not have, and that id is a handle to
           # PII this erasure is responsible for.
-          StripeGuardianManager.stripe_person_ids_for_erasure(@user.guardians.reload.to_a, stripe_account_id)
-                               .each do |stripe_person_id|
+          scan = StripeGuardianManager.stripe_person_ids_for_erasure(@user.guardians.reload.to_a, stripe_account_id)
+
+          # A scan that did not reach every page fails the erasure even when every id it DID find
+          # deletes cleanly. The unlisted Persons are precisely the ones with no recorded id — the
+          # scan is the only thing that could have found them — so "everything I was handed was
+          # deleted" is not evidence the account is clear, and there is no id to enqueue a retry for.
+          @unscanned_guardian_account_ids << stripe_account_id unless scan.complete?
+
+          scan.person_ids.each do |stripe_person_id|
             if StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
               confirmed << stripe_person_id
             else

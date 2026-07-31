@@ -133,8 +133,9 @@ describe GdprDataErasureService do
         expect(Stripe::Account).not_to have_received(:delete_person)
       end
 
-      # A scan Stripe will not answer must not abandon the erasure: the recorded ids still go.
-      it "deletes the recorded person even when the scan fails" do
+      # A scan Stripe will not answer must not abandon the erasure: the recorded ids still go. But it
+      # is the least complete scan there is, so it cannot report the account cleared either.
+      it "deletes the recorded person even when the scan fails, and reports the erasure incomplete" do
         guardian = create(:guardian, user:, stripe_person_id: "person_recorded")
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
         allow(Stripe::Account).to receive(:list_persons)
@@ -142,8 +143,9 @@ describe GdprDataErasureService do
 
         result = described_class.new(user, performed_by: admin).perform!
 
-        expect(result[:success]).to be(true)
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_recorded")
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("could not be fully scanned")
       end
 
       # The local row must still be anonymized: a processor-side failure cannot be a reason to leave
@@ -367,7 +369,7 @@ describe GdprDataErasureService do
           result = described_class.new(user, performed_by: admin).perform!
 
           expect(result[:success]).to be(false)
-          expect(result[:error]).to include("could not be scanned")
+          expect(result[:error]).to include("could not be fully scanned")
           # Nothing to enqueue — a retry job takes a Person id — so the note naming the account is
           # the only handle a human gets.
           note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
@@ -410,15 +412,17 @@ describe GdprDataErasureService do
           end
         end
 
-        described_class.new(user, performed_by: admin).perform!
+        result = described_class.new(user, performed_by: admin).perform!
 
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_page_one")
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_page_two")
+        # A scan that did reach the end is complete, so paginating must not make every erasure fail.
+        expect(result[:success]).to be(true)
       end
 
       # A partial scan still found real Persons. Dropping them on the rescue would delete fewer than
-      # the single-page version did.
-      it "deletes the persons a partially failing scan did find" do
+      # the single-page version did — but deleting them is not clearing the account either.
+      it "deletes the persons a partially failing scan did find and reports the erasure incomplete" do
         guardian = create(:guardian, user:, stripe_person_id: nil)
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
         allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
@@ -427,9 +431,30 @@ describe GdprDataErasureService do
           Stripe::ListObject.construct_from(data: [{ id: "person_page_one" }], has_more: true)
         end
 
-        described_class.new(user, performed_by: admin).perform!
+        result = described_class.new(user, performed_by: admin).perform!
 
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_page_one")
+        # Every id the scan handed over deleted cleanly, so nothing is retained and nothing is being
+        # retried. The unread pages are where an unrecorded Person hides, and only the scan could have
+        # found it, so the account must be named for a human rather than passed off as erased.
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("could not be fully scanned")
+        note = user.reload.comments.where(comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE).last
+        expect(note.content).to include("acct_erasure_test")
+      end
+
+      # Stripe says there is more but hands back no cursor to ask with. The loop has to stop, and the
+      # unseen Persons are just as unseen as on a raised page.
+      it "reports the erasure incomplete when Stripe offers no cursor for the next page" do
+        guardian = create(:guardian, user:, stripe_person_id: nil)
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:list_persons)
+          .and_return(Stripe::ListObject.construct_from(data: [], has_more: true))
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("could not be fully scanned")
       end
 
       # A Redis outage is not a lock that is merely busy — the calls themselves raise. Those errors

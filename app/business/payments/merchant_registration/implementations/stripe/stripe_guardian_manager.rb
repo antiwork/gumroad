@@ -180,6 +180,10 @@ module StripeGuardianManager
   # it is an adult's name, date of birth, address and tax id that erasure affirmatively reports as
   # gone. `has_more` is read with [] rather than a reader so a page object without the key answers
   # nil instead of raising.
+  #
+  # Returns false when Stripe said there were more Persons and we could not go get them. That is
+  # separate from raising: the pages already yielded are real and the caller still wants them, but it
+  # must not read what it got as the whole account.
   def self.each_legal_guardian_person(stripe_account_id, &block)
     starting_after = nil
 
@@ -191,12 +195,12 @@ module StripeGuardianManager
       people = page[:data].to_a
       people.each(&block)
 
-      break unless page[:has_more]
+      return true unless page[:has_more]
 
       last_id = people.last&.id
       # Stripe says there is more but gave us no cursor to ask for it. Stopping beats looping on the
-      # same page forever; the caller's own reporting is what surfaces an incomplete scan.
-      break if last_id.nil? || last_id == starting_after
+      # same page forever, and there are unseen Persons either way, so this is an incomplete scan.
+      return false if last_id.nil? || last_id == starting_after
 
       starting_after = last_id
     end
@@ -286,26 +290,36 @@ module StripeGuardianManager
     delete_person_by_id(guardian.stripe_person_id, stripe_account_id)
   end
 
+  # What an erasure scan of one account found, and whether it saw all of it. `complete` false means
+  # the account may still hold legal-guardian Persons this scan never listed, so the caller must not
+  # treat deleting `person_ids` as having cleared the account.
+  ErasureScan = Struct.new(:person_ids, :complete, keyword_init: true) do
+    def complete? = complete
+  end
+
   # Every legal-guardian Person on the account, by recorded id where we have one and by a
   # relationship scan where we do not. A sync that created the Person but failed to save its id
   # leaves no local handle, and erasure cannot wait for the next sync to supply one — the accounts
   # being erased are the least likely to get another.
   def self.stripe_person_ids_for_erasure(guardians, stripe_account_id)
     recorded = guardians.filter_map(&:stripe_person_id)
-    return recorded if guardians.none?
+    return ErasureScan.new(person_ids: recorded, complete: true) if guardians.none?
 
     scanned = []
-    each_legal_guardian_person(stripe_account_id) { |person| scanned << person.id }
+    complete = each_legal_guardian_person(stripe_account_id) { |person| scanned << person.id }
 
-    (recorded + scanned).uniq
+    ErasureScan.new(person_ids: (recorded + scanned).uniq, complete:)
   rescue Stripe::StripeError => e
     # The scan is the belt to the recorded id's braces. If Stripe will not answer, delete what we
     # can point at rather than abandoning the erasure entirely.
     #
     # Whatever pages the scan did reach is kept: a partial scan raising on page two still found real
-    # Persons on page one, and dropping them would delete fewer than before this rescue existed.
+    # Persons on page one, and dropping them would delete fewer than before this rescue existed. But
+    # it is reported incomplete — the pages it never reached are exactly where an unrecorded Person
+    # hides, so passing the partial set off as the account's contents is how a "successful" erasure
+    # leaves guardian PII at Stripe.
     ErrorNotifier.notify(e)
-    (recorded + scanned.to_a).uniq
+    ErasureScan.new(person_ids: (recorded + scanned.to_a).uniq, complete: false)
   end
 
   # Deletes one Person by id, so erasure can act on a Person found by scan, which has no Guardian
