@@ -379,15 +379,20 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send if @seller.nil?
 
     # Setting a URL or re-authorizing the app makes it deliverable again, and this email would then
-    # ask the seller to repair something already working.
+    # ask the seller to repair something already working. A disconnect in the same window soft-deletes
+    # the application, which is not deliverable either but is also not the seller's to fix, so both
+    # halves of selection's rule are re-asked here rather than only the deliverability one.
     return do_not_send if @seller.ping_notification_deliverable?(@resource_subscription)
+    return do_not_send unless @seller.ping_notification_notice_actionable?(@resource_subscription)
 
     rendered_reason = UndeliverablePingSubscriptionNotifier.reason_for(@resource_subscription)
     # Claiming rather than checking: the enqueue throttle is keyed on the reason as it was at enqueue,
     # so two jobs that resolve to the same reason here are not excluded by it and a read would let both
     # send. Nothing below can decline, so the claim marks a send this render is committed to.
-    return do_not_send unless UndeliverablePingSubscriptionNotifier.claim_send(resource_subscription_id, rendered_reason)
+    claim_token = UndeliverablePingSubscriptionNotifier.claim_send(resource_subscription_id, rendered_reason)
+    return do_not_send if claim_token.nil?
 
+    @undeliverable_ping_subscription_claim_token = claim_token
     @undeliverable_ping_subscription_reason = rendered_reason
     @application_name = @resource_subscription.oauth_application&.name
     @missing_post_url = rendered_reason == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
@@ -779,7 +784,8 @@ class ContactingCreatorMailer < ApplicationMailer
       unless @resource_subscription.nil? || @undeliverable_ping_subscription_reason.blank?
         settle = delivered ? :record_sent : :release_claim
         UndeliverablePingSubscriptionNotifier.public_send(
-          settle, @resource_subscription.id, @undeliverable_ping_subscription_reason
+          settle, @resource_subscription.id, @undeliverable_ping_subscription_reason,
+          @undeliverable_ping_subscription_claim_token
         )
       end
     end

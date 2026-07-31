@@ -1587,6 +1587,32 @@ describe ContactingCreatorMailer do
       expect(mail.message).to be_a ActionMailer::Base::NullMail
     end
 
+    # A disconnect in the enqueue-to-render window soft-deletes the application, which is not
+    # deliverable either — so re-asking deliverability alone still renders "re-authorize" advice for an
+    # integration the seller just removed, and spends their one notice on it. Selection excludes those
+    # subscriptions; the render has to exclude them for the same reason.
+    it "sends nothing when the application was deleted by render time" do
+      oauth_application.mark_deleted!
+      # mark_deleted! soft-deletes the subscriptions too; this isolates the application's own state,
+      # which is the half the render was not re-asking.
+      ResourceSubscription.where(id: resource_subscription.id).update_all(deleted_at: nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    # Same shape for the agent exclusion: those subscriptions are token-less by design and their owners
+    # have no authorization flow to re-run, so a render must not email them either.
+    it "sends nothing for a Store Agent application at render time" do
+      oauth_application.update!(name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
     # Rendering is not sending, which is why nothing is recorded here: the record has no expiry, and
     # one written for an email nobody received would refuse the notice the seller is owed when the
     # same reason breaks again.
