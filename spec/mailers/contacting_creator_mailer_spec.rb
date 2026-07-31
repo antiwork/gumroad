@@ -1762,8 +1762,10 @@ describe ContactingCreatorMailer do
       expect(mail.message).not_to be_a ActionMailer::Base::NullMail
     end
 
+    # Recording now goes through `eval` (the claim is compare-and-set), so stub that rather than
+    # `set`: the claim must succeed and the delivery must happen for this to reach the failing write.
     it "sends the email even when recording that it sent fails" do
-      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      allow($redis).to receive(:eval).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify).at_least(:once)
 
       expect do

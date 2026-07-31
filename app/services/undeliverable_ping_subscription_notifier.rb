@@ -27,8 +27,9 @@ class UndeliverablePingSubscriptionNotifier
 
   # Settle only what this render holds. A claim expires, so the key may already carry a successor's
   # token or the permanent record of a send that successor completed; overwriting either would let a
-  # later release discard a real send, or a later event repeat one. An absent key is settled too — an
-  # expiry nobody claimed behind is still this render's send to record.
+  # later release discard a real send, or a later event repeat one. An absent key is settled too — our
+  # own transmission happened, so whether nobody claimed behind the expiry or a successor claimed and
+  # released, this send is still the one to record.
   SETTLE_IF_HELD = <<~LUA
     local current = redis.call('GET', KEYS[1])
     if current == false or current == ARGV[1] then
