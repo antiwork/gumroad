@@ -35,6 +35,15 @@ class User < ApplicationRecord
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
+  # Seasoning before a seller can pull funds instantly. Mirrors Stripe's own rule for the same
+  # feature: Instant Payouts require an account to have been processing on Stripe for at least
+  # 60 days.
+  #
+  # Age rather than a payout tally, because a tally measures cadence instead of history: a weekly
+  # seller cleared the old four-payout bar in a month while a seller paid a few times over several
+  # years never did, and failed payout attempts never incremented it at all.
+  MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS = 60.days
+
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
 
   # How long a resolved avatar variant URL stays cached. Avatar URLs are stable
@@ -202,6 +211,8 @@ class User < ApplicationRecord
 
   attr_json_data_accessor :background_opacity_percent, default: 100
   attr_json_data_accessor :payout_date_of_last_payment_failure_email
+  # Separate from the column above on purpose — see Payment#send_paypal_terminal_failure_email.
+  attr_json_data_accessor :payout_date_of_last_paypal_terminal_failure_email
   attr_json_data_accessor :au_backtax_sales_cents, default: 0
   attr_json_data_accessor :au_backtax_owed_cents, default: 0
   attr_json_data_accessor :gumroad_day_timezone
@@ -1130,8 +1141,19 @@ class User < ApplicationRecord
   def eligible_for_instant_payouts?
     compliant? &&
       !payouts_paused? &&
-      payments.completed.count >= 4 &&
+      payments.completed.exists? &&
+      stripe_account_seasoned_for_instant_payouts? &&
       alive_user_compliance_info&.legal_entity_country_code == "US"
+  end
+
+  # "Processing on Stripe" is anchored on the Stripe account itself, not on the Gumroad signup
+  # date: a seller can hold an account for years before connecting a payout account, and it is the
+  # processing history Stripe seasons against.
+  def stripe_account_seasoned_for_instant_payouts?
+    account = stripe_account
+    return false if account.nil?
+
+    account.created_at <= MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
   end
 
   def instant_payouts_supported?

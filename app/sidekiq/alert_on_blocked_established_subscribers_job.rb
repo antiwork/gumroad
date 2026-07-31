@@ -80,6 +80,9 @@ class AlertOnBlockedEstablishedSubscribersJob
         next if charge_counts.empty?
 
         failures = latest_block_failures(charge_counts.keys)
+        failures = reject_recovered(failures)
+        next if failures.empty?
+
         block_dates = active_block_dates(failures)
         live_subscription_ids = live_subscription_ids_among(charge_counts.keys)
 
@@ -157,6 +160,32 @@ class AlertOnBlockedEstablishedSubscribersJob
       Purchase.where(id: newest_per_subscription.values)
               .includes(:purchaser, :gift_given, :gift_received)
               .to_a
+    end
+
+    # Drops subscriptions whose newest successful renewal postdates their newest blocked failure:
+    # eligibility is "stranded now", and a failure row alone cannot say that. A block re-written
+    # after a charge got through is a different event from the one that failed.
+    #
+    # A successful UPGRADE charge counts as recovery and is deliberately not excluded. It settles
+    # the overdue period, so the subscriber is not stranded at report time — but it carries the
+    # buyer's live browser_guid while renewals keep copying the original purchase's, so a
+    # guid-blocked subscriber who self-rescues this way reappears only after the next cycle fails.
+    # Ties go to the report: a same-second pair is an ambiguous ordering, and a human reading a
+    # false positive beats a silent drop.
+    def reject_recovered(failures)
+      return failures if failures.empty?
+
+      newest_success = Purchase.successful
+                               .recurring_charge
+                               .not_is_gift_receiver_purchase
+                               .where(subscription_id: failures.map(&:subscription_id))
+                               .group(:subscription_id)
+                               .maximum(:created_at)
+
+      failures.reject do |purchase|
+        renewed_at = newest_success[purchase.subscription_id]
+        renewed_at.present? && renewed_at > purchase.created_at
+      end
     end
 
     # Purchase id => date its declining block was written, absent when no block is active any more.

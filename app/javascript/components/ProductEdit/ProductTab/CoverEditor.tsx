@@ -33,6 +33,12 @@ const IMAGE_EXTENSIONS = ["jpeg", "jpg", "png", "gif"];
 const MEGABYTE = 1024 * 1024;
 const MAX_IMAGE_FILE_SIZE = 50 * MEGABYTE;
 
+// Marks the remove button so the Sortable below can exclude it from the drag surface.
+// A data attribute rather than a class: Tailwind classes on this button are styling the
+// seller can reasonably expect to change, and a `filter` selector pointed at one of them
+// would silently stop working the next time the button is restyled.
+const REMOVE_COVER_ATTRIBUTE = "data-remove-cover";
+
 export const CoverEditor = ({
   covers,
   setCovers,
@@ -82,7 +88,21 @@ export const CoverEditor = ({
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "start", gap: "var(--spacer-4)" }}
           >
-            <Sortable animation={150} tag={CoversTabList} list={covers} setList={setCovers}>
+            {/* `filter` keeps the remove button out of the drag surface, and
+                `preventOnFilter: false` is the half that actually fixes touch: SortableJS's
+                default is to `preventDefault()` the filtered `touchstart`, which cancels the
+                synthetic click the browser would otherwise emit — so on a phone the button
+                rendered, highlighted, and did nothing. Both are needed; `filter` alone only
+                stops the tap being read as a drag.
+                See https://github.com/antiwork/gumroad-private/issues/1524 */}
+            <Sortable
+              animation={150}
+              tag={CoversTabList}
+              list={covers}
+              setList={setCovers}
+              filter={`[${REMOVE_COVER_ATTRIBUTE}]`}
+              preventOnFilter={false}
+            >
               {covers.map((cover) => (
                 <CoverTab
                   key={cover.id}
@@ -327,6 +347,7 @@ const CoverTab = ({
 
       {showDelete || !isDesktop ? (
         <RemoveButton
+          {...{ [REMOVE_COVER_ATTRIBUTE]: "" }}
           onClick={(evt) => {
             evt.stopPropagation();
             onRemove();

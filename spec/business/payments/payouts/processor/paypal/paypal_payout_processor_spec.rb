@@ -67,6 +67,221 @@ describe PaypalPayoutProcessor do
         end
       end
 
+      describe "when PayPal permanently refused a payout to this address" do
+        before do
+          @refused = create(:payment_failed, user:, payment_address: user.payment_address,
+                                             failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+          # The failing payout wrote the seller their explanation, which is the ordinary state of an
+          # account that has hit one of these rejections.
+          user.add_payout_note(content: @refused.terminal_paypal_failure_seller_note, seller_visible: true)
+        end
+
+        it "returns false instead of re-attempting the same doomed payout" do
+          expect(described_class.is_user_payable(user, 10_01)).to eq(false)
+        end
+
+        it "does not record another payout note, so the seller-facing one stays the newest" do
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.not_to change { user.comments.with_type_payout_note.count }
+        end
+
+        # The seller-facing explanation is the only thing telling this seller what to do, and other
+        # blockers legitimately write over it: a flagged account gets a seller-visible "the account
+        # was under review" note every week. Once that clears, staying silent would leave them
+        # reading about a finished review with no idea PayPal is what is holding the money now.
+        it "writes the explanation again when the seller can no longer see one" do
+          user.add_payout_note(content: "Payout on July 1st, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(@refused.terminal_paypal_failure_seller_note)
+          expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+        end
+
+        it "does not write the explanation again when notes are not being recorded" do
+          user.add_payout_note(content: "Payout on July 1st, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+
+          expect do
+            described_class.is_user_payable(user, 10_01)
+          end.not_to change { user.comments.with_type_payout_note.count }
+        end
+
+        # A seller can be rejected on one PayPal address, switch to another, and be rejected there
+        # too. The note they are already reading names the address they left: it quotes a date that
+        # is not the one that stopped their money, and here also the other of the two PayPal
+        # restrictions. Treating it as "already explained" would leave them acting on the wrong
+        # information with no way to find the right one.
+        it "explains the current rejection even when the seller is reading one about an older address" do
+          # The note the seller is already reading is about a currency rejection (14159) on the
+          # address they have since left. Deliberately the other code from the current one, so this
+          # covers the half of the predicate where the restriction sentence itself differs — the
+          # sibling example below covers the same-code case where only the date separates them.
+          older = create(:payment_failed, user:, payment_address: user.payment_address,
+                                          failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+          user.add_payout_note(content: older.terminal_paypal_failure_seller_note, seller_visible: true)
+
+          user.update!(payment_address: "second@gr.co")
+          current = create(:payment_failed, user:, payment_address: "second@gr.co",
+                                            failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(current.terminal_paypal_failure_seller_note)
+          expect(note.content).to include("payments cannot be received in the country on that account's address")
+          expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+        end
+
+        # A currency rejection is explained to the seller but must NOT stop the retries, because
+        # PayPal lets a recipient add receive currencies on the same account and the block is keyed
+        # on the payout address — which does not change when they do that. Blocking would freeze the
+        # whole balance of a seller who had already fixed the problem, clearable only by an
+        # admin-issued payout. Reviewer finding on #6526; see
+        # Payment::FailureReason::RETRY_BLOCKING_PAYPAL_FAILURE_REASONS.
+        it "keeps retrying a currency rejection the seller can repair in place" do
+          currency_refused_user = create(:user, payment_address: "currency@gr.co", user_risk_state: "compliant")
+          create(:user_compliance_info, user: currency_refused_user)
+          create(:payment_failed, user: currency_refused_user, payment_address: "currency@gr.co",
+                                  failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+
+          expect(described_class.is_user_payable(currency_refused_user, 10_01)).to eq(true)
+        end
+
+        # Same shape, but both rejections carry the SAME PayPal code, so the restriction sentence is
+        # identical and the payout date is the only thing separating the two notes. This is the more
+        # common real case — a seller moving between accounts in one country hits 3148 both times —
+        # and it is the half of the predicate that a same-day fixture cannot exercise.
+        it "explains the current rejection when only the payout date tells the two notes apart" do
+          older = user.comments.with_type_payout_note.last
+          expect(older.content).to eq(@refused.terminal_paypal_failure_seller_note)
+
+          user.update!(payment_address: "third@gr.co")
+          current = create(:payment_failed, user:, payment_address: "third@gr.co",
+                                            failure_reason: "PAYPAL 3148", txn_id: nil,
+                                            processor_fee_cents: nil, created_at: 3.weeks.ago)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(current.terminal_paypal_failure_seller_note)
+          expect(note.content).to include(current.created_at.to_fs(:formatted_date_full_month))
+          expect(note.content).not_to eq(older.content)
+        end
+
+        # The two rejections disagree about whether retries continue, so on an address carrying both
+        # the 3148 is what still stops the money even when the 14159 came later. Quoting the newer
+        # one would send the seller to add US dollars to an account in a country PayPal will not pay
+        # into at all, and the payout would keep being refused after they had done it. Reviewer
+        # finding on #6526.
+        it "explains the rejection that is still blocking, not merely the newest one" do
+          currency = create(:payment_failed, user:, payment_address: user.payment_address,
+                                             failure_reason: "PAYPAL 14159", txn_id: nil,
+                                             processor_fee_cents: nil, created_at: 1.day.from_now)
+          user.add_payout_note(content: "Payout on July 1st, 2026 was skipped because the account was under review.",
+                               seller_visible: true)
+
+          expect do
+            described_class.is_user_payable(user, 10_01, add_comment: true)
+          end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.content).to eq(@refused.terminal_paypal_failure_seller_note)
+          expect(note.content).not_to eq(currency.terminal_paypal_failure_seller_note)
+          expect(note.content).to include("payments cannot be received in the country on that account's address")
+        end
+
+        # Nothing outranks a rejection that does not block retries when that is all there is, so the
+        # seller still gets told about a currency rejection rather than nothing.
+        it "explains a currency rejection when no retry-blocking one stands against the address" do
+          currency_user = create(:user, payment_address: "solo-currency@gr.co", user_risk_state: "compliant")
+          create(:user_compliance_info, user: currency_user)
+          currency = create(:payment_failed, user: currency_user, payment_address: "solo-currency@gr.co",
+                                             failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+
+          expect(described_class.rejection_to_explain(currency_user)).to eq(currency)
+          expect(described_class.ensure_terminal_failure_explanation_visible(currency_user)).to eq(true)
+          expect(currency_user.comments.with_type_payout_note.last.content)
+            .to eq(currency.terminal_paypal_failure_seller_note)
+        end
+
+        # A rejection from before a payout that later succeeded is history, not the seller's
+        # situation, so it must not be what the note quotes.
+        it "ignores rejections from before a payout that later completed" do
+          create(:payment_completed, user:, payment_address: user.payment_address, created_at: 1.hour.from_now)
+          current = create(:payment_failed, user:, payment_address: user.payment_address,
+                                            failure_reason: "PAYPAL 3148", txn_id: nil,
+                                            processor_fee_cents: nil, created_at: 2.hours.from_now)
+
+          expect(described_class.rejection_to_explain(user.reload)).to eq(current)
+        end
+
+        it "returns true again once the seller switches to a different PayPal address" do
+          user.update!(payment_address: "another@gr.co")
+
+          expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+
+        it "returns true again once a later payout to the same address completed" do
+          create(:payment_completed, user:, payment_address: user.payment_address)
+
+          expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+
+        it "still allows a payout issued from admin, which is how support pays a fixed account" do
+          expect(described_class.is_user_payable(user, 10_01, from_admin: true)).to eq(true)
+        end
+
+        it "keeps retrying failures that are not terminal" do
+          user.payments.failed.each { |payment| payment.update!(failure_reason: "PAYPAL 3015") }
+
+          expect(described_class.is_user_payable(user, 10_01)).to eq(true)
+        end
+
+        # Stripe payouts carry no payment_address, so they never clear this address-keyed rejection.
+        # A seller since moved to Stripe Connect is being paid every week, and must not be counted
+        # as stopped by PayPal — the note would tell an actively-paid seller their money had stopped.
+        describe "and the seller has since moved to Stripe Connect" do
+          it "is not considered blocked by the rejection" do
+            create(:merchant_account_stripe_connect, user:)
+            user.update!(check_merchant_account_is_linked: true)
+
+            expect(described_class.terminal_failure_blocking_payouts?(user.reload)).to eq(false)
+          end
+
+          # This has to agree with the gate that actually pays them, not merely happen to match it
+          # today: the two conditions used to be written out twice, and a change to one would have
+          # left us telling a seller Stripe pays every week that their payouts had stopped.
+          it "asks the same question the Stripe gate asks" do
+            create(:merchant_account_stripe_connect, user:)
+            user.update!(check_merchant_account_is_linked: true)
+
+            expect(StripePayoutProcessor).to receive(:pays_user_via_stripe_connect?).with(user).and_return(true)
+
+            expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(false)
+          end
+        end
+
+        it "is considered blocked while PayPal is still the only payout method on file" do
+          expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(true)
+        end
+
+        it "is not considered blocked once a bank account is on file" do
+          create(:ach_account, user:)
+
+          expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(false)
+        end
+      end
+
       describe "payment address contains non-ascii characters" do
         before do
           user.payment_address = "sebastian.ripenås@example.com"
@@ -953,6 +1168,65 @@ describe PaypalPayoutProcessor do
 
       expect(payment.split_payments_info.count).to eq 2
       expect(payment.processor_fee_cents).to eq 500
+    end
+  end
+
+  describe ".update_split_payment_state" do
+    let(:user) { create(:user, payment_address: "seller@example.com") }
+    let(:payment) do
+      create(:payment, user:, payment_address: user.payment_address, was_created_in_split_mode: true,
+                       split_payments_info: split_payments_info)
+    end
+
+    context "when every part failed with the same PayPal rejection code" do
+      let(:split_payments_info) do
+        [{ "state" => "failed", "reason_code" => "3148" }, { "state" => "failed", "reason_code" => "3148" }]
+      end
+
+      it "records the code, so a permanently refused split payout stops being retried" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.state).to eq "failed"
+        expect(payment.failure_reason).to eq "PAYPAL 3148"
+        expect(payment.terminal_paypal_failure?).to eq true
+      end
+    end
+
+    context "when PayPal sent no rejection code" do
+      let(:split_payments_info) { [{ "state" => "failed" }, { "state" => "failed" }] }
+
+      it "falls back to the generic reason and keeps retrying" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.state).to eq "failed"
+        expect(payment.failure_reason).to eq Payment::FailureReason::PAYPAL_PAYOUT_FAILED
+        expect(payment.terminal_paypal_failure?).to eq false
+      end
+    end
+
+    context "when the parts disagree and none of them stops the retries" do
+      let(:split_payments_info) do
+        [{ "state" => "failed", "reason_code" => "3015" }, { "state" => "failed", "reason_code" => "1002" }]
+      end
+
+      it "falls back to the generic reason rather than picking one part's code" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.failure_reason).to eq Payment::FailureReason::PAYPAL_PAYOUT_FAILED
+      end
+    end
+
+    context "when the parts disagree and one of them stops the retries" do
+      let(:split_payments_info) do
+        [{ "state" => "failed", "reason_code" => "14159" }, { "state" => "failed", "reason_code" => "3148" }]
+      end
+
+      it "keeps the retry-blocking code, so the unreachable address stops being paid out to" do
+        described_class.update_split_payment_state(payment)
+
+        expect(payment.reload.failure_reason).to eq "PAYPAL 3148"
+        expect(payment.terminal_paypal_failure?).to eq true
+      end
     end
   end
 

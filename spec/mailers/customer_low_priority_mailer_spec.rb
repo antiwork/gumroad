@@ -305,6 +305,72 @@ describe CustomerLowPriorityMailer do
     end
   end
 
+  describe "subscription_charge_blocked_location" do
+    context "memberships" do
+      it "explains the location block without blaming the card, and links to manage subscription" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        mail = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id)
+
+        expect(mail.subject).to eq "Your membership could not be renewed."
+        expect(mail.body.encoded).to include subscription.link.name
+        expect(mail.body.encoded).to include "United States sanctions"
+        expect(mail.body.encoded).to include "no charge was attempted"
+        expect(mail.body.encoded).to include "nothing wrong with your card"
+        expect(mail.body.encoded).to include "/manage"
+      end
+
+      it "does not tell the subscriber to update or re-authorize their card" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to_not include "attempted to charge your card"
+        expect(body).to_not include "re-authorize"
+        expect(body).to_not include "update your card"
+      end
+
+      it "links to manage subscription with the token that is valid after sending" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "token=#{subscription.reload.token}"
+      end
+
+      it "marks the manage link as coming from a failure email so the retry it invites does not re-send it" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "declined=true"
+      end
+    end
+
+    context "installment plans" do
+      let(:installment_plan_purchase) { create(:installment_plan_purchase) }
+      let(:subscription) { installment_plan_purchase.subscription }
+
+      it "uses installment-plan wording" do
+        mail = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id)
+
+        expect(mail.subject).to eq "Your installment payment could not be processed."
+        expect(mail.body.encoded).to include "installment plan"
+      end
+
+      it "says the plan will be paused rather than canceled" do
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to include "will be paused"
+        expect(body).to_not include "will be canceled"
+      end
+    end
+  end
+
   describe "subscription_ended" do
     context "memberships" do
       before do
@@ -563,7 +629,16 @@ describe CustomerLowPriorityMailer do
         expect(mail.body.encoded).to have_text("We'd love to hear your thoughts on it. When you have a moment, could you drop us a quick review?")
         expect(mail.body.encoded).to have_text("Thank you for your contribution!")
         expect(mail.body.encoded).to have_link("Leave a review", href: purchase.link.long_url)
-        expect(mail.body.encoded).not_to have_link("Unsubscribe")
+        expect(mail.body.encoded).to have_link("Unsubscribe")
+      end
+
+      it "gives a guest buyer a purchase-scoped unsubscribe link that resolves without a session" do
+        body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
+
+        expect(purchase.purchaser).to be_nil
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(token).to be_present
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
       end
 
       context "purchase does not have name" do
@@ -594,10 +669,38 @@ describe CustomerLowPriorityMailer do
       end
 
       context "purchaser has an account" do
-        before { purchase.update!(purchaser: create(:user, name: "Purchaser")) }
+        before { purchase.update!(purchaser: create(:user, name: "Purchaser", email: purchase.email)) }
 
-        it "includes unsubscribe link" do
-          expect(CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded).to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
+        it "includes a token-scoped unsubscribe link that resolves without a session" do
+          body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
+
+          # Tokens are non-deterministic (AES-GCM, random IV), so assert on what the emitted
+          # token resolves to rather than comparing against a freshly minted one.
+          token = body[%r{/users/unsubscribe_review_reminders/([A-Za-z0-9_-]+)}, 1]
+          expect(token).to be_present
+          expect(User.find_by_secure_external_id(token, scope: Users::ReviewRemindersController::TOKEN_SCOPE)).to eq(purchase.purchaser)
+        end
+
+        it "no longer points at the login-gated route" do
+          body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
+
+          expect(body).to have_link("Unsubscribe")
+          expect(body).not_to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
+        end
+      end
+
+      context "purchaser was reassigned but the purchase email still points at the previous recipient" do
+        before do
+          purchase.update!(purchaser: create(:user, email: "new-owner@example.com"))
+          purchase.update_column(:email, "previous-recipient@example.com")
+        end
+
+        it "falls back to the session-gated route so the recipient cannot opt the purchaser out unauthenticated" do
+          mail = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
+
+          expect(mail.to).to eq(["previous-recipient@example.com"])
+          expect(mail.body.encoded).not_to match(%r{/users/unsubscribe_review_reminders/})
+          expect(mail.body.encoded).to have_link("Unsubscribe", href: user_unsubscribe_review_reminders_url)
         end
       end
     end
@@ -618,6 +721,16 @@ describe CustomerLowPriorityMailer do
       it "does not send an email" do
         expect do
           CustomerLowPriorityMailer.purchase_review_reminder(purchase.id)
+        end.to_not change { ActionMailer::Base.deliveries.count }
+      end
+    end
+
+    context "buyer unsubscribed from the seller" do
+      before { purchase.update!(can_contact: false) }
+
+      it "does not send an email" do
+        expect do
+          CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).deliver_now
         end.to_not change { ActionMailer::Base.deliveries.count }
       end
     end
@@ -668,7 +781,53 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to have_text("We'd love to hear your thoughts on it. When you have a moment, could you drop us some reviews?")
       expect(mail.body.encoded).to have_text("Thank you for your contribution!")
       expect(mail.body.encoded).to have_link("Leave reviews", href: reviews_url)
-      expect(mail.body.encoded).to have_link("Unsubscribe")
+      unsubscribe_token = mail.body.encoded[%r{/users/unsubscribe_review_reminders/([A-Za-z0-9_-]+)}, 1]
+      expect(User.find_by_secure_external_id(unsubscribe_token, scope: Users::ReviewRemindersController::TOKEN_SCOPE)).to eq(order.purchaser)
+    end
+
+    context "order has no purchaser account" do
+      it "falls back to a purchase-scoped unsubscribe link" do
+        order.update!(purchaser: nil)
+
+        body = CustomerLowPriorityMailer.order_review_reminder(order.id).body.encoded
+
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(token).to be_present
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
+      end
+
+      it "mints the token from a purchase the email is about, skipping excluded ones" do
+        # `excluded` is first in the order, so it is what `order.purchases.first` returns —
+        # the row the token used to come from even though it gets no reminder.
+        excluded = create(:purchase, full_name: "Buyer", can_contact: false)
+        multi_seller_order = create(:order, purchaser: nil, purchases: [excluded, purchase])
+        expect(multi_seller_order.purchases.first).to eq(excluded)
+
+        body = CustomerLowPriorityMailer.order_review_reminder(multi_seller_order.id).body.encoded
+
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
+      end
+
+      it "addresses the buyer of the purchase it is about, not an excluded first row" do
+        excluded = create(:purchase, full_name: "Excluded Buyer", email: "excluded@example.com", can_contact: false)
+        mixed_order = create(:order, purchaser: nil, purchases: [excluded, purchase])
+
+        mail = CustomerLowPriorityMailer.order_review_reminder(mixed_order.id)
+
+        expect(mail.to).to eq([purchase.email])
+        expect(mail.to).not_to include(excluded.email)
+        expect(mail.body.encoded).to have_text("Hi Buyer,")
+      end
+
+      it "does not send when no purchase in the order is still eligible" do
+        order.update!(purchaser: nil)
+        purchase.update!(can_contact: false)
+
+        expect do
+          CustomerLowPriorityMailer.order_review_reminder(order.id).deliver_now
+        end.to_not change { ActionMailer::Base.deliveries.count }
+      end
     end
 
     context "purchase does not have name" do

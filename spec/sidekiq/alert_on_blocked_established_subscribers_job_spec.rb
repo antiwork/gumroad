@@ -6,15 +6,25 @@ describe AlertOnBlockedEstablishedSubscribersJob do
   let(:browser_guid) { "guid-established" }
   let(:email) { "established@example.com" }
 
+  # A subscription's successful history predates the renewal that failed, which is the only shape
+  # the report is about. Leaving these at Time.current would put a successful renewal after every
+  # failure and read as recovery.
+  let(:history_starts_at) { 6.months.ago }
+
   # Builds a subscription with exactly `total` successful purchases against it. The membership
   # factory's own original purchase is successful and counts, so only the remainder are renewals.
   def subscription_with_history(total)
     subscription = create(:membership_purchase).subscription
-    (total - 1).times do
-      create(:purchase, link: subscription.link, subscription:,
-                        is_original_subscription_purchase: false, purchase_state: "successful")
+    (total - 1).times do |index|
+      successful_renewal(subscription:, created_at: history_starts_at + index.days)
     end
     subscription
+  end
+
+  def successful_renewal(subscription:, created_at:)
+    create(:purchase, link: subscription.link, subscription:,
+                      is_original_subscription_purchase: false, purchase_state: "successful",
+                      created_at:)
   end
 
   def failed_renewal(subscription:, guid: browser_guid, buyer_email: email, created_at: 1.hour.ago,
@@ -241,6 +251,79 @@ describe AlertOnBlockedEstablishedSubscribersJob do
     described_class.new.perform
 
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  # Eligibility is "stranded now", not "was ever blocked".
+  it "ignores a subscription that renewed successfully after its blocked failure" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, created_at: 20.days.ago)
+    successful_renewal(subscription:, created_at: 10.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  it "still reports a subscription whose successful renewal predates the blocked failure" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    successful_renewal(subscription:, created_at: 20.days.ago)
+    failed_renewal(subscription:, created_at: 10.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+    end
+  end
+
+  # An upgrade charge settles the overdue period, so the subscriber is not stranded when the report
+  # runs. Pinned because it is a judgment call, not an oversight: the upgrade carries a live
+  # browser_guid, so a guid-blocked subscriber who self-rescues this way is only reported again
+  # after their next renewal fails.
+  it "treats a successful upgrade charge as recovery" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, created_at: 20.days.ago)
+    create(:purchase, link: subscription.link, subscription:, is_original_subscription_purchase: false,
+                      is_upgrade_purchase: true, purchase_state: "successful", created_at: 10.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  # created_at is second-precision, so an import can land both rows in the same second. An
+  # ambiguous ordering should produce a human-reviewed report entry, not a silent drop.
+  it "reports a subscription whose successful renewal shares a timestamp with the blocked failure" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_at = 10.days.ago.change(usec: 0)
+    failed_renewal(subscription:, created_at: failed_at)
+    successful_renewal(subscription:, created_at: failed_at)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+    end
+  end
+
+  # A gifted membership's opening purchase is not a renewal, so it is not evidence that renewals
+  # are getting through — the same predicate the failure side uses has to apply here too.
+  it "does not treat a later gift-receiver purchase as a recovered renewal" do
+    subscription = subscription_with_history(described_class::MIN_SUCCESSFUL_CHARGES)
+    failed_renewal(subscription:, created_at: 20.days.ago)
+    create(:purchase, link: subscription.link, subscription:, is_original_subscription_purchase: false,
+                      is_gift_receiver_purchase: true, purchase_state: "successful", created_at: 10.days.ago)
+    PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _sender, message|
+      expect(message).to include("subscription #{subscription.id}")
+    end
   end
 
   it "reports a subscription once even when several of its renewals failed" do

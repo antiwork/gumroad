@@ -195,7 +195,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
     def notify_bank_rejection!(user, note, rejection_kind)
       _code, message = StripeMerchantAccountManager.bank_sync_note_error_details(note)
       send_once!(note, marker: "seller_notified") do
-        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, message).deliver_later(queue: "critical")
+        ContactingCreatorMailer.invalid_bank_account(user.id, rejection_kind, message, note.json_data["bank_account_id"]).deliver_later(queue: "critical")
       end
     end
 

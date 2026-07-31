@@ -121,7 +121,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect do
         described_class.new.perform(user.id)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, note.content)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, note.content, nil)
 
       note.reload
       expect(note.json_data["seller_notified"]).to be(true)
@@ -273,7 +273,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect do
         described_class.new.perform(user.id)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, blocked_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_BLOCKED, blocked_message, nil)
 
       note.reload
       expect(note.json_data["seller_notified"]).to be(true)
@@ -355,7 +355,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect do
         described_class.new.perform(user.id)
       end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
-        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, unusable_message)
+        .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_TERMINAL, unusable_message, nil)
 
       note.reload
       expect(note.json_data["seller_notified"]).to be(true)

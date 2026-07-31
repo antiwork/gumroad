@@ -257,6 +257,8 @@ export class PaymentConfirmedError extends Error {
 export const startClientConfirmOrderCreation = async (
   requestData: StartCartPurchaseRequestPayload,
   confirmationTokenId: string,
+  // See PurchasePaymentMethod in ./purchase for why this is needed.
+  selectedMethodType: string,
 ): Promise<CartPurchaseResult> => {
   let confirmedReturnUrl: string | null = null;
   try {
@@ -304,7 +306,7 @@ export const startClientConfirmOrderCreation = async (
       // this leg are debuggable (the 2026-07-23 iDEAL ramp-down produced zero completions
       // with zero server-side evidence of why — gumroad-private#933). Fire-and-forget: the
       // buyer-facing failure below must render whether or not the report lands.
-      void reportClientConfirmError(order.id, "confirm", confirmResult.error);
+      void reportClientConfirmError(order.id, "confirm", confirmResult.error, selectedMethodType);
       return translateOrderFailureResponseIntoLineItemFailures(requestData, {
         success: false,
         error_message: confirmResult.error.message ?? "Sorry, something went wrong.",
@@ -350,7 +352,15 @@ export const startClientConfirmOrderCreation = async (
 // Reports a client-side confirm failure to the server, which is otherwise blind to it (see the
 // call site above). Best-effort: swallow every failure — error reporting must never break the
 // checkout error path it instruments.
-const reportClientConfirmError = async (orderId: string, stage: string, error: StripeError): Promise<void> => {
+//
+// Both method fields are sent: Stripe's own is authoritative but usually absent, so a mismatch
+// between the two stays visible instead of being papered over.
+const reportClientConfirmError = async (
+  orderId: string,
+  stage: string,
+  error: StripeError,
+  selectedMethodType: string,
+): Promise<void> => {
   try {
     await request({
       method: "POST",
@@ -362,6 +372,7 @@ const reportClientConfirmError = async (orderId: string, stage: string, error: S
         stripe_error_code: error.code ?? null,
         stripe_error_message: error.message ?? null,
         payment_method_type: error.payment_method?.type ?? null,
+        selected_payment_method_type: selectedMethodType,
       },
     });
   } catch {
