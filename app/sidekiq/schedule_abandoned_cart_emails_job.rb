@@ -21,30 +21,13 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  # Wall-clock ceiling on one attempt, and the only bound when the lock's remaining life cannot be
-  # read. SCAN_TIME_BUDGET caps a single statement, not the run, which walks ~30 day windows and
-  # then matches workflows. An attempt outliving its lock lets the next enqueue take the same
-  # digest and run concurrently, and `sent_abandoned_cart_emails` has no unique index, so two live
-  # copies can email one cart twice — `attempt_deadline` therefore also clamps to the live TTL,
-  # because this constant alone assumes a queue latency nobody guarantees.
-  ATTEMPT_TIME_BUDGET = 18.hours
-
-  # A SIGKILL (OOM, deploy reap) skips the `ensure` that releases an `until_executed` lock and
-  # leaves the digest with no expiry. This job takes no arguments, so its digest is constant and
-  # one strand drops every later enqueue forever (gumroad-private#1576). Stays under the 24h
-  # schedule so a strand costs one run rather than every run.
+  # A SIGKILL (OOM, deploy pod reap) skips the `ensure` that releases an `until_executed`
+  # lock, and this job's digest is constant because it takes no arguments — so a stranded
+  # lock silently dropped every subsequent daily enqueue (gumroad-private#1576). Kept under
+  # the 24h schedule so a strand costs one run, not every run. Duplicate sends from an
+  # overlapping run are prevented by the unique index on sent_abandoned_cart_emails, not
+  # by this lock.
   LOCK_TTL = 23.hours
-
-  # How much of the lock's remaining life the attempt refuses to spend, covering the gap between
-  # the deadline check and the work that follows it (a batch of `deliver_later` calls, a statement
-  # already in flight) plus Redis/Rails clock skew.
-  LOCK_SAFETY_MARGIN = 1.hour
-
-  class AttemptTimeBudgetExceeded < StandardError; end
-
-  # Raised before any work when the lock has less life left than LOCK_SAFETY_MARGIN. Distinct from
-  # AttemptTimeBudgetExceeded so Sentry separates "ran too long" from "never safely started".
-  class LockLifeTooShort < StandardError; end
 
   sidekiq_options queue: :low, retry: 5, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
 
@@ -61,28 +44,19 @@ class ScheduleAbandonedCartEmailsJob
   end
 
   def perform
-    @deadline = attempt_deadline
-
     # cart_product_ids_with_cart_ids is a hash of { product_id => { cart_id => [variant_ids] } }
     cart_product_ids_with_cart_ids = {}
 
-    # How many days ago each cart was abandoned, so the enqueue loop can go oldest-first.
-    cart_ids_with_window_days = {}
-
     days_to_process = (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i)
     (1..days_to_process).each do |day|
-      check_attempt_deadline!
       day_start = day.days.ago.beginning_of_day
       day_end = day == 1 ? Cart::ABANDONED_IF_UPDATED_BEFORE_AGO.ago : (day - 1).days.ago.beginning_of_day
 
       start_time = Time.current
       cart_ids = abandoned_cart_ids(day_start..day_end)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
-        check_attempt_deadline!
         Cart.includes(:alive_cart_products).where(id: batch_ids).each do |cart|
           next if cart.user_id.blank? && cart.email.blank?
-
-          cart_ids_with_window_days[cart.id] = day
 
           cart.alive_cart_products.each do |cart_product|
             product_id = cart_product.product_id
@@ -101,7 +75,6 @@ class ScheduleAbandonedCartEmailsJob
 
     start_time = Time.current
     Workflow.distinct.alive.abandoned_cart_type.published.joins(seller: :links).merge(User.alive.not_suspended).merge(Link.visible_and_not_archived).includes(:seller).find_each do |workflow|
-      check_attempt_deadline!
       next unless workflow.seller&.eligible_for_abandoned_cart_workflows?
 
       workflow.abandoned_cart_products(only_product_and_variant_ids: true).each do |product_id, variant_ids|
@@ -120,107 +93,12 @@ class ScheduleAbandonedCartEmailsJob
 
     Rails.logger.info "Fetched #{cart_ids_with_matched_workflow_ids_and_product_ids.count} cart ids with matched workflow ids and product ids in #{(Time.current - start_time).round(2)} seconds"
 
-    enqueued_count = 0
-    # Oldest-abandoned first. A cart's window shifts one day older every run, so a cart the stop
-    # path never reaches is only rescanned tomorrow if it has a day left inside
-    # Cart::ABANDONED_IF_UPDATED_AFTER_AGO — the last window has none. Sending in that order makes
-    # the carts at the edge the ones already handled, so what a stop defers is recoverable.
-    # sort_by is not stable, so the discovery index is the tiebreak: same-window carts keep the
-    # id-ascending order they were scanned in rather than an arbitrary one.
-    enqueue_order = cart_ids_with_matched_workflow_ids_and_product_ids.each_with_index.sort_by do |(cart_id, _), index|
-      [-cart_ids_with_window_days.fetch(cart_id, 0), index]
-    end.map(&:first)
-
-    enqueue_order.each do |cart_id, workflow_ids_with_product_ids|
-      # Deliberately not `check_attempt_deadline!`: raising here would be retried, and a retry
-      # re-enqueues every cart this loop already sent. `sent_abandoned_cart_emails` rows are
-      # written by the mailer jobs when they run, not at enqueue time, so the retry cannot see
-      # them — `Cart.abandoned` still matches those carts and the buyer gets a second email.
-      # Stopping only defers, because of the oldest-first order above — except for carts in the
-      # final window, which this loop sends before any other, so a stop can strand them only if
-      # it lands inside that window. The alert reports how many of those were left.
-      if attempt_deadline_passed?
-        remaining = enqueue_order.drop(enqueued_count)
-        ErrorNotifier.notify(
-          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after reaching its attempt deadline — unreached carts are picked up by the next run, except any reported as aging out of the abandoned-cart window",
-          # The effective deadline, not ATTEMPT_TIME_BUDGET: the run may have been bounded by the
-          # tighter lock-derived ceiling instead, and reporting "18 hours" for a stop at hour 5
-          # points the reader at the wrong cause.
-          attempt_deadline: @deadline.iso8601,
-          carts_enqueued: enqueued_count,
-          carts_remaining: remaining.size,
-          # A cart in window `d` is scanned again tomorrow as window `d + 1`, so only the last
-          # window has nowhere left to shift into.
-          carts_aging_out: remaining.count { |cart_id, _| cart_ids_with_window_days.fetch(cart_id, 0) >= days_to_process }
-        )
-        break
-      end
-
+    cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
       CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
-      enqueued_count += 1
     end
   end
 
   private
-    # `lock_ttl` is anchored at ACQUIRE, which for a first attempt is enqueue time, and the server
-    # reuses that lock without refreshing it — so the gap between LOCK_TTL and ATTEMPT_TIME_BUDGET
-    # is a bet on :low queue latency, not a guarantee. Read what the lock actually has left and
-    # take whichever ceiling binds first.
-    def attempt_deadline
-      now = Time.current
-      budget_deadline = now + ATTEMPT_TIME_BUDGET
-      lock_life = remaining_lock_life
-      return budget_deadline if lock_life.nil?
-
-      lock_deadline = now + lock_life - LOCK_SAFETY_MARGIN
-
-      # Less lock life left than the margin: a retry that waited out most of the TTL. There is no
-      # safe amount of work to do, so decline the whole attempt rather than start one that finishes
-      # unlocked — deferring is recoverable (hence the oldest-first enqueue order), a duplicate
-      # email is not. Raising rather than returning is deliberate: the retry re-acquires a fresh
-      # full TTL once the digest finally expires, so the day still completes; returning would
-      # unlock and skip the day, aging out the final window's carts.
-      raise LockLifeTooShort, "only #{lock_life.inspect} of unique-lock life left, less than the #{LOCK_SAFETY_MARGIN.inspect} margin; declining before enqueueing anything" if lock_deadline <= now
-
-      [budget_deadline, lock_deadline].min
-    end
-
-    # Remaining life of this job's `until_executed` lock, or nil when it has none to spend: no key
-    # (uniqueness disabled, as in test) or no expiry (the orphaned digest of gumroad-private#1576 —
-    # a lock that cannot expire cannot expire mid-run). The digest is a pure function of class,
-    # queue and args, so it is reconstructible here without the job hash.
-    def remaining_lock_life
-      item = { "class" => self.class.name, "queue" => self.class.sidekiq_options["queue"].to_s, "args" => [] }
-      SidekiqUniqueJobs::Job.prepare(item)
-      pttl = Sidekiq.redis { |conn| conn.pttl(item["lock_digest"]) }
-      return if pttl.nil? || pttl.negative?
-
-      (pttl / 1000.0).seconds
-    rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
-      # This read is a tightening, not a dependency: a Redis hiccup must not take the day's emails
-      # down platform-wide (gumroad-private#1198). All four classes are load-bearing — Sidekiq 7
-      # talks redis-client, so neither RedisClient::Error nor the pool's checkout timeout is a
-      # Redis::BaseError. Narrow on purpose, so a coding error here surfaces instead of reporting
-      # itself as a healthy fallback.
-      Rails.logger.warn "ScheduleAbandonedCartEmailsJob could not read its lock TTL (#{e.class}: #{e.message}); falling back to #{ATTEMPT_TIME_BUDGET.inspect}"
-      nil
-    end
-
-    def attempt_deadline_passed?
-      Time.current >= @deadline
-    end
-
-    # Raises once the attempt has outrun its deadline, because an attempt that outlives its lock is
-    # the concurrency hazard. Called from every unbounded loop that runs BEFORE any mail is
-    # enqueued — day window, scan batch, hydration batch, workflow — since a retry there has no
-    # side effects to duplicate. Miss one and the bound is only as good as the loops it covers.
-    # The enqueue loop is the exception and stops without raising; see its comment.
-    def check_attempt_deadline!
-      return unless attempt_deadline_passed?
-
-      raise AttemptTimeBudgetExceeded, "exceeded its attempt deadline before finishing; aborting so the run cannot outlive its unique lock"
-    end
-
     # Returns the ids of all abandoned carts in the given updated_at window, equivalent to
     # `Cart.abandoned(updated_at: window).pluck(:id)` but walked in id-ordered keyset batches
     # so no single statement has to materialize the whole window. The cursor advances past
@@ -230,7 +108,6 @@ class ScheduleAbandonedCartEmailsJob
       last_id = 0
       WithMaxExecutionTime.timeout_queries(seconds: SCAN_TIME_BUDGET) do
         loop do
-          check_attempt_deadline!
           batch = Cart.abandoned(updated_at: window)
                       .where("carts.id > ?", last_id)
                       .reorder("carts.id ASC")
