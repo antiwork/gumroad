@@ -18,7 +18,7 @@ class OfferCodeDiscountComputingService
   end
 
   def process
-    products_data = @products_data = {}
+    products_data = {}
 
     links.each do |link|
       purchase_quantity = products[link.unique_permalink][:quantity].to_i
@@ -40,18 +40,25 @@ class OfferCodeDiscountComputingService
 
     {
       products_data:,
-      error_code:,
-      partial_ineligibility_code:
+      error_code: error_code(products_data),
+      partial_ineligibility_code: partial_ineligibility_code(products_data)
     }
   end
 
   private
     attr_reader :code, :products, :buyer
 
+    # Ordered by the buyer's cart, not the DB's plan: a capped code is consumed
+    # greedily, so iteration order decides which lines win a scarce discount.
     def links
-      @_links ||= Link.visible
-        .includes({ available_cross_sells: :product })
-        .where(unique_permalink: products.values.map { it[:permalink] })
+      @_links ||= begin
+        permalinks = products.values.map { it[:permalink] }
+        by_permalink = Link.visible
+          .includes({ available_cross_sells: :product })
+          .where(unique_permalink: permalinks)
+          .index_by(&:unique_permalink)
+        permalinks.filter_map { by_permalink[it] }
+      end
     end
 
     def offer_codes
@@ -133,23 +140,22 @@ class OfferCodeDiscountComputingService
       :sold_out,
     ]
 
-    def error_code
+    def error_code(products_data)
       return :invalid_offer if @applicable_offer_codes.blank?
       return :inactive if @applicable_offer_codes.all?(&:inactive?)
 
-      # Only fatal when nothing survived. The loop above deliberately builds a
-      # partial products_data (see the class comment) — collapsing that into a
-      # rejection is what made a capped code look globally broken to buyers whose
-      # carts were merely wider than the cap.
-      return nil if @products_data.present?
+      # Only fatal when nothing survived; the loop above builds a partial
+      # products_data by design. Code-level rejections must stay ABOVE this guard,
+      # or a surviving line will suppress them.
+      return nil if products_data.present?
 
       highest_priority_ineligibility
     end
 
     # Set when SOME lines were discounted and others skipped: not an error, but
     # the reason the discount does not cover the whole cart.
-    def partial_ineligibility_code
-      return nil if @products_data.blank?
+    def partial_ineligibility_code(products_data)
+      return nil if products_data.blank?
 
       highest_priority_ineligibility
     end

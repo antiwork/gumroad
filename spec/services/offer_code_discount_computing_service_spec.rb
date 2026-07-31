@@ -233,13 +233,10 @@ describe OfferCodeDiscountComputingService do
       expect(result[:partial_ineligibility_code]).to eq(:sold_out)
     end
 
-    it "leaves the lines that do not fit undiscounted" do
+    it "consumes uses in cart order, leaving the later lines undiscounted" do
       result = OfferCodeDiscountComputingService.new(universal_offer_code.code, one_each).process
 
-      # Which two lines win depends on `links` iteration order, which carries no
-      # ORDER BY — assert the shape, not a specific pair.
-      expect(result[:products_data].size).to eq(2)
-      expect(result[:products_data].keys).to all(be_in(products.map(&:unique_permalink)))
+      expect(result[:products_data].keys).to eq(products.first(2).map(&:unique_permalink))
       expect(result[:error_code]).to be_nil
     end
 
@@ -265,6 +262,14 @@ describe OfferCodeDiscountComputingService do
       expect(result[:partial_ineligibility_code]).to be_nil
     end
 
+    it "honours cart order even when it differs from the products' creation order" do
+      reversed = products.reverse.to_h { [it.unique_permalink, { quantity: "1", permalink: it.unique_permalink }] }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, reversed).process
+
+      expect(result[:products_data].keys).to eq(products.reverse.first(2).map(&:unique_permalink))
+    end
+
     it "counts uses per unit, not per line, so one over-quantity line can exhaust the code" do
       universal_offer_code.update!(max_purchase_count: 2)
       three_of_one = { products.first.unique_permalink => { quantity: "3", permalink: products.first.unique_permalink } }
@@ -273,6 +278,19 @@ describe OfferCodeDiscountComputingService do
 
       expect(result[:products_data]).to eq({})
       expect(result[:error_code]).to eq(:insufficient_times_of_use)
+    end
+
+    it "never quotes more uses than the code has left, so the charge-time cross-line check agrees" do
+      universal_offer_code.update!(max_purchase_count: 2)
+      mixed = products.to_h { [it.unique_permalink, { quantity: "2", permalink: it.unique_permalink }] }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, mixed).process
+
+      # Purchase.validate_offer_code_usage_across_line_items fails the whole group when
+      # the discounted lines' quantities exceed quantity_left. Keep this invariant or a
+      # buyer sees a partial discount and then gets blocked at checkout.
+      quoted_quantity = result[:products_data].keys.sum { mixed[it][:quantity].to_i }
+      expect(quoted_quantity).to be <= universal_offer_code.quantity_left
     end
 
     it "keeps an unmet-minimum line from poisoning the lines that qualify" do
