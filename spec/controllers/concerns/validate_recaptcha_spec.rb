@@ -269,6 +269,81 @@ describe ValidateRecaptcha, type: :controller do
         expect(response).to have_http_status(:unprocessable_entity)
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
+
+      # Google reports the hostname as the browser sent it, so an absolute FQDN arrives with
+      # its trailing dot intact. gumroad-private#1634.
+      it "passes checkout on the apex written as an absolute FQDN" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "#{DOMAIN}.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "passes checkout on a seller subdomain written as an absolute FQDN" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "seller.#{ROOT_DOMAIN}.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "passes checkout on a registered custom domain written as an absolute FQDN" do
+        custom_domain = create(:custom_domain, domain: "shop.example.com")
+
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "shop.example.com.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(CustomDomain.find_by_host("shop.example.com")).to eq(custom_domain)
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "passes checkout when the hostname arrives uppercased" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "Seller.#{ROOT_DOMAIN.upcase}")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      # Normalizing must not widen the allowlist: an unrelated host stays refused however
+      # it is written.
+      it "still fails checkout on an unrelated host written as an absolute FQDN" do
+        allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "attacker.example.net.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      it "still fails checkout on a lookalike host that merely ends with our domain text" do
+        allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "evil-#{ROOT_DOMAIN}.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      # A bare "." would otherwise normalize to the empty string and fall through the blank
+      # guard, which runs before normalization.
+      it "still fails checkout when the hostname is only a dot" do
+        allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: ".")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
     end
   end
 

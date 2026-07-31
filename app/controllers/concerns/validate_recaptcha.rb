@@ -138,6 +138,12 @@ module ValidateRecaptcha
       return true unless Rails.env.production?
       return false if hostname.blank?
 
+      # This hostname comes from Google's assessment as the browser sent it, not from
+      # request.host — Rack normalizes that, so only this path sees the raw form. A trailing
+      # dot is a legal absolute FQDN that Cloudflare and Rails both serve, so a visitor on
+      # "<seller>.gumroad.com." arrives with a valid token and no way to fix the refusal.
+      hostname = hostname.downcase.delete_suffix(".")
+
       # TODO: Refactor subdomain check. Use Subdomain module if possible
       hostname == DOMAIN || hostname.end_with?(".#{ROOT_DOMAIN}") || CustomDomain.find_by_host(hostname).present?
     end
