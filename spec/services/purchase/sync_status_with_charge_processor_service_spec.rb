@@ -131,6 +131,23 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(@seller.reload.unpaid_balance_cents).to eq(@initial_balance + purchase.payment_cents)
   end
 
+  it "delegates client-confirmed recovery to the PaymentIntent finalizer" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_recovery")
+    purchase = create(:purchase_in_progress, link: @product)
+    charge.purchases << purchase
+    finalizer = instance_double(Order::FinalizeConfirmedChargeService)
+
+    expect(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    expect(finalizer).to receive(:perform) { purchase.update!(purchase_state: "successful") }
+    expect(ChargeProcessor).not_to receive(:get_or_search_charge)
+    expect(purchase).to receive(:with_lock).and_call_original
+
+    expect(described_class.new(purchase, mark_as_failed: true).perform).to be(true)
+    expect(purchase.reload).to be_successful
+  end
+
   it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
     purchase = build(:purchase, link: @product, purchase_state: "in_progress")
     purchase.save!(validate: false)
