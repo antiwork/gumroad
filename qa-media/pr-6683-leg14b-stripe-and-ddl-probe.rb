@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # QA 14b — the two claims the body makes that a re-seeded preview DB could have invalidated.
 def m(k, v) = puts("MARK #{k}=#{v}")
 
@@ -35,7 +37,7 @@ rescue => e
   m "LaterChargePresentment_count", "#{e.class}"
 end
 m "lcp_has_canonical_price_cents", (conn.table_exists?("later_charge_presentments") ? conn.columns("later_charge_presentments").map(&:name).include?("canonical_price_cents") : "n/a")
-sace = conn.indexes("sent_abandoned_cart_emails").select(&:unique).map(&:name)
+sace = conn.indexes("sent_abandoned_cart_emails").filter_map { |i| i.name if i.unique }
 m "sent_abandoned_cart_emails_unique_indexes", sace.inspect
 
 m "PROBE_OK", true

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # QA 14 — composition probe at the main-merge head dba94798f (#6716 migration renumber merged in).
 # The PR's own four app/ files are byte-identical across 5f0668ccc..dba94798f; what the merge
 # changed is the guardian migrations' VERSION NUMBERS. So the question is not "does the feature
@@ -18,7 +20,7 @@ gcols = conn.columns("guardians").map(&:name)
 %w[user_id stripe_person_id date_of_birth individual_tax_id stripe_tos_accepted country_code].each do |c|
   m "guardians_col_#{c}", gcols.include?(c)
 end
-uniq = conn.indexes("guardians").select(&:unique).map { |i| [i.name, i.columns] }
+uniq = conn.indexes("guardians").filter_map { |i| [i.name, i.columns] if i.unique }
 m "guardians_unique_indexes", uniq.inspect
 
 # --- 2. The migration-version artifact the body describes, measured rather than asserted.
