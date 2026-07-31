@@ -233,10 +233,13 @@ describe OfferCodeDiscountComputingService do
       expect(result[:partial_ineligibility_code]).to eq(:sold_out)
     end
 
-    it "consumes uses in cart order, leaving the later lines undiscounted" do
+    it "leaves the lines that do not fit undiscounted" do
       result = OfferCodeDiscountComputingService.new(universal_offer_code.code, one_each).process
 
-      expect(result[:products_data].keys).to eq(products.first(2).map(&:unique_permalink))
+      # Which two lines win depends on `links` iteration order, which carries no
+      # ORDER BY — assert the shape, not a specific pair.
+      expect(result[:products_data].size).to eq(2)
+      expect(result[:products_data].keys).to all(be_in(products.map(&:unique_permalink)))
       expect(result[:error_code]).to be_nil
     end
 
@@ -260,6 +263,16 @@ describe OfferCodeDiscountComputingService do
       # which would read as nil and let this example pass either way.
       expect(result).to have_key(:partial_ineligibility_code)
       expect(result[:partial_ineligibility_code]).to be_nil
+    end
+
+    it "counts uses per unit, not per line, so one over-quantity line can exhaust the code" do
+      universal_offer_code.update!(max_purchase_count: 2)
+      three_of_one = { products.first.unique_permalink => { quantity: "3", permalink: products.first.unique_permalink } }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, three_of_one).process
+
+      expect(result[:products_data]).to eq({})
+      expect(result[:error_code]).to eq(:insufficient_times_of_use)
     end
 
     it "keeps an unmet-minimum line from poisoning the lines that qualify" do

@@ -1262,7 +1262,8 @@ const Form = ({
                     )}
                   </NumberInput>
                   <p className="text-muted-foreground text-sm">
-                    Each product a customer buys uses one. A customer checking out with five products uses five.
+                    Each item a customer buys uses one. A customer checking out with five items uses five, whether that
+                    is five products or five copies of one.
                   </p>
                 </Fieldset>
               </Dropdown>
