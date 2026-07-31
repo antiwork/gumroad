@@ -103,7 +103,9 @@ class AffiliateMailer < ApplicationMailer
 
     @seller = @direct_affiliate.seller
     @affiliate_user = @direct_affiliate.affiliate_user
-    @affiliate_user_name = @affiliate_user.name_or_username
+    # Only the seller's username is validated on DirectAffiliate, so the affiliate
+    # may have neither name nor username.
+    @affiliate_user_name = @affiliate_user.name_or_username.presence || "An affiliate"
 
     @subject = "#{@affiliate_user_name} has left your affiliate program"
     mail to: @seller.form_email,
