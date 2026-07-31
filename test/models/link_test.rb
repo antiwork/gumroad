@@ -1446,13 +1446,60 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal reclaimed, Link.fetch_leniently("slug", user:)
   end
 
+  test "a legacy mapping to a deleted product does not resurrect it on the seller's host" do
+    user = create_user
+    product = create_product(user:, unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+    assert_equal product, Link.fetch_leniently("old-slug", user:)
+
+    product.mark_deleted!
+
+    assert_nil Link.fetch_leniently("old-slug", user:)
+  end
+
   test "a legacy mapping never leaks across sellers on a scoped host" do
     owner = create_user
     other = create_user
     product = create_product(user: owner, unique_permalink: "aaa", custom_permalink: "old-slug")
     product.update!(custom_permalink: "new-slug")
 
+    # Without this the assertion below would also pass if no mapping were written.
+    assert LegacyPermalink.exists?(permalink: "old-slug")
     assert_nil Link.fetch_leniently("old-slug", user: other)
+  end
+
+  test "a mapping pointing at a gone product is reclaimed rather than squatting the slug" do
+    gone = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    gone.update!(custom_permalink: "gone-moved")
+    assert_equal gone.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    gone.update!(deleted_at: Time.current)
+
+    renamer = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+    renamer.update!(custom_permalink: "renamer-moved")
+
+    # The stale row resolved to nothing on either branch, so taking it over
+    # cannot break a working link.
+    assert_equal renamer.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    assert_equal renamer, Link.fetch_leniently("slug", user: renamer.user)
+  end
+
+  test "a mapping pointing at a live product is left alone" do
+    first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-moved")
+
+    second = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+    second.update!(custom_permalink: "second-moved")
+
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+  end
+
+  test "a mapping to a gone product does not resolve on the scoped host" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+    product.update!(deleted_at: Time.current)
+
+    assert LegacyPermalink.exists?(permalink: "old-slug")
+    assert_nil Link.fetch_leniently("old-slug", user: product.user)
   end
 
   test "a later live claim wins the claimant's own host while the earlier mapping survives" do

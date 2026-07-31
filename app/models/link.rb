@@ -808,10 +808,9 @@ class Link < ApplicationRecord
     return live_match if live_match.present? || user.blank?
 
     # Seller-scoped hosts (`seller.gumroad.com/l/:slug`, custom domains) are the
-    # URLs sellers actually share, and the unscoped branch above skips them, so a
-    # renamed slug would still 404 there. Consulted only after the live match
-    # misses, and only for this seller's own products: legacy-first stays
-    # confined to the unscoped branch, so nothing that resolves today changes.
+    # URLs `long_url` builds, and only the unscoped branch consults the legacy
+    # table — so a renamed slug 404s here without this fallback. Live match wins,
+    # and the mapping is confined to this seller's own products.
     Link.visible.by_user(user).find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
   end
 
@@ -1612,23 +1611,32 @@ class Link < ApplicationRecord
     # Records the outgoing slug so `fetch_leniently` forwards the old URL
     # (gumroad-private#1619).
     #
-    # `fetch_leniently` reads the legacy table BEFORE the live permalink match,
-    # so a mapping for a slug some live product answers on shadows that product:
-    # never write one, and withdraw our own if a claim lands between the check
-    # and the insert. Only ever removes the row this callback just created —
-    # deleting a competing mapping would break another seller's shared links,
-    # which is the harm this fixes, not a fix for it. `after_commit` (not
-    # `after_save`) so the re-check can see a claim committed meanwhile.
+    # The unscoped lookup reads this table before the live permalink match, so a
+    # mapping for a slug a live product answers on would shadow it: never write
+    # one, and withdraw the row this call created if a claim lands between the
+    # check and the insert. `after_commit`, not `after_save`, so that re-check
+    # can see a claim committed meanwhile.
     #
-    # `permalink` is globally unique while `custom_permalink` is unique only per
-    # seller, so two sellers can have held the same slug: first writer keeps it.
+    # `permalink` is globally unique while `custom_permalink` is unique per
+    # seller, so two sellers can have held one slug: the first writer keeps it.
+    # A mapping whose product is gone is reclaimable — it resolves to nothing on
+    # either branch, so leaving it would squat the slug forever (about a third of
+    # the imported rows are in that state).
     def redirect_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
       return if live_product_answers_on?(outgoing)
-      return if LegacyPermalink.where(permalink: outgoing).exists?
+
+      existing = LegacyPermalink.find_by(permalink: outgoing)
+      if existing.present?
+        return if mapped_product_visible?(existing.product_id)
+        existing.update!(product_id: id)
+        existing.destroy if live_product_answers_on?(outgoing)
+        return
+      end
 
       mapping = LegacyPermalink.create(permalink: outgoing, product_id: id)
+      Rails.logger.warn("LegacyPermalink not recorded for #{outgoing.inspect}: #{mapping.errors.full_messages.to_sentence}") unless mapping.persisted?
       mapping.destroy if mapping.persisted? && live_product_answers_on?(outgoing)
     rescue ActiveRecord::RecordNotUnique
       # A concurrent rename won the row; first writer keeps it.
@@ -1638,6 +1646,12 @@ class Link < ApplicationRecord
     # Uncached: the second call has to see a claim committed since the first.
     def live_product_answers_on?(permalink)
       Link.uncached { Link.visible.by_general_permalink(permalink).exists? }
+    end
+
+    # Uncached for the same reason: a deletion may have committed since an
+    # earlier read of this product in the same request.
+    def mapped_product_visible?(product_id)
+      Link.uncached { Link.visible.where(id: product_id).exists? }
     end
 
     def create_licenses_for_existing_customers
