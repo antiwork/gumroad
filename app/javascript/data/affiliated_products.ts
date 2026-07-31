@@ -1,8 +1,8 @@
 import typia from "typia";
 
-import { request } from "$app/utils/request";
+import { request, ResponseError } from "$app/utils/request";
 
-import { AffiliatedProduct, SortKey } from "$app/components/AffiliatedPage";
+import { AffiliatedProduct, AffiliatedPageStats, SortKey } from "$app/components/AffiliatedPage";
 import { PaginationProps } from "$app/components/Pagination";
 import { Sort } from "$app/components/useSortingTableDriver";
 
@@ -26,4 +26,16 @@ export const getPagedAffiliatedProducts = (page?: number, query?: string, sort?:
     response,
     cancel: () => abort.abort(),
   };
+};
+
+type AffiliationRemovedData = PagedAffiliatedProductsData & { stats: AffiliatedPageStats };
+
+export const removeSelfAsAffiliate = async (affiliateId: string): Promise<AffiliationRemovedData> => {
+  const response = await request({
+    method: "DELETE",
+    accept: "json",
+    url: Routes.products_affiliated_path(affiliateId),
+  });
+  if (!response.ok) throw new ResponseError();
+  return typia.assert<AffiliationRemovedData>(await response.json());
 };

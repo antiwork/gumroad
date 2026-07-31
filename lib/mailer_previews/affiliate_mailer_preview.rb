@@ -36,6 +36,10 @@ class AffiliateMailerPreview < ActionMailer::Preview
     AffiliateMailer.notify_direct_affiliate_of_new_product(DirectAffiliate.last&.id, DirectAffiliate.last&.products&.last&.id)
   end
 
+  def direct_affiliate_removal_by_affiliate_user
+    AffiliateMailer.direct_affiliate_removal_by_affiliate_user(DirectAffiliate.last&.id)
+  end
+
   def collaborator_creation
     AffiliateMailer.collaborator_creation(Collaborator.last&.id)
   end

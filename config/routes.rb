@@ -903,7 +903,7 @@ Rails.application.routes.draw do
     end
 
     namespace :products do
-      resources :affiliated, only: [:index]
+      resources :affiliated, only: %i[index destroy]
       resources :collabs, only: [:index]
       resources :archived, only: %i[index create destroy]
     end

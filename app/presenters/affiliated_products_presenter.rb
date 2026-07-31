@@ -56,8 +56,11 @@ class AffiliatedProductsPresenter
         "COALESCE(affiliates_links.affiliate_basis_points || affiliates.affiliate_basis_points, -1)"
       )
       pagination, records = pagy_arel(affiliated_products, page:, limit: PER_PAGE, overflow: :last_page, count:)
+      records = records.to_a
+      removable_affiliates = removable_affiliates_by_id(records)
       records = records.map do |product|
         revenue = product.revenue || 0
+        removable = removable_affiliates[product.affiliate_id]
         {
           product_name: product.name,
           url: product.affiliate_type.constantize.new(id: product.affiliate_id).referral_url_for_product(product),
@@ -65,10 +68,22 @@ class AffiliatedProductsPresenter
           revenue:,
           humanized_revenue: MoneyFormatter.format(revenue, :usd, no_cents_if_whole: true, symbol: true),
           sales_count: product.sales_count,
-          affiliate_type: product.affiliate_type.underscore
+          affiliate_type: product.affiliate_type.underscore,
+          affiliate_id: removable&.external_id,
+          seller_name: removable&.seller&.name_or_username,
         }
       end
       { pagination: PagyPresenter.new(pagination).props, affiliated_products: records }
+    end
+
+    # Direct affiliations the user can end from this page, keyed by affiliate id. Global rows are
+    # excluded: those are the user's own Gumroad Affiliates enrollment, not a seller's addition.
+    # One extra query per page rather than joining users into the grouped revenue query above.
+    def removable_affiliates_by_id(records)
+      direct_ids = records.filter_map { _1.affiliate_id if _1.affiliate_type == DirectAffiliate.name }
+      return {} if direct_ids.empty?
+
+      DirectAffiliate.where(id: direct_ids).includes(:seller).index_by(&:id)
     end
 
     def stats
@@ -87,7 +102,10 @@ class AffiliatedProductsPresenter
         # products, that unbounded grouped query took multiple seconds and was
         # the main source of slow requests on this page.
         total_products: affiliated_products_scope.distinct.count("affiliates_links.link_id"),
-        total_affiliated_creators: user.affiliated_creators.count,
+        # Derived from the same alive scope as the list rather than User#affiliated_creators, which
+        # goes through every affiliate row including soft-deleted ones — so an ended affiliation
+        # kept counting here after its products had already left the table.
+        total_affiliated_creators: affiliated_products_scope.distinct.count("links.user_id"),
       }
     end
 

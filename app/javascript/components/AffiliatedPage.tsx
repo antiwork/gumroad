@@ -1,7 +1,7 @@
-import { Link, XCircle } from "@boxicons/react";
+import { Link, Trash, XCircle } from "@boxicons/react";
 import * as React from "react";
 
-import { getPagedAffiliatedProducts } from "$app/data/affiliated_products";
+import { getPagedAffiliatedProducts, removeSelfAsAffiliate } from "$app/data/affiliated_products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
@@ -10,6 +10,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { GlobalAffiliates } from "$app/components/GlobalAffiliates";
+import { Modal } from "$app/components/Modal";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { ProductsLayout } from "$app/components/ProductsLayout";
 import { Search } from "$app/components/Search";
@@ -34,9 +35,11 @@ export type AffiliatedProduct = {
   humanized_revenue: string;
   sales_count: number;
   affiliate_type: "direct_affiliate" | "global_affiliate";
+  affiliate_id: string | null;
+  seller_name: string | null;
 };
 
-type Stats = {
+export type AffiliatedPageStats = {
   total_revenue: number;
   total_sales: number;
   total_products: number;
@@ -46,7 +49,7 @@ type Stats = {
 export type AffiliatedPageProps = {
   pagination: PaginationProps;
   affiliated_products: AffiliatedProduct[];
-  stats: Stats;
+  stats: AffiliatedPageStats;
   global_affiliates_data: {
     global_affiliate_id: number | null;
     global_affiliate_sales: string | null;
@@ -57,7 +60,7 @@ export type AffiliatedPageProps = {
   affiliates_disabled_reason: string | null;
 };
 
-const StatsSection = (stats: Stats) => {
+const StatsSection = (stats: AffiliatedPageStats) => {
   const { locale } = useUserAgentInfo();
 
   return (
@@ -90,6 +93,11 @@ type AffiliatedProductsTableProps = {
   affiliatedProducts: AffiliatedProduct[];
   pagination: PaginationProps;
   loadAffiliatedProducts: (page: number, sort: Sort<SortKey> | null) => void;
+  onAffiliationRemoved: (data: {
+    affiliatedProducts: AffiliatedProduct[];
+    pagination: PaginationProps;
+    stats: AffiliatedPageStats;
+  }) => void;
   isLoading: boolean;
 };
 
@@ -99,15 +107,38 @@ const AffiliatedProductsTable = ({
   affiliatedProducts,
   pagination,
   loadAffiliatedProducts,
+  onAffiliationRemoved,
   isLoading,
 }: AffiliatedProductsTableProps) => {
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
   const thProps = useSortingTableDriver<SortKey>(sort, setSort);
   const userAgentInfo = useUserAgentInfo();
+  const [removing, setRemoving] = React.useState<{ product: AffiliatedProduct; inFlight: boolean } | null>(null);
 
   React.useEffect(() => {
     if (sort) loadAffiliatedProducts(1, sort);
   }, [sort]);
+
+  const removeAffiliation = async (product: AffiliatedProduct) => {
+    if (product.affiliate_id === null) return;
+    try {
+      setRemoving({ product, inFlight: true });
+      // Ending an affiliation drops every product that seller enabled and moves the headline
+      // stats, so the endpoint answers with the whole refreshed page rather than one row.
+      const {
+        affiliated_products: affiliatedProducts,
+        pagination,
+        stats,
+      } = await removeSelfAsAffiliate(product.affiliate_id);
+      setRemoving(null);
+      onAffiliationRemoved({ affiliatedProducts, pagination, stats });
+      showAlert("You're no longer an affiliate for these products.", "success");
+    } catch (e) {
+      assertResponseError(e);
+      setRemoving({ product, inFlight: false });
+      showAlert(e.message, "error");
+    }
+  };
 
   return (
     <section className="flex flex-col gap-4">
@@ -160,12 +191,50 @@ const AffiliatedProductsTable = ({
                       Copy link
                     </Button>
                   </CopyToClipboard>
+                  {affiliatedProduct.affiliate_id !== null ? (
+                    <Button
+                      aria-label={`Remove yourself as an affiliate for ${affiliatedProduct.product_name}`}
+                      onClick={() => setRemoving({ product: affiliatedProduct, inFlight: false })}
+                    >
+                      <Trash className="size-5" />
+                      Remove
+                    </Button>
+                  ) : null}
                 </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      {removing ? (
+        <Modal
+          open
+          allowClose={!removing.inFlight}
+          onClose={() => setRemoving(null)}
+          title="Remove yourself as an affiliate?"
+          footer={
+            <>
+              <Button disabled={removing.inFlight} onClick={() => setRemoving(null)}>
+                Cancel
+              </Button>
+              <Button
+                color="danger"
+                disabled={removing.inFlight}
+                onClick={asyncVoid(() => removeAffiliation(removing.product))}
+              >
+                {removing.inFlight ? "Removing..." : "Yes, remove me"}
+              </Button>
+            </>
+          }
+        >
+          <p>
+            You will stop earning commission on{" "}
+            {removing.product.seller_name === null ? "this seller's" : `${removing.product.seller_name}'s`} products,
+            and your existing affiliate links for them will stop crediting you. Commission you have already earned is
+            not affected.
+          </p>
+        </Modal>
+      ) : null}
       {pagination.pages > 1 ? (
         <Pagination onChangePage={(page) => loadAffiliatedProducts(page, sort)} pagination={pagination} />
       ) : null}
@@ -176,12 +245,13 @@ const AffiliatedProductsTable = ({
 type AffiliatedPageState = {
   affiliatedProducts: AffiliatedProduct[];
   pagination: PaginationProps;
+  stats: AffiliatedPageStats;
   query: string;
 };
 
 const AffiliatedPage = ({
   affiliated_products: initialAffiliatedProducts,
-  stats,
+  stats: initialStats,
   global_affiliates_data: globalAffiliatesData,
   archived_tab_visible: archivedTabVisible,
   pagination: initialPaginationState,
@@ -199,9 +269,10 @@ const AffiliatedPage = ({
   const [state, setState] = React.useState<AffiliatedPageState>({
     pagination: initialPaginationState,
     affiliatedProducts: initialAffiliatedProducts,
+    stats: initialStats,
     query: "",
   });
-  const { affiliatedProducts, pagination } = state;
+  const { affiliatedProducts, pagination, stats } = state;
   const [isLoading, setIsLoading] = React.useState(false);
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
 
@@ -302,6 +373,9 @@ const AffiliatedPage = ({
                   loadAffiliatedProducts={(page: number, sort: Sort<SortKey> | null) => {
                     void loadAffiliatedProducts(page, state.query, sort);
                   }}
+                  onAffiliationRemoved={({ affiliatedProducts, pagination, stats }) =>
+                    setState((prevState) => ({ ...prevState, affiliatedProducts, pagination, stats }))
+                  }
                   isLoading={isLoading}
                 />
               )}

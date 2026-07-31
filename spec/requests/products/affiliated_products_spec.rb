@@ -219,6 +219,33 @@ describe "Affiliated Products", type: :system, js: true do
       expect(page).to have_text("Copied!")
     end
 
+    it "removes the affiliation when the affiliate leaves the program" do
+      visit products_affiliated_index_path
+
+      product = affiliate_three_products.first
+      within find(:table_row, { "Product" => product.name, "Type" => "Direct" }, match: :first) do
+        click_on "Remove"
+      end
+
+      expect(page).to have_text("You will stop earning commission on #{creator.name_or_username}'s products")
+      click_on "Yes, remove me"
+
+      expect(page).to have_alert(text: "You're no longer an affiliate for these products.")
+      expect(direct_affiliate.reload.deleted?).to be(true)
+      # The global affiliation is separate and survives; only the seller's rows go away.
+      expect(page).to have_selector(:table_row, { "Product" => affiliate_one_products.first.name, "Type" => "Gumroad" })
+      expect(page).not_to have_selector(:table_row, { "Product" => product.name, "Type" => "Direct" })
+    end
+
+    it "does not offer removal for the user's own Gumroad affiliation" do
+      visit products_affiliated_index_path
+
+      within find(:table_row, { "Product" => affiliate_one_products.first.name, "Type" => "Gumroad" }) do
+        expect(page).to have_button("Copy link")
+        expect(page).not_to have_button("Remove")
+      end
+    end
+
     it "allows opening the product on clicking product's title" do
       visit products_affiliated_index_path
 
