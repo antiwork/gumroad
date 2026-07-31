@@ -362,6 +362,70 @@ describe StripeGuardianManager do
         expect($redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")).to eq("someone-else")
       end
 
+      # A long lease makes lock expiry rare; it cannot make an orphan impossible. No lock spans the
+      # gap between Stripe accepting the create and the id reaching our row, so the guarantee has to
+      # be after-the-fact detection.
+      it "deletes a legal-guardian person on the account that no local row points at" do
+        create_compliance_info(guardian_record: guardian)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons).and_return(
+          Stripe::ListObject.construct_from(data: []),
+          Stripe::ListObject.construct_from(
+            data: [{ id: "person_guardian_new" }, { id: "person_orphaned_duplicate" }]
+          )
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).to have_received(:delete_person)
+          .with(stripe_account_id, "person_orphaned_duplicate")
+        # The Person this sync just recorded must survive — deleting it would leave the account on an
+        # unmet legal-guardian requirement.
+        expect(Stripe::Account).not_to have_received(:delete_person)
+          .with(stripe_account_id, "person_guardian_new")
+      end
+
+      # Another guardian row of the same seller holding the id is a local pointer too. Erasure can
+      # reach that Person, so deleting it here would destroy a superseded guardian's only handle.
+      it "keeps a person another guardian row of the same seller points at" do
+        create_compliance_info(guardian_record: guardian)
+        create(:guardian, user:, stripe_person_id: "person_previous_guardian")
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons).and_return(
+          Stripe::ListObject.construct_from(data: []),
+          Stripe::ListObject.construct_from(
+            data: [{ id: "person_guardian_new" }, { id: "person_previous_guardian" }]
+          )
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).not_to have_received(:delete_person)
+      end
+
+      # The Person the caller asked for exists and its id is recorded by this point. Failing the sync
+      # over the cleanup would turn a resolved duplicate into an unmet Stripe requirement.
+      it "still returns the created person when the reconcile fails" do
+        create_compliance_info(guardian_record: guardian)
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons).and_return(
+          Stripe::ListObject.construct_from(data: [])
+        )
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account_id, hash_including(limit: 100))
+          .and_raise(Stripe::APIError.new("Stripe is down"))
+
+        expect(described_class.sync(user, stripe_account, passphrase:).id).to eq("person_guardian_new")
+        expect(guardian.reload.stripe_person_id).to eq("person_guardian_new")
+        expect(ErrorNotifier).to have_received(:notify)
+      end
+
       # The lock is held across two Stripe round trips, so a TTL shorter than a worst-case call
       # expires mid-sequence and lets a second sync create the duplicate Person this lock exists to
       # prevent — during a Stripe brownout, which is when overlapping syncs are most likely. Pinned

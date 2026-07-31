@@ -93,10 +93,48 @@ module StripeGuardianManager
           StripeMerchantAccountManager.force_utf8_encoding(attributes)
         )
         adopt_person_id!(guardian, created.id)
+        # A long lease makes expiry rare; it cannot make an orphan impossible. No lock spans the gap
+        # between Stripe accepting the create and the id reaching our row — a process killed there
+        # leaves a Person holding an adult's details with nothing local pointing at it. So the create
+        # is followed by a reconcile: detected after the fact, rather than assumed away.
+        reconcile_duplicate_persons!(guardian, stripe_account.id)
         created
       end
     end
   end
+
+  # Deletes legal-guardian Persons on this account that no Guardian row of this seller points at.
+  #
+  # Such a Person is an adult's name, date of birth, address and tax id sitting at Stripe with no
+  # local handle, so erasure's recorded-id path cannot select it. Erasure does also scan by
+  # relationship, but only while the seller still has a resolvable Stripe account — so an orphan left
+  # in place is PII we may later be unable to reach at all.
+  #
+  # Scoped by "not referenced locally" rather than "not the one I just created", so it also clears an
+  # orphan left by an earlier sync that died between Stripe's create and our write.
+  #
+  # Never raises: the Person the caller asked for exists and its id is recorded by this point, and
+  # failing the sync over the cleanup would turn a resolved duplicate into an unmet Stripe
+  # requirement. A leftover is reported and stays reachable by erasure's relationship scan.
+  def self.reconcile_duplicate_persons!(guardian, stripe_account_id)
+    recorded_ids = Guardian.where(user_id: guardian.user_id).pluck(:stripe_person_id).compact.to_set
+
+    Stripe::Account.list_persons(
+      stripe_account_id,
+      relationship: { legal_guardian: true },
+      limit: 100
+    ).data.each do |person|
+      next if recorded_ids.include?(person.id)
+
+      Stripe::Account.delete_person(stripe_account_id, person.id)
+      Rails.logger.info(
+        "Deleted orphaned legal-guardian Stripe person for guardian #{guardian.id} on #{stripe_account_id}"
+      )
+    end
+  rescue => e
+    ErrorNotifier.notify(e)
+  end
+  private_class_method :reconcile_duplicate_persons!
 
   # Holds a Redis lock for the duration of one guardian sync.
   #
