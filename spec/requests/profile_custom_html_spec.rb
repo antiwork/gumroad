@@ -175,7 +175,7 @@ describe "Profile custom HTML rendering", type: :request do
     it "keeps the iframe sandbox unchanged — still no allow-same-origin or allow-top-navigation" do
       get "http://seller.example.com/"
 
-      expect(response.body).to include(%(sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"))
+      expect(response.body).to include(%(sandbox="#{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}"))
       expect(response.body).not_to include("allow-same-origin")
       expect(response.body).not_to include("allow-top-navigation")
     end
