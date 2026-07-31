@@ -74,7 +74,7 @@ describe DashboardNav do
     end
 
     it "credits analytics once the seller has a sale" do
-      create(:purchase, seller:, link: create(:product, user: seller))
+      create(:purchase, seller:, link: create(:product, user: seller, price_cents: 0))
 
       items = described_class.earned_items(user: seller, seller:)
       expect(items).to include "analytics"
@@ -82,7 +82,7 @@ describe DashboardNav do
 
     it "credits the buyer-side library from the browsing user, not the seller" do
       buyer = create(:user)
-      create(:purchase, purchaser: buyer, seller:, link: create(:product, user: seller))
+      create(:purchase, purchaser: buyer, seller:, link: create(:product, user: seller, price_cents: 0))
 
       expect(described_class.earned_items(user: buyer, seller:)).to include "library"
       expect(described_class.earned_items(user: seller, seller:)).not_to include "library"

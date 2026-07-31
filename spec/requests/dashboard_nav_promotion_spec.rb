@@ -45,7 +45,8 @@ describe DashboardNavPromotion, type: :request do
   end
 
   it "does not credit a page the request did not successfully render" do
-    allow_any_instance_of(WorkflowsController).to receive(:index) { |controller| controller.head :forbidden }
+    # A refused page redirects rather than rendering the nav, so it must not count as a visit.
+    allow_any_instance_of(WorkflowPolicy).to receive(:index?).and_return(false)
 
     get workflows_path
 
