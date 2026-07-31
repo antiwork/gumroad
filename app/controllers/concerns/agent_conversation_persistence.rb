@@ -64,9 +64,7 @@ module AgentConversationPersistence
   ACTION_CLAIM_RELEASE_FAILED_NOTICE = "Store agent action claim could not be released"
 
   # What the model is told a proposal turn was, in place of the reply the creator actually saw. That
-  # reply points at a confirmation card, and by the next turn the server already knows the card's
-  # result — replaying the reply is what lets the model send the creator back to a card that can no
-  # longer be confirmed. The state notes below carry the result instead.
+  # reply points at a confirmation card whose result the server already knows and the model does not.
   PROPOSAL_TURN_HISTORY_CONTENT = "You proposed a change on this turn."
   NO_PROPOSAL_STATE_NOTE = "no proposed action was recorded for this message"
   PROPOSAL_STATE_RECORDED = "a proposal was recorded, but its current result and card visibility " \
@@ -89,7 +87,13 @@ module AgentConversationPersistence
                    :UNPERSISTED_PROPOSAL_REPLY,
                    :UNRESOLVED_MOBILE_ACTION_REPLY,
                    :MISSING_PROPOSAL_MESSAGE_ID_NOTICE,
-                   :ACTION_CLAIM_RELEASE_FAILED_NOTICE
+                   :ACTION_CLAIM_RELEASE_FAILED_NOTICE,
+                   :PROPOSAL_TURN_HISTORY_CONTENT,
+                   :NO_PROPOSAL_STATE_NOTE,
+                   :PROPOSAL_STATE_RECORDED,
+                   :PROPOSAL_STATE_EXECUTING,
+                   :PROPOSAL_STATE_APPLIED,
+                   :PROPOSAL_STATE_UNKNOWN
 
   private
     # Returns the seller's conversation for params[:conversation_id], or nil when the param is
@@ -160,17 +164,18 @@ module AgentConversationPersistence
     end
 
     # Rebuild history from stored rows. A turn that carried a proposal is replayed as server-owned
-    # state only: the creator-facing confirmation copy is dropped, because the card it points at has
-    # a result the server knows and the model does not. `last` bounds token cost while preserving
-    # chronological order. Nothing here may carry proposal payloads, params, objects, or client turn
-    # ids — the model has no use for them and they are the creator's data, not conversation.
+    # state only, never as the confirmation copy the creator saw. Nothing here may carry proposal
+    # payloads, params, objects, or client turn ids. `last` bounds token cost, preserving order.
     def agent_conversation_history(conversation)
       conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map do |message|
         next { role: message.role, content: message.content } unless message.role == "assistant"
 
-        proposal_state = agent_proposal_state_note(message)
-        content = proposal_state == NO_PROPOSAL_STATE_NOTE ? message.content : PROPOSAL_TURN_HISTORY_CONTENT
-        { role: message.role, content:, proposal_state: }
+        proposal = (message.metadata || {})["proposed_action"].present?
+        {
+          role: message.role,
+          content: proposal ? PROPOSAL_TURN_HISTORY_CONTENT : message.content,
+          proposal_state: agent_proposal_state_note(message),
+        }
       end
     end
 

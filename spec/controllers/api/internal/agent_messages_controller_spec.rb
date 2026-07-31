@@ -201,9 +201,8 @@ describe Api::Internal::AgentMessagesController do
         )
       end
 
-      # The production shape from gp#1470: a proposal applied on an earlier turn, then a later turn
-      # whose persisted copy points the creator back at that card. Replaying that copy is what let
-      # the model repeat it as a live instruction.
+      # gp#1470's production shape: a proposal applied earlier, then a turn whose persisted copy
+      # points the creator back at that card. Replaying it let the model repeat it as live.
       it "replaces an applied proposal turn's confirm-that-card copy with server-owned state" do
         conversation = create(:ai_conversation, seller:)
         proposal = { "type" => "api_write", "params" => { "endpoint" => "update_user_custom_html" } }
