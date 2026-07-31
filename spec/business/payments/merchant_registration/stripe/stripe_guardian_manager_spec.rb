@@ -158,8 +158,7 @@ describe StripeGuardianManager do
     # Stripe records the IP as evidence of where a legal acceptance happened, so a placeholder would
     # be a fabricated attestation. Since has_completed_info? now requires the IP alongside the flag,
     # such a guardian never reaches Stripe at all rather than arriving as a Person with no
-    # acceptance — the account sits on the guardian requirement, which is the truthful state. The
-    # IP check in person_attributes stays as defence for any future caller that bypasses the gate.
+    # acceptance — the account sits on the guardian requirement, which is the truthful state.
     it "does not sync a guardian whose acceptance has no IP, so no incomplete person is created" do
       guardian.update!(stripe_tos_accepted: true, stripe_tos_ip: nil)
       create_compliance_info(guardian_record: guardian)
@@ -176,7 +175,34 @@ describe StripeGuardianManager do
 
       described_class.sync(user, stripe_account, passphrase:)
 
+      # Anchored on the predicate so the spec records WHY sync declined, not merely that it did.
+      expect(guardian.reload.has_completed_info?).to be(false)
       expect(Stripe::Account).not_to have_received(:create_person)
+    end
+
+    # person_hash is only reached through sync today, which gates on has_completed_info?, so this
+    # exercises the builder directly: it is the only way to reach the case the guard exists for. A
+    # partial acceptance must send no acceptance block at all rather than stamping created_at as the
+    # moment of acceptance, which would be an attestation the guardian never made.
+    it "sends no terms acceptance when the acceptance is incomplete, rather than inventing a date" do
+      guardian.update!(stripe_tos_accepted: true, stripe_tos_accepted_at: nil, stripe_tos_ip: "1.2.3.4")
+      compliance_info = create_compliance_info(guardian_record: guardian)
+
+      hash = described_class.send(:person_hash, guardian.reload, compliance_info, passphrase:)
+
+      expect(hash).not_to have_key(:additional_tos_acceptances)
+    end
+
+    it "sends the acceptance the guardian actually made when it is complete" do
+      accepted_at = 3.days.ago.change(usec: 0)
+      guardian.update!(stripe_tos_accepted: true, stripe_tos_accepted_at: accepted_at, stripe_tos_ip: "1.2.3.4")
+      compliance_info = create_compliance_info(guardian_record: guardian)
+
+      hash = described_class.send(:person_hash, guardian.reload, compliance_info, passphrase:)
+
+      expect(hash[:additional_tos_acceptances]).to eq(
+        account: { date: accepted_at.to_i, ip: "1.2.3.4" }
+      )
     end
 
     context "when there is nothing to sync" do

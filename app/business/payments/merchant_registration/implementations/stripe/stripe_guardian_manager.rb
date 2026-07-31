@@ -98,7 +98,12 @@ module StripeGuardianManager
     # Already gone on Stripe's side is the outcome we wanted. Anything else is a real failure and
     # must not be swallowed — an undeleted Person means the guardian's details still sit with Stripe
     # after we told the seller they were erased.
+    #
+    # A missing ACCOUNT is also not a failure: erasure tries every Stripe account the seller ever
+    # held, because a locally-deleted account can still hold the Person, and an account Stripe no
+    # longer has cannot be holding anything.
     return true if e.message.to_s.include?("No such person")
+    return false if e.message.to_s.match?(/No such account|does not exist/i)
     raise
   end
 
@@ -160,17 +165,16 @@ module StripeGuardianManager
     # wants an adult here. additional_tos_acceptances is the guardian-specific channel for that; the
     # account-level tos_acceptance stays with the seller.
     #
-    # Sent only with a real IP. Stripe records this as evidence of where a legal acceptance
-    # happened, so a placeholder would be a fabricated attestation. Guardian#has_completed_info?
-    # already requires the IP, so sync never reaches here without one — this stays as defence for
-    # any future caller that builds attributes without going through that gate.
-    if guardian.stripe_tos_accepted? && guardian.stripe_tos_ip.present?
+    # Gated on the same predicate sync gates on, so the two cannot disagree about what a complete
+    # acceptance is. Stripe records this as evidence of where and when a legal acceptance happened,
+    # so every field must be one the guardian actually produced — a placeholder date or IP would be
+    # a fabricated attestation, which is worse than the account sitting on an unmet requirement.
+    if guardian.has_accepted_terms?
       hash[:additional_tos_acceptances] = {
         account: {
-          # The date the guardian actually accepted, not now: Stripe records this as the moment of
-          # acceptance, and re-stamping it on every sync would overwrite the real one with the time
-          # of an unrelated address edit.
-          date: (guardian.stripe_tos_accepted_at || guardian.created_at).to_i,
+          # The date the guardian actually accepted, not now: re-stamping it on every sync would
+          # overwrite the real one with the time of an unrelated address edit.
+          date: guardian.stripe_tos_accepted_at.to_i,
           ip: guardian.stripe_tos_ip
         }
       }

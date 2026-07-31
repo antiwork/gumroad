@@ -91,7 +91,12 @@ describe GdprDataErasureService do
         create(:merchant_account, user:, charge_processor_merchant_id: "acct_erasure_test")
       end
 
-      before { allow(Stripe::Account).to receive(:delete_person) }
+      before do
+        allow(Stripe::Account).to receive(:delete_person)
+        # Spied rather than left real: these examples assert on whether a retained vendor copy was
+        # reported, which is the only signal that Stripe still holds the adult's details.
+        allow(ErrorNotifier).to receive(:notify)
+      end
 
       # Anonymizing our row does not reach Stripe, so without this the adult's name, date of birth
       # and address survive the erasure request at our processor.
@@ -126,6 +131,58 @@ describe GdprDataErasureService do
 
         expect(result[:success]).to be(true)
         expect(guardian.reload.first_name).to be_nil
+        # The notification is the only signal that Stripe kept its copy, so it is asserted rather
+        # than assumed — without it the retained copy is invisible.
+        expect(ErrorNotifier).to have_received(:notify)
+      end
+
+      # Switching payout method, changing country, or connecting Stripe Connect all mark the Stripe
+      # account dead LOCALLY without deleting it at Stripe, so the guardian's Person keeps holding
+      # an adult's name, date of birth and address there. Resolving only the live account would skip
+      # it and still report success.
+      it "deletes the person from a Stripe account that was only deleted on our side" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        merchant_account.delete_charge_processor_account!
+        expect(user.reload.stripe_account).to be_nil
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
+      end
+
+      # An account Stripe no longer has cannot be holding the Person, so trying a dead account must
+      # not turn into a reported failure.
+      it "treats a Stripe account that no longer exists as nothing left to delete" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me", first_name: "Ellie")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:delete_person)
+          .and_raise(Stripe::InvalidRequestError.new("No such account: 'acct_erasure_test'", nil))
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(guardian.reload.first_name).to be_nil
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+
+      # The one case where we know Stripe holds a copy and have no handle to reach it. Silence here
+      # would mean telling the seller their data was erased while an adult's details stay with our
+      # processor and nobody ever finds out.
+      #
+      # The account is killed first because charge_processor_merchant_id is validated as present
+      # only while the account is alive — a blank id is reachable exactly on a dead row.
+      it "reports when a synced guardian has no resolvable Stripe account to delete from" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_orphaned")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        merchant_account.delete_charge_processor_account!
+        merchant_account.update!(charge_processor_merchant_id: nil)
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(Stripe::Account).not_to have_received(:delete_person)
+        expect(ErrorNotifier).to have_received(:notify).with(/guardian Stripe person/)
       end
     end
 

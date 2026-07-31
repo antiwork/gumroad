@@ -168,13 +168,40 @@ class GdprDataErasureService
       end
     end
 
-    # Pairs each guardian with the Stripe account its Person lives on, resolved while the account is
-    # still active. Only guardians we actually created a Person for are returned.
+    # Pairs each guardian with every Stripe account its Person may live on. Only guardians we
+    # actually created a Person for are returned.
+    #
+    # Deliberately NOT User#stripe_account: that is scoped to charge_processor_alive, and switching
+    # payout method, changing country, or connecting Stripe Connect all call
+    # MerchantAccount#delete_charge_processor_account!, which marks the account dead locally and
+    # never deletes it at Stripe. Resolving only the live account would leave the guardian's
+    # Person — an adult's name, date of birth, address and tax id — at Stripe forever while erasure
+    # reported success. The merchant id is a column and survives that local delete (only meta is
+    # cleared), so a dead row is still a usable handle.
+    #
+    # Every candidate account is tried rather than guessing which one holds the Person: a guardian
+    # keeps one stripe_person_id, and a re-onboarded seller's later sync overwrites it, so the id
+    # alone cannot say which account it came from.
     def guardian_stripe_persons_for_erasure
-      stripe_account_id = @user.stripe_account&.charge_processor_merchant_id
-      return [] if stripe_account_id.blank?
+      guardians = @user.guardians.where.not(stripe_person_id: nil).to_a
+      return [] if guardians.empty?
 
-      @user.guardians.where.not(stripe_person_id: nil).map { |guardian| [guardian, stripe_account_id] }
+      stripe_account_ids = @user.merchant_accounts.stripe
+                                .reject(&:is_a_stripe_connect_account?)
+                                .filter_map(&:charge_processor_merchant_id)
+                                .uniq
+
+      if stripe_account_ids.empty?
+        # Never silent: this is the one branch where we know a copy of the adult's details is with
+        # Stripe and we have no handle to reach it.
+        message = "GDPR: user #{@user.id} has #{guardians.size} guardian Stripe person(s) but no " \
+                  "resolvable Stripe account id — their details were NOT deleted at Stripe"
+        Rails.logger.error(message)
+        ErrorNotifier.notify(message)
+        return []
+      end
+
+      guardians.flat_map { |guardian| stripe_account_ids.map { |account_id| [guardian, account_id] } }
     end
 
     def anonymize_carts!(anonymized_email)
