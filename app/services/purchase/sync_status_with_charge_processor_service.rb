@@ -45,16 +45,12 @@ class Purchase::SyncStatusWithChargeProcessorService
       charge_succeeded &&= @charge_outcome == :succeeded if @require_final_charge_status
 
       if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
-        # The underlying charge succeeded but the processor has not produced the balance
-        # transaction the flow of funds is read from, so leave the purchase `in_progress` for a
-        # later retry rather than failing a purchase whose money actually moved.
-        #
-        # One cause of that nil is now bounded rather than indefinite: a destination payment
-        # Stripe will never credit stops reporting nil once it is past
-        # StripeCharge::DESTINATION_PAYMENT_SETTLEMENT_GRACE (gumroad-private#1608). Every other
-        # cause still waits without a bound, and the retry jobs stop scanning at
-        # Purchase::UnstickStuckInProgressService::MAX_AGE, so reaching here is not a guarantee
-        # the row will ever heal on its own.
+        # The charge succeeded but the processor has not produced the balance transaction the flow
+        # of funds is read from, so retry later rather than failing a purchase whose money moved.
+        # Only the uncredited-destination-payment cause is bounded (by
+        # StripeCharge::DESTINATION_PAYMENT_SETTLEMENT_GRACE); every other cause waits
+        # indefinitely, and the retry jobs stop scanning at
+        # Purchase::UnstickStuckInProgressService::MAX_AGE.
         false
       elsif charge_succeeded
         purchase.flow_of_funds = if purchase.is_part_of_combined_charge?

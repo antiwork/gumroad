@@ -177,7 +177,7 @@ class StripeChargeProcessor
     end
 
     # Only needed to label a destination payment Stripe never credited, so pay for the lookup
-    # exactly then rather than on every charge read.
+    # exactly then.
     destination_payment_balance_transaction = stripe_destination_payment.try(:balance_transaction)
     if stripe_destination_payment.present? && destination_payment_balance_transaction.nil? && !merchant_account_looked_up
       merchant_account = merchant_account_for_transfer_group(charge.transfer_group)

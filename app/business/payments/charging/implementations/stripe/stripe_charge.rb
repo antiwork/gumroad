@@ -1,18 +1,14 @@
 # frozen_string_literal: true
 
 class StripeCharge < BaseProcessorCharge
-  # How long a destination payment may sit without a balance transaction before we stop treating
-  # its absence as "Stripe has not settled yet". Stripe settles these within minutes; past this
-  # window it never will, and the purchase must be allowed to finish rather than retrying forever
+  # Past this, a succeeded destination payment with no balance transaction never gets one
   # (gumroad-private#1608).
   DESTINATION_PAYMENT_SETTLEMENT_GRACE = 24.hours
 
   # Public: Create a BaseProcessorCharge from a Stripe::Charge and a Stripe::BalanceTransaction
   #
-  # stripe_destination_payment and merchant_account_currency are what let a permanently
-  # uncredited destination payment be told apart from one that simply has not settled yet; the
-  # currency is the destination account's, which is the only correct label for an amount that
-  # account did or did not receive.
+  # merchant_account_currency is the DESTINATION account's, not the charge's — see
+  # #build_flow_of_funds.
   def initialize(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
                  stripe_destination_payment_balance_transaction, stripe_destination_transfer,
                  stripe_destination_payment: nil, merchant_account_currency: nil)
@@ -46,16 +42,11 @@ class StripeCharge < BaseProcessorCharge
   end
 
   private
-    # True when Stripe has accepted the destination payment but is never going to produce a
-    # balance transaction for it. Both halves matter: an unsettled payment is still pending and
-    # must keep waiting, while a settled-and-captured one older than the grace window has already
-    # had every chance to be credited. Fails closed — without the destination payment object we
-    # cannot tell the two apart, so we keep the old "wait" behaviour.
+    # True when Stripe accepted the destination payment but will never credit it. An unsettled or
+    # uncaptured payment is still pending and must keep waiting. Fails closed: without the payment
+    # object or the account's currency the two are indistinguishable, so we keep waiting.
     def destination_payment_permanently_uncredited?
       return false if @stripe_destination_payment.nil?
-      # Without the destination account's own currency there is no correct label for the amount it
-      # did not receive, and guessing one either overstates the credit or blocks the seller's
-      # payout. Keep waiting instead.
       return false if @merchant_account_currency.blank?
       return false unless @stripe_destination_payment[:status] == "succeeded" && @stripe_destination_payment[:captured]
 
@@ -63,13 +54,6 @@ class StripeCharge < BaseProcessorCharge
       return false if created.blank?
 
       Time.zone.at(created) <= DESTINATION_PAYMENT_SETTLEMENT_GRACE.ago
-    end
-
-    # The destination account's own currency — the only correct label for an amount that account
-    # did or did not receive. Not the destination payment's currency: that is the charge's, and the
-    # reason the payment was never credited is precisely that the two differ.
-    def uncredited_destination_currency
-      @merchant_account_currency
     end
 
     def fetch_risk_level(stripe_charge)
@@ -159,16 +143,14 @@ class StripeCharge < BaseProcessorCharge
           merchant_account_net_amount = FlowOfFunds::Amount.new(currency: stripe_destination_payment_balance_transaction[:currency],
                                                                 cents: stripe_destination_payment_balance_transaction[:net])
         else
-          # Stripe accepted the destination payment but never credited the connected account,
-          # because the transfer rounds below one subunit of that account's currency (the transfer
-          # is our one-subunit floor in the charge's currency — see
-          # StripeIntentChargeRouting::MINIMUM_DESTINATION_TRANSFER_AMOUNT_CENTS). There is no
-          # balance transaction to read and there never will be, so record what the account
-          # actually received: nothing, in its own currency. Relabelling the transfer's own cents
-          # as this account's would both overstate the credit and, because payouts require a
-          # balance's holding currency to match its account's, block the seller's whole payout.
-          merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: uncredited_destination_currency, cents: 0)
-          merchant_account_net_amount = FlowOfFunds::Amount.new(currency: uncredited_destination_currency, cents: 0)
+          # Stripe accepted the destination payment but never credited the account: the transfer
+          # is our one-subunit floor in the CHARGE's currency (see
+          # StripeIntentChargeRouting::MINIMUM_DESTINATION_TRANSFER_AMOUNT_CENTS) and rounds below
+          # one subunit of the account's. Record what the account received — nothing — in ITS
+          # currency. The transfer's own cents would overstate the credit, and a holding currency
+          # that does not match the account's makes the seller's whole payout unpayable.
+          merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: @merchant_account_currency, cents: 0)
+          merchant_account_net_amount = FlowOfFunds::Amount.new(currency: @merchant_account_currency, cents: 0)
         end
       elsif stripe_application_fee_balance_transaction.present?
         # For direct charges in case of Stripe Connect accounts, there will be no destination on the Stripe charge,
