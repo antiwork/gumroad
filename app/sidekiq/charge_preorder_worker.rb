@@ -22,7 +22,7 @@ class ChargePreorderWorker
 
     if purchase.successful?
       preorder.mark_charge_successful!
-    else
+    elsif !purchase.pending_buyer_presentment_settlement?
       if PurchaseErrorCode.is_temporary_network_error?(purchase.error_code) || PurchaseErrorCode.is_temporary_network_error?(purchase.stripe_error_code)
         # special retry for connection-related issues and stripe 500ing
         if attempts >= MAX_ATTEMPTS
