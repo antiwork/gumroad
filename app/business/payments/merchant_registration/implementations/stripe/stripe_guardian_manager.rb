@@ -35,6 +35,13 @@ module StripeGuardianManager
   # create the duplicate Person this lock exists to prevent. The only cost of the long TTL is how
   # long a process killed mid-sync blocks the next one, and a missed sync self-heals on the next
   # account update. Pinned against the client's own numbers in the spec, not hardcoded twice.
+  #
+  # Sizing the lease is the fix here rather than renewing it in a background thread, and that is not
+  # a style preference: $redis is a single bare Redis connection shared process-wide
+  # (config/redis.rb), not a pool, and it is not thread-safe. A renewer thread interleaves replies on
+  # the socket the sync itself is using — verified, a threaded read of the lock key returned nil
+  # while the key was demonstrably present. So the renewer would corrupt unrelated Redis reads
+  # elsewhere in the process rather than failing where it was added.
   SYNC_LOCK_TTL = 20.minutes
   SYNC_LOCK_WAIT_TIMEOUT = 10.seconds
   SYNC_LOCK_RETRY_INTERVAL_SECONDS = 0.05

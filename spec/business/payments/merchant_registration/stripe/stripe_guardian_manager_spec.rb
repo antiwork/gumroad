@@ -437,6 +437,22 @@ describe StripeGuardianManager do
         # Both round trips under one lock.
         expect(described_class::SYNC_LOCK_TTL).to be > (worst_case_stripe_call * 2).seconds
       end
+
+      # "Just renew the lease in a background thread" is the obvious-looking alternative to a long
+      # TTL and it is unsafe here: $redis is a single bare Redis connection shared process-wide
+      # (config/redis.rb), not a pool, and it is not thread-safe. A renewer interleaves replies on the
+      # socket the sync itself is using — measured, a threaded read of the lock key returned nil while
+      # the key was present. The damage lands on unrelated Redis reads elsewhere in the process, so it
+      # would not fail where it was introduced. Pinned so the next reader does not "improve" this.
+      it "does not renew the lease from a background thread" do
+        source = File.read(
+          Rails.root.join(
+            "app/business/payments/merchant_registration/implementations/stripe/stripe_guardian_manager.rb"
+          )
+        )
+
+        expect(source).not_to include("Thread.new")
+      end
     end
   end
 
