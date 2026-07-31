@@ -1270,7 +1270,7 @@ const AccountDetailsSection = ({
               onChange={(evt) => updateComplianceInfo({ dob_year: Number(evt.target.value) })}
             >
               <option disabled>Year</option>
-              {Array.from({ length: minDobYear - 1900 }, (_, i) => i + 1900).map((year) => (
+              {Array.from({ length: minDobYear - 1900 + 1 }, (_, i) => i + 1900).map((year) => (
                 <option key={year} value={year}>
                   {year}
                 </option>
