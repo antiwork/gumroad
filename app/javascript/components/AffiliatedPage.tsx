@@ -104,6 +104,7 @@ type AffiliatedProductsTableProps = {
   }) => void;
   query: string;
   cancelPendingLoad: () => void;
+  dropStaleAffiliation: (affiliateId: string) => void;
   isLoading: boolean;
 };
 
@@ -116,6 +117,7 @@ const AffiliatedProductsTable = ({
   onAffiliationRemoved,
   query,
   cancelPendingLoad,
+  dropStaleAffiliation,
   isLoading,
 }: AffiliatedProductsTableProps) => {
   const [sort, setSort] = React.useState<Sort<SortKey> | null>(null);
@@ -149,6 +151,9 @@ const AffiliatedProductsTable = ({
       if (e instanceof AffiliationAlreadyRemovedError) {
         setRemoving(null);
         showAlert(e.message, "error");
+        // Drop the row before the refresh, not after it: loadAffiliatedProducts keeps the current
+        // products on failure, which would leave a dead row still offering Remove.
+        dropStaleAffiliation(product.affiliate_id);
         loadAffiliatedProducts(pagination.page, sort);
         return;
       }
@@ -401,6 +406,14 @@ const AffiliatedPage = ({
                     setState((prevState) => ({ ...prevState, affiliatedProducts, pagination, stats }))
                   }
                   query={state.query}
+                  dropStaleAffiliation={(affiliateId: string) =>
+                    setState((prevState) => ({
+                      ...prevState,
+                      affiliatedProducts: prevState.affiliatedProducts.filter(
+                        (product) => product.affiliate_id !== affiliateId,
+                      ),
+                    }))
+                  }
                   cancelPendingLoad={() => {
                     debouncedLoadAffiliatedProducts.cancel();
                     activeRequest.current?.cancel();
