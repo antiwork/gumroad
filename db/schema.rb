@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000013) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000014) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2260,7 +2260,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000013) do
     t.bigint "installment_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["cart_id"], name: "index_sent_abandoned_cart_emails_on_cart_id"
+    t.index ["cart_id", "installment_id"], name: "index_sent_abandoned_cart_emails_on_cart_id_and_installment_id", unique: true
     t.index ["installment_id"], name: "index_sent_abandoned_cart_emails_on_installment_id"
   end
 

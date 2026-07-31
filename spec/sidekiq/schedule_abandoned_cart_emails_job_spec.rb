@@ -153,4 +153,18 @@ describe ScheduleAbandonedCartEmailsJob do
       )
     end
   end
+
+  describe "lock configuration" do
+    # A SIGKILL leaves the `until_executed` digest behind with no expiry, and this job's
+    # digest is constant because it takes no arguments — so a single strand muted the job
+    # platform-wide until cleared by hand (gumroad-private#1576). The TTL must stay under
+    # the 24h schedule so an expiring strand cannot race the next day's enqueue.
+    it "bounds the until_executed lock with a TTL shorter than the daily schedule" do
+      opts = described_class.sidekiq_options
+
+      expect(opts["lock"].to_sym).to eq(:until_executed)
+      expect(opts["lock_ttl"]).to eq(described_class::LOCK_TTL.to_i)
+      expect(opts["lock_ttl"]).to be < 1.day.to_i
+    end
+  end
 end
