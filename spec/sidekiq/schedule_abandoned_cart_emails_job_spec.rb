@@ -236,12 +236,20 @@ describe ScheduleAbandonedCartEmailsJob do
 
     # Reading the TTL is a tightening, not a dependency: a Redis hiccup must not take down the
     # day's abandoned-cart emails platform-wide, which is the exact failure gumroad-private#1198
-    # was about.
-    it "falls back to the attempt budget when Redis raises" do
-      allow(Sidekiq).to receive(:redis).and_raise(Redis::CannotConnectError, "no connection")
+    # was about. All four classes are needed — Sidekiq 7 talks redis-client, so neither
+    # RedisClient::Error nor the pool's checkout timeout is a Redis::BaseError.
+    [
+      [Redis::CannotConnectError, "no connection"],
+      [RedisClient::ConnectionError, "connection reset"],
+      [ConnectionPool::TimeoutError, "waited 5 sec"],
+      [SidekiqUniqueJobs::UniqueJobsError, "lock unavailable"],
+    ].each do |error_class, message|
+      it "falls back to the attempt budget when the lock read raises #{error_class}" do
+        allow(Sidekiq).to receive(:redis).and_raise(error_class, message)
 
-      travel_to Time.current do
-        expect(job.send(:attempt_deadline)).to eq(Time.current + described_class::ATTEMPT_TIME_BUDGET)
+        travel_to Time.current do
+          expect(job.send(:attempt_deadline)).to eq(Time.current + described_class::ATTEMPT_TIME_BUDGET)
+        end
       end
     end
 

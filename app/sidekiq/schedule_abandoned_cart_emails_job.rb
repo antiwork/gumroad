@@ -198,11 +198,13 @@ class ScheduleAbandonedCartEmailsJob
       return if pttl.nil? || pttl.negative?
 
       (pttl / 1000.0).seconds
-    rescue Redis::BaseError, SidekiqUniqueJobs::UniqueJobsError => e
-      # A Redis hiccup must not take down the day's abandoned-cart emails; fall back to the
-      # constant bound, which is the behaviour this method tightens rather than replaces. Scoped to
-      # connection/lock errors on purpose: a bare `StandardError` here swallowed a NoMethodError in
-      # this very method and reported it as a healthy fallback.
+    rescue Redis::BaseError, RedisClient::Error, ConnectionPool::TimeoutError, SidekiqUniqueJobs::UniqueJobsError => e
+      # A Redis hiccup must not take down the day's abandoned-cart emails platform-wide, which is
+      # the gumroad-private#1198 failure — this read is a tightening, not a dependency. All four
+      # classes are needed and none is redundant: Sidekiq 7 talks redis-client, so neither
+      # RedisClient::Error nor the pool's checkout timeout is a Redis::BaseError. Deliberately not
+      # a bare StandardError: that hid a NoMethodError in this very method and reported it as a
+      # healthy fallback.
       Rails.logger.warn "ScheduleAbandonedCartEmailsJob could not read its lock TTL (#{e.class}: #{e.message}); falling back to #{ATTEMPT_TIME_BUDGET.inspect}"
       nil
     end
