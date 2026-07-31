@@ -17,6 +17,11 @@ if Rails.env.development? || Rails.env.test?
 end
 
 require_relative "domain"
+# Must run after Dotenv (it reads the *_REDIS_HOST vars .env.test sets) and before
+# anything connects: config/redis.rb below, plus the sidekiq, rpush and rack_attack
+# initializers. Rewrites those vars so concurrent test runs get separate databases.
+require_relative "test_redis_isolation"
+TestRedisIsolation.install!
 require_relative "redis"
 require_relative "../lib/utilities/global_config"
 
