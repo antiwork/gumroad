@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 DIR = ARGV[0] || "db/migrate"
 SCHEMA = ARGV[1] || "db/schema.rb"
 
