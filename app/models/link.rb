@@ -291,6 +291,8 @@ class Link < ApplicationRecord
   # SQL mirror of #default_offer_code_detached?, so the repairs can re-evaluate
   # detachment inside their own UPDATE instead of reading it first. Kept beside
   # that method — the two must agree, and only this form is race-free.
+  # `<=>` is MySQL's NULL-safe equality: a NULL price_currency_type counts as a
+  # mismatch, matching the Ruby predicate rather than swallowing the row.
   scope :with_detached_default_offer_code, -> {
     where(<<~SQL.squish)
       links.default_offer_code_id IS NOT NULL AND (
@@ -311,7 +313,8 @@ class Link < ApplicationRecord
           SELECT 1 FROM offer_codes oc
           WHERE oc.id = links.default_offer_code_id AND oc.universal = TRUE
             AND (
-              (oc.currency_type IS NOT NULL AND oc.currency_type != links.price_currency_type)
+              (oc.currency_type IS NOT NULL AND oc.currency_type != ''
+                AND NOT (links.price_currency_type <=> oc.currency_type))
               OR EXISTS (
                 SELECT 1 FROM offer_codes_excluded_products ocep
                 WHERE ocep.offer_code_id = oc.id AND ocep.product_id = links.id
@@ -1504,7 +1507,7 @@ class Link < ApplicationRecord
       # the same request would otherwise write this nil back over an assignment
       # that landed in between.
       write_attribute(:default_offer_code_id, nil)
-      clear_attribute_change(:default_offer_code_id)
+      clear_attribute_changes([:default_offer_code_id])
       association(:default_offer_code).reset
     end
 

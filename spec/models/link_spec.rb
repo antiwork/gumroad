@@ -108,8 +108,12 @@ describe Link do
 
       # Stand in for a concurrent request assigning a valid default after this
       # save decided the old one was detached but before the clearing write lands.
-      allow(Link).to receive(:with_detached_default_offer_code).and_wrap_original do |original, *args|
-        Link.where(id: product.id).update_all(default_offer_code_id: replacement.id)
+      # Injected at the UPDATE itself, so a repair that reads through the scope and
+      # then writes blindly is still caught.
+      allow_any_instance_of(ActiveRecord::Relation).to receive(:update_all).and_wrap_original do |original, *args|
+        Link.connection.update(
+          Link.sanitize_sql(["UPDATE links SET default_offer_code_id = ? WHERE id = ?", replacement.id, product.id])
+        )
         original.call(*args)
       end
 
