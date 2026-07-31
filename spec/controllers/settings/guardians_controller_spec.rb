@@ -203,6 +203,18 @@ describe Settings::GuardiansController, type: :controller do
       expect(guardian.stripe_tos_accepted_at).to be_within(1.second).of(accepted_at)
     end
 
+    # Guardians saved before the country was derived are stored with it nil, so payouts stay blocked
+    # forever unless a later edit heals them.
+    it "fills in a missing country on update" do
+      guardian.update_column(:country, nil)
+
+      put :update, params: { id: guardian.external_id, guardian: { city: "Berkeley" } }, format: :json
+
+      guardian.reload
+      expect(guardian.country).to eq("United States")
+      expect(guardian.has_completed_info?).to be(true)
+    end
+
     it "cannot reach another seller's guardian" do
       other_guardian = create(:guardian, user: create(:user), first_name: "Someone")
 

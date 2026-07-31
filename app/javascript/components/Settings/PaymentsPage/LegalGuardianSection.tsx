@@ -126,9 +126,8 @@ const LegalGuardianSection = ({
   if (!legalGuardian.required) return null;
 
   // Required fields are checked here rather than by the browser: this section cannot be a <form> (see
-  // the render below), so `required` on the inputs is inert. Mirrors Guardian#has_completed_info? —
-  // without this the endpoint saves a partial guardian and reports success, leaving payouts blocked
-  // with nothing telling the seller which field is missing.
+  // the render below), so `required` on the inputs is inert. Without this the endpoint saves a partial
+  // guardian and reports success, leaving payouts blocked with nothing naming the missing field.
   const missingRequiredField = () => {
     if (formState.first_name.trim() === "") return "your guardian's first name";
     if (formState.last_name.trim() === "") return "your guardian's last name";
@@ -190,10 +189,12 @@ const LegalGuardianSection = ({
       const { guardian } = typia.assert<{ guardian: Guardian }>(await response.json());
 
       setFormState(guardianToFormState(guardian));
+      // The incomplete branch names the terms specifically: it is the only required field a seller
+      // can leave unset and still save, so it is the only reason this message ever appears.
       showAlert(
         guardian.has_completed_info
           ? "Your legal guardian's details are saved. Payouts will resume on your next payout date."
-          : "Your legal guardian's details are saved.",
+          : "Your legal guardian's details are saved, but payouts stay on hold until your guardian accepts the terms.",
         "success",
       );
       // Last, and after the local form state is already correct: this refetches the page's own
@@ -230,9 +231,7 @@ const LegalGuardianSection = ({
       )}
 
       {/* A div, not a form, and the button below is type="button" with an onClick. The payout-settings
-          page wraps this whole section in its own <form>, and a nested form is invalid HTML — the
-          browser discards the inner one, so a submit button here would silently submit the PAGE's form
-          and the guardian would never be saved. */}
+          page wraps this whole section in its own <form>, and nesting one inside it is invalid HTML. */}
       <div className="grid gap-4">
         <div>{formError ? <Alert variant="danger">{formError}</Alert> : null}</div>
 

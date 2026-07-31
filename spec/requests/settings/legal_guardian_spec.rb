@@ -100,7 +100,7 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       fill_in "Guardian's Social Security number", with: "000000000"
       click_on "Add guardian"
 
-      expect(page).to have_alert(text: "Your legal guardian's details are saved")
+      expect(page).to have_alert(text: "Your legal guardian's details are saved, but payouts stay on hold until your guardian accepts the terms")
       expect(page).to have_text("Your payouts are on hold until your guardian's details are complete")
       expect(seller.guardians.alive.sole.has_completed_info?).to be(false)
       expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(false)
