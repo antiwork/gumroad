@@ -68,9 +68,13 @@ describe "app/views/home/terms.html.erb cross-references" do
   # each cite, then the list pass walks the "and"/"," continuations after it. Matching only after
   # the prefix would capture 11.3 out of "Sections 11.3(a) and 11.99(b)" and let the bad
   # continuation through — the shape §11.3(c) actually uses.
+  #
+  # The separator takes a comma AND a trailing conjunction in one step. Alternating them instead
+  # ("," or " and") stops at an Oxford comma: the comma matches, then a number is required where
+  # "and" sits, so the last item of "Sections 4.1, 9.98, and 9.99" never reaches the existence check.
   def cited_numbers(pattern)
     numbers = source.scan(/(?:#{section_word})#{sp}+((?:#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?
-                          (?:(?:,|#{sp}+and|#{sp}+or)?#{sp}+(?:#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?)*)/x)
+                          (?:(?:,#{sp}*(?:and|or)?|#{sp}+(?:and|or))?#{sp}+(?:#{pattern})(?!\d)(?!\.\d)(?:\([a-z0-9]\))?)*)/x)
     numbers.flatten
            .flat_map { |run| run.scan(/#{pattern}/) }
            .uniq
@@ -155,6 +159,20 @@ describe "app/views/home/terms.html.erb cross-references" do
 
     expect(cited_numbers('\d{1,2}\.\d{1,2}')).to contain_exactly("11.3", "11.99", "4.1", "9.98", "9.99")
     expect(cited_numbers('\d{1,2}').map(&:to_i)).to include(14, 40)
+  end
+
+  # Separate from the list example above because the Oxford comma is where a list scan is most
+  # likely to stop one item early: the comma and the conjunction are both present, and a separator
+  # that takes one or the other consumes the comma and then demands a number where "and" is. The
+  # tail is the position a dead cite hides in, so the last number has to be read.
+  it "reads the last number of a list written with an Oxford comma" do
+    document = instance_double(Pathname, read: <<~HTML)
+      <p>Nothing in Sections 4.1, 9.98, and 9.99 limits Sections 14, 19, or 40.</p>
+    HTML
+    allow(Rails.root).to receive(:join).with("app/views/home/terms.html.erb").and_return(document)
+
+    expect(cited_numbers('\d{1,2}\.\d{1,2}')).to contain_exactly("4.1", "9.98", "9.99")
+    expect(cited_numbers('\d{1,2}').map(&:to_i)).to include(14, 19, 40)
   end
 
   # The (?!\d) guard above is what keeps "CALIFORNIA CIVIL CODE SECTION 1542" from reading as a
