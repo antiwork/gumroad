@@ -2,56 +2,86 @@
 
 require "spec_helper"
 
-# §27.5 makes a material change effective for an existing Registered User on the EARLIER of 30 days
-# after posting or 30 days after an emailed notice, so the posting date alone fixes the date and a
-# later email cannot pull it in. Deriving the assertion from Last Updated rather than pinning a
-# literal is what makes a future Terms edit redden here instead of shipping a stale notice.
+# §27.6 ("Agreement Updates") delays every Terms change by 30 days for existing Registered Users,
+# and for MATERIAL changes makes it the earlier of that or 30 days after an emailed notice — so the
+# posting date alone fixes the date and a later email cannot pull it in. The header states that date;
+# these examples keep it arithmetically true and tied to the posting it describes.
 #
-# Ruby's \s does not match U+00A0, and this file's hand-maintained header markup mixes both.
+# Asserts a derived invariant rather than pinning literals, so an ordinary Terms edit does not have
+# to rewrite this file. Section NUMBERS are deliberately absent from the header and from the
+# assertions: #6717 renumbered 52 subsection headers, which is why the amendment is identified by
+# its posting date instead.
 describe "app/views/home/terms.html.erb amendment notice" do
-  SPACE = "[[:space:]\u00a0]"
+  # Methods rather than constants: a constant assigned in a describe block lands on Object and
+  # collides with the next spec that picks the same name.
+  def month
+    "(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+  end
+
+  # Ruby's \s does not match U+00A0 but POSIX [[:space:]] does, and this file's hand-maintained
+  # markup is full of nbsp gaps — matching a gap with \s would silently skip those rows.
+  def sp
+    "[[:space:]]"
+  end
 
   let(:source) { Rails.root.join("app/views/home/terms.html.erb").read }
 
   let(:header) do
-    source[/description:#{SPACE}*"(.*?)"#{SPACE}*%>/mo, 1] ||
+    source[/description:#{sp}*"(.*?)"#{sp}*%>/m, 1] ||
       raise("could not find the header description passed to home/shared/header")
   end
 
-  # No /o here: the interpolation varies per call, and /o would cache the FIRST label's pattern and
-  # silently answer every later call with it.
+  let(:last_updated) { date_after("Last Updated Date") }
+
+  # The notice sentence, parsed as the pair of dates it relates. nil when no notice line is present.
+  let(:notice) do
+    m = header.match(
+      /(?<posted>#{month}#{sp}+\d{1,2},#{sp}*\d{4})#{sp}+changes#{sp}+take#{sp}+effect#{sp}+
+       for#{sp}+accounts#{sp}+created#{sp}+before#{sp}+\k<posted>#{sp}+on#{sp}+
+       (?<binding>#{month}#{sp}+\d{1,2},#{sp}*\d{4})/x
+    )
+    m && { posted: to_date(m[:posted]), binding: to_date(m[:binding]) }
+  end
+
+  def to_date(raw)
+    Date.parse(raw.gsub(/#{sp}+/, " "))
+  end
+
   def date_after(label)
-    raw = header[/#{Regexp.escape(label)}:#{SPACE}*([A-Z][a-z]+#{SPACE}+\d{1,2},#{SPACE}*\d{4})/, 1] ||
+    raw = header[/#{Regexp.escape(label)}:#{sp}*(#{month}#{sp}+\d{1,2},#{sp}*\d{4})/, 1] ||
       raise("header carries no #{label}: #{header.inspect}")
-    Date.parse(raw.gsub(/#{SPACE}+/o, " "))
+    to_date(raw)
   end
 
-  it "parses the header it is asserting about" do
-    expect(header).to include("Effective Date", "Last Updated Date")
-  end
+  # Required only while the latest posting's 30-day window is still running or just closed. Once the
+  # window has passed the notice has done its work and may come off the page — the spec must not be
+  # the reason a spent sentence stays up reading as future tense about a past date.
+  it "states when a posted change takes effect while its 30-day window is still open" do
+    pending_window = last_updated + 30 >= Date.current
+    next unless pending_window
 
-  # Anchored on the notice line's OWN posting date, not on Last Updated. Last Updated moves for any
-  # edit including a typo fix, while this date may only move when a MATERIAL change is posted — a
-  # materiality call no spec can make. Coupling the two would redden CI on an innocent edit and the
-  # only way to green it would be publishing a 30-day claim with no material change behind it.
-  it "states a binding date 30 days after the amendment it describes was posted" do
-    notice = header[/((?:January|February|March|April|May|June|July|August|September|October|November|December)#{SPACE}+\d{1,2},#{SPACE}*\d{4})#{SPACE}+changes#{SPACE}+take#{SPACE}+effect#{SPACE}+for#{SPACE}+existing#{SPACE}+accounts#{SPACE}+on#{SPACE}+((?:January|February|March|April|May|June|July|August|September|October|November|December)#{SPACE}+\d{1,2},#{SPACE}*\d{4})/o]
     expect(notice).to be_present,
-                      "header must state when a posted amendment takes effect for existing accounts, " \
-                      "in the form '<posted date> changes take effect for existing accounts on <date>'; " \
-                      "header is #{header.inspect}"
-
-    posted, binding_date = Regexp.last_match.captures.map { |d| Date.parse(d.gsub(/#{SPACE}+/o, " ")) }
-
-    expect(binding_date).to eq(posted + 30),
-                            "§27.5 gives the EARLIER of 30 days after posting or 30 days after an " \
-                            "emailed notice, so a posting on #{posted} binds an existing account on " \
-                            "#{posted + 30}, not #{binding_date}"
+                      "#{last_updated} is within 30 days, so the header must say when that change " \
+                      "takes effect: '<posted> changes take effect for accounts created before " \
+                      "<posted> on <posted + 30 days>'. Header is #{header.inspect}"
   end
 
-  # The amendment date must be additive. Reusing this field would move the arbitration boundary in
-  # §25 ("disputes that arose ... before the effective date of the Agreement").
-  it "states the amendment date without disturbing the Agreement's own Effective Date" do
+  # Both halves are checked against Last Updated, not just the trailing date: greening a stale line
+  # by editing only the date it takes effect would leave the sentence attributing the wrong posting.
+  it "describes the latest posting, and dates it 30 days out" do
+    next if notice.nil?
+
+    expect(notice[:posted]).to eq(last_updated),
+                               "notice describes the #{notice[:posted]} changes but the page was " \
+                               "last updated #{last_updated}"
+    expect(notice[:binding]).to eq(notice[:posted] + 30),
+                                "a change posted #{notice[:posted]} takes effect for an existing " \
+                                "account on #{notice[:posted] + 30}, not #{notice[:binding]}"
+  end
+
+  # January 1, 2025 is a historical fact about this Agreement, so a per-amendment date has to be
+  # added alongside it rather than written over it.
+  it "states the amendment date without restating the Agreement's own Effective Date" do
     expect(date_after("Effective Date")).to eq(Date.new(2025, 1, 1))
   end
 end
