@@ -129,7 +129,7 @@ describe StripeGuardianManager do
     it "creates a fresh person when the recorded id no longer exists at Stripe" do
       guardian.update!(stripe_person_id: "person_gone")
       allow(Stripe::Account).to receive(:retrieve_person)
-        .and_raise(Stripe::InvalidRequestError.new("No such person: 'person_gone'", nil))
+        .and_raise(Stripe::InvalidRequestError.new("No such person: 'person_gone'", nil, code: "resource_missing"))
       create_compliance_info(guardian_record: guardian)
 
       described_class.sync(user, stripe_account, passphrase:)
@@ -361,6 +361,18 @@ describe StripeGuardianManager do
         # The other holder's lock must survive: releasing it would let both syncs run after all.
         expect($redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")).to eq("someone-else")
       end
+
+      # The lock is held across two Stripe round trips, so a TTL shorter than a worst-case call
+      # expires mid-sequence and lets a second sync create the duplicate Person this lock exists to
+      # prevent — during a Stripe brownout, which is when overlapping syncs are most likely. Pinned
+      # against the client's own worst case rather than a bare number.
+      it "outlives the slowest Stripe call the client will make" do
+        worst_case_stripe_call = Stripe.read_timeout * (Stripe.max_network_retries + 1)
+
+        expect(described_class::SYNC_LOCK_TTL).to be > worst_case_stripe_call.seconds
+        # Both round trips under one lock.
+        expect(described_class::SYNC_LOCK_TTL).to be > (worst_case_stripe_call * 2).seconds
+      end
     end
   end
 
@@ -383,7 +395,7 @@ describe StripeGuardianManager do
     it "treats an already-deleted person as deleted" do
       guardian.update!(stripe_person_id: "person_gone")
       allow(Stripe::Account).to receive(:delete_person)
-        .and_raise(Stripe::InvalidRequestError.new("No such person: 'person_gone'", nil))
+        .and_raise(Stripe::InvalidRequestError.new("No such person: 'person_gone'", nil, code: "resource_missing"))
 
       expect(described_class.delete_person(guardian, stripe_account_id)).to be(true)
     end

@@ -28,9 +28,14 @@ module StripeGuardianManager
   US_SSN_LAST_4_LENGTH = 4
   US_FULL_TAX_ID_LENGTH = 9
 
-  # Long enough to cover a retrieve plus a create/update round trip to Stripe, short enough that a
-  # process killed mid-sync does not block the next one for long.
-  SYNC_LOCK_TTL = 30.seconds
+  # Must outlast the worst case Stripe call, not the typical one. The lock is held across two round
+  # trips, and stripe-ruby's 80s read timeout retried max_network_retries times puts one call at up
+  # to ~320s — so both together exceed 10 minutes. That worst case is a Stripe brownout, which is
+  # exactly when overlapping syncs happen, and a TTL that lapses mid-sequence lets a second sync
+  # create the duplicate Person this lock exists to prevent. The only cost of the long TTL is how
+  # long a process killed mid-sync blocks the next one, and a missed sync self-heals on the next
+  # account update. Pinned against the client's own numbers in the spec, not hardcoded twice.
+  SYNC_LOCK_TTL = 20.minutes
   SYNC_LOCK_WAIT_TIMEOUT = 10.seconds
   SYNC_LOCK_RETRY_INTERVAL_SECONDS = 0.05
   SYNC_LOCK_RELEASE_SCRIPT = <<~LUA.squish
@@ -185,11 +190,13 @@ module StripeGuardianManager
     # must not be swallowed — an undeleted Person means the guardian's details still sit with Stripe
     # after we told the seller they were erased.
     #
-    # A missing ACCOUNT is also not a failure: erasure tries every Stripe account the seller ever
-    # held, because a locally-deleted account can still hold the Person, and an account Stripe no
-    # longer has cannot be holding anything.
+    # Matched on the structured code rather than the message: a substring hunt that over-matches
+    # turns a live failure into a reported-complete erasure, which is the one outcome worth
+    # engineering against here. A missing ACCOUNT is also not a failure — erasure tries every Stripe
+    # account the seller ever held, and an account Stripe no longer has cannot be holding anything.
+    raise unless e.code == "resource_missing"
     return true if e.message.to_s.include?("No such person")
-    return false if e.message.to_s.match?(/No such account|does not exist/i)
+    return false if e.message.to_s.include?("No such account")
     raise
   end
 

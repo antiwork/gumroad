@@ -205,19 +205,40 @@ describe GdprDataErasureService do
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
       end
 
-      # An account Stripe no longer has cannot be holding the Person, so trying a dead account must
-      # not turn into a reported failure.
-      it "treats a Stripe account that no longer exists as nothing left to delete" do
+      # "No such account" is not evidence the Person was deleted, and when it is the ONLY account
+      # tried nothing has confirmed the delete — so the erasure cannot report itself complete. This
+      # example previously asserted success and was pinning that bug.
+      it "does not report success when the only Stripe account tried cannot confirm the delete" do
         guardian = create(:guardian, user:, stripe_person_id: "person_erase_me", first_name: "Ellie")
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
         allow(Stripe::Account).to receive(:delete_person)
-          .and_raise(Stripe::InvalidRequestError.new("No such account: 'acct_erasure_test'", nil))
+          .and_raise(Stripe::InvalidRequestError.new("No such account: 'acct_erasure_test'", nil, code: "resource_missing"))
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("Erasure incomplete")
+        expect(DeleteGuardianStripePersonJob).to have_enqueued_sidekiq_job("person_erase_me", "acct_erasure_test", user.id)
+        # Our own copy still goes: a processor-side failure is not a reason to keep the local row.
+        expect(guardian.reload.first_name).to be_nil
+      end
+
+      # The reason a dead account is not itself a failure: erasure tries every account the seller
+      # ever held, so a "no such account" alongside a real delete is expected. Only a Person that NO
+      # account acknowledged is unverified, so this must not regress into failing every erasure for
+      # a re-onboarded seller.
+      it "reports success when another account confirmed the delete" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_dead_one")
+        allow(Stripe::Account).to receive(:delete_person)
+          .with("acct_dead_one", "person_erase_me")
+          .and_raise(Stripe::InvalidRequestError.new("No such account: 'acct_dead_one'", nil, code: "resource_missing"))
 
         result = described_class.new(user, performed_by: admin).perform!
 
         expect(result[:success]).to be(true)
-        expect(guardian.reload.first_name).to be_nil
-        expect(ErrorNotifier).not_to have_received(:notify)
+        expect(DeleteGuardianStripePersonJob.jobs).to be_empty
       end
 
       # The one case where we know Stripe holds a copy and have no handle to reach it. Silence here

@@ -214,8 +214,19 @@ class GdprDataErasureService
     #
     # Returns the Person ids still at Stripe.
     def delete_guardian_stripe_persons!(guardian_stripe_persons)
-      guardian_stripe_persons.filter_map do |stripe_person_id, stripe_account_id|
-        StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
+      # A false return means Stripe could not confirm the deletion because the ACCOUNT was missing,
+      # which is not evidence the Person is gone. Erasure tries every account the seller ever held,
+      # so one account answering "no such account" is expected and harmless — what matters is
+      # whether ANY account confirmed the delete. Tracked per Person id and reconciled below.
+      confirmed = Set.new
+      unconfirmed = {}
+
+      retained = guardian_stripe_persons.filter_map do |stripe_person_id, stripe_account_id|
+        if StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
+          confirmed << stripe_person_id
+        else
+          unconfirmed[stripe_person_id] = stripe_account_id
+        end
         nil
       rescue => e
         Rails.logger.error("GDPR: Failed to delete Stripe guardian person for user #{@user.id}: #{e.message}")
@@ -223,6 +234,19 @@ class GdprDataErasureService
         DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
         stripe_person_id
       end
+
+      # Nothing confirmed this Person deleted anywhere, so it may still stand at Stripe. Retry it
+      # rather than letting an unverified delete pass for a completed erasure.
+      unconfirmed.except(*confirmed, *retained).each do |stripe_person_id, stripe_account_id|
+        message = "GDPR: could not confirm deletion of guardian Stripe person #{stripe_person_id} " \
+                  "for user #{@user.id}: no account acknowledged the delete"
+        Rails.logger.error(message)
+        ErrorNotifier.notify(message)
+        DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
+        retained << stripe_person_id
+      end
+
+      retained.uniq
     end
 
     # Pairs each guardian Person with every Stripe account it may live on. Includes Persons found by
