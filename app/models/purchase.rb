@@ -123,7 +123,9 @@ class Purchase < ApplicationRecord
   has_many :media_locations
   has_one :processor_payment_intent
   has_one :commission_as_deposit, class_name: "Commission", foreign_key: :deposit_purchase_id
-  has_one :commission_as_completion, class_name: "Commission", foreign_key: :completion_purchase_id
+  # Commission persists this link after processing, so saving a failed completion must not attach it.
+  has_one :commission_as_completion, class_name: "Commission", foreign_key: :completion_purchase_id,
+                                     inverse_of: :completion_purchase, autosave: false
   has_one :utm_link_driven_sale
   has_one :utm_link, through: :utm_link_driven_sale
 
@@ -1422,10 +1424,11 @@ class Purchase < ApplicationRecord
       end
       if link.is_tiered_membership?
         first_tier_name = purchase.variant_attributes.first&.name
+        subscription_external_id = purchase.subscription&.external_id
         json[:membership] = {
           tier_name: first_tier_name == "Untitled" ? purchase.link.name : first_tier_name,
           tier_description: purchase.variant_attributes.first&.description,
-          manage_url: Rails.application.routes.url_helpers.manage_subscription_url(purchase.subscription.external_id, host: "#{PROTOCOL}://#{DOMAIN}"),
+          manage_url: subscription_external_id.present? ? Rails.application.routes.url_helpers.manage_subscription_url(subscription_external_id, host: "#{PROTOCOL}://#{DOMAIN}") : nil,
         }
       end
       json[:enabled_integrations] = Integration.enabled_integrations_for(purchase)
@@ -1581,9 +1584,9 @@ class Purchase < ApplicationRecord
   end
 
   # True while a presentment purchase has been charged but Stripe settlement data has not
-  # arrived yet; FinalizeBuyerPresentmentChargeJob completes the purchase once it does.
+  # arrived yet; a finalization job completes the purchase once it does.
   def pending_buyer_presentment_settlement?
-    in_progress? && stripe_transaction_id.present? && charge&.charge_presentment.present?
+    in_progress? && stripe_transaction_id.present? && (buyer_presentment? || charge&.charge_presentment.present?) && flow_of_funds.blank?
   end
 
   def buyer_presentment_currency
@@ -2227,7 +2230,12 @@ class Purchase < ApplicationRecord
     self.charge_intent = create_charge_intent(chargeable, off_session:)
     return if errors.present?
 
-    save_charge_data(charge_intent.charge, chargeable:) if charge_intent.succeeded?
+    if charge_intent.succeeded?
+      charge_data_saved = save_charge_data(charge_intent.charge, chargeable:, allow_missing_flow_of_funds: buyer_presentment?)
+      unless charge_data_saved
+        FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, id)
+      end
+    end
 
     unless charge_intent.succeeded? || charge_intent.requires_action? || (charge_intent.is_a?(StripeChargeIntent) && charge_intent.processing?)
       errors.add :base, "Sorry, something went wrong."
@@ -4242,6 +4250,55 @@ class Purchase < ApplicationRecord
       end
     end
 
+    # Processor args for an off-session purchase whose buyer-currency price was fixed earlier.
+    # Buyer-present charges stay on the verified checkout quote path.
+    def later_charge_presentment_processor_args(off_session:)
+      return {} unless off_session
+      return {} unless charge_processor_id == StripeChargeProcessor.charge_processor_id
+      return {} unless merchant_account&.stripe_charge_processor?
+      return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+
+      result = Purchase::LaterChargePresentmentService.new(
+        merchant_account:,
+        purchases: [self],
+        amount_cents: total_transaction_cents,
+        gumroad_amount_cents: total_transaction_amount_for_gumroad_cents
+      ).perform
+      return {} if result.blank?
+
+      {
+        processor_amount_cents: result.processor_amount_cents,
+        processor_currency: result.processor_currency,
+        processor_gumroad_amount_cents: result.processor_gumroad_amount_cents,
+        stripe_fx_quote_id: result.stripe_fx_quote_id,
+      }
+    end
+
+    # Converts the RBI e-mandate cap into the currency this charge will actually settle in. See
+    # Charge::CreateService#mandate_options_in_charge_currency for the full reasoning; this is the
+    # renewal-path counterpart, kept deliberately identical in behaviour.
+    def mandate_options_in_charge_currency(mandate_options, presentment_args, canonical_amount_cents)
+      return mandate_options if mandate_options.blank?
+
+      presentment_currency = presentment_args[:processor_currency]
+      return mandate_options if presentment_currency.blank? || presentment_currency == Currency::USD
+
+      canonical_cap_cents = mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)
+      return mandate_options if canonical_cap_cents.blank?
+      return mandate_options unless canonical_amount_cents.to_i.positive?
+
+      presentment_cap_cents = (Rational(canonical_cap_cents * presentment_args[:processor_amount_cents].to_i,
+                                        canonical_amount_cents)).ceil
+      # A cap below the amount being charged would decline this very renewal.
+      presentment_cap_cents = [presentment_cap_cents, presentment_args[:processor_amount_cents].to_i].max
+
+      inner = mandate_options[:payment_method_options][:card][:mandate_options]
+                .merge(amount: presentment_cap_cents, currency: presentment_currency)
+      mandate_options.deep_merge(
+        payment_method_options: { card: { mandate_options: inner } }
+      )
+    end
+
     def create_charge_intent(chargeable, off_session: true)
       with_charge_processor_error_handler do
         amount_cents = total_transaction_cents
@@ -4255,6 +4312,17 @@ class Purchase < ApplicationRecord
         # off-session (multi-seller carts) but must not be treated that way.
         mandate_expected = is_a_saved_card_rebill?
 
+        # Delayed product charges reuse the buyer-currency price fixed at checkout.
+        #
+        # Empty hash means no valid fixing applies, so the charge keeps its canonical behavior.
+        presentment_args = later_charge_presentment_processor_args(off_session:)
+        # The RBI e-mandate cap is registered in US dollars, but Stripe reads mandate_options
+        # amounts in the mandate's own currency and the mandate inherits the intent's currency.
+        # An unconverted cap on a presentment charge registers as (say) ₹10.00 instead of $10.00
+        # and every subsequent renewal is declined off-session. Same conversion the checkout lane
+        # applies in Charge::CreateService#mandate_options_in_charge_currency.
+        mandate_options = mandate_options_in_charge_currency(mandate_options, presentment_args, amount_cents)
+
         charge_intent = ChargeProcessor.create_payment_intent_or_charge!(self.merchant_account,
                                                                          chargeable,
                                                                          amount_cents,
@@ -4266,7 +4334,8 @@ class Purchase < ApplicationRecord
                                                                          off_session:,
                                                                          setup_future_charges:,
                                                                          mandate_options:,
-                                                                         mandate_expected:)
+                                                                         mandate_expected:,
+                                                                         **presentment_args)
 
         if charge_intent.id.present?
           if processor_payment_intent.present?

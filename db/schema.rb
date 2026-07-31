@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000016) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000020) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1208,6 +1208,20 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000016) do
     t.index ["community_id"], name: "index_last_read_community_chat_messages_on_community_id"
     t.index ["user_id", "community_id"], name: "idx_on_user_id_community_id_45efa2a41c", unique: true
     t.index ["user_id"], name: "index_last_read_community_chat_messages_on_user_id"
+  end
+
+  create_table "later_charge_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "owner_type", null: false
+    t.bigint "owner_id", null: false
+    t.string "processor", null: false
+    t.string "presentment_currency", null: false
+    t.bigint "presentment_price_cents", null: false
+    t.decimal "signup_currency_units_per_usd", precision: 30, scale: 15, null: false
+    t.datetime "effective_from", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "canonical_price_cents", null: false
+    t.index ["owner_type", "owner_id", "effective_from"], name: "index_later_charge_presentments_on_owner_and_effective"
   end
 
   create_table "legacy_permalinks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

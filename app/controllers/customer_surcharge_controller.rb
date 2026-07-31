@@ -44,12 +44,23 @@ class CustomerSurchargeController < ApplicationController
         tax_rate += tax_cents
       end
       subtotal += tax_result.price_cents
+      charge_details = buyer_currency_charge_details(product:, item:, surcharges:)
+      unless charge_details
+        all_lines_quotable = false
+        next
+      end
       quote_line_items << Checkout::BuyerCurrencyQuote::LineItem.from_surcharge(
         permalink: item[:permalink].to_s,
         product:,
         tax_result:,
         tip_cents: item[:tip_cents],
-        shipping_usd_cents:
+        shipping_usd_cents:,
+        charge_tax_result: charge_details[:surcharges]&.fetch(:sales_tax_result),
+        charge_tip_cents: charge_details[:tip_cents],
+        charge_shipping_usd_cents: charge_details[:surcharges] ? get_usd_cents(product.price_currency_type, charge_details[:surcharges].fetch(:shipping_rate)) : 0,
+        charge_now: charge_details[:charge_now],
+        later_charge_kind: charge_details[:kind],
+        later_charge_price_cents: charge_details[:later_price_cents]
       )
     end
 
@@ -88,6 +99,7 @@ class CustomerSurchargeController < ApplicationController
         currency: quote.currency,
         canonical_total_cents: quote.canonical_total_cents,
         presentment_total_cents: quote.presentment_total_cents,
+        charge_presentment_total_cents: quote.charge_presentment_total_cents,
         # What one canonical US dollar cent is worth in the buyer's currency. The browser uses
         # this only for the two amounts it still converts itself, the discount row and the tip
         # the buyer types; every amount that is actually charged comes from the per-line
@@ -115,6 +127,50 @@ class CustomerSurchargeController < ApplicationController
             total_cents: allocation.presentment_total_cents,
           }
         end,
+      }
+    end
+
+    def buyer_currency_charge_details(product:, item:, surcharges:)
+      tax_result = surcharges.fetch(:sales_tax_result)
+      full_price_cents = tax_result.price_cents.to_i
+      tip_cents = item[:tip_cents]
+      tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
+      tip_cents = tip_cents.clamp(0, [full_price_cents, 0].max)
+      full_base_price_cents = full_price_cents - tip_cents
+
+      kind, charge_base_price_cents, charge_tip_cents, later_price_cents =
+        if product.is_in_preorder_state?
+          ["preorder", 0, 0, full_base_price_cents]
+        elsif product.native_type == Link::NATIVE_TYPE_COMMISSION
+          deposit = Commission::COMMISSION_DEPOSIT_PROPORTION
+          ["commission", (full_base_price_cents * deposit).round, (tip_cents * deposit).round,
+           (full_base_price_cents * (1 - deposit)).round]
+        elsif ActiveModel::Type::Boolean.new.cast(item[:pay_in_installments]) && product.installment_plan.present?
+          payments = product.installment_plan.calculate_installment_payment_price_cents(full_base_price_cents)
+          ["installment", payments.first, tip_cents, payments.last]
+        elsif product.is_recurring_billing?
+          ["subscription", full_base_price_cents, tip_cents, full_base_price_cents]
+        else
+          return { charge_now: true, surcharges:, tip_cents:, kind: nil, later_price_cents: nil }
+        end
+
+      return { charge_now: false, surcharges: nil, tip_cents: 0, kind:, later_price_cents: } if kind == "preorder"
+
+      charge_surcharges = calculate_surcharges(
+        product,
+        item[:quantity],
+        charge_base_price_cents + charge_tip_cents,
+        subscription_id: item[:subscription_id],
+        recommended_by: item[:recommended_by]
+      )
+      return if charge_surcharges.blank?
+
+      {
+        charge_now: true,
+        surcharges: charge_surcharges,
+        tip_cents: charge_tip_cents,
+        kind:,
+        later_price_cents:,
       }
     end
 

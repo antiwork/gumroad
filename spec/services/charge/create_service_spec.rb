@@ -256,7 +256,8 @@ describe Charge::CreateService, :vcr do
             permalink: product_1.unique_permalink,
             total_cents: purchase.total_transaction_cents,
           },
-        ]
+        ],
+        later_charge_canonical_line_items: []
       ).and_return(locked_quote)
       allow_any_instance_of(Charge::PresentmentOrchestrator).to receive(:perform).and_return(presentment_result)
 
