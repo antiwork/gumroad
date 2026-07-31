@@ -197,9 +197,9 @@ export default function SubscriptionsManage() {
       amountDueToday === 0 && !isResubscribing && !subscription.is_in_free_trial && requirePayment;
     const deferralNote = deferredToRenewal ? ", starting at your next renewal" : "";
     if (isQuantityChanged && isRecurrenceChanged) {
-      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat.${oneWayNote}`;
+      warning = `Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of ${price} per seat${deferralNote}.${oneWayNote}`;
     } else if (isQuantityChanged) {
-      warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat.`;
+      warning = `Changing the number of seats will update your subscription to the current price of ${price} per seat${deferralNote}.`;
     } else if (isRecurrenceChanged) {
       warning = `Changing the billing frequency will update your subscription to the current price of ${price} per seat${deferralNote}.${oneWayNote}`;
     } else if (isResubscribing) {

@@ -481,9 +481,10 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
         select("Yearly", from: "Recurrence")
         fill_in "Seats", with: 1
 
-        # The frequency half of this change is deferred and uncharged, so it is warned about even
-        # though the buyer is on current pricing (gumroad-private#1577).
-        expect(page).to have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of $10 a year per seat.")
+        # Both halves are deferred: the seat decrease and the frequency decrease each collect
+        # nothing today, so the updater applies them at renewal. The combined warning has to say
+        # so, or it reads as an immediate change (gumroad-private#1577).
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of $10 a year per seat, starting at your next renewal.")
       end
     end
 
@@ -500,7 +501,8 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
           fill_in "Seats", with: 1
 
-          expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $40 every 3 months per seat.")
+          # A seat decrease collects nothing today, so the updater defers it to renewal.
+          expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $40 every 3 months per seat, starting at your next renewal.")
         end
       end
 
