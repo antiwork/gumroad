@@ -139,11 +139,21 @@ class PaypalChargeProcessor
       return
     end
 
+    # The capture settles in the seller's PayPal primary currency, which is wider than the
+    # currencies Gumroad prices products in — don't gate on CURRENCY_CHOICES, or refunds stop
+    # recording for every seller paid in MXN/MYR/SEK/THB/HUF/DKK/NOK. Convert and fail closed
+    # only when the amount or its USD rate is unusable.
     begin
       refund_currency = raw_refund_currency.to_s.downcase
       scaled_refund_amount = BigDecimal(raw_refund_value) * unit_scaling_factor(refund_currency)
       refund_amount_cents = scaled_refund_amount.to_i
-    rescue ArgumentError, TypeError, FloatDomainError
+      valid_amount = scaled_refund_amount == refund_amount_cents && refund_amount_cents.positive?
+      usd_amount_cents = get_usd_cents(refund_currency, refund_amount_cents) if valid_amount
+    rescue ArgumentError, TypeError, FloatDomainError, ZeroDivisionError
+      usd_amount_cents = nil
+    end
+
+    unless valid_amount && usd_amount_cents.to_i.positive?
       ErrorNotifier.notify(
         "PayPal refund webhook: current refund amount is invalid; skipping automatic refund",
         capture_id:,
@@ -156,20 +166,6 @@ class PaypalChargeProcessor
       return
     end
 
-    unless CURRENCY_CHOICES.key?(refund_currency) && scaled_refund_amount == refund_amount_cents && refund_amount_cents.positive?
-      ErrorNotifier.notify(
-        "PayPal refund webhook: current refund amount is invalid; skipping automatic refund",
-        capture_id:,
-        processor_refund_id: refund_id,
-        refund_currency: raw_refund_currency,
-        refund_value: raw_refund_value,
-        webhook_event_id: event_info["id"],
-        webhook_event_type: event_info["event_type"]
-      )
-      return
-    end
-
-    usd_amount_cents = get_usd_cents(refund_currency.downcase, refund_amount_cents)
     refund_purchase(capture_id:, usd_amount_cents:,
                     processor_refund: OpenStruct.new({ id: refund_id, status: resource["status"] }),
                     skip_if_capture_shared: true)
@@ -269,7 +265,18 @@ class PaypalChargeProcessor
       next if processor_refund&.id.present? && Refund.where(processor_refund_id: processor_refund.id).exists?
 
       refundable_cents = purchase.gross_amount_refundable_cents
-      next unless refundable_cents.positive?
+      unless refundable_cents.positive?
+        # PayPal moved money for a purchase our books already consider fully refunded — a
+        # divergence someone has to reconcile, so don't let it vanish.
+        ErrorNotifier.notify(
+          "PayPal refund webhook: purchase has nothing left to refund; skipping automatic refund",
+          capture_id:,
+          purchase_id: purchase.id,
+          usd_amount_cents:,
+          processor_refund_id: processor_refund&.id
+        )
+        next
+      end
 
       # Both values are canonical US dollar cents. When PayPal gains buyer-currency support,
       # this comparison and the US-dollar flow of funds below must be revisited.

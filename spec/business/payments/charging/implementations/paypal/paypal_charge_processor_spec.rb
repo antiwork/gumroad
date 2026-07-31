@@ -703,11 +703,85 @@ describe PaypalChargeProcessor, :vcr do
         expect(@purchase.balance_transactions.count).to eq(1)
       end
 
-      it "skips automatic processing and alerts for unsupported, nonpositive, or over-precise amounts" do
+      it "records a refund settled in a currency Gumroad does not price products in" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        # PayPal captures settle in the seller's PayPal primary currency, which is wider than
+        # CURRENCY_CHOICES — thousands of live merchant accounts are MXN/MYR/SEK/THB/HUF.
+        allow(described_class).to receive(:get_rate).with("mxn").and_return("20.0")
+        event_info = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-MXN",
+          capture_id:,
+          amount: "40.00",
+          total_refunded_amount: "40.00",
+          currency_code: "MXN"
+        )
+
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.handle_order_events(event_info)
+
+        expect(@purchase.reload.refunds.pluck(:processor_refund_id, :amount_cents)).to eq(
+          [["PAYPAL-REFUND-MXN", 200]]
+        )
+      end
+
+      it "skips automatic processing and alerts when the refund currency has no usable USD rate" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        allow(described_class).to receive(:get_rate).with("zzz").and_return("0.0")
+        event_info = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-NO-RATE",
+          capture_id:,
+          amount: "2.00",
+          total_refunded_amount: "2.00",
+          currency_code: "ZZZ"
+        )
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "PayPal refund webhook: current refund amount is invalid; skipping automatic refund",
+          capture_id:,
+          processor_refund_id: "PAYPAL-REFUND-NO-RATE",
+          refund_currency: "ZZZ",
+          refund_value: "2.00",
+          webhook_event_id: "WEBHOOK-PAYPAL-REFUND-NO-RATE",
+          webhook_event_type: "PAYMENT.CAPTURE.REFUNDED"
+        )
+
+        described_class.handle_order_events(event_info)
+
+        expect(@purchase.reload.refunds).to be_empty
+      end
+
+      it "alerts instead of silently skipping when the purchase has nothing left to refund" do
+        capture_id = "0JF852973C016714D"
+        @purchase.update!(stripe_transaction_id: capture_id)
+        create(:refund, purchase: @purchase, amount_cents: @purchase.price_cents)
+        expect(@purchase.reload.gross_amount_refundable_cents).to eq(0)
+        event_info = paypal_refund_event(
+          refund_id: "PAYPAL-REFUND-NOTHING-LEFT",
+          capture_id:,
+          amount: "1.00",
+          total_refunded_amount: "11.00"
+        )
+
+        expect(ErrorNotifier).to receive(:notify).with(
+          "PayPal refund webhook: purchase has nothing left to refund; skipping automatic refund",
+          capture_id:,
+          purchase_id: @purchase.id,
+          usd_amount_cents: 100,
+          processor_refund_id: "PAYPAL-REFUND-NOTHING-LEFT"
+        )
+
+        expect do
+          described_class.handle_order_events(event_info)
+        end.not_to change { @purchase.reload.refunds.count }
+      end
+
+      it "skips automatic processing and alerts for nonpositive or over-precise amounts" do
         capture_id = "0JF852973C016714D"
         @purchase.update!(stripe_transaction_id: capture_id)
         invalid_amounts = [
-          ["UNSUPPORTED-CURRENCY", "2.00", "ZZZ"],
           ["ZERO-AMOUNT", "0.00", "USD"],
           ["NEGATIVE-AMOUNT", "-1.00", "USD"],
           ["EXCESS-PRECISION", "0.009", "USD"],
