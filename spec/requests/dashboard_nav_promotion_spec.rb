@@ -1,0 +1,88 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe DashboardNavPromotion, type: :request do
+  include Devise::Test::IntegrationHelpers
+
+  let(:seller) { create(:user) }
+
+  before do
+    allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(VALID_REQUEST_HOSTS.first)
+    sign_in seller
+  end
+
+  it "promotes the destination a dashboard page belongs to" do
+    get workflows_path
+
+    expect(response).to be_successful
+    expect(seller.reload.promoted_nav_item_keys).to include "workflows"
+  end
+
+  it "records nothing for a core destination" do
+    get dashboard_path
+
+    expect(seller.reload.promoted_nav_item_keys).to eq []
+  end
+
+  it "does not hand the frontend a promoted row the user is no longer authorized for" do
+    seller.update!(promoted_nav_items: %w[community])
+
+    get dashboard_path
+
+    # The nav's own per-row policy gate is what hides it; promotion never grants access. Payouts is
+    # the parallel case for a core row.
+    expect(seller.reload.promoted_nav_item_keys).to include "community"
+    expect(Pundit.policy!(SellerContext.new(user: seller, seller:), Community).index?).to be false
+  end
+
+  it "seeds what the seller's store already contains on any dashboard page" do
+    create(:workflow, seller:)
+
+    get dashboard_path
+
+    expect(seller.reload.promoted_nav_item_keys).to include "workflows"
+  end
+
+  it "does not credit a page the request did not successfully render" do
+    allow_any_instance_of(WorkflowsController).to receive(:index) { |controller| controller.head :forbidden }
+
+    get workflows_path
+
+    expect(response).not_to be_successful
+    expect(seller.reload.promoted_nav_item_keys).not_to include "workflows"
+  end
+
+  it "credits the destination a redirect lands on, not the one it left" do
+    # /affiliates bounces a seller with no affiliates to the onboarding page, which is itself under
+    # the affiliates prefix — so the promotion comes from the page that actually rendered.
+    get affiliates_path
+    follow_redirect!
+
+    expect(response).to be_successful
+    expect(seller.reload.promoted_nav_item_keys).to include "affiliates"
+  end
+
+  it "ignores requests to paths that do not render the dashboard nav" do
+    product = create(:product, user: seller)
+
+    get short_link_path(product.unique_permalink)
+
+    expect(seller.reload.promoted_nav_items).to be_nil
+  end
+
+  it "does not promote on a non-GET request" do
+    post dashboard_dismiss_getting_started_checklist_path
+
+    expect(seller.reload.promoted_nav_items).to be_nil
+  end
+
+  it "keeps serving the page when the promotion write fails" do
+    allow_any_instance_of(User).to receive(:promote_nav_item!).and_raise(ActiveRecord::LockWaitTimeout)
+    expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
+
+    get workflows_path
+
+    expect(response).to be_successful
+  end
+end

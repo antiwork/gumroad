@@ -13,6 +13,7 @@ import {
   BookmarkHeart,
   Cart,
   DollarCircle,
+  DotsHorizontalRounded,
   Envelope,
   FileDetail,
   Gift,
@@ -45,6 +46,24 @@ type Props = {
   compact?: boolean;
 };
 
+const matchesCurrentPath = ({
+  href,
+  additionalPatterns = [],
+  exactHrefMatch,
+}: {
+  href: string;
+  additionalPatterns?: string[] | undefined;
+  exactHrefMatch?: boolean | undefined;
+}) => {
+  const currentPath = window.location.pathname + window.location.search;
+
+  return [href, ...additionalPatterns].some((pattern) => {
+    const patternPath = pattern.includes("://") ? new URL(pattern).pathname + new URL(pattern).search : pattern;
+    const escaped = escapeRegExp(patternPath);
+    return new RegExp(exactHrefMatch ? `^${escaped}/?$` : escaped, "u").test(currentPath);
+  });
+};
+
 export const ClientNavLink = ({
   text,
   icon,
@@ -64,15 +83,7 @@ export const ClientNavLink = ({
   onClick?: (event: React.MouseEvent) => void;
   prefetch?: boolean | LinkPrefetchOption | LinkPrefetchOption[];
 }) => {
-  const currentPath = window.location.pathname + window.location.search;
-
-  const ariaCurrent = [href, ...additionalPatterns].some((pattern) => {
-    const patternPath = pattern.includes("://") ? new URL(pattern).pathname + new URL(pattern).search : pattern;
-    const escaped = escapeRegExp(patternPath);
-    return new RegExp(exactHrefMatch ? `^${escaped}/?$` : escaped, "u").test(currentPath);
-  })
-    ? "page"
-    : undefined;
+  const ariaCurrent = matchesCurrentPath({ href, additionalPatterns, exactHrefMatch }) ? "page" : undefined;
 
   return (
     <Link
@@ -97,6 +108,25 @@ export const ClientNavLink = ({
     </Link>
   );
 };
+
+// Keys match DashboardNav::CORE_ITEMS / PROMOTABLE_ITEMS — the server records promotions under these
+// names, so renaming one here needs the same rename in app/models/dashboard_nav.rb.
+const CORE_ITEMS = ["home", "products", "sales", "payouts", "discover"];
+
+type NavItem = {
+  key: string;
+  // The existing per-row authorization gate, independent of promotion: a row the user may not open
+  // does not appear even inside "Everything else".
+  visible: boolean;
+  href: string;
+  exactHrefMatch?: boolean;
+  additionalPatterns?: string[];
+  text: string;
+  icon: React.ReactNode;
+  onClick?: (event: React.MouseEvent) => void;
+};
+
+const renderItem = ({ key, visible: _visible, ...link }: NavItem) => <ClientNavLink key={key} {...link} />;
 
 export const Nav = (props: Props) => {
   const routeParams = { host: useAppDomain() };
@@ -124,122 +154,186 @@ export const Nav = (props: Props) => {
     }
   });
 
+  const primaryItems: NavItem[] = [
+    {
+      key: "home",
+      visible: true,
+      text: "Home",
+      icon: <HomeAlt2 pack="filled" className="size-5" />,
+      href: Routes.dashboard_url(routeParams),
+      exactHrefMatch: true,
+    },
+    {
+      key: "agent",
+      visible: !!loggedInUser?.policies.user.use_store_agent,
+      text: "Agent",
+      icon: <MessageBubbleDots pack="filled" className="size-5" />,
+      href: Routes.agent_url(routeParams),
+      exactHrefMatch: true,
+    },
+    {
+      key: "profile",
+      visible: !!currentSeller,
+      text: "Profile",
+      icon: <Store pack="filled" className="size-5" />,
+      href: Routes.profile_url(routeParams),
+      exactHrefMatch: true,
+    },
+    {
+      // Pages sits alongside Profile: Profile jumps straight to the public storefront, while Pages
+      // manages the full page tree (with the profile pinned as its home page).
+      key: "pages",
+      visible: !!currentSeller && !!loggedInUser?.policies.page.index,
+      text: "Pages",
+      icon: <FileDetail pack="filled" className="size-5" />,
+      href: Routes.pages_url(routeParams),
+      additionalPatterns: ["/pages/"],
+    },
+    {
+      key: "products",
+      visible: true,
+      text: "Products",
+      icon: <ArchiveAlt pack="filled" className="size-5" />,
+      href: Routes.products_url(routeParams),
+      additionalPatterns: ["/bundles/"],
+    },
+    {
+      key: "collaborators",
+      visible: !!loggedInUser?.policies.collaborator.create,
+      text: "Collaborators",
+      icon: <Handshake pack="filled" className="size-5" />,
+      href: Routes.collaborators_url(routeParams),
+    },
+    {
+      key: "checkout",
+      visible: true,
+      text: "Checkout",
+      icon: <Cart pack="filled" className="size-5" />,
+      href: Routes.checkout_discounts_url(routeParams),
+      additionalPatterns: [Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)],
+    },
+    {
+      key: "emails",
+      visible: true,
+      text: "Emails",
+      icon: <Envelope pack="filled" className="size-5" />,
+      href: Routes.emails_url(routeParams),
+      additionalPatterns: [Routes.followers_url(routeParams)],
+    },
+    {
+      key: "workflows",
+      visible: true,
+      text: "Workflows",
+      icon: <Workflow pack="filled" className="size-5" />,
+      href: Routes.workflows_url(routeParams),
+    },
+    {
+      key: "sales",
+      visible: true,
+      text: "Sales",
+      icon: <DollarCircle pack="filled" className="size-5" />,
+      href: Routes.customers_url(routeParams),
+    },
+    {
+      key: "analytics",
+      visible: true,
+      text: "Analytics",
+      icon: <BarChartBig pack="filled" className="size-5" />,
+      href: Routes.sales_dashboard_url(routeParams),
+      additionalPatterns: [
+        Routes.audience_dashboard_url(routeParams),
+        Routes.dashboard_utm_links_url(routeParams),
+        Routes.churn_dashboard_url(routeParams),
+      ],
+    },
+    {
+      key: "affiliates",
+      visible: true,
+      text: "Affiliates",
+      icon: <Gift pack="filled" className="size-5" />,
+      href: Routes.affiliates_url(routeParams),
+    },
+    {
+      key: "payouts",
+      visible: !!loggedInUser?.policies.balance.index,
+      text: "Payouts",
+      icon: <Bank pack="filled" className="size-5" />,
+      href: Routes.balance_url(routeParams),
+    },
+    {
+      key: "community",
+      visible: !!loggedInUser?.policies.community.index,
+      text: "Community",
+      icon: <MessageBubble pack="filled" className="size-5" />,
+      href: Routes.communities_path(),
+      onClick: () => {
+        sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
+      },
+    },
+  ];
+
+  const secondaryItems: NavItem[] = [
+    {
+      key: "discover",
+      visible: true,
+      text: "Discover",
+      icon: <Search className="size-5" />,
+      href: discoverUrl,
+      exactHrefMatch: true,
+    },
+    {
+      key: "library",
+      visible: currentSeller?.id === loggedInUser?.id,
+      text: "Library",
+      icon: <BookmarkHeart pack="filled" className="size-5" />,
+      href: Routes.library_url(routeParams),
+      additionalPatterns: [Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)],
+    },
+  ];
+
+  const promoted = new Set(loggedInUser?.promotedNavItems ?? []);
+  // The page being viewed is pinned regardless of its promotion state, which covers the render that
+  // races the promotion write and keeps the current row out of the overflow.
+  const isPinned = (item: NavItem) =>
+    CORE_ITEMS.includes(item.key) || promoted.has(item.key) || matchesCurrentPath(item);
+
+  const visiblePrimary = primaryItems.filter((item) => item.visible);
+  const visibleSecondary = secondaryItems.filter((item) => item.visible);
+  const overflow = [...visiblePrimary, ...visibleSecondary].filter((item) => !isPinned(item));
+  const pinnedSecondary = visibleSecondary.filter(isPinned);
+
   return (
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
-      <NavSection>
-        <ClientNavLink
-          text="Home"
-          icon={<HomeAlt2 pack="filled" className="size-5" />}
-          href={Routes.dashboard_url(routeParams)}
-          exactHrefMatch
-        />
-        {loggedInUser?.policies.user.use_store_agent ? (
-          <ClientNavLink
-            text="Agent"
-            icon={<MessageBubbleDots pack="filled" className="size-5" />}
-            href={Routes.agent_url(routeParams)}
-            exactHrefMatch
-          />
-        ) : null}
-        {currentSeller ? (
-          <ClientNavLink
-            text="Profile"
-            icon={<Store pack="filled" className="size-5" />}
-            href={Routes.profile_url(routeParams)}
-            exactHrefMatch
-          />
-        ) : null}
-        {currentSeller && loggedInUser?.policies.page.index ? (
-          // Pages sits alongside Profile in the nav: Profile jumps straight to
-          // the public storefront, while Pages manages the full page tree
-          // (with the profile pinned as its home page).
-          <ClientNavLink
-            text="Pages"
-            icon={<FileDetail pack="filled" className="size-5" />}
-            href={Routes.pages_url(routeParams)}
-            additionalPatterns={["/pages/"]}
-          />
-        ) : null}
-        <ClientNavLink
-          text="Products"
-          icon={<ArchiveAlt pack="filled" className="size-5" />}
-          href={Routes.products_url(routeParams)}
-          additionalPatterns={["/bundles/"]}
-        />
-        {loggedInUser?.policies.collaborator.create ? (
-          <ClientNavLink
-            text="Collaborators"
-            icon={<Handshake pack="filled" className="size-5" />}
-            href={Routes.collaborators_url(routeParams)}
-          />
-        ) : null}
-        <ClientNavLink
-          text="Checkout"
-          icon={<Cart pack="filled" className="size-5" />}
-          href={Routes.checkout_discounts_url(routeParams)}
-          additionalPatterns={[Routes.checkout_form_url(routeParams), Routes.checkout_upsells_url(routeParams)]}
-        />
-        <ClientNavLink
-          text="Emails"
-          icon={<Envelope pack="filled" className="size-5" />}
-          href={Routes.emails_url(routeParams)}
-          additionalPatterns={[Routes.followers_url(routeParams)]}
-        />
-        <ClientNavLink
-          text="Workflows"
-          icon={<Workflow pack="filled" className="size-5" />}
-          href={Routes.workflows_url(routeParams)}
-        />
-        <ClientNavLink
-          text="Sales"
-          icon={<DollarCircle pack="filled" className="size-5" />}
-          href={Routes.customers_url(routeParams)}
-        />
-        <ClientNavLink
-          text="Analytics"
-          icon={<BarChartBig pack="filled" className="size-5" />}
-          href={Routes.sales_dashboard_url(routeParams)}
-          additionalPatterns={[
-            Routes.audience_dashboard_url(routeParams),
-            Routes.dashboard_utm_links_url(routeParams),
-            Routes.churn_dashboard_url(routeParams),
-          ]}
-        />
-        <ClientNavLink
-          text="Affiliates"
-          icon={<Gift pack="filled" className="size-5" />}
-          href={Routes.affiliates_url(routeParams)}
-        />
-        {loggedInUser?.policies.balance.index ? (
-          <ClientNavLink
-            text="Payouts"
-            icon={<Bank pack="filled" className="size-5" />}
-            href={Routes.balance_url(routeParams)}
-          />
-        ) : null}
-        {loggedInUser?.policies.community.index ? (
-          <ClientNavLink
-            text="Community"
-            icon={<MessageBubble pack="filled" className="size-5" />}
-            href={Routes.communities_path()}
-            onClick={() => {
-              sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
-            }}
-          />
-        ) : null}
-      </NavSection>
-      <NavSection>
-        <ClientNavLink text="Discover" icon={<Search className="size-5" />} href={discoverUrl} exactHrefMatch />
-        {currentSeller?.id === loggedInUser?.id ? (
-          <ClientNavLink
-            text="Library"
-            icon={<BookmarkHeart pack="filled" className="size-5" />}
-            href={Routes.library_url(routeParams)}
-            additionalPatterns={[Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)]}
-          />
-        ) : null}
-      </NavSection>
+      <NavSection>{visiblePrimary.filter(isPinned).map(renderItem)}</NavSection>
+      {pinnedSecondary.length > 0 ? <NavSection>{pinnedSecondary.map(renderItem)}</NavSection> : null}
+      {overflow.length > 0 ? (
+        <NavSection>
+          <EverythingElse>{overflow.map(renderItem)}</EverythingElse>
+        </NavSection>
+      ) : null}
     </NavFramework>
+  );
+};
+
+// The escape hatch for destinations a seller has not used yet. Collapsed by default so the sidebar
+// stays short, and the open state is per-render only: the list shrinks as rows get promoted out of
+// it, so persisting "open" would work against the thing it exists to fix.
+const EverythingElse = ({ children }: { children: React.ReactNode }) => {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full cursor-pointer items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 text-left all-unset hover:text-accent dark:border-foreground/50 dark:border-b-transparent"
+      >
+        <DotsHorizontalRounded className="size-5" />
+        <span className="ml-4">Everything else</span>
+      </button>
+      {open ? children : null}
+    </>
   );
 };

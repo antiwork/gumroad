@@ -91,6 +91,8 @@ describe "Agent tab", type: :system, js: true do
     ConfirmedFollowerEvent.__elasticsearch__.create_index!(force: true)
 
     visit dashboard_path
+    # Agent starts under "Everything else" until the seller uses it (DashboardNav).
+    within("nav[aria-label='Main']") { click_on "Everything else" }
     find("nav a", text: "Agent").click
 
     expect(page).to have_current_path(agent_path)
