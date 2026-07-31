@@ -257,5 +257,50 @@ describe ScheduleAbandonedCartEmailsJob do
       expect { described_class.new.perform }.not_to raise_error
       expect(enqueued).to eq(1)
     end
+
+    it "enqueues the oldest abandoned carts first so a stop can only defer the rest" do
+      # The scan walks day windows newest-first, so the cart closest to aging out of
+      # Cart::ABANDONED_IF_UPDATED_AFTER_AGO is discovered LAST. A stop in discovery order would
+      # strand exactly the cart that has no window left to be rescanned in tomorrow.
+      oldest_cart = create(:cart)
+      create(:cart_product, cart: oldest_cart, product:)
+      oldest_cart.update!(updated_at: (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i).days.ago + 1.hour)
+
+      enqueued_cart_ids = []
+      real_mailer = CustomerMailer.method(:abandoned_cart)
+      allow(CustomerMailer).to receive(:abandoned_cart) do |cart_id, *rest|
+        enqueued_cart_ids << cart_id
+        real_mailer.call(cart_id, *rest)
+      end
+
+      described_class.new.perform
+
+      expect(enqueued_cart_ids.first).to eq(oldest_cart.id)
+      expect(enqueued_cart_ids).to include(cart.id)
+    end
+
+    it "reports zero carts aging out when the stop lands outside the final window" do
+      # `carts_remaining` alone cannot tell an operator whether the stop cost anyone their email.
+      # Both carts here sit well inside the window, so the deferral is fully recoverable and the
+      # alert must say so rather than implying loss.
+      second_cart = create(:cart)
+      create(:cart_product, cart: second_cart, product:)
+      second_cart.update!(updated_at: 3.days.ago)
+
+      real_mailer = CustomerMailer.method(:abandoned_cart)
+      enqueued = 0
+      allow(CustomerMailer).to receive(:abandoned_cart) do |*args|
+        enqueued += 1
+        travel described_class::ATTEMPT_TIME_BUDGET + 1.minute if enqueued == 1
+        real_mailer.call(*args)
+      end
+
+      expect(ErrorNotifier).to receive(:notify).with(
+        a_string_including("stopped mid-enqueue"),
+        hash_including(carts_enqueued: 1, carts_remaining: 1, carts_aging_out: 0)
+      )
+
+      described_class.new.perform
+    end
   end
 end

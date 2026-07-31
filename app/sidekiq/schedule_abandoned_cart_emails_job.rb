@@ -57,6 +57,9 @@ class ScheduleAbandonedCartEmailsJob
     # cart_product_ids_with_cart_ids is a hash of { product_id => { cart_id => [variant_ids] } }
     cart_product_ids_with_cart_ids = {}
 
+    # How many days ago each cart was abandoned, so the enqueue loop can go oldest-first.
+    cart_ids_with_window_days = {}
+
     days_to_process = (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i)
     (1..days_to_process).each do |day|
       check_attempt_deadline!
@@ -69,6 +72,8 @@ class ScheduleAbandonedCartEmailsJob
         check_attempt_deadline!
         Cart.includes(:alive_cart_products).where(id: batch_ids).each do |cart|
           next if cart.user_id.blank? && cart.email.blank?
+
+          cart_ids_with_window_days[cart.id] = day
 
           cart.alive_cart_products.each do |cart_product|
             product_id = cart_product.product_id
@@ -107,20 +112,34 @@ class ScheduleAbandonedCartEmailsJob
     Rails.logger.info "Fetched #{cart_ids_with_matched_workflow_ids_and_product_ids.count} cart ids with matched workflow ids and product ids in #{(Time.current - start_time).round(2)} seconds"
 
     enqueued_count = 0
-    cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
+    # Oldest-abandoned first. A cart's window shifts one day older every run, so a cart the stop
+    # path never reaches is only rescanned tomorrow if it has a day left inside
+    # Cart::ABANDONED_IF_UPDATED_AFTER_AGO — the last window has none. Sending in that order makes
+    # the carts at the edge the ones already handled, so what a stop defers is recoverable.
+    # sort_by is not stable, so the discovery index is the tiebreak: same-window carts keep the
+    # id-ascending order they were scanned in rather than an arbitrary one.
+    enqueue_order = cart_ids_with_matched_workflow_ids_and_product_ids.each_with_index.sort_by do |(cart_id, _), index|
+      [-cart_ids_with_window_days.fetch(cart_id, 0), index]
+    end.map(&:first)
+
+    enqueue_order.each do |cart_id, workflow_ids_with_product_ids|
       # Deliberately not `check_attempt_deadline!`: raising here would be retried, and a retry
       # re-enqueues every cart this loop already sent. `sent_abandoned_cart_emails` rows are
       # written by the mailer jobs when they run, not at enqueue time, so the retry cannot see
       # them — `Cart.abandoned` still matches those carts and the buyer gets a second email.
-      # Stopping is not lossless either: unreached carts still inside the day windows below are
-      # rescanned tomorrow, but ones already in the oldest window age out of it and never get an
-      # email at all. Duplicating mail to every cart already sent is the worse of the two.
+      # Stopping only defers, because of the oldest-first order above — except for carts in the
+      # final window, which this loop sends before any other, so a stop can strand them only if
+      # it lands inside that window. The alert reports how many of those were left.
       if attempt_deadline_passed?
+        remaining = enqueue_order.drop(enqueued_count)
         ErrorNotifier.notify(
-          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after exceeding its attempt budget — unreached carts still inside the abandoned-cart window will be picked up by the next run, but any already in its oldest day age out unemailed",
+          "ScheduleAbandonedCartEmailsJob stopped mid-enqueue after exceeding its attempt budget — unreached carts are picked up by the next run, except any reported as aging out of the abandoned-cart window",
           attempt_time_budget: ATTEMPT_TIME_BUDGET.inspect,
           carts_enqueued: enqueued_count,
-          carts_remaining: cart_ids_with_matched_workflow_ids_and_product_ids.size - enqueued_count
+          carts_remaining: remaining.size,
+          # A cart in window `d` is scanned again tomorrow as window `d + 1`, so only the last
+          # window has nowhere left to shift into.
+          carts_aging_out: remaining.count { |cart_id, _| cart_ids_with_window_days.fetch(cart_id, 0) >= days_to_process }
         )
         break
       end
