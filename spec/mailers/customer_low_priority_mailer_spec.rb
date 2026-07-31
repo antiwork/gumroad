@@ -305,6 +305,56 @@ describe CustomerLowPriorityMailer do
     end
   end
 
+  describe "subscription_charge_blocked_location" do
+    context "memberships" do
+      it "explains the location block without blaming the card, and links to manage subscription" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        mail = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id)
+
+        expect(mail.subject).to eq "Your membership could not be renewed."
+        expect(mail.body.encoded).to include subscription.link.name
+        expect(mail.body.encoded).to include "no charge was attempted"
+        expect(mail.body.encoded).to include "nothing wrong with your card"
+        expect(mail.body.encoded).to include "/manage"
+      end
+
+      it "does not tell the subscriber to update or re-authorize their card" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+
+        body = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(body).to_not include "attempted to charge your card"
+        expect(body).to_not include "re-authorize"
+        expect(body).to_not include "update your card"
+      end
+
+      it "reuses the existing manage-link token so an earlier email's link keeps working" do
+        subscription = create(:subscription, link: create(:product))
+        create(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:)
+        first_token = subscription.reusable_token
+
+        CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id).body.encoded
+
+        expect(subscription.reload.token).to eq first_token
+      end
+    end
+
+    context "installment plans" do
+      let(:installment_plan_purchase) { create(:installment_plan_purchase) }
+      let(:subscription) { installment_plan_purchase.subscription }
+
+      it "uses installment-plan wording" do
+        mail = CustomerLowPriorityMailer.subscription_charge_blocked_location(subscription.id)
+
+        expect(mail.subject).to eq "Your installment payment could not be processed."
+        expect(mail.body.encoded).to include "installment plan"
+      end
+    end
+  end
+
   describe "subscription_ended" do
     context "memberships" do
       before do

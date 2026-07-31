@@ -346,7 +346,12 @@ class Subscription < ApplicationRecord
           if purchase.has_payment_network_error?
             schedule_charge(1.hour.from_now)
           else
-            if purchase.has_payment_error?
+            if purchase.error_code == PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+              # Sanctions screening rejects the renewal in a `before_create` validation, so no charge
+              # is ever attempted. The card emails would both be false and unactionable; the address
+              # on the subscription is the only screened signal the subscriber can change.
+              CustomerLowPriorityMailer.subscription_charge_blocked_location(id).deliver_later(queue: "low")
+            elsif purchase.has_payment_error?
               CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
               ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
             else

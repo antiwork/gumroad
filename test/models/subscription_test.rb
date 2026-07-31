@@ -1696,6 +1696,35 @@ class SubscriptionTest < ActiveSupport::TestCase
     end
   end
 
+  # A renewal blocked by sanctions screening never reaches a charge processor:
+  # `validate_sanctioned_location` is a before_create validation, so the card
+  # mailers would be describing a charge that was never attempted.
+  def sanctioned_renewal_setup
+    charge_section_setup
+    @subscription.original_purchase.update!(country: "Iran", ip_country: "Iran")
+  end
+
+  test "#charge! blocked by sanctions screening sends the location email, not the card one" do
+    sanctioned_renewal_setup
+    mail = mock
+    mail.stubs(:deliver_later)
+    CustomerLowPriorityMailer.expects(:subscription_charge_blocked_location).returns(mail)
+    CustomerLowPriorityMailer.expects(:subscription_card_declined).never
+    CustomerLowPriorityMailer.expects(:subscription_charge_failed).never
+
+    purchase = @subscription.charge!
+
+    assert_equal PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION, purchase.error_code
+  end
+
+  test "#charge! blocked by sanctions screening does not schedule the card-declined reminder" do
+    sanctioned_renewal_setup
+
+    @subscription.charge!
+
+    refute_sidekiq_enqueued(ChargeDeclinedReminderWorker, args: [@subscription.id])
+  end
+
   # --- #charge! double charged -----------------------------------------------
 
   test "#charge! double charged does not create the purchase row" do
