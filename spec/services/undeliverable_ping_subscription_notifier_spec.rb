@@ -152,38 +152,53 @@ describe UndeliverablePingSubscriptionNotifier do
     end
   end
 
-  describe ".record_sent and .already_sent?" do
+  describe ".claim_send, .record_sent and .release_claim" do
     def key_for(reason) = RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, reason)
 
-    # The record is written after delivery, not before: writing it earlier means a send that raises
-    # or is declined spends a notice that has no expiry to give it back.
-    it "reports a reason as sent only once it has been recorded" do
-      expect(described_class.already_sent?(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be false
+    # The claim is what makes the send-once decision exclusive: two overlapping renders both reading an
+    # absent record would both send, so the render takes the notice with one write.
+    it "gives the notice to the first caller only" do
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
 
-      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
-
-      expect(described_class.already_sent?(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be false
     end
 
-    it "keeps the record forever rather than letting it expire into a repeat email" do
+    # A claim is not evidence the seller was told. It expires so a render that dies before settling
+    # costs at most a delayed notice rather than a permanent one.
+    it "holds the claim provisionally until the send is recorded" do
+      described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+
+      expect($redis.ttl(key_for(described_class::REVOKED_CREDENTIAL))).to be_between(1, described_class::SEND_CLAIM_TTL.to_i)
+    end
+
+    it "keeps a recorded send forever rather than letting it expire into a repeat email" do
+      described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
       described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
 
       expect($redis.ttl(key_for(described_class::REVOKED_CREDENTIAL))).to eq(-1)
     end
 
-    it "records each reason separately" do
-      described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+    # Releasing is what keeps a render that sent nothing from spending the notice.
+    it "lets a later render take a released claim" do
+      described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
 
-      expect(described_class.already_sent?(resource_subscription.id, described_class::MISSING_POST_URL)).to be false
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
     end
 
-    # Silence is what this notice exists to break, so unreadable bookkeeping costs a possible repeat
+    it "claims each reason separately" do
+      described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+
+      expect(described_class.claim_send(resource_subscription.id, described_class::MISSING_POST_URL)).to be true
+    end
+
+    # Silence is what this notice exists to break, so unusable bookkeeping costs a possible repeat
     # rather than the email.
-    it "treats an unreadable record as not sent" do
-      allow($redis).to receive(:exists?).and_raise(Redis::BaseError)
+    it "claims when the store cannot be written" do
+      allow($redis).to receive(:set).and_raise(Redis::BaseError)
       expect(ErrorNotifier).to receive(:notify)
 
-      expect(described_class.already_sent?(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be false
+      expect(described_class.claim_send(resource_subscription.id, described_class::REVOKED_CREDENTIAL)).to be true
     end
 
     it "swallows a failure to record rather than failing the delivery" do
@@ -193,11 +208,20 @@ describe UndeliverablePingSubscriptionNotifier do
       expect { described_class.record_sent(resource_subscription.id, described_class::REVOKED_CREDENTIAL) }.not_to raise_error
     end
 
-    it "ignores a blank reason on both sides" do
-      expect($redis).not_to receive(:set)
+    it "swallows a failure to release rather than failing the delivery" do
+      allow($redis).to receive(:del).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify)
 
+      expect { described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL) }.not_to raise_error
+    end
+
+    it "ignores a blank reason on every side" do
+      expect($redis).not_to receive(:set)
+      expect($redis).not_to receive(:del)
+
+      expect(described_class.claim_send(resource_subscription.id, nil)).to be false
       described_class.record_sent(resource_subscription.id, nil)
-      expect(described_class.already_sent?(resource_subscription.id, nil)).to be false
+      described_class.release_claim(resource_subscription.id, nil)
     end
   end
 end

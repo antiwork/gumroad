@@ -1590,7 +1590,7 @@ describe ContactingCreatorMailer do
     # Rendering is not sending, which is why nothing is recorded here: the record has no expiry, and
     # one written for an email nobody received would refuse the notice the seller is owed when the
     # same reason breaks again.
-    it "records nothing when it suppresses the send" do
+    it "claims nothing when it suppresses the send" do
       create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
 
       ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
@@ -1598,10 +1598,24 @@ describe ContactingCreatorMailer do
       expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
     end
 
-    it "records nothing on a render that is never delivered" do
+    # The render takes the notice rather than reading whether it is taken, because two renders can
+    # overlap: the enqueue throttle is keyed on the reason at enqueue, so both jobs resolving to the
+    # same reason here would pass a read and both send.
+    it "sends only one of two renders that overlap before either delivers" do
+      first = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+      second = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(first.message).not_to be_a ActionMailer::Base::NullMail
+      expect(second.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # A claim is not evidence the seller was told, so it expires: a render killed between claiming and
+    # delivering costs a delayed notice rather than a permanent silence.
+    it "holds the claim provisionally on a render that has not delivered" do
       ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
 
-      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+      ttl = $redis.ttl(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))
+      expect(ttl).to be_between(1, UndeliverablePingSubscriptionNotifier::SEND_CLAIM_TTL.to_i)
     end
 
     it "records the reason it sent, with no expiry" do
@@ -1622,22 +1636,25 @@ describe ContactingCreatorMailer do
       expect(second.message).to be_a ActionMailer::Base::NullMail
     end
 
-    # The recording hook is scoped to this action, and `only:` on a deliver callback is worth pinning
-    # because an unscoped hook would record against whatever the last-rendered mailer left behind.
-    it "records nothing when an unrelated email is delivered" do
+    # The settling callback runs for every action on this mailer — deliver callbacks cannot be scoped
+    # with `only:` — so the ivars are what keep it from touching another action's bookkeeping.
+    it "touches no send-once state when an unrelated email is delivered" do
       product = create(:product, user: seller)
       expect(UndeliverablePingSubscriptionNotifier).not_to receive(:record_sent)
+      expect(UndeliverablePingSubscriptionNotifier).not_to receive(:release_claim)
 
       ContactingCreatorMailer.unstampable_pdf_notification(product.id).deliver_now
     end
 
-    # A delivery that raises spends nothing, or the seller's one notice goes on an email that never
-    # left — the same permanent silence a claim taken before sending causes.
+    # A delivery that raises gives the notice back, or the seller's one notice goes on an email that
+    # never left — the same permanent silence a claim that is never released causes.
     it "still reports the reason after a delivery failure" do
       allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(StandardError, "transport down")
       expect do
         ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
       end.to raise_error(StandardError, "transport down")
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
 
       allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
       retried = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
@@ -1646,8 +1663,8 @@ describe ContactingCreatorMailer do
     end
 
     # `deliver_email` returns before `mail` for an address it will not send to, so the delivery
-    # succeeds with nothing sent — recording there would burn the notice permanently and silently.
-    it "records nothing when the seller's address is not one we will send to" do
+    # succeeds with nothing sent — keeping the claim there would burn the notice permanently.
+    it "gives the notice back when the seller's address is not one we will send to" do
       allow_any_instance_of(User).to receive(:form_email).and_return("not-an-email")
 
       ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
@@ -1679,9 +1696,9 @@ describe ContactingCreatorMailer do
 
     # Silence is what this notice exists to break, so a failure in the send-once bookkeeping has to
     # cost a possible repeat rather than the email itself.
-    it "sends when the send-once state cannot be read" do
-      allow($redis).to receive(:exists?).and_raise(Redis::BaseError)
-      expect(ErrorNotifier).to receive(:notify)
+    it "sends when the send-once state cannot be claimed" do
+      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).at_least(:once)
 
       mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
 
@@ -1690,7 +1707,7 @@ describe ContactingCreatorMailer do
 
     it "sends the email even when recording that it sent fails" do
       allow($redis).to receive(:set).and_raise(Redis::BaseError)
-      expect(ErrorNotifier).to receive(:notify)
+      expect(ErrorNotifier).to receive(:notify).at_least(:once)
 
       expect do
         ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now

@@ -19,6 +19,12 @@ class UndeliverablePingSubscriptionNotifier
   # render, so a lost or kept key here can only cost a no-op job, never a notice.
   ENQUEUE_THROTTLE = 1.hour
 
+  # How long a claim stays provisional. Two renders can overlap — the enqueue throttle is keyed on the
+  # reason at enqueue and both jobs resolve the reason again at render — so the decision to send has
+  # to be exclusive, not a read. It only has to cover handing one message to the delivery method, and
+  # expiring is the backstop for a render that dies before it can say the send did not happen.
+  SEND_CLAIM_TTL = 10.minutes
+
   def initialize(resource_subscription)
     @resource_subscription = resource_subscription
   end
@@ -40,14 +46,12 @@ class UndeliverablePingSubscriptionNotifier
 
   # Send once and stop, keyed on the advice actually given. The seller cannot re-authorize an app
   # holding no live token, and there is no UI or API to delete the subscription without one, so a
-  # repeat is a nag they cannot act on — which is also why these keys carry no expiry.
+  # repeat is a nag they cannot act on — which is also why the record carries no expiry.
   #
-  # Recorded AFTER delivery, never at enqueue or render. The reason and the decision to send are both
-  # render-time state, so claiming at enqueue meant writing a permanent key for advice that might
-  # never be sent and then moving it — a write plus a delete, whose failed delete leaves a permanent
-  # claim on advice nobody was given. Claiming at render has the same shape one step later: the
-  # deliver can still raise, and `deliver_email` itself declines an invalid address, either of which
-  # spends the seller's one notice on an email that never went out.
+  # This makes the render's claim permanent; it does not create it. Writing the key here for the first
+  # time would leave the gap between deciding to send and recording it, which two overlapping renders
+  # both fit through. Called AFTER delivery, because a claim that expires costs at worst a repeat while
+  # a permanent record written for a message that never left costs the notice itself.
   def self.record_sent(resource_subscription_id, reason)
     return if reason.blank?
 
@@ -56,16 +60,35 @@ class UndeliverablePingSubscriptionNotifier
     report(e)
   end
 
-  # Read-only, so a render decides on what has actually been sent. Two renders inside the throttle
-  # window can both pass this and send twice; a duplicate is the failure direction this whole notice
-  # accepts, unlike the permanent silence a pre-emptive claim causes.
-  def self.already_sent?(resource_subscription_id, reason)
+  # Takes the notice, or reports that someone else holds it. This is the render's decision to send, so
+  # it has to be one write rather than a read followed by one: overlapping renders both reading an
+  # absent record would both send. The claim is provisional until `record_sent` makes it permanent —
+  # a claim is not evidence the seller was told, which is why it expires and why the send path gives
+  # it back the moment it knows nothing went out.
+  #
+  # An unusable store sends. Silence is the failure this notice exists to break, and the cost of the
+  # other direction is a possible repeat.
+  def self.claim_send(resource_subscription_id, reason)
     return false if reason.blank?
 
-    $redis.exists?(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
+    !!$redis.set(
+      RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason),
+      Time.current.to_i, nx: true, ex: SEND_CLAIM_TTL.to_i
+    )
   rescue => e
     report(e)
-    false
+    true
+  end
+
+  # Only ever called on a claim this process took and did not spend. Deleting unconditionally is safe
+  # for that reason: a permanent record is written after the message is handed to the delivery method,
+  # so there is nothing to delete here that another render could still be owed.
+  def self.release_claim(resource_subscription_id, reason)
+    return if reason.blank?
+
+    $redis.del(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
+  rescue => e
+    report(e)
   end
 
   def self.report(error)

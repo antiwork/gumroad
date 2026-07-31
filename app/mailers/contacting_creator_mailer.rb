@@ -18,7 +18,11 @@ class ContactingCreatorMailer < ApplicationMailer
 
   after_action :deliver_email
   after_action :send_push_notification!, only: :notify
-  after_deliver :record_undeliverable_ping_subscription_sent, only: :undeliverable_ping_subscription
+  # `around` rather than `after`, because the notice claimed at render has to be given back on every
+  # path where nothing was sent — including a delivery that raises, which an after callback never sees.
+  # It runs for every action on this mailer, and the ivar check inside is what scopes it: an `only:`
+  # here would be accepted and silently ignored, since deliver callbacks take `:if`/`:unless` only.
+  around_deliver :settle_undeliverable_ping_subscription_notice
 
   layout "layouts/email"
 
@@ -364,8 +368,8 @@ class ContactingCreatorMailer < ApplicationMailer
   # subscription — so the reason is resolved here rather than flattened into one vague message.
   # Everything this send depends on is read here rather than passed in: the subscription is enqueued
   # from the sale path and rendered from the low queue, and inside that window the seller can delete
-  # it, repair it, or break it a different way. The send-once record is written after delivery, by
-  # `record_undeliverable_ping_subscription_sent`.
+  # it, repair it, or break it a different way. The send-once notice is claimed here and settled after
+  # delivery, by `settle_undeliverable_ping_subscription_notice`.
   def undeliverable_ping_subscription(resource_subscription_id)
     @resource_subscription = ResourceSubscription.alive.find_by(id: resource_subscription_id)
     # Saying it is "still listed as active" would be false for a subscription deleted in the window.
@@ -379,7 +383,10 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send if @seller.ping_notification_deliverable?(@resource_subscription)
 
     rendered_reason = UndeliverablePingSubscriptionNotifier.reason_for(@resource_subscription)
-    return do_not_send if UndeliverablePingSubscriptionNotifier.already_sent?(resource_subscription_id, rendered_reason)
+    # Claiming rather than checking: the enqueue throttle is keyed on the reason as it was at enqueue,
+    # so two jobs that resolve to the same reason here are not excluded by it and a read would let both
+    # send. Nothing below can decline, so the claim marks a send this render is committed to.
+    return do_not_send unless UndeliverablePingSubscriptionNotifier.claim_send(resource_subscription_id, rendered_reason)
 
     @undeliverable_ping_subscription_reason = rendered_reason
     @application_name = @resource_subscription.oauth_application&.name
@@ -754,17 +761,23 @@ class ContactingCreatorMailer < ApplicationMailer
       mail(mailer_args)
     end
 
-    # Only reached once the message has been handed to the delivery method, so a raise leaves the
-    # notice unspent and a later event can still report it. `deliver_email` declines an unusable
-    # address by returning before `mail`, which delivers an empty message rather than raising —
-    # hence the recipient check, not just the ivars.
-    def record_undeliverable_ping_subscription_sent
-      return if @resource_subscription.nil? || @undeliverable_ping_subscription_reason.blank?
-      return if message.to.blank?
-
-      UndeliverablePingSubscriptionNotifier.record_sent(
-        @resource_subscription.id, @undeliverable_ping_subscription_reason
-      )
+    # The render claimed the seller's one notice; this decides whether it was spent. Only a message
+    # actually handed to the delivery method spends it — `deliver_email` returns before `mail` for an
+    # address we will not send to, which delivers an empty message rather than raising, and a transport
+    # failure raises straight through here. Both leave the seller un-notified, so both give the claim
+    # back and let a later event report it again.
+    def settle_undeliverable_ping_subscription_notice
+      delivered = false
+      yield
+      delivered = message.to.present?
+    ensure
+      # `ensure` rather than an after callback, so a raised delivery settles too.
+      unless @resource_subscription.nil? || @undeliverable_ping_subscription_reason.blank?
+        settle = delivered ? :record_sent : :release_claim
+        UndeliverablePingSubscriptionNotifier.public_send(
+          settle, @resource_subscription.id, @undeliverable_ping_subscription_reason
+        )
+      end
     end
 
     def send_push_notification!
