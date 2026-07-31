@@ -41,7 +41,8 @@ class Shipment < ApplicationRecord
 
   # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
   # `tracking_url` — so read them back out of the URL when it is one of the forms above.
-  # Scheme-insensitive because the stored prefixes are http for carriers that now serve https.
+  # Scheme- and case-insensitive on the prefix: the stored prefixes are http for carriers that now
+  # serve https, and hosts are case-insensitive.
   # Returns nil rather than a guess: dispute evidence submits once, and a wrong number is worse
   # than an absent one.
   def carrier_and_tracking_number_from_url
@@ -50,10 +51,12 @@ class Shipment < ApplicationRecord
     url = tracking_url.sub(%r{\Ahttps?://}i, "")
     CARRIER_TRACKING_URL_MAPPING.each do |carrier_name, prefix|
       bare_prefix = prefix.sub(%r{\Ahttps?://}i, "")
-      next unless url.start_with?(bare_prefix)
+      next unless url[0, bare_prefix.length]&.casecmp?(bare_prefix)
 
-      number = url.delete_prefix(bare_prefix)
-      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]+\z/)
+      number = url[bare_prefix.length..]
+      # Bounded because every mapped carrier's number falls well inside it, so a longer or shorter
+      # alphanumeric remainder is paste garbage rather than something to submit.
+      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{4,40}\z/)
     end
     nil
   end

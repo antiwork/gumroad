@@ -105,16 +105,24 @@ describe Shipment do
       expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999"])
     end
 
+    it "matches regardless of the host's case" do
+      shipment.update!(tracking_url: "https://WWWAPPS.UPS.COM/WebTracking/processInputRequest?TypeOfInquiryNumber=T&InquiryNumber1=1Z999aa")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999aa"])
+    end
+
     it "returns nothing for a URL that is not a known carrier's tracking form" do
       shipment.update!(tracking_url: "https://track.aftership.com/1Z999AA10123456784")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
     end
 
-    it "returns nothing when the remainder is not a bare tracking number" do
+    it "returns nothing when the remainder is not a plausible tracking number" do
       # Extra query parameters mean we cannot tell where the number ends, and a wrong number
-      # submitted as evidence is worse than none.
-      shipment.update!(tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}1Z999&tRef=fullpage")
-      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+      # submitted as evidence is worse than none. Lengths no mapped carrier issues are paste garbage.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      ["#{usps}1Z999&tRef=fullpage", usps, "#{usps}12", "#{usps}#{'A' * 41}"].each do |url|
+        shipment.update!(tracking_url: url)
+        expect(shipment.carrier_and_tracking_number_from_url).to be_nil, "expected #{url} to be rejected"
+      end
     end
 
     it "returns nothing when no tracking URL was supplied" do
