@@ -70,6 +70,7 @@ module StripeBeneficialOwnersManager
     stripe_account = ensure_eligible!(user)
     validate_required_fields!(params, action: :create, user: user)
     validate_jp_kana_address_format!(params, user)
+    validate_colombia_id_number!(params, user)
     person_params = build_person_params(params, user, action: :create)
     person = Stripe::Account.create_person(stripe_account.charge_processor_merchant_id, person_params)
     serialize(person)
@@ -84,6 +85,7 @@ module StripeBeneficialOwnersManager
     else
       validate_required_fields!(params, action: :update, user: user)
       validate_jp_kana_address_format!(params, user)
+      validate_colombia_id_number!(params, user)
       person_params = build_person_params(params, user, action: :update)
     end
 
@@ -213,6 +215,19 @@ module StripeBeneficialOwnersManager
     raise InvalidFieldError, "#{label} may only contain #{allowed_description}."
   end
   private_class_method :validate_kana_param!
+
+  # The form's maxLength counts characters so a pasted "1.123.456.789" fits, which means a value can
+  # satisfy the input and still carry too few digits. Checking digits here — and normalizing in
+  # build_person_params — keeps this path from handing Stripe a number it will refuse, which is the
+  # rolled-back-create failure that left one seller with eight silent attempts.
+  def self.validate_colombia_id_number!(params, user)
+    return unless user.alive_user_compliance_info&.legal_entity_country_code == Compliance::Countries::COL.alpha2
+    id_number = params[:id_number].to_s
+    return if id_number.strip.blank?
+    return if Compliance::ColombiaIdNumber.valid?(id_number)
+    raise InvalidFieldError, Compliance::ColombiaIdNumber::ERROR_MESSAGE
+  end
+  private_class_method :validate_colombia_id_number!
 
   def self.representative?(person)
     relationship = person.is_a?(Hash) ? person[:relationship] || person["relationship"] : person[:relationship]
@@ -356,6 +371,9 @@ module StripeBeneficialOwnersManager
     end
 
     id_number = params[:id_number].to_s.strip
+    # Send the digits the guard counted, not the separators the seller typed — Stripe refuses a CO
+    # id_number that is not digits-only.
+    id_number = Compliance::ColombiaIdNumber.normalize(id_number) if country_code == Compliance::Countries::COL.alpha2
     if id_number.present?
       if country_code == Compliance::Countries::USA.alpha2 && id_number.length == 4
         hash[:ssn_last_4] = id_number

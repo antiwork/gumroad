@@ -277,7 +277,17 @@ class Subscription < ApplicationRecord
                         was_product_recommended: original_purchase.was_product_recommended,
                         is_installment_payment: original_purchase.is_installment_payment }
     purchase_params.merge!(override_params)
+    # `ip_country`/`ip_state` are derived from `ip_address`, so a caller supplying a live IP must not
+    # leave the original purchase's derivations standing beside it — sanctions screening would read
+    # them as the subscriber's present location.
+    if override_params[:ip_address].present?
+      purchase_params[:ip_country] = override_params[:ip_country]
+      purchase_params[:ip_state] = override_params[:ip_state]
+    end
     purchase = Purchase.new(purchase_params)
+    # Without a live IP the fields above describe where the buyer was when they subscribed, which is
+    # not a location signal sanctions screening may act on.
+    purchase.ip_location_inherited = override_params[:ip_address].blank?
     purchase.variant_attributes = original_purchase.variant_attributes
     unless authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
       purchase.authenticated_offer_code_buyer = authenticated_offer_code_buyer
