@@ -96,6 +96,8 @@ describe GdprDataErasureService do
         # Spied rather than left real: these examples assert on whether a retained vendor copy was
         # reported, which is the only signal that Stripe still holds the adult's details.
         allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:list_persons)
+          .and_return(Stripe::ListObject.construct_from(data: []))
       end
 
       # Anonymizing our row does not reach Stripe, so without this the adult's name, date of birth
@@ -109,13 +111,39 @@ describe GdprDataErasureService do
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_erase_me")
       end
 
-      it "does not call Stripe for a guardian that was never synced" do
+      # The gap a recorded id alone cannot close: a sync that created the Person but failed before
+      # saving its id leaves no local pointer, and erasure cannot wait for a next sync to supply one.
+      it "deletes a guardian person Stripe holds that we never recorded an id for" do
+        guardian = create(:guardian, user:, stripe_person_id: nil)
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:list_persons)
+          .and_return(Stripe::ListObject.construct_from(data: [{ id: "person_orphaned" }]))
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_orphaned")
+      end
+
+      it "does not call Stripe for a guardian Stripe holds no person for" do
         guardian = create(:guardian, user:)
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
 
         described_class.new(user, performed_by: admin).perform!
 
         expect(Stripe::Account).not_to have_received(:delete_person)
+      end
+
+      # A scan Stripe will not answer must not abandon the erasure: the recorded ids still go.
+      it "deletes the recorded person even when the scan fails" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_recorded")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:list_persons)
+          .and_raise(Stripe::APIError.new("Stripe is down"))
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_recorded")
       end
 
       # The local row must still be anonymized and the erasure must still report success: a
