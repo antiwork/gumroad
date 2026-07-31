@@ -12,16 +12,18 @@
 # Lives beside StripeBeneficialOwnersManager rather than inside StripeMerchantAccountManager: both
 # are "a second Person on the seller's account", and the merchant-account manager is already 2000
 # lines. The merchant-account manager calls in at the two moments the account is written.
+#
+# When the requirement ends — the seller turns 18, or moves to a country without a guardian path —
+# sync stops sending the guardian but the Person already at Stripe is left in place. Deliberate for
+# now: Stripe drops the requirement on its own and a lingering verified Person does not block
+# payouts, whereas deleting one mid-verification would. Revisit alongside the form in PR 3, which is
+# where a seller can act on it. Erasure still reaches it, by the recorded id.
 module StripeGuardianManager
   # Stripe validates an identity number against the ACCOUNT's country, not the person's, and expects
   # 9 digits for a US account. See StripeMerchantAccountManager.person_hash, which carries the same
   # rule for the representative.
   US_SSN_LAST_4_LENGTH = 4
   US_FULL_TAX_ID_LENGTH = 9
-
-  # Stripe wants an IP with the terms acceptance. A guardian who accepted through our form always
-  # has one; a row migrated or fixed up by hand may not, and Stripe rejects a null.
-  FALLBACK_TOS_IP = "0.0.0.0"
 
   # Creates or updates the guardian's Stripe Person, and records the id Stripe assigns.
   #
@@ -43,6 +45,12 @@ module StripeGuardianManager
     stripe_person = existing_person(stripe_account, guardian)
 
     if stripe_person
+      # Record the id when we reached this Person by the relationship scan rather than by a stored
+      # id. Without this the recovery path never writes one back, and erasure — which selects on
+      # stripe_person_id — would skip exactly the guardians whose first sync half-failed, leaving
+      # the adult's details at Stripe permanently.
+      adopt_person_id!(guardian, stripe_person.id) if guardian.stripe_person_id != stripe_person.id
+
       Stripe::Account.update_person(
         stripe_account.id,
         stripe_person.id,
@@ -53,12 +61,21 @@ module StripeGuardianManager
         stripe_account.id,
         StripeMerchantAccountManager.force_utf8_encoding(attributes)
       )
-      # Recorded before anything else can fail, so a later error cannot leave us creating a second
-      # guardian Person on the next sync.
-      guardian.update!(stripe_person_id: created.id)
+      adopt_person_id!(guardian, created.id)
       created
     end
   end
+
+  # Points this guardian at a Stripe Person, taking the id from whichever other row still holds it.
+  # stripe_person_id is uniquely indexed, so a replacement guardian adopting the previous
+  # guardian's Person would otherwise collide with the superseded row.
+  def self.adopt_person_id!(guardian, stripe_person_id)
+    Guardian.transaction do
+      Guardian.where(stripe_person_id:).where.not(id: guardian.id).update_all(stripe_person_id: nil)
+      guardian.update!(stripe_person_id:)
+    end
+  end
+  private_class_method :adopt_person_id!
 
   # Deletes the guardian's Person from Stripe. Called by the erasure path, which is why Guardian
   # keeps stripe_person_id rather than nulling it: the id is the only handle to the copy Stripe
@@ -142,14 +159,18 @@ module StripeGuardianManager
     # The guardian accepts Stripe's terms on the account's behalf, which is the whole reason Stripe
     # wants an adult here. additional_tos_acceptances is the guardian-specific channel for that; the
     # account-level tos_acceptance stays with the seller.
-    if guardian.stripe_tos_accepted?
+    #
+    # Sent only with a real IP. Stripe records this as evidence of where a legal acceptance
+    # happened, so a placeholder would be a fabricated attestation; without one the account sits on
+    # an unmet requirement, which is the truthful outcome.
+    if guardian.stripe_tos_accepted? && guardian.stripe_tos_ip.present?
       hash[:additional_tos_acceptances] = {
         account: {
           # The date the guardian actually accepted, not now: Stripe records this as the moment of
           # acceptance, and re-stamping it on every sync would overwrite the real one with the time
           # of an unrelated address edit.
           date: (guardian.stripe_tos_accepted_at || guardian.created_at).to_i,
-          ip: guardian.stripe_tos_ip.presence || FALLBACK_TOS_IP
+          ip: guardian.stripe_tos_ip
         }
       }
     end
@@ -167,13 +188,17 @@ module StripeGuardianManager
   # the identifier against the account country, so a US account takes a 4-digit ssn_last_4 or a
   # 9-digit id_number and nothing else. Sending a wrongly-sized value fails the whole call, so an
   # identifier that fits neither shape is withheld and Stripe falls back to document verification.
+  #
+  # ssn_last_4 additionally requires the guardian to be US-resident, matching the representative:
+  # a foreign guardian has no SSN, so a short foreign identifier must be withheld rather than
+  # mislabelled as one.
   def self.apply_tax_id!(hash, guardian, account_country_code, passphrase)
     tax_id = guardian.individual_tax_id&.decrypt(passphrase)
     return if tax_id.blank?
 
     if account_country_code == Compliance::Countries::USA.alpha2
       if tax_id.length == US_SSN_LAST_4_LENGTH
-        hash[:ssn_last_4] = tax_id
+        hash[:ssn_last_4] = tax_id if guardian.country_code == Compliance::Countries::USA.alpha2
       elsif tax_id.length == US_FULL_TAX_ID_LENGTH
         hash[:id_number] = tax_id
       end

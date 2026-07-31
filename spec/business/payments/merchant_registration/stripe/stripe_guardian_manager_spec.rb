@@ -36,13 +36,25 @@ describe StripeGuardianManager do
 
       described_class.sync(user, stripe_account, passphrase:)
 
-      expect(Stripe::Account).to have_received(:create_person).with(
-        stripe_account_id,
-        hash_including(
-          first_name: "Ellie",
-          last_name: "Bartowski",
-          relationship: { legal_guardian: true }
-        )
+      sent = nil
+      expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
+      # The fields Stripe actually verifies, asserted whole rather than by hash_including: a
+      # dropped address or dob would otherwise pass and only surface as a stalled verification.
+      expect(sent).to include(
+        first_name: "Ellie",
+        last_name: "Bartowski",
+        email: "guardian@example.com",
+        phone: "0000000000",
+        dob: { day: 4, month: 3, year: 1975 },
+        relationship: { legal_guardian: true },
+        address: {
+          line1: "address_full_match",
+          line2: nil,
+          city: "San Francisco",
+          state: "California",
+          postal_code: "94107",
+          country: "US"
+        }
       )
       expect(guardian.reload.stripe_person_id).to eq("person_guardian_new")
     end
@@ -57,7 +69,9 @@ describe StripeGuardianManager do
       described_class.sync(user, stripe_account, passphrase:)
 
       expect(Stripe::Account).to have_received(:update_person).with(
-        stripe_account_id, "person_guardian_existing", anything
+        stripe_account_id,
+        "person_guardian_existing",
+        hash_including(first_name: "Ellie", relationship: { legal_guardian: true })
       )
       expect(Stripe::Account).not_to have_received(:create_person)
     end
@@ -79,6 +93,35 @@ describe StripeGuardianManager do
         stripe_account_id, "person_guardian_orphan", anything
       )
       expect(Stripe::Account).not_to have_received(:create_person)
+    end
+
+    # Erasure selects on stripe_person_id, so a guardian reached only by the relationship scan would
+    # be skipped by it — leaving the adult's details at Stripe permanently.
+    it "records the id of a person it reached by the relationship scan" do
+      allow(Stripe::Account).to receive(:list_persons).and_return(
+        Stripe::StripeObject.construct_from(data: [{ id: "person_guardian_orphan" }])
+      )
+      create_compliance_info(guardian_record: guardian)
+
+      described_class.sync(user, stripe_account, passphrase:)
+
+      expect(guardian.reload.stripe_person_id).to eq("person_guardian_orphan")
+    end
+
+    # stripe_person_id is uniquely indexed, so adopting a superseded guardian's Person has to clear
+    # the old row's id or the save collides.
+    it "takes the person id from a superseded guardian rather than colliding on it" do
+      superseded = create(:guardian, user:, stripe_person_id: "person_shared")
+      superseded.mark_deleted!
+      allow(Stripe::Account).to receive(:list_persons).and_return(
+        Stripe::StripeObject.construct_from(data: [{ id: "person_shared" }])
+      )
+      create_compliance_info(guardian_record: guardian)
+
+      described_class.sync(user, stripe_account, passphrase:)
+
+      expect(guardian.reload.stripe_person_id).to eq("person_shared")
+      expect(superseded.reload.stripe_person_id).to be_nil
     end
 
     # The recorded id no longer resolving means the Person was deleted at Stripe. The sync must
@@ -110,6 +153,19 @@ describe StripeGuardianManager do
           }
         )
       )
+    end
+
+    # Stripe records this as evidence of where a legal acceptance happened, so a placeholder would
+    # be a fabricated attestation.
+    it "omits the terms acceptance when no IP was captured" do
+      guardian.update!(stripe_tos_accepted: true, stripe_tos_ip: nil)
+      create_compliance_info(guardian_record: guardian)
+
+      described_class.sync(user, stripe_account, passphrase:)
+
+      sent = nil
+      expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
+      expect(sent).not_to have_key(:additional_tos_acceptances)
     end
 
     context "when there is nothing to sync" do
@@ -182,6 +238,20 @@ describe StripeGuardianManager do
         sent = nil
         expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
         expect(sent[:ssn_last_4]).to eq("6789")
+        expect(sent).not_to have_key(:id_number)
+      end
+
+      # A foreign guardian has no SSN, so a short foreign identifier must be withheld rather than
+      # mislabelled as one — matching the representative's rule.
+      it "withholds a 4-digit identifier from a guardian who is not US-resident" do
+        guardian.update!(country: "Germany", state: nil, individual_tax_id: "6789")
+        create_compliance_info(guardian_record: guardian)
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        sent = nil
+        expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
+        expect(sent).not_to have_key(:ssn_last_4)
         expect(sent).not_to have_key(:id_number)
       end
 

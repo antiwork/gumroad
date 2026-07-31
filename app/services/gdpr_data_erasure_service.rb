@@ -17,9 +17,9 @@ class GdprDataErasureService
   def perform!
     original_email = @user.email
     credit_card_ids = credit_card_ids_for_erasure
-    # Read before the transaction soft-deletes the account holder, and before anonymize_compliance_info!
-    # runs: the Stripe deletion below needs the account id and the guardians' Person ids, and the
-    # account id is derived from associations the deactivation touches.
+    # Read before the transaction so the Stripe deletion below has the account id and the Person
+    # ids to hand. The values would survive the transaction unchanged, but resolving them up front
+    # keeps the deletion independent of what erasure does to the account in between.
     guardian_stripe_persons = guardian_stripe_persons_for_erasure
 
     ActiveRecord::Base.transaction do

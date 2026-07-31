@@ -238,9 +238,12 @@ module StripeMerchantAccountManager
     # record above are already live, and the guardian is re-synced by every later update_account.
     # Without a guardian the account simply sits on Stripe's legal-guardian requirement, which is
     # the same place it would be if we had never tried.
+    # StandardError, not Stripe::StripeError: the sync also writes locally, and a deadlock or
+    # lock-wait timeout there would escape a Stripe-only rescue and abort creation before the
+    # merchant account is marked alive — wedging it. A missed sync self-heals on the next update.
     begin
       StripeGuardianManager.sync(user, stripe_account, passphrase:)
-    rescue Stripe::StripeError => e
+    rescue => e
       ErrorNotifier.notify(e)
     end
 
@@ -482,7 +485,7 @@ module StripeMerchantAccountManager
     # already on the account by this point.
     begin
       StripeGuardianManager.sync(user, stripe_account, passphrase:)
-    rescue Stripe::StripeError => e
+    rescue => e
       ErrorNotifier.notify(e)
     end
 
@@ -2180,4 +2183,9 @@ module StripeMerchantAccountManager
 
     true
   end
+
+  # StripeGuardianManager sends its own Person payload and needs the same two treatments. Pinned
+  # public because most of the helpers above sit under a bare `private_class_method`, which does
+  # nothing in Ruby — anyone fixing that pattern would otherwise break guardian sync silently.
+  public_class_method :normalize_postal_code, :force_utf8_encoding
 end
