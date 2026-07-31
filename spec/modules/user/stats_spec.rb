@@ -701,9 +701,8 @@ describe User::Stats, :vcr do
     describe "PayPal stats" do
       before :each do
         # The payout window is derived from Date arithmetic while the chargeback and refund
-        # timestamps below come from later `travel_to(N.days.ago)` reads. Freeze the clock so
-        # every read resolves to one instant: setup crossing midnight otherwise shifts those
-        # timestamps a day past `@payout_end_date.end_of_day` and drops them from the window.
+        # timestamps come from later `travel_to(N.days.ago)` reads. Freeze the clock so setup
+        # crossing midnight can't shift those timestamps out of the window.
         travel_to(Time.current.midday)
 
         @creator = create(:user)
@@ -1304,6 +1303,10 @@ describe User::Stats, :vcr do
 
   describe "#last_weeks_sales" do
     it "only includes successful purchases" do
+      # `last_weeks_sales` re-reads Date.today, so an example crossing Sunday 00:00 moves the
+      # week boundary between the two reads and the purchase falls out of the window.
+      travel_to(Time.current.midday)
+
       product = create(:product, user: @user)
       created_at = Date.today.beginning_of_week(:sunday).to_datetime - 1.day
       create(:purchase, link: product, created_at:, purchase_state: "successful", price_cents: 100, fee_cents: 30)
