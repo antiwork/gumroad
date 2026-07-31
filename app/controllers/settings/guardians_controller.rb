@@ -17,6 +17,7 @@ class Settings::GuardiansController < Settings::BaseController
 
   def create
     guardian = current_seller.guardians.build(guardian_params)
+    apply_sellers_country(guardian)
     accept_terms(guardian)
 
     unless guardian.save
@@ -33,6 +34,7 @@ class Settings::GuardiansController < Settings::BaseController
     return head :not_found if guardian.nil?
 
     guardian.assign_attributes(guardian_params)
+    apply_sellers_country(guardian)
     accept_terms(guardian)
 
     unless guardian.save
@@ -90,10 +92,18 @@ class Settings::GuardiansController < Settings::BaseController
       guardian.stripe_tos_ip = request.remote_ip
     end
 
+    # Derived here rather than submitted: our payment partner adds the guardian as a second person on
+    # the seller's own account, so their country is the account's country and the form has no picker
+    # for it. Without this the country stays nil, Guardian#has_completed_info? is never satisfied, and
+    # the seller fills the form in to no effect — payouts stay blocked with the page reporting success.
+    def apply_sellers_country(guardian)
+      guardian.country = current_seller.alive_user_compliance_info&.country
+    end
+
     def guardian_params
       params.require(:guardian).permit(
         :first_name, :last_name, :email, :phone, :date_of_birth,
-        :street_address, :city, :state, :zip_code, :country, :nationality,
+        :street_address, :city, :state, :zip_code, :nationality,
         :individual_tax_id
       )
     end

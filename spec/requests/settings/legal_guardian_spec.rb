@@ -22,13 +22,19 @@ describe("Legal guardian payout setup", type: :system, js: true) do
     fill_in "Guardian's last name", with: "Okafor"
     fill_in "Guardian's email", with: "dana@example.com"
     fill_in "Guardian's phone number", with: "4155550123"
-    fill_in "Guardian's date of birth", with: "1984-06-02"
+    fill_in_guardian_birthday Date.new(1984, 6, 2)
     fill_in "Guardian's address", with: "1 Market St"
     fill_in "Guardian's city", with: "San Francisco"
     select "California", from: "Guardian's state"
     fill_in "Guardian's ZIP code", with: "94107"
     fill_in "Guardian's Social Security number", with: "000000000"
     check "My guardian has read and accepts the Stripe Connected Account Agreement."
+  end
+
+  # A native date input takes keystrokes in the order the browser renders its segments, not an ISO
+  # string — passing "1984-06-02" leaves the field empty and the form reports a missing birthday.
+  def fill_in_guardian_birthday(date)
+    fill_in "Guardian's date of birth", with: date.strftime("%m%d%Y")
   end
 
   describe "a US seller aged 13-17" do
@@ -38,8 +44,6 @@ describe("Legal guardian payout setup", type: :system, js: true) do
     end
 
     it "adds a guardian and their payouts unblock" do
-      expect(Payouts.is_user_payable(seller, Date.today)).to be(false)
-
       visit settings_payments_path
 
       expect(page).to have_text("Legal guardian")
@@ -60,8 +64,11 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       # Attached to the seller's LIVE compliance revision, which is what the payout gate reads. A
       # saved guardian nothing points at would leave payouts blocked with the form claiming success.
       expect(seller.reload.alive_user_compliance_info.guardian).to eq(guardian)
-
-      expect(Payouts.is_user_payable(seller.reload, Date.today)).to be(true)
+      # The requirement this page exists to satisfy, read through the same predicate the payout gate
+      # reads. Not is_user_payable itself: this seller has no payout route set up, so that stays false
+      # for reasons a guardian cannot fix and the assertion would pass before the form was even filled
+      # in. Whether the gate honours this predicate is covered in spec/business/payments/payouts.
+      expect(seller.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(true)
     end
 
     it "records the guardian's own acceptance of our payment partner's terms, with when and from where" do
@@ -85,7 +92,7 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       fill_in "Guardian's first name", with: "Dana"
       fill_in "Guardian's last name", with: "Okafor"
       fill_in "Guardian's email", with: "dana@example.com"
-      fill_in "Guardian's date of birth", with: "1984-06-02"
+      fill_in_guardian_birthday Date.new(1984, 6, 2)
       fill_in "Guardian's address", with: "1 Market St"
       fill_in "Guardian's city", with: "San Francisco"
       select "California", from: "Guardian's state"
@@ -96,14 +103,14 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       expect(page).to have_alert(text: "Your legal guardian's details are saved")
       expect(page).to have_text("Your payouts are on hold until your guardian's details are complete")
       expect(seller.guardians.alive.sole.has_completed_info?).to be(false)
-      expect(Payouts.is_user_payable(seller.reload, Date.today)).to be(false)
+      expect(seller.reload.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(false)
     end
 
     it "rejects a guardian who is under 18 themselves" do
       visit settings_payments_path
 
       fill_in_guardian_details
-      fill_in "Guardian's date of birth", with: 16.years.ago.to_date.to_fs(:db)
+      fill_in_guardian_birthday 16.years.ago.to_date
       click_on "Add guardian"
 
       expect(page).to have_text("The legal guardian must be at least 18 years old.")
@@ -131,7 +138,8 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       seller.alive_user_compliance_info.update!(guardian_id: guardian.id)
 
       visit settings_payments_path
-      fill_in "Guardian's city", with: "Berkeley"
+      # Prefilled from the stored guardian, so the old value has to be cleared rather than typed over.
+      fill_in "Guardian's city", with: "Berkeley", fill_options: { clear: :backspace }
       click_on "Save guardian"
 
       expect(page).to have_alert(text: "Your legal guardian's details are saved")

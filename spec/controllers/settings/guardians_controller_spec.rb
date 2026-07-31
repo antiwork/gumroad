@@ -12,7 +12,8 @@ describe Settings::GuardiansController, type: :controller do
   let(:minor_birthday) { 15.years.ago.to_date }
   let(:seller) { create(:named_seller) }
 
-  # Enough for a complete guardian, so an example that removes one field is testing that field.
+  # Exactly what the form sends, so an example that removes one field is testing that field. Notably
+  # no country: the form has no picker for it and the controller derives it from the seller.
   let(:valid_params) do
     {
       guardian: {
@@ -25,7 +26,6 @@ describe Settings::GuardiansController, type: :controller do
         city: "San Francisco",
         state: "California",
         zip_code: "94107",
-        country: "United States",
         individual_tax_id: "000000000",
         accept_terms: "true",
       },
@@ -59,6 +59,24 @@ describe Settings::GuardiansController, type: :controller do
         # The attach is the whole point: a saved guardian nothing points at leaves payouts blocked
         # while the form reports success.
         expect(seller.reload.alive_user_compliance_info.guardian).to eq(guardian)
+      end
+
+      # The form has no country picker, so a guardian whose country is not derived server-side stays
+      # incomplete no matter what the seller types and payouts never unblock.
+      it "takes the guardian's country from the seller's own account" do
+        post :create, params: valid_params, format: :json
+
+        guardian = seller.guardians.alive.sole
+        expect(guardian.country).to eq(seller.alive_user_compliance_info.country)
+        expect(guardian.country_code).to eq("US")
+      end
+
+      # Their country is the account's, not theirs to choose: accepting one would let a guardian be
+      # stored in a country our payment partner cannot add a person on this account in.
+      it "ignores a country supplied by the client" do
+        post :create, params: valid_params.deep_merge(guardian: { country: "Brazil" }), format: :json
+
+        expect(seller.guardians.alive.sole.country).to eq("United States")
       end
 
       it "records the acceptance date and IP alongside the flag" do
