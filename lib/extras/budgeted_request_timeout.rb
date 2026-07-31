@@ -15,6 +15,8 @@ class BudgetedRequestTimeout < Rack::Timeout
   # hosts mount these route sets at the same paths, so matching PATH_INFO covers every host.
   EXTENDED_BUDGET_PATHS = [
     %r{\A/orders(/|\z)},
+    # Stripe's 3DS return_url. Finalizes the confirmed charge in-request, same as /orders/:id/finalize.
+    %r{\A/checkout/returns/[^/]+\z},
     %r{\A/purchases/[^/]+/confirm\z},
     %r{\A/service_charges(\z|/[^/]+/confirm\z)},
     %r{\A/preorders/[^/]+/charge_preorder\z},

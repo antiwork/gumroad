@@ -59,6 +59,7 @@ describe BudgetedRequestTimeout do
         "/orders/prepare",
         "/orders/abc123/confirm",
         "/orders/abc123/finalize",
+        "/checkout/returns/abc123",
         "/purchases/abc123/confirm",
         "/service_charges",
         "/service_charges/abc123/confirm",
@@ -75,6 +76,7 @@ describe BudgetedRequestTimeout do
         "/discover",
         "/l/some-product",
         "/orders_history",
+        "/checkout",
         "/purchases/abc123/receipt",
         "/purchases/abc123/subscribe",
         "/library",
@@ -111,6 +113,7 @@ describe BudgetedRequestTimeout do
 
     it "gives checkout the longer budget and everything else the short one" do
       expect(applied_budget("/orders/abc123/confirm")).to eq described_class::Budget.checkout
+      expect(applied_budget("/checkout/returns/abc123")).to eq described_class::Budget.checkout
       expect(applied_budget("/l/some-product")).to eq 15
       expect(applied_budget("/orders/abc123/confirm")).to be > applied_budget("/l/some-product")
     end
