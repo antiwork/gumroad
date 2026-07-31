@@ -207,6 +207,24 @@ describe ScheduleAbandonedCartEmailsJob do
       expect { described_class.new.perform }.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
     end
 
+    it "stops before hydrating a scanned batch of carts once the deadline has passed" do
+      # The scan and the hydration that follows it are separate unbounded loops over the same
+      # platform-scale window, so a check on the scan alone leaves the hydration free to run past
+      # the deadline. Cross the deadline as a NON-EMPTY scan returns, so the next check reached is
+      # the hydration one rather than the following day window's, and assert nothing is hydrated —
+      # `Cart.includes` is only called from the hydration loop.
+      job = described_class.new
+      allow(job).to receive(:abandoned_cart_ids).and_wrap_original do |original, window|
+        original.call(window).tap do |ids|
+          travel described_class::ATTEMPT_TIME_BUDGET + 1.minute if ids.any?
+        end
+      end
+
+      expect(Cart).not_to receive(:includes)
+
+      expect { job.perform }.to raise_error(described_class::AttemptTimeBudgetExceeded)
+    end
+
     it "stops mid-way through the mail enqueue loop instead of raising into a duplicating retry" do
       # The enqueue loop is per-cart and platform-wide, so it can be the part that runs long.
       # It must not raise: sent_abandoned_cart_emails rows are written when the mailer jobs run,

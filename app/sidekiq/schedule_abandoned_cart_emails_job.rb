@@ -21,21 +21,19 @@ class ScheduleAbandonedCartEmailsJob
   # (see PerformPayoutsUpToDelayDaysAgoWorker).
   SCAN_TIME_BUDGET = 2.hours
 
-  # Wall-clock ceiling on one attempt. SCAN_TIME_BUDGET only caps a single statement, and the
-  # attempt runs many of them across ~30 day windows plus workflow matching, so nothing else
-  # bounds the whole thing. It has to stay under LOCK_TTL: an attempt that outlived its lock
-  # would let the next day's enqueue acquire the same digest and run concurrently, and the
-  # `sent_abandoned_cart_emails` dedupe is a check-then-write with no unique index behind it,
-  # so two live copies can email the same cart twice. Failing loudly instead retries under a
-  # fresh lock, and surfaces in Sentry via the retries-exhausted handler below.
+  # Wall-clock ceiling on one attempt. SCAN_TIME_BUDGET caps a single statement, not the run,
+  # which walks ~30 day windows and then matches workflows. Must stay under LOCK_TTL: an attempt
+  # outliving its lock lets the next enqueue take the same digest and run concurrently, and
+  # `sent_abandoned_cart_emails` has no unique index, so two live copies can email one cart twice.
   ATTEMPT_TIME_BUDGET = 18.hours
 
-  # An `until_executed` lock is released in an `ensure`, so an exception or a retry cannot strand
-  # it — but a SIGKILL (OOM, deploy reap) never runs that ensure and leaves the digest with no
-  # expiry. This job takes no arguments, so its digest is constant: one strand drops every later
-  # enqueue forever (gumroad-private#1576). The TTL is re-applied on each acquire, so it only has
-  # to outlast a single attempt, and must stay under the 24h schedule so a strand costs one run.
-  LOCK_TTL = 20.hours
+  # A SIGKILL (OOM, deploy reap) skips the `ensure` that releases an `until_executed` lock and
+  # leaves the digest with no expiry. This job takes no arguments, so its digest is constant and
+  # one strand drops every later enqueue forever (gumroad-private#1576). The TTL is anchored at
+  # ACQUIRE, which for a first attempt is enqueue time — the server reuses that lock without
+  # refreshing it — so it must cover queue latency plus ATTEMPT_TIME_BUDGET, and stay under the
+  # 24h schedule so a strand costs one run.
+  LOCK_TTL = 23.hours
 
   class AttemptTimeBudgetExceeded < StandardError; end
 
@@ -68,6 +66,7 @@ class ScheduleAbandonedCartEmailsJob
       start_time = Time.current
       cart_ids = abandoned_cart_ids(day_start..day_end)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
+        check_attempt_deadline!
         Cart.includes(:alive_cart_products).where(id: batch_ids).each do |cart|
           next if cart.user_id.blank? && cart.email.blank?
 
@@ -137,7 +136,7 @@ class ScheduleAbandonedCartEmailsJob
 
     # Raises once the attempt has outrun ATTEMPT_TIME_BUDGET, because an attempt that outlives
     # LOCK_TTL is the concurrency hazard. Called from every unbounded loop that runs BEFORE any
-    # mail is enqueued — each day window, each scan batch, each workflow — since a retry there
+    # mail is enqueued — day window, scan batch, hydration batch, workflow — since a retry there
     # has no side effects to duplicate. Miss one and the bound is only as good as the loops it
     # covers. The enqueue loop is the exception and stops without raising; see its comment.
     def check_attempt_deadline!
