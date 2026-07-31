@@ -1540,7 +1540,7 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq "A buyer may not have received their receipt"
       expect(mail.body.encoded).to include purchase.email
       expect(mail.body.encoded).to include "Terraforming Guide"
-      expect(mail.body.encoded).to include "have not opened what they bought"
+      expect(mail.body.encoded).to include "opened what they bought either"
     end
 
     it "pluralizes the subject and body for several affected sales" do
