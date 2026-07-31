@@ -16,8 +16,7 @@ describe InstantPayoutsService, :vcr do
       before do
         create(:ach_account_stripe_succeed, user: seller)
         merchant_account = StripeMerchantAccountManager.create_account(seller.reload, passphrase: "1234")
-        # Instant payouts require the Stripe account to be seasoned 60 days
-        # (User::MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS); the account is created here and so is new.
+        # Created here, so season it past MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.
         merchant_account.update!(created_at: 90.days.ago)
         @merchant_account = merchant_account
 
