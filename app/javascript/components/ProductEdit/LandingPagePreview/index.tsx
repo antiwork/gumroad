@@ -28,11 +28,9 @@ const buildCheckoutUrl = (uniquePermalink: string, params: Record<string, unknow
   return url.pathname + url.search;
 };
 
-// Mirrors gumroadNavigationTarget in RendersCustomHtmlPages (the single predicate
-// the four sandbox bridge sites share). Returns the URL to open, or null to refuse.
-// Seller-controlled hosts keep the URL as written; Gumroad's own account/cart pages
-// live on a host no seller controls, so they are admitted only on an exact path with
-// query and fragment dropped — nothing from the sandbox reaches a Gumroad page.
+// Mirrors gumroadNavigationTarget in RendersCustomHtmlPages; returns the URL to
+// open, or null to refuse. Keep the two in step — a wrapper that admits less than
+// the interceptor intercepts turns those clicks into silent dead clicks.
 const navigationTarget = (
   url: URL,
   storeHostnames: string[],
@@ -84,13 +82,6 @@ export const LandingPagePreview = ({
         // and the destination must clear the same allowlist. Without that any
         // script on the page could pop open an arbitrary site from inside the
         // Gumroad dashboard.
-        //
-        // This is the FIFTH bridge site. The other four share one server-emitted
-        // gumroadNavigationTarget; this one cannot (it is dashboard React, not
-        // injected sandbox JS), so the predicate is mirrored here and the two
-        // must be kept in step — the iframe interceptor decides which clicks to
-        // hand up, and a wrapper that admits less than the interceptor
-        // intercepts turns those clicks into silent dead clicks.
         let destination;
         try {
           destination = new URL(e.data.url, window.location.origin);

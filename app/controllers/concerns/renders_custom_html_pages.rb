@@ -26,12 +26,10 @@ module RendersCustomHtmlPages
   # shim — see tailwind_v3_gradient_compat_head.
   TAILWIND_V3_CDN_HOST = "cdn.tailwindcss.com"
 
-  # Gumroad's own destinations a storefront legitimately links to. They live on
-  # a shared Gumroad host, so they are reachable through the navigate bridge by
-  # exact path only (see custom_html_navigation_allowlist_js). Add a path here
-  # only if seller-authored HTML sending an anonymous visitor there is harmless:
-  # anything that acts on a signed-in account, or that takes a redirect
-  # parameter, is not.
+  # Reachable through the navigate bridge by exact path only (see
+  # custom_html_navigation_allowlist_js). Add a path here only if seller-authored
+  # HTML sending an anonymous visitor there is harmless: anything that acts on a
+  # signed-in account, or that takes a redirect parameter, is not.
   GLOBAL_NAV_PATHS = ["/library", "/checkout"].freeze
 
   # Hostnames are case-insensitive, and the sanitizer compares them after
@@ -577,19 +575,16 @@ module RendersCustomHtmlPages
   end
 
   private
-    # Emits gumroadNavigationTarget(url, storeHostnames), the single decision
-    # both halves of the navigate bridge use: the in-iframe interceptor to pick
-    # which clicks to hand up, and each trusted wrapper to decide where it will
-    # actually send the tab. Both sides must agree or a link either silently
-    # does nothing or is intercepted and then refused.
+    # Emits gumroadNavigationTarget(url, storeHostnames), used by BOTH halves of
+    # the navigate bridge: the in-iframe interceptor picks which clicks to hand
+    # up, each trusted wrapper decides where to send the tab. Both sides must
+    # agree or a link either silently does nothing or is intercepted and then
+    # refused.
     #
-    # Hosts the seller controls keep the URL they wrote. GLOBAL_NAV_PATHS are
-    # Gumroad's own account/cart pages, which live on a host no seller controls:
-    # putting that host in the hostname allowlist would let seller-authored HTML
-    # drive the visitor's tab to any gumroad.com path, so it is matched on an
-    # exact path instead, and the query and fragment are dropped rather than
-    # rejected — a near-miss link still lands somewhere useful, and no parameter
-    # from the sandbox ever reaches a Gumroad page.
+    # GLOBAL_NAV_PATHS live on a host no seller controls, so putting that host in
+    # the hostname allowlist would let seller HTML drive the visitor's tab to any
+    # gumroad.com path. Matched on an exact path instead, query and fragment
+    # dropped rather than rejected.
     def custom_html_navigation_allowlist_js
       <<~JS
         var GUMROAD_NAV_HOSTS = #{ERB::Util.json_escape(VALID_REQUEST_HOSTS.to_json)};

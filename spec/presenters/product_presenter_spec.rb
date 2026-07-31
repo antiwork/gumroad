@@ -591,17 +591,19 @@ describe ProductPresenter do
     end
 
     describe "custom_html_global_nav_hosts / _paths" do
-      # The negative above ("never includes a shared Gumroad host") is only safe
-      # because the shared hosts arrive in a SEPARATE key that is reachable on an
-      # exact path only. Without this positive twin, deleting the global-nav keys
-      # entirely would leave that negative passing.
+      # Without this positive twin, deleting the global-nav keys outright would
+      # leave the "never includes a shared Gumroad host" negative above passing.
+      # Literals, not the constants the presenter returns — that would be X-vs-X
+      # and pin nothing. `include` rather than an exact match because
+      # config/domain.rb appends CUSTOM_DOMAIN to the host list on branch deploys.
       it "passes the shared Gumroad hosts and the exact blessed paths separately" do
-        expect(presenter.edit_props[:custom_html_global_nav_hosts]).to match_array(VALID_REQUEST_HOSTS)
+        expect(presenter.edit_props[:custom_html_global_nav_hosts])
+          .to include("test.gumroad.com", "app.test.gumroad.com")
         expect(presenter.edit_props[:custom_html_global_nav_paths]).to eq(["/library", "/checkout"])
       end
 
-      # Both halves of the bridge must decide identically or a click is intercepted
-      # in the iframe and then refused by the wrapper — a silent dead click.
+      # Pins the presenter to the constant the bridge JS is emitted from, so the
+      # two cannot drift apart silently.
       it "matches the values the sandbox bridge is served" do
         expect(presenter.edit_props[:custom_html_global_nav_paths])
           .to eq(RendersCustomHtmlPages::GLOBAL_NAV_PATHS)

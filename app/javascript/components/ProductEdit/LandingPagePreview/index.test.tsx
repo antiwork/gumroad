@@ -108,9 +108,7 @@ describe("LandingPagePreview navigation messages", () => {
     expect(openSpy).toHaveBeenCalledWith("/l/abc?quantity=2&wanted=true", "_blank", "noopener");
   });
 
-  // The preview is the fifth bridge site. The in-iframe interceptor hands up
-  // clicks on the global nav paths, so a preview that refused them would turn
-  // every /library and /checkout link in the editor into a silent dead click.
+  // A refusal here is a silent dead click on the shipped feature.
   it("opens a global nav path on a shared Gumroad host", () => {
     const frame = renderPreview();
 
@@ -159,7 +157,6 @@ describe("LandingPagePreview navigation messages", () => {
   it("refuses a global nav path on a host that is not a Gumroad host", () => {
     const frame = renderPreview();
 
-    // The path tier must not admit the path on an arbitrary host.
     postFromFrame(frame, { type: "gumroad:navigate", url: "https://evil.example/library" });
 
     expect(openSpy).not.toHaveBeenCalled();

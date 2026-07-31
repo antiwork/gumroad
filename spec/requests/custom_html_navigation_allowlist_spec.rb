@@ -47,19 +47,12 @@ describe "custom HTML page navigation allowlist", type: :request do
 
   # Deliberately literals, not the constant: the examples above compare the
   # response against GLOBAL_NAV_PATHS, which moves with production and so
-  # cannot notice a path being added. These fail if the set changes, which is
+  # cannot notice a path being added. This fails if the set changes, which is
   # the point — widening what seller-authored HTML can do with the visitor's
-  # tab should be a conscious edit.
+  # tab should be a conscious edit. The bar for adding one: a path that acts on
+  # a signed-in account, or that carries a redirect parameter, must not be
+  # reachable, since seller HTML would otherwise pick the path.
   it "blesses exactly these two paths" do
     expect(RendersCustomHtmlPages::GLOBAL_NAV_PATHS).to eq(["/library", "/checkout"])
-  end
-
-  # A path that acts on a signed-in account, or that carries a redirect
-  # parameter, must not be reachable: the whole reason the canonical host is not
-  # in the hostname allowlist is that seller HTML would otherwise pick the path.
-  it "does not bless account-acting or redirect-carrying paths" do
-    %w[/settings /settings/payments /login /logout /dashboard /payouts].each do |path|
-      expect(RendersCustomHtmlPages::GLOBAL_NAV_PATHS).not_to include(path)
-    end
   end
 end
