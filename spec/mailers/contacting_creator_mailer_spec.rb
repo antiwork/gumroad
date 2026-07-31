@@ -80,8 +80,12 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to_not include("We&#39;ll keep trying on your usual payout schedule")
-      expect(mail.body.encoded).to include("payouts on your account are paused right now")
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Payouts on your account are paused right now")
+      # The pause is named once, so the later paragraph must not reintroduce it as a second,
+      # distinct restriction.
+      expect(mail.body.encoded).to_not include("are also on hold")
+      expect(mail.body.encoded).to include("That hold is ours to lift")
     end
 
     it "does not promise schedule retries to a seller who paused their own payouts" do
@@ -90,8 +94,10 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to_not include("We&#39;ll keep trying on your usual payout schedule")
-      expect(mail.body.encoded).to include("payouts on your account are paused right now")
+      expect(mail.body.encoded).to_not include("keep trying on your usual payout schedule")
+      expect(mail.body.encoded).to include("Payouts on your account are paused right now")
+      expect(mail.body.encoded).to_not include("also paused in your settings")
+      expect(mail.body.encoded).to include("You paused them yourself")
     end
 
     it "promises schedule retries for a retried rejection when nothing is paused" do

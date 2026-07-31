@@ -7,7 +7,7 @@
     </p>
   <% elsif @retries_paused_by_pause %>
     <p>
-      Every attempt will fail until this is fixed, and payouts on your account are paused right now, so we'll only start trying again once they resume and a working payout method is on file. Your balance is safe and stays on your account.
+      Payouts on your account are paused right now, so we'll only start trying again once they resume — and every attempt will fail until this is fixed. Your balance is safe and stays on your account.
     </p>
   <% else %>
     <p>
@@ -35,11 +35,20 @@
   <% end %>
   <% if @payouts_on_hold %>
     <p>
-      Payouts on your account are also on hold. Once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
+      <%# The pause is already named above when it is what stopped the retries, so don't restate it. %>
+      <% if @retries_paused_by_pause %>
+        That hold is ours to lift: once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
+      <% else %>
+        Payouts on your account are also on hold. Once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
+      <% end %>
     </p>
   <% elsif @payouts_paused_by_seller %>
     <p>
-      Payouts on your account are also paused in your settings. Once a working payout method is on file and you
+      <% if @retries_paused_by_pause %>
+        You paused them yourself, so once a working payout method is on file and you
+      <% else %>
+        Payouts on your account are also paused in your settings. Once a working payout method is on file and you
+      <% end %>
       <a href='<%= settings_payments_url %>'>resume payouts there</a>, your balance will be sent on the next payout date.
     </p>
   <% else %>
