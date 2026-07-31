@@ -3742,9 +3742,12 @@ class Purchase < ApplicationRecord
     # two checks drift apart, buyers get a reminder email whose link opens a page
     # with no review form (e.g. purchases flagged `should_exclude_product_review`
     # after a charge reversal, or access-revoked free purchases).
+    # `can_contact` is the receipt footer's unsubscribe, and the only opt-out a guest can
+    # reach — they have no User row to carry `opted_out_of_review_reminders`.
     allows_review_to_be_counted? &&
       product_review.blank? &&
       !seller&.disable_review_reminders? &&
+      can_contact? &&
       (purchaser.present? ? !purchaser.opted_out_of_review_reminders? : true)
   end
 

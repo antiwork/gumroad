@@ -563,7 +563,16 @@ describe CustomerLowPriorityMailer do
         expect(mail.body.encoded).to have_text("We'd love to hear your thoughts on it. When you have a moment, could you drop us a quick review?")
         expect(mail.body.encoded).to have_text("Thank you for your contribution!")
         expect(mail.body.encoded).to have_link("Leave a review", href: purchase.link.long_url)
-        expect(mail.body.encoded).not_to have_link("Unsubscribe")
+        expect(mail.body.encoded).to have_link("Unsubscribe")
+      end
+
+      it "gives a guest buyer a purchase-scoped unsubscribe link that resolves without a session" do
+        body = CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).body.encoded
+
+        expect(purchase.purchaser).to be_nil
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(token).to be_present
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
       end
 
       context "purchase does not have name" do
@@ -650,6 +659,16 @@ describe CustomerLowPriorityMailer do
       end
     end
 
+    context "buyer unsubscribed from the seller" do
+      before { purchase.update!(can_contact: false) }
+
+      it "does not send an email" do
+        expect do
+          CustomerLowPriorityMailer.purchase_review_reminder(purchase.id).deliver_now
+        end.to_not change { ActionMailer::Base.deliveries.count }
+      end
+    end
+
     context "bundle purchase" do
       before { purchase.update!(is_bundle_purchase: true) }
 
@@ -698,6 +717,40 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to have_link("Leave reviews", href: reviews_url)
       unsubscribe_token = mail.body.encoded[%r{/users/unsubscribe_review_reminders/([A-Za-z0-9_-]+)}, 1]
       expect(User.find_by_secure_external_id(unsubscribe_token, scope: Users::ReviewRemindersController::TOKEN_SCOPE)).to eq(order.purchaser)
+    end
+
+    context "order has no purchaser account" do
+      it "falls back to a purchase-scoped unsubscribe link" do
+        order.update!(purchaser: nil)
+
+        body = CustomerLowPriorityMailer.order_review_reminder(order.id).body.encoded
+
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(token).to be_present
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
+      end
+
+      it "mints the token from a purchase the email is about, skipping excluded ones" do
+        # `excluded` is first in the order, so it is what `order.purchases.first` returns —
+        # the row the token used to come from even though it gets no reminder.
+        excluded = create(:purchase, full_name: "Buyer", can_contact: false)
+        multi_seller_order = create(:order, purchaser: nil, purchases: [excluded, purchase])
+        expect(multi_seller_order.purchases.first).to eq(excluded)
+
+        body = CustomerLowPriorityMailer.order_review_reminder(multi_seller_order.id).body.encoded
+
+        token = body[%r{/purchases/([^/]+)/unsubscribe}, 1]
+        expect(Purchase.find_by_secure_external_id(CGI.unescape(token), scope: "unsubscribe")).to eq(purchase)
+      end
+
+      it "does not send when no purchase in the order is still eligible" do
+        order.update!(purchaser: nil)
+        purchase.update!(can_contact: false)
+
+        expect do
+          CustomerLowPriorityMailer.order_review_reminder(order.id).deliver_now
+        end.to_not change { ActionMailer::Base.deliveries.count }
+      end
     end
 
     context "purchase does not have name" do
