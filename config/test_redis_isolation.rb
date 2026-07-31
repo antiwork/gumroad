@@ -31,8 +31,8 @@ require "socket"
 # so separate worktrees still get separate blocks, which is the case this exists for. Its
 # per-command forks share their server's block, so two simultaneous runs in ONE checkout
 # are no more isolated than today; `DISABLE_SPRING=1` gives each its own. The pid guard on
-# the release is what makes this safe: without it the first fork to exit would drop the
-# lease its own server was still using.
+# the release is what makes this safe. Note the opt-out below is read at preload too, so
+# under a live spring server it needs `DISABLE_SPRING=1` or a `bin/spring stop` first.
 #
 # Capacity is the constraint: 16 databases is one concurrent run, hence
 # `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
@@ -188,7 +188,7 @@ module TestRedisIsolation
       def capacity_warning(server:, databases:, slots:)
         <<~WARNING.chomp
           [test-redis-isolation] no free Redis database block on #{server} (#{databases} databases = #{slots} concurrent run#{'s' unless slots == 1}); falling back to the shared databases in .env.test.
-          [test-redis-isolation] Concurrent runs will flush each other's keys mid-test. Start Redis with more databases (docker/docker-compose-local.yml passes --databases 64) or wait for a run to finish.
+          [test-redis-isolation] Concurrent runs will flush each other's keys mid-test. Start Redis with more databases (docker/docker-compose-local.yml passes --databases 64), or free a slot: a spring server holds its lease until `bin/spring stop`, so idle checkouts keep one.
         WARNING
       end
 
