@@ -73,8 +73,10 @@ class Payouts
         # A seller who paused their own payouts in settings is excluded for the opposite reason:
         # for them the weekly note naming that switch IS the actionable message, and the
         # explanation they would see instead had its next-step wording chosen when it was written,
-        # so it can be promising a payout date that their own pause now prevents. Same distinction
-        # Payment#terminal_paypal_failure_seller_solution and the email already make.
+        # so it can be promising a payout date that their own pause now prevents. A seller carrying
+        # BOTH pauses falls in with the hold here, which costs them nothing: the weekly note they
+        # lose names only the internal source (User#payouts_paused_by_source), and the explanation
+        # kept in its place names both pauses.
         #
         # The liveness check costs a few queries, and it runs for every internally-held seller in
         # the walk rather than only the PayPal-blocked ones, because both branches below need the

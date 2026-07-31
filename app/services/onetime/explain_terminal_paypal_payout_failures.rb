@@ -10,11 +10,12 @@
 #
 # The fix explains both codes and stops the retries for 3148 only: a 14159 seller can add US
 # dollars to the account we already pay, which an address-keyed block would never notice, so they
-# keep being retried. Either way the explanation only gets written on a new payout failure. For
-# sellers already stuck behind the 3148 block there is no next failure at all, so nothing would
-# ever fire and they would keep seeing the same uninformative note they have been staring at for
-# months. This walks the existing population once and writes the note they should have had all
-# along.
+# keep being retried. Either way the explanation is written by a payout that fails, or restored by
+# the weekly walk when one gets buried — and a seller already behind the 3148 block has no next
+# failure, while the walk's restore only reaches sellers who get as far as the PayPal processor
+# (below the payout minimum or not compliant, Payouts exits first). Those sellers would keep seeing
+# the same uninformative note they have been staring at for months, so this walks the existing
+# population once and writes the note they should have had all along.
 #
 # Notes only: the one-time email to these sellers is tracked separately so its copy can be reviewed
 # before anything sends.
