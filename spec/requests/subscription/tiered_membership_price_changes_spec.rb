@@ -420,23 +420,107 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
     end
 
     context "when increasing the billing frequency" do
-      it "does not display a warning notice regarding the billing frequency" do
+      it "warns that the billing frequency change takes effect at renewal" do
         visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
 
         select("Monthly", from: "Recurrence")
 
-        expect(page).to_not have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of")
+        # A frequency change is a deferred plan change that collects nothing today when it is a
+        # downgrade, so the warning is the only signal it happened — it must not depend on the
+        # price also having moved (gumroad-private#1577).
+        expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $3 a month per seat, starting at your next renewal.")
+      end
+
+      it "does not warn that the change is irreversible while that frequency is still offered" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        select("Monthly", from: "Recurrence")
+
+        # Assert the base warning is present too, or this passes when no warning renders at all.
+        expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription")
+        expect(page).to_not have_selector("[role='status']", text: "you will not be able to switch back")
+      end
+    end
+
+    context "when the buyer's current billing frequency has been retired by the seller" do
+      before do
+        @product.prices.alive.is_buy.find_by!(recurrence: "quarterly").mark_deleted!
+      end
+
+      it "warns that switching away is one-way" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        select("Monthly", from: "Recurrence")
+
+        expect(page).to have_selector("[role='status']", text: "Your current every 3 months billing is no longer offered on this membership, so as long as the seller does not offer it again you will not be able to switch back.")
+      end
+    end
+
+    context "when the target billing frequency is free on the buyer's tier" do
+      before do
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "monthly").update!(price_cents: 0)
+        @product.prices.alive.is_buy.find_by!(recurrence: "monthly").update!(price_cents: 0)
+      end
+
+      it "does not promise the next renewal" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        select("Monthly", from: "Recurrence")
+
+        # A switch to a free plan owes $0 today but the updater applies it immediately
+        # (`new_plan_is_free?`), so the deferral phrasing would be wrong.
+        expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription")
+        expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
+      end
+    end
+
+    context "when the new per-seat price leaves the total unchanged" do
+      before do
+        # Two seats at $5.99 were bought for $11.98; one seat at $11.98 is the same total.
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "quarterly").update!(price_cents: 1198)
+      end
+
+      it "does not promise the next renewal" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        fill_in "Seats", with: 1
+
+        # An unchanged total is not a downgrade, so `UpdaterService#upgrade?` holds and the charge
+        # is floored to the product minimum rather than skipped: the change applies immediately.
+        # Deriving the timing from a computed amount-due of zero would claim the opposite.
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $11.98 every 3 months per seat.")
+        expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
+      end
+    end
+
+    context "when the price of the user's current tier has dropped" do
+      before do
+        @subscription.original_purchase.variant_attributes.first.prices.find_by!(recurrence: "quarterly").update!(price_cents: 100)
+      end
+
+      it "warns that a seat decrease takes effect at renewal" do
+        visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
+
+        fill_in "Seats", with: 1
+
+        # Deferral is a property of the whole pending change, not of the recurrence half. One seat
+        # at the reduced price is below the locked-in two-seat price, so nothing is owed today and
+        # the updater applies it at renewal — the seat-only sentence has to say so.
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $1 every 3 months per seat, starting at your next renewal.")
       end
     end
 
     context "when decreasing the seat count and decreasing the billing frequency" do
-      it "does not display a warning notice regarding the seat and billing frequency change" do
+      it "displays a warning notice regarding the seat and billing frequency change" do
         visit manage_subscription_path(@subscription.external_id, token: @subscription.token)
 
         select("Yearly", from: "Recurrence")
         fill_in "Seats", with: 1
 
-        expect(page).to_not have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of")
+        # Both halves are deferred: the seat decrease and the frequency decrease each collect
+        # nothing today, so the updater applies them at renewal. The combined warning has to say
+        # so, or it reads as an immediate change (gumroad-private#1577).
+        expect(page).to have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of $10 a year per seat, starting at your next renewal.")
       end
     end
 
@@ -453,7 +537,10 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
           fill_in "Seats", with: 1
 
+          # Prices went UP here, so one seat at the new price still exceeds the buyer's locked-in
+          # two-seat price: this is an upgrade charged today, not a deferred change.
           expect(page).to have_selector("[role='status']", text: "Changing the number of seats will update your subscription to the current price of $40 every 3 months per seat.")
+          expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
         end
       end
 
@@ -463,7 +550,10 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
 
           select("Yearly", from: "Recurrence")
 
+          # Yearly ($50) is above the current quarterly price ($40), so this is an upgrade: it
+          # applies immediately and is charged today. The warning must not promise the renewal.
           expect(page).to have_selector("[role='status']", text: "Changing the billing frequency will update your subscription to the current price of $50 a year per seat.")
+          expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
         end
       end
 
@@ -475,6 +565,9 @@ describe "Tiered Membership Price Changes Spec", type: :system, js: true do
           fill_in "Seats", with: 3
 
           expect(page).to have_selector("[role='status']", text: "Changing the number of seats and adjusting the billing frequency will update your subscription to the current price of $30 a month per seat.")
+          # More seats at the raised monthly price is owed today, so this is the combined case that
+          # must NOT carry the deferral clause the other combined example asserts.
+          expect(page).to_not have_selector("[role='status']", text: "starting at your next renewal")
         end
       end
     end
