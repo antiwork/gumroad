@@ -3,20 +3,33 @@
 class ContentModeration::Strategies::ClassifierStrategy
   Result = Struct.new(:status, :reasoning, keyword_init: true)
   OPENAI_REQUEST_TIMEOUT_IN_SECONDS = 10
-  # Image batches carry up to IMAGES_PER_REQUEST downloads on OpenAI's side, so
-  # they get their own, longer timeout: reusing the single-input budget would
-  # turn a healthy batch into three timed-out attempts and a "try again later"
-  # for the seller.
+  # A batch carries up to IMAGES_PER_REQUEST downloads on OpenAI's side, so it
+  # gets a longer budget than a single input would. Only the multi-input request
+  # uses it — single-image calls stay on the 10s budget, because the fallback
+  # path fires routinely (an expired signed product URL 400s its batch) and
+  # tripling its timeout would triple that save's worst case.
   IMAGE_BATCH_REQUEST_TIMEOUT_IN_SECONDS = 30
   MAX_MODERATION_ATTEMPTS = 3
+  # Wall-clock ceiling on the whole image phase. This runs inside the record's
+  # save, and for a page inside `with_lock` on the users row that payout
+  # processing also locks (Pages::CustomHtmlWriter), so an OpenAI degradation
+  # must not turn one save into minutes of held lock: without this, 25 images
+  # whose batches all time out and then retry individually is ~40 minutes.
+  # Expiring fails closed — the images that were not reached are unmoderated,
+  # which is the same state as an unreachable service.
+  IMAGE_PHASE_DEADLINE_IN_SECONDS = 60
   # How many images one save spends a moderation attempt on when the caller
   # doesn't say otherwise (products and posts, whose image sets come from our own
   # uploads rather than arbitrary seller HTML).
   MAX_IMAGES_TO_MODERATE = 5
   # The moderations endpoint takes an array of inputs and returns one result per
-  # input, so a page's images cost one request per five rather than one each.
-  # That is what makes moderating EVERY image a page displays affordable.
+  # input, which is what makes moderating every image a page displays affordable.
   IMAGES_PER_REQUEST = 5
+  # Ceiling on one inline `data:image/` payload. A page can carry 500k characters
+  # of HTML, so without this a handful of inline images would build a request far
+  # over what the endpoint accepts and 400 the batch. Over the ceiling counts as
+  # unmoderated (which blocks a full-coverage caller) rather than as absent.
+  MAX_DATA_IMAGE_BYTES = 200_000
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
 
   DEFAULT_THRESHOLDS = {
@@ -69,19 +82,24 @@ class ContentModeration::Strategies::ClassifierStrategy
 
     moderated_count = 0
     skipped_urls = []
-    # Deterministic in the URL, not shuffled per attempt: re-validating unchanged
-    # content must moderate the same images, or a retry loop eventually draws a
-    # subset omitting the prohibited one. Not document order either, so the images
-    # cannot be parked past the cap. Walking the order (rather than taking the
-    # first MAX) means an image OpenAI refuses to fetch falls through to the next
-    # instead of costing a slot.
+    unreached_urls = []
+    # See ContentModeration::ImageSelection for why this order, not a shuffle.
+    # Walking it (rather than taking the first MAX) means an image OpenAI refuses
+    # to fetch falls through to the next instead of costing a slot.
     urls_to_moderate = ContentModeration::ImageSelection.ordered(@image_urls)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + IMAGE_PHASE_DEADLINE_IN_SECONDS
 
     urls_to_moderate.each_slice(IMAGES_PER_REQUEST) do |batch|
       remaining = @max_images == :all ? batch.size : @max_images - moderated_count
       break if remaining <= 0
 
-      moderate_images(batch.first(remaining)).each do |url, scores|
+      selected = batch.first(remaining)
+      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        unreached_urls.concat(selected)
+        next
+      end
+
+      moderate_images(selected).each do |url, scores|
         if scores.nil?
           skipped_urls << url
           next
@@ -90,6 +108,30 @@ class ContentModeration::Strategies::ClassifierStrategy
         moderated_count += 1
         flagged_categories.concat(collect_flagged(scores, thresholds))
       end
+    end
+
+    # A concrete violation is more actionable than "try again later", so a real
+    # flag is reported even if another image was unreviewable. Both block.
+    if flagged_categories.any?
+      return Result.new(
+        status: "flagged",
+        reasoning: flagged_categories.uniq.map { |cat| "OpenAI moderation flagged: #{cat}" }
+      )
+    end
+
+    # A caller asking for every image is relying on full coverage for its verdict:
+    # `ModerateRecordService` rejects a page over the image budget on the grounds
+    # that the ones inside it were all reviewed. So for `:all`, an image we could
+    # not moderate blocks rather than degrading to a text-only pass — otherwise a
+    # single image on a host that serves browsers and refuses OpenAI publishes
+    # unreviewed, which is the bypass the budget rejection exists to close.
+    if @max_images == :all && (skipped_urls.any? || unreached_urls.any?)
+      Rails.logger.warn(
+        "ContentModeration::ClassifierStrategy blocking full-coverage content: " \
+        "#{skipped_urls.size} image(s) rejected by OpenAI, #{unreached_urls.size} not reached " \
+        "within #{IMAGE_PHASE_DEADLINE_IN_SECONDS}s, of #{@image_urls.size}"
+      )
+      return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
     end
 
     if @image_urls.any? && moderated_count == 0
@@ -111,20 +153,13 @@ class ContentModeration::Strategies::ClassifierStrategy
         ErrorNotifier.notify(
           "ContentModeration::ClassifierStrategy could not moderate any image",
           image_url_count: @image_urls.size,
-          skipped_urls: skipped_urls,
+          skipped_urls: skipped_urls.map { |url| loggable_url(url) },
         )
         return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
       end
     end
 
-    if flagged_categories.any?
-      Result.new(
-        status: "flagged",
-        reasoning: flagged_categories.uniq.map { |cat| "OpenAI moderation flagged: #{cat}" }
-      )
-    else
-      Result.new(status: "compliant", reasoning: [])
-    end
+    Result.new(status: "compliant", reasoning: [])
   rescue StandardError => e
     Rails.logger.error("ContentModeration::ClassifierStrategy error: #{e.message}")
     raise
@@ -141,18 +176,41 @@ class ContentModeration::Strategies::ClassifierStrategy
     # drop four good ones from the verdict — the failure mode this batching exists
     # to avoid.
     def moderate_images(urls)
-      return [] if urls.empty?
-      return urls.map { |url| [url, moderate_one_image(url)] } if urls.size == 1
+      # An inline payload we will not send is unmoderated, not clean: reported as
+      # nil so a full-coverage caller blocks on it.
+      oversized, sendable = urls.partition { |url| oversized_data_image?(url) }
+      if oversized.any?
+        Rails.logger.warn(
+          "ContentModeration::ClassifierStrategy skipping #{oversized.size} inline image(s) over " \
+          "#{MAX_DATA_IMAGE_BYTES} bytes"
+        )
+      end
+      refused = oversized.map { |url| [url, nil] }
 
-      input = urls.map { |url| { type: "image_url", image_url: { url: url } } }
+      return refused if sendable.empty?
+      return refused + sendable.map { |url| [url, moderate_one_image(url)] } if sendable.size == 1
+
+      input = sendable.map { |url| { type: "image_url", image_url: { url: url } } }
       scores = moderate_batch(input)
-      return urls.each_with_index.map { |url, index| [url, scores[index]] } unless scores.nil?
+      return refused + sendable.each_with_index.map { |url, index| [url, scores[index]] } unless scores.nil?
 
-      urls.map { |url| [url, moderate_one_image(url)] }
+      refused + sendable.map { |url| [url, moderate_one_image(url)] }
+    end
+
+    def oversized_data_image?(url)
+      url.to_s.start_with?("data:") && url.to_s.bytesize > MAX_DATA_IMAGE_BYTES
+    end
+
+    # A `data:` image URL IS the image, so logging one verbatim would put a whole
+    # base64 payload in the logs and in Sentry.
+    def loggable_url(url)
+      return url unless url.to_s.start_with?("data:")
+
+      "#{url.to_s[0, 30]}…(#{url.to_s.bytesize} bytes inline)"
     end
 
     def moderate_one_image(url)
-      moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url, client: @image_client)
+      moderate([{ type: "image_url", image_url: { url: url } }], skip_url: url)
     end
 
     # Per-input category scores for a multi-input request, or nil when the whole
@@ -164,7 +222,11 @@ class ContentModeration::Strategies::ClassifierStrategy
       # a wrong-image verdict is worse than an unmoderated one: fall back.
       return nil unless results.is_a?(Array) && results.size == input.size
 
-      results.map { |result| result["category_scores"] || {} }
+      # A slot without scores is an image we did NOT get a verdict for. Mapping it
+      # to `{}` would read as "no category over threshold" — a clean pass for an
+      # unreviewed image, and it would also count towards moderated_count and so
+      # suppress the no-image-moderated safety net below.
+      results.map { |result| result.is_a?(Hash) ? result["category_scores"] : nil }
     rescue Faraday::BadRequestError, Faraday::TimeoutError, Faraday::ConnectionFailed,
            Faraday::ParsingError, Faraday::ServerError => e
       Rails.logger.warn(
@@ -186,12 +248,12 @@ class ContentModeration::Strategies::ClassifierStrategy
           retry
         end
         Rails.logger.warn("ContentModeration::ClassifierStrategy exhausted #{MAX_MODERATION_ATTEMPTS} attempts: #{e.class} - #{e.message}")
-        ErrorNotifier.notify(e, attempts: attempts, input_type: input.first[:type], skip_url: skip_url)
+        ErrorNotifier.notify(e, attempts: attempts, input_type: input.first[:type], skip_url: loggable_url(skip_url))
         nil
       rescue Faraday::BadRequestError => e
         raise if skip_url.nil?
         body = e.response&.dig(:body).to_s
-        Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{skip_url} error=#{body[0..500]}")
+        Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{loggable_url(skip_url)} error=#{body[0..500]}")
         nil
       end
     end

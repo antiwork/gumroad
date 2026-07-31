@@ -19,14 +19,9 @@ class ContentModeration::ContentExtractor
   MAX_PAGE_LINK_TEXT_LENGTH = 5_000
 
   # How many remote images one page may carry and still be moderated. Every image
-  # inside this budget IS moderated (ClassifierStrategy batches them, so the cost
-  # is one request per five, not one per image); a page carrying more is rejected
-  # rather than approved on a subset, because the approval covers what the page
-  # displays and a page can display an image we never looked at only if we let it.
-  #
-  # Sized so the worst case is a handful of batched requests inside one save. It
-  # is far above what a real storefront page uses; the shape it stops is a
-  # generated document with hundreds of image tags.
+  # inside this budget IS moderated; a page carrying more is rejected rather than
+  # approved on a subset. Sized so the worst case is a handful of batched requests
+  # inside one save, far above what a real storefront page uses.
   MAX_PAGE_IMAGE_URLS = 25
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
@@ -67,11 +62,17 @@ class ContentModeration::ContentExtractor
 
     Result.new(
       text: text,
-      # Every remote image, not a subset: the service rejects a page carrying more
-      # than MAX_PAGE_IMAGE_URLS rather than silently narrowing here, so it needs
-      # the real count. Deterministically ordered so a re-save moderates the same
-      # images in the same batches.
-      image_urls: ContentModeration::ImageSelection.ordered(page_image_urls(document))
+      # Every image the RENDERED page displays, not a subset: the service rejects a
+      # page carrying more than MAX_PAGE_IMAGE_URLS rather than narrowing here, so
+      # it needs the real count. Deterministically ordered so a re-save moderates
+      # the same images in the same batches.
+      #
+      # Images come from the sanitized document while the text above comes from the
+      # raw one, and the asymmetry is deliberate: text hidden in a tag the
+      # sanitizer drops still says something, but an image in one is never
+      # displayed, so counting it would reject a page over a limit it does not
+      # really reach.
+      image_urls: ContentModeration::ImageSelection.ordered(page_image_urls(rendered_document(page)))
     )
   end
 
@@ -82,6 +83,22 @@ class ContentModeration::ContentExtractor
     # actually reads.
     def page_document(page)
       document = Nokogiri::HTML(page.custom_html.presence || page.content.to_s)
+      document.css("script, style, noscript, template").each(&:remove)
+      document
+    end
+
+    # The page as a visitor receives it. Both preview endpoints and
+    # Pages::CustomHtmlWriter assign already-sanitized HTML, so for those this is
+    # the same string; the slugged-pages API and the dashboard assign raw input,
+    # which `Page#sanitize_html` rewrites in a before_save that has not run yet.
+    def rendered_document(page)
+      html = if page.custom_html.present?
+        Ai::PageSanitizer.sanitize(page.custom_html)
+      else
+        Pages::RichContentSanitizer.sanitize(page.content)
+      end
+
+      document = Nokogiri::HTML(html.to_s)
       document.css("script, style, noscript, template").each(&:remove)
       document
     end
@@ -108,16 +125,39 @@ class ContentModeration::ContentExtractor
       end.uniq
     end
 
-    # Only remotely-hosted images, and only ones a classifier can fetch. A
-    # custom page's images are arbitrary URLs the seller wrote, so inline
-    # `data:` images (which OpenAI cannot download from a URL) and relative
-    # paths (which have no absolute form here) are left out rather than sent as
-    # URLs that would 400 the moderation call.
+    # Every image the page can DISPLAY, since that is what an approval covers.
+    # `img src` is not enough: the sanitizer permits `srcset` (on `img` and
+    # `picture > source`) and `video poster`, so an image reachable only through
+    # one of those renders to every visitor while being reviewed by nothing.
+    #
+    # Remote URLs the classifier fetches itself; `data:` images are passed through
+    # as the base64 payload, which the moderations endpoint accepts in place of a
+    # URL, and which is also permitted by the sanitizer and the page CSP. Relative
+    # paths have no absolute form here, so they are left out rather than sent as
+    # URLs that would 400 the call. Oversized inline payloads are NOT filtered
+    # out: ClassifierStrategy refuses them and counts them unmoderated, which
+    # blocks the page, where dropping them here would publish it.
     def page_image_urls(document)
-      document.css("img[src]").filter_map do |img|
-        src = img["src"].to_s.strip
-        src if src.start_with?("http://", "https://")
+      sources = document.css("img[src], video[poster]").flat_map do |node|
+        [node["src"], node["poster"]]
+      end
+      sources += document.css("img[srcset], source[srcset]").flat_map do |node|
+        srcset_urls(node["srcset"])
+      end
+
+      sources.filter_map do |value|
+        src = value.to_s.strip
+        src if src.start_with?("http://", "https://") || src.downcase.start_with?("data:image/")
       end.uniq
+    end
+
+    # `srcset` is a comma-separated candidate list, each entry a URL followed by an
+    # optional descriptor. A `data:` URL can itself contain a comma, so entries are
+    # split on the comma that precedes a new candidate rather than on every comma.
+    def srcset_urls(value)
+      value.to_s.split(/,(?=\s*(?:https?:|data:|[^\s,]*\/))/).filter_map do |candidate|
+        candidate.strip.split(/\s+/, 2).first.presence
+      end
     end
 
     # A seller linking to their OWN storefront/profile (or one of their own

@@ -22,6 +22,122 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
       .and_return(client)
   end
 
+  it "blocks a full-coverage caller when any selected image could not be moderated" do
+    image_urls = ["https://cdn.example.com/ok.png", "https://cdn.example.com/refused.png"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    bad_error = Faraday::BadRequestError.new({ status: 400, body: {} }, bad_response)
+
+    allow(client).to receive(:moderations) do |parameters:|
+      urls = parameters[:input].map { |part| part.dig(:image_url, :url) }
+      raise bad_error if urls.size > 1 || urls.first.to_s.include?("refused")
+
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    # A page over the image budget is rejected on the grounds that everything
+    # inside the budget WAS reviewed, so an unreviewable image must not degrade
+    # to a clean text-only pass — that would publish it unmoderated.
+    result = described_class.new(text: "safe text", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "still degrades to a text-only pass for a capped caller, whose verdict never claimed full coverage" do
+    image_urls = ["https://cdn.example.com/refused.png"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    allow(client).to receive(:moderations) do |parameters:|
+      raise Faraday::BadRequestError.new({ status: 400, body: {} }, bad_response) if parameters[:input].first[:type] == "image_url"
+
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "safe text", image_urls:).perform
+
+    expect(result.status).to eq("compliant")
+  end
+
+  it "treats a batch slot with no category_scores as unmoderated rather than clean" do
+    image_urls = ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"]
+    call_inputs = []
+    allow(client).to receive(:moderations) do |parameters:|
+      call_inputs << parameters[:input]
+      if parameters[:input].size > 1
+        # Same length as the input, so the arity guard passes, but one slot
+        # carries no scores. Reading that as {} would pass an unreviewed image.
+        { "results" => [{ "category_scores" => {} }, { "error" => "unavailable" }] }
+      else
+        { "results" => [{ "category_scores" => {} }] }
+      end
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "refuses an oversized inline image without spending a request on it" do
+    oversized = "data:image/png;base64,#{"A" * described_class::MAX_DATA_IMAGE_BYTES}"
+    call_inputs = []
+    allow(client).to receive(:moderations) do |parameters:|
+      call_inputs << parameters[:input]
+      { "results" => parameters[:input].map { { "category_scores" => {} } } }
+    end
+
+    result = described_class.new(text: "", image_urls: [oversized], max_images: :all).perform
+
+    # Refused locally: the payload IS the image, so sending it would 400 the
+    # request. Unmoderated blocks a full-coverage caller rather than passing.
+    expect(call_inputs).to be_empty
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "never logs an inline image payload verbatim" do
+    inline = "data:image/png;base64,#{"A" * 400}"
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    allow(client).to receive(:moderations)
+      .and_raise(Faraday::BadRequestError.new({ status: 400, body: {} }, bad_response))
+
+    described_class.new(text: "", image_urls: [inline], max_images: :all).perform
+
+    expect(Rails.logger).to have_received(:warn).with(/URL=data:image\/png;base64,A+…\(\d+ bytes inline\)/)
+    expect(Rails.logger).not_to have_received(:warn).with(/#{"A" * 200}/)
+  end
+
+  it "stops the image phase at the deadline instead of holding the row lock indefinitely" do
+    image_urls = (1..10).map { |n| "https://cdn.example.com/#{n}.png" }
+    call_inputs = []
+    # The deadline reads the monotonic clock, which `travel` does not move.
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    elapsed = 0
+    allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
+    allow(client).to receive(:moderations) do |parameters:|
+      call_inputs << parameters[:input]
+      # The first batch overruns the whole budget; the rest must not be attempted.
+      elapsed = described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS + 1
+      { "results" => parameters[:input].map { { "category_scores" => {} } } }
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(call_inputs.size).to eq(1)
+    # Unreached images are unmoderated, so a full-coverage caller blocks.
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(Rails.logger).to have_received(:warn).with(/5 not reached within #{described_class::IMAGE_PHASE_DEADLINE_IN_SECONDS}s/o)
+  end
+
+  it "retries a single image on the short timeout, not the batch timeout" do
+    # The fallback fires routinely (an expired signed product URL 400s its
+    # batch), so it must not carry the batch's longer budget.
+    expect(OpenAI::Client).to receive(:new).with(access_token: "test-key", request_timeout: 10).and_return(client)
+    allow(client).to receive(:moderations).and_return({ "results" => [{ "category_scores" => {} }] })
+
+    described_class.new(text: "", image_urls: ["https://cdn.example.com/1.png"]).perform
+  end
+
   it "returns compliant when the API key is blank" do
     allow(GlobalConfig).to receive(:get).with("OPENAI_ACCESS_TOKEN").and_return(nil)
 

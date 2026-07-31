@@ -148,7 +148,13 @@ class Page < ApplicationRecord
       # still moderated.
       return if custom_html.blank? && content.blank? && title.blank?
 
-      result = ContentModeration::ModerateRecordService.check(self, :page)
+      # A title-only save cannot introduce or remove an image, so it moderates the
+      # text and leaves the images alone. Without this a rename re-runs the whole
+      # image phase, and on a page that predates the image budget it is rejected
+      # for a size it is not changing — trapping the rename on a page that is
+      # already live.
+      images_unchanged = persisted? && !custom_html_changed? && !content_changed?
+      result = ContentModeration::ModerateRecordService.check(self, :page, skip_images: images_unchanged)
       return if result.passed
 
       # On :base, like products and posts: the message is a whole sentence naming

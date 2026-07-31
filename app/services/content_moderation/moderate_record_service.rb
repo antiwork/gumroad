@@ -135,8 +135,8 @@ class ContentModeration::ModerateRecordService
     end
   end
 
-  def self.check(record, entity_type)
-    new(record, entity_type).check
+  def self.check(record, entity_type, skip_images: false)
+    new(record, entity_type, skip_images:).check
   end
 
   def self.off_platform_fulfillment_reason?(reason)
@@ -144,9 +144,10 @@ class ContentModeration::ModerateRecordService
   end
   private_class_method :off_platform_fulfillment_reason?
 
-  def initialize(record, entity_type)
+  def initialize(record, entity_type, skip_images: false)
     @record = record
     @entity_type = entity_type
+    @skip_images = skip_images
   end
 
   def check
@@ -155,16 +156,17 @@ class ContentModeration::ModerateRecordService
     return CheckResult.new(passed: true, reasons: []) if record_moderation_disabled?
 
     content = extract_content
+    content = content.class.new(text: content.text, image_urls: []) if @skip_images
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
 
     if entity_type == :page && content.image_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
-      # Approving a page approves what the page DISPLAYS, so we do not approve one
-      # on a sample of its images: a page over the budget is rejected instead.
-      # Rejecting is also what makes the moderated set safe to bound at all — the
-      # alternative, moderating some and publishing anyway, is the same as not
-      # moderating the rest.
+      # Approving a page approves what it DISPLAYS, so it is rejected rather than
+      # approved on a sample of its images.
       reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
-      leave_admin_comment(reasons)
+      # `blocked: false`: the publish did stop, but the admin trail is read as
+      # abuse history, and a seller with a big gallery has not done anything
+      # wrong. The seller-facing message says what to change.
+      leave_admin_comment(reasons, blocked: false)
       return CheckResult.new(passed: false, reasons: reasons)
     end
 

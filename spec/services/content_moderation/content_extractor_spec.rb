@@ -204,12 +204,56 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to include("https://elsewhere.example/x")
     end
 
-    it "excludes data: and relative image sources, which a classifier cannot fetch by URL" do
+    it "counts only the images that survive sanitization, while still reading text the sanitizer drops" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="https://cdn.example.com/kept.png">
+        <marquee>buy illegal things<img src="https://cdn.example.com/dropped.png"></marquee>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      # An image inside a dropped tag never renders, so counting it would reject a
+      # page over a limit it does not really reach. Text in one still says
+      # something, so it is still moderated.
+      expect(result.image_urls).to eq(["https://cdn.example.com/kept.png"])
+      expect(result.text).to include("buy illegal things")
+    end
+
+    it "extracts every image the page can display, not just img src" do
+      page = page_for(custom_html: <<~HTML)
+        <img src="https://cdn.example.com/remote.png">
+        <img srcset="https://cdn.example.com/one.png 1x, https://cdn.example.com/two.png 2x">
+        <picture><source srcset="https://cdn.example.com/source.png"></picture>
+        <video poster="https://cdn.example.com/poster.jpg"></video>
+      HTML
+
+      # The sanitizer permits srcset and poster, so an image reachable only
+      # through one of them renders to every visitor.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/remote.png",
+                                                                            "https://cdn.example.com/one.png",
+                                                                            "https://cdn.example.com/two.png",
+                                                                            "https://cdn.example.com/source.png",
+                                                                            "https://cdn.example.com/poster.jpg",
+                                                                          ])
+    end
+
+    it "extracts inline data: images, which render without ever being uploaded" do
       page = page_for(custom_html: <<~HTML)
         <img src="data:image/png;base64,AAAA">
-        <img src="/local/asset.png">
-        <img src="https://cdn.example.com/remote.png">
+        <img srcset="data:image/png;base64,BBBB 1x, https://cdn.example.com/remote.png 2x">
       HTML
+
+      # A data: URL contains commas, so srcset splitting must not bisect one.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "data:image/png;base64,AAAA",
+                                                                            "data:image/png;base64,BBBB",
+                                                                            "https://cdn.example.com/remote.png",
+                                                                          ])
+    end
+
+    it "excludes relative image sources, which have no absolute form to send" do
+      page = page_for(custom_html: %(<img src="/local/asset.png"><img src="https://cdn.example.com/remote.png">))
 
       expect(extractor.extract_from_page(page).image_urls).to eq(["https://cdn.example.com/remote.png"])
     end

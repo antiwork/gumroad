@@ -189,6 +189,24 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           expect(message).not_to include("content guidelines")
         end
 
+        it "records the block as a note rather than as abuse history" do
+          # A big gallery is a size problem, not a content violation, and the admin
+          # trail is read as abuse history.
+          expect(ContentModerationAdminCommentJob).to receive(:perform_async)
+            .with(seller.id, /flagged but did not block/)
+
+          described_class.check(over_budget_page, :page)
+        end
+
+        it "lets the seller rename an already-live page that is over the limit" do
+          over_budget_page.save!(validate: false)
+          over_budget_page.title = "Renamed gallery"
+
+          # A title-only save cannot change the images, so re-running the image
+          # phase would trap the rename on a page that predates the budget.
+          expect(over_budget_page.valid?).to eq(true)
+        end
+
         it "moderates a page that sits exactly at the limit" do
           at_limit = (1..ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
                        .map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join
