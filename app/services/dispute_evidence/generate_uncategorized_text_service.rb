@@ -36,9 +36,8 @@ class DisputeEvidence::GenerateUncategorizedTextService
       "Billing postal code: #{purchase.credit_card_zipcode}"
     end
 
-    # The structured shipping_carrier / shipping_tracking_number fields only carry a URL we can
-    # attribute to a known carrier. Everything else the seller supplied still belongs in the one
-    # submission we get, so send the URL itself here rather than dropping it.
+    # Always include the raw URL: the structured shipping fields only carry it when a known carrier
+    # can be attributed, and we get one submission.
     def shipping_tracking_text
       tracking_url = purchase.shipment&.tracking_url
       return if tracking_url.blank?

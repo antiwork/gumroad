@@ -129,6 +129,23 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
     end
   end
 
+  # A legacy row can carry a carrier with no number alongside a later seller-supplied URL from a
+  # different carrier. Per-field fallback would submit that mismatched pair as one-shot evidence.
+  context "when the shipment carries a stale carrier and a different carrier's URL" do
+    before do
+      shipment.update!(carrier: "FedEx", tracking_number: nil,
+                       tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
+    end
+
+    it "submits the pair recovered from the URL, not the stale carrier" do
+      dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+      expect(dispute_evidence.shipping_carrier).to eq("USPS")
+      expect(dispute_evidence.shipping_tracking_number).to eq("9400111899223197428490")
+    end
+  end
+
   context "when dispute is on a combined charge" do
     let(:purchase) do
       create(

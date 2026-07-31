@@ -26,11 +26,16 @@ class DisputeEvidence::CreateFromDisputeService
     if shipment.present?
       dispute_evidence.shipping_address = dispute_evidence.billing_address
       dispute_evidence.shipped_at = shipment.shipped_at
-      # Sellers only ever supply a tracking URL, so prefer the columns and derive from the URL when
-      # they are blank — which in production they always are.
-      derived_carrier, derived_tracking_number = shipment.carrier_and_tracking_number_from_url
-      dispute_evidence.shipping_carrier = shipment.carrier.presence || derived_carrier
-      dispute_evidence.shipping_tracking_number = shipment.tracking_number.presence || derived_tracking_number
+      # Sellers only ever supply a tracking URL, so derive from it when the columns are blank —
+      # which in production they always are. Taken as a pair: falling back per-field would pair a
+      # legacy row's carrier with a number derived from a different carrier's URL.
+      if shipment.carrier.present? && shipment.tracking_number.present?
+        dispute_evidence.shipping_carrier = shipment.carrier
+        dispute_evidence.shipping_tracking_number = shipment.tracking_number
+      else
+        dispute_evidence.shipping_carrier, dispute_evidence.shipping_tracking_number =
+          shipment.carrier_and_tracking_number_from_url
+      end
     end
     dispute_evidence.product_description = generate_product_description(product:, purchase:)
     dispute_evidence.uncategorized_text = DisputeEvidence::GenerateUncategorizedTextService.perform(purchase)
