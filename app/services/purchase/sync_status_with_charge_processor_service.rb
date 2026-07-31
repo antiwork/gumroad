@@ -45,11 +45,13 @@ class Purchase::SyncStatusWithChargeProcessorService
       charge_succeeded &&= @charge_outcome == :succeeded if @require_final_charge_status
 
       if charge_succeeded && charge.flow_of_funds.nil? && (purchase.is_part_of_combined_charge? || purchase.buyer_presentment?)
-        # Transient unsettled state: the underlying Stripe charge succeeded but
-        # `balance_transaction` (and therefore `flow_of_funds`) hasn't been produced yet.
-        # Leave the purchase `in_progress` so a subsequent SyncStuckPurchasesJob run can
-        # re-attempt once Stripe settles, rather than permanently failing a purchase whose
-        # underlying charge actually succeeded.
+        # The underlying charge succeeded but the processor has not produced the balance
+        # transaction the flow of funds is read from, so leave the purchase `in_progress` for a
+        # later retry rather than failing a purchase whose money actually moved. This wait is
+        # bounded on the Stripe side: a destination payment that is never going to be credited
+        # stops reporting nil once it is past
+        # StripeCharge::DESTINATION_PAYMENT_SETTLEMENT_GRACE, so a row cannot sit here forever
+        # (gumroad-private#1608).
         false
       elsif charge_succeeded
         purchase.flow_of_funds = if purchase.is_part_of_combined_charge?
