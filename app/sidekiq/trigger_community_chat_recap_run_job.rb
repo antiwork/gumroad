@@ -5,13 +5,9 @@ class TriggerCommunityChatRecapRunJob
 
   sidekiq_options queue: :low, retry: 3, lock: :until_executed
 
-
   # Daily, with static YAML args, so the digest is constant. The attempt creates the run rows and
-
   # fans the per-community recaps out.
-
   include RecurringLockTtl
-
   recurring_lock_ttl max_attempt: 1.hour
 
   def perform(recap_frequency, from_date = nil)

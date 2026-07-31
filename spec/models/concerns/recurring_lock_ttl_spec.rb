@@ -2,57 +2,34 @@
 
 require "spec_helper"
 
-# Namespaced jobs (app/sidekiq/reports/*) declare `module Reports` then `class FooJob`, so the class
-# name has to be rebuilt from both rather than read off the `class` line alone — otherwise such a job
-# never matches a schedule entry and is silently skipped by the coverage guard. Shared by the
-# detector and the resolvability check so the two cannot drift.
-module UntilExecutedJobName
-  def self.call(source)
-    klass = source[/^\s*class\s+([A-Za-z0-9_:]+)/, 1]
-    return nil unless klass
-
-    (source.scan(/^\s*module\s+([A-Za-z0-9_:]+)/).flatten + [klass]).join("::")
-  end
-end
-
-describe UntilExecutedJobName do
-  it "qualifies a namespaced job with its module" do
-    source = "module Reports\n  class GenerateYtdSalesReportJob\n  end\nend\n"
-
-    expect(described_class.call(source)).to eq("Reports::GenerateYtdSalesReportJob")
-  end
-
-  it "returns a top-level job's name unchanged" do
-    expect(described_class.call("class FightDisputesJob\nend\n")).to eq("FightDisputesJob")
-  end
-end
-
 describe RecurringLockTtl do
   # A scheduled `until_executed` job has a constant lock digest — MD5(class, queue, lock_args), and
   # a cron entry enqueues the same args every fire — so a SIGKILL that strands the lock mutes every
   # later enqueue forever, arguments or not. This is the guard that keeps the next such job from
   # being born with the hole rather than a list of the ones fixed today.
   describe "every scheduled until_executed job" do
-    def self.until_executed_job_sources
-      Dir[Rails.root.join("app/sidekiq/**/*.rb")].filter_map do |path|
-        source = File.read(path)
-        [path, source] if source.include?("lock: :until_executed")
-      end
+    # The schedule is the list of class names, and `sidekiq_options` is what Sidekiq itself will
+    # apply at enqueue time — so both halves of "scheduled and until_executed" are read from the
+    # authorities rather than from source text. An earlier version grepped for the literal
+    # `lock: :until_executed`, which a semantically identical multiline declaration silently
+    # dropped: coverage fell from 29 jobs to 28 and the suite stayed green over the unguarded one.
+    def self.scheduled_job_classes
+      YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
+          .each_value
+          .filter_map { |e| e["class"] if e.is_a?(Hash) && e["cron"].present? }
+          .uniq
     end
 
     def self.scheduled_until_executed_jobs
-      schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
-      scheduled = schedule.each_value.filter_map { |e| e["class"] if e.is_a?(Hash) && e["cron"].present? }.uniq
-
-      until_executed_job_sources.filter_map do |_path, source|
-        klass = UntilExecutedJobName.call(source)
-        klass if klass && scheduled.include?(klass)
+      scheduled_job_classes.select do |name|
+        job = name.safe_constantize
+        job.respond_to?(:sidekiq_options) && job.sidekiq_options["lock"].to_s == "until_executed"
       end
     end
 
     # Held in locals, not re-called per example: `def self.` methods are group scope, and reaching
     # for one inside an `it` raises rather than resolving.
-    job_sources = until_executed_job_sources
+    scheduled_classes = scheduled_job_classes
     covered_jobs = scheduled_until_executed_jobs
 
     covered_jobs.each do |klass|
@@ -103,22 +80,26 @@ describe RecurringLockTtl do
       end
     end
 
-    it "covers a non-trivial number of jobs" do
-      # A refactor that makes the detector match nothing would turn every example above into a
-      # vacuous pass, and the suite would stay green over an unguarded fleet.
-      expect(covered_jobs.size).to be >= 28
+    # Anti-vacuity. A detector that matched nothing would turn every example above into a vacuous
+    # pass over an unguarded fleet, so this pins named jobs rather than a count: a count drifts with
+    # the schedule and has to be revised, and a `>=` count guard tolerates losing a job silently.
+    # These four are the ones a strand costs most — payouts and dispute evidence.
+    [
+      "PerformPayoutsUpToDelayDaysAgoWorker",
+      "PerformDailyInstantPayoutsWorker",
+      "ExecuteScheduledPayoutsJob",
+      "FightDisputesJob",
+    ].each do |klass|
+      it "detects #{klass}" do
+        expect(covered_jobs).to include(klass)
+      end
     end
 
-    it "resolves every until_executed job's class name" do
-      # The detector's only silent-skip path: a file whose class name cannot be rebuilt is dropped
-      # without ever being checked for a TTL. Asserting the set is empty means a new file shape
-      # fails here rather than quietly leaving a job unguarded.
-      unresolvable = job_sources.filter_map do |path, source|
-        name = UntilExecutedJobName.call(source)
-        path.to_s unless name&.safe_constantize
-      end
-
-      expect(unresolvable).to be_empty
+    it "resolves every scheduled job's class name" do
+      # The detector's only silent-skip path: a schedule entry naming a class that cannot be
+      # constantized is dropped without ever being checked for a lock or a TTL. Asserting the set is
+      # empty means a rename fails here rather than quietly leaving a job unguarded.
+      expect(scheduled_classes.reject(&:safe_constantize)).to be_empty
     end
   end
 
