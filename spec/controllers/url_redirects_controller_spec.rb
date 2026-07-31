@@ -270,6 +270,10 @@ describe UrlRedirectsController, inertia: true do
 
         before do
           purchase.create_url_redirect!
+          # The redirect sends the buyer to the library filtered by `bundles`, which matches on
+          # the member purchases' `bundle_id` — so the member rows have to exist for the
+          # destination to have anything in it.
+          purchase.create_artifacts_and_send_receipt!
         end
 
         it "redirects to the library page without creating consumption event" do
@@ -307,6 +311,20 @@ describe UrlRedirectsController, inertia: true do
           it "includes the purchase_id parameter when redirecting" do
             get :download_page, params: { id: purchase.url_redirect.token, receipt: true }
             expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, purchase_id: purchase.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when the bundle has no member purchases" do
+          before do
+            purchase.product_purchases.each(&:destroy!)
+            purchase.reload
+          end
+
+          it "renders the download page instead of redirecting to an empty filtered library" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
           end
         end
       end

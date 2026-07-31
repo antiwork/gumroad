@@ -300,7 +300,6 @@ describe LibraryPresenter do
 
       context "when every member purchase is excluded from the library" do
         it "renders the bundle itself so the buyer keeps a row for the purchase" do
-          purchase1.create_artifacts_and_send_receipt!
           purchase1.product_purchases.each { _1.update!(is_deleted_by_buyer: true) }
 
           purchases, _, _ = described_class.new(buyer).library_cards

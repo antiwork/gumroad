@@ -41,8 +41,7 @@ class LibraryPresenter
     # `is_bundle_purchase` tells the page "my member rows render instead of me", so it must be
     # false whenever none of those member rows survived into this result set — otherwise the
     # buyer's only row for that purchase is filtered out and the product vanishes from their
-    # library entirely (gumroad-private#1585). A bundle saved with no members carries its files
-    # directly on the Link, so rendering the bundle row itself serves them.
+    # library entirely (gumroad-private#1585).
     library_purchase_ids = purchases.map(&:id).to_set
     replaced_by_members = purchases.filter_map do |purchase|
       next unless purchase.is_bundle_purchase?
