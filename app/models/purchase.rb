@@ -881,6 +881,12 @@ class Purchase < ApplicationRecord
   # The rows the buyer's library can actually render. LibraryPresenter loads exactly this set, so
   # anything excluded here has no card there and cannot stand in for a bundle it belongs to.
   scope :visible_in_library, -> { for_library.not_rental_expired.not_is_deleted_by_buyer }
+  # Same set, narrowed to one account's library. Account-claim flows (`change_purchaser`,
+  # add-to-library) move a single purchase, so a bundle's members can end up on a different
+  # account than the parent and render only there. A nil argument means the guest bucket, which
+  # is no account's library — callers reaching this with an unclaimed purchase get main's
+  # behaviour, since claiming is what decides where these rows should render.
+  scope :visible_in_library_of, ->(purchaser_id) { visible_in_library.where(purchaser_id:) }
   scope :for_sales_api, -> {
     all_success_states_except_preorder_auth_and_gift.exclude_not_charged_except_free_trial
   }

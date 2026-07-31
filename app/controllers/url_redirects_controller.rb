@@ -383,7 +383,7 @@ class UrlRedirectsController < ApplicationController
       # member reassigned to (or never claimed by) that account still satisfies `visible_in_library`
       # yet renders in a different library, or none. This runs before `check_permissions`, so anchor
       # on the purchase rather than the signed-in user.
-      return if purchase.product_purchases.visible_in_library.where(purchaser_id: purchase.purchaser_id).none?
+      return if purchase.product_purchases.visible_in_library_of(purchase.purchaser_id).none?
 
       # Build the library URL on the main app domain explicitly. This request can arrive on
       # the seller's subdomain (or custom domain), and /library requires authentication. A

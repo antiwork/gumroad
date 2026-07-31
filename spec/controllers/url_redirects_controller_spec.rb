@@ -385,6 +385,33 @@ describe UrlRedirectsController, inertia: true do
             expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
           end
         end
+
+        context "when the bundle purchase is claimed but its members are still unclaimed" do
+          # add-to-library attaches only the purchase it was given, so a guest who claims the
+          # parent leaves the members in the guest bucket and out of their library.
+          before do
+            buyer = create(:user, email: purchase.email)
+            purchase.update!(purchaser: buyer)
+            sign_in buyer
+          end
+
+          it "renders the download page instead of redirecting to a library that has no member rows" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+        end
+
+        context "when neither the bundle purchase nor its members have been claimed" do
+          it "still redirects, since claiming is what decides whose library these render in" do
+            expect(purchase.purchaser).to be_nil
+
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
       end
     end
 
