@@ -19,11 +19,26 @@
 # payouts, whereas deleting one mid-verification would. Revisit alongside the form in PR 3, which is
 # where a seller can act on it. Erasure still reaches it, by the recorded id.
 module StripeGuardianManager
+  # Raised when the per-guardian sync lock cannot be taken. Not a Stripe failure: nothing was sent.
+  class SyncLockUnavailable < StandardError; end
+
   # Stripe validates an identity number against the ACCOUNT's country, not the person's, and expects
   # 9 digits for a US account. See StripeMerchantAccountManager.person_hash, which carries the same
   # rule for the representative.
   US_SSN_LAST_4_LENGTH = 4
   US_FULL_TAX_ID_LENGTH = 9
+
+  # Long enough to cover a retrieve plus a create/update round trip to Stripe, short enough that a
+  # process killed mid-sync does not block the next one for long.
+  SYNC_LOCK_TTL = 30.seconds
+  SYNC_LOCK_WAIT_TIMEOUT = 10.seconds
+  SYNC_LOCK_RETRY_INTERVAL_SECONDS = 0.05
+  SYNC_LOCK_RELEASE_SCRIPT = <<~LUA.squish
+    if redis.call('get', KEYS[1]) == ARGV[1] then
+      return redis.call('del', KEYS[1])
+    end
+    return 0
+  LUA
 
   # Creates or updates the guardian's Stripe Person, and records the id Stripe assigns.
   #
@@ -41,30 +56,69 @@ module StripeGuardianManager
     guardian = user_compliance_info.guardian
     return unless guardian&.has_completed_info?
 
-    attributes = person_hash(guardian, user_compliance_info, passphrase:)
-    stripe_person = existing_person(stripe_account, guardian)
+    # Serialized across the whole lookup-create-adopt sequence, per guardian and account. Two
+    # overlapping syncs — account creation racing an update, or two updates — can otherwise both
+    # find no Person and both create one, and only the last id written survives locally. The other
+    # Person keeps the adult's name, date of birth and address at Stripe with no handle erasure can
+    # select on. Deciding by Stripe idempotency key instead would not help: the two calls carry
+    # different keys only because neither knows the other exists.
+    with_sync_lock(guardian, stripe_account) do
+      # Re-read inside the lock: the sync we waited on may have just created the Person and written
+      # its id, and this stale copy would otherwise still look unsynced and create a second one.
+      guardian.reload
 
-    if stripe_person
-      # Record the id when we reached this Person by the relationship scan rather than by a stored
-      # id. Without this the recovery path never writes one back, and erasure — which selects on
-      # stripe_person_id — would skip exactly the guardians whose first sync half-failed, leaving
-      # the adult's details at Stripe permanently.
-      adopt_person_id!(guardian, stripe_person.id) if guardian.stripe_person_id != stripe_person.id
+      attributes = person_hash(guardian, user_compliance_info, passphrase:)
+      stripe_person = existing_person(stripe_account, guardian)
 
-      Stripe::Account.update_person(
-        stripe_account.id,
-        stripe_person.id,
-        StripeMerchantAccountManager.force_utf8_encoding(attributes)
-      )
-    else
-      created = Stripe::Account.create_person(
-        stripe_account.id,
-        StripeMerchantAccountManager.force_utf8_encoding(attributes)
-      )
-      adopt_person_id!(guardian, created.id)
-      created
+      if stripe_person
+        # Record the id when we reached this Person by the relationship scan rather than by a stored
+        # id. Without this the recovery path never writes one back, and erasure — which selects on
+        # stripe_person_id — would skip exactly the guardians whose first sync half-failed, leaving
+        # the adult's details at Stripe permanently.
+        adopt_person_id!(guardian, stripe_person.id) if guardian.stripe_person_id != stripe_person.id
+
+        Stripe::Account.update_person(
+          stripe_account.id,
+          stripe_person.id,
+          StripeMerchantAccountManager.force_utf8_encoding(attributes)
+        )
+      else
+        created = Stripe::Account.create_person(
+          stripe_account.id,
+          StripeMerchantAccountManager.force_utf8_encoding(attributes)
+        )
+        adopt_person_id!(guardian, created.id)
+        created
+      end
     end
   end
+
+  # Holds a Redis lock for the duration of one guardian sync.
+  #
+  # Raises rather than proceeding when the lock cannot be taken, including when Redis itself is
+  # unreachable: both call sites rescue and report, and a missed sync self-heals on the next account
+  # update, whereas an unserialized one leaves an untracked Person holding a third party's identity
+  # data at Stripe. Failing closed is the cheaper side of that trade.
+  def self.with_sync_lock(guardian, stripe_account)
+    lock_key = "stripe_guardian_sync:#{stripe_account.id}:#{guardian.id}"
+    token = SecureRandom.uuid
+    lock_acquired = false
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + SYNC_LOCK_WAIT_TIMEOUT
+
+    until $redis.set(lock_key, token, ex: SYNC_LOCK_TTL.to_i, nx: true)
+      if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+        raise SyncLockUnavailable, "Timed out waiting to sync guardian #{guardian.id} to #{stripe_account.id}"
+      end
+
+      sleep SYNC_LOCK_RETRY_INTERVAL_SECONDS
+    end
+
+    lock_acquired = true
+    yield
+  ensure
+    $redis.eval(SYNC_LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [token]) if lock_acquired
+  end
+  private_class_method :with_sync_lock
 
   # Points this guardian at a Stripe Person, taking the id from whichever other row of the same
   # seller still holds it. stripe_person_id is uniquely indexed, so a replacement guardian adopting

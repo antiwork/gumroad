@@ -146,9 +146,9 @@ describe GdprDataErasureService do
         expect(Stripe::Account).to have_received(:delete_person).with("acct_erasure_test", "person_recorded")
       end
 
-      # The local row must still be anonymized and the erasure must still report success: a
-      # processor-side failure is worth reporting, but it cannot be a reason to leave the seller's
-      # own data in place.
+      # The local row must still be anonymized: a processor-side failure cannot be a reason to leave
+      # the seller's own data in place. But the erasure itself is NOT complete — a third party's
+      # identity data is still at Stripe — so it must not report success.
       it "still anonymizes the local row when the Stripe deletion fails" do
         guardian = create(:guardian, user:, stripe_person_id: "person_locked", first_name: "Ellie")
         create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
@@ -157,11 +157,37 @@ describe GdprDataErasureService do
 
         result = described_class.new(user, performed_by: admin).perform!
 
-        expect(result[:success]).to be(true)
         expect(guardian.reload.first_name).to be_nil
+        expect(result[:success]).to be(false)
+        expect(result[:error]).to include("Erasure incomplete")
         # The notification is the only signal that Stripe kept its copy, so it is asserted rather
         # than assumed — without it the retained copy is invisible.
         expect(ErrorNotifier).to have_received(:notify)
+      end
+
+      # Reporting the failure is not enough on its own: erasure has no second pass, so without a
+      # queued retry a transient Stripe outage retains the adult's details permanently.
+      it "queues a retry for a guardian person Stripe refused to delete" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_locked")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+        allow(Stripe::Account).to receive(:delete_person)
+          .and_raise(Stripe::InvalidRequestError.new("Cannot delete", nil))
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(DeleteGuardianStripePersonJob).to have_enqueued_sidekiq_job(
+          "person_locked", "acct_erasure_test", user.id
+        )
+      end
+
+      it "does not queue a retry when the deletion succeeds" do
+        guardian = create(:guardian, user:, stripe_person_id: "person_erase_me")
+        create(:user_compliance_info, user:, birthday: 15.years.ago.to_date, guardian:)
+
+        result = described_class.new(user, performed_by: admin).perform!
+
+        expect(result[:success]).to be(true)
+        expect(DeleteGuardianStripePersonJob.jobs).to be_empty
       end
 
       # Switching payout method, changing country, or connecting Stripe Connect all mark the Stripe

@@ -307,6 +307,61 @@ describe StripeGuardianManager do
         expect(sent).not_to have_key(:ssn_last_4)
       end
     end
+
+    # Two overlapping syncs both finding no Person both create one, and only the last id written
+    # survives locally — leaving an adult's name, date of birth and address at Stripe with no handle
+    # erasure can select on. The lock is the only thing preventing that, so these pin it directly.
+    describe "serialization across overlapping syncs" do
+      it "does not create a second person when a concurrent sync already recorded one" do
+        info = create_compliance_info(guardian_record: guardian)
+        # The guardian is read BEFORE the lock is taken, so by the time this sync gets the lock the
+        # sync it waited on may already have created the Person and written its id. This stale
+        # instance is that pre-lock read; the DB row below is what the other sync left. Without the
+        # reload inside the lock, this sync still sees no id and creates a duplicate Person.
+        stale_guardian = Guardian.find(guardian.id)
+        Guardian.where(id: guardian.id).update_all(stripe_person_id: "person_from_sibling")
+        allow(user).to receive(:alive_user_compliance_info).and_return(info)
+        allow(info).to receive(:guardian).and_return(stale_guardian)
+        allow(Stripe::Account).to receive(:retrieve_person).and_return(
+          Stripe::StripeObject.construct_from(id: "person_from_sibling")
+        )
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(Stripe::Account).not_to have_received(:create_person)
+        expect(Stripe::Account).to have_received(:update_person).with(
+          stripe_account_id, "person_from_sibling", anything
+        )
+      end
+
+      it "holds the lock for the whole lookup-create-adopt sequence" do
+        create_compliance_info(guardian_record: guardian)
+        held = nil
+        allow(Stripe::Account).to receive(:create_person) do
+          held = $redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")
+          Stripe::StripeObject.construct_from(id: "person_guardian_new")
+        end
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(held).to be_present
+        expect($redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")).to be_nil
+      end
+
+      # Failing closed: a missed sync self-heals on the next account update, an unserialized one
+      # leaves an untracked Person holding a third party's identity data at Stripe.
+      it "sends nothing to Stripe when the lock is already held" do
+        create_compliance_info(guardian_record: guardian)
+        stub_const("#{described_class}::SYNC_LOCK_WAIT_TIMEOUT", 0.seconds)
+        $redis.set("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}", "someone-else")
+
+        expect { described_class.sync(user, stripe_account, passphrase:) }
+          .to raise_error(StripeGuardianManager::SyncLockUnavailable)
+        expect(Stripe::Account).not_to have_received(:create_person)
+        # The other holder's lock must survive: releasing it would let both syncs run after all.
+        expect($redis.get("stripe_guardian_sync:#{stripe_account_id}:#{guardian.id}")).to eq("someone-else")
+      end
+    end
   end
 
   describe ".delete_person" do

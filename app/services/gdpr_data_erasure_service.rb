@@ -34,7 +34,20 @@ class GdprDataErasureService
     end
 
     remove_profile_assets!
-    delete_guardian_stripe_persons!(guardian_stripe_persons)
+    retained_guardian_person_ids = delete_guardian_stripe_persons!(guardian_stripe_persons)
+
+    if retained_guardian_person_ids.any?
+      # Our own copy is erased, but a third party's identity data is still at the processor. Saying
+      # "success" here is what let a failed guardian deletion pass for a completed erasure, so the
+      # request stays open until the retry job clears it.
+      return {
+        success: false,
+        error: "Erasure incomplete: #{retained_guardian_person_ids.size} guardian record(s) could " \
+               "not be deleted at Stripe. Retrying in the background; re-check before confirming " \
+               "the request as fulfilled.",
+        summary: erasure_summary
+      }
+    end
 
     { success: true, summary: erasure_summary }
   rescue => e
@@ -157,14 +170,22 @@ class GdprDataErasureService
     # Outside the transaction on purpose: this is a network call, and holding a write transaction
     # open across it would keep locks on the rows above for the duration of Stripe's response.
     # Per-guardian rescue for the same reason the file purge has one — one failed delete must not
-    # skip the rest. A failure here leaves a Person at Stripe that our row no longer describes, so
-    # it is reported rather than logged quietly.
+    # skip the rest.
+    #
+    # A failure is not final here. Logging it and returning success would report an erasure that did
+    # not reach the processor, so each failure is handed to DeleteGuardianStripePersonJob to retry
+    # and counted, and the caller reports the erasure as incomplete until that count is zero.
+    #
+    # Returns the Person ids still at Stripe.
     def delete_guardian_stripe_persons!(guardian_stripe_persons)
-      guardian_stripe_persons.each do |stripe_person_id, stripe_account_id|
+      guardian_stripe_persons.filter_map do |stripe_person_id, stripe_account_id|
         StripeGuardianManager.delete_person_by_id(stripe_person_id, stripe_account_id)
+        nil
       rescue => e
         Rails.logger.error("GDPR: Failed to delete Stripe guardian person for user #{@user.id}: #{e.message}")
         ErrorNotifier.notify(e)
+        DeleteGuardianStripePersonJob.perform_async(stripe_person_id, stripe_account_id, @user.id)
+        stripe_person_id
       end
     end
 
