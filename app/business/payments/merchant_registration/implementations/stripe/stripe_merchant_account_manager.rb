@@ -471,7 +471,7 @@ module StripeMerchantAccountManager
 
     person_address_submitted = false
     if user_compliance_info.is_business?
-      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, seed_representative_ownership:, unclaimed_percent_ownership:)
+      person_address_submitted = update_person(user, stripe_account, last_user_compliance_info&.external_id, passphrase, force_address_resync:, seed_representative_ownership:, unclaimed_percent_ownership:, notify:)
       # Stripe keeps a company's payouts blocked on company.owners_provided until the platform
       # states the owner list is complete. Scoped to accounts we found blocked on it; the callee
       # re-reads the ownership before making the statement.
@@ -645,6 +645,19 @@ module StripeMerchantAccountManager
   # address" from "Stripe refused your tax ID", because only the second is the seller's to fix.
   IDENTITY_REJECTION_NOTE_PREFIX = "Stripe rejected tax/national ID"
 
+  # The seller's own identifier and the representative's are separate Stripe requirements that can
+  # be rejected independently, so each gets its own note namespace. Sharing one would let a
+  # representative success clear a company rejection that is still blocking verification.
+  IDENTITY_REJECTION_NOTE_SCOPES = %i[seller representative].freeze
+  private_constant :IDENTITY_REJECTION_NOTE_SCOPES
+
+  private_class_method
+  def self.identity_rejection_note_prefix(scope)
+    raise ArgumentError, "unknown identity rejection scope #{scope.inspect}" unless IDENTITY_REJECTION_NOTE_SCOPES.include?(scope)
+
+    "#{IDENTITY_REJECTION_NOTE_PREFIX} (#{scope})"
+  end
+
   private_class_method
   def self.only_identity_fields(diff_attributes)
     ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.each_with_object({}) do |entity_key, identity|
@@ -681,10 +694,10 @@ module StripeMerchantAccountManager
     return false if identity_attributes.blank?
 
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(identity_attributes))
-    clear_identity_rejection_notes(user)
+    clear_identity_rejection_notes(user, scope: :seller)
     true
   rescue Stripe::InvalidRequestError => e
-    record_identity_rejection_note(user, e, account_country) if notify
+    record_identity_rejection_note(user, e, account_country, scope: :seller) if notify
     Rails.logger.warn "Stripe rejected the identity fields for user #{user&.id} on a " \
                       "#{account_country.inspect} account: #{e.message}"
     false
@@ -694,17 +707,18 @@ module StripeMerchantAccountManager
   # repeatedly and a note per attempt would bury the payout notes (the same reasoning as the
   # service-agreement note, which is written once per account).
   private_class_method
-  def self.record_identity_rejection_note(user, error, account_country)
+  def self.record_identity_rejection_note(user, error, account_country, scope:)
     return if user.blank?
 
+    prefix = identity_rejection_note_prefix(scope)
     detail = error.respond_to?(:message) && error&.message.present? ? error.message.to_s.truncate(300) : "no reason given"
-    content = "#{IDENTITY_REJECTION_NOTE_PREFIX} — Stripe account country #{account_country.inspect} " \
+    content = "#{prefix} — Stripe account country #{account_country.inspect} " \
               "validates the ID against itself, not the seller's legal-entity country: #{detail}"
 
     user.with_lock do
       existing = user.comments.with_type_payout_note.alive
                      .where(author_id: GUMROAD_ADMIN_ID)
-                     .where("content LIKE ?", "#{IDENTITY_REJECTION_NOTE_PREFIX}%")
+                     .where("content LIKE ?", "#{prefix}%")
       next if existing.where(content:).exists?
 
       existing.each { |note| note.mark_deleted! }
@@ -716,14 +730,16 @@ module StripeMerchantAccountManager
   end
 
   # The identifier landed, so a note saying it was refused now describes a resolved state. Leaving it
-  # would keep support chasing a verification that is no longer blocked.
+  # would keep support chasing a verification that is no longer blocked. Scoped, so clearing the
+  # representative's note cannot silence a company rejection that is still outstanding.
   private_class_method
-  def self.clear_identity_rejection_notes(user)
+  def self.clear_identity_rejection_notes(user, scope:)
     return if user.blank?
 
+    prefix = identity_rejection_note_prefix(scope)
     user.comments.with_type_payout_note.alive
         .where(author_id: GUMROAD_ADMIN_ID)
-        .where("content LIKE ?", "#{IDENTITY_REJECTION_NOTE_PREFIX}%")
+        .where("content LIKE ?", "#{prefix}%")
         .each { |note| note.mark_deleted! }
   rescue => e
     Rails.logger.error "Failed to clear Stripe identity-rejection payout note for user #{user&.id}: #{e.class}: #{e.message}"
@@ -759,7 +775,7 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
-  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false, seed_representative_ownership: nil, unclaimed_percent_ownership: nil)
+  def self.update_person(user, stripe_account, last_user_compliance_info_id, passphrase, force_address_resync: false, seed_representative_ownership: nil, unclaimed_percent_ownership: nil, notify: true)
     stripe_person = Stripe::Account.list_persons(stripe_account.id, relationship: { representative: true }, limit: 1)["data"].first
     return if stripe_person.nil?
 
@@ -840,22 +856,23 @@ module StripeMerchantAccountManager
       end
       Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
     end
-    submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country)
+    submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country, notify:)
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
   end
 
   # The `update_person` counterpart of `submit_identity_fields_in_isolation`. Same contract: the
   # rejection is recorded as a payout note rather than raised, because the rest of the person update
-  # has already landed by the time this runs.
+  # has already landed by the time this runs. `notify:` comes from the caller for the same reason it
+  # does on the account path — the automated remediation retry passes false and must stay silent.
   private_class_method
-  def self.submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, identity_attributes, account_country)
+  def self.submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, identity_attributes, account_country, notify: true)
     return false if identity_attributes.blank?
 
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(identity_attributes))
-    clear_identity_rejection_notes(user)
+    clear_identity_rejection_notes(user, scope: :representative)
     true
   rescue Stripe::InvalidRequestError => e
-    record_identity_rejection_note(user, e, account_country)
+    record_identity_rejection_note(user, e, account_country, scope: :representative) if notify
     Rails.logger.warn "Stripe rejected the representative's identity fields for user #{user&.id} on a " \
                       "#{account_country.inspect} account: #{e.message}"
     false

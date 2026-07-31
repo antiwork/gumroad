@@ -9521,6 +9521,18 @@ describe StripeMerchantAccountManager, :vcr do
                      .count).to eq(0)
         end
 
+        # The two identifiers are separate Stripe requirements. Sharing one note namespace let a
+        # representative success delete a company rejection that was still blocking verification.
+        it "leaves the representative's rejection note alone when the seller's identifier is accepted" do
+          representative_note = "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (representative) — still outstanding"
+          user.add_payout_note(content: representative_note, seller_visible: false)
+          allow(Stripe::Account).to receive(:update)
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(user.comments.with_type_payout_note.alive.where(content: representative_note)).to exist
+        end
+
         # The split is scoped to the mismatch. On a matched account the identifier belongs on the
         # main payload, and a second call would be a pointless extra round-trip on every save.
         context "when the countries agree" do
@@ -9793,7 +9805,7 @@ describe StripeMerchantAccountManager, :vcr do
           stripe_account
         end
         expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(expected_account_params)).and_call_original
-        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, seed_representative_ownership: false, unclaimed_percent_ownership: nil).and_call_original
+        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, seed_representative_ownership: false, unclaimed_percent_ownership: nil, notify: true).and_call_original
         expect(Stripe::Account).to receive(:update_person).with(kind_of(String), kind_of(String), a_hash_including(expected_person_params).and(excluding(:first_name))).and_call_original
         subject.update_account(user, passphrase: "1234")
       end
@@ -13595,6 +13607,47 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.update_person(user, stripe_account, nil, "1234", seed_representative_ownership: false)
 
         expect(captured_attributes[:relationship]).to eq(representative: true)
+      end
+    end
+
+    # gumroad-private#1575. The representative's identifier is split onto its own call for the same
+    # reason as the seller's, and the rejection note it writes has to honour the caller's
+    # notification setting — the automated remediation retry passes notify: false and must stay
+    # silent, or a rejection nobody asked about lands as a payout note on every sweep.
+    context "when the account country disagrees with the legal-entity country" do
+      let(:user_compliance_info) do
+        create(:user_compliance_info_business, user:, country: "Korea, Republic of",
+                                               business_country: "Korea, Republic of", individual_tax_id: "1234567890")
+      end
+      let(:stripe_account) { Stripe::Account.construct_from(id: "acct_mismatch_person", country: "US") }
+      let(:rejection) { Stripe::InvalidRequestError.new("Invalid ID number", "id_number") }
+
+      before do
+        allow(Stripe::Account).to receive(:list_persons)
+          .with(stripe_account.id, relationship: { representative: true }, limit: 1)
+          .and_return("data" => [representative_person])
+        allow(Stripe::Account).to receive(:update_person) do |_account_id, _person_id, attributes|
+          raise rejection if attributes.key?(:id_number) || attributes.key?(:ssn_last_4)
+
+          true
+        end
+      end
+
+      def representative_rejection_notes
+        user.comments.with_type_payout_note.alive
+            .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (representative)%")
+      end
+
+      it "records the rejection when notifications are on" do
+        described_class.update_person(user, stripe_account, nil, "1234")
+
+        expect(representative_rejection_notes.count).to eq(1)
+      end
+
+      it "stays silent when the caller suppressed notifications" do
+        described_class.update_person(user, stripe_account, nil, "1234", notify: false)
+
+        expect(representative_rejection_notes.count).to eq(0)
       end
     end
   end
