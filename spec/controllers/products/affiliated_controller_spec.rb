@@ -243,5 +243,27 @@ describe Products::AffiliatedController, inertia: true do
       expect(response).to have_http_status(:ok)
       expect(direct_affiliate.reload.deleted?).to be(true)
     end
+
+    # Two tabs both pass the `alive` lookup, then race the transition. The seam is mid-request: the
+    # authorization step runs after the row is loaded and before it is marked deleted, so removing
+    # the row there is the other request winning while this one is in flight.
+    it "404s without notifying the seller when a concurrent request removed the row first" do
+      allow(controller).to receive(:authorize).and_wrap_original do |original, *args|
+        DirectAffiliate.where(id: direct_affiliate.id).update_all(deleted_at: Time.current)
+        original.call(*args)
+      end
+      original_deleted_at = nil
+
+      expect do
+        expect do
+          delete :destroy, params: { id: direct_affiliate.external_id }, as: :json
+        end.to raise_error(ActionController::RoutingError)
+        original_deleted_at = direct_affiliate.reload.deleted_at
+      end.not_to have_enqueued_mail(AffiliateMailer, :direct_affiliate_removal_by_affiliate_user)
+
+      # The winner's timestamp survives — the loser must not re-stamp a row it did not transition.
+      expect(original_deleted_at).to be_present
+      expect(direct_affiliate.reload.deleted_at).to eq(original_deleted_at)
+    end
   end
 end

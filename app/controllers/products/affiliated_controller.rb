@@ -18,10 +18,19 @@ class Products::AffiliatedController < Sellers::BaseController
   def destroy
     authorize [:products, :affiliated, @direct_affiliate]
 
-    # Skip validations: this is a state transition, not a creation, and a legacy row that no longer
-    # satisfies today's rules (basis points out of range, no destination URL and no seller username)
-    # would otherwise raise and leave the affiliate with no exit — the thing this endpoint exists for.
-    @direct_affiliate.mark_deleted(validate: false)
+    # Two tabs can both pass the `alive` lookup above, so the transition itself has to be the gate:
+    # a conditional UPDATE lets exactly one request win, and only the winner mails the seller and
+    # reports success. The loser 404s like any other stale row.
+    #
+    # It also skips validations, deliberately: this is a state transition, not a creation, and a
+    # legacy row that no longer satisfies today's rules (basis points out of range, no destination
+    # URL and no seller username) would otherwise raise and leave the affiliate with no exit — the
+    # thing this endpoint exists for.
+    now = Time.current
+    removed = DirectAffiliate.alive.where(id: @direct_affiliate.id).update_all(deleted_at: now, updated_at: now)
+    e404 if removed.zero?
+
+    @direct_affiliate.reload
     AffiliateMailer.direct_affiliate_removal_by_affiliate_user(@direct_affiliate.id).deliver_later
 
     # The affiliation covers every product the seller enabled, so the headline stats move too, not

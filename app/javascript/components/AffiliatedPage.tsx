@@ -1,7 +1,11 @@
 import { Link, Trash, XCircle } from "@boxicons/react";
 import * as React from "react";
 
-import { getPagedAffiliatedProducts, removeSelfAsAffiliate } from "$app/data/affiliated_products";
+import {
+  AffiliationAlreadyRemovedError,
+  getPagedAffiliatedProducts,
+  removeSelfAsAffiliate,
+} from "$app/data/affiliated_products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
@@ -140,6 +144,14 @@ const AffiliatedProductsTable = ({
       showAlert("You're no longer an affiliate for these products.", "success");
     } catch (e) {
       assertResponseError(e);
+      // The row is stale — the affiliation went away in another tab. Retrying would 404 forever, so
+      // close the dialog and reload instead of leaving a dead row behind a retry prompt.
+      if (e instanceof AffiliationAlreadyRemovedError) {
+        setRemoving(null);
+        showAlert(e.message, "error");
+        loadAffiliatedProducts(pagination.page, sort);
+        return;
+      }
       setRemoving({ product, inFlight: false });
       showAlert(e.message, "error");
     }
@@ -295,7 +307,12 @@ const AffiliatedPage = ({
       setIsLoading(false);
       activeRequest.current = null;
     } catch (e) {
+      // A cancellation means a newer load (or a removal) owns the table now and will settle the
+      // loading state itself. Any other failure has to clear it here, or the table stays dimmed and
+      // unusable with nothing in flight.
       if (e instanceof AbortError) return;
+      setIsLoading(false);
+      activeRequest.current = null;
       assertResponseError(e);
       showAlert(e.message, "error");
     }
@@ -388,6 +405,9 @@ const AffiliatedPage = ({
                     debouncedLoadAffiliatedProducts.cancel();
                     activeRequest.current?.cancel();
                     activeRequest.current = null;
+                    // Nothing follows this cancellation to settle the loader — the cancelled load's
+                    // own catch returns early precisely because a newer load usually owns the state.
+                    setIsLoading(false);
                   }}
                   isLoading={isLoading}
                 />
