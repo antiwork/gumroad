@@ -504,10 +504,9 @@ describe StripeGuardianManager do
           .with(stripe_account_id, "person_guardian_new")
       end
 
-      # An unread page is not a deferred cleanup: the next sync takes the recorded id and does not
-      # scan, so nothing revisits the orphans left on it. Erasure fails its request closed on this
-      # same condition, and the reconcile discarding it silently is what hides the account until
-      # then.
+      # An unread page holds orphans nothing local points at, so erasure's recorded-id path cannot
+      # select them. A later sync's reconcile does rescan, so a one-off glitch self-heals; a
+      # persistent one fails every rescan, on an account whose next write may never come.
       it "reports an incomplete scan when Stripe promises more persons but returns no cursor" do
         create_compliance_info(guardian_record: guardian)
         allow(ErrorNotifier).to receive(:notify)
@@ -528,6 +527,33 @@ describe StripeGuardianManager do
 
         expect(ErrorNotifier).to have_received(:notify)
           .with(/reconciliation scanned only part of Stripe account #{stripe_account_id}/)
+        expect(user.reload.comments.last.content)
+          .to include("Guardian reconciliation scan incomplete on Stripe account #{stripe_account_id}")
+      end
+
+      # The other incomplete arm: a page whose last id is the cursor we just sent. That is the
+      # infinite-loop guard, so it is the arm most at risk from a later edit to the pagination loop.
+      it "reports an incomplete scan when Stripe keeps returning the page we already paged past" do
+        create_compliance_info(guardian_record: guardian)
+        allow(ErrorNotifier).to receive(:notify)
+        allow(Stripe::Account).to receive(:delete_person)
+        allow(Stripe::Account).to receive(:create_person)
+          .and_return(Stripe::StripeObject.construct_from(id: "person_guardian_new"))
+        allow(Stripe::Account).to receive(:list_persons) do |_account_id, params|
+          if params[:limit] == 1
+            Stripe::ListObject.construct_from(data: [])
+          else
+            Stripe::ListObject.construct_from(data: [{ id: "person_stuck" }], has_more: true)
+          end
+        end
+
+        described_class.sync(user, stripe_account, passphrase:)
+
+        expect(ErrorNotifier).to have_received(:notify)
+          .with(/reconciliation scanned only part of Stripe account #{stripe_account_id}/)
+        # Bounded: the first reconcile page, then the one request that proves the cursor is stuck.
+        expect(Stripe::Account).to have_received(:list_persons)
+          .with(stripe_account_id, hash_including(limit: 100)).twice
       end
 
       # The complement: a scan that finished having deleted nothing is the ordinary case and must
@@ -548,6 +574,7 @@ describe StripeGuardianManager do
         described_class.sync(user, stripe_account, passphrase:)
 
         expect(ErrorNotifier).not_to have_received(:notify)
+        expect(user.reload.comments).to be_empty
       end
 
       # existing_person takes ONE Person, so an account already holding several legal-guardian

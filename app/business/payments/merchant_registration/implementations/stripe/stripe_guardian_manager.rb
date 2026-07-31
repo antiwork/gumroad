@@ -142,8 +142,9 @@ module StripeGuardianManager
       # scan returns — so an account that already holds several legal-guardian Persons has the rest
       # standing after this sync updated one of them. Reconciling only after a create left them
       # there: an adult's name, date of birth, address and tax id at Stripe that erasure's recorded-id
-      # path cannot select, and that no later sync revisits either, since the next one takes the
-      # recorded id and never scans.
+      # path cannot select. Running it on the update path too is what gives an orphan from any
+      # earlier half-failure a further chance of being noticed, since a steady-state sync reaches
+      # its Person by recorded id and would otherwise never look at the rest of the account.
       #
       # Ordering is load-bearing: the reconcile deletes what no Guardian row of this seller points
       # at, so it must follow adopt_person_id! or it would delete the Person we just adopted.
@@ -190,11 +191,30 @@ module StripeGuardianManager
     end
 
     # A scan that could not finish is the one case where this method's silence would be wrong. It
-    # deletes what it does not find recorded, so an unread page is not a deferred cleanup — it is an
-    # orphan this seller's next sync will never revisit either, because that sync takes the recorded
-    # id and does not scan at all. Erasure fails its own request closed on the same condition, so the
-    # notification is what gets the account looked at before an erasure request ever arrives.
+    # deletes what it does not find recorded, so the orphans on an unread page are not merely
+    # missed: nothing local points at them, and erasure's recorded-id path cannot select them.
+    #
+    # A later sync's reconcile does rescan the whole account, so a one-off no-cursor glitch
+    # self-heals. What does not self-heal is a persistent one — every rescan fails the same way —
+    # on an account whose next write may never come. The note is what that leaves behind.
     unless complete
+      # Written before the notify, and separately rescued, for the reason the same pair carries in
+      # DeleteGuardianStripePersonJob: ErrorNotifier is the transport most likely to be down, and
+      # this record is the half meant to outlive Sentry's retention. The account is all it can name
+      # — which Persons the unread pages hold is exactly what could not be read.
+      begin
+        User.find_by(id: guardian.user_id)&.add_payout_note(
+          content: "Guardian reconciliation scan incomplete on Stripe account #{stripe_account_id}: " \
+                   "Stripe reported more legal-guardian persons but returned no cursor. The account " \
+                   "may hold unrecorded legal-guardian persons.",
+          seller_visible: false
+        )
+      rescue => e
+        Rails.logger.error(
+          "Failed to record guardian reconcile breadcrumb for guardian #{guardian.id}: #{e.class}: #{e.message}"
+        )
+      end
+
       ErrorNotifier.notify(
         "Guardian duplicate reconciliation scanned only part of Stripe account #{stripe_account_id} " \
         "for guardian #{guardian.id}: Stripe reported more legal-guardian persons but returned no " \
