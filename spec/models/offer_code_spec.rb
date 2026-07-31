@@ -257,6 +257,239 @@ describe OfferCode do
     end
   end
 
+  describe "default discount applicability validation" do
+    let(:other_product) { create(:product, user: @product.user) }
+    let(:offer_code) { create(:offer_code, user: @product.user, products: [@product, other_product]) }
+
+    it "disallows removing a product whose default discount is this offer code" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(products: [other_product])).to eq(false)
+      expect(offer_code.errors.full_messages).to include("This discount code is the default discount for “#{@product.name}”. Please remove it from that product before removing it from the discount.")
+      expect(offer_code.reload.products).to match_array([@product, other_product])
+    end
+
+    it "disallows removing all products when one of them uses this offer code as its default discount" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(products: [])).to eq(false)
+      expect(offer_code.errors.full_messages).to include("This discount code is the default discount for “#{@product.name}”. Please remove it from that product before removing it from the discount.")
+      expect(offer_code.reload.products).to match_array([@product, other_product])
+    end
+
+    it "allows removing a product that doesn't use this offer code as its default discount" do
+      @product.update!(default_offer_code_id: nil)
+
+      expect(offer_code.update(products: [other_product])).to eq(true)
+      expect(offer_code.reload.products).to eq([other_product])
+    end
+
+    it "allows removing a deleted product that uses this offer code as its default discount" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      @product.update!(deleted_at: Time.current)
+
+      expect(offer_code.update(products: [other_product])).to eq(true)
+      expect(offer_code.reload.products).to eq([other_product])
+    end
+
+    it "allows saving while an attached product uses this offer code as its default discount" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.update(name: "New name")).to eq(true)
+    end
+
+    it "allows updating a universal offer code that is a product's default discount" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(name: "New name")).to eq(true)
+    end
+
+    it "disallows moving a universal offer code to a currency a defaulting product doesn't use" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user, amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(amount_percentage: nil, amount_cents: 100, currency_type: "eur")).to eq(false)
+      expect(universal_offer_code.errors.full_messages).to include("This discount code is the default discount for “#{@product.name}”, which uses a different currency. Please remove it from that product before changing the discount's currency.")
+      expect(universal_offer_code.reload.currency_type).to eq(nil)
+    end
+
+    it "allows updating a universal percentage offer code that is a product's default discount" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user, amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(name: "New name")).to eq(true)
+    end
+
+    it "doesn't prevent creating an offer code while products without a default discount exist" do
+      expect(@product.default_offer_code_id).to be_nil
+
+      expect { create(:offer_code, user: @product.user, products: [other_product]) }.to change { OfferCode.count }.by(1)
+    end
+
+    it "allows unrelated edits while a default detached before this guard existed" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      # The state Onetime::ClearDetachedDefaultOfferCodes exists to clear: the
+      # product still defaults to the code but is no longer in its list. Direct
+      # collection mutation never saves the owner, so no guard saw it.
+      offer_code.products.delete(@product)
+
+      expect(offer_code.reload.update(name: "New name")).to eq(true)
+      expect(offer_code.update(valid_at: 1.day.ago, expires_at: 30.days.from_now)).to eq(true)
+    end
+
+    it "allows an edit that removes and re-adds the defaulting product" do
+      @product.update!(default_offer_code_id: offer_code.id)
+
+      offer_code.products.delete(@product)
+      offer_code.products << @product
+
+      expect(offer_code.save).to eq(true)
+      expect(offer_code.reload.products).to match_array([@product, other_product])
+    end
+
+    it "allows a retry on the same instance once the seller clears the default" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      expect(offer_code.update(products: [other_product])).to eq(false)
+
+      @product.update!(default_offer_code_id: nil)
+
+      expect(offer_code.update(products: [other_product])).to eq(true)
+    end
+
+    it "still blocks removing another product while a pre-existing detached default is present" do
+      third_product = create(:product, user: @product.user)
+      @product.update!(name: "Stale default")
+      other_product.update!(name: "Actively removed")
+      offer_code.update!(products: [@product, other_product, third_product])
+      @product.update!(default_offer_code_id: offer_code.id)
+      offer_code.products.delete(@product)
+      other_product.update!(default_offer_code_id: offer_code.id)
+
+      expect(offer_code.reload.update(products: [third_product])).to eq(false)
+      # Only the product this edit removed is named; the stale one is ignored.
+      expect(offer_code.errors.full_messages).to eq(["This discount code is the default discount for “Actively removed”. Please remove it from that product before removing it from the discount."])
+    end
+
+    it "names several removed products and counts the rest" do
+      products = Array.new(5) { create(:product, user: @product.user) }
+      offer_code.update!(products:)
+      products.each { _1.update!(default_offer_code_id: offer_code.id) }
+
+      expect(offer_code.update(products: [])).to eq(false)
+      message = offer_code.errors.full_messages.first
+      expect(message).to include("and 2 others")
+      expect(message.scan("“").size).to eq(3)
+    end
+
+    it "blocks a universal code turning product-specific while a defaulting product is left out" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(universal: false, products: [other_product])).to eq(false)
+      expect(universal_offer_code.errors.full_messages).to include("This discount code is the default discount for “#{@product.name}”. Please remove it from that product before removing it from the discount.")
+    end
+
+    it "allows a universal code turning product-specific when it keeps the defaulting product" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      expect(universal_offer_code.update(universal: false, products: [@product])).to eq(true)
+    end
+  end
+
+  describe "a product currency change detaching a universal default discount" do
+    let(:universal_offer_code) { create(:universal_offer_code, user: @product.user, currency_type: "usd") }
+
+    it "clears the default in the same write rather than leaving a discount checkout refuses" do
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      @product.update!(price_currency_type: "eur", price_range: "10")
+
+      expect(@product.reload.default_offer_code_id).to be_nil
+      expect(@product.default_offer_code_detached?).to eq(false)
+    end
+
+    it "leaves the universal code editable afterwards" do
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+      @product.update!(price_currency_type: "eur", price_range: "10")
+
+      expect(universal_offer_code.reload.update(name: "New name")).to eq(true)
+    end
+
+    it "leaves the default alone when the currency is not changing" do
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+
+      # No currency change, so the repair must not run at all.
+      expect_any_instance_of(Link).not_to receive(:clear_detached_default_offer_code)
+      @product.update!(name: "Renamed")
+
+      expect(@product.reload.default_offer_code_id).to eq(universal_offer_code.id)
+    end
+
+    it "keeps a product-specific default, which applies regardless of currency" do
+      specific = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100)
+      @product.update!(default_offer_code_id: specific.id)
+
+      @product.update!(price_currency_type: "eur", price_range: "10")
+
+      expect(@product.reload.default_offer_code_id).to eq(specific.id)
+    end
+
+    it "keeps the default when duplicating a product in a non-default currency" do
+      # A duplicate reports every attribute as changed, and its offer-code join
+      # rows are copied only after the first save.
+      @product.update!(price_currency_type: "eur", price_range: "10")
+      specific = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100, currency_type: "eur")
+      @product.update!(default_offer_code_id: specific.id)
+
+      duplicate = ProductDuplicatorService.new(@product.id).duplicate
+
+      expect(duplicate.reload.default_offer_code_id).to eq(specific.id)
+    end
+
+    it "keeps a percentage universal default, which applies to every currency" do
+      percentage_code = create(:universal_offer_code, user: @product.user, amount_cents: nil, amount_percentage: 50, currency_type: nil)
+      @product.update!(default_offer_code_id: percentage_code.id)
+
+      @product.update!(price_currency_type: "eur", price_range: "10")
+
+      expect(@product.reload.default_offer_code_id).to eq(percentage_code.id)
+    end
+  end
+
+  describe "repairing detached defaults after concurrent edits" do
+    let(:other_product) { create(:product, user: @product.user) }
+    let(:offer_code) { create(:offer_code, user: @product.user, products: [@product, other_product]) }
+
+    it "clears a default assigned concurrently with the edit that detached it" do
+      @product.update!(default_offer_code_id: offer_code.id)
+      # This edit's validation read the defaults before the concurrent
+      # assignment landed; skip it to reproduce that stale read.
+      allow_any_instance_of(OfferCode).to receive(:validate_default_discount_remains_applicable)
+
+      offer_code.update!(products: [other_product])
+
+      expect(@product.reload.default_offer_code_id).to be_nil
+    end
+
+    it "clears a default excluded concurrently from a universal code" do
+      universal_offer_code = create(:universal_offer_code, user: @product.user)
+      @product.update!(default_offer_code_id: universal_offer_code.id)
+      allow_any_instance_of(OfferCode).to receive(:validate_excluded_products)
+
+      universal_offer_code.update!(excluded_products: [@product])
+
+      expect(@product.reload.default_offer_code_id).to be_nil
+    end
+
+    it "skips the sweep for edits that can't affect applicability" do
+      expect(offer_code).not_to receive(:repair_detached_default_discounts)
+
+      offer_code.update!(max_purchase_count: 5)
+    end
+  end
+
   describe "validity dates validation" do
     context "when the start date is before the expiration date" do
       let(:offer_code) { build(:offer_code, valid_at: 2.days.ago, expires_at: 1.day.ago) }

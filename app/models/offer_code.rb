@@ -18,9 +18,9 @@ class OfferCode < ApplicationRecord
 
   stripped_fields :code
 
-  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id"
+  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: :note_applicability_change, after_remove: [:note_applicability_change, :note_removed_product]
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
-  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: :invalidate_excluded_product_cache, after_remove: :invalidate_excluded_product_cache
+  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change]
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -29,6 +29,8 @@ class OfferCode < ApplicationRecord
   alias_attribute :duration_in_billing_cycles, :duration_in_months
 
   MAX_OWNERSHIP_DURATION_TIERS = 10
+  # Enough for the seller to recognise the products without an unbounded message.
+  NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
 
   # Regex modified from https://stackoverflow.com/a/26900132
   validates :code, presence: true, format: { with: /\A[A-Za-zÀ-ÖØ-öø-ÿ0-9\-_]*\z/, message: "can only contain numbers, letters, dashes, and underscores." }, unless: -> { is_cancellation_discount? || upsell.present? }
@@ -41,10 +43,14 @@ class OfferCode < ApplicationRecord
   validate :validate_existing_customer_settings
   validate :validate_ownership_duration_tiers
   validate :validate_excluded_products
+  validate :validate_default_discount_remains_applicable
 
 
   after_save :invalidate_product_cache
   after_save :reindex_associated_products
+  after_save :note_column_applicability_changes
+  after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
+  after_rollback :forget_applicability_changes
   before_destroy :capture_associated_product_ids
   after_destroy :reindex_captured_products
 
@@ -199,6 +205,14 @@ class OfferCode < ApplicationRecord
     else
       products
     end
+  end
+
+  # The join-table callbacks that record removals fire during assign_attributes,
+  # before validation. Clearing here keeps a stale list from an earlier failed
+  # save (the object is reused across retries) out of the next validation pass.
+  def reload(...)
+    @removed_product_ids = nil
+    super
   end
 
   def applicable?(link)
@@ -415,6 +429,59 @@ class OfferCode < ApplicationRecord
       products.each(&:invalidate_cache)
     end
 
+    # Consumed at commit by repair_detached_default_discounts. Direct collection
+    # mutations (products.delete) never save the owner, so nothing consumes it —
+    # they bypass the detachment guards. Change product lists through update.
+    def note_applicability_change(_product)
+      @applicability_changed = true unless new_record?
+    end
+
+    # HABTM has no dirty tracking and the join table already holds the new list
+    # by the time validations run, so this is the only record of what THIS edit
+    # removed. Rows detached before the guard existed are absent from it, which
+    # keeps them from blocking edits that never touched them.
+    def note_removed_product(product)
+      return if new_record?
+
+      (@removed_product_ids ||= []) << product.id
+    end
+
+    def note_column_applicability_changes
+      return if previously_new_record?
+
+      @applicability_changed ||= saved_changes.keys.intersect?(%w[universal currency_type deleted_at code])
+    end
+
+    def forget_applicability_changes
+      @applicability_changed = false
+      @removed_product_ids = nil
+    end
+
+    # Counterpart of Link#repair_detached_default_offer_code for the other
+    # commit order: an edit that validated before a concurrent default
+    # assignment landed sweeps its defaulting products after commit. Set-based
+    # so a code defaulting many products costs a couple of queries, not one per
+    # product; gated to edits that can change applicability.
+    def repair_detached_default_discounts
+      forget_applicability_changes
+
+      detached = Link.visible.where(default_offer_code_id: id)
+      if !deleted? && code.present?
+        detached = if universal?
+          excluded_scope = detached.where(id: excluded_products.select(:id))
+          currency_type.present? ? detached.where.not(price_currency_type: currency_type).or(excluded_scope) : excluded_scope
+        else
+          detached.where.not(id: products.select(:id))
+        end
+      end
+
+      product_ids = detached.pluck(:id)
+      return if product_ids.empty?
+
+      Link.where(id: product_ids, default_offer_code_id: id).update_all(default_offer_code_id: nil)
+      Link.where(id: product_ids).find_each(&:invalidate_cache)
+    end
+
     def invalidate_excluded_product_cache(product)
       product.invalidate_cache
     end
@@ -488,6 +555,60 @@ class OfferCode < ApplicationRecord
       if Link.visible.where(default_offer_code_id: id, id: excluded_products.map(&:id)).exists?
         errors.add(:base, "This discount code is the default discount for one or more of the excluded products. Please remove it from those products before excluding them.")
       end
+    end
+
+    # Blocks code edits that would detach a visible product's default discount:
+    # removing the product from a product-specific code, or moving a universal
+    # code to a currency the product doesn't use (exclusions are guarded by
+    # validate_excluded_products). Scoped to what THIS edit changed — the
+    # products it removed, or the currency it is moving away from — so defaults
+    # detached before this guard existed never block an unrelated rename or
+    # expiry change; Onetime::ClearDetachedDefaultOfferCodes clears those.
+    # Not atomic with the Link-side default assignment — a concurrent assignment
+    # can slip past both validations; repair_detached_default_discounts sweeps it
+    # up after commit.
+    def validate_default_discount_remains_applicable
+      return if deleted_at.present?
+      return unless persisted?
+
+      if universal?
+        return if currency_type.nil?
+        return unless currency_type_changed?
+
+        blocked = Link.visible.where(default_offer_code_id: id).where.not(price_currency_type: currency_type)
+        names = blocked.order(:id).limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
+        return if names.empty?
+
+        errors.add(:base, "This discount code is the default discount for #{to_product_sentence(names, blocked.count)}, which #{names.one? ? "uses" : "use"} a different currency. Please remove it from #{names.one? ? "that product" : "those products"} before changing the discount's currency.")
+      else
+        return if removed_product_ids.empty?
+
+        blocked = Link.visible.where(default_offer_code_id: id, id: removed_product_ids)
+        names = blocked.order(:id).limit(NAMED_DEFAULT_DISCOUNT_PRODUCTS).pluck(:name)
+        return if names.empty?
+
+        errors.add(:base, "This discount code is the default discount for #{to_product_sentence(names, blocked.count)}. Please remove it from #{names.one? ? "that product" : "those products"} before removing #{names.one? ? "it" : "them"} from the discount.")
+      end
+    end
+
+    def removed_product_ids
+      # A code switching from universal to product-specific removes nothing, but
+      # every product defaulting to it that isn't in the new list detaches.
+      return Link.visible.where(default_offer_code_id: id).where.not(id: products.map(&:id)).pluck(:id) if universal_changed?(from: true, to: false)
+      return [] if @removed_product_ids.blank?
+
+      # Subtract the current list: a product removed and re-added in the same
+      # edit is recorded by after_remove but ends up attached, so it detaches
+      # nothing.
+      @removed_product_ids - products.map(&:id)
+    end
+
+    def to_product_sentence(names, total)
+      quoted = names.map { "“#{_1}”" }
+      remaining = total - names.size
+      return quoted.to_sentence if remaining <= 0
+
+      (quoted + ["#{remaining} #{"other".pluralize(remaining)}"]).to_sentence
     end
 
     def validate_ownership_duration_tiers
