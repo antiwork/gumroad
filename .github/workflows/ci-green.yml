@@ -49,17 +49,27 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -uo pipefail
-          if ! git cat-file -e "$SHA^{commit}" 2>/dev/null && ! git fetch --no-tags origin "$SHA" 2>/dev/null; then
+          # Anything other than "the checker ran and found a collision" has to
+          # come out as unknown: this step gates every PR's green, so a checker
+          # that cannot run must not read as every PR colliding.
+          COLLISION=unknown
+
+          if [ ! -f bin/check-migration-versions ]; then
+            echo "No checker on main yet."
+          elif ! git cat-file -e "$SHA^{commit}" 2>/dev/null && ! git fetch --no-tags origin "$SHA" 2>/dev/null; then
             # Fork heads are not in this repo. Their PR-time run already checked
             # against main, and the push:main guard still covers them.
-            echo "collision=unknown" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if ruby bin/check-migration-versions origin/main "$SHA"; then
-            echo "collision=no" >> "$GITHUB_OUTPUT"
+            echo "Head $SHA not in this repo; leaving to the push:main guard."
           else
-            echo "collision=yes" >> "$GITHUB_OUTPUT"
+            ruby bin/check-migration-versions origin/main "$SHA"
+            case "$?" in
+              0) COLLISION=no ;;
+              1) COLLISION=yes ;;
+              *) echo "Checker errored; leaving the verdict to the suite." ;;
+            esac
           fi
+
+          echo "collision=$COLLISION" >> "$GITHUB_OUTPUT"
 
       - name: Set ci/green status on the tested commit
         env:
