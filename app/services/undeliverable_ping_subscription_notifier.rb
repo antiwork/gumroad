@@ -19,8 +19,33 @@ class UndeliverablePingSubscriptionNotifier
   end
 
   def self.notify_all(resource_subscriptions)
-    resource_subscriptions.each { new(_1).notify }
+    resource_subscriptions.each do |resource_subscription|
+      new(resource_subscription).notify
+    rescue => e
+      # A seller can have several broken subscriptions, and the events that reach here are one-shot
+      # (subscription_ended, dispute_won): there is no later event to retry the ones we skipped, so
+      # a Redis or enqueue failure on the first must not cost the rest their only notice.
+      report(e)
+    end
   end
+
+  # The claim is taken at enqueue, but the mailer suppresses the send when the subscription is
+  # deliverable again by render time. Holding the claim then spends the seller's one notice on an
+  # email nobody received, and the same reason breaking a second time would go unreported.
+  def self.release_claim(resource_subscription_id, reason)
+    return if reason.blank?
+
+    $redis.del(RedisKey.undeliverable_ping_subscription_notified(resource_subscription_id, reason))
+  rescue => e
+    report(e)
+  end
+
+  def self.report(error)
+    ErrorNotifier.notify(error)
+  rescue
+    nil
+  end
+  private_class_method :report
 
   def notify
     return unless resource_subscription.created_at >= SUBSCRIPTION_CLEANUP_CUTOVER
@@ -38,7 +63,7 @@ class UndeliverablePingSubscriptionNotifier
 
     # Send once and stop. The seller cannot re-authorize an app holding no live token, and there is
     # no UI or API to delete the subscription without one, so a repeat is a nag they cannot act on.
-    # Unclaimed keys carry no expiry for the same reason.
+    # Keys carry no expiry for the same reason; the mailer releases one when it suppresses the send.
     def claim_notification
       $redis.set(
         RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, reason),

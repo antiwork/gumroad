@@ -1598,6 +1598,35 @@ describe ContactingCreatorMailer do
       expect(mail.message).to be_a ActionMailer::Base::NullMail
     end
 
+    # The claim has no expiry, so a suppressed send that keeps it spends the subscription's only
+    # notice on an email nobody got: break the same way again and the seller hears nothing.
+    it "hands the send-once claim back when it suppresses the send" do
+      create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
+      key = RedisKey.undeliverable_ping_subscription_notified(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+      $redis.set(key, Time.current.to_i)
+
+      ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      ).message
+
+      expect($redis.exists?(key)).to be false
+    end
+
+    it "keeps the claim when it does send" do
+      key = RedisKey.undeliverable_ping_subscription_notified(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      )
+      $redis.set(key, Time.current.to_i)
+
+      ContactingCreatorMailer.undeliverable_ping_subscription(
+        resource_subscription.id, UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL
+      ).message
+
+      expect($redis.exists?(key)).to be true
+    end
+
     # The reason is serialized at enqueue time, so remediation text read from it can describe a
     # state the subscription has since left.
     it "gives the advice matching current state rather than the reason it was enqueued with" do

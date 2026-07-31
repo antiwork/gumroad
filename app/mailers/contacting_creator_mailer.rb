@@ -361,18 +361,24 @@ class ContactingCreatorMailer < ApplicationMailer
 
   # The two reasons need opposite advice — fill in a URL, or re-authorize the app that owns the
   # subscription — so the reason is resolved here from current state rather than flattened to one
-  # message. The enqueued reason is still in the signature because it identifies the notifier's
-  # send-once claim, and jobs enqueued before this change still carry it.
-  def undeliverable_ping_subscription(resource_subscription_id, _reason = nil)
+  # message. The enqueued reason is not read for advice, only to identify the notifier's send-once
+  # claim so a suppressed send can hand it back.
+  def undeliverable_ping_subscription(resource_subscription_id, reason = nil)
     @resource_subscription = ResourceSubscription.alive.find_by(id: resource_subscription_id)
     # Enqueued from the sale path but rendered later, so the seller may have deleted the
     # subscription in between; saying it is "still listed as active" would then be false.
     return do_not_send if @resource_subscription.nil?
 
     @seller = @resource_subscription.user
+    return do_not_send if @seller.nil?
+
     # Same window, other direction: setting a URL or re-authorizing the app makes it deliverable
-    # again, and this email would then ask the seller to repair something already working.
-    return do_not_send if @seller.nil? || @seller.ping_notification_deliverable?(@resource_subscription)
+    # again, and this email would then ask the seller to repair something already working. Give the
+    # claim back, so breaking the same way again still gets the one notice this send did not use.
+    if @seller.ping_notification_deliverable?(@resource_subscription)
+      UndeliverablePingSubscriptionNotifier.release_claim(resource_subscription_id, reason)
+      return do_not_send
+    end
 
     @application_name = @resource_subscription.oauth_application&.name
     @missing_post_url = @resource_subscription.post_url.blank?

@@ -88,5 +88,73 @@ describe UndeliverablePingSubscriptionNotifier do
         described_class.notify_all([])
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription)
     end
+
+    # The events that reach here are one-shot, so a skipped subscription never gets another chance.
+    it "still notifies the later subscriptions when an earlier one raises" do
+      other_subscription = create(:resource_subscription, oauth_application: oauth_app, user: seller)
+      allow($redis).to receive(:set).and_call_original
+      allow($redis).to receive(:set).with(
+        RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, described_class::REVOKED_CREDENTIAL),
+        anything,
+        anything
+      ).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).once
+
+      expect do
+        described_class.notify_all([resource_subscription, other_subscription])
+      end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription)
+        .with(other_subscription.id, described_class::REVOKED_CREDENTIAL)
+    end
+
+    it "keeps notifying when the error reporter also raises" do
+      other_subscription = create(:resource_subscription, oauth_application: oauth_app, user: seller)
+      allow($redis).to receive(:set).and_call_original
+      allow($redis).to receive(:set).with(
+        RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, described_class::REVOKED_CREDENTIAL),
+        anything,
+        anything
+      ).and_raise(Redis::BaseError)
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError)
+
+      expect do
+        described_class.notify_all([resource_subscription, other_subscription])
+      end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription)
+        .with(other_subscription.id, described_class::REVOKED_CREDENTIAL)
+    end
+  end
+
+  describe ".release_claim" do
+    it "lets the same reason be notified again" do
+      described_class.new(resource_subscription).notify
+      described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+
+      expect do
+        described_class.new(resource_subscription).notify
+      end.to have_enqueued_mail(ContactingCreatorMailer, :undeliverable_ping_subscription)
+        .with(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+    end
+
+    it "leaves other reasons claimed" do
+      described_class.new(resource_subscription).notify
+      described_class.release_claim(resource_subscription.id, described_class::MISSING_POST_URL)
+
+      key = RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, described_class::REVOKED_CREDENTIAL)
+      expect($redis.exists?(key)).to be true
+    end
+
+    # Jobs enqueued before the reason argument existed pass nil, and deleting that key would be
+    # deleting a claim nothing took.
+    it "does nothing without a reason" do
+      expect($redis).not_to receive(:del)
+
+      described_class.release_claim(resource_subscription.id, nil)
+    end
+
+    it "swallows a Redis failure rather than failing the render" do
+      allow($redis).to receive(:del).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect { described_class.release_claim(resource_subscription.id, described_class::REVOKED_CREDENTIAL) }.not_to raise_error
+    end
   end
 end
