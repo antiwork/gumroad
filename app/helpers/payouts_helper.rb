@@ -17,9 +17,10 @@ module PayoutsHelper
   # are folded into the same below-minimum notice instead of being shown.
   UNDER_REVIEW_PAYOUT_NOTE_REGEX = /\APayout on (?<date>\w+ \d{1,2}, \d{4}) was skipped because the account was under review\.\z/
 
-  # How far back the Payouts banner looks for a seller-facing payout note. See the comment at
-  # the lookup itself for why the scan is bounded.
-  MAX_PAYOUT_NOTES_SCANNED_FOR_BANNER = 25
+  # How far back the Payouts banner looks for a seller-facing payout note. The scan itself now
+  # lives on User#latest_seller_visible_payout_note, because the payout pipeline needs the same
+  # lookup to decide whether a weekly note would bury a seller-facing explanation.
+  MAX_PAYOUT_NOTES_SCANNED_FOR_BANNER = PayoutNoteVisibility::MAX_NOTES_SCANNED
 
   def formatted_payout_date(payout_date)
     return "" if payout_date.nil?
@@ -90,19 +91,7 @@ module PayoutsHelper
     # Only notes written for the seller may be rendered here. Notes that record internal state
     # (why an automated retry stopped, what support still has to do) are phrased for staff and
     # must never reach the person they describe — see PayoutNoteVisibility.
-    #
-    # Visibility lives in the comment's json_data, which MySQL can't filter on usefully, so we
-    # walk back from the newest note in memory. The scan is capped: an account can accumulate a
-    # long tail of internal breadcrumbs (a failing account creation records one per Sidekiq
-    # retry), and a seller-facing note buried under that many newer notes is far too stale to
-    # put in a banner anyway.
-    recent_payout_notes = user.comments
-                              .with_type_payout_note
-                              .alive
-                              .where(author_id: GUMROAD_ADMIN_ID)
-                              .order(created_at: :desc, id: :desc)
-                              .limit(MAX_PAYOUT_NOTES_SCANNED_FOR_BANNER)
-    last_payout_note = recent_payout_notes.find { |note| PayoutNoteVisibility.seller_visible?(note) }
+    last_payout_note = user.latest_seller_visible_payout_note
     payout_note = \
       if last_payout_note.present? && last_payout_note.created_at.to_i > user.payments.completed_or_processing.last&.created_at.to_i
         last_payout_note.content.gsub("via Stripe ", "")
