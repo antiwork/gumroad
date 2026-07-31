@@ -1339,6 +1339,24 @@ describe Order::PreparePaymentIntentService, :vcr do
           Feature.deactivate_user(:checkout_local_method_klarna, seller)
         end
 
+        # The parameter is merged straight from the request, so its length is whatever the caller
+        # sends. The cap bounds the work before the list is discarded and leaves the methods a real
+        # element could have mounted intact.
+        it "caps an oversized report and still narrows against the entries it keeps" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "United States") }
+
+          padding = Array.new(described_class::MAX_REPORTED_MOUNTED_PAYMENT_METHOD_TYPES) { "pad_#{_1}" }
+
+          create_args, = prepare_with_reported_methods(
+            %w[card link] + padding,
+            preview: Stripe::StripeObject.construct_from(card: { country: "US" }),
+            token: "ctoken_oversized", order:, params:
+          )
+
+          expect(create_args[:payment_method_types]).to eq(%w[card link])
+        end
+
         # A non-array report (a scalar, a hash) carries nothing to narrow against and must not
         # raise — it degrades to the older-client path.
         it "treats a malformed report as no report at all" do

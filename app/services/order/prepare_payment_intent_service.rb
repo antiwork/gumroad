@@ -35,6 +35,10 @@ class Order::PreparePaymentIntentService
   # served by a clean expiry (and a re-purchase) than by a key that outlives their session by
   # hours. Also keeps the pending window near the abandonment worker's own horizon.
   PIX_EXPIRES_AFTER_SECONDS = 30.minutes.to_i
+  # Bounds on the browser's reported Payment Element method list. Comfortably above any list the
+  # resolver can produce, so a legitimate report is never truncated.
+  MAX_REPORTED_MOUNTED_PAYMENT_METHOD_TYPES = 20
+  MAX_REPORTED_PAYMENT_METHOD_TYPE_LENGTH = 50
 
   def initialize(order:, params:, confirmation_token:)
     @order = order
@@ -827,7 +831,11 @@ class Order::PreparePaymentIntentService
       reported = params[:payment_element_mounted_payment_method_types]
       return nil unless reported.is_a?(Array)
 
-      reported.map { _1.to_s.presence }.compact.presence
+      # Capped like the other client-supplied strings on this controller (see #confirm_error).
+      # A real element mounts a handful of methods, and the list is only ever intersected against
+      # the resolved set, so anything past the cap is noise a caller chose to send.
+      reported.first(MAX_REPORTED_MOUNTED_PAYMENT_METHOD_TYPES)
+        .map { _1.to_s.first(MAX_REPORTED_PAYMENT_METHOD_TYPE_LENGTH).presence }.compact.presence
     end
 
     # The previewed method, or nil when it must not ride this intent: nil when no method
