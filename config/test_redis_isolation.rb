@@ -15,13 +15,17 @@ require "socket"
 # connects. The lease holds a TTL refreshed by a background thread, so a run killed
 # with SIGKILL frees its block on its own.
 #
-# Two invariants the arithmetic must keep, both load-bearing:
+# Two invariants the arithmetic must keep:
 #   - Leased blocks never include a database any *fallback* run uses. A run that skips
 #     leasing keeps the .env.test indexes and flushes them; if a leased block covered
 #     one, the skipping run would wipe an isolated run's keys — the original race, now
 #     invisible because the victim holds a valid lease. So the floor is derived from
 #     the env vars themselves (`reserved_databases`), not hardcoded.
 #   - Leased blocks never include 0..3 (.env.development) or the registry index.
+#
+# Editing .env.test's indexes moves the floor, so two checkouts running concurrently
+# across such an edit map the same slot number to different blocks. Change those values
+# and the shared-server runs need to be on the same checkout.
 #
 # Capacity is the constraint: 16 databases is one concurrent run, hence
 # `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
@@ -61,9 +65,8 @@ module TestRedisIsolation
 
       # Under a spring server the app boots once and every `bin/rspec` is a fork of it,
       # sharing the already-open connections — so a lease claimed here would isolate the
-      # server, not the runs, while every concurrent run still shared one block. Leaving
-      # the fallback in place is the honest outcome; the block is disjoint from leased
-      # ones either way.
+      # server, not the runs, while every concurrent run still shared one block. The
+      # fallback block is disjoint from leased ones either way.
       if spring_preload?
         warn_io.puts("[test-redis-isolation] skipped: running under spring, whose forks would share one leased block. Use DISABLE_SPRING=1 to isolate concurrent runs.")
         return nil
@@ -89,7 +92,6 @@ module TestRedisIsolation
         return nil
       end
 
-      # The floor sits above every database a fallback run would flush.
       reserved = reserved_databases(endpoints)
       claim = claim_slot(server:, databases:, reserved:, warn_io:, key_prefix:)
       return nil if claim.nil?
@@ -111,7 +113,7 @@ module TestRedisIsolation
 
     # The first database a slot may use: above .env.development AND above every index
     # the passed-in env vars name, so a run that falls back to them cannot flush a
-    # leased block. See the invariants at the top of this file.
+    # leased block.
     def reserved_databases(endpoints)
       [RESERVED_DATABASES, endpoints.map { |endpoint| endpoint[:database] }.max + 1].max
     end
@@ -201,7 +203,7 @@ module TestRedisIsolation
         { server: match[1], database: (match[2] || "0").to_i }
       end
 
-      # Returns the thread so a caller (the spec) can stop it; nothing in boot needs it.
+      # Stashes the thread on the claim so the spec can stop it; nothing in boot needs it.
       def keep_lease_alive(claim)
         # Its own connection, so a tick sleeping mid-command cannot delay the exit-time
         # release sharing the same one.

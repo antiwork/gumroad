@@ -228,9 +228,21 @@ describe TestRedisIsolation do
       described_class.install!(env:, warn_io:, key_prefix: test_prefix)
     end
 
+    # A stock `redis-server` ships 16 databases, which leaves no block above the .env.test
+    # indexes — so the examples that need a real lease would fail there for a reason that
+    # is not a regression. Skip loudly instead.
+    def skip_without_a_free_block
+      reserved = described_class.reserved_databases(
+        described_class::STORE_ENV_VARS.map { parse(base_env.fetch(it)) }
+      )
+      return if described_class.slot_count(databases:, reserved:).positive?
+      skip("needs a Redis started with --databases 64; #{databases} leaves no block above #{reserved - 1}")
+    end
+
     after { discard(claimed) }
 
     it "rewrites all four store env vars to the one block it leased" do
+      skip_without_a_free_block
       env = base_env.dup
 
       expect(install(env)).to be_present
@@ -246,6 +258,7 @@ describe TestRedisIsolation do
       # fallback run flushes, while the leaseholder believed it was isolated. Asserting
       # the FLOOR rather than just the first block is what makes this load-bearing: slot 0
       # ([4..7]) missed the fallback by luck even before the fix, and every later slot hit it.
+      skip_without_a_free_block
       env = base_env.dup
 
       expect(install(env)).to be_present
@@ -313,6 +326,7 @@ describe TestRedisIsolation do
       # If the refresh thread dies, the lease expires mid-run and another run leases the
       # same databases — this file's own race, with nothing to point at. So the rescue has
       # to swallow anything, and that has to be proven rather than asserted.
+      skip_without_a_free_block
       env = base_env.dup
       refreshed = Queue.new
       attempt = 0
@@ -336,6 +350,20 @@ describe TestRedisIsolation do
   end
 
   describe ".release_lease_at_exit" do
+    it "releases the lease when the process that claimed it exits" do
+      # The other half of the pid guard: a guard that never fires would strand every slot
+      # until its TTL, which the fork example alone cannot tell apart from working.
+      claimed = claim
+
+      Process.wait(fork do
+        described_class.send(:release_lease_at_exit, claimed)
+      end)
+
+      with_registry do |registry|
+        expect(registry.get(claimed[:key])).to be_nil
+      end
+    end
+
     it "does not let a forked child release the lease its parent is still using" do
       # at_exit handlers are inherited across fork and the child holds the parent's exact
       # token, so the token compare cannot tell them apart — only the pid can.
