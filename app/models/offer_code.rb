@@ -462,16 +462,15 @@ class OfferCode < ApplicationRecord
     # assignment landed sweeps its defaulting products after commit. Set-based
     # so a code defaulting many products costs a couple of queries, not one per
     # product; gated to edits that can change applicability.
-    # Detachment is re-evaluated inside the UPDATE, so a product reattached
-    # between selection and the write is left alone instead of being cleared.
+    # The clearing UPDATE re-runs the detachment predicate, so a product
+    # reattached between selection and the write is left alone; the pluck only
+    # narrows which rows to attempt.
     def repair_detached_default_discounts
       forget_applicability_changes
 
-      scope = Link.visible.where(default_offer_code_id: id).with_detached_default_offer_code
-      product_ids = scope.pluck(:id)
+      product_ids = Link.visible.where(default_offer_code_id: id).with_detached_default_offer_code.pluck(:id)
       return if product_ids.empty?
 
-      # Re-runs the detachment predicate; pluck above only narrows which rows to try.
       Link.where(id: product_ids).with_detached_default_offer_code.update_all(default_offer_code_id: nil)
       Link.where(id: product_ids).find_each(&:invalidate_cache)
     end

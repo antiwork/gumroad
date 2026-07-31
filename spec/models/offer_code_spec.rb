@@ -508,7 +508,9 @@ describe OfferCode do
       expect(@product.reload.default_offer_code_id).to eq(offer_code.id)
     end
 
-    it "clears a default detached by a direct products.delete that never saves the code" do
+    # Pins pre-existing behaviour rather than a change here: the sweep reads the
+    # join table, so a delete that never saved the code is still seen.
+    it "clears a default detached by a direct products.delete" do
       @product.update!(default_offer_code_id: offer_code.id)
 
       offer_code.products.delete(@product)
@@ -547,7 +549,9 @@ describe OfferCode do
     it "agrees when the code was soft-deleted" do
       code = create(:offer_code, user: @product.user, products: [@product])
       @product.update!(default_offer_code_id: code.id)
-      code.mark_deleted!
+      # validate_not_used_as_default_discount blocks deleting a code in use, so
+      # this shape only exists as legacy data predating that guard.
+      code.update_column(:deleted_at, Time.current)
 
       expect(expect_scope_to_agree_with_predicate(@product)).to eq(true)
     end
