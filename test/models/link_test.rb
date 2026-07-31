@@ -1574,6 +1574,72 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal claimant, Link.fetch_leniently("slug")
   end
 
+  test "a concurrent reclaim of a stale mapping is not clobbered by a second reclaimer" do
+    gone = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    gone.update!(custom_permalink: "gone-new")
+    gone.update!(deleted_at: Time.current)
+
+    winner = create_product(unique_permalink: "bbb")
+    loser = create_product(unique_permalink: "ccc", custom_permalink: "slug")
+
+    # Two renames off the same slug fire their callbacks concurrently: both read
+    # the row as stale, and the other one's reclaim commits first.
+    loser.stub(:mapped_product_visible?, ->(_product_id) {
+      LegacyPermalink.where(permalink: "slug").update_all(product_id: winner.id)
+      false
+    }) do
+      loser.update!(custom_permalink: "loser-new")
+    end
+
+    # The winner is live, so taking its row would forward its shared links to us.
+    assert_equal winner.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    assert_equal winner, Link.fetch_leniently("slug", user: winner.user)
+  end
+
+  test "a reclaimed mapping is withdrawn when a live claim lands right after the reclaim" do
+    gone = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    gone.update!(custom_permalink: "gone-new")
+    gone.update!(deleted_at: Time.current)
+
+    claimant = create_product(unique_permalink: "bbb")
+    reclaimer = create_product(unique_permalink: "ccc", custom_permalink: "slug")
+
+    reclaimer.stub(:mapped_product_visible?, ->(_product_id) {
+      claimant.update!(custom_permalink: "slug")
+      false
+    }) do
+      reclaimer.update!(custom_permalink: "reclaimer-new")
+    end
+
+    assert_nil LegacyPermalink.find_by(permalink: "slug")
+    assert_equal claimant, Link.fetch_leniently("slug")
+  end
+
+  test "withdrawing after a reclaim never removes a row another rename took over" do
+    gone = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    gone.update!(custom_permalink: "gone-new")
+    gone.update!(deleted_at: Time.current)
+
+    other = create_product(unique_permalink: "bbb")
+    reclaimer = create_product(unique_permalink: "ccc", custom_permalink: "slug")
+
+    # Our reclaim wins the row, then a second rename takes it over before we
+    # decide to withdraw. The row is no longer ours to remove.
+    calls = 0
+    reclaimer.stub(:mapped_product_visible?, ->(_product_id) { false }) do
+      reclaimer.stub(:live_product_answers_on?, ->(_permalink) {
+        calls += 1
+        next false if calls == 1
+        LegacyPermalink.where(permalink: "slug").update_all(product_id: other.id)
+        true
+      }) do
+        reclaimer.update!(custom_permalink: "reclaimer-new")
+      end
+    end
+
+    assert_equal other.id, LegacyPermalink.find_by(permalink: "slug")&.product_id
+  end
+
   test "saving a product without touching the custom permalink writes no mapping" do
     product = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     assert_no_difference -> { LegacyPermalink.count } do

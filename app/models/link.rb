@@ -1621,7 +1621,11 @@ class Link < ApplicationRecord
     # seller, so two sellers can have held one slug: the first writer keeps it.
     # A mapping whose product is gone is reclaimable — it resolves to nothing on
     # either branch, so leaving it would squat the slug forever (about a third of
-    # the imported rows are in that state).
+    # the imported rows are in that state). Every write here is conditional on
+    # the row still being the one this call read or created, so a concurrent
+    # rename's reclaim is never overwritten or deleted; two reclaims racing on
+    # one row leave the loser unmapped, i.e. the 404 it already had, until its
+    # next rename.
     def redirect_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
@@ -1630,14 +1634,18 @@ class Link < ApplicationRecord
       existing = LegacyPermalink.find_by(permalink: outgoing)
       if existing.present?
         return if mapped_product_visible?(existing.product_id)
-        existing.update!(product_id: id)
-        existing.destroy if live_product_answers_on?(outgoing)
+        # Conditional on the row still pointing where the check looked. A
+        # concurrent rename may have reclaimed it to a live product meanwhile,
+        # and overwriting that would forward their shared links to us.
+        return if LegacyPermalink.where(id: existing.id, product_id: existing.product_id)
+                                 .update_all(product_id: id, updated_at: Time.current).zero?
+        withdraw_legacy_permalink(existing.id) if live_product_answers_on?(outgoing)
         return
       end
 
       mapping = LegacyPermalink.create(permalink: outgoing, product_id: id)
       Rails.logger.warn("LegacyPermalink not recorded for #{outgoing.inspect}: #{mapping.errors.full_messages.to_sentence}") unless mapping.persisted?
-      mapping.destroy if mapping.persisted? && live_product_answers_on?(outgoing)
+      withdraw_legacy_permalink(mapping.id) if mapping.persisted? && live_product_answers_on?(outgoing)
     rescue ActiveRecord::RecordNotUnique
       # A concurrent rename won the row; first writer keeps it.
       nil
@@ -1652,6 +1660,12 @@ class Link < ApplicationRecord
     # earlier read of this product in the same request.
     def mapped_product_visible?(product_id)
       Link.uncached { Link.visible.where(id: product_id).exists? }
+    end
+
+    # Scoped to `id` so this only ever removes a row this call owns, never a
+    # mapping a concurrent rename wrote.
+    def withdraw_legacy_permalink(mapping_id)
+      LegacyPermalink.where(id: mapping_id, product_id: id).delete_all
     end
 
     def create_licenses_for_existing_customers
