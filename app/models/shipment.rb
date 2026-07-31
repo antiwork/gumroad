@@ -39,6 +39,25 @@ class Shipment < ApplicationRecord
     CARRIER_TRACKING_URL_MAPPING[carrier] + tracking_number
   end
 
+  # `carrier` and `tracking_number` have no writer outside specs — every seller-facing path sets
+  # only `tracking_url` — so read them back out of the URL when it is one of the forms above.
+  # Scheme-insensitive because the stored prefixes are http for carriers that now serve https.
+  #
+  # Returns nil rather than a guess unless the remainder is a bare alphanumeric tracking number:
+  # dispute evidence submits once, and a wrong number is worse than an absent one.
+  def carrier_and_tracking_number_from_url
+    return if tracking_url.blank?
+
+    url = tracking_url.sub(%r{\Ahttps?://}i, "")
+    CARRIER_TRACKING_URL_MAPPING.each do |carrier_name, prefix|
+      next unless url.start_with?(prefix.sub(%r{\Ahttps?://}i, ""))
+
+      number = url.delete_prefix(prefix.sub(%r{\Ahttps?://}i, ""))
+      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]+\z/)
+    end
+    nil
+  end
+
   private
     def marked_as_shipped!
       update!(shipped_at: Time.current)

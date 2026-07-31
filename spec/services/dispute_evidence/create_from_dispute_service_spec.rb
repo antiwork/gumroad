@@ -97,6 +97,38 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
     expect(dispute_evidence.access_activity_log).to eq("Sample activity logs")
   end
 
+  context "when the shipment carries only a tracking URL" do
+    # No production path writes shipments.carrier or shipments.tracking_number — the dashboard and
+    # both API endpoints set tracking_url and nothing else — so this, not the fixture above, is the
+    # shape every real physical-goods dispute is built from.
+    before do
+      shipment.update!(carrier: nil, tracking_number: nil, tracking_url:)
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
+    end
+
+    context "and the URL is a known carrier's tracking form" do
+      let(:tracking_url) { "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490" }
+
+      it "submits the carrier and number recovered from it" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_carrier).to eq("USPS")
+        expect(dispute_evidence.shipping_tracking_number).to eq("9400111899223197428490")
+      end
+    end
+
+    context "and the URL is not attributable to a carrier" do
+      let(:tracking_url) { "https://track.aftership.com/9400111899223197428490" }
+
+      it "leaves the structured fields empty rather than guessing" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_carrier).to be_nil
+        expect(dispute_evidence.shipping_tracking_number).to be_nil
+      end
+    end
+  end
+
   context "when dispute is on a combined charge" do
     let(:purchase) do
       create(

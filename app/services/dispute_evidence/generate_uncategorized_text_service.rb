@@ -17,6 +17,7 @@ class DisputeEvidence::GenerateUncategorizedTextService
     rows = [
       customer_location_text,
       billing_zip_text,
+      shipping_tracking_text,
       previous_purchases_rows
     ].compact
     rows.flatten.join("\n")
@@ -33,6 +34,16 @@ class DisputeEvidence::GenerateUncategorizedTextService
       return if purchase.credit_card_zipcode.blank?
 
       "Billing postal code: #{purchase.credit_card_zipcode}"
+    end
+
+    # The structured shipping_carrier / shipping_tracking_number fields only carry a URL we can
+    # attribute to a known carrier. Everything else the seller supplied still belongs in the one
+    # submission we get, so send the URL itself here rather than dropping it.
+    def shipping_tracking_text
+      tracking_url = purchase.shipment&.tracking_url
+      return if tracking_url.blank?
+
+      "Shipment tracking URL: #{tracking_url}"
     end
 
     # Evidence of one or more non-disputed payments on the same card

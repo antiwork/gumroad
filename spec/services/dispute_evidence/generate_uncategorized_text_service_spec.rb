@@ -64,5 +64,32 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
         expect(uncategorized_text).to eq(expected_uncategorized_text)
       end
     end
+
+    context "when the purchase was shipped with a tracking URL" do
+      before do
+        other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint")
+        create(:shipment, purchase: disputed_purchase, tracking_url: "https://track.aftership.com/9400111899223197428490")
+      end
+
+      # The structured shipping fields only take a URL attributable to a known carrier, so an
+      # unattributable one would otherwise be dropped from the single submission entirely.
+      it "includes the tracking URL" do
+        expected_uncategorized_text = <<~TEXT.strip_heredoc.rstrip
+          Device location: California, United States
+          Billing postal code: 12345
+          Shipment tracking URL: https://track.aftership.com/9400111899223197428490
+        TEXT
+        expect(uncategorized_text).to eq(expected_uncategorized_text)
+      end
+    end
+
+    context "when the purchase has no shipment" do
+      before { other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint") }
+
+      it "omits the tracking row" do
+        expect(uncategorized_text).to_not include("Shipment tracking URL")
+        expect(uncategorized_text).to include("Billing postal code: 12345")
+      end
+    end
   end
 end

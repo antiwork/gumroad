@@ -85,4 +85,41 @@ describe Shipment do
       expect(@shipment.calculated_tracking_url).to eq(nil)
     end
   end
+
+  describe "#carrier_and_tracking_number_from_url" do
+    # The shape production actually stores: a tracking URL and nothing else.
+    let(:shipment) { create(:shipment, carrier: nil, tracking_number: nil) }
+
+    it "recovers the carrier and number for every mapped carrier" do
+      Shipment::CARRIER_TRACKING_URL_MAPPING.each do |carrier, prefix|
+        shipment.update!(tracking_url: "#{prefix}1Z999AA10123456784")
+        expect(shipment.carrier_and_tracking_number_from_url).to eq([carrier, "1Z999AA10123456784"]),
+                                                                 "expected #{carrier} to round-trip from #{prefix}"
+      end
+    end
+
+    it "matches regardless of the URL's scheme" do
+      # The stored prefixes are http for carriers that now redirect to https, and a seller pasting
+      # from the carrier's own site gets the https form.
+      shipment.update!(tracking_url: "https://wwwapps.ups.com/WebTracking/processInputRequest?TypeOfInquiryNumber=T&InquiryNumber1=1Z999")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999"])
+    end
+
+    it "returns nothing for a URL that is not a known carrier's tracking form" do
+      shipment.update!(tracking_url: "https://track.aftership.com/1Z999AA10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+    end
+
+    it "returns nothing when the remainder is not a bare tracking number" do
+      # Extra query parameters mean we cannot tell where the number ends, and a wrong number
+      # submitted as evidence is worse than none.
+      shipment.update!(tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}1Z999&tRef=fullpage")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+    end
+
+    it "returns nothing when no tracking URL was supplied" do
+      expect(create(:shipment, carrier: nil, tracking_number: nil, tracking_url: nil)
+               .carrier_and_tracking_number_from_url).to be_nil
+    end
+  end
 end
