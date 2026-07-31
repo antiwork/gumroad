@@ -161,8 +161,9 @@ module StripeGuardianManager
     # account-level tos_acceptance stays with the seller.
     #
     # Sent only with a real IP. Stripe records this as evidence of where a legal acceptance
-    # happened, so a placeholder would be a fabricated attestation; without one the account sits on
-    # an unmet requirement, which is the truthful outcome.
+    # happened, so a placeholder would be a fabricated attestation. Guardian#has_completed_info?
+    # already requires the IP, so sync never reaches here without one — this stays as defence for
+    # any future caller that builds attributes without going through that gate.
     if guardian.stripe_tos_accepted? && guardian.stripe_tos_ip.present?
       hash[:additional_tos_acceptances] = {
         account: {

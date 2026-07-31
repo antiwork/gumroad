@@ -155,17 +155,28 @@ describe StripeGuardianManager do
       )
     end
 
-    # Stripe records this as evidence of where a legal acceptance happened, so a placeholder would
-    # be a fabricated attestation.
-    it "omits the terms acceptance when no IP was captured" do
+    # Stripe records the IP as evidence of where a legal acceptance happened, so a placeholder would
+    # be a fabricated attestation. Since has_completed_info? now requires the IP alongside the flag,
+    # such a guardian never reaches Stripe at all rather than arriving as a Person with no
+    # acceptance — the account sits on the guardian requirement, which is the truthful state. The
+    # IP check in person_attributes stays as defence for any future caller that bypasses the gate.
+    it "does not sync a guardian whose acceptance has no IP, so no incomplete person is created" do
       guardian.update!(stripe_tos_accepted: true, stripe_tos_ip: nil)
       create_compliance_info(guardian_record: guardian)
 
       described_class.sync(user, stripe_account, passphrase:)
 
-      sent = nil
-      expect(Stripe::Account).to have_received(:create_person) { |_, params| sent = params }
-      expect(sent).not_to have_key(:additional_tos_acceptances)
+      expect(guardian.reload).to have_attributes(has_completed_info?: false, stripe_person_id: nil)
+      expect(Stripe::Account).not_to have_received(:create_person)
+    end
+
+    it "does not sync a guardian whose acceptance has no timestamp" do
+      guardian.update!(stripe_tos_accepted: true, stripe_tos_accepted_at: nil)
+      create_compliance_info(guardian_record: guardian)
+
+      described_class.sync(user, stripe_account, passphrase:)
+
+      expect(Stripe::Account).not_to have_received(:create_person)
     end
 
     context "when there is nothing to sync" do
