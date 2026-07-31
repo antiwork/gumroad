@@ -107,11 +107,16 @@ class Cart < ApplicationRecord
     end
   end
 
+  # Only the address CustomerMailer#abandoned_cart actually delivers to. A logged-in cart can
+  # still carry a stale `email` from a guest session, and that address may belong to someone
+  # else entirely — counting their purchases here would suppress a reminder the account holder
+  # should get. Keep this expression identical to the mailer's `to:`.
+  #
   # Downcased so a purchase made under a differently-cased spelling of the same address still
   # counts — Purchase downcases on write and MySQL's collation ignores case, but the Ruby-side
   # comparison below does not, and User#email is not normalized.
   def self.recipient_emails_for(cart)
-    [cart.email, cart.user&.email].compact_blank.map(&:downcase).uniq
+    [cart.user&.email.presence || cart.email].compact_blank.map(&:downcase).uniq
   end
 
   # Two maps of { recipient => { product_id => Set(owned variant ids) } }, keyed by downcased

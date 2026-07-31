@@ -163,6 +163,22 @@ describe Cart do
       expect(cart.purchased_product_ids).to eq([product.id])
     end
 
+    it "ignores a purchase by the stale cart email when the cart belongs to a signed-in user" do
+      # The mailer delivers to the account email only, so a leftover guest-session address on a
+      # logged-in cart must not suppress anything — that address can belong to someone else.
+      cart.update!(email: "previous-guest@example.com")
+      create(:purchase, link: product, email: "previous-guest@example.com", purchaser: create(:user))
+
+      expect(cart.purchased_product_ids).to be_empty
+    end
+
+    it "still suppresses on the account email when a stale cart email is present" do
+      cart.update!(email: "previous-guest@example.com")
+      create(:purchase, link: product, email: buyer.email, purchaser: buyer)
+
+      expect(cart.purchased_product_ids).to eq([product.id])
+    end
+
     it "ignores another buyer's purchase of the same product" do
       create(:purchase, link: product, email: "someone-else@example.com", purchaser: create(:user))
 
