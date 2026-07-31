@@ -315,6 +315,7 @@ describe CustomerLowPriorityMailer do
 
         expect(mail.subject).to eq "Your membership could not be renewed."
         expect(mail.body.encoded).to include subscription.link.name
+        expect(mail.body.encoded).to include "United States sanctions"
         expect(mail.body.encoded).to include "no charge was attempted"
         expect(mail.body.encoded).to include "nothing wrong with your card"
         expect(mail.body.encoded).to include "/manage"
