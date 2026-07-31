@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 M = "MARK6477"
 def m(k, v) = puts("#{M} #{k}=#{v}")
 
