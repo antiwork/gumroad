@@ -82,6 +82,17 @@ describe DashboardNavPromotion, type: :request do
     expect(seller.reload.promoted_nav_items).to be_nil
   end
 
+  it "ignores an Inertia prefetch, so hovering a row does not promote it" do
+    # The sidebar links prefetch on hover, and a prefetch is a real GET carrying X-Inertia.
+    get workflows_path, headers: {
+      "X-Requested-With" => "XMLHttpRequest",
+      "X-Inertia" => "true",
+      "Purpose" => "prefetch",
+    }
+
+    expect(seller.reload.promoted_nav_items).to be_nil
+  end
+
   it "does not seed a team member from the seller they are switched into" do
     other_seller = create(:user)
     create(:workflow, seller: other_seller)

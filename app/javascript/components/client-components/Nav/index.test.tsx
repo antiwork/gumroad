@@ -1,12 +1,46 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { LoggedInUserProvider, type LoggedInUser } from "$app/components/LoggedInUser";
+
+// `prefetch` is a behavior of Inertia's Link, not a DOM attribute, so the only way to assert on it
+// is to capture the props each row is rendered with.
+const linkPropsByText = new Map<string, { prefetch?: unknown }>();
+
+vi.mock("@inertiajs/react", () => ({
+  Link: ({
+    children,
+    prefetch,
+    title,
+    href,
+    className,
+    onClick,
+    "aria-current": ariaCurrent,
+  }: {
+    children?: React.ReactNode;
+    prefetch?: unknown;
+    title?: string;
+    href?: string;
+    className?: string;
+    onClick?: (event: React.MouseEvent) => void;
+    "aria-current"?: "page" | undefined;
+  }) => {
+    if (title !== undefined) linkPropsByText.set(title, { prefetch });
+    return (
+      <a href={href} title={title} className={className} onClick={onClick} aria-current={ariaCurrent}>
+        {children}
+      </a>
+    );
+  },
+  router: { on: () => () => undefined },
+}));
+
+beforeEach(() => linkPropsByText.clear());
 
 // The nav builds every href through js-routes, which the app injects as a global.
 beforeAll(() => {
@@ -206,5 +240,19 @@ describe("dashboard nav progressive disclosure", () => {
     // Promotion records that the user opened a destination; it never grants access to one.
     fireEvent.click(screen.getByRole("button", { name: "Everything else" }));
     expect(screen.queryByRole("link", { name: "Community" })).toBeNull();
+  });
+
+  it("does not prefetch overflow rows, so the click that earns a row reaches the server", () => {
+    renderNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Everything else" }));
+
+    // Inertia prefetches on hover and a later click ADOPTS that response instead of issuing its own
+    // request — so a prefetching overflow row could be clicked without the server ever seeing the
+    // visit that is supposed to promote it.
+    expect(linkPropsByText.get("Workflows")?.prefetch).toBe(false);
+    // A promoted row sits at the top level, where prefetching costs nothing: promoting an
+    // already-recorded destination is a no-op.
+    expect(linkPropsByText.get("Products")?.prefetch).not.toBe(false);
   });
 });

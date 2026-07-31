@@ -46,11 +46,16 @@ module DashboardNavPromotion
 
     def dashboard_nav_request?
       return false unless request.get?
-      # An Inertia visit IS a page render, and it always sets X-Requested-With, so xhr? alone would
-      # skip every in-app click — the navigation that earns a row in the first place. Partial
-      # reloads re-fetch props for a page already on screen, so they promote nothing.
-      return false if request.xhr? && request.headers["X-Inertia"].blank?
+      # Only a page render earns a row. The app's own fetch wrapper asks for JSON and does not set
+      # X-Requested-With, so the format check — not xhr? — is what keeps its GETs out; Inertia and
+      # browsers both resolve to html.
+      return false unless request.format.html?
+      # Inertia partial reloads re-fetch props for a page already on screen.
       return false if request.headers["X-Inertia-Partial-Data"].present?
+      # The sidebar links prefetch on hover, and a prefetch is a real GET with X-Inertia. Overflow
+      # rows opt out of prefetching for this reason (a click adopts the prefetch and sends nothing
+      # of its own); this is the server-side half of that guard.
+      return false if request.headers["Purpose"] == "prefetch"
       return false if impersonating?
       # Storefronts are served from seller subdomains and custom domains, where a slugged page can
       # collide with a dashboard path. Only the app's own hosts render this nav.

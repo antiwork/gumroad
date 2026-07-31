@@ -128,6 +128,14 @@ type NavItem = {
 
 const renderItem = ({ key, visible: _visible, ...link }: NavItem) => <ClientNavLink key={key} {...link} />;
 
+// Overflow rows must NOT prefetch. Inertia prefetches on hover and a later click adopts that
+// in-flight or cached response instead of issuing its own request, so the visit that is supposed to
+// earn the row would never reach the server. Once promoted the row moves up here, where hover
+// prefetch is free again because promoting an already-recorded item is a no-op.
+const renderOverflowItem = ({ key, visible: _visible, ...link }: NavItem) => (
+  <ClientNavLink key={key} {...link} prefetch={false} />
+);
+
 export const Nav = (props: Props) => {
   const routeParams = { host: useAppDomain() };
   const loggedInUser = useLoggedInUser();
@@ -309,7 +317,7 @@ export const Nav = (props: Props) => {
       {pinnedSecondary.length > 0 ? <NavSection>{pinnedSecondary.map(renderItem)}</NavSection> : null}
       {overflow.length > 0 ? (
         <NavSection>
-          <EverythingElse>{overflow.map(renderItem)}</EverythingElse>
+          <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse>
         </NavSection>
       ) : null}
     </NavFramework>
@@ -330,7 +338,12 @@ const EverythingElse = ({ children }: { children: React.ReactNode }) => {
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full cursor-pointer items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 text-left all-unset hover:text-accent dark:border-foreground/50 dark:border-b-transparent"
+        className={classNames(
+          "flex w-full cursor-pointer items-center truncate border-y border-white/50 px-6 py-4 text-left all-unset hover:text-accent dark:border-foreground/50",
+          // The button can never be :last-child (the controlled region always follows it), so it
+          // closes the section itself while collapsed rather than borrowing `last:border-b`.
+          open ? "border-b-transparent dark:border-b-transparent" : "border-b-white/50 dark:border-b-foreground/50",
+        )}
       >
         <DotsHorizontalRounded className="size-5" />
         <span className="ml-4">Everything else</span>
