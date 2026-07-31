@@ -255,8 +255,20 @@ describe Api::V2::SalesController do
       end
 
       it "uses the Redis-configured timeout for the page_key query when set" do
+        $redis.set(RedisKey.api_v2_sales_page_key_query_timeout, 4)
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 4).and_call_original
+
+        get :index, params: @params
+        expect(response.code).to eq "200"
+      ensure
+        $redis.del(RedisKey.api_v2_sales_page_key_query_timeout)
+      end
+
+      it "clamps a Redis-configured timeout that would outlive the request budget" do
+        # 42s exceeds the Rack::Timeout budget, so the guard would never fire before the
+        # request (and its Puma worker) was killed. It resolves to budget - 1 instead.
         $redis.set(RedisKey.api_v2_sales_page_key_query_timeout, 42)
-        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 42).and_call_original
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: 14).and_call_original
 
         get :index, params: @params
         expect(response.code).to eq "200"
