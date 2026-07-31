@@ -35,13 +35,7 @@ class User < ApplicationRecord
 
   MIN_AGE_FOR_SERVICE_PRODUCTS = 30.days
 
-  # Seasoning before a seller can pull funds instantly. Mirrors Stripe's own rule for the same
-  # feature: Instant Payouts require an account to have been processing on Stripe for at least
-  # 60 days.
-  #
-  # Age rather than a payout tally, because a tally measures cadence instead of history: a weekly
-  # seller cleared the old four-payout bar in a month while a seller paid a few times over several
-  # years never did, and failed payout attempts never incremented it at all.
+  # Seasoning before a seller can pull funds instantly.
   MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS = 60.days
 
   MIN_SALES_CENTS_VALUE_FOR_AI_PRODUCT_GENERATION = 10_000
@@ -1143,15 +1137,15 @@ class User < ApplicationRecord
       alive_user_compliance_info&.legal_entity_country_code == "US"
   end
 
-  # "Processing on Stripe" is anchored on the Stripe account itself, not on the Gumroad signup
-  # date: a seller can hold an account for years before connecting a payout account, and it is the
-  # processing history Stripe seasons against.
+  # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
+  # account for years before connecting one. A recreated payout account resets this.
   def stripe_account_seasoned_for_instant_payouts?
     account = stripe_account
     return false if account.nil?
 
     account.created_at <= MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
   end
+  private :stripe_account_seasoned_for_instant_payouts?
 
   def instant_payouts_supported?
     eligible_for_instant_payouts? && (active_bank_account&.supports_instant_payouts? || false)

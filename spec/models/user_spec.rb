@@ -3607,6 +3607,28 @@ describe User, :vcr do
       expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
+    # A payout-method switch, country change or admin recreation makes a fresh
+    # MerchantAccount row, so a long-standing seller re-seasons from zero.
+    it "returns false when a seller with many payouts has a freshly recreated account" do
+      create_list(:payment_completed, 4, user:)
+      merchant_account.update!(created_at: 10.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns false for a Stripe Connect seller, whose account #stripe_account never returns" do
+      merchant_account.update!(json_data: { meta: { stripe_connect: "true" } })
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns false for a seller paid through PayPal, with no Stripe account to season" do
+      merchant_account.mark_deleted!
+      create(:merchant_account_paypal, user:, created_at: 90.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
     it "returns false when user is not from the US" do
       user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info_canada, user:)
