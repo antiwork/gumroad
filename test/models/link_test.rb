@@ -1425,6 +1425,49 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal product, Link.fetch_leniently("new-slug", user:)
   end
 
+  test "a renamed slug resolves on the seller's own subdomain, not just the bare domain" do
+    user = create_user
+    product = create_product(user:, unique_permalink: "aaa", custom_permalink: "old-slug")
+
+    product.update!(custom_permalink: "new-slug")
+
+    # The seller-scoped host is the URL `long_url` builds and sellers share.
+    assert_equal product, Link.fetch_leniently("old-slug", user:)
+  end
+
+  test "a seller's live product beats a legacy mapping on that seller's own host" do
+    user = create_user
+    renamed = create_product(user:, unique_permalink: "aaa", custom_permalink: "slug")
+    renamed.update!(custom_permalink: "moved")
+    assert_equal renamed.id, LegacyPermalink.find_by(permalink: "slug").product_id
+
+    reclaimed = create_product(user:, unique_permalink: "bbb", custom_permalink: "slug")
+
+    assert_equal reclaimed, Link.fetch_leniently("slug", user:)
+  end
+
+  test "a legacy mapping never leaks across sellers on a scoped host" do
+    owner = create_user
+    other = create_user
+    product = create_product(user: owner, unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+
+    assert_nil Link.fetch_leniently("old-slug", user: other)
+  end
+
+  test "a later live claim wins the claimant's own host while the earlier mapping survives" do
+    first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-new")
+
+    claimant = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+
+    # The claimant's shared URL is seller-scoped, so their live product answers it.
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
+    # The bare-domain lookup keeps its documented legacy-first order; the earlier
+    # seller's mapping is not destroyed to satisfy the newer claim.
+    assert_equal first, Link.fetch_leniently("slug")
+  end
+
   test "renaming twice keeps every earlier slug pointing at the product" do
     product = create_product(unique_permalink: "aaa", custom_permalink: "one")
     product.update!(custom_permalink: "two")

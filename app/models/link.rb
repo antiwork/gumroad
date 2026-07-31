@@ -803,7 +803,16 @@ class Link < ApplicationRecord
   def self.fetch_leniently(general_permalink, user: nil)
     product_via_legacy_permalink = Link.visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink)) if user.blank?
 
-    product_via_legacy_permalink || Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    live_match = product_via_legacy_permalink ||
+      Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    return live_match if live_match.present? || user.blank?
+
+    # Seller-scoped hosts (`seller.gumroad.com/l/:slug`, custom domains) are the
+    # URLs sellers actually share, and the unscoped branch above skips them, so a
+    # renamed slug would still 404 there. Consulted only after the live match
+    # misses, and only for this seller's own products: legacy-first stays
+    # confined to the unscoped branch, so nothing that resolves today changes.
+    Link.visible.by_user(user).find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
   end
 
   def self.fetch(unique_permalink, user: nil)
