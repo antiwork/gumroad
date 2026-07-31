@@ -687,6 +687,19 @@ describe Charge::Disputable, :vcr do
             expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
           end
 
+          it "still asks the seller for their side, on the window the crashed delivery opened" do
+            expect { Purchase.handle_charge_event(event) }.to raise_error("simulated crash")
+
+            # The replay loses the window claim to its own crashed attempt, and the notice that
+            # attempt was raising on never reached the seller. Suppressing the send on a lost
+            # claim would therefore lose the only request for evidence this dispute ever gets.
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
+
+            evidence = purchase.reload.dispute.dispute_evidence
+            expect(evidence.hours_left_to_submit_evidence).to be_positive
+          end
+
           context "when the product is a subscription" do
             let(:product) { create(:subscription_product, user: seller) }
             let!(:purchase) do
@@ -750,6 +763,143 @@ describe Charge::Disputable, :vcr do
             Purchase.handle_charge_event(event)
 
             expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(purchase.id)
+          end
+        end
+
+        context "when CreateMissingDisputeEvidenceJob already opened an elapsed window" do
+          # The sweep backdates seller_contacted_at past its own end when the processor's cutoff
+          # leaves no usable time, then submits without asking. A formalization arriving after that
+          # loses the claim and must not send a notice against the window it lost.
+          let(:elapsed_stamp) { (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS + 8).hours.ago }
+
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              DisputeEvidence.where(id: evidence.id).update_all(seller_contacted_at: elapsed_stamp) if evidence
+              evidence
+            end
+          end
+
+          it "does not ask the seller for information the window no longer accepts" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            evidence = purchase.reload.dispute.dispute_evidence
+            # The sweep's window is kept, not replaced with a fresh full-length one.
+            expect(evidence.seller_contacted_at).to be_within(1.second).of(elapsed_stamp)
+            expect(evidence.hours_left_to_submit_evidence).not_to be_positive
+          end
+
+          it "still notifies admin and hands the dispute to FightDisputeJob" do
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(AdminMailer, :chargeback_notify)
+
+            dispute = purchase.reload.dispute
+            expect(FightDisputeJob).to have_enqueued_sidekiq_job(dispute.id)
+            expect(dispute.formalized_side_effects_finished_at).to be_present
+          end
+        end
+
+        # The old gate tested `elapsed < 72.hours` exactly while every other consumer — including
+        # the notice's own body — asks the rounded hours_left_to_submit_evidence. Between 71.5h and
+        # 72h the two disagreed, so the gate called the window open and the email it sent read "in
+        # the next 0 hours". One predicate now answers for both.
+        context "when rounding has taken the window to its last half hour" do
+          let(:boundary_stamp) { (DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 0.4).hours.ago }
+
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              DisputeEvidence.where(id: evidence.id).update_all(seller_contacted_at: boundary_stamp) if evidence
+              evidence
+            end
+          end
+
+          it "does not send a notice that would quote zero hours" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            evidence = purchase.reload.dispute.dispute_evidence
+            # Still inside the window by exact arithmetic, which is what made this band send.
+            expect(Time.current - evidence.seller_contacted_at)
+              .to be < DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+            expect(evidence.hours_left_to_submit_evidence).to eq(0)
+          end
+        end
+
+        context "when the seller already answered the recovery notice" do
+          # The sweep can open the window, notify the seller, and have them submit before a
+          # re-delivery arrives. A second notice would ask for a statement the form no longer
+          # accepts, on a dispute already sent to the processor.
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              if evidence
+                DisputeEvidence.where(id: evidence.id)
+                               .update_all(seller_contacted_at: 2.hours.ago, seller_submitted_at: 1.hour.ago)
+              end
+              evidence
+            end
+          end
+
+          it "does not ask the seller again for a statement they have already submitted" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.dispute.dispute_evidence.seller_submitted?).to be(true)
+          end
+        end
+
+        # A dispute with no evidence surface at all (PayPal, Stripe Connect) never gets a window, and
+        # the plain notice is the only one it will ever receive — the notice gate must not require a
+        # stamp the way the ask does.
+        context "when the dispute has no evidence record at all" do
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
+          end
+
+          it "still sends the seller the plain chargeback notice" do
+            expect(ContactingCreatorMailer).to receive(:chargeback_notice).with(anything).and_call_original
+
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.dispute.dispute_evidence).to be_nil
+          end
+        end
+
+        context "when the evidence has already been submitted to the processor" do
+          before do
+            allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_wrap_original do |original|
+              evidence = original.call
+              if evidence
+                DisputeEvidence.where(id: evidence.id).update_all(
+                  seller_contacted_at: 2.hours.ago,
+                  resolved_at: 1.hour.ago,
+                  resolution: DisputeEvidence::RESOLUTION_SUBMITTED
+                )
+              end
+              evidence
+            end
+          end
+
+          it "does not send a notice linking a form that no longer accepts anything" do
+            expect(ContactingCreatorMailer).not_to receive(:chargeback_notice)
+
+            Purchase.handle_charge_event(event)
+
+            expect(purchase.reload.dispute.dispute_evidence.resolved?).to be(true)
+          end
+        end
+
+        context "when the seller's window is still open" do
+          it "asks the seller for their side of the dispute" do
+            expect { Purchase.handle_charge_event(event) }
+              .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
+
+            expect(purchase.reload.dispute.dispute_evidence.hours_left_to_submit_evidence).to be_positive
           end
         end
 

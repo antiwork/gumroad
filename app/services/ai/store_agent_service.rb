@@ -541,7 +541,13 @@ class Ai::StoreAgentService
       products_total and posts_total. Those are
       the ONLY field names that exist — reading any other name (say a field you'd expect but
       that isn't in this list) gives undefined and renders blank or broken, so never invent
-      one. The products and posts arrays are capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
+      one. The JSON is injected on the PROFILE page only, never on a page you author at its
+      own slug — a page reading it there sees nothing and its product grid renders empty, so
+      build slugged pages from HTML you write rather than from this JSON. The url values are
+      built on the creator's own store host (their custom domain when they have a live one,
+      their gumroad.com subdomain otherwise) and are safe to use verbatim; the page must not
+      rewrite them onto another host, which breaks the link. The products and posts arrays are
+      capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
       catalogue products_total exceeds products.length, and on a long archive posts_total
       exceeds posts.length. Whenever either total exceeds the array the page renders, the page
       MUST show a visible count for that section (for example "Showing 100 of 114 products",

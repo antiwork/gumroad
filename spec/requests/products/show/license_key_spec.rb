@@ -24,11 +24,13 @@ describe "License key on the product page", :js, type: :system do
   end
 
   context "when the visitor is not a recognized buyer" do
-    it "links the license key lookup page" do
+    # Asserted as an absolute root-domain URL on purpose: the product page also renders on the
+    # seller's subdomain, where /license-key-lookup is not routed (GumroadDomainConstraint).
+    it "links the license key lookup page on the root domain" do
       visit short_link_path(product)
 
       expect(page).to have_text("Already bought this?")
-      expect(page).to have_link("View your information", href: license_key_lookup_path)
+      expect(page).to have_link("View your information", href: license_key_lookup_url(protocol: PROTOCOL, host: ROOT_DOMAIN))
     end
   end
 

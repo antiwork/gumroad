@@ -68,6 +68,10 @@ class CustomDomainVerificationService
     end
   end
 
+  def has_valid_ssl_certificate_for?(domain_variant)
+    ssl_cert_check_redis_namespace.get(ssl_cert_check_cache_key(domain_variant)) || has_valid_ssl_certificate?(domain_variant)
+  end
+
   private
     attr_reader :dns_resolver
 

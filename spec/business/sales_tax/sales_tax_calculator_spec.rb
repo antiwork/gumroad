@@ -42,7 +42,9 @@ describe SalesTaxCalculator do
       compare_calculations(expected: SalesTaxCalculation.zero_tax(0), actual: sales_tax)
     end
 
-    it "returns zero tax if product is physical and in the EU" do
+    # The only rate on file is seller-responsible, which the lookup scope skips, so no rate is
+    # found at all. Nothing here exercises the import logic — see the import context below.
+    it "returns zero tax when the only matching rate is seller-responsible" do
       create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil)
 
       sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
@@ -52,7 +54,7 @@ describe SalesTaxCalculator do
       compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
     end
 
-    context "physical products imported into the EU" do
+    context "physical products shipped to the EU" do
       # No IOSS registration, so anything collected here could not be remitted and the buyer paid
       # the same VAT again to customs on delivery.
       it "returns zero tax for a physical product shipped to an EU member state" do
@@ -64,6 +66,66 @@ describe SalesTaxCalculator do
                                            buyer_location: { country: "LT" }).calculate
 
         compare_calculations(expected: SalesTaxCalculation.zero_tax(12_500), actual: sales_tax)
+      end
+
+      # Origin does not enter into it: we have no IOSS number to remit under or to present at the
+      # border wherever the parcel starts. These four cover the origins the previous revision of
+      # this fix branched on, so re-introducing an origin test reddens them.
+      it "returns zero tax when the seller ships from inside the EU" do
+        create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        create(:user_compliance_info, user: @seller, country: "Germany")
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "LT" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+      end
+
+      it "returns zero tax on a domestic EU shipment" do
+        create(:zip_tax_rate, country: "DE", zip_code: nil, state: nil, combined_rate: 0.19, is_seller_responsible: false)
+        create(:user_compliance_info, user: @seller, country: "Germany")
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "DE" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+      end
+
+      it "returns zero tax when the seller ships from the UK into the EU" do
+        create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        create(:user_compliance_info, user: @seller, country: "United Kingdom")
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "LT" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+      end
+
+      it "returns zero tax when the seller has no compliance country on file" do
+        create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+        @seller.alive_user_compliance_info&.mark_deleted!
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "LT" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+      end
+
+      # The UK has its own registration and the marketplace collects under £135, so the border does
+      # not charge again — this is the one physical destination that still assesses.
+      it "still assesses VAT on a physical product shipped to the UK" do
+        expected_tax_rate = create(:zip_tax_rate, country: "GB", zip_code: nil, state: nil, combined_rate: 0.20, is_seller_responsible: false)
+
+        sales_tax = SalesTaxCalculator.new(product: create(:physical_product, user: @seller),
+                                           price_cents: 100,
+                                           buyer_location: { country: "GB" }).calculate
+
+        compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 20, zip_tax_rate: expected_tax_rate),
+                             actual: sales_tax)
       end
 
       it "still assesses VAT on a digital product shipped to the same country" do
@@ -126,6 +188,140 @@ describe SalesTaxCalculator do
 
         compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 8, zip_tax_rate: expected_tax_rate),
                              actual: sales_tax)
+      end
+
+      # A bundle's own Link is not is_physical, so before this the carve-out read every bundle as
+      # digital and collected on parcels customs charges again.
+      context "when the physical goods are sold inside a bundle" do
+        def bundle_of(*products)
+          create(:product, :bundle, user: @seller, bundle_products: []).tap do |bundle|
+            products.each { create(:bundle_product, bundle:, product: _1) }
+            bundle.bundle_products.reload
+          end
+        end
+
+        it "returns zero tax when every component ships" do
+          create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          bundle = bundle_of(create(:physical_product, user: @seller), create(:physical_product, user: @seller))
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 12_500,
+                                             shipping_cents: 4_000,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.zero_tax(12_500), actual: sales_tax)
+        end
+
+        it "still assesses VAT on a bundle that mixes physical and digital components" do
+          expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          bundle = bundle_of(create(:physical_product, user: @seller), create(:product, user: @seller))
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
+                               actual: sales_tax)
+        end
+
+        it "still assesses VAT on an all-digital bundle" do
+          expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          bundle = bundle_of(create(:product, user: @seller), create(:product, user: @seller))
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
+                               actual: sales_tax)
+        end
+
+        # Converting a physical product into a bundle leaves its own is_physical set, so the row says
+        # "ships" while the thing being sold includes a digital component we still owe VAT on.
+        it "still assesses VAT when a converted physical product carries a digital component" do
+          expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          bundle = create(:physical_product, user: @seller)
+          bundle.is_bundle = true
+          bundle.native_type = Link::NATIVE_TYPE_BUNDLE
+          create(:bundle_product, bundle:, product: create(:product, user: @seller))
+          bundle.save!
+
+          sales_tax = SalesTaxCalculator.new(product: bundle.reload,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
+                               actual: sales_tax)
+        end
+
+        # A removed component must not silently change what the remaining ones are taxed as.
+        it "ignores deleted components when deciding whether the bundle ships" do
+          create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          bundle = bundle_of(create(:physical_product, user: @seller), create(:product, user: @seller))
+          bundle.bundle_products.find { !_1.product.is_physical? }.mark_deleted!
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+        end
+
+        # Deleting the component PRODUCT does not cascade to the join row, so the bundle still sells
+        # and still ships it — the tax lane has to read it the same way checkout does.
+        it "counts a component whose product row is deleted" do
+          create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          physical = create(:physical_product, user: @seller)
+          bundle = bundle_of(physical, create(:physical_product, user: @seller))
+          physical.delete!
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+        end
+
+        # No live components means no parcel to import; an empty bundle must not fall into the
+        # carve-out just because nothing contradicts it.
+        it "still assesses VAT on a bundle with no live components" do
+          expected_tax_rate = create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          bundle = create(:product, :bundle, user: @seller, bundle_products: [])
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 21, zip_tax_rate: expected_tax_rate),
+                               actual: sales_tax)
+        end
+
+        # Origin no longer enters the predicate — #6604 dropped the seller-country proxy per the
+        # ruling to stop collecting physical EU VAT at all — so an EU-established seller's
+        # all-physical bundle is carved out exactly like a non-EU seller's.
+        it "returns zero tax on an all-physical bundle when the seller is established inside the EU" do
+          create(:zip_tax_rate, country: "LT", zip_code: nil, state: nil, combined_rate: 0.21, is_seller_responsible: false)
+          create(:user_compliance_info, user: @seller, country: "Germany")
+          bundle = bundle_of(create(:physical_product, user: @seller), create(:physical_product, user: @seller))
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "LT" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.zero_tax(100), actual: sales_tax)
+        end
+
+        it "still assesses VAT on an all-physical bundle shipped to the UK" do
+          expected_tax_rate = create(:zip_tax_rate, country: "GB", zip_code: nil, state: nil, combined_rate: 0.20, is_seller_responsible: false)
+          bundle = bundle_of(create(:physical_product, user: @seller), create(:physical_product, user: @seller))
+
+          sales_tax = SalesTaxCalculator.new(product: bundle,
+                                             price_cents: 100,
+                                             buyer_location: { country: "GB" }).calculate
+
+          compare_calculations(expected: SalesTaxCalculation.new(price_cents: 100, tax_cents: 20, zip_tax_rate: expected_tax_rate),
+                               actual: sales_tax)
+        end
       end
     end
 
@@ -2140,7 +2336,7 @@ describe SalesTaxCalculator do
         compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
       end
 
-      it "does not assess VAT for physical products in EU country" do
+      it "does not assess VAT for physical products shipped to an EU country" do
         product = create(:physical_product, user: @seller)
         create(:zip_tax_rate, country: "IT", state: nil, zip_code: nil, combined_rate: 0.22, is_seller_responsible: false)
 

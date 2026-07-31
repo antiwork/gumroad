@@ -79,10 +79,66 @@ class DisputeEvidence < ApplicationRecord
     errors.add(:base, "Invalid file type.")
   end
 
-  def hours_left_to_submit_evidence
-    return 0 unless seller_contacted?
+  # Hours the seller has left, from a stamp. Every consumer must ask through here: the number the
+  # notice quotes and the number the gates test have to be the same one, or a window reads open to
+  # one caller while the email it triggers says "0 hours". Rounded, so callers that hold a raw
+  # timestamp cannot reintroduce a second arithmetic.
+  def self.hours_left_in_window(seller_contacted_at)
+    return 0 if seller_contacted_at.nil?
 
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
+  end
+
+  def hours_left_to_submit_evidence
+    self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
+  end
+
+  # Both terminal states make Purchases::DisputeEvidenceController redirect away, so no notice may
+  # reference the form once either is set.
+  def self.evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+    seller_submitted_at.present? || resolved_at.present?
+  end
+
+  # May we ask this seller for a statement and link them to the form? Requires an OPEN window:
+  # check_if_needs_redirect bounces an unstamped row too, so a nil stamp is not permission to ask.
+  #
+  # Takes raw column values so a caller holding them without a trustworthy record can still ask —
+  # the sweep must not #reload mid-transaction (see claim_seller_contacted_window!).
+  def self.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    return false if evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+
+    seller_contacted_at.present? && hours_left_in_window(seller_contacted_at).positive?
+  end
+
+  # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with
+  # no evidence surface at all (PayPal, Stripe Connect) never gets a window and still needs its
+  # plain notice, so an unstamped row is accepted here and refused by accepting_evidence?.
+  def self.notice_worth_sending?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    return false if evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+
+    seller_contacted_at.nil? || hours_left_in_window(seller_contacted_at).positive?
+  end
+
+  def accepting_evidence?
+    self.class.accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+  end
+
+  # Opens the seller's evidence window, and returns whether this caller is the one that opened it.
+  #
+  # Two paths open it — formalization and CreateMissingDisputeEvidenceJob — and they can run against
+  # one row at the same time. Both must claim through here rather than checking seller_contacted? and
+  # then writing: the sweep backdates the stamp to land its submission before the processor's cutoff,
+  # so a stale check elsewhere would replace that with a fresh full-length window and submit too
+  # late. The condition lives in the WHERE, so the loser writes nothing and keeps the winner's window.
+  #
+  # Deliberately does not reload: the sweep runs this inside the transaction that creates the record
+  # and its attachments, and reloading there resets the attachment associations before ActiveStorage's
+  # after_commit upload, so the blobs would never reach storage. Read the stamp back with a fresh
+  # query rather than #reload on this object.
+  def claim_seller_contacted_window!(at: Time.current)
+    self.class.where(id:, seller_contacted_at: nil, resolved_at: nil)
+        .update_all(seller_contacted_at: at, updated_at: Time.current)
+        .positive?
   end
 
   def all_files_size_within_limit
