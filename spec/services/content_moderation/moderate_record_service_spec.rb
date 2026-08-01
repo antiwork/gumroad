@@ -207,6 +207,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
           expect(over_budget_page.valid?).to eq(true)
         end
 
+        it "counts images painted through nested CSS toward the budget" do
+          count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
+          nested_css = (1..count).map do |n|
+            %(.card#{n} { --img#{n}: url("https://cdn.example.com/#{n}.png"); & .hero { background-image: var(--img#{n}) } })
+          end.join("\n")
+          nested_page = Page.new(pageable: seller, slug: "nested", title: "Nested", custom_html: "<style>#{nested_css}</style>")
+
+          expect(ContentModeration::Strategies::ClassifierStrategy).not_to receive(:new)
+
+          expect(described_class.check(nested_page, :page).passed).to eq(false)
+        end
+
         it "moderates a page that sits exactly at the limit" do
           at_limit = (1..ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS)
                        .map { |n| %(<img src="https://cdn.example.com/#{n}.png">) }.join

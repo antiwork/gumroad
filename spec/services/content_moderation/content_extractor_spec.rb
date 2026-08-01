@@ -307,6 +307,30 @@ RSpec.describe ContentModeration::ContentExtractor do
                                                                           ])
     end
 
+    it "recovers images painted through CSS nesting, which the parser cannot structure but browsers render" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          .card {
+            --seller-image: url("https://cdn.example.com/nested-var.png");
+            & .hero { background-image: var(--seller-image) }
+            & .side { .deep { background-image: url("https://cdn.example.com/deep.png") } }
+          }
+          @media screen {
+            .promo { & .banner { background: url("https://cdn.example.com/media-nested.png") } }
+          }
+        </style>
+      HTML
+
+      # Crass returns a nested rule as a bare :error node with its declarations
+      # discarded, so without the flattened re-read these images rendered while
+      # extraction had nothing to hand to moderation.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/nested-var.png",
+                                                                            "https://cdn.example.com/deep.png",
+                                                                            "https://cdn.example.com/media-nested.png",
+                                                                          ])
+    end
+
     it "leaves unused custom-property URLs out, so a URL nothing renders cannot block a page" do
       page = page_for(custom_html: <<~HTML)
         <style>

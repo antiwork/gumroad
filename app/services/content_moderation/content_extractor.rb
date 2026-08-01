@@ -208,7 +208,7 @@ class ContentModeration::ContentExtractor
     def css_image_urls(document)
       properties =
         document.css("[style]").flat_map { |node| css_property_nodes(Crass.parse_properties(node["style"].to_s)) } +
-        document.css("style").flat_map { |node| css_rule_property_nodes(Crass.parse(node.text.to_s)) }
+        document.css("style").flat_map { |node| style_sheet_property_nodes(node.text.to_s) }
 
       # Custom property names are case-sensitive, unlike standard properties.
       custom_property_values = Hash.new { |hash, name| hash[name] = [] }
@@ -242,19 +242,54 @@ class ContentModeration::ContentExtractor
       urls
     end
 
+    # One <style> sheet's declarations. Crass's grammar predates CSS nesting, so
+    # a rule nested inside another comes back as a bare :error node with its
+    # declarations DISCARDED — while nesting-capable browsers render them. When
+    # the structured parse loses content that way, re-read the sheet with every
+    # block brace replaced by a semicolon, at the token level so braces inside
+    # strings and url() are untouched: declarations at any nesting depth then
+    # parse flat, and selector fragments fall out as :error. The coarse pass can
+    # collect a declaration a browser would not apply, which errs toward
+    # reviewing an image that may never render — and only for sheets whose
+    # precise parse dropped something.
+    def style_sheet_property_nodes(css)
+      properties, errors = css_rule_property_nodes(Crass.parse(css))
+                             .partition { |node| node[:node] == :property }
+      properties += css_property_nodes(Crass.parse_properties(flatten_css_blocks(css))) if errors.any?
+      properties
+    end
+
+    def flatten_css_blocks(css)
+      Crass::Tokenizer.tokenize(css).map do |token|
+        token[:node] == :"{" || token[:node] == :"}" ? ";" : token[:raw]
+      end.join
+    end
+
+    # Property nodes plus the :error nodes that mark content the parse dropped,
+    # so the caller knows when the sheet needs the flattened re-read.
     def css_rule_property_nodes(rules)
       rules.flat_map do |node|
         next [] unless node.is_a?(Hash)
 
         case node[:node]
         when :style_rule
-          css_property_nodes(node[:children])
+          Array(node[:children]).select { |child| child.is_a?(Hash) && [:property, :error].include?(child[:node]) }
         when :at_rule
           # An at-rule's block comes back as raw tokens; re-parsing recovers the
-          # rules nested under @media/@supports. @font-face's declarations don't
-          # parse as rules and fall out as :error nodes — which is the point:
-          # its `src` URLs are fonts, not images.
-          node[:block] ? css_rule_property_nodes(Crass::Parser.parse_rules(node[:block])) : []
+          # rules nested under @media/@supports. @font-face is skipped whole:
+          # its `src` URLs are fonts, not images, and its declarations don't
+          # parse as rules — the :error nodes they would surface as must not
+          # count as dropped content, or every webfont would trigger the
+          # flattened re-read and its font declarations would be swept up.
+          if node[:name].to_s.downcase == "font-face"
+            []
+          elsif node[:block]
+            css_rule_property_nodes(Crass::Parser.parse_rules(node[:block]))
+          else
+            []
+          end
+        when :error
+          [node]
         else
           []
         end
