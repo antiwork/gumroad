@@ -1422,7 +1422,7 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
   end
 
-  # --- custom permalink rename redirects (gumroad-private#1619) --------------
+  # --- custom permalink rename redirects -------------------------------------
 
   test "renaming a custom permalink records a legacy mapping so the old URL still resolves" do
     user = create_user
@@ -1553,8 +1553,7 @@ class LinkTest < ActiveSupport::TestCase
 
     # The claimant's shared URL is seller-scoped, so their live product answers it.
     assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
-    # The bare domain is live-first too, so the mapping cannot serve the earlier
-    # seller's product over the claimant's live listing (gumroad-private#1653).
+    # The bare domain is live-first too, so the mapping cannot override the claimant.
     assert_equal claimant, Link.fetch_leniently("slug")
     # The mapping is not destroyed to achieve that — it resumes forwarding the
     # moment the claim lapses.

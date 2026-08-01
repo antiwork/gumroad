@@ -1,6 +1,4 @@
-// Cross-seller contention capture for gumroad#6721 / gumroad-private#1653.
-// The claim is made by pr-6721-cross-seller-claim.rb; this proves what the BARE
-// domain actually serves to a visitor once a different seller holds the slug live.
+// Capture what the bare domain serves when another seller holds a mapped slug live.
 import fs from "fs";
 import { chromium } from "playwright";
 

@@ -5519,8 +5519,7 @@ class LinksControllerShowTest < ActionController::TestCase
 
     get :show, params: { id: "custom" }
 
-    # A mapping must never serve over another seller's live listing
-    # (gumroad-private#1653); @other_product is the oldest live holder.
+    # @other_product is the oldest live holder, so the mapping must not override it.
     assert_redirected_to @other_product.long_url
   end
 

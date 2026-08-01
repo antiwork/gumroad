@@ -1,17 +1,8 @@
 import fs from "fs";
 import { chromium } from "playwright";
 
-// PR #6721 at head 4ba5161a3 — the seller-scoped `product_permalink_redirects` table.
-// Before this commit a rename OFF a slug another seller held live wrote nothing at all
-// (the globally-unique legacy_permalinks row was already taken), so the renaming seller
-// kept the 404 on every link they had shared. The scoped row fixes exactly that case
-// without touching the established global mapping.
-//
-// Seeded state (read back on the pod, see pr-6721-scoped-seed.rb):
-//   product 6 "Beautiful education widget"           seller 10 gumboeducation  renamed zshared-r6721b -> zmoved-r6721b
-//   product 7 "Beautiful software-development widget" seller 11 gumbosoftware  holds zshared-r6721b LIVE
-//   product_permalink_redirects: [seller 10 -> product 6] on zshared-r6721b
-//   legacy_permalinks:           [] on zshared-r6721b   <- the row the old writer could not create
+// Verify seller-scoped redirects when another seller still holds the released slug.
+// The global legacy table cannot represent this collision without displacing its existing mapping.
 const ROOT = "gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org";
 const SLUG_OLD = "zshared-r6721b";
 const SLUG_NEW = "zmoved-r6721b";

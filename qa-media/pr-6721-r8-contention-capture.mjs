@@ -1,7 +1,7 @@
 import fs from "fs";
 import { chromium } from "playwright";
 
-// PR #6721 re-QA at head ea5492aba — live-first precedence on BOTH fetch_leniently branches.
+// Capture live-first precedence on both fetch_leniently branches.
 // Overlay values are read off the live response; no expectation is hardcoded into a frame.
 const ROOT = "https://gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org";
 const RUN = "r126656";

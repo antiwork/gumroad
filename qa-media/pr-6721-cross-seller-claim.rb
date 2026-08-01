@@ -1,13 +1,7 @@
 # frozen_string_literal: true
 
-# Cross-seller contention leg for gumroad#6721 / gumroad-private#1653.
-# A DIFFERENT seller claims, LIVE, the slug that seller@'s legacy mapping holds.
-# Before the reorder the bare domain served the MAPPED product (wrong seller).
-# After it, the live claimant must win, and the mapping row must survive untouched.
-#
-# Re-running is idempotent, not a fresh measurement: the claim persists, so `before_bare`
-# reads the claimant on every run after the first. Only the first run observed the
-# transition (1 -> 3); its output survives in ce5566690's commit message.
+# Seed a live cross-seller slug collision and verify bare-domain precedence.
+# The live claimant must win while the existing mapping remains unchanged.
 SLUG = "xseller-old-974496"
 
 owner = User.find_by(email: "seller@gumroad.com")

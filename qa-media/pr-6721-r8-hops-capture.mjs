@@ -1,7 +1,7 @@
 import fs from "fs";
 import { chromium } from "playwright";
 
-// PR #6721 re-QA at head ea5492aba — rename-hop legs on product 5 (gumbowriting).
+// Capture seller-host and bare-domain behavior across multiple renames.
 const ROOT = "https://gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org";
 const HOST = "https://gumbowriting.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org";
 const RUN = "r126656";
