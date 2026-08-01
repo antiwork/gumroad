@@ -115,6 +115,25 @@ describe Order::ChargeService, :vcr do
       }
     end
 
+    let(:two_seller_line_items_params) do
+      {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            quantity: 1
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_3.unique_permalink,
+            perceived_price_cents: product_3.price_cents,
+            quantity: 1
+          }
+        ]
+      }
+    end
+
     let(:multi_seller_line_items_params) do
       {
         line_items: [
@@ -200,23 +219,27 @@ describe Order::ChargeService, :vcr do
     end
 
     it "reports a seller group that raises, while the other seller's charge still succeeds" do
-      # gumroad-private#1671: the rescue is per seller group, so a raise here is the
-      # partial-order path — earlier groups stay captured and the loop continues. It logged
-      # only, so these were invisible to Sentry.
       create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
-      params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
+      create(:merchant_account, user: seller_2, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+      params = two_seller_line_items_params.merge!(common_order_params_without_payment).merge!(payment_params_with_future_charges)
       order, _ = Order::CreateService.new(params:).perform
 
       boom = StandardError.new("charge exploded")
-      allow_any_instance_of(Order::ChargeService).to receive(:create_charge_for_seller_purchases).and_raise(boom)
+      allow_any_instance_of(Order::ChargeService).to receive(:create_charge_for_seller_purchases).and_wrap_original do |original, purchases, *rest|
+        raise boom if purchases.first.seller_id == seller_1.id
+        original.call(purchases, *rest)
+      end
 
-      expect(ErrorNotifier).to receive(:notify).with(boom, hash_including(order: order.id, seller: seller_1.id)).once
+      expect(ErrorNotifier).to receive(:notify).with(boom, hash_including(order_id: order.id, seller_id: seller_1.id)).once
 
       Order::ChargeService.new(order:, params:).perform
 
-      # The loop still drives every purchase to a terminal state rather than leaving them hung.
-      expect(order.reload.purchases.in_progress).to be_empty
-      expect(order.purchases.successful).to be_empty
+      order.reload
+      # The raise is confined to seller_1's group: seller_2's charge is captured afterwards,
+      # which is what makes this a partial order rather than an aborted checkout.
+      expect(order.purchases.successful.pluck(:link_id)).to eq([product_3.id])
+      expect(order.purchases.where(link_id: product_1.id).sole).to be_failed
+      expect(order.purchases.in_progress).to be_empty
     end
 
     it "charges all purchases in the order when seller has a Stripe merchant account" do
