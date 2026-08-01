@@ -216,12 +216,9 @@ module Payment::FailureReason
     "PayPal is the only payout method we can offer in your country, so to get paid you'll need to connect a " \
     "PayPal account registered in a country that can receive PayPal payments. You can change it in your " \
     "payout settings."
-  # Said only where both rails are closed: PayPal refuses the country on the account's address and
-  # bank transfer is not offered in the seller's. We cannot tell which half of that cohort holds a
-  # usable PayPal account elsewhere, so the remaining option is stated as a condition rather than
-  # as an instruction, and the seller who has no such account is told so plainly instead of being
-  # sent after one. The balance claim is left to the next-step sentence appended after this, which
-  # is the one that knows about holds.
+  # Said only where both rails are closed. Part of this cohort does hold a usable PayPal account
+  # elsewhere, so the option is a condition rather than an instruction. The balance/next-step claim
+  # is appended after this — that half is the one that knows about holds.
   TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL =
     "PayPal will not send payments to accounts registered in that country, and bank transfer is not " \
     "available in yours. If you have a PayPal account registered in a country PayPal does pay to, you " \

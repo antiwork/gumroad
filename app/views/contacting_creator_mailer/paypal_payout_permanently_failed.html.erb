@@ -22,8 +22,7 @@
   <% if @no_payout_rail_available %>
     <p>
       <%# The cohort splits and we cannot tell the halves apart: some hold a usable PayPal account
-          elsewhere, some cannot get one. Offer the first as a condition, answer the second plainly.
-          Claims only that the balance stays — closing the account still forfeits it. %>
+          elsewhere, some cannot get one. Offer the first as a condition, answer the second plainly. %>
       PayPal will not send payments to accounts registered in that country, and bank transfer is not available in yours.
       If you have a PayPal account registered in a country PayPal does pay to, you can
       <a href='<%= settings_payments_url %>'>add it in your payout settings</a>.

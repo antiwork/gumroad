@@ -174,7 +174,9 @@ describe Payment::FailureReason do
               payment.mark_failed!("PAYPAL 3148")
 
               solution = payment.reload.terminal_paypal_failure_seller_solution
-              expect(solution).to start_with(no_payout_rail_solution)
+              expect(solution).to eq(
+                "#{no_payout_rail_solution} #{Payment::FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_NEXT_STEP}"
+              )
               expect(solution).to_not include("is not forfeited")
             end
 
