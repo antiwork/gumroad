@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 class CreateDashboardNavPromotions < ActiveRecord::Migration[7.1]
-  # Renumbered from 20261206000021, which #6733's migration had already taken — two branches picked
-  # the same next number and both merged, so every branch's suite died in maintain_test_schema!.
-  # Where the old version is already recorded, db:migrate now runs this against a database that has
-  # the table: up leaves it alone, and down refuses to drop a table this migration never created.
-  # That is why this is an explicit up/down pair rather than a reversible change.
+  # Renumbered from 20261206000021, which #6733's migration also claimed. Version 21 is still live
+  # under that other migration, so it is recorded on every normally-migrated database and cannot be
+  # read as evidence about this table. Ownership is only ambiguous where 21 was recorded by THIS
+  # migration before the renumber — a branch database that ran #6766 pre-merge, which is why up
+  # tolerates an existing table and down refuses to drop that one.
   SUPERSEDED_VERSION = "20261206000021"
 
   def up
@@ -21,15 +21,20 @@ class CreateDashboardNavPromotions < ActiveRecord::Migration[7.1]
 
   def down
     return unless table_exists?(:dashboard_nav_promotions)
-    # The version numbers alone cannot prove ownership — under the collision, 21 may instead be
-    # #6733's column migration — so this errs towards keeping the table. A rollback that leaves an
-    # unused table behind costs nothing; one that drops it loses every promotion row.
-    return if superseded_version_applied?
+    return if table_predates_this_version?
 
     drop_table :dashboard_nav_promotions
   end
 
   private
+    # True only where version 21 is recorded WITHOUT #6733's columns, i.e. it was this table's
+    # migration under the old number. Dropping there would destroy rows this migration never
+    # created; everywhere else 21 means #6733 and the table is this migration's to remove.
+    def table_predates_this_version?
+      superseded_version_applied? &&
+        !column_exists?(:subscription_plan_changes, :notification_claim_id)
+    end
+
     def superseded_version_applied?
       connection.select_value(
         ActiveRecord::Base.sanitize_sql_array(
