@@ -293,10 +293,17 @@ class CustomerMailer < ApplicationMailer
 
     workflows = Workflow.where(id: workflow_ids_with_product_ids.keys).abandoned_cart_type.published.includes(:alive_installments)
 
+    # Re-checked at render time rather than trusted from scheduling: a run walks a month of
+    # windows, so a buyer can complete the purchase between being selected and the mail being
+    # delivered — that is exactly the shape the reported case had (gumroad-private#1626).
+    # Skipped for previews, whose fixture cart is usually one the recipient has bought from.
+    purchased_product_ids = is_preview ? [] : cart.purchased_product_ids
+
     @installments = workflows.filter_map do |workflow|
       installment = workflow.alive_installments.sole
       products = workflow.abandoned_cart_products.select do |product|
-        workflow_ids_with_product_ids[workflow.id.to_s].include?(ObfuscateIds.decrypt(product[:external_id]))
+        product_id = ObfuscateIds.decrypt(product[:external_id])
+        workflow_ids_with_product_ids[workflow.id.to_s].include?(product_id) && purchased_product_ids.exclude?(product_id)
       end
       next if products.empty?
 
