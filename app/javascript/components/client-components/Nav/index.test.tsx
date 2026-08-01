@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -182,11 +182,14 @@ const renderNav = ({
 
 // Scoped to the scroll region so the header logo and the pinned footer (Help, account popover)
 // don't show up as nav rows.
-const navLinkNames = () => {
+const navScrollRegion = () => {
   const region = screen.getByRole("navigation", { name: "Main" }).querySelector(".overflow-y-auto");
-  if (!region) throw new Error("Expected the nav links to have a scroll region");
-  return [...region.querySelectorAll("a")].map((link) => link.textContent.trim()).filter(Boolean);
+  if (!(region instanceof HTMLElement)) throw new Error("Expected the nav links to have a scroll region");
+  return region;
 };
+
+const navLinkNames = () =>
+  [...navScrollRegion().querySelectorAll("a")].map((link) => link.textContent.trim()).filter(Boolean);
 
 describe("dashboard nav progressive disclosure", () => {
   it("shows only the core rows to a seller who has used nothing", () => {
@@ -212,6 +215,17 @@ describe("dashboard nav progressive disclosure", () => {
     renderNav({ promoted: ["workflows", "analytics"] });
 
     expect(navLinkNames()).toEqual(["Home", "Products", "Workflows", "Sales", "Analytics", "Payouts", "Discover"]);
+  });
+
+  it("renders a promoted Library above Discover, inside the same section as every other row", () => {
+    renderNav({ promoted: ["library"] });
+
+    const names = navLinkNames();
+    expect(names.indexOf("Library")).toBeLessThan(names.indexOf("Discover"));
+    // Same <section> as the core rows — Library and Discover are not split off behind a gap.
+    const section = (name: string) => within(navScrollRegion()).getByRole("link", { name }).closest("section");
+    expect(section("Library")).toBe(section("Home"));
+    expect(section("Discover")).toBe(section("Home"));
   });
 
   it("keeps the page being viewed out of the overflow even before its promotion is recorded", () => {

@@ -162,7 +162,7 @@ export const Nav = (props: Props) => {
     }
   });
 
-  const primaryItems: NavItem[] = [
+  const navItems: NavItem[] = [
     {
       key: "home",
       visible: true,
@@ -278,17 +278,6 @@ export const Nav = (props: Props) => {
         sessionStorage.setItem("communities:referrer", window.location.pathname + window.location.search);
       },
     },
-  ];
-
-  const secondaryItems: NavItem[] = [
-    {
-      key: "discover",
-      visible: true,
-      text: "Discover",
-      icon: <Search className="size-5" />,
-      href: discoverUrl,
-      exactHrefMatch: true,
-    },
     {
       key: "library",
       visible: currentSeller?.id === loggedInUser?.id,
@@ -296,6 +285,14 @@ export const Nav = (props: Props) => {
       icon: <BookmarkHeart pack="filled" className="size-5" />,
       href: Routes.library_url(routeParams),
       additionalPatterns: [Routes.wishlists_url(routeParams), Routes.reviews_url(routeParams)],
+    },
+    {
+      key: "discover",
+      visible: true,
+      text: "Discover",
+      icon: <Search className="size-5" />,
+      href: discoverUrl,
+      exactHrefMatch: true,
     },
   ];
 
@@ -305,16 +302,13 @@ export const Nav = (props: Props) => {
   const isPinned = (item: NavItem) =>
     CORE_ITEMS.includes(item.key) || promoted.has(item.key) || matchesCurrentPath(item);
 
-  const visiblePrimary = primaryItems.filter((item) => item.visible);
-  const visibleSecondary = secondaryItems.filter((item) => item.visible);
-  const overflow = [...visiblePrimary, ...visibleSecondary].filter((item) => !isPinned(item));
-  const pinnedSecondary = visibleSecondary.filter(isPinned);
+  const visibleItems = navItems.filter((item) => item.visible);
+  const overflow = visibleItems.filter((item) => !isPinned(item));
 
   return (
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
-      <NavSection>{visiblePrimary.filter(isPinned).map(renderItem)}</NavSection>
-      {pinnedSecondary.length > 0 ? <NavSection>{pinnedSecondary.map(renderItem)}</NavSection> : null}
+      <NavSection>{visibleItems.filter(isPinned).map(renderItem)}</NavSection>
       {overflow.length > 0 ? (
         <NavSection>
           <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse>
