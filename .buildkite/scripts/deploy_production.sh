@@ -9,6 +9,17 @@ logger() {
 
 SKIP_DEPLOY=10
 
+PAYOUT_HEALTHCHECK_URL="https://gumroad.com/healthcheck/payouts"
+LONG_RUNNING_JOBS_HEALTHCHECK_URL="https://gumroad.com/healthcheck/long_running_jobs"
+
+poll_healthcheck() {
+  local status
+  # On a connection failure curl already writes "000" to stdout, so the fallback is only
+  # for the case where curl writes nothing at all.
+  status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1") || status="000"
+  printf '%s\n' "$status"
+}
+
 # Deploys wait while work a deploy would destroy is ACTUALLY running, by asking the app
 # rather than guessing from the clock. Jobs a deploy must not interrupt register a token in
 # Redis while they run (see DeployBlockingJobTracking) and the matching healthcheck answers
@@ -36,10 +47,7 @@ wait_for_healthcheck() {
   local attempt hc_status
 
   for attempt in $(seq 1 "$max_attempts"); do
-    # On a connection failure curl already writes "000" to stdout, so the `|| echo` fallback
-    # is only for the case where curl writes nothing at all. Either way the value is not
-    # 200/503 and falls through to the unreachable branch below.
-    hc_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url") || hc_status="000"
+    hc_status=$(poll_healthcheck "$url")
     if [ "$hc_status" = "200" ]; then
       return 0
     elif [ "$hc_status" = "503" ]; then
@@ -76,7 +84,7 @@ run_healthcheck_waits() {
 
   (
     set +e
-    wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15 proceed \
+    wait_for_healthcheck "Payout batch" "$PAYOUT_HEALTHCHECK_URL" 15 proceed \
       '[ "$(date -u +%u)" -ge 2 ] && [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H)" -eq 10 ]'
     rc=$?
     printf '%s\n' "$rc" > "$tmpdir/payout.rc.tmp"
@@ -87,7 +95,7 @@ run_healthcheck_waits() {
 
   (
     set +e
-    wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
+    wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" 40 skip \
       '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
     rc=$?
     printf '%s\n' "$rc" > "$tmpdir/long.rc.tmp"
@@ -124,7 +132,30 @@ run_healthcheck_waits() {
   rm -rf "$tmpdir"
 }
 
-run_healthcheck_waits
+# A wait that finishes early goes stale while the other one is still busy: a protected job
+# starting in that window would never be seen again before the deploy. Serially the
+# long-running check ran last, so it was always fresh at deploy time — restore that by
+# rechecking it after the parallel waits drain and re-entering the waits if it went busy
+# again. Only the long-running blocker gets this treatment: payout staleness is accepted by
+# design (an interrupted slice is re-run by Sidekiq, hence proceed-on-timeout), and looping
+# on it would break its promise of never holding a deploy more than its own wait budget.
+# Only 503 loops — for unreachable/absent endpoints the waits above already applied the
+# fail-safe-window semantics, and re-looping would apply them twice.
+CONFIRMATION_ROUNDS=5
+confirmation_round=1
+while true; do
+  run_healthcheck_waits
+  long_status=$(poll_healthcheck "$LONG_RUNNING_JOBS_HEALTHCHECK_URL")
+  if [ "$long_status" != "503" ]; then
+    break
+  fi
+  if [ "$confirmation_round" -ge "$CONFIRMATION_ROUNDS" ]; then
+    logger "Long-running job busy again on every confirmation round — skipping deployment (the change ships with the next push, or click require-approval to force it)"
+    exit 0
+  fi
+  logger "Long-running job busy again after the waits cleared — waiting again (confirmation round $confirmation_round/$CONFIRMATION_ROUNDS)"
+  confirmation_round=$((confirmation_round + 1))
+done
 
 ECR_REGISTRY=${ECR_REGISTRY}
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
