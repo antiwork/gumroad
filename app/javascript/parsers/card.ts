@@ -7,11 +7,12 @@ export type CreditCardType =
   | "mastercard"
   | "jcb"
   | "diners"
-  | "unionpay";
+  | "unionpay"
+  | "upi";
 
 export type SavedCreditCard = {
   type: CreditCardType;
   number: string;
-  expiration_date: string;
+  expiration_date: string | null;
   requires_mandate: boolean;
 };
