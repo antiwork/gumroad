@@ -373,4 +373,86 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
       expect(@seller.reload.unpaid_balance_cents).to eq(@initial_balance)
     end
   end
+
+  describe "serializing competing callers" do
+    let(:purchase) { create(:purchase_in_progress, link: @product, stripe_transaction_id: "ch_test") }
+
+    it "holds the row for the whole read-then-write" do
+      locked_before_processor_read = false
+      allow(purchase).to receive(:with_lock).and_wrap_original do |orig, &blk|
+        locked_before_processor_read = true
+        orig.call(&blk)
+      end
+      allow(ChargeProcessor).to receive(:get_or_search_charge) do
+        expect(locked_before_processor_read).to be(true)
+        nil
+      end
+
+      described_class.new(purchase).perform
+
+      expect(locked_before_processor_read).to be(true)
+    end
+
+    it "does nothing when the caller it queued behind already finalized the row" do
+      # Stands in for winning the lock only after a webhook-driven sync finalized this purchase:
+      # without the re-read, this caller would credit the seller a second time.
+      allow(purchase).to receive(:with_lock).and_wrap_original do |orig, &blk|
+        Purchase.where(id: purchase.id).update_all(purchase_state: "successful")
+        orig.call(&blk)
+      end
+      expect(ChargeProcessor).to_not receive(:get_or_search_charge)
+
+      expect(described_class.new(purchase, mark_as_failed: true).perform).to be(false)
+
+      expect(purchase.reload).to be_successful
+    end
+
+    it "leaves the row to the lock holder instead of failing it when the lock cannot be taken" do
+      allow(purchase).to receive(:with_lock).and_raise(ActiveRecord::LockWaitTimeout)
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(described_class.new(purchase, mark_as_failed: true).perform).to be(false)
+
+      expect(purchase.reload).to be_in_progress
+    end
+  end
+
+  describe "#charge_outcome" do
+    let(:purchase) { create(:purchase_in_progress, link: @product, stripe_transaction_id: "ch_test") }
+
+    def outcome_for(charge)
+      allow(ChargeProcessor).to receive(:get_or_search_charge).and_return(charge)
+      service = described_class.new(purchase)
+      service.perform
+      service.charge_outcome
+    end
+
+    def stripe_charge(status:, refunded: false, disputed: false)
+      instance_double(StripeCharge, status:, refunded:, disputed:, flow_of_funds: nil, id: "ch_test")
+    end
+
+    it "is nil before the processor has been consulted" do
+      expect(described_class.new(purchase).charge_outcome).to be_nil
+    end
+
+    it "reports a missing charge" do
+      expect(outcome_for(nil)).to eq(:missing)
+    end
+
+    it "reports a refunded charge" do
+      expect(outcome_for(stripe_charge(status: "succeeded", refunded: true))).to eq(:refunded)
+    end
+
+    it "reports a disputed charge" do
+      expect(outcome_for(stripe_charge(status: "succeeded", disputed: true))).to eq(:disputed)
+    end
+
+    it "reports a charge that is still settling as pending, not succeeded" do
+      expect(outcome_for(stripe_charge(status: "pending"))).to eq(:pending)
+    end
+
+    it "reports a charge in a non-success status" do
+      expect(outcome_for(stripe_charge(status: "failed"))).to eq(:unsuccessful)
+    end
+  end
 end
