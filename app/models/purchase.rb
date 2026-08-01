@@ -3506,8 +3506,10 @@ class Purchase < ApplicationRecord
     preorder.present? || is_recurring_subscription_charge
   end
 
-  def is_an_off_session_charge_on_indian_card?
-    stripe_charge_processor? && !credit_card&.upi? && card_country == "IN" && is_a_saved_card_rebill?
+  def is_an_async_off_session_charge_in_india?
+    return false unless stripe_charge_processor? && is_a_saved_card_rebill?
+
+    credit_card&.recurring_upi? || (!credit_card&.upi? && card_country == Compliance::Countries::IND.alpha2)
   end
 
   # Indian cards must register an RBI e-mandate when a recurring payment is first set up;
@@ -3560,10 +3562,10 @@ class Purchase < ApplicationRecord
     ErrorNotifier.notify(e, purchase: external_id)
   end
 
-  # Off-session charges on Indian cards remain in processing for 26 hours on Stripe.
+  # Off-session charges on Indian cards and UPI remain in processing for 26 hours on Stripe.
   # We keep the purchase in_progress for that duration, so avoid forced updates (from admin or background jobs).
   def can_force_update?
-    in_progress? && (!is_an_off_session_charge_on_indian_card? || created_at < 26.hours.ago)
+    in_progress? && (!is_an_async_off_session_charge_in_india? || created_at < 26.hours.ago)
   end
 
   def linked_license

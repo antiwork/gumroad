@@ -207,6 +207,48 @@ describe Purchase::ChargeEventsHandler, :vcr do
     end
   end
 
+  describe "UPI Autopay off-session events" do
+    let(:credit_card) do
+      CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_customer_id: "cus_upi_renewal",
+        processor_payment_method_id: "pm_upi_renewal",
+        stripe_fingerprint: "pm_upi_renewal",
+        visual: "UPI",
+        card_type: CardType::UPI,
+        card_country: Compliance::Countries::IND.alpha2,
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000
+      )
+    end
+    let(:purchase) do
+      create(
+        :recurring_membership_purchase,
+        credit_card:,
+        stripe_transaction_id: "ch_upi_renewal",
+        purchase_state: "in_progress"
+      )
+    end
+    it "finalizes a successful renewal" do
+      processor_charge = double
+      event = build(:charge_event_charge_succeeded, charge_id: purchase.stripe_transaction_id)
+      allow(ChargeProcessor).to receive(:get_charge).and_return(processor_charge)
+      expect(purchase).to receive(:save_charge_data).with(processor_charge)
+      expect_any_instance_of(Subscription).to receive(:handle_purchase_success).with(purchase, succeeded_at: nil)
+
+      purchase.handle_event_succeeded!(event)
+    end
+
+    it "finalizes a failed renewal" do
+      event = build(:charge_event_payment_failed, charge_id: purchase.stripe_transaction_id)
+      expect_any_instance_of(Subscription).to receive(:handle_purchase_failure).with(purchase)
+
+      purchase.handle_event_failed!(event)
+    end
+  end
+
   describe "payment failed event for purchase" do
     before do
       @initial_balance = 200
