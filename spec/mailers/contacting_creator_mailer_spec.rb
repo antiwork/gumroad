@@ -442,7 +442,8 @@ describe ContactingCreatorMailer do
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
       end
