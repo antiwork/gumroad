@@ -29,18 +29,17 @@ describe "deleted_ids[:variants] kind invariant" do
       version = create(:variant, variant_category: category, name: "V1")
 
       # Force the collision the id scheme permits: a grouping whose primary key
-      # equals the version's, so both encrypt to the same string. `base_variants`
-      # and `variant_categories` have independent counters, so whether that row
-      # already exists is incidental — take it if it does, move one onto that id
-      # if it does not. Never `update_all(id:)` blindly: when the id is already
-      # taken (which it is whenever the counters happen to line up) that violates
-      # the primary key, and the failure looks like a flake rather than a clash.
-      colliding_category = VariantCategory.find_by(id: version.id)
-      if colliding_category.nil?
-        spare = create(:variant_category, link: product, title: "Collides")
-        VariantCategory.where(id: spare.id).update_all(id: version.id)
-        colliding_category = VariantCategory.find(version.id)
-      end
+      # equals the version's, so both encrypt to the same string. Move BOTH rows
+      # onto an id free in both tables rather than reusing whatever grouping
+      # already sits at the version's id — when the two counters line up that row
+      # is `category` itself, and the example then asserts the grouping under
+      # test both survives and gets swept.
+      collision_id = [BaseVariant.maximum(:id), VariantCategory.maximum(:id)].compact.max + 1
+      BaseVariant.where(id: version.id).update_all(id: collision_id)
+      version = Variant.find(collision_id)
+      spare = create(:variant_category, link: product, title: "Collides")
+      VariantCategory.where(id: spare.id).update_all(id: collision_id)
+      colliding_category = VariantCategory.find(collision_id)
 
       expect(colliding_category.external_id).to eq(version.external_id)
 
