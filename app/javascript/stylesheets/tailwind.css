@@ -173,6 +173,9 @@
   pointer-events: none;
   position: absolute;
   margin: 0;
+  /* ProseMirror's widget is an empty div, so it shrink-to-fits to 0 and the bar below —
+     sized against it — paints nothing. Upstream sidesteps this with a fixed 20px caret. */
+  width: 100%;
 }
 
 .ProseMirror-gapcursor::after {

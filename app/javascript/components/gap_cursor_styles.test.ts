@@ -48,6 +48,13 @@ describe("gap cursor styling", () => {
     expect(ourCss).toMatch(/\.ProseMirror\s*\{[^}]*position:\s*relative/u);
   });
 
+  it("gives the caret host a width, because ProseMirror's widget div is empty", () => {
+    // The host shrink-to-fits to 0 without this, and the ::after bar is sized against it, so
+    // every other assertion here can pass over a caret that paints nothing (measured: 0px).
+    const host = /\.ProseMirror-gapcursor\s*\{(?<body>[^}]*)\}/u.exec(ourCss)?.groups?.body ?? "";
+    expect(host).toMatch(/width:\s*100%/u);
+  });
+
   it("draws the caret with the accent colour, so it stays visible in dark mode", () => {
     const rule = /\.ProseMirror-gapcursor::after\s*\{(?<body>[^}]*)\}/u.exec(ourCss)?.groups?.body ?? "";
     expect(rule).toMatch(/border-top:[^;]*rgb\(var\(--accent\)\)/u);
