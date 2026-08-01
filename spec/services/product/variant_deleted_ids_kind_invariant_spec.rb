@@ -130,11 +130,18 @@ describe "deleted_ids[:variants] kind invariant" do
                                                     "gumroad-private#1503. Give grouping deletion its own collection."
 
       # The reconciler may clear the list or drop the ids a save consumed;
-      # anything else makes it a fifth producer.
+      # anything else makes it a fifth producer. Capture each assignment's
+      # WHOLE expression (to the semicolon, across lines) and anchor-match it —
+      # a prefix check would wave through a trailing `.concat(groupingIds)`.
+      # Paren-free arguments only, so wrapping any call around the result (or
+      # feeding one in) trips this and forces review.
       reconciler_source = File.read(javascript_root.join(reconciler))
-      reconciler_writes = reconciler_source.scan(/confirmed_removed_variant_ids["'\]\s]*=(?![=>])\s*(.+)/).flatten
+      reconciler_writes = reconciler_source.scan(/confirmed_removed_variant_ids["'\]\s]*=(?![=>])\s*([^;]+);/).flatten
       expect(reconciler_writes).not_to be_empty
-      expect(reconciler_writes).to all(match(/\A(?:\[\]|reconcileConfirmedRemovalIds\()/))
+      expect(reconciler_writes).to all(match(/\A(?:\[\]|reconcileConfirmedRemovalIds\(\s*[^()]*\))\s*\z/)),
+                                   "The reconciler assigns confirmed_removed_variant_ids something other than [] or a " \
+                                   "bare reconcileConfirmedRemovalIds(...) call. Anything appended to that expression " \
+                                   "can smuggle a grouping id into deleted_ids[:variants] — see gumroad-private#1503."
 
       # Every write the wide pattern sees in the reconciler must be one of the
       # plain assignments checked above — a `.push` or indexed write here would
