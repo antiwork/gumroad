@@ -835,7 +835,10 @@ describe Payouts do
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
+      # The cycle is Friday-anchored, so on a Saturday `Date.today - 1` IS the current
+      # payout date and "the cycle has moved past it" stops being true. Pin a Wednesday.
       before do
+        travel_to Time.utc(2026, 7, 29, 12, 0, 0)
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
         create(:user_compliance_info, user: seller)
       end
