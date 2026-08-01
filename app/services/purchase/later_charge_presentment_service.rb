@@ -148,17 +148,20 @@ class Purchase::LaterChargePresentmentService
 
       owner.with_lock do
         current = owner.current_later_charge_presentment
-        return current if current&.presentment_currency == required_currency && current.canonical_price_cents == canonical_price_cents
-        return if current&.presentment_currency != required_currency
-
-        owner.later_charge_presentments.create!(
-          processor: StripeChargeProcessor.charge_processor_id,
-          presentment_currency: required_currency,
-          presentment_price_cents:,
-          canonical_price_cents:,
-          signup_currency_units_per_usd: currency_units_per_usd,
-          effective_from: Time.current
-        )
+        if current&.presentment_currency == required_currency && current.canonical_price_cents == canonical_price_cents
+          current
+        elsif current&.presentment_currency != required_currency
+          nil
+        else
+          owner.later_charge_presentments.create!(
+            processor: StripeChargeProcessor.charge_processor_id,
+            presentment_currency: required_currency,
+            presentment_price_cents:,
+            canonical_price_cents:,
+            signup_currency_units_per_usd: currency_units_per_usd,
+            effective_from: Time.current
+          )
+        end
       end
     end
 

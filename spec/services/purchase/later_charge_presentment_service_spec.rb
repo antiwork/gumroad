@@ -369,6 +369,32 @@ describe Purchase::LaterChargePresentmentService do
       )
     end
 
+    it "uses a successor fixing created before the renewal lock is acquired" do
+      stale = create_inr_fixing
+      renewal_purchase.update!(
+        price_cents: 1500,
+        total_transaction_cents: 1500,
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 124_500,
+        rate_converted_to_usd: BigDecimal("83")
+      )
+      successor = create(
+        :later_charge_presentment,
+        owner: subscription,
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 124_500,
+        canonical_price_cents: 1500,
+        signup_currency_units_per_usd: BigDecimal("83"),
+        effective_from: Time.current
+      )
+      allow(subscription).to receive(:current_later_charge_presentment).and_return(stale, successor)
+
+      result = nil
+      expect { result = service(required_currency: Currency::INR, amount_cents: 1500).perform }
+        .not_to change(LaterChargePresentment, :count)
+      expect(result.processor_amount_cents).to eq(124_500)
+    end
+
     it "requests a payment-method update when a stale fixing lacks direct-INR renewal terms" do
       create_inr_fixing
       renewal_purchase.update!(price_cents: 1500, total_transaction_cents: 1500)
