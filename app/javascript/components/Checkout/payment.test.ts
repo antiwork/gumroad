@@ -423,6 +423,25 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     ).toBe(true);
   });
 
+  it("keeps recurring UPI available when a limited discount changes only today's charge", () => {
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        clientConfirmState({
+          checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+          products: [
+            product({
+              recurrence: "monthly",
+              // price is the discounted canonical amount charged today; listedPriceCents keeps
+              // the selected pre-discount INR basis that the server rendered.
+              price: 430,
+              listedPriceCents: 73_000,
+            }),
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });

@@ -140,8 +140,9 @@ export type Product = {
   creator: Creator;
   quantity: number;
   price: number;
-  // The discounted cart total in the product's listed currency. Recurring UPI uses it to
-  // detect edits that no longer match the server-rendered INR Element amount.
+  // The selected pre-discount subtotal in the product's listed currency. Recurring UPI uses it
+  // to detect price or quantity edits that no longer match the server-rendered INR Element
+  // amount while allowing a limited discount to change only today's charge.
   listedPriceCents?: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
