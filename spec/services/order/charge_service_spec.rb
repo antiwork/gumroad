@@ -199,6 +199,26 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[1]]).to eq(order.purchases.last.purchase_response)
     end
 
+    it "reports a seller group that raises, while the other seller's charge still succeeds" do
+      # gumroad-private#1671: the rescue is per seller group, so a raise here is the
+      # partial-order path — earlier groups stay captured and the loop continues. It logged
+      # only, so these were invisible to Sentry.
+      create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+      params = line_items_params.merge!(common_order_params_without_payment).merge!(successful_payment_params)
+      order, _ = Order::CreateService.new(params:).perform
+
+      boom = StandardError.new("charge exploded")
+      allow_any_instance_of(Order::ChargeService).to receive(:create_charge_for_seller_purchases).and_raise(boom)
+
+      expect(ErrorNotifier).to receive(:notify).with(boom, hash_including(order: order.id, seller: seller_1.id)).once
+
+      Order::ChargeService.new(order:, params:).perform
+
+      # The loop still drives every purchase to a terminal state rather than leaving them hung.
+      expect(order.reload.purchases.in_progress).to be_empty
+      expect(order.purchases.successful).to be_empty
+    end
+
     it "charges all purchases in the order when seller has a Stripe merchant account" do
       seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
