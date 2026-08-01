@@ -161,9 +161,12 @@ class StripeChargeProcessor
                                                            { stripe_account: destination_transfer.destination })
     end
     balance_transaction = charge.balance_transaction
+    merchant_account_looked_up = false
+    merchant_account = nil
     if balance_transaction.is_a?(String)
       begin
         merchant_account = merchant_account_for_transfer_group(charge.transfer_group)
+        merchant_account_looked_up = true
         balance_transaction = merchant_account&.is_a_stripe_connect_account? ?
                                 Stripe::BalanceTransaction.retrieve({ id: balance_transaction }, { stripe_account: merchant_account.charge_processor_merchant_id }) :
                                 Stripe::BalanceTransaction.retrieve({ id: balance_transaction })
@@ -172,8 +175,18 @@ class StripeChargeProcessor
         balance_transaction = nil
       end
     end
+
+    # Only needed to label a destination payment Stripe never credited, so pay for the lookup
+    # exactly then.
+    destination_payment_balance_transaction = stripe_destination_payment.try(:balance_transaction)
+    if stripe_destination_payment.present? && destination_payment_balance_transaction.nil? && !merchant_account_looked_up
+      merchant_account = merchant_account_for_transfer_group(charge.transfer_group)
+    end
+
     StripeCharge.new(charge, balance_transaction, charge.application_fee.try(:balance_transaction),
-                     stripe_destination_payment.try(:balance_transaction), destination_transfer)
+                     destination_payment_balance_transaction, destination_transfer,
+                     stripe_destination_payment:,
+                     merchant_account_currency: merchant_account&.currency)
   end
 
   # A combined charge's transfer_group is a Charge id carrying the "CH-" prefix, not a Purchase id,
@@ -463,12 +476,23 @@ class StripeChargeProcessor
           end
         end
         destination_payment_application_fee_refund = stripe_destination_payment.application_fee.refunds.first if stripe_destination_payment.application_fee
+
+        # Reverse the same way the charge was recorded. The account's currency is only needed for
+        # that case, so pay for the lookup exactly then.
+        if stripe_destination_payment.balance_transaction.nil?
+          refund_merchant_account_currency = (merchant_account || merchant_account_for_transfer_group(charge.transfer_group))&.currency
+          destination_payment_uncredited = StripeCharge.destination_payment_permanently_uncredited?(
+            stripe_destination_payment, merchant_account_currency: refund_merchant_account_currency
+          )
+        end
       end
       StripeChargeRefund.new(charge, refund, destination_payment_refund,
                              refund.balance_transaction,
                              application_fee_refund.try(:balance_transaction),
                              destination_payment_refund_balance_transaction,
-                             destination_payment_application_fee_refund)
+                             destination_payment_application_fee_refund,
+                             destination_payment_uncredited: destination_payment_uncredited.present?,
+                             merchant_account_currency: refund_merchant_account_currency)
     end
   end
 
