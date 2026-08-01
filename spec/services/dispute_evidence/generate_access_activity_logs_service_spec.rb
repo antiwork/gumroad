@@ -283,9 +283,8 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
     end
   end
 
-  # Buyers download the member products, so every access row is written against the members
-  # while the disputed wrapper purchase stays silent. Two thirds of bundle dispute packets
-  # went out with no download log because of it (gumroad-private#1690).
+  # Access rows are written against the member purchases the buyer downloads, not the disputed
+  # wrapper.
   describe "bundle purchases" do
     let(:bundle_purchase) { create(:purchase, link: create(:product, :bundle, user: seller), is_bundle_purchase: true) }
     let(:member_product) { create(:product, user: seller, name: "Member One") }
@@ -303,8 +302,8 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       content = described_class.perform(bundle_purchase)
 
       expect(content).to include("The customer accessed the product 1 time.")
-      expect(content).to include("1.2.3.4")
-      expect(content).to include("Member One")
+      expect(content).to include("consumed_at,event_type,platform,ip_address,product\n")
+      expect(content).to end_with("web,1.2.3.4,\"Member One\"")
     end
 
     it "counts url_redirect uses on the members when there are no consumption events" do
@@ -331,7 +330,8 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       content = described_class.perform(purchase)
 
       expect(content).to include("consumed_at,event_type,platform,ip_address\n")
-      expect(content).to_not include("product\n")
+      expect(content).to end_with("web,0.0.0.0")
+      expect(content).to_not include(purchase.link.name)
     end
   end
 end

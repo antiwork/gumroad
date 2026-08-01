@@ -39,12 +39,15 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       end
     end
 
-    # A bundle sale's disputed row is the wrapper purchase, but buyers download the member
-    # products, so every access row is written against the members and the wrapper is always
-    # silent. Aggregating both is what puts the download log back in the dispute packet
-    # (gumroad-private#1690).
+    # The disputed row on a bundle sale is the wrapper, but access rows are written against the
+    # member purchases the buyer actually downloads. Both are counted: the wrapper's own download
+    # page still increments when no member is library-visible.
     def access_purchases
-      @_access_purchases ||= bundle? ? [purchase, *purchase.product_purchases] : [purchase]
+      @_access_purchases ||= if bundle?
+        [purchase, *purchase.product_purchases.includes(:link, :url_redirect)]
+      else
+        [purchase]
+      end
     end
 
     def bundle?
@@ -75,12 +78,11 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       ].flatten.join("\n")
     end
 
+    BASE_ROW_ATTRIBUTES = %w(consumed_at event_type platform ip_address).freeze
+
     def consumption_event_row_attributes
       BASE_ROW_ATTRIBUTES + (bundle? ? ["product"] : [])
     end
-
-    BASE_ROW_ATTRIBUTES = %w(consumed_at event_type platform ip_address).freeze
-    private_constant :BASE_ROW_ATTRIBUTES
 
     def consumption_event_rows
       consumption_events.first(LOG_RECORDS_LIMIT).map do |event|
@@ -90,11 +92,13 @@ class DisputeEvidence::GenerateAccessActivityLogsService
       end
     end
 
-    # Names the member a row belongs to, so a reviewer can tell which item of the bundle was
-    # downloaded. Quoted because product names routinely contain commas.
+    # Quoted because product names routinely contain commas; embedded quotes are doubled per CSV
+    # convention rather than rewritten, since this is evidence and the name must stay verbatim.
     def product_name_for(event)
       name = purchase_names_by_id[event.purchase_id]
-      name.present? ? "\"#{name.tr('"', "'")}\"" : ""
+      return "" if name.blank?
+
+      "\"#{name.gsub("\"", "\"\"").gsub(/[\r\n]+/, " ")}\""
     end
 
     def purchase_names_by_id
