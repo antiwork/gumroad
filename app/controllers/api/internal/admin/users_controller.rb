@@ -345,12 +345,17 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     record_admin_write(action: "users.flag_for_tos_violation", target: user) do
-      # Always take down the reported product: a seller can already be flagged from a
-      # prior listing, but this listing still needs its own enforcement action.
-      already_flagged = user.flagged_for_tos_violation?
+      # Every reported product is taken down, whether or not the seller is already flagged.
+      already_flagged = nil
       product_status = nil
 
       ActiveRecord::Base.transaction do
+        # Read the flag under the row lock. Two reports on an unflagged seller would
+        # otherwise both see false, and the loser's state transition raises before it
+        # reaches its own takedown — leaving that listing live.
+        user.lock!
+        already_flagged = user.flagged_for_tos_violation?
+
         if already_flagged
           product.comments.create!(
             content: flag_for_tos_violation_comment_content(product),
