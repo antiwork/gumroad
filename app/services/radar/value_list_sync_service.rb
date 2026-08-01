@@ -26,7 +26,16 @@ class Radar::ValueListSyncService
     value = platform_block.object_value
     return false if platform_block.charge_processor_fingerprint? && !value.match?(STRIPE_FINGERPRINT_PATTERN)
 
-    remove_item_from_list(find_or_create_list(**list_config).id, value)
+    value_list_id = find_or_create_list(**list_config).id
+    remove_item_from_list(value_list_id, value)
+
+    # A block re-added between the check above and the delete would otherwise lose Radar
+    # enforcement until tomorrow's sync, so put the item back instead of leaving the gap.
+    if reblocked?(platform_block.object_type, value)
+      add_item_to_list(value_list_id, value)
+      return false
+    end
+
     true
   end
 
@@ -105,6 +114,10 @@ class Radar::ValueListSyncService
   end
 
   private
+    def reblocked?(object_type, object_value)
+      PlatformBlock.active.exists?(object_type:, object_value:)
+    end
+
     # The add loop makes one sequential Stripe call per row, so a row cleared after the SELECT
     # would otherwise be re-added — restoring the very block the removal job just lifted.
     def unblocked_since_select?(platform_block)

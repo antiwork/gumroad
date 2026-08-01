@@ -305,6 +305,36 @@ describe Radar::ValueListSyncService do
       expect(service.remove_block(block)).to be(false)
     end
 
+    it "restores the item when the row is re-blocked between the check and the delete" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "raced@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("raced@example.com", "rsli_9")
+
+      # Commits the re-block after remove_block has already passed its reload check, which is the
+      # only window where a delete can strip Radar enforcement from a live block.
+      allow(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_9") do
+        PlatformBlock.find(block.id).update_columns(blocked_at: Time.current)
+      end
+
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(
+        value_list: "rsl_123",
+        value: "raced@example.com"
+      )
+
+      expect(service.remove_block(block)).to be(false)
+    end
+
+    it "does not re-add the item when no concurrent re-block happened" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "clean@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("clean@example.com", "rsli_10")
+      allow(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_10")
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
     it "skips types that were never pushed to Radar" do
       block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
       block.update_columns(blocked_at: nil, expires_at: nil)
