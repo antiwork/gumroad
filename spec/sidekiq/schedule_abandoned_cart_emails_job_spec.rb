@@ -66,6 +66,14 @@ describe ScheduleAbandonedCartEmailsJob do
           guest_cart4.update!(updated_at: 2.days.ago)
         end
 
+        # cart1 holds two seller1 products (one variant-specific) and one of seller2's; owning
+        # every one of them is what leaves the cart with nothing to be reminded about.
+        def own_everything_in_cart1
+          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+          create(:purchase, link: seller1_product2, email: cart1.user.email, purchaser: cart1.user, variant_attributes: [seller1_product2_variant1])
+          create(:purchase, link: seller2_product2, email: cart1.user.email, purchaser: cart1.user)
+        end
+
         it "schedules emails for the matching abandoned carts belonging to both logged-in users and guest carts" do
           expect do
             described_class.new.perform
@@ -87,6 +95,113 @@ describe ScheduleAbandonedCartEmailsJob do
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
+
+        it "does not schedule an email for products the recipient already bought" do
+          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+          create(:purchase, link: seller2_product1, email: cart2.user.email, purchaser: cart2.user)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(2).times
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
+
+        it "does not schedule an email for a guest cart whose email already bought the product" do
+          create(:purchase, link: seller1_product1, email: guest_cart1.email, purchaser: nil)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
+        end
+
+        it "schedules nothing for a cart whose every product is owned, and leaves it eligible" do
+          own_everything_in_cart1
+
+          # guest_cart1 holds the same seller1 products under an unowned email, so the run
+          # staying otherwise intact proves the filter keys on the recipient, not the products.
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(2).times
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
+            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+
+          # Skipping a cart must not write the SentAbandonedCartEmail marker the mailer writes
+          # on delivery: that row is what takes a cart out of Cart.abandoned for good.
+          expect(cart1.reload.sent_abandoned_cart_emails).to be_empty
+          expect(cart1).to be_abandoned
+        end
+
+        it "schedules an email for an all-owned cart once an unowned product is added to it" do
+          own_everything_in_cart1
+          described_class.new.perform
+
+          create(:cart_product, cart: cart1, product: seller2_product1)
+          cart1.update!(updated_at: 2.days.ago) # adding to a cart touches it
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
+        end
+
+        it "still schedules an email when a refunded purchase is the only one for a carted product" do
+          create(:purchase, :refunded, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
+
+          expect do
+            described_class.new.perform
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
+
+        it "does not walk workflows of sellers with no products in the abandoned carts" do
+          # Workflow matching drives off the carted products' sellers; walking every
+          # published workflow was the bulk of the runtime that kept the job from
+          # finishing inside a deploy window (gumroad-private#1576).
+          uncarted_seller = create(:user)
+          create(:payment_completed, user: uncarted_seller)
+          uncarted_product = create(:product, user: uncarted_seller)
+          uncarted_workflow = create(:abandoned_cart_workflow, seller: uncarted_seller, published_at: 1.day.ago, bought_products: [uncarted_product.unique_permalink])
+
+          walked_workflow_ids = []
+          allow_any_instance_of(Workflow).to receive(:abandoned_cart_products).and_wrap_original do |original, **kwargs|
+            walked_workflow_ids << original.receiver.id
+            original.call(**kwargs)
+          end
+
+          described_class.new.perform
+
+          expect(walked_workflow_ids).to include(seller1_abandoned_cart_workflow.id, seller2_abandoned_cart_workflow.id)
+          expect(walked_workflow_ids).not_to include(uncarted_workflow.id)
+        end
+      end
+
+      context "when the run is killed partway through the day windows" do
+        it "has already scheduled emails for the days scanned before the kill" do
+          # Each day's window is matched and delivered before the next is scanned, so a
+          # deploy-window kill costs one day's chunk instead of the whole run
+          # (gumroad-private#1576): a death on day 2 must not take day 1's sends with it.
+          travel_to Time.current.noon do
+            day1_cart = create(:cart)
+            create(:cart_product, cart: day1_cart, product: seller1_product1)
+            day1_cart.update!(updated_at: 25.hours.ago)
+
+            day2_cart = create(:cart)
+            create(:cart_product, cart: day2_cart, product: seller1_product1)
+            day2_cart.update!(updated_at: 2.days.ago)
+
+            job = described_class.new
+            scanned_windows = 0
+            allow(job).to receive(:abandoned_cart_ids).and_wrap_original do |original, window|
+              scanned_windows += 1
+              raise Sidekiq::Shutdown if scanned_windows > 1
+              original.call(window)
+            end
+
+            expect do
+              expect { job.perform }.to raise_error(Sidekiq::Shutdown)
+            end.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
+              .with(day1_cart.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id] }.stringify_keys)
+          end
         end
       end
 

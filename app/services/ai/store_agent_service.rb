@@ -876,6 +876,7 @@ class Ai::StoreAgentService
 
       reply = result.text.to_s.strip
       return { status: :invalid, reason: :blank_reply } if reply.blank?
+      return { status: :invalid, reason: :staging_claim_without_proposal } if reply == PROPOSAL_READY_REPLY
       return { status: :invalid, reason: :staging_claim_without_proposal } if phantom_staged_claim?(reply:, proposed_action:)
 
       { status: :complete, reply: }
@@ -936,7 +937,15 @@ class Ai::StoreAgentService
       end
 
       outcome = retrying ? "retrying" : "gave up"
-      Rails.logger.warn("Store agent final turn did not match proposal state (#{reason}, #{outcome})")
+      message = "Store agent final turn did not match proposal state (#{reason}, #{outcome})"
+      # The retry recovers this almost every time, and reporting the recoverable half buried the
+      # signals worth seeing. Only the give-up is a failure; every other reason stays error-level.
+      if reason == :missing_complete_turn && retrying
+        Rails.logger.info(message)
+        return
+      end
+
+      Rails.logger.warn(message)
       ErrorNotifier.notify(
         "Store agent final turn did not match proposal state",
         reason: reason.to_s,
@@ -1103,7 +1112,15 @@ class Ai::StoreAgentService
         next if content.blank?
         next unless %w[user assistant].include?(role)
 
-        { role:, content: content.truncate(MAX_MESSAGE_LENGTH, omission: "...") }
+        proposal_state = msg[:proposal_state] || msg["proposal_state"]
+        state_suffix =
+          if role == "assistant" && proposal_state.present?
+            "\n\n[Server proposal state: #{proposal_state}]"
+          else
+            ""
+          end
+        content = content.truncate(MAX_MESSAGE_LENGTH - state_suffix.length, omission: "...")
+        { role:, content: "#{content}#{state_suffix}" }
       end
 
       # Anthropic's Messages API requires the conversation to START with a user message. The web chat

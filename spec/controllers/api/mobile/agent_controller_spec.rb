@@ -663,7 +663,11 @@ describe Api::Mobile::AgentController do
         expect(service_double).to receive(:respond).with(
           messages: [
             { role: "user", content: "Earlier question" },
-            { role: "assistant", content: "Earlier answer" },
+            {
+              role: "assistant",
+              content: "Earlier answer",
+              proposal_state: "no proposed action was recorded for this message",
+            },
             { role: "user", content: "And this month?" },
           ],
         ).and_return(store_agent_turn(reply: "Better."))
@@ -675,6 +679,41 @@ describe Api::Mobile::AgentController do
 
         expect(response.parsed_body["conversation_id"]).to eq(conversation.external_id)
         expect(conversation.ai_messages.reload.count).to eq(4)
+      end
+
+      # The buffered mobile endpoint shares the history builder, so a proposal turn must reach the
+      # model as server-owned state here too.
+      it "replays an applied proposal turn as server-owned state" do
+        conversation = create(:ai_conversation, seller: @seller)
+        create(:ai_message, ai_conversation: conversation, content: "Upload the portrait")
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "Confirm that card and the upload goes through.",
+          metadata: {
+            "proposed_action" => { "type" => "api_write", "params" => { "endpoint" => "update_user_custom_html" } },
+            "action_status" => "applied",
+          },
+        )
+
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        expect(service_double).to receive(:respond).with(
+          messages: [
+            { role: "user", content: "Upload the portrait" },
+            {
+              role: "assistant",
+              content: "You proposed a change on this turn.",
+              proposal_state: "the action was applied and cannot be confirmed again",
+            },
+            { role: "user", content: "And this month?" },
+          ],
+        ).and_return(store_agent_turn(reply: "Already applied."))
+
+        post :create, params: @auth_params.merge(messages: [{ role: "user", content: "And this month?" }], conversation_id: conversation.external_id)
+
+        expect(response.parsed_body["conversation_id"]).to eq(conversation.external_id)
       end
 
       it "resumes a conversation started on the web (same store, no separate mobile silo)" do
@@ -732,6 +771,25 @@ describe Api::Mobile::AgentController do
         # Persistence failure degrades to the generated reply instead of discarding it as a 500.
         expect(response).to be_successful
         expect(response.parsed_body["reply"]).to eq("You have 3 products.")
+        expect(response.parsed_body["conversation_id"]).to be_nil
+      end
+
+      it "rejects and replaces server-owned confirmation copy without a proposal" do
+        stub_agent_service(reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY)
+        expect(ErrorNotifier).to receive(:notify).with(
+          an_instance_of(ArgumentError).and(having_attributes(
+            message: "Store agent proposal reply requires a proposed action.",
+          )),
+        )
+
+        expect do
+          post :create, params: valid_params
+        end.to not_change { @seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["reply"]).to eq(Ai::StoreAgentService::NOTHING_STAGED_REPLY)
+        expect(response.parsed_body["proposed_action"]).to be_nil
+        expect(response.parsed_body["conversation_id"]).to be_nil
       end
     end
 

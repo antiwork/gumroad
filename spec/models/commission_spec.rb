@@ -47,6 +47,20 @@ describe Commission, :vcr do
       end
     end
 
+    it "makes the commission's stored presentment available while processing the completion purchase" do
+      product = create(:commission_product)
+      merchant_account = create(:merchant_account, user: product.user, charge_processor_merchant_id: "commission-presentment-test")
+      deposit_purchase = create(:purchase, link: product, merchant_account:, is_commission_deposit_purchase: true)
+      commission = create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase:)
+      fixing = create(:later_charge_presentment, owner: commission, canonical_price_cents: deposit_purchase.price_cents)
+      expect_any_instance_of(Purchase).to receive(:process!) do |completion_purchase|
+        expect(completion_purchase.commission.current_later_charge_presentment).to eq(fixing)
+        completion_purchase.errors.add(:base, "Stop before charging")
+      end
+
+      expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid)
+    end
+
     context "when status is not completed" do
       let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
       let(:deposit_purchase) { commission.deposit_purchase }

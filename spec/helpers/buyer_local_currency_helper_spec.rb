@@ -308,10 +308,34 @@ describe CurrencyHelper do
     # so it charges canonical USD for them. Showing a converted price here would put the same
     # unexplained change between the product page and the total that this gate exists to prevent.
     context "for a product shape the checkout refuses to quote" do
-      it "hides the buyer currency for a membership, which is charged one period rather than the cart total" do
+      it "hides the buyer currency for a membership while its seller is not in the subscription ramp" do
         membership = create(:membership_product, user: seller, price_cents: 1000)
 
         props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
+      end
+
+      it "shows the buyer currency for a membership once its seller is in the subscription ramp" do
+        # Checkout quotes this membership in the buyer's currency now, so the product page has
+        # to as well: showing US dollars here and the local currency at the till changes the
+        # price between the two.
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        membership = create(:membership_product, user: seller, price_cents: 1000)
+
+        props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
+
+        expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+      end
+
+      it "keeps hiding the buyer currency for a membership offering a free trial, whose first charge is nothing" do
+        # The ramp lifts the plain-membership exclusion only. A free trial charges $0 up front,
+        # so no quote can match its first charge whatever the flag says.
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
+        free_trial = create(:membership_product, user: seller, price_cents: 1000, free_trial_enabled: true,
+                                                 free_trial_duration_unit: :week, free_trial_duration_amount: 1)
+
+        props = helper.buyer_currency_display_props(product: free_trial, price_cents: 1000, ip: "1.2.3.4")
 
         expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
       end
