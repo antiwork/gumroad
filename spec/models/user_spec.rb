@@ -3620,6 +3620,16 @@ describe User, :vcr do
       expect(user.reload.eligible_for_instant_payouts?).to eq(true)
     end
 
+    it "returns false when the only older account is a rejected setup that never went live" do
+      create_list(:payment_completed, 4, user:)
+      merchant_account.update!(created_at: 10.days.ago)
+      # cleanup_failed_merchant_account's shape: mark_deleted! only, both charge-processor
+      # timestamps still NULL, so the row never carried a charge.
+      create(:merchant_account, user:, created_at: 90.days.ago, charge_processor_alive_at: nil).mark_deleted!
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
     it "returns false when the only account ever held is younger than 60 days" do
       create_list(:payment_completed, 4, user:)
       merchant_account.update!(created_at: 10.days.ago)

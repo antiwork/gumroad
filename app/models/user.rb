@@ -1170,13 +1170,16 @@ class User < ApplicationRecord
     cutoff = MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
     return true if account.created_at <= cutoff
 
-    same_kind = merchant_accounts.stripe.select do |candidate|
-      candidate.id != account.id &&
-        candidate.is_a_stripe_connect_account? == account.is_a_stripe_connect_account? &&
-        !candidate.stripe_rejected?
+    # A predecessor has to have actually carried money: a rejected Stripe::Account.create leaves a
+    # row that was mark_deleted! the same second with both charge-processor timestamps still NULL
+    # (StripeMerchantAccountManager.cleanup_failed_merchant_account). Counting those would season a
+    # minutes-old account off an attempt that never processed anything.
+    merchant_accounts.stripe.any? do |predecessor|
+      predecessor.created_at <= cutoff &&
+        predecessor.is_a_stripe_connect_account? == account.is_a_stripe_connect_account? &&
+        !predecessor.stripe_rejected? &&
+        (predecessor.charge_processor_deleted? || predecessor.charge_processor_alive?)
     end
-
-    same_kind.any? { |predecessor| predecessor.created_at <= cutoff }
   end
   private :seasoned_for_instant_payouts?
 
