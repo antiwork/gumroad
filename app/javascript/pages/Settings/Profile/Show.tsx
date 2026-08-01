@@ -17,6 +17,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
+import { type EmailConfirmation, EmailConfirmationBanner } from "$app/components/EmailConfirmationBanner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
@@ -69,6 +70,7 @@ type ProfilePageProps = {
   has_custom_landing_page: boolean;
   seller_fonts_css_source: string;
   username: string;
+  email_confirmation?: EmailConfirmation | null;
 } & ProfileProps;
 
 export default function SettingsPage() {
@@ -81,6 +83,7 @@ export default function SettingsPage() {
     has_custom_landing_page,
     seller_fonts_css_source,
     username,
+    email_confirmation,
   } = typia.assert<ProfilePageProps>(usePage().props);
   const loggedInUser = useLoggedInUser();
   const [creatorProfile, setCreatorProfile] = React.useState(creator_profile);
@@ -136,7 +139,9 @@ export default function SettingsPage() {
   const profileUrl = creatorProfile.subdomain ? Routes.root_url({ host: creatorProfile.subdomain }) : Routes.root_url();
 
   const [isSaving, setIsSaving] = React.useState(false);
-  const canUpdate = Boolean(loggedInUser?.policies.settings_profile.update) && !isSaving;
+  const isEmailConfirmationRequired = email_confirmation != null;
+  const canUpdate =
+    Boolean(loggedInUser?.policies.settings_profile.update) && !isEmailConfirmationRequired && !isSaving;
   const isDirty =
     !isEqual(profileSettings, lastSavedSettings.current) ||
     !isEqual(editableProfile.sections, lastSavedProfile.current.sections) ||
@@ -199,7 +204,7 @@ export default function SettingsPage() {
   }, []);
 
   const save = async (): Promise<boolean> => {
-    if (isSaving) return false;
+    if (!canUpdate) return false;
     setIsSaving(true);
     const settings = profileSettings;
     const previousSettings = lastSavedSettings.current;
@@ -388,6 +393,20 @@ export default function SettingsPage() {
       )}
       <WithPreviewSidebar>
         <div>
+          {email_confirmation ? (
+            <div className="p-4 pb-0 md:p-8 md:pb-0">
+              <EmailConfirmationBanner {...email_confirmation}>
+                {email_confirmation.email ? (
+                  <>
+                    Confirm your email address (<b>{email_confirmation.email}</b>) before you can save changes to your
+                    profile.
+                  </>
+                ) : (
+                  <>Add and confirm an email address before you can save changes to your profile.</>
+                )}
+              </EmailConfirmationBanner>
+            </div>
+          ) : null}
           {tab === "about" ? (
             <section className="grid gap-8 p-4! md:p-8!">
               <header>

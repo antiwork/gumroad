@@ -11,6 +11,7 @@ type Props = {
   currentOrder: string[];
   onReorder: (newIdOrder: string[]) => void;
   children: React.ReactNode;
+  disabled?: boolean;
   group?: string | undefined;
   tag?: ReactSortableProps<string>["tag"];
   // Defaults to the `ReorderingHandle` marker. Override it when nesting sortables (e.g. pages whose
@@ -21,6 +22,7 @@ export const SortableList = ({
   currentOrder,
   onReorder,
   children,
+  disabled = false,
   group,
   tag = "div",
   handle = "[aria-grabbed]",
@@ -30,6 +32,7 @@ export const SortableList = ({
   return (
     <IsBeingDraggedContext.Provider value={isBeingDragged}>
       <Sortable
+        disabled={disabled}
         group={group}
         list={currentOrder.map((id) => ({ id }))}
         setList={(items) => {
@@ -54,7 +57,7 @@ export const SortableList = ({
   );
 };
 
-export const ReorderingHandle = () => {
+export const ReorderingHandle = ({ disabled = false }: { disabled?: boolean }) => {
   const rowIsBeingDragged = useIsBeingDragged();
   const [ref, setRef] = React.useState<null | HTMLDivElement>(null);
   const [grabbed, setGrabbed] = React.useState(false);
@@ -64,7 +67,7 @@ export const ReorderingHandle = () => {
     setGrabbed(rowElement?.getAttribute("draggable") === "true");
   }, [rowIsBeingDragged]);
 
-  return <RowDragHandle ref={setRef} aria-grabbed={grabbed} data-drag-handle draggable />;
+  return <RowDragHandle ref={setRef} aria-grabbed={grabbed} data-drag-handle draggable={!disabled} />;
 };
 
 export const Drawer = ({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) => {

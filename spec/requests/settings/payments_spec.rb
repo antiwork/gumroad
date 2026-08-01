@@ -2209,7 +2209,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("Bank Identifier Code (BIC)", with: "BCDEFGHI123")
+        fill_in("Bank Identifier Code (BIC)", with: "BCDEPHM1123")
         fill_in("Account #", with: "01567890123456789")
         fill_in("Confirm account #", with: "01567890123456789")
         expect(page).to have_content("Must exactly match the name on your bank account")

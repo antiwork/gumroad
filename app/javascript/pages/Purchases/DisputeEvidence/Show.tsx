@@ -36,6 +36,7 @@ type Props = {
     customer_email: string;
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;
+    seller_response_due_at: string | null;
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
     blobs: Blobs;
@@ -110,6 +111,13 @@ export default function Show() {
   const purchaseDate = new Date(dispute_evidence.purchased_at).toLocaleString(userAgentInfo.locale, {
     dateStyle: "medium",
   });
+  const sellerResponseDueAt =
+    dispute_evidence.seller_response_due_at !== null
+      ? new Date(dispute_evidence.seller_response_due_at).toLocaleString(userAgentInfo.locale, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
 
   const updateFormData = (update: Partial<FormData["dispute_evidence"]>) => {
     form.setData("dispute_evidence", { ...form.data.dispute_evidence, ...update });
@@ -262,8 +270,9 @@ export default function Show() {
         </p>
         <p>
           <strong>
-            Any additional information you can provide in the next{" "}
-            {dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.
+            {sellerResponseDueAt !== null
+              ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
+              : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
           </strong>
         </p>
         <Alert variant="warning">
