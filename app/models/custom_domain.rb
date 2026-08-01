@@ -6,6 +6,13 @@ class CustomDomain < ApplicationRecord
   WWW_PREFIX = "www"
   MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT = 3
   ROUTABILITY_REFRESH_INTERVAL = 6.hours
+  # How long a Let's Encrypt certificate is actually good for. Renewal starts earlier
+  # (renew_in in config/ssl_certificates.yml.erb, 75 days) so that issuance — an async
+  # Sidekiq job that can be rate-limited for days — has room to finish while the current
+  # certificate still works. Judging active? against renew_in instead would drop the
+  # seller back to their *.gumroad.com subdomain the moment renewal became due, throwing
+  # that buffer away; a spec pins renew_in below this.
+  CERTIFICATE_LIFETIME = 90.days
 
   include Deletable
 
@@ -151,24 +158,8 @@ class CustomDomain < ApplicationRecord
     failed_verification_attempts_count >= MAX_FAILED_VERIFICATION_ATTEMPTS_COUNT
   end
 
-  # Certificates are regenerated on the cadence in config/ssl_certificates.yml.erb
-  # (renew_in, currently 75 days). Asking for a stricter window than that marks a domain
-  # inactive for the whole gap between renewals even though its certificate is perfectly
-  # valid — with a 1-week window that was ~68 of every 75 days, which silently dropped
-  # sellers back to their *.gumroad.com subdomain.
-  #
-  # Read from the config rather than SslCertificates::Base, which only has entries for
-  # staging and production and raises in every other environment. Memoized because this
-  # runs on the profile render path.
-  def self.certificate_validity_window
-    @certificate_validity_window ||= begin
-      config = YAML.load(ERB.new(File.read(SslCertificates::Base::CONFIG_FILE)).result, aliases: true)
-      (config[Rails.env] || config["production"]).fetch("renew_in").seconds
-    end
-  end
-
   def active?
-    verified? && has_valid_certificate?(self.class.certificate_validity_window)
+    verified? && has_valid_certificate?(CERTIFICATE_LIFETIME)
   end
 
   private

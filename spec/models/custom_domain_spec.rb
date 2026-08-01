@@ -3,6 +3,17 @@
 require "spec_helper"
 
 describe CustomDomain do
+  # The real production config, not spec/support/fixtures/ssl_certificates.yml.erb, and read
+  # directly rather than through SslCertificates::Base — Base fetches Rails.env and the real
+  # config has no "test" key, so instantiating it here raises KeyError.
+  def ssl_certificates_config
+    YAML.load(ERB.new(File.read(Rails.root.join("config", "ssl_certificates.yml.erb"))).result, aliases: true)
+  end
+
+  def production_renew_in
+    ssl_certificates_config.fetch("production").fetch("renew_in").seconds
+  end
+
   describe "#validate_domain_format" do
     context "with a valid domain name" do
       before do
@@ -297,9 +308,9 @@ describe CustomDomain do
 
     it "does not use a positive result after the certificate expires" do
       custom_domain.set_routability!(true)
-      # Past the renewal cadence, not merely past a week — a week-old certificate is still
-      # valid, since certificates are only regenerated every renew_in.
-      custom_domain.update_columns(ssl_certificate_issued_at: (CustomDomain.certificate_validity_window + 1.day).ago)
+      # Past the certificate's real lifetime, not merely past a week — a week-old
+      # certificate is still valid, and so is one that renewal is merely due for.
+      custom_domain.update_columns(ssl_certificate_issued_at: (CustomDomain::CERTIFICATE_LIFETIME + 1.day).ago)
 
       expect(custom_domain.strictly_routable?).to be(false)
       expect(RefreshCustomDomainRoutabilityWorker).not_to have_enqueued_sidekiq_job(custom_domain.id)
@@ -559,13 +570,13 @@ describe CustomDomain do
       end
     end
 
-    context "when the certificate is older than a week but within the renewal cadence" do
+    context "when the certificate is older than a week but well within its lifetime" do
       let(:domain) { create(:custom_domain, state: "verified") }
 
       before do
-        # Certificates are only regenerated every renew_in (75 days), so a 30-day-old
-        # certificate is the normal steady state, not a stale one. The old 1.week window
-        # called this inactive and dropped the seller back to their subdomain.
+        # Certificates are only regenerated every renew_in (75 days in production), so a
+        # 30-day-old certificate is the normal steady state, not a stale one. The old
+        # 1.week window called this inactive and dropped the seller back to their subdomain.
         domain.update!(ssl_certificate_issued_at: 30.days.ago)
       end
 
@@ -574,15 +585,43 @@ describe CustomDomain do
       end
     end
 
-    context "when the certificate is older than the renewal cadence" do
+    context "when renewal is due but the replacement certificate has not been issued yet" do
+      let(:domain) { create(:custom_domain, state: "verified") }
+      let(:renew_in) { production_renew_in }
+
+      before do
+        # Renewal is queued asynchronously and can be rate-limited for days. The existing
+        # certificate is still valid the whole time, so routing must stay up.
+        domain.update!(ssl_certificate_issued_at: (renew_in + 1.day).ago)
+      end
+
+      it "keeps routing on the custom domain" do
+        expect(CustomDomain.certificate_absent_or_older_than(renew_in)).to include(domain)
+        expect(domain.active?).to eq(true)
+      end
+    end
+
+    context "when the certificate has outlived its lifetime" do
       let(:domain) { create(:custom_domain, state: "verified") }
 
       before do
-        domain.update!(ssl_certificate_issued_at: (CustomDomain.certificate_validity_window + 1.day).ago)
+        domain.update!(ssl_certificate_issued_at: (CustomDomain::CERTIFICATE_LIFETIME + 1.day).ago)
       end
 
       it "returns false" do
         expect(domain.active?).to eq(false)
+      end
+    end
+  end
+
+  describe "CERTIFICATE_LIFETIME" do
+    it "leaves renewal room ahead of expiry in every configured environment" do
+      settings_by_env = ssl_certificates_config
+
+      expect(settings_by_env).to be_present
+      settings_by_env.each do |env, settings|
+        expect(settings.fetch("renew_in").seconds).to be < CustomDomain::CERTIFICATE_LIFETIME,
+                                                      "#{env} renew_in must start renewal before the certificate expires"
       end
     end
   end
