@@ -145,5 +145,21 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
         expect(uncategorized_text).to include("Billing postal code: 12345")
       end
     end
+
+    # A shipment row predating Shipment's create-time gate can still hang off a digital purchase,
+    # and its URL would be shipping evidence in a digital-product dispute.
+    context "when the product never required shipping" do
+      before do
+        other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint")
+        create(:shipment, purchase: disputed_purchase, tracking_url: "https://track.aftership.com/94001")
+        product.update_columns(flags: 0, require_shipping: false)
+      end
+
+      it "omits the tracking row even though a shipment exists" do
+        expect(disputed_purchase.reload.shipment).to be_present
+        expect(uncategorized_text).to_not include("shipment tracking URL")
+        expect(uncategorized_text).to include("Billing postal code: 12345")
+      end
+    end
   end
 end

@@ -57,15 +57,10 @@ class DisputeEvidence::CreateFromDisputeService
   private
     attr_reader :dispute, :purchase
 
-    # The buyer identity and address we submit must be what the buyer entered at checkout, not
-    # what the seller can edit afterwards — three seller-facing writers mutate these columns
-    # (`PurchasesController#update`, `Api::Mobile::SalesController#update`,
-    # `Purchases::InvoicesController`) with no annotation, so a live read represents mutable
-    # operational data to a card network as platform-generated transaction evidence.
-    #
-    # Same mechanism already used one line up for the product. Falls back to the live record when
-    # no version covers the purchase (nothing has edited it, or it predates `has_paper_trail`),
-    # which is the overwhelmingly common case and is then identical to today's behaviour.
+    # The address and buyer identity we submit must be what the buyer entered at checkout: three
+    # seller-facing writers mutate these columns afterwards, so a live read presents mutable
+    # operational data to a card network as platform-generated evidence. Falls back to the live
+    # record when no version covers the purchase, which is today's behaviour.
     def purchase_as_at_checkout
       @_purchase_as_at_checkout ||= purchase.paper_trail.version_at(purchase.created_at) || purchase
     end

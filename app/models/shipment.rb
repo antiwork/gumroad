@@ -52,9 +52,9 @@ class Shipment < ApplicationRecord
   validates :purchase, presence: true
   before_validation :strip_tracking_url
   validate :tracking_url_must_be_display_safe
-  # On create only: ~1% of recent shipments sit on non-shipping products, and those rows must stay
-  # updatable (`mark_shipped!` is an update). Ungated, a shipment on a digital purchase injects
-  # shipping evidence into a digital-product dispute and emails the buyer "Your order has shipped".
+  # Create-only: violating rows already exist and must stay updatable (`mark_shipped!` is an
+  # update). Ungated, a shipment on a digital purchase injects shipping evidence into a
+  # digital-product dispute and emails the buyer "Your order has shipped".
   validate :purchase_requires_shipping, on: :create
 
   # The purchase's updated_at should reflect changes to its shipment.
