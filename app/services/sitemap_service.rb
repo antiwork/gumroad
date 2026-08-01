@@ -5,6 +5,11 @@ class SitemapService
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
 
+  # Everything the per-product `add` below touches. Without these the walk costs
+  # a handful of queries per row, which is what made a full month time out.
+  SITEMAP_PRELOADS = [:user, { display_asset_previews: { file_attachment: :blob } }].freeze
+  private_constant :SITEMAP_PRELOADS
+
   def generate(date = Date.current)
     # Parse date from Sidekiq job argument
     date = Date.parse(date) if date.is_a?(String)
@@ -20,7 +25,7 @@ class SitemapService
       sitemap_config(filename, path, include_index)
 
       SitemapGenerator::Sitemap.create do
-        Link.alive.where(created_at: period).find_each do |product|
+        Link.alive.where(created_at: period).preload(*SITEMAP_PRELOADS).find_each do |product|
           relative_url = Rails.application.routes.url_helpers.short_link_path(product)
           add relative_url, changefreq: "daily", priority: 1, lastmod: product.updated_at, images: [{ loc: product.preview_url }],
                             host: product.user.subdomain_with_protocol
