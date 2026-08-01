@@ -158,6 +158,43 @@
   @apply bg-transparent;
 }
 
+/* Gap cursor: the caret you get when clicking beside an atom node (a file embed, upsell card,
+   video). `injectCSS: false` in baseEditorOptions drops Tiptap's stylesheet, which is the only
+   place these rules ship — without them the caret is `display: none` and a leading file block
+   looks like an uneditable page (gumroad-private#1652). Styled like the drop cursor rather than
+   upstream's 20px black hairline: black disappears in dark mode, and the accent bar is already
+   what this editor uses to mean "your content lands here". */
+.ProseMirror {
+  position: relative;
+}
+
+.ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+  margin: 0;
+}
+
+.ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 100%;
+  border-top: 4px solid rgb(var(--accent));
+  animation: prosemirror-gapcursor-blink 1.1s steps(2, start) infinite;
+}
+
+.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+@keyframes prosemirror-gapcursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
 /* Tiptap placeholder plugin */
 .ProseMirror p.is-editor-empty:first-child::before,
 .ProseMirror .node-image.is-empty .figcaption::before {
