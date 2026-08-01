@@ -41,6 +41,7 @@ class Radar::ValueListSyncService
 
     blocked_emails = PlatformBlock.email.active.where("blocked_at >= ?", SYNC_WINDOW.ago)
     blocked_emails.each do |blocked_object|
+      next if unblocked_since_select?(blocked_object)
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
@@ -66,6 +67,7 @@ class Radar::ValueListSyncService
       .where("blocked_at >= ?", SYNC_WINDOW.ago)
       .where("object_value REGEXP ?", STRIPE_FINGERPRINT_PATTERN.source)
     blocked_cards.each do |blocked_object|
+      next if unblocked_since_select?(blocked_object)
       add_item_to_list(value_list.id, blocked_object.object_value)
     end
 
@@ -113,6 +115,14 @@ class Radar::ValueListSyncService
   end
 
   private
+    # The add loop makes one sequential Stripe call per row, so a row cleared after the SELECT
+    # would otherwise be re-added — restoring the very block the removal job just lifted.
+    def unblocked_since_select?(platform_block)
+      platform_block.reload.blocked_at.nil?
+    rescue ActiveRecord::RecordNotFound
+      true
+    end
+
     def remove_item_from_list(value_list_id, value)
       items = Stripe::Radar::ValueListItem.list(value_list: value_list_id, value: value)
       items.data.each do |item|

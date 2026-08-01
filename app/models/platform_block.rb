@@ -40,9 +40,11 @@ class PlatformBlock < ApplicationRecord
 
   # Radar, not this row, is what actually rejects the charge — so an unblock that only writes
   # MySQL leaves the buyer hard-blocked until the next daily sync (gumroad-private#1647).
+  # Enqueued unconditionally rather than only on a blocked->clear transition: removal is
+  # idempotent, and re-running unblock! is the only recovery for a row already stranded in Radar
+  # (the daily job's updated_at window has aged past it, and a no-op update! would not move it).
   def unblock!
-    was_blocked = blocked_at.present?
     update!(blocked_at: nil, expires_at: nil)
-    Radar::RemoveValueListItemJob.perform_async(id) if was_blocked && Radar::ValueListSyncService.syncs?(object_type)
+    Radar::RemoveValueListItemJob.perform_async(id) if Radar::ValueListSyncService.syncs?(object_type)
   end
 end

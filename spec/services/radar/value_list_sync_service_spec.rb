@@ -305,6 +305,10 @@ describe Radar::ValueListSyncService do
 
     it "leaves Radar alone when the row was re-blocked between enqueue and run" do
       block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblocked@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      # Re-blocked behind this handle, so only a reload can see it — deleting the reload from
+      # remove_block must redden here.
+      PlatformBlock.find(block.id).update_columns(blocked_at: Time.current)
 
       expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
 
@@ -327,6 +331,26 @@ describe Radar::ValueListSyncService do
       expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
 
       expect(service.remove_block(block)).to be(false)
+    end
+  end
+
+  describe "add loop re-check" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
+      allow(Stripe::Radar::ValueListItem).to receive(:list).and_return(double(data: []))
+    end
+
+    it "does not re-add an email cleared after the sync's SELECT" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "cleared-mid-sync@example.com")
+      allow_any_instance_of(PlatformBlock).to receive(:reload) do |record|
+        record.assign_attributes(blocked_at: nil)
+        record
+      end
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      service.sync_blocked_emails
+      expect(block).to be_present
     end
   end
 

@@ -9,8 +9,8 @@ describe Radar::RemoveValueListItemJob do
     allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
   end
 
-  it "runs in the critical queue: until it lands the buyer is still hard-blocked at checkout" do
-    expect(described_class.sidekiq_options["queue"]).to eq("critical")
+  it "runs in the default queue: critical is reserved for receipt email, and mass unblock fans out" do
+    expect(described_class.sidekiq_options["queue"]).to eq("default")
   end
 
   it "removes the unblocked email from the Radar list" do

@@ -78,6 +78,8 @@ describe PlatformBlock do
         expect do
           record.unblock!
         end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
+
+        expect(Radar::RemoveValueListItemJob.jobs.last["args"]).to eq([record.id])
       end
 
       it "does not enqueue for types Radar never received" do
@@ -88,14 +90,16 @@ describe PlatformBlock do
         end.not_to change { Radar::RemoveValueListItemJob.jobs.size }
       end
 
-      it "does not enqueue when the row was already unblocked" do
-        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "already@example.com")
+      # Re-unblocking is the only recovery for a row already stranded in Radar: update! writes no
+      # SQL on an already-clear row, so the daily job's updated_at window will never see it again.
+      it "enqueues again on an already-unblocked row, so re-unblocking repairs a stranded item" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "stranded@example.com")
         record.unblock!
         Radar::RemoveValueListItemJob.jobs.clear
 
         expect do
           record.unblock!
-        end.not_to change { Radar::RemoveValueListItemJob.jobs.size }
+        end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
       end
     end
   end
