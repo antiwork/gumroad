@@ -9483,6 +9483,22 @@ describe StripeMerchantAccountManager, :vcr do
           expect(note.json_data[PayoutNoteVisibility::SELLER_VISIBLE_FLAG]).to be(false)
         end
 
+        # The note is the retry marker force_identity_into_diff! consults, so it must be recorded
+        # even when the caller suppressed notifications — a rejection first seen on the silent
+        # weekly sweep would otherwise leave no state behind and never be re-sent.
+        it "records the rejection even when the caller suppressed notifications" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+
+          subject.update_account(user, passphrase: "1234", notify: false)
+
+          expect(user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                     .count).to eq(1)
+        end
+
         # The seller retries this save repeatedly; a note per attempt buries the payout notes.
         it "does not accumulate a note per retry for the same rejection" do
           rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
@@ -9918,7 +9934,7 @@ describe StripeMerchantAccountManager, :vcr do
           stripe_account
         end
         expect(Stripe::Account).to receive(:update).with(user.stripe_account.charge_processor_merchant_id, hash_including(expected_account_params)).and_call_original
-        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, seed_representative_ownership: false, unclaimed_percent_ownership: nil, notify: true).and_call_original
+        expect(StripeMerchantAccountManager).to receive(:update_person).with(user, kind_of(Stripe::Account), user_compliance_info_1.external_id, "1234", force_address_resync: false, seed_representative_ownership: false, unclaimed_percent_ownership: nil).and_call_original
         expect(Stripe::Account).to receive(:update_person).with(kind_of(String), kind_of(String), a_hash_including(expected_person_params).and(excluding(:first_name))).and_call_original
         subject.update_account(user, passphrase: "1234")
       end
@@ -13724,9 +13740,8 @@ describe StripeMerchantAccountManager, :vcr do
     end
 
     # gumroad-private#1575. The representative's identifier is split onto its own call for the same
-    # reason as the seller's, and the rejection note it writes has to honour the caller's
-    # notification setting — the automated remediation retry passes notify: false and must stay
-    # silent, or a rejection nobody asked about lands as a payout note on every sweep.
+    # reason as the seller's, and the rejection note is the retry marker, so it is recorded no
+    # matter which caller triggered the rejection.
     context "when the account country disagrees with the legal-entity country" do
       let(:user_compliance_info) do
         create(:user_compliance_info_business, user:, country: "Korea, Republic of",
@@ -13751,16 +13766,10 @@ describe StripeMerchantAccountManager, :vcr do
             .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (representative)%")
       end
 
-      it "records the rejection when notifications are on" do
+      it "records the rejection as a payout note" do
         described_class.update_person(user, stripe_account, nil, "1234")
 
         expect(representative_rejection_notes.count).to eq(1)
-      end
-
-      it "stays silent when the caller suppressed notifications" do
-        described_class.update_person(user, stripe_account, nil, "1234", notify: false)
-
-        expect(representative_rejection_notes.count).to eq(0)
       end
     end
   end
