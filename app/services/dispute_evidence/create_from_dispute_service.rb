@@ -70,14 +70,15 @@ class DisputeEvidence::CreateFromDisputeService
       fields.map { |field| source.send(field) }.compact.join(", ")
     end
 
-    # A shipment row alone does not mean the order needed delivery: `Shipment` validates only
-    # `purchase` presence, and the mark-as-shipped endpoints never check the product. Attaching
-    # one to a digital purchase would put shipping evidence into a digital-product dispute —
-    # an assertion the buyer can trivially disprove, on our single submission.
+    # A shipment row alone does not mean the order needed delivery: rows predating Shipment's
+    # create-time gate hang off digital purchases, and their evidence would put a shipping claim
+    # into a digital-product dispute — an assertion the buyer can trivially disprove, on our
+    # single submission. Checked as at checkout, not live: a seller disabling shipping later
+    # must not erase delivery proof for an order that genuinely shipped.
     def shipment_for(purchase)
       shipment = purchase.shipment
       return if shipment.blank?
-      return unless purchase.link.is_physical? || purchase.link.require_shipping?
+      return unless purchase.required_delivery_at_checkout?
 
       shipment
     end

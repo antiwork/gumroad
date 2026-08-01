@@ -501,10 +501,24 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
     end
 
     context "when a shipment sits on a product that never required shipping" do
-      before do
-        # Reachable in production: `Shipment` gated this only from #1665 onward, and ~1% of recent
-        # rows predate the gate. `update_columns` bypasses the new create-time validation.
-        disputed_purchase.link.update_columns(flags: 0, require_shipping: false)
+      # Reachable in production: `Shipment` gated creation only from #1665 onward, so legacy rows
+      # hang off digital purchases. The product is digital at checkout, so the shipment must not
+      # count — `save!(validate: false)` is how such a row exists at all.
+      let(:product) do
+        travel_to 1.hour.ago do
+          create(:product, name: "Sample product title at purchase time")
+        end
+      end
+
+      let!(:shipment) do
+        build(
+          :shipment,
+          carrier: "UPS",
+          tracking_number: "123456",
+          purchase: disputed_purchase,
+          ship_state: "shipped",
+          shipped_at: DateTime.parse("2023-02-10 14:55:32")
+        ).tap { _1.save!(validate: false) }
       end
 
       it "omits all shipping evidence" do
@@ -514,6 +528,23 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
         expect(dispute_evidence.shipped_at).to be_nil
         expect(dispute_evidence.shipping_carrier).to be_nil
         expect(dispute_evidence.shipping_tracking_number).to be_nil
+      end
+    end
+
+    context "when the seller disables shipping after the order shipped" do
+      before do
+        travel_to 2.hours.from_now do
+          disputed_purchase.link.update!(is_physical: false, require_shipping: false)
+        end
+      end
+
+      it "keeps the shipping evidence as at checkout" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
+        expect(dispute_evidence.shipped_at).to eq(shipment.shipped_at)
+        expect(dispute_evidence.shipping_carrier).to eq("UPS")
+        expect(dispute_evidence.shipping_tracking_number).to eq("123456")
       end
     end
   end

@@ -161,5 +161,30 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
         expect(uncategorized_text).to include("Billing postal code: 12345")
       end
     end
+
+    # The gate reads the product as at checkout, so a seller disabling shipping later cannot
+    # erase the tracking URL for an order that genuinely shipped.
+    context "when the seller disables shipping after the order shipped", :versioning do
+      # Created ahead of the purchase so the product's own create-version cannot round into the
+      # second after `purchase.created_at` and shadow the checkout-time reification.
+      let(:product) do
+        travel_to 1.hour.ago do
+          create(:physical_product, name: "Sample product title at purchase time")
+        end
+      end
+
+      before do
+        other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint")
+        create(:shipment, purchase: disputed_purchase, tracking_url: "https://track.aftership.com/94001")
+        travel_to 1.hour.from_now do
+          product.update!(is_physical: false, require_shipping: false)
+        end
+      end
+
+      it "keeps the tracking row" do
+        expect(uncategorized_text)
+          .to include("Seller-provided shipment tracking URL: https://track.aftership.com/94001")
+      end
+    end
   end
 end
