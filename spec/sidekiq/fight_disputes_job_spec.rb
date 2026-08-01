@@ -17,6 +17,23 @@ describe FightDisputesJob do
       expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute_evidence_resolved.dispute.id)
     end
 
+    context "when the seller submitted early, inside their window" do
+      # hours_left_to_submit_evidence now reports 0 for a spent submission slot
+      # (gumroad-private#1612). This job must NOT read it: to the scheduler a spent slot is not an
+      # expired window, and treating it as one would forward a seller's evidence hours early.
+      let!(:dispute_evidence_submitted_early) do
+        create(:dispute_evidence, seller_contacted_at: 2.hours.ago, seller_submitted_at: 1.hour.ago)
+      end
+
+      it "still waits for the window to close before forwarding" do
+        expect(dispute_evidence_submitted_early.hours_left_to_submit_evidence).to eq(0)
+
+        described_class.new.perform
+
+        expect(FightDisputeJob).not_to have_enqueued_sidekiq_job(dispute_evidence_submitted_early.dispute.id)
+      end
+    end
+
     context "when the dispute has reached a terminal state" do
       let!(:dispute_evidence_lost) { create(:dispute_evidence, seller_contacted_at: 80.hours.ago) }
       let!(:dispute_evidence_won) { create(:dispute_evidence, seller_contacted_at: 80.hours.ago) }

@@ -32,6 +32,7 @@ class DisputeEvidence < ApplicationRecord
   belongs_to :dispute
 
   SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS = 72
+  EVIDENCE_REMINDER_LEAD_TIME = 24.hours
   STRIPE_MAX_COMBINED_FILE_SIZE = 5_000_000.bytes
   MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE = 1_000_000.bytes
   # Bounds the inline merge work in Purchases::DisputeEvidenceController#update; Stripe still
@@ -92,8 +93,43 @@ class DisputeEvidence < ApplicationRecord
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
   end
 
+  # Hours the seller has left to ADD anything, which is not the same as hours left on the clock.
+  # Stripe accepts exactly one evidence submission per dispute, so the moment seller_submitted_at
+  # or resolved_at is stamped the slot is spent and no later upload can be filed — while the raw
+  # 72-hour arithmetic keeps counting down. Support read "68 hours" off this on dispute 127291 and
+  # invited a seller to assemble evidence that could never be filed (gumroad-private#1612).
+  #
+  # The two schedulers deciding WHEN we file with the card network must not read this: to them a
+  # spent slot must not look like an expired window. They call hours_left_in_window directly.
   def hours_left_to_submit_evidence
+    return 0 if self.class.evidence_submission_closed?(seller_submitted_at:, resolved_at:)
+
     self.class.hours_left_in_window(seller_contacted? ? seller_contacted_at : nil)
+  end
+
+  def self.seller_response_due_at(seller_contacted_at)
+    return if seller_contacted_at.nil?
+
+    seller_contacted_at + SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours
+  end
+
+  def self.seller_response_reminder_at(seller_contacted_at)
+    seller_response_due_at(seller_contacted_at)&.-(EVIDENCE_REMINDER_LEAD_TIME)
+  end
+
+  def seller_response_due_at
+    self.class.seller_response_due_at(seller_contacted_at)
+  end
+
+  def self.schedule_due_soon_reminder(dispute_id:, seller_contacted_at:, seller_submitted_at:, resolved_at:)
+    return unless accepting_evidence?(seller_contacted_at:, seller_submitted_at:, resolved_at:)
+
+    reminder_at = seller_response_reminder_at(seller_contacted_at)
+    return unless reminder_at&.future?
+
+    DisputeEvidenceDueSoonReminderJob.perform_at(reminder_at, dispute_id)
+  rescue => e
+    ErrorNotifier.notify("DisputeEvidence: could not schedule evidence reminder for dispute #{dispute_id}: #{e.class} #{e.message}")
   end
 
   # Both terminal states make Purchases::DisputeEvidenceController redirect away, so no notice may

@@ -189,6 +189,12 @@ class CreateMissingDisputeEvidenceJob
         ErrorNotifier.notify(message)
         return
       end
+      DisputeEvidence.schedule_due_soon_reminder(
+        dispute_id: dispute.id,
+        seller_contacted_at: window_start,
+        seller_submitted_at: nil,
+        resolved_at: nil
+      )
 
       ErrorNotifier.notify(
         "CreateMissingDisputeEvidenceJob: dispute #{dispute.id} was never asked for evidence and has " \
