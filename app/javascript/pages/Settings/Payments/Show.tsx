@@ -1,5 +1,5 @@
 import { Bank, CreditCard, Paypal, Stripe } from "@boxicons/react";
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import parsePhoneNumberFromString, { CountryCode } from "libphonenumber-js";
 import * as React from "react";
 import typia from "typia";
@@ -29,6 +29,9 @@ import BankAccountSection, {
 } from "$app/components/Settings/PaymentsPage/BankAccountSection";
 import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 import DebitCardSection from "$app/components/Settings/PaymentsPage/DebitCardSection";
+import LegalGuardianSection, {
+  type LegalGuardianProps,
+} from "$app/components/Settings/PaymentsPage/LegalGuardianSection";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 import StripeConnectSection, { StripeConnect } from "$app/components/Settings/PaymentsPage/StripeConnectSection";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
@@ -215,6 +218,7 @@ type PaymentsPageProps = {
   buyer_currency_charging_enabled: boolean;
   disable_buyer_currency_rounding: boolean;
   can_manage_beneficial_owners: boolean;
+  legal_guardian: LegalGuardianProps;
   errors?: {
     base?: string[];
   };
@@ -316,6 +320,39 @@ export default function PaymentsPage() {
   };
 
   const [debitCard, setDebitCard] = React.useState<PayoutDebitCardData | null>(null);
+
+  // The guardian is added by its own endpoint, not by this page's form, so the page's own props go
+  // stale the moment it saves. Reloading only `legal_guardian` is what refreshes them — and the
+  // reason not to merge the endpoint's response into local state instead is `blocking_payouts`: it
+  // is derived server-side from the same predicate the payout gate reads, and recomputing it here
+  // would let the page tell a seller their payouts are running while Payouts.is_user_payable
+  // disagrees.
+  const refreshLegalGuardian = () => router.reload({ only: ["legal_guardian"] });
+
+  // The guardian is a person on the seller's own payout account, so they are in the seller's country
+  // and pick from its subdivisions. Empty for a country with no subdivision list, which is what
+  // hides the field — the guardian path is US-only today, so in practice this is always the US list.
+  const guardianStates = React.useMemo(() => {
+    switch (props.user.country_code) {
+      case "US":
+        return props.states.us;
+      case "CA":
+        return props.states.ca;
+      case "AU":
+        return props.states.au;
+      case "MX":
+        return props.states.mx;
+      case "AE":
+        return props.states.ae;
+      case "IE":
+        return props.states.ir;
+      case "BR":
+        return props.states.br;
+      default:
+        return [];
+    }
+  }, [props.user.country_code, props.states]);
+
   const [showNewBankAccount, setShowNewBankAccount] = React.useState(!props.bank_account_details.account_number_visual);
   const previousCountryRef = React.useRef<string | null>(
     props.compliance_info.is_business ? props.compliance_info.business_country : props.compliance_info.country,
@@ -1470,6 +1507,16 @@ export default function PaymentsPage() {
               />
             )}
           </section>
+          {/* Not tied to the selected payout tab: the guardian requirement is a property of the
+              seller, not of the rail they picked, and the presenter already decides who is asked.
+              Gating it on a tab hid the form from exactly the sellers the payout gate blocks. */}
+          <LegalGuardianSection
+            legalGuardian={props.legal_guardian}
+            sellerCountry={props.user.country_code}
+            states={guardianStates}
+            isFormDisabled={props.is_form_disabled}
+            onSaved={refreshLegalGuardian}
+          />
           {selectedPayoutMethod !== "stripe" && props.can_manage_beneficial_owners ? (
             <BeneficialOwnersSection
               countries={props.countries}
