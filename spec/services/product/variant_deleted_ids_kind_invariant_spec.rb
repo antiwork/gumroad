@@ -28,11 +28,19 @@ describe "deleted_ids[:variants] kind invariant" do
       category = create(:variant_category, link: product, title: "Groupings")
       version = create(:variant, variant_category: category, name: "V1")
 
-      # Force the collision the id scheme permits: a SECOND grouping whose
-      # primary key equals the version's, so both encrypt to the same string.
-      colliding_category = create(:variant_category, link: product, title: "Collides")
-      VariantCategory.where(id: colliding_category.id).update_all(id: version.id)
-      colliding_category = VariantCategory.find(version.id)
+      # Force the collision the id scheme permits: a grouping whose primary key
+      # equals the version's, so both encrypt to the same string. `base_variants`
+      # and `variant_categories` have independent counters, so whether that row
+      # already exists is incidental — take it if it does, move one onto that id
+      # if it does not. Never `update_all(id:)` blindly: when the id is already
+      # taken (which it is whenever the counters happen to line up) that violates
+      # the primary key, and the failure looks like a flake rather than a clash.
+      colliding_category = VariantCategory.find_by(id: version.id)
+      if colliding_category.nil?
+        spare = create(:variant_category, link: product, title: "Collides")
+        VariantCategory.where(id: spare.id).update_all(id: version.id)
+        colliding_category = VariantCategory.find(version.id)
+      end
 
       expect(colliding_category.external_id).to eq(version.external_id)
 
@@ -72,11 +80,13 @@ describe "deleted_ids[:variants] kind invariant" do
     ]
 
     it "has no producer of confirmed_removed_variant_ids outside the version-row editors" do
-      producers = Dir.glob(javascript_root.join("**", "*.{ts,tsx}")).select do |path|
-        next false if path.end_with?(".test.ts", ".test.tsx")
+      producers = Dir.glob(javascript_root.join("**", "*.{ts,tsx}")).filter_map do |path|
+        next if path.end_with?(".test.ts", ".test.tsx")
 
-        File.read(path).match?(/product\.confirmed_removed_variant_ids\s*=/)
-      end.map { |path| Pathname.new(path).relative_path_from(javascript_root).to_s }
+        next unless File.read(path).match?(/product\.confirmed_removed_variant_ids\s*=/)
+
+        Pathname.new(path).relative_path_from(javascript_root).to_s
+      end
 
       expect(producers.sort).to eq(permitted_producers.sort),
                                 "A new writer of confirmed_removed_variant_ids appeared. If it can name a " \
@@ -97,9 +107,11 @@ describe "deleted_ids[:variants] kind invariant" do
       editor_sources = Dir.glob(javascript_root.join("components", "ProductEdit", "**", "*.{ts,tsx}")) +
                        [javascript_root.join("data", "product_edit.ts").to_s]
 
-      naming_groupings = editor_sources.select do |path|
-        File.read(path).match?(/variant_categor|variantCategor/i)
-      end.map { |path| Pathname.new(path).relative_path_from(javascript_root).to_s }
+      naming_groupings = editor_sources.filter_map do |path|
+        next unless File.read(path).match?(/variant_categor|variantCategor/i)
+
+        Pathname.new(path).relative_path_from(javascript_root).to_s
+      end
 
       expect(naming_groupings).to be_empty,
                                   "The editor now references variant categories. A grouping still cannot be " \
