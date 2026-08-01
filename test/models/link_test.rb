@@ -1613,8 +1613,6 @@ class LinkTest < ActiveSupport::TestCase
     second = create_product(user: seller, unique_permalink: "bbb", custom_permalink: "slug")
     second.update!(custom_permalink: "second-new")
 
-    # The redirect follows the seller's latest release, so the old URL keeps
-    # serving what it served just before the rename, not an earlier holder.
     assert_equal second.id, ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug").product_id
     assert_equal second, Link.fetch_leniently("slug", user: seller)
   end

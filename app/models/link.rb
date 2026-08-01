@@ -1721,9 +1721,10 @@ class Link < ApplicationRecord
     def record_product_permalink_redirect(outgoing)
       existing = ProductPermalinkRedirect.find_by(seller_id: user_id, permalink: outgoing)
       if existing
-        # Both rows are this seller's, so the latest release wins. Repointing at a
-        # product the reader skips would retire a URL that still resolves, so a
-        # deleted product leaves the previous target in place.
+        # Both rows are this seller's, so the latest release wins. A seller-owned
+        # legacy mapping still outranks this row in fetch_leniently, so the
+        # repoint only reaches readers where no such mapping exists. Repointing at
+        # a product the reader skips would retire a URL that still resolves.
         existing.update(product_id: id) unless existing.product_id == id || deleted_at.present?
         return
       end
@@ -1732,8 +1733,7 @@ class Link < ApplicationRecord
       redirect = ProductPermalinkRedirect.create(permalink: outgoing, product_id: id, seller_id: user_id)
       Rails.logger.warn("ProductPermalinkRedirect not recorded for #{outgoing.inspect}: #{redirect.errors.full_messages.to_sentence}") unless redirect.persisted?
     rescue ActiveRecord::RecordNotUnique
-      # A concurrent rename by this seller created the row between the lookup
-      # and the insert; both targets are this seller's, either one is fine.
+      # A concurrent rename by this seller won the insert; both targets are hers.
       nil
     end
 
