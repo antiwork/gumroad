@@ -164,7 +164,13 @@
    looks like an uneditable page (gumroad-private#1652). Styled like the drop cursor rather than
    upstream's 20px black hairline: black disappears in dark mode, and the accent bar is already
    what this editor uses to mean "your content lands here". */
-.ProseMirror {
+
+/* The caret is absolutely positioned and needs the editor as its containing block, but
+   `position: relative` unconditionally would raise .ProseMirror into the positioned paint layer
+   above the empty-state overlay that precedes it, so the editor's own empty <p> swallows clicks
+   on "Upload your files". `:has` limits that to the moments a caret is actually on screen —
+   ProseMirror only inserts the widget beside an atom node, which an empty document has none of. */
+.ProseMirror:has(.ProseMirror-gapcursor) {
   position: relative;
 }
 

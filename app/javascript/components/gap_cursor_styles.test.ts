@@ -42,10 +42,13 @@ describe("gap cursor styling", () => {
     for (const selector of upstream) expect(gapCursorSelectors(ourCss)).toContain(selector);
   });
 
-  it("positions the editor so the absolutely-positioned caret resolves against it", () => {
-    // .ProseMirror-gapcursor is `position: absolute`, so without a positioned .ProseMirror the
-    // caret is placed against whatever ancestor happens to be positioned instead.
-    expect(ourCss).toMatch(/\.ProseMirror\s*\{[^}]*position:\s*relative/u);
+  it("positions the editor only while a caret exists, so the empty-state overlay stays clickable", () => {
+    // .ProseMirror-gapcursor is `position: absolute` and needs the editor as its containing
+    // block. Positioning .ProseMirror unconditionally also raises it above the empty-state
+    // overlay rendered before it, so the editor's own empty <p> swallows clicks on "Upload your
+    // files" (caught by spec/requests/products/edit/rich_text_editor_spec.rb).
+    expect(ourCss).toMatch(/\.ProseMirror:has\(\.ProseMirror-gapcursor\)\s*\{[^}]*position:\s*relative/u);
+    expect(ourCss).not.toMatch(/^\.ProseMirror\s*\{[^}]*position:\s*relative/mu);
   });
 
   it("gives the caret host a width, because ProseMirror's widget div is empty", () => {
