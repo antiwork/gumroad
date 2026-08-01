@@ -100,10 +100,11 @@ describe "deleted_ids[:variants] kind invariant" do
     ]
 
     # Any spelling that can WRITE the collection — dot or bracket property
-    # assignment on any receiver, logical assignment, or in-place array
-    # mutation. A producer can rename its variable or switch notation, but it
-    # still has to spell the property name.
-    write_pattern = /confirmed_removed_variant_ids["'\]\s]*(?:\|\|=|&&=|\?\?=|=(?![=>])|\.\s*(?:push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin)\b)/
+    # assignment on any receiver, logical assignment, element assignment
+    # through an index, or in-place array mutation behind `.`, `?.`, or `!.`.
+    # A producer can rename its variable or switch notation, but it still has
+    # to spell the property name.
+    write_pattern = /confirmed_removed_variant_ids["'\]\s!]*(?:\[[^\[\]]*\]\s*)*(?:\|\|=|&&=|\?\?=|=(?![=>])|\??\.\s*(?:push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin)\b)/
 
     it "has no producer of confirmed_removed_variant_ids outside the version-row editors" do
       expect(files_matching.call(/confirmed_removed_variant_ids/)).to eq((permitted_producers + permitted_readers).sort),
@@ -119,10 +120,42 @@ describe "deleted_ids[:variants] kind invariant" do
 
       # The reconciler may clear the list or drop the ids a save consumed;
       # anything else makes it a fifth producer.
-      reconciler_writes = File.read(javascript_root.join(reconciler))
-                              .scan(/confirmed_removed_variant_ids["'\]\s]*=(?![=>])\s*(.+)/).flatten
+      reconciler_source = File.read(javascript_root.join(reconciler))
+      reconciler_writes = reconciler_source.scan(/confirmed_removed_variant_ids["'\]\s]*=(?![=>])\s*(.+)/).flatten
       expect(reconciler_writes).not_to be_empty
       expect(reconciler_writes).to all(match(/\A(?:\[\]|reconcileConfirmedRemovalIds\()/))
+
+      # Every write the wide pattern sees in the reconciler must be one of the
+      # plain assignments checked above — a `.push` or indexed write here would
+      # otherwise hide inside the allowed-writer file.
+      expect(reconciler_source.scan(write_pattern).size).to eq(reconciler_writes.size)
+    end
+
+    it "classifies every write spelling, including indexed and optional-chain forms" do
+      writes = [
+        "product.confirmed_removed_variant_ids = ids",
+        'product["confirmed_removed_variant_ids"] = ids',
+        "product.confirmed_removed_variant_ids ||= []",
+        "product.confirmed_removed_variant_ids ??= []",
+        "product.confirmed_removed_variant_ids &&= ids",
+        "confirmed_removed_variant_ids.push(id)",
+        "confirmed_removed_variant_ids?.push(id)",
+        "confirmed_removed_variant_ids!.push(id)",
+        "product.confirmed_removed_variant_ids[index] = id",
+        'product["confirmed_removed_variant_ids"][0] = id',
+        "confirmed_removed_variant_ids.splice(index, 1)",
+      ]
+      reads = [
+        "product.confirmed_removed_variant_ids ?? []",
+        "confirmed_removed_variant_ids.includes(id)",
+        "confirmed_removed_variant_ids?.length",
+        "confirmed_removed_variant_ids[0] === id",
+        "confirmed_removed_variant_ids: string[]",
+        "const ids = product.confirmed_removed_variant_ids.map((id) => id)",
+      ]
+
+      expect(writes.grep(write_pattern)).to eq(writes)
+      expect(reads.grep(write_pattern)).to be_empty
     end
 
     it "gives deleted_ids.variants exactly one producer, fed only by confirmed_removed_variant_ids" do
