@@ -641,8 +641,8 @@ const CheckoutIndexPage = () => {
 
       // The CAPTCHA check refused the order on risk score alone, which is not something the buyer
       // can act on — so run the challenge key instead and resubmit with its token
-      // (gumroad-private#1590). No alert: the challenge is the next step, and the server withholds
-      // this offer once a fallback attempt has failed, so it cannot loop.
+      // (gumroad-private#1590). No alert: the challenge is the next step, and the offer is
+      // single-use server-side, so it cannot loop.
       if (result.recaptchaChallengeAvailable) {
         dispatch({ type: "retry-recaptcha-challenge" });
         return;
