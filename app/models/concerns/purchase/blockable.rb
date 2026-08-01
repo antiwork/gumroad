@@ -169,6 +169,11 @@ module Purchase::Blockable
   #
   # Guids and card fingerprints ARE widened from siblings, for the reason #unblock_buyer! gives:
   # they name a browser and a physical card, not a string somebody typed.
+  #
+  # A browser can still be shared, so clearing a sibling guid can lift a block a co-user of that
+  # browser earned. Accepted deliberately: the co-user's person-bound blocks (email, card) stay
+  # put, renewed abuse re-earns the guid block via the velocity checks, and withholding sibling
+  # guids is exactly the never-expiring stranded-block problem this widening exists to fix.
   private def blockable_values_for(purchases, extra_fingerprints: [], widened_emails: true)
     guids = Set.new
     emails = Set.new
