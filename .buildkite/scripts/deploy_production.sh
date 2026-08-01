@@ -42,18 +42,43 @@ poll_healthcheck() {
 #
 # The fail-safe window test is a shell snippet evaluated with `eval`; it should succeed when
 # the current time is inside the window.
+#
+# Every return path reports how many 3-minute sleeps it actually burned, in WAIT_SLEEPS_USED and
+# (when a 6th argument is given) in that file, so a caller that may enter the same wait more than
+# once can charge all of them against ONE budget. See LONG_RUNNING_ATTEMPTS_LEFT below.
 wait_for_healthcheck() {
   local label="$1" url="$2" max_attempts="$3" on_timeout="$4" failsafe_window_test="$5"
+  local sleeps_file="$6"
   local attempt hc_status
+
+  WAIT_SLEEPS_USED=0
+  record_sleeps_used() {
+    [ -n "$sleeps_file" ] || return 0
+    printf '%s\n' "$WAIT_SLEEPS_USED" > "$sleeps_file.tmp"
+    mv "$sleeps_file.tmp" "$sleeps_file"
+  }
+
+  if [ "$max_attempts" -le 0 ]; then
+    record_sleeps_used
+    if [ "$on_timeout" = "skip" ]; then
+      logger "$label wait budget exhausted — skipping deployment (the change ships with the next push, or click require-approval to force it)"
+      return "$SKIP_DEPLOY"
+    fi
+    logger "WARNING: $label wait budget exhausted — proceeding with deploy anyway (this means it is unusually slow and worth a look)"
+    return 0
+  fi
 
   for attempt in $(seq 1 "$max_attempts"); do
     hc_status=$(poll_healthcheck "$url")
     if [ "$hc_status" = "200" ]; then
+      record_sleeps_used
       return 0
     elif [ "$hc_status" = "503" ]; then
       logger "$label in flight (healthcheck 503) — waiting 3 minutes (attempt $attempt/$max_attempts)"
       sleep 180
+      WAIT_SLEEPS_USED=$((WAIT_SLEEPS_USED + 1))
     elif [ "$hc_status" = "404" ]; then
+      record_sleeps_used
       if eval "$failsafe_window_test"; then
         logger "$label healthcheck absent (HTTP 404) inside the fail-safe window — skipping deployment"
         return "$SKIP_DEPLOY"
@@ -61,6 +86,7 @@ wait_for_healthcheck() {
       logger "$label healthcheck absent (HTTP 404) outside the fail-safe window — proceeding"
       return 0
     else
+      record_sleeps_used
       if eval "$failsafe_window_test"; then
         logger "$label healthcheck unreachable (HTTP $hc_status) inside the fail-safe window — skipping deployment"
         return "$SKIP_DEPLOY"
@@ -70,6 +96,7 @@ wait_for_healthcheck() {
     fi
   done
 
+  record_sleeps_used
   if [ "$on_timeout" = "skip" ]; then
     logger "$label still in flight after $((max_attempts * 3)) minutes — skipping deployment (the change ships with the next push, or click require-approval to force it)"
     return "$SKIP_DEPLOY"
@@ -82,8 +109,17 @@ wait_for_healthcheck() {
 # Named because both the wait and the final confirmation have to agree on it.
 LONG_RUNNING_FAILSAFE_WINDOW_TEST='[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
 
+# The long-running blocker can be entered more than once (the confirmation loop below re-waits
+# when it goes busy again), so all of those entries share ONE attempt budget instead of each
+# getting a fresh 40. A per-entry budget is what killed build #18755 in a different disguise:
+# 40 attempts x 3 min x 5 rounds is 600 minutes of legal waiting inside a 240-minute step, so a
+# deploy that genuinely re-waited was killed as `timed_out` instead of exiting 0 on its own skip
+# path. Spent attempts come back from wait_for_healthcheck via WAIT_SLEEPS_USED.
+LONG_RUNNING_MAX_ATTEMPTS=40
+LONG_RUNNING_ATTEMPTS_LEFT=$LONG_RUNNING_MAX_ATTEMPTS
+
 run_healthcheck_waits() {
-  local tmpdir payout_pid long_pid remaining rc
+  local tmpdir payout_pid long_pid remaining rc long_sleeps
   tmpdir=$(mktemp -d)
 
   (
@@ -99,8 +135,9 @@ run_healthcheck_waits() {
 
   (
     set +e
-    wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" 40 skip \
-      "$LONG_RUNNING_FAILSAFE_WINDOW_TEST"
+    wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" \
+      "$LONG_RUNNING_ATTEMPTS_LEFT" skip \
+      "$LONG_RUNNING_FAILSAFE_WINDOW_TEST" "$tmpdir/long.sleeps"
     rc=$?
     printf '%s\n' "$rc" > "$tmpdir/long.rc.tmp"
     mv "$tmpdir/long.rc.tmp" "$tmpdir/long.rc"
@@ -133,6 +170,14 @@ run_healthcheck_waits() {
   done
 
   wait "$payout_pid" "$long_pid" 2>/dev/null || true
+  # Charge the long-running wait's spent attempts to the shared budget before returning, so the
+  # confirmation loop's re-waits cannot restart from a full 40.
+  if [ -f "$tmpdir/long.sleeps" ]; then
+    long_sleeps=$(cat "$tmpdir/long.sleeps")
+    case "$long_sleeps" in ''|*[!0-9]*) long_sleeps=0 ;; esac
+    LONG_RUNNING_ATTEMPTS_LEFT=$((LONG_RUNNING_ATTEMPTS_LEFT - long_sleeps))
+    [ "$LONG_RUNNING_ATTEMPTS_LEFT" -lt 0 ] && LONG_RUNNING_ATTEMPTS_LEFT=0
+  fi
   rm -rf "$tmpdir"
 }
 
@@ -169,11 +214,14 @@ while true; do
     logger "Long-running job busy again on every confirmation round — skipping deployment (the change ships with the next push, or click require-approval to force it)"
     exit 0
   fi
-  logger "Long-running job busy again after the waits cleared — waiting again (confirmation round $confirmation_round/$CONFIRMATION_ROUNDS)"
+  logger "Long-running job busy again after the waits cleared — waiting again (confirmation round $confirmation_round/$CONFIRMATION_ROUNDS, $LONG_RUNNING_ATTEMPTS_LEFT of $LONG_RUNNING_MAX_ATTEMPTS wait attempts left)"
   confirmation_round=$((confirmation_round + 1))
   long_rc=0
-  wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" 40 skip \
+  wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" \
+    "$LONG_RUNNING_ATTEMPTS_LEFT" skip \
     "$LONG_RUNNING_FAILSAFE_WINDOW_TEST" || long_rc=$?
+  LONG_RUNNING_ATTEMPTS_LEFT=$((LONG_RUNNING_ATTEMPTS_LEFT - WAIT_SLEEPS_USED))
+  [ "$LONG_RUNNING_ATTEMPTS_LEFT" -lt 0 ] && LONG_RUNNING_ATTEMPTS_LEFT=0
   if [ "$long_rc" -eq "$SKIP_DEPLOY" ]; then
     exit 0
   elif [ "$long_rc" -ne 0 ]; then

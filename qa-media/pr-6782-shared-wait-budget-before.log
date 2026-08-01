@@ -1,0 +1,13 @@
+exit code                    : 0 (0 = the designed skip path)
+confirmation rounds entered  : 1  (must be >=1 or this harness proves nothing)
+waits before the clear        : 10  (budget deliberately part-spent)
+long-running 3-min waits used: 50
+shared budget ceiling        : 40 waits = 120 min
+a per-round budget would give : 50 waits here, and up to 200 = 600 min in a 240-min step
+
+--- decision lines ---
+[0;32m2026/08/01 12:07:46 deploy_production.sh: Long-running job still in flight after 120 minutes — skipping deployment (the change ships with the next push, or click require-approval to force it)[0m
+
+RESULT: FAIL — 50 waits exceeds the 40-attempt shared budget.
+        The confirmation round refreshed the budget instead of drawing from it:
+        10 spent before the clear, then a full 40 again.
