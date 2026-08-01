@@ -54,16 +54,21 @@ class DetectLegalEntityCountryDriftJob
               "Compliance resync to Stripe will fail for this seller until the account is " \
               "recreated in the correct country; Stripe cannot change an existing account's country."
 
-    return if user.comments
+    # Near-simultaneous compliance edits enqueue jobs with distinct record ids,
+    # so the Sidekiq unique lock does not collapse them. Lock the user row to
+    # make the dedup check and the insert atomic across those jobs.
+    user.with_lock do
+      next if user.comments
                   .with_type_note
                   .where(author_name: AUTHOR_NAME, content:)
                   .where("created_at > ?", DEDUP_WINDOW.ago)
                   .exists?
 
-    user.comments.create!(
-      author_name: AUTHOR_NAME,
-      comment_type: Comment::COMMENT_TYPE_NOTE,
-      content:,
-    )
+      user.comments.create!(
+        author_name: AUTHOR_NAME,
+        comment_type: Comment::COMMENT_TYPE_NOTE,
+        content:,
+      )
+    end
   end
 end
