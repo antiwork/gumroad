@@ -6,7 +6,7 @@ require "timeout"
 describe("PurchaseScenario using StripeJs", type: :system, js: true) do
   def checkout_payment_props
     page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
   end
 
@@ -268,7 +268,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     visit("/checkout?product=#{product.unique_permalink}")
 
     checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
@@ -337,7 +337,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(Stripe::PaymentIntent).to receive(:create).and_call_original
 
     checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
@@ -390,7 +390,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     end
 
     checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
@@ -438,7 +438,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(Stripe::SetupIntent).to receive(:create).and_call_original
 
     checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil
@@ -491,7 +491,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
     expect(Stripe::SetupIntent).to receive(:create).and_call_original
 
     checkout_payment = page.evaluate_script(<<~JS)
-      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout.checkout_payment
+      JSON.parse(document.querySelector("[data-page]").getAttribute("data-page")).props.checkout_payment
     JS
     expect(checkout_payment["integration"]).to eq("payment_element")
     expect(checkout_payment["fallback_reason"]).to be_nil

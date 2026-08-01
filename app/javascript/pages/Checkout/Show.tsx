@@ -41,6 +41,11 @@ import {
   type Result,
 } from "$app/components/Checkout/cartState";
 import {
+  buildCartSaveRefreshCallbacks,
+  createLaneInvalidationSuppressor,
+  type CartSaveCallbacks,
+} from "$app/components/Checkout/checkoutPaymentRefresh";
+import {
   type CheckoutStyle,
   CheckoutThemeProvider,
   getCheckoutIndicatorCss,
@@ -103,8 +108,11 @@ type CheckoutIndexPageProps = {
     state: string | null;
     tip_options: number[];
     us_states: string[];
-    checkout_payment: CheckoutPaymentConfig;
   };
+  // Its own top-level prop rather than a key of `checkout`, because it depends on the cart's
+  // contents: the page re-requests it alone after every cart edit so the mounted element always
+  // matches the cart on screen. See CheckoutPresenter#checkout_payment_props.
+  checkout_payment: CheckoutPaymentConfig;
 };
 
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
@@ -124,6 +132,31 @@ const buildCustomFieldValues = (
     const key = getCustomFieldKey(field, product);
     return { id: field.id, value: field.type === "text" ? (values[key] ?? "") : values[key] === "true" };
   });
+
+// Identifies the cart for the purpose of choosing a payment lane. Deliberately narrower than the
+// cart object, which also carries things the lane does not depend on — the buyer's email is written
+// into it on every keystroke, and invalidating the payment configuration on that would disable Pay
+// while someone types their address. These are the fields Checkout::StripePaymentPresenter reads to
+// choose the lane: which seller each item belongs to, the price, whether it recurs or pays in
+// installments, preorder/free-trial status, the native type, and the listed currency.
+const paymentLaneCartKeyFor = (cart: CartState) =>
+  cart.items
+    .map((item) =>
+      [
+        item.product.creator.id,
+        item.product.permalink,
+        item.option_id ?? "",
+        item.quantity,
+        item.price,
+        item.recurrence ?? "",
+        item.pay_in_installments,
+        item.product.is_preorder,
+        item.product.free_trial !== null,
+        item.product.native_type,
+        item.product.currency_code,
+      ].join(":"),
+    )
+    .join("|");
 
 const CheckoutIndexPage = () => {
   const {
@@ -146,8 +179,8 @@ const CheckoutIndexPage = () => {
       cart_save_debounce_ms,
       tip_options,
       default_tip_option,
-      checkout_payment,
     },
+    checkout_payment,
     ...props
   } = typia.assert<CheckoutIndexPageProps>(usePage().props);
 
@@ -293,6 +326,10 @@ const CheckoutIndexPage = () => {
     [currentOffer],
   );
 
+  // Lets acceptOffer tell the passive lane-key effect "I already invalidated for this exact cart",
+  // for that one echo only. See createLaneInvalidationSuppressor for why the claim is consumed
+  // rather than kept.
+  const laneInvalidation = React.useRef(createLaneInvalidationSuppressor()).current;
   const completeOffer = () => {
     if (!currentOffer) return;
     completedOfferIds.add(currentOffer.id);
@@ -303,12 +340,34 @@ const CheckoutIndexPage = () => {
   const acceptOffer = () => {
     const newCart = getCartIfAccepted();
     cartForm.setData({ cart: newCart });
-    if (surchargesIfAccepted)
-      dispatch({
-        type: "update-products",
-        products: getProducts(newCart),
-        surcharges: surchargesIfAccepted,
-      });
+    // Synchronously, not via the passive effect below: completeOffer can dispatch "validate" in
+    // the same tick, and a passive invalidation would run after it — submitting through a payment
+    // configuration computed for the pre-offer cart. An accepted offer changes the cart's items,
+    // so it can change the lane (a bundle's listed currency, a recurring tier) exactly like any
+    // other edit.
+    //
+    // Record which cart this invalidation covers so the passive effect, which fires for this same
+    // cart change, does not repeat it. A repeat would look like a fresh buyer edit and cancel the
+    // resume that the "validate" below arms.
+    laneInvalidation.claim(paymentLaneCartKeyFor(newCart));
+    dispatch({ type: "invalidate-checkout-payment" });
+    // Unconditionally, including when the accepted cart's quote has not arrived yet. The products
+    // have to be in state before completeOffer's "validate" runs, because that "validate" is the
+    // dispatch responsible for pointing out required fields belonging to the product the buyer just
+    // added — and it can only see fields for products it has. Making this conditional on the quote
+    // meant that whether the cross-sold product's required fields were flagged depended on whether
+    // a background surcharge request happened to have landed, which is a race the buyer can lose:
+    // upsell_spec.rb:489 loses it, and the fields sit un-flagged with no explanation.
+    //
+    // Passing no surcharges leaves the quote pending, which cancels the pipeline back to "input".
+    // That is the same thing the passive [cartForm.data.cart] effect does one tick later, so this is
+    // the existing behaviour brought forward rather than a new one, and it is the fail-closed
+    // direction: the totals really are not yet ones a charge would honour.
+    dispatch({
+      type: "update-products",
+      products: getProducts(newCart),
+      ...(surchargesIfAccepted ? { surcharges: surchargesIfAccepted } : {}),
+    });
     completeOffer();
   };
 
@@ -715,13 +774,53 @@ const CheckoutIndexPage = () => {
     largeTipConfirmedRef.current = false;
   }, [state.tip]);
 
-  const debouncedSaveCartState = useDebouncedCallback(() => {
+  // A save can finish without delivering a recomputed configuration (dropped connection, timeout,
+  // 500). The hold on Pay is NOT released in that case — see checkoutPaymentRefresh for why a lost
+  // response cannot be read as "the edit didn't persist" — instead the save is re-issued, and if
+  // that one comes back empty-handed too the buyer is asked to reload.
+  //
+  // The recovery has to be a save rather than a bare re-request of the configuration: a save sends
+  // the cart the client currently holds, so its answer is the configuration for that same cart.
+  // Saves also supersede one another, so a recovery cannot race the buyer's next edit.
+  const saveCart = (callbacks: CartSaveCallbacks) => {
     cartForm.patch(Routes.checkout_path(), {
-      // Refresh the theme with the cart so branding cannot outlive a one-to-mixed-seller transition.
-      only: ["cart", "flash", "checkout_style"],
+      // checkout_payment comes back with the save because it is derived from the cart: which
+      // element this checkout mounts, and in which currency, can change when the cart changes.
+      // Asking for it in the same request means there is no window where the persisted cart and
+      // the payment configuration on screen describe different carts. checkout_style rides along
+      // for the same reason: branding cannot outlive a one-to-mixed-seller transition.
+      only: ["cart", "flash", "checkout_payment", "checkout_style"],
       preserveUrl: true,
       preserveScroll: true,
+      ...callbacks,
     });
+  };
+  // Held in a ref so a recovery started by an earlier save calls the current render's save rather
+  // than one closed over stale cart data.
+  const saveCartRef = React.useRef(saveCart);
+  saveCartRef.current = saveCart;
+  // The lane key of the cart as it stands right now, for saves to compare their answer against.
+  // A ref for the same reason as the save above: a debounce or a recovery reads it outside the
+  // render that scheduled it.
+  const currentPaymentLaneCartKeyRef = React.useRef("");
+
+  const debouncedSaveCartState = useDebouncedCallback(() => {
+    saveCartRef.current(
+      buildCartSaveRefreshCallbacks({
+        save: (callbacks) => saveCartRef.current(callbacks),
+        currentCartKey: () => currentPaymentLaneCartKeyRef.current,
+        // The one path that lifts the hold on Pay. The save that asked is the only place that knows
+        // the configuration describes the cart the buyer is looking at — see checkoutPaymentRefresh.
+        // Re-validated here because it is read straight off the response rather than out of the
+        // props typia has already checked.
+        onDelivered: (checkoutPayment) =>
+          dispatch({
+            type: "update-checkout-payment",
+            checkoutPayment: typia.assert<CheckoutPaymentConfig>(checkoutPayment),
+          }),
+        onUnrecoverable: (message) => showAlert(message, "error"),
+      }),
+    );
   }, cart_save_debounce_ms);
 
   // Clean URL params after initial render to avoid stale URL references during Inertia updates
@@ -737,6 +836,38 @@ const CheckoutIndexPage = () => {
       dispatch({ type: "update-products", products: getProducts(cartForm.data.cart) });
     }
   }, [cartForm.data.cart]);
+  // The cart changed in a way that can move it to a different payment lane, so the configuration
+  // on screen was computed for the previous cart. Mark it stale (Pay stays disabled) until the
+  // save above returns the recomputed one.
+  //
+  // Keyed on the items' lane-relevant fields rather than the cart object, because the cart object
+  // also carries things the payment lane does not depend on — the buyer's email is written into it
+  // on every keystroke (see the effect below), and invalidating on that would disable Pay while
+  // someone types their address. These are the fields Checkout::StripePaymentPresenter reads to
+  // choose the lane: which seller each item belongs to, the price, whether it recurs or pays in
+  // installments, preorder/free-trial status, the native type, and the listed currency.
+  const paymentLaneCartKey = paymentLaneCartKeyFor(cartForm.data.cart);
+  currentPaymentLaneCartKeyRef.current = paymentLaneCartKey;
+  useOnChange(() => {
+    // Skip the invalidation when acceptOffer already made it for this exact cart. Accepting an
+    // offer changes the cart, so this passive effect fires for that change too — but acceptOffer
+    // has already dispatched the invalidation synchronously (it has to, so the "validate" it
+    // dispatches in the same tick sees the stale flag) and that "validate" has already been refused
+    // and armed for resume. A second invalidation here would read as "the buyer edited the cart
+    // again" and drop the resume, stranding the checkout with no purchase and no feedback — the
+    // deadlock this echo caused before.
+    //
+    // The claim covers only that one echo: it is consumed here, so a later edit that returns the
+    // cart to the accepted key is invalidated normally. See createLaneInvalidationSuppressor.
+    if (laneInvalidation.shouldSuppressLaneInvalidation(paymentLaneCartKey)) return;
+    dispatch({ type: "invalidate-checkout-payment" });
+  }, [paymentLaneCartKey]);
+  // Deliberately NOT a watcher on the checkout_payment prop. A configuration arriving in the props
+  // is not evidence that it describes the cart on screen — a rejected edit and a save the buyer's
+  // next edit overtook both deliver a well-formed configuration for a cart the buyer no longer has,
+  // and a prop watcher adopts all three cases identically. Adoption is dispatched by the save that
+  // asked instead, via onDelivered above; the cart PATCH is the only request that asks for this
+  // prop, so nothing else can supply one.
   useOnChange(() => {
     if (state.email.trim() === "" || isValidEmail(state.email.trim())) {
       // @ts-expect-error FormDataKeys recurses into Product.cross_sells; CartState is still correct at runtime

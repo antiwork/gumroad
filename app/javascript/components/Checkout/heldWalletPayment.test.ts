@@ -113,6 +113,8 @@ const state = (overrides: Partial<State> = {}): State => ({
   emailTypoSuggestion: null,
   acknowledgedEmails: new Set(),
   requireEmailTypoAcknowledgment: false,
+  checkoutPaymentStale: false,
+  resumeSubmitAfterCheckoutPayment: false,
   ...overrides,
 });
 
