@@ -147,6 +147,17 @@ describe Shipment do
       end
     end
 
+    it "rejects a remainder shorter than the shortest real carrier format" do
+      # DHL's 10 digits is the shortest number any mapped carrier issues, so the bound sits there:
+      # nine characters is a truncated paste, ten is a real DHL waybill.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      shipment.update!(tracking_url: "#{usps}123456789")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+
+      shipment.update!(tracking_url: "#{usps}1234567890")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "1234567890"])
+    end
+
     it "recovers the pair from a value stored with surrounding whitespace" do
       # No writer strips this column, so a trailing newline must not cost the structured evidence.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]

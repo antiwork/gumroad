@@ -67,7 +67,7 @@ class Shipment < ApplicationRecord
       number = url_rest[prefix_rest.length..]
       # The shortest number any mapped carrier issues is DHL's 10 digits; a shorter remainder is a
       # truncated paste, and submitting it as a real tracking number is the failure this guards.
-      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{8,40}\z/)
+      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{10,40}\z/)
     end
     nil
   end
