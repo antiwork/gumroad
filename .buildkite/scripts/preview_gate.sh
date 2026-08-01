@@ -36,10 +36,12 @@ if [ "$pr_number" = "false" ] || [ -z "$pr_number" ]; then
   if [ -n "${GITHUB_TOKEN:-}" ]; then
     export GH_TOKEN="$GITHUB_TOKEN"
     source .buildkite/scripts/ensure_gh.sh
-    ensure_gh
-    # Never let a gh failure (rate limit, token scope, API blip) block the deploy.
-    pr_number=$(gh pr list --repo "$PREVIEW_GITHUB_REPO" --head "$BUILDKITE_BRANCH" \
-      --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
+    # Never let a gh failure block the deploy — that includes ensure_gh itself
+    # (a failed CLI download aborts under `set -e`), not just the API call.
+    if ensure_gh >/dev/null 2>&1 && command -v gh >/dev/null 2>&1; then
+      pr_number=$(gh pr list --repo "$PREVIEW_GITHUB_REPO" --head "$BUILDKITE_BRANCH" \
+        --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
+    fi
   fi
 fi
 
