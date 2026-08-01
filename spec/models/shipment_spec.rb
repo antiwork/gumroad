@@ -165,6 +165,15 @@ describe Shipment do
       expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "9400111899223197428490"])
     end
 
+    it "returns nothing rather than raising when the stored value is not valid UTF-8" do
+      # Free text: without `scrub`, `strip` raises `ArgumentError` here and the whole
+      # dispute-evidence build fails instead of skipping one unusable field.
+      shipment.update_column(:tracking_url, "https://tools.usps.com/go/x\xFF".dup.force_encoding("UTF-8"))
+
+      expect { shipment.reload.carrier_and_tracking_number_from_url }.to_not raise_error
+      expect(shipment.reload.carrier_and_tracking_number_from_url).to be_nil
+    end
+
     it "returns nothing when no tracking URL was supplied" do
       expect(create(:shipment, carrier: nil, tracking_number: nil, tracking_url: nil)
                .carrier_and_tracking_number_from_url).to be_nil

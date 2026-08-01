@@ -111,6 +111,17 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
         expect(described_class.perform(disputed_purchase.reload))
           .to include("Seller-provided shipment tracking URL: https://track.aftership.com/94001")
       end
+
+      it "omits, rather than raising on, a value that is not valid UTF-8" do
+        # Without `scrub`, `strip` raises `ArgumentError` before any guard runs and the whole
+        # evidence build fails over one bad byte in free text.
+        shipment.update_column(:tracking_url, "https://track.aftership.com/94001\xFF".dup.force_encoding("UTF-8"))
+
+        text = nil
+        expect { text = described_class.perform(disputed_purchase.reload) }.to_not raise_error
+        expect(text).to include("Billing postal code: 12345")
+        expect(text).to_not include("shipment tracking URL")
+      end
     end
 
     context "when the purchase has no shipment" do

@@ -54,7 +54,9 @@ class DisputeEvidence::GenerateUncategorizedTextService
     # newline would put seller-written lines into evidence Stripe reads as Gumroad's own. Dropping
     # an unusable row costs less than vouching for its text.
     def submission_safe_tracking_url
-      url = purchase.shipment&.tracking_url&.strip
+      # `scrub` before `strip`: an invalid byte sequence makes `strip` raise, failing the whole
+      # evidence build rather than dropping one unusable row.
+      url = purchase.shipment&.tracking_url&.scrub&.strip
       return if url.blank? || url.length > MAX_TRACKING_URL_LENGTH || url.match?(/[[:cntrl:]]/)
 
       parsed = begin
