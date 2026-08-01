@@ -197,41 +197,88 @@ class ContentModeration::ContentExtractor
     # tokenizer Loofah itself uses) rather than a regex so comments, escaped
     # identifiers (`\68ttps:`), and semicolons inside data: URLs read here
     # exactly as a browser reads them when it decides what to render.
+    #
+    # A custom property's url() paints only when an image-painting declaration
+    # reads it through var() — possibly through other custom properties — so the
+    # reference graph is resolved from those declarations rather than harvesting
+    # every `--name: url(…)`. An unused one makes no browser request, and under
+    # full coverage an unreviewable URL parked in it would block the page.
+    # Custom properties inherit document-wide, so definitions and references are
+    # matched across all style attributes and blocks, not per rule.
     def css_image_urls(document)
-      document.css("[style]").flat_map { |node| css_declaration_image_urls(Crass.parse_properties(node["style"].to_s)) } +
-        document.css("style").flat_map { |node| css_rule_image_urls(Crass.parse(node.text.to_s)) }
+      properties =
+        document.css("[style]").flat_map { |node| css_property_nodes(Crass.parse_properties(node["style"].to_s)) } +
+        document.css("style").flat_map { |node| css_rule_property_nodes(Crass.parse(node.text.to_s)) }
+
+      # Custom property names are case-sensitive, unlike standard properties.
+      custom_property_values = Hash.new { |hash, name| hash[name] = [] }
+      urls = []
+      referenced_names = []
+
+      properties.each do |node|
+        name = node[:name].to_s
+        if name.start_with?("--")
+          custom_property_values[name] << node[:children]
+        elsif IMAGE_CSS_PROPERTIES.include?(name.downcase.sub(/\A-[a-z]+-/, ""))
+          urls += css_url_values(node[:children])
+          referenced_names += css_var_references(node[:children])
+        end
+      end
+
+      resolved = Set.new
+      until referenced_names.empty?
+        name = referenced_names.shift
+        next unless resolved.add?(name)
+
+        # Every definition of the name, not one winner: which applies depends on
+        # the cascade per element, which is not modeled here — any of them can
+        # be the one that renders.
+        custom_property_values[name].each do |value|
+          urls += css_url_values(value)
+          referenced_names += css_var_references(value)
+        end
+      end
+
+      urls
     end
 
-    def css_rule_image_urls(rules)
+    def css_rule_property_nodes(rules)
       rules.flat_map do |node|
         next [] unless node.is_a?(Hash)
 
         case node[:node]
         when :style_rule
-          css_declaration_image_urls(node[:children])
+          css_property_nodes(node[:children])
         when :at_rule
           # An at-rule's block comes back as raw tokens; re-parsing recovers the
           # rules nested under @media/@supports. @font-face's declarations don't
           # parse as rules and fall out as :error nodes — which is the point:
           # its `src` URLs are fonts, not images.
-          node[:block] ? css_rule_image_urls(Crass::Parser.parse_rules(node[:block])) : []
+          node[:block] ? css_rule_property_nodes(Crass::Parser.parse_rules(node[:block])) : []
         else
           []
         end
       end
     end
 
-    def css_declaration_image_urls(nodes)
+    def css_property_nodes(nodes)
+      Array(nodes).select { |node| node.is_a?(Hash) && node[:node] == :property }
+    end
+
+    # Custom property names read through var() anywhere in a value, including
+    # nested inside other functions. A var() fallback's names are collected too:
+    # the fallback paints whenever the first name is undefined.
+    def css_var_references(nodes)
       Array(nodes).flat_map do |node|
-        next [] unless node.is_a?(Hash) && node[:node] == :property
+        next [] unless node.is_a?(Hash) && node[:node] == :function
 
-        # Custom properties are collected too: `--bg: url(…)` painted via
-        # `background-image: var(--bg)` renders like any other background, and
-        # var() is not usable in @font-face `src`, so a font can't get in this way.
-        name = node[:name].to_s.downcase
-        next [] unless name.start_with?("--") || IMAGE_CSS_PROPERTIES.include?(name.sub(/\A-[a-z]+-/, ""))
-
-        css_url_values(node[:children])
+        names = css_var_references(node[:value])
+        if node[:name].to_s.downcase == "var"
+          names += Array(node[:value]).filter_map do |token|
+            token[:value].to_s if token.is_a?(Hash) && token[:node] == :ident && token[:value].to_s.start_with?("--")
+          end
+        end
+        names
       end
     end
 

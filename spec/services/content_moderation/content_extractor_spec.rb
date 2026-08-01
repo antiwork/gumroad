@@ -307,6 +307,32 @@ RSpec.describe ContentModeration::ContentExtractor do
                                                                           ])
     end
 
+    it "leaves unused custom-property URLs out, so a URL nothing renders cannot block a page" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          :root { --unused: url("https://dead.example.com/never-rendered.png") }
+          .a { --indirect: url("https://cdn.example.com/chained.png") }
+          .b { --painted: var(--indirect) }
+        </style>
+        <div style="background-image: var(--painted, var(--fallback))"></div>
+        <style>
+          .c { --fallback: url("https://cdn.example.com/fallback.png") }
+          .d { color: var(--unused-by-a-non-image-property) }
+          .e { --unused-by-a-non-image-property: url("https://dead.example.com/text-only.png") }
+        </style>
+      HTML
+
+      # A custom property no image-painting declaration reads (directly, through
+      # another custom property, or as a var() fallback) makes no browser
+      # request — collecting it would let an unreviewable parked URL block an
+      # otherwise safe page. References resolve across style attributes and
+      # blocks, since custom properties inherit document-wide.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/chained.png",
+                                                                            "https://cdn.example.com/fallback.png",
+                                                                          ])
+    end
+
     it "leaves font URLs out of the image set, so a custom font cannot block a page" do
       page = page_for(custom_html: <<~HTML)
         <style>
