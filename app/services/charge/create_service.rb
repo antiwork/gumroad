@@ -265,6 +265,14 @@ class Charge::CreateService
     # amount, and any eligibility or quote failure must stop the charge.
     quote_token = params[:buyer_currency_quote].presence if merchant_account&.stripe_charge_processor?
 
+    # A membership renewal runs off-session with no quote token: there is no browser to
+    # confirm a total and nothing to verify against. It presents from the amount stored at
+    # signup instead (gumroad-private#1322), so it is resolved before the token-based lane.
+    # Returns {} to charge canonical USD when the subscription has no stored amount, which is
+    # every subscription created before this ramp.
+    renewal_args = subscription_renewal_presentment_processor_args
+    return renewal_args if renewal_args.present?
+
     eligibility_decision = Checkout::BuyerCurrencyEligibility.new(
       order:,
       seller:,
@@ -328,6 +336,44 @@ class Charge::CreateService
     }
   end
 
+  # Processor args for a membership renewal presented in the currency stored at signup, or {}
+  # to leave the caller charging canonical USD.
+  #
+  # Gated on off_session so an on-session charge can never reach it: a buyer-present checkout
+  # has a quote token and belongs in the verified-quote lane, and an upgrade/plan change
+  # charges a prorated amount that is not the stored price.
+  #
+  # Defensive rather than load-bearing. Order::ChargeService sets off_session for any multi-seller
+  # cart, so this does run, but a checkout purchase is always the original subscription purchase
+  # and #stored_presentment refuses those, so it always returns {} here. Renewals bill through
+  # Purchase#later_charge_presentment_processor_args instead. The shape safety is
+  # #stored_presentment's own guards, not the eligibility service: returning early skips that
+  # service for the charge entirely.
+  def subscription_renewal_presentment_processor_args
+    return {} unless off_session
+    return {} unless merchant_account&.stripe_charge_processor?
+    return {} unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+
+    renewal = Purchase::LaterChargePresentmentService.new(
+      charge:,
+      merchant_account:,
+      purchases:,
+      amount_cents:,
+      gumroad_amount_cents:
+    )
+    result = renewal.perform
+    return {} if result.blank?
+
+    @presentment_currency_attempted = result.processor_currency
+
+    {
+      processor_amount_cents: result.processor_amount_cents,
+      processor_currency: result.processor_currency,
+      processor_gumroad_amount_cents: result.processor_gumroad_amount_cents,
+      stripe_fx_quote_id: result.stripe_fx_quote_id,
+    }
+  end
+
   def locked_buyer_currency_quote!(quote_token, eligibility_decision)
     Checkout::BuyerCurrencyQuote.verify!(
       token: quote_token,
@@ -342,7 +388,8 @@ class Charge::CreateService
           permalink: purchase.link.unique_permalink,
           total_cents: purchase.total_transaction_cents,
         }
-      end
+      end,
+      later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases)
     )
   rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
     Rails.logger.info("Buyer currency presentment quote rejected for charge #{charge.external_id}: #{e.message}")

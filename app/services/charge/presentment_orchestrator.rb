@@ -57,14 +57,14 @@ class Charge::PresentmentOrchestrator
   # to the allocation and show the buyer per-item buyer-currency amounts for items that
   # were never separately charged. spec/services/order/charge_service_spec.rb pins this
   # for both single-item and multi-item carts.
-  def self.persist!(charge:, presentment_currency:, presentment_total_cents:, presentment_gumroad_amount_cents:,
+  def self.persist!(charge: nil, presentment_currency:, presentment_total_cents:, presentment_gumroad_amount_cents:,
                     allocations:, stripe_fx_quote_id: nil, stripe_fx_quote_expires_at: nil, fx_rate: nil,
                     rounding_delta_cents: 0)
     ActiveRecord::Base.transaction do
       allocations.each { _1.purchase.purchase_presentment&.destroy! }
-      charge.charge_presentment&.destroy!
+      charge&.charge_presentment&.destroy!
 
-      charge_presentment = charge.create_charge_presentment!(
+      charge_presentment = charge&.create_charge_presentment!(
         processor: StripeChargeProcessor.charge_processor_id,
         presentment_currency:,
         presentment_total_cents:,

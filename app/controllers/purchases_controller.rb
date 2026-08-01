@@ -160,8 +160,8 @@ class PurchasesController < ApplicationController
     }
 
     purchase = @preorder.charge!(ip_address: request.remote_ip, browser_guid: cookies[:_gumroad_guid], purchase_params:)
-    if purchase&.successful?
-      @preorder.mark_charge_successful!
+    if purchase&.successful? || purchase&.pending_buyer_presentment_settlement?
+      @preorder.mark_charge_successful! if purchase.successful?
       return render json: { success: true, next: @preorder.link.long_url }
     end
 

@@ -63,6 +63,16 @@ module AgentConversationPersistence
   MISSING_PROPOSAL_MESSAGE_ID_NOTICE = "Store agent confirmation omitted proposal message id"
   ACTION_CLAIM_RELEASE_FAILED_NOTICE = "Store agent action claim could not be released"
 
+  # What the model is told a proposal turn was, in place of the reply the creator actually saw. That
+  # reply points at a confirmation card whose result the server already knows and the model does not.
+  PROPOSAL_TURN_HISTORY_CONTENT = "You proposed a change on this turn."
+  NO_PROPOSAL_STATE_NOTE = "no proposed action was recorded for this message"
+  PROPOSAL_STATE_RECORDED = "a proposal was recorded, but its current result and card visibility " \
+                            "are unknown; never send the creator back to that card"
+  PROPOSAL_STATE_EXECUTING = "execution started; do not confirm again"
+  PROPOSAL_STATE_APPLIED = "the action was applied and cannot be confirmed again"
+  PROPOSAL_STATE_UNKNOWN = "the result is unknown; do not confirm again"
+
   private_constant :LEGACY_ACTION_LOOKUP_LIMIT,
                    :FORM_DECIMAL_NUMBER_PATTERN,
                    :ACTION_NUMBER_INPUT_MAX_BYTES,
@@ -77,7 +87,13 @@ module AgentConversationPersistence
                    :UNPERSISTED_PROPOSAL_REPLY,
                    :UNRESOLVED_MOBILE_ACTION_REPLY,
                    :MISSING_PROPOSAL_MESSAGE_ID_NOTICE,
-                   :ACTION_CLAIM_RELEASE_FAILED_NOTICE
+                   :ACTION_CLAIM_RELEASE_FAILED_NOTICE,
+                   :PROPOSAL_TURN_HISTORY_CONTENT,
+                   :NO_PROPOSAL_STATE_NOTE,
+                   :PROPOSAL_STATE_RECORDED,
+                   :PROPOSAL_STATE_EXECUTING,
+                   :PROPOSAL_STATE_APPLIED,
+                   :PROPOSAL_STATE_UNKNOWN
 
   private
     # Returns the seller's conversation for params[:conversation_id], or nil when the param is
@@ -134,21 +150,45 @@ module AgentConversationPersistence
       end
     end
 
-    # A generated proposal cannot be confirmed unless its assistant message was stored.
+    # A generated proposal cannot be confirmed unless its assistant message was stored. The same
+    # fallback also keeps reserved proposal copy from escaping when the persistence guard rejects it.
     def replace_unpersisted_proposal_reply!(result)
-      return false if result[:proposed_action].blank?
+      if result[:proposed_action].present?
+        result[:reply] = UNPERSISTED_PROPOSAL_REPLY
+        return true
+      end
+      return false unless result[:reply].to_s.strip == Ai::StoreAgentService::PROPOSAL_READY_REPLY
 
-      result[:reply] = UNPERSISTED_PROPOSAL_REPLY
+      result[:reply] = Ai::StoreAgentService::NOTHING_STAGED_REPLY
       true
     end
 
-    # The plain role/content transcript to send to the model — rebuilt from the stored rows so a
-    # tampered or stale client-side history can't rewrite what the agent believes was said. Only
-    # the most recent HISTORY_MAX_MESSAGES are replayed: without a cap, every turn of a long-lived
-    # conversation would resend the entire transcript to the LLM (O(n²) token cost over the
-    # conversation's life) — `last` keeps the newest rows while preserving chronological order.
+    # Rebuild history from stored rows. A turn that carried a proposal is replayed as server-owned
+    # state only, never as the confirmation copy the creator saw. Nothing here may carry proposal
+    # payloads, params, objects, or client turn ids. `last` bounds token cost, preserving order.
     def agent_conversation_history(conversation)
-      conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map { |message| { role: message.role, content: message.content } }
+      conversation.ai_messages.last(HISTORY_MAX_MESSAGES).map do |message|
+        next { role: message.role, content: message.content } unless message.role == "assistant"
+
+        proposal = (message.metadata || {})["proposed_action"].present?
+        {
+          role: message.role,
+          content: proposal ? PROPOSAL_TURN_HISTORY_CONTENT : message.content,
+          proposal_state: agent_proposal_state_note(message),
+        }
+      end
+    end
+
+    def agent_proposal_state_note(message)
+      metadata = message.metadata || {}
+      return NO_PROPOSAL_STATE_NOTE if metadata["proposed_action"].blank?
+
+      case metadata["action_status"].presence
+      when nil then PROPOSAL_STATE_RECORDED
+      when ACTION_STATUS_EXECUTING then PROPOSAL_STATE_EXECUTING
+      when ACTION_STATUS_APPLIED then PROPOSAL_STATE_APPLIED
+      else PROPOSAL_STATE_UNKNOWN
+      end
     end
 
     def record_agent_user_message!(conversation, content)
@@ -169,6 +209,9 @@ module AgentConversationPersistence
         end
       unless result[:outcome] == expected_outcome
         raise ArgumentError, "Store agent turn outcome does not match its proposed action."
+      end
+      if result[:proposed_action].blank? && result[:reply].to_s.strip == Ai::StoreAgentService::PROPOSAL_READY_REPLY
+        raise ArgumentError, "Store agent proposal reply requires a proposed action."
       end
 
       metadata = {

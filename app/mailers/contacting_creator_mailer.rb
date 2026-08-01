@@ -18,6 +18,11 @@ class ContactingCreatorMailer < ApplicationMailer
 
   after_action :deliver_email
   after_action :send_push_notification!, only: :notify
+  # `around` rather than `after`, because the notice claimed at render has to be given back on every
+  # path where nothing was sent — including a delivery that raises, which an after callback never sees.
+  # It runs for every action on this mailer, and the ivar check inside is what scopes it: an `only:`
+  # here would be accepted and silently ignored, since deliver callbacks take `:if`/`:unless` only.
+  around_deliver :settle_undeliverable_ping_subscription_notice
 
   layout "layouts/email"
 
@@ -359,6 +364,36 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "We were unable to stamp your PDF"
   end
 
+  # The two reasons need opposite advice — fill in a URL, or re-authorize the app that owns the
+  # subscription — so the reason is resolved here rather than flattened into one vague message.
+  # Everything this send depends on is read here rather than passed in: the subscription is enqueued
+  # from the sale path and rendered from the low queue, and inside that window the seller can delete
+  # it, repair it, or break it a different way. The send-once notice is claimed here and settled after
+  # delivery, by `settle_undeliverable_ping_subscription_notice`.
+  def undeliverable_ping_subscription(resource_subscription_id)
+    @resource_subscription = ResourceSubscription.alive.find_by(id: resource_subscription_id)
+    # Saying it is "still listed as active" would be false for a subscription deleted in the window.
+    return do_not_send if @resource_subscription.nil?
+
+    @seller = @resource_subscription.user
+    return do_not_send if @seller.nil?
+
+    # Setting a URL or re-authorizing the app makes it deliverable again, and this email would then
+    # ask the seller to repair something already working.
+    return do_not_send if @seller.ping_notification_deliverable?(@resource_subscription)
+
+    rendered_reason = UndeliverablePingSubscriptionNotifier.reason_for(@resource_subscription)
+    # Claiming rather than checking: the enqueue throttle is keyed on the reason as it was at enqueue,
+    # so two jobs that resolve to the same reason here are not excluded by it and a read would let both
+    # send. Nothing below can decline, so the claim marks a send this render is committed to.
+    return do_not_send unless UndeliverablePingSubscriptionNotifier.claim_send(resource_subscription_id, rendered_reason)
+
+    @undeliverable_ping_subscription_reason = rendered_reason
+    @application_name = @resource_subscription.oauth_application&.name
+    @missing_post_url = rendered_reason == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
+    @subject = "Your #{@resource_subscription.resource_name} webhook is not being sent"
+  end
+
   def chargeback_lost_no_refund_policy(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
@@ -667,11 +702,12 @@ class ContactingCreatorMailer < ApplicationMailer
     # sentence we're after either, so drop it rather than pasting a wall of text into the email.
     MAX_FORMAT_HINT_LENGTH = 200
 
-    # The row Stripe refused, or the current one when the caller could not name it (legacy calls
-    # and the debit-card path). A missing id must not fall back silently to nothing: without a row
-    # there is nothing to quote, which is the correct outcome, not an error.
+    # The row Stripe refused, and only that row. An unnamed id (a job enqueued before this
+    # argument existed) resolves to nothing rather than to the active account: the seller may have
+    # saved a replacement since, and quoting those values as "the details we sent" points them at
+    # a row Stripe never saw. No row means no quoted values, which is the pre-existing copy.
     def rejected_bank_account(bank_account_id)
-      return @seller.active_bank_account if bank_account_id.blank?
+      return if bank_account_id.blank?
 
       @seller.bank_accounts.find_by(id: bank_account_id)
     end
@@ -723,6 +759,29 @@ class ContactingCreatorMailer < ApplicationMailer
       mailer_args[:reply_to] = @reply_to if @reply_to.present?
       mailer_args[:from] = @from if @from.present?
       mail(mailer_args)
+    end
+
+    # The render claimed the seller's one notice; this decides whether it was spent. Only a message
+    # actually transmitted spends it — `deliver_email` returns before `mail` for an address we will
+    # not send to, which delivers an empty message rather than raising; a transport failure raises
+    # straight through here; and `perform_deliveries = false` drops the message silently, the way
+    # `PostSendgridApi` already reads that flag. All three leave the seller un-notified, so all three
+    # give the claim back and let a later event report it again.
+    #
+    # `RescueSmtpErrors` does not hide the SMTP cases from this: it handles them outside the deliver
+    # callbacks, so a rejection unwinds to this `ensure` first and only then looks like a clean send.
+    def settle_undeliverable_ping_subscription_notice
+      delivered = false
+      yield
+      delivered = message.to.present? && message.perform_deliveries
+    ensure
+      # `ensure` rather than an after callback, so a raised delivery settles too.
+      unless @resource_subscription.nil? || @undeliverable_ping_subscription_reason.blank?
+        settle = delivered ? :record_sent : :release_claim
+        UndeliverablePingSubscriptionNotifier.public_send(
+          settle, @resource_subscription.id, @undeliverable_ping_subscription_reason
+        )
+      end
     end
 
     def send_push_notification!

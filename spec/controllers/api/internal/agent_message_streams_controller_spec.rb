@@ -150,6 +150,47 @@ describe Api::Internal::AgentMessageStreamsController do
         expect(conversation.ai_messages.reload.count).to eq(3)
       end
 
+      # The streaming path must build history the same way as the buffered one: an applied proposal
+      # turn reaches the model as server-owned state, never as its old "confirm that card" copy.
+      it "replays an applied proposal turn as server-owned state" do
+        conversation = create(:ai_conversation, seller:)
+        create(:ai_message, ai_conversation: conversation, content: "Upload the portrait")
+        create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "Confirm that card and the upload goes through.",
+          metadata: {
+            "proposed_action" => { "type" => "api_write", "params" => { "endpoint" => "update_user_custom_html" } },
+            "action_status" => "applied",
+            "client_turn_id" => "8f14e45f",
+          },
+        )
+
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        expect(service_double).to receive(:respond_streaming).with(
+          messages: [
+            { role: "user", content: "Upload the portrait" },
+            {
+              role: "assistant",
+              content: "You proposed a change on this turn.",
+              proposal_state: "the action was applied and cannot be confirmed again",
+            },
+            { role: "user", content: "How are my sales?" },
+          ],
+          on_reply_complete: kind_of(Proc),
+        ) do |on_reply_complete:, **|
+          turn = store_agent_turn(reply: "Already applied.", proposed_action: nil)
+          on_reply_complete.call(turn)
+          turn.merge(suggestions: [])
+        end
+
+        post :create, params: valid_params.merge(conversation_id: conversation.external_id), format: :json
+
+        expect(response).to have_http_status(:ok)
+      end
+
       it "still emits the done event but suppresses an unpersisted proposal" do
         proposal = { "type" => "api_write", "params" => { "endpoint" => "create_offer_code" } }
         service_double = instance_double(Ai::StoreAgentService)
@@ -194,6 +235,32 @@ describe Api::Internal::AgentMessageStreamsController do
         expect($redis.get(turn_status_key)).to eq("failed")
       ensure
         $redis.del(turn_status_key) if turn_status_key
+      end
+
+      it "rejects and replaces server-owned confirmation copy without a proposal" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+          turn = store_agent_turn(reply: Ai::StoreAgentService::PROPOSAL_READY_REPLY, proposed_action: nil)
+          on_reply_complete&.call(turn)
+          emit.call(:token, { text: turn[:reply] })
+          turn.merge(suggestions: [])
+        end
+        expect(ErrorNotifier).to receive(:notify).with(
+          an_instance_of(ArgumentError).and(having_attributes(
+            message: "Store agent proposal reply requires a proposed action.",
+          )),
+        )
+
+        expect do
+          post :create, params: valid_params, format: :json
+        end.to not_change { seller.ai_conversations.count }.and not_change { AiMessage.count }
+
+        done_data = JSON.parse(response.body[/event: done\ndata: (.*)\n/, 1])
+        expect(response.body).to include("event: token")
+        expect(response.body).not_to include(Ai::StoreAgentService::PROPOSAL_READY_REPLY)
+        expect(done_data["reply"]).to eq(Ai::StoreAgentService::NOTHING_STAGED_REPLY)
+        expect(done_data["proposed_action"]).to be_nil
       end
 
       it "persists the turn before any trailing write, so a client disconnect can't drop it" do

@@ -1521,6 +1521,240 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "undeliverable_ping_subscription" do
+    let(:seller) { create(:user) }
+    let(:oauth_application) { create(:oauth_application, owner: seller, name: "Gumroad Store Agent") }
+    let(:resource_subscription) { create(:resource_subscription, oauth_application:, user: seller) }
+
+    def notified_key(reason) = RedisKey.undeliverable_ping_subscription_notified(resource_subscription.id, reason)
+
+    it "names the affected webhook and tells a seller with a revoked credential to reconnect" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.to).to eq [seller.email]
+      expect(mail.subject).to eq "Your sale webhook is not being sent"
+      expect(mail.body.encoded).to include "Gumroad Store Agent"
+      expect(mail.body.encoded).to include "no longer has permission to read your sales"
+      expect(mail.body.encoded).to include "Reconnecting Gumroad inside that application"
+      expect(mail.body.encoded).not_to include "does not have a URL to send to"
+    end
+
+    # Resource subscriptions have no seller-facing UI, so advanced settings is offered as the
+    # alternative destination rather than the place to fix this webhook.
+    it "does not tell the seller to change this webhook in their own settings" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.body.encoded).to include "nothing to change"
+      expect(mail.body.encoded).to include "Reply to this email"
+      expect(mail.body.encoded).not_to include "review your webhooks and set a notification URL"
+    end
+
+    it "tells a seller with no post URL to set one through the application that created it" do
+      resource_subscription.update_column(:post_url, nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.body.encoded).to include "does not have a URL to send to"
+      expect(mail.body.encoded).to include "through the application that created it"
+      expect(mail.body.encoded).not_to include "no longer has permission to read your sales"
+    end
+
+    # Enqueued on a sale, rendered later: the seller may have removed it in between, and the email
+    # asserts the subscription "is still listed as active".
+    it "sends nothing when the subscription is gone by render time" do
+      resource_subscription.mark_deleted!
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # Same window, other direction: the whole email asks the seller to do something they have now
+    # already done, so it has to stop asking.
+    it "sends nothing once the application has a live token again by render time" do
+      create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    it "sends nothing once a post URL is set on an authorized application by render time" do
+      create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "account")
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # Rendering is not sending, which is why nothing is recorded here: the record has no expiry, and
+    # one written for an email nobody received would refuse the notice the seller is owed when the
+    # same reason breaks again.
+    it "claims nothing when it suppresses the send" do
+      create("doorkeeper/access_token", application: oauth_application, resource_owner_id: seller.id, scopes: "view_sales")
+
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    # The render takes the notice rather than reading whether it is taken, because two renders can
+    # overlap: the enqueue throttle is keyed on the reason at enqueue, so both jobs resolving to the
+    # same reason here would pass a read and both send.
+    it "sends only one of two renders that overlap before either delivers" do
+      first = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+      second = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(first.message).not_to be_a ActionMailer::Base::NullMail
+      expect(second.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # A claim is not evidence the seller was told, so it expires: a render killed between claiming and
+    # delivering costs a delayed notice rather than a permanent silence.
+    it "holds the claim provisionally on a render that has not delivered" do
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).message
+
+      ttl = $redis.ttl(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))
+      expect(ttl).to be_between(1, UndeliverablePingSubscriptionNotifier::SEND_CLAIM_TTL.to_i)
+    end
+
+    it "records the reason it sent, with no expiry" do
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+
+      key = notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL)
+      expect($redis.exists?(key)).to be true
+      expect($redis.ttl(key)).to eq(-1)
+    end
+
+    # The seller cannot act on a repeat: there is no way to re-authorize an app holding no live token,
+    # and no UI or API to delete the subscription without one.
+    it "sends once for the same reason however many times it is delivered" do
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+
+      second = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(second.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # The settling callback runs for every action on this mailer — deliver callbacks cannot be scoped
+    # with `only:` — so the ivars are what keep it from touching another action's bookkeeping.
+    it "touches no send-once state when an unrelated email is delivered" do
+      product = create(:product, user: seller)
+      expect(UndeliverablePingSubscriptionNotifier).not_to receive(:record_sent)
+      expect(UndeliverablePingSubscriptionNotifier).not_to receive(:release_claim)
+
+      ContactingCreatorMailer.unstampable_pdf_notification(product.id).deliver_now
+    end
+
+    # A delivery that raises gives the notice back, or the seller's one notice goes on an email that
+    # never left — the same permanent silence a claim that is never released causes.
+    it "still reports the reason after a delivery failure" do
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(StandardError, "transport down")
+      expect do
+        ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+      end.to raise_error(StandardError, "transport down")
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
+      retried = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    # `RescueSmtpErrors` swallows these, so the delivery looks successful to the caller. The claim
+    # still has to come back: `handle_exceptions` wraps the deliver callbacks from outside, so the
+    # raise reaches this settle before the handler sees it.
+    [Net::SMTPFatalError, Net::SMTPSyntaxError, Net::SMTPAuthenticationError].each do |error_class|
+      it "gives the notice back when SMTP rejects the message with #{error_class}" do
+        allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(error_class, "550 rejected")
+
+        expect do
+          ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+        end.not_to raise_error
+
+        expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+
+        allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
+        retried = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+        expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+      end
+    end
+
+    # `deliver_email` returns before `mail` for an address it will not send to, so the delivery
+    # succeeds with nothing sent — keeping the claim there would burn the notice permanently.
+    it "gives the notice back when the seller's address is not one we will send to" do
+      allow_any_instance_of(User).to receive(:form_email).and_return("not-an-email")
+
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    # `perform_deliveries = false` drops the message with no raise and a recipient still set, so
+    # treating it as sent would burn the notice on a mail that never left the process.
+    it "gives the notice back when deliveries are switched off" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+      mail.perform_deliveries = false
+
+      mail.deliver_now
+
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    # The advice comes from current state, so the reason recorded has to be the reason the seller was
+    # told about — the other reason is still a notice they are owed.
+    it "records only the reason it gave, leaving the other one reportable" do
+      resource_subscription.update_column(:post_url, nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+      mail.deliver_now
+
+      expect(mail.body.encoded).to include "does not have a URL to send to"
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::MISSING_POST_URL))).to be true
+      expect($redis.exists?(notified_key(UndeliverablePingSubscriptionNotifier::REVOKED_CREDENTIAL))).to be false
+    end
+
+    it "still sends the second reason after the first was already sent" do
+      ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+      resource_subscription.update_column(:post_url, nil)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.body.encoded).to include "does not have a URL to send to"
+    end
+
+    # Silence is what this notice exists to break, so a failure in the send-once bookkeeping has to
+    # cost a possible repeat rather than the email itself.
+    it "sends when the send-once state cannot be claimed" do
+      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).at_least(:once)
+
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    it "sends the email even when recording that it sent fails" do
+      allow($redis).to receive(:set).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).at_least(:once)
+
+      expect do
+        ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id).deliver_now
+      end.to change { ActionMailer::Base.deliveries.size }.by(1)
+    end
+
+    # A small numeric primary key matches inside the footer address, so the identifier worth
+    # asserting on is the one that would actually leak: the subscription's own external id.
+    it "does not leak the post URL or an identifier of the seller's subscription" do
+      mail = ContactingCreatorMailer.undeliverable_ping_subscription(resource_subscription.id)
+
+      expect(mail.body.encoded).not_to include resource_subscription.post_url
+      expect(mail.body.encoded).not_to include resource_subscription.external_id
+    end
+  end
+
   describe "chargeback_lost_no_refund_policy" do
     let(:seller) { create(:user) }
 
@@ -2370,6 +2604,23 @@ describe ContactingCreatorMailer do
 
         expect(mail.body.encoded).to include("routing number 110000000")
         expect(mail.body.encoded).not_to include("check both")
+      end
+
+      it "quotes nothing when the caller could not name the refused row" do
+        # A job enqueued before the id argument existed. The seller may have re-saved since, so
+        # naming the active row would attribute values Stripe never saw.
+        create(:uzbekistan_bank_account, user: seller, bank_code: "JSCLUZ22XXX", branch_code: "00401")
+
+        mail = ContactingCreatorMailer.invalid_bank_account(seller.id, nil, directory_miss_message)
+
+        # Decoded, not .encoded: quoted-printable soft-wraps can split a quoted value across a
+        # line break and make a negative assertion pass for the wrong reason.
+        body = mail.html_part&.decoded || mail.body.decoded
+        # Positive anchor from static template text — the header copy's apostrophes HTML-escape
+        # ("couldn&#39;t"), so anchoring on those makes the negatives below vacuous.
+        expect(body).to include("double-check your details")
+        expect(body).not_to include("JSCLUZ22XXX")
+        expect(body).not_to include("The details we sent were")
       end
 
       it "quotes the row Stripe refused, not whatever the seller has saved since" do

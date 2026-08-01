@@ -123,6 +123,7 @@ const clientConfirmPaymentMethod: PurchasePaymentMethod = {
   cardCountry: "US",
   walletType: "apple_pay",
   mountCurrency: "usd",
+  selectedMethodType: "card",
 };
 
 // The held payment was tokenized while surcharges showed no tax (total 1000), so those are the

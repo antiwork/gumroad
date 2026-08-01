@@ -15,6 +15,9 @@ class Subscription < ApplicationRecord
   include Subscription::PingNotification
   include Purchase::Searchable::SubscriptionCallbacks
   include AfterCommitEverywhere
+  # Memberships AND installment plans are both Subscriptions internally, so this one include
+  # covers two of the four product types in gumroad-private#1322.
+  include HasLaterChargePresentments
   extend Restartable
 
   # time allowed after card declined for buyer to have a successful charge before ending the subscription
@@ -346,7 +349,12 @@ class Subscription < ApplicationRecord
           if purchase.has_payment_network_error?
             schedule_charge(1.hour.from_now)
           else
-            if purchase.has_payment_error?
+            if purchase.error_code == PurchaseErrorCode::BLOCKED_SANCTIONED_LOCATION
+              # Sanctions screening rejects the renewal in a `before_create` validation, so no charge
+              # is ever attempted. The card emails would both be false and unactionable; the address
+              # on the subscription is the only screened signal the subscriber can change.
+              CustomerLowPriorityMailer.subscription_charge_blocked_location(id).deliver_later(queue: "low")
+            elsif purchase.has_payment_error?
               CustomerLowPriorityMailer.subscription_card_declined(id).deliver_later(queue: "low")
               ChargeDeclinedReminderWorker.perform_in(ALLOWED_TIME_BEFORE_FAIL_AND_UNSUBSCRIBE - CHARGE_DECLINED_REMINDER_EMAIL, id)
             else
@@ -359,6 +367,9 @@ class Subscription < ApplicationRecord
         # schedule for termination 5 days after subscription is overdue for a charge
         UnsubscribeAndFailWorker.perform_in(terminate_by > (Time.current + 1.minute) ? terminate_by : 1.minute, id)
         purchase.mark_failed!
+      elsif purchase.pending_buyer_presentment_settlement?
+        # FinalizeBuyerPresentmentPurchaseJob completes the renewal once Stripe settles it.
+        nil
       elsif purchase.in_progress? && purchase.charge_intent.is_a?(StripeChargeIntent) && (purchase.charge_intent&.processing? || purchase.charge_intent.requires_action?)
         # For recurring charges on Indian cards, the charge goes into processing state for 26 hours.
         # We'll receive a webhook once the charge succeeds/fails, and we'll transition the purchase
