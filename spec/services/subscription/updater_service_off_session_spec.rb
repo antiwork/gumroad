@@ -114,7 +114,7 @@ describe Subscription::UpdaterService, "#charge_user! off_session behavior" do
 
   context "when stripe_setup_intent_id is absent and card does not require mandate" do
     it "passes off_session: true to subscription.charge!" do
-      non_mandate_card = instance_double(CreditCard, requires_mandate?: false)
+      non_mandate_card = instance_double(CreditCard, requires_mandate?: false, recurring_upi?: false)
       allow(subscription).to receive(:credit_card_to_charge).and_return(non_mandate_card)
       allow(subscription).to receive(:charge!).and_return(successful_purchase)
 
@@ -123,6 +123,21 @@ describe Subscription::UpdaterService, "#charge_user! off_session behavior" do
 
       expect(subscription).to have_received(:charge!).with(
         hash_including(off_session: true)
+      )
+    end
+  end
+
+  context "when stripe_setup_intent_id is absent and payment method is UPI Autopay" do
+    it "passes off_session: false to subscription.charge!" do
+      recurring_upi_card = instance_double(CreditCard, requires_mandate?: false, recurring_upi?: true)
+      allow(subscription).to receive(:credit_card_to_charge).and_return(recurring_upi_card)
+      allow(subscription).to receive(:charge!).and_return(successful_purchase)
+
+      updater = build_updater
+      updater.send(:charge_user!)
+
+      expect(subscription).to have_received(:charge!).with(
+        hash_including(off_session: false)
       )
     end
   end
