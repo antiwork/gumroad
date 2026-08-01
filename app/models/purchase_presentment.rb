@@ -5,7 +5,7 @@ class PurchasePresentment < ApplicationRecord
   belongs_to :charge_presentment, optional: true
 
   validates :processor, :presentment_currency, presence: true
-  validates :charge_presentment, presence: true, if: :stripe_processor?
+  validates :charge_presentment, presence: true, if: :stripe_charge_presentment_required?
   validates :presentment_price_cents,
             :presentment_tip_cents,
             :presentment_seller_tax_cents,
@@ -20,6 +20,10 @@ class PurchasePresentment < ApplicationRecord
   private
     def stripe_processor?
       processor == StripeChargeProcessor.charge_processor_id
+    end
+
+    def stripe_charge_presentment_required?
+      stripe_processor? && purchase&.charge.present?
     end
 
     def presentment_components_sum_to_total

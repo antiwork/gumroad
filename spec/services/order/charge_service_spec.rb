@@ -751,7 +751,7 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
     end
 
-    it "fails closed when a stale quote token reaches an unsupported commission checkout" do
+    it "charges a commission deposit and fixes its completion price in the buyer currency" do
       seller_1.update!(check_merchant_account_is_linked: true,
                        disable_buyer_local_currency: false,
                        created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
@@ -761,6 +761,7 @@ describe Order::ChargeService, :vcr do
              currency: Currency::USD)
       Feature.activate_user(:buyer_local_currency, seller_1)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
       allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
       allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
       allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
@@ -788,20 +789,32 @@ describe Order::ChargeService, :vcr do
       allow(CardParamsHelper).to receive(:build_chargeable).and_return(commission_chargeable)
 
       commission_product = create(:commission_product, user: seller_1, price_cents: 10_00)
-      expect(buyer_currency_quote_for(commission_product)).to be_nil
-
-      # Commissions charge only the deposit, so a locked full-total quote can never match.
-      # Simulate a stale token minted for a same-seller, same-total product. The checkout
-      # never displays local-currency totals for a commission (no quote is issued above), so
-      # a token arriving here means a buggy or crafted client. Erroring out beats silently
-      # charging canonical USD: a quote token is the buyer's confirmation of a local-currency
-      # total, and the charge must never diverge from what was displayed.
-      decoy_product = create(:product, user: seller_1, price_cents: 10_00)
       stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
       allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
-      quote = buyer_currency_quote_for(decoy_product)
 
       deposit_cents = (commission_product.price_cents * Commission::COMMISSION_DEPOSIT_PROPORTION).round
+      quote = Checkout::BuyerCurrencyQuote.create(
+        line_items: [
+          Checkout::BuyerCurrencyQuote::LineItem.new(
+            permalink: commission_product.unique_permalink,
+            product: commission_product,
+            price_cents: commission_product.price_cents,
+            tip_cents: 0,
+            seller_tax_cents: 0,
+            gumroad_tax_cents: 0,
+            shipping_cents: 0,
+            charge_price_cents: deposit_cents,
+            charge_tip_cents: 0,
+            charge_seller_tax_cents: 0,
+            charge_gumroad_tax_cents: 0,
+            charge_shipping_cents: 0,
+            later_charge_kind: "commission",
+            later_charge_price_cents: deposit_cents
+          )
+        ],
+        canonical_total_cents: commission_product.price_cents,
+        ip: "24.48.0.1"
+      )
       params = {
         line_items: [
           {
@@ -814,17 +827,130 @@ describe Order::ChargeService, :vcr do
         ]
       }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
       order, = Order::CreateService.new(params:).perform
-      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
 
       Order::ChargeService.new(order:, params:).perform
 
       purchase = order.reload.purchases.sole
-      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
-      expect(ChargePresentment.count).to eq(0)
-      expect(PurchasePresentment.count).to eq(0)
+      expect(purchase).to be_successful
+      expect(purchase.purchase_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                               presentment_price_cents: 6_25,
+                                                               presentment_total_cents: 6_25)
+      expect(purchase.commission.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::CAD,
+        presentment_price_cents: 6_25,
+        canonical_price_cents: 5_00
+      )
     ensure
       Feature.deactivate_user(:buyer_local_currency, seller_1)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
+    end
+
+    it "charges the first installment and fixes the remaining installments in the buyer currency" do
+      configure_seller_1_for_presentment_charges
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      installment_chargeable = instance_double(
+        Chargeable,
+        can_be_saved?: true,
+        card_type: CardType::VISA,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_ids: [StripeChargeProcessor.charge_processor_id],
+        country: Compliance::Countries::CAN.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        fingerprint: "card_fp",
+        funding_type: "credit",
+        get_chargeable_for: instance_double(StripeChargeablePaymentMethod),
+        payment_method_id: "pm_test",
+        prepare!: true,
+        requires_mandate?: false,
+        reusable_token_for!: "cus_test",
+        visual: "**** **** **** 4242",
+        zip_code: "H2X 1Y4"
+      )
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(installment_chargeable)
+
+      installment_product = create(:product, user: seller_1, price_cents: 10_00)
+      create(:product_installment_plan, link: installment_product, number_of_installments: 3)
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      quote = Checkout::BuyerCurrencyQuote.create(
+        line_items: [
+          Checkout::BuyerCurrencyQuote::LineItem.new(
+            permalink: installment_product.unique_permalink,
+            product: installment_product.reload,
+            price_cents: 10_00,
+            tip_cents: 0,
+            seller_tax_cents: 0,
+            gumroad_tax_cents: 0,
+            shipping_cents: 0,
+            charge_price_cents: 3_34,
+            charge_tip_cents: 0,
+            charge_seller_tax_cents: 0,
+            charge_gumroad_tax_cents: 0,
+            charge_shipping_cents: 0,
+            later_charge_kind: "installment",
+            later_charge_price_cents: 3_33
+          )
+        ],
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1"
+      )
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: installment_product.unique_permalink,
+            perceived_price_cents: 3_34,
+            price_cents: 10_00,
+            pay_in_installments: true,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, _chargeable, amount_cents, gumroad_amount_cents, *, **options|
+        stripe_charge_intent_for_buyer_presentment(
+          merchant_account: merchant_account_arg,
+          canonical_total_cents: amount_cents,
+          presentment_total_cents: options.fetch(:processor_amount_cents),
+          gumroad_amount_cents:
+        )
+      end
+
+      Order::ChargeService.new(order:, params:).perform
+
+      purchase = order.reload.purchases.sole
+      expect(purchase).to be_successful
+      expect(purchase.purchase_presentment).to have_attributes(presentment_currency: Currency::CAD,
+                                                               presentment_price_cents: 4_18,
+                                                               presentment_total_cents: 4_18)
+      expect(purchase.subscription.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::CAD,
+        presentment_price_cents: 4_16,
+        canonical_price_cents: 3_33
+      )
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
     end
 
     it "keeps buyer-presentment purchases in progress when Stripe settlement data is not available yet" do
@@ -1176,6 +1302,97 @@ describe Order::ChargeService, :vcr do
 
       expect(charge_responses.size).to eq(1)
       expect(charge_responses[charge_responses.keys[0]]).to eq(order.purchases.last.purchase_response)
+    end
+
+    it "fixes a preorder release price when its setup intent is created" do
+      configure_seller_1_for_presentment_charges
+      create(:merchant_account_stripe_connect,
+             user: seller_1,
+             charge_processor_merchant_id: "acct_presentment",
+             currency: Currency::USD)
+      Feature.activate_user(:buyer_local_currency, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_presentment")
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      allow_any_instance_of(Checkout::BuyerCurrencyEligibility).to receive(:buyer_currency_for_ip).and_return(Currency::CAD)
+      preorder_chargeable = instance_double(
+        Chargeable,
+        can_be_saved?: true,
+        card_type: CardType::VISA,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        charge_processor_ids: [StripeChargeProcessor.charge_processor_id],
+        country: Compliance::Countries::CAN.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        fingerprint: "card_fp",
+        funding_type: "credit",
+        get_chargeable_for: instance_double(StripeChargeablePaymentMethod),
+        payment_method_id: "pm_test",
+        prepare!: true,
+        requires_mandate?: false,
+        reusable_token_for!: "cus_test",
+        visual: "**** **** **** 4242",
+        zip_code: "H2X 1Y4"
+      )
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(preorder_chargeable)
+      setup_intent = SetupIntent.new
+      setup_intent.id = "seti_presentment"
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
+
+      preorder_product = create(:product, user: seller_1, price_cents: 10_00, is_in_preorder_state: true)
+      create(:preorder_link, link: preorder_product, release_at: 1.month.from_now)
+      stripe_fx_quote = StripeFxQuote::Quote.new(id: "fxq_test", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.8"))
+      allow(StripeFxQuote).to receive(:create).and_return(stripe_fx_quote)
+      quote = Checkout::BuyerCurrencyQuote.create(
+        line_items: [
+          Checkout::BuyerCurrencyQuote::LineItem.new(
+            permalink: preorder_product.unique_permalink,
+            product: preorder_product,
+            price_cents: 10_00,
+            tip_cents: 0,
+            seller_tax_cents: 0,
+            gumroad_tax_cents: 0,
+            shipping_cents: 0,
+            charge_price_cents: 0,
+            charge_tip_cents: 0,
+            charge_seller_tax_cents: 0,
+            charge_gumroad_tax_cents: 0,
+            charge_shipping_cents: 0,
+            later_charge_kind: "preorder",
+            later_charge_price_cents: 10_00
+          )
+        ],
+        canonical_total_cents: 10_00,
+        ip: "24.48.0.1"
+      )
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: preorder_product.unique_permalink,
+            perceived_price_cents: 10_00,
+            price_cents: 10_00,
+            is_preorder: true,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment).merge(buyer_currency_quote: quote.token)
+      order, = Order::CreateService.new(params:).perform
+
+      Order::ChargeService.new(order:, params:).perform
+
+      purchase = order.reload.purchases.sole
+      expect(purchase).to be_preorder_authorization_successful
+      expect(purchase.preorder.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::CAD,
+        presentment_price_cents: 12_50,
+        canonical_price_cents: 10_00
+      )
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller_1)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller_1)
     end
 
     it "creates charges with no amounts for sellers whose items don't require an immediate payment" do
@@ -2089,6 +2306,33 @@ describe Order::ChargeService, :vcr do
       mandate_options = charge_service.mandate_options_for_stripe(purchases: [discounted, plain])
 
       expect(mandate_options[:payment_method_options][:card][:mandate_options][:amount]).to eq(12_00)
+    end
+  end
+
+  describe "#mandate_options_in_setup_currency" do
+    it "converts a preorder SetupIntent mandate cap with the locked rate" do
+      order = create(:order)
+      service = described_class.new(order:, params: nil)
+      mandate_options = {
+        payment_method_options: {
+          card: { mandate_options: { amount: 10_00, currency: Currency::USD } }
+        }
+      }
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
+        currency: Currency::CAD,
+        fx_rate: BigDecimal("0.8")
+      )
+
+      converted = service.mandate_options_in_setup_currency(mandate_options, locked_quote)
+
+      expect(converted.dig(:payment_method_options, :card, :mandate_options)).to include(
+        amount: 12_50,
+        currency: Currency::CAD
+      )
+      expect(mandate_options.dig(:payment_method_options, :card, :mandate_options)).to include(
+        amount: 10_00,
+        currency: Currency::USD
+      )
     end
   end
 
