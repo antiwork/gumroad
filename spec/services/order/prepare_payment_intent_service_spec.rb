@@ -586,6 +586,33 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
+      it "keeps using a verified issued list after the seller is ramped down from the token path" do
+        Feature.activate_user(Checkout::StripePaymentPresenter::PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Greece") }
+        params[:payment_method_list_token] = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link cashapp], sellers: [seller]
+        )
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, seller)
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_ramped_down_issued_list").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      ensure
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, seller)
+      end
+
       # The token settles which methods the Element offered, never whether a method may still be
       # offered at all: it was signed before a flag could roll back or an account could lose a
       # capability. So a replayed list cannot enable a method past its rollout gate — the same
@@ -635,6 +662,28 @@ describe Order::PreparePaymentIntentService, :vcr do
         params[:payment_method_list_token] = "not-a-real-token"
         described_class.new(order:, params:, confirmation_token: "ctoken_forged_list").perform
         expect(create_args[:payment_method_types]).to eq(%w[card link])
+      end
+
+      it "re-resolves when the token flag is off and no issued list is submitted" do
+        Feature.deactivate_user(Checkout::StripePaymentPresenter::PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, seller)
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_flag_off_no_issued_list").perform
+
+        expect(params[:payment_method_list_token]).to be_nil
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
       # The final-amount strip runs over a verified issued list exactly as it does over a

@@ -61,11 +61,16 @@ describe Checkout::StripePaymentPresenter do
     checkout_product_for(product, **overrides)
   end
 
+  def activate_client_confirm_checkout(seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, seller)
+  end
+
   def confirm_flagged_seller_product(**overrides)
     seller = create(:user)
     product = create(:product, user: seller, price_cents: 1234)
-    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+    activate_client_confirm_checkout(seller)
     checkout_product_for(product, **overrides)
   end
 
@@ -76,7 +81,7 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, disable_wallets: false, request_apple_pay_merchant_tokens: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, payment_method_list_token: "issued:#{payment_method_types.join(",")}")
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -96,7 +101,7 @@ describe Checkout::StripePaymentPresenter do
         payment_method_types:,
         # The presenter signs the list it mounted, so the fixture pins the post-strip list: a
         # region or amount strip that failed to reach the issuer would show up here.
-        payment_method_list_token: "issued:#{payment_method_types.join(",")}",
+        payment_method_list_token:,
         stripe_link_enabled:,
         stripe_connect_account_id:,
       },
@@ -729,8 +734,7 @@ describe Checkout::StripePaymentPresenter do
   # ["card"] list and no deferred intent, so it has nothing to drift from.
   it "keeps a pay-what-you-want cart off the client-confirm lane, where the method list would drift once an amount is named" do
     seller = create(:user)
-    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+    activate_client_confirm_checkout(seller)
     Feature.activate_user(:checkout_local_method_klarna, seller)
     pwyw_product = create(:product, user: seller, price_cents: 0, customizable_price: true)
     stub_geoip_country("104.28.0.1", "United States")
@@ -1152,6 +1156,63 @@ describe Checkout::StripePaymentPresenter do
         .to eq(payment_element_client_confirm_props)
     end
 
+    it "does not issue a payment-method list token when the seller is not flagged for the token ramp" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+
+      expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+        .to eq(payment_element_client_confirm_props(payment_method_list_token: nil))
+      expect(Checkout::PaymentMethodListToken).not_to have_received(:issue)
+    end
+
+    it "issues a payment-method list token that verifies when the seller is flagged for the token ramp" do
+      allow(Checkout::PaymentMethodListToken).to receive(:issue).and_call_original
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1234)
+      activate_client_confirm_checkout(seller)
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)])
+      token = props.dig(:elements_options, :payment_method_list_token)
+
+      expect(token).to be_present
+      expect(Checkout::PaymentMethodListToken.verify(token, sellers: [seller])).to eq(%w[card link])
+    end
+
+    it "does not issue a payment-method list token when only one seller in the cart is flagged for the token ramp" do
+      flagged_seller = create(:user)
+      flagged_product = create(:product, user: flagged_seller, price_cents: 1234)
+      unflagged_seller = create(:user)
+      unflagged_product = create(:product, user: unflagged_seller, price_cents: 1234)
+      [flagged_seller, unflagged_seller].each do |seller|
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      end
+      Feature.activate_user(described_class::PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, flagged_seller)
+      presenter = described_class.new(
+        cart: nil,
+        add_products: [checkout_product_for(flagged_product), checkout_product_for(unflagged_product)],
+        clear_cart: false,
+        saved_credit_card: nil,
+      )
+      resolution = Checkout::PaymentMethodResolver::Resolution.new(
+        client_confirm_eligible: true,
+        payment_method_types: %w[card link],
+        eligible_payment_method_types: %w[card link],
+        fallback_reason: nil,
+        stripe_connect_account_id: nil,
+      )
+      allow(presenter).to receive(:client_confirm_eligible?).and_return(true)
+      allow(presenter).to receive(:payment_method_resolver).and_return(double(resolve: resolution))
+
+      props = presenter.props
+
+      expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+      expect(props[:elements_options][:payment_method_list_token]).to be_nil
+      expect(Checkout::PaymentMethodListToken).not_to have_received(:issue)
+    end
+
     it "launches Cash App Pay alongside card for a US buyer — ACH Direct Debit stays withdrawn platform-wide" do
       stub_geoip_country("104.28.0.1", "United States")
 
@@ -1222,8 +1283,7 @@ describe Checkout::StripePaymentPresenter do
         stub_geoip_country("104.28.0.1", "United States")
         seller = create(:user)
         product = create(:product, user: seller, price_cents: 50_00)
-        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+        activate_client_confirm_checkout(seller)
         Feature.activate_user(:checkout_local_method_klarna, seller)
         cart = create(:cart, :guest)
         create(:cart_product, cart:, product:, price: 50_00, quantity: 100)
@@ -1337,8 +1397,7 @@ describe Checkout::StripePaymentPresenter do
       cart = create(:cart, :guest)
       [100, 200].each do |price_cents|
         product = create(:product, user: create(:user), price_cents:)
-        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
-        Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, product.user)
+        activate_client_confirm_checkout(product.user)
         create(:cart_product, cart:, product:)
       end
 
@@ -1370,8 +1429,7 @@ describe Checkout::StripePaymentPresenter do
                                 "capabilities" => { "link_payments" => "active" },
                                 "refreshed_at" => Time.current.iso8601,
                               })
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_client_confirm_props(stripe_connect_account_id: connect_account.charge_processor_merchant_id))
@@ -1380,8 +1438,7 @@ describe Checkout::StripePaymentPresenter do
     it "always enables Link in client-confirm mode (no per-seller flag)" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
         .to eq(payment_element_client_confirm_props(stripe_link_enabled: true))
@@ -1402,8 +1459,7 @@ describe Checkout::StripePaymentPresenter do
     def buyer_currency_seller_with_product(price_currency_type: "eur", price_cents: 1500)
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type:, price_cents:)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
       [seller, product]
     end
 
@@ -1717,8 +1773,7 @@ describe Checkout::StripePaymentPresenter do
       seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 1500)
       connect_account = create(:merchant_account_stripe_connect, user: seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
       activate_buyer_currency_flags(seller)
       Feature.activate_user(:checkout_local_method_ideal, seller)
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
@@ -1914,8 +1969,7 @@ describe Checkout::StripePaymentPresenter do
       # buyer_currency_presentment_unsupported fallback.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:membership_product, user: seller, price_currency_type: "eur", price_cents: 1500)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
       add_products = [
@@ -2001,8 +2055,7 @@ describe Checkout::StripePaymentPresenter do
     it "requests merchant tokens on the client-confirm integration when the seller is flagged" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
       Feature.activate_user(described_class::APPLE_PAY_MERCHANT_TOKENS_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
@@ -2047,8 +2100,7 @@ describe Checkout::StripePaymentPresenter do
     it "enables wallets on the client-confirm integration when the seller is flagged" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1234)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
@@ -2080,8 +2132,7 @@ describe Checkout::StripePaymentPresenter do
       # the euro-zone buyer the forced lane actually serves.
       seller = create(:user, disable_buyer_local_currency: false)
       product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
-      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME, seller)
+      activate_client_confirm_checkout(seller)
       Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
       Feature.activate_user(:buyer_local_currency, seller)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)

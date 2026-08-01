@@ -6,6 +6,7 @@ class Checkout::StripePaymentPresenter
 
   STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME = :stripe_payment_element_checkout
   STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_FEATURE_NAME = :stripe_payment_element_client_confirm
+  PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME = :checkout_payment_method_list_token
   # When active for every seller in the cart, subscription checkouts declare recurring intent on
   # the Apple Pay payment sheet so Apple issues a merchant token (MPAN) — a token tied to the
   # buyer's card and Gumroad rather than to the physical device — instead of a device token that
@@ -272,6 +273,16 @@ class Checkout::StripePaymentPresenter
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
     end
 
+    def payment_method_list_token(payment_method_types)
+      return nil unless payment_method_list_token_enabled?
+
+      Checkout::PaymentMethodListToken.issue(payment_method_types:, sellers:)
+    end
+
+    def payment_method_list_token_enabled?
+      sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_METHOD_LIST_TOKEN_FEATURE_NAME, _1) }
+    end
+
     # Same seller-complete keying as payment_element_wallets?, and ANDed with it: a seller must be
     # in the general wallet rollout AND this lane's ramp before their buyer-currency checkouts
     # offer a wallet. That means ramping the general flag down still removes wallets everywhere,
@@ -387,11 +398,10 @@ class Checkout::StripePaymentPresenter
             subunit_to_unit: subunit_to_unit(method_forced_element_currency),
           } : nil,
           payment_method_types:,
-          # Signed copy of the list directly above, echoed back at #prepare so the intent is built
-          # from what this page actually mounted rather than from a second resolver run whose
-          # country and Klarna-window inputs are sampled from a different request
-          # (gumroad-private#1528). Issued after every strip, so it describes the mounted Element.
-          payment_method_list_token: Checkout::PaymentMethodListToken.issue(payment_method_types:, sellers:),
+          # Signed copy of the list directly above, echoed back at #prepare so flagged carts build
+          # the intent from what this page mounted, after every strip, rather than a second resolver
+          # run whose country and Klarna-window inputs come from a different request.
+          payment_method_list_token: payment_method_list_token(payment_method_types),
           # Derived from the resolver's method list (not a second flag check) so the Element's Link
           # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
           # ConfirmationToken minted with Link against an intent whose method list omits it.

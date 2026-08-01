@@ -718,6 +718,7 @@ class Order::PreparePaymentIntentService
       return @issued_payment_method_types if defined?(@issued_payment_method_types)
 
       submitted = params[:payment_method_list_token].presence
+      # Deliberately ungated: a page loaded while the ramp was on can prepare after it is off.
       issued = Checkout::PaymentMethodListToken.verify(submitted, sellers: [seller])
       # Expiry (a long-open tab) is routine here; a tampered token or a presenter/service
       # disagreement about the seller set is not. Warn rather than error because the bucket mixes
