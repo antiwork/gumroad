@@ -302,6 +302,101 @@ check_filter(
   expect: "false"
 )
 
+# --- ci-green.yml's publisher --------------------------------------------
+#
+# ci/green is the only status the main ruleset requires, so this step deciding
+# to write `success` IS the merge decision. The verdict it reads can be "we did
+# not check" (unknown), and publishing green on that grants the required status
+# to a head nobody compared against main. Same extraction trick: the real `run:`
+# body, not a paraphrase of it.
+
+CI_GREEN_WORKFLOW = File.expand_path("../../.github/workflows/ci-green.yml", __dir__)
+
+def publisher_body
+  steps = YAML.load_file(CI_GREEN_WORKFLOW).fetch("jobs").fetch("report").fetch("steps")
+  steps.find { |s| s["name"].to_s.start_with?("Set ci/green") }.fetch("run")
+end
+
+# Runs the publisher with `gh` stubbed onto PATH, and returns the ci/green write
+# it made -- or nil when it deliberately wrote nothing.
+def publisher_write_for(conclusion:, collision:)
+  Dir.mktmpdir do |dir|
+    writes = File.join(dir, "writes.log")
+    bin = File.join(dir, "bin")
+    FileUtils.mkdir_p(bin)
+    File.write(File.join(bin, "gh"), <<~SH)
+      #!/usr/bin/env bash
+      state=""
+      while [ $# -gt 0 ]; do
+        [ "$1" = "-f" ] && case "$2" in state=*) state="${2#state=}" ;; esac
+        shift
+      done
+      echo "$state" >> "#{writes}"
+    SH
+    FileUtils.chmod(0o755, File.join(bin, "gh"))
+
+    env = {
+      "PATH" => "#{bin}:#{ENV['PATH']}",
+      "GH_TOKEN" => "x",
+      "GITHUB_REPOSITORY" => "antiwork/gumroad",
+      "SHA" => "0" * 40,
+      "CONCLUSION" => conclusion,
+      "COLLISION" => collision,
+      "RUN_URL" => "https://example.invalid/run"
+    }
+    Open3.capture3(env, "bash", "-c", publisher_body, chdir: dir)
+    written = File.exist?(writes) ? File.read(writes).strip : ""
+    written.empty? ? nil : written
+  end
+end
+
+def check_publisher(name, conclusion:, collision:, expect:)
+  $count += 1
+  actual = publisher_write_for(conclusion:, collision:)
+  if actual == expect
+    puts "  ok    #{name}"
+  else
+    puts "  FAIL  #{name}"
+    $failures << "#{name}: expected ci/green=#{expect.inspect}, got #{actual.inspect}"
+  end
+end
+
+check_publisher(
+  "a clean re-check grants ci/green",
+  conclusion: "success", collision: "no", expect: "success"
+)
+
+check_publisher(
+  "a collision fails ci/green",
+  conclusion: "success", collision: "yes", expect: "failure"
+)
+
+# The one this exists for. `unknown` means the re-check could not run, and a
+# green here would be a guess on the status that gates the merge -- it would
+# also paper over a failure the push:main guard may already have written on
+# this same SHA. Pending blocks the merge and a re-run resolves it.
+check_publisher(
+  "an unknown migration verdict leaves ci/green unset",
+  conclusion: "success", collision: "unknown", expect: nil
+)
+
+# Distinct from unknown: there was no rule to apply, so withholding green would
+# strand the PR forever rather than stall it until a re-run.
+check_publisher(
+  "a skipped re-check still grants ci/green",
+  conclusion: "success", collision: "skipped", expect: "success"
+)
+
+check_publisher(
+  "a failed suite fails ci/green regardless of the verdict",
+  conclusion: "failure", collision: "no", expect: "failure"
+)
+
+check_publisher(
+  "a cancelled run leaves ci/green unset",
+  conclusion: "cancelled", collision: "no", expect: nil
+)
+
 puts
 if $failures.empty?
   puts "#{$count} checks passed."

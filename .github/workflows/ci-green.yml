@@ -46,26 +46,51 @@ jobs:
         id: migrations
         if: github.event.workflow_run.conclusion == 'success'
         env:
+          GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -uo pipefail
-          # Anything other than "the checker ran and found a collision" has to
-          # come out as unknown: this step gates every PR's green, so a checker
-          # that cannot run must not read as every PR colliding.
+          # Four verdicts, because "we did not check" must not read as "clean":
+          #   no       clean against main
+          #   yes      collision
+          #   skipped  nothing to check, and nothing this step could grant green
+          #   unknown  the check could not run -- publisher leaves ci/green unset
+          # unknown is the safe stall, not a pass: ci/green is the only required
+          # status, so publishing success for a head we never checked is what
+          # lets a stale collision merge.
           COLLISION=unknown
 
+          # A fork head is absent from this repo and unreachable by SHA, but the
+          # PR's refs/pull/N/head does live here. Without this the step used to
+          # skip the re-check for every fork PR -- and then grant green over the
+          # failure the push:main guard had already written on that same SHA.
+          fetch_head() {
+            git cat-file -e "$SHA^{commit}" 2>/dev/null && return 0
+            git fetch --no-tags --quiet origin "$SHA" 2>/dev/null && return 0
+            local number
+            number=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" \
+                       --jq '.[0].number' 2>/dev/null) || return 1
+            case "$number" in "" | null) return 1 ;; esac
+            git fetch --no-tags --quiet origin "refs/pull/${number}/head" 2>/dev/null || return 1
+            git cat-file -e "$SHA^{commit}" 2>/dev/null
+          }
+
           if [ ! -f bin/check-migration-versions ]; then
-            echo "No checker on main yet."
-          elif ! git cat-file -e "$SHA^{commit}" 2>/dev/null && ! git fetch --no-tags origin "$SHA" 2>/dev/null; then
-            # Fork heads are not in this repo. Their PR-time run already checked
-            # against main, and the push:main guard still covers them.
-            echo "Head $SHA not in this repo; leaving to the push:main guard."
+            # Pre-dates the checker: there is no rule to apply, not a check we
+            # failed to run.
+            echo "No checker on main; nothing to re-check."
+            COLLISION=skipped
+          elif ! fetch_head; then
+            # No open PR points at this SHA, so no ci/green on it can gate a
+            # merge. Granting green here is inert rather than unsafe.
+            echo "Head $SHA is not in this repo and no PR points at it."
+            COLLISION=skipped
           else
             ruby bin/check-migration-versions origin/main "$SHA"
             case "$?" in
               0) COLLISION=no ;;
               1) COLLISION=yes ;;
-              *) echo "Checker errored; leaving the verdict to the suite." ;;
+              *) echo "Checker could not run; ci/green stays pending." ;;
             esac
           fi
 
@@ -82,6 +107,14 @@ jobs:
           if [ "$CONCLUSION" = "success" ] && [ "$COLLISION" = "yes" ]; then
             STATE=failure
             DESC="Migration version collides with main. Rebase and renumber."
+          elif [ "$CONCLUSION" = "success" ] && [ "$COLLISION" = "unknown" ]; then
+            # The suite passed but the migration re-check could not run. Green
+            # here would be a guess on the one status the ruleset requires, and
+            # it would also overwrite a failure the push:main guard may already
+            # have written on this SHA. Stall instead: pending blocks the merge
+            # and a re-run resolves it.
+            echo "Migration verdict unknown; leaving ci/green pending."
+            exit 0
           elif [ "$CONCLUSION" = "success" ]; then
             STATE=success
             DESC="Test suite passed"
