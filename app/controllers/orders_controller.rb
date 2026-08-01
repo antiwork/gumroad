@@ -3,6 +3,10 @@
 class OrdersController < ApplicationController
   include ValidateRecaptcha, Events, Order::ResponseHelpers, ClientConfirmedOrderFinalization
 
+  # Long enough for a buyer to work through an image challenge, short enough that an offer cannot
+  # be banked for later.
+  RECAPTCHA_CHALLENGE_OFFER_TTL = 15.minutes
+
   before_action :normalize_line_items, only: [:create, :prepare]
   before_action :validate_order_request, only: [:create, :prepare]
   before_action :fetch_affiliates, only: [:create, :prepare]
@@ -260,20 +264,42 @@ class OrdersController < ApplicationController
     end
 
     # The buyer is resubmitting with a token from the challenge key after being refused on score
-    # alone, so verify against that key instead (gumroad-private#1590). Ignored when the challenge
-    # key is unconfigured: verifying a token against a blank key errors out to the
-    # infrastructure-error path, and that path fails OPEN for :checkout — which would turn the
-    # marker into a way to skip the check entirely.
+    # alone, so verify against that key instead (gumroad-private#1590). The marker is only honoured
+    # against an offer this server issued and has not yet spent: :checkout carries no score
+    # threshold, so a marker taken on trust would let any cohort buyer opt out of the score gate on
+    # their FIRST attempt. Also ignored when the challenge key is unconfigured — verifying against a
+    # blank key lands on the infrastructure-error path, which fails OPEN for :checkout.
     def recaptcha_challenge_fallback?
-      ActiveModel::Type::Boolean.new.cast(params[:recaptcha_challenge_fallback]).present? &&
-        CheckoutRecaptcha.challenge_site_key.present?
+      return @recaptcha_challenge_fallback if defined?(@recaptcha_challenge_fallback)
+
+      @recaptcha_challenge_fallback =
+        ActiveModel::Type::Boolean.new.cast(params[:recaptcha_challenge_fallback]).present? &&
+        CheckoutRecaptcha.challenge_site_key.present? &&
+        redeem_recaptcha_challenge_offer?
     end
 
-    # Offered once per order attempt. A request that already carried a challenge token and still
-    # failed is terminal: without that condition the client and server could hand the same refusal
-    # back and forth if :checkout ever gets a score threshold of its own.
+    # One redemption per issued offer. DEL returning 1 means this request is the one that spent it,
+    # so concurrent submissions cannot both ride the same offer.
+    def redeem_recaptcha_challenge_offer?
+      browser_guid = cookies[:_gumroad_guid]
+      return false if browser_guid.blank?
+
+      $redis.del(RedisKey.recaptcha_challenge_offer(browser_guid)) == 1
+    end
+
+    # Offered once per order attempt, and only to the cohort whose key cannot render a challenge —
+    # everyone else already checks out against the challenge key, so there is nothing to fall back
+    # to. Recorded server-side because the marker on the next request is only trustworthy if we
+    # issued it. A request that already spent an offer and still failed is terminal.
     def offer_recaptcha_challenge_fallback?
-      recaptcha_failed_on_score_only? && !recaptcha_challenge_fallback?
+      return false unless CheckoutRecaptcha.score_based?(logged_in_user)
+      return false unless recaptcha_failed_on_score_only? && !recaptcha_challenge_fallback?
+
+      browser_guid = cookies[:_gumroad_guid]
+      return false if browser_guid.blank?
+
+      $redis.set(RedisKey.recaptcha_challenge_offer(browser_guid), "1", ex: RECAPTCHA_CHALLENGE_OFFER_TTL.to_i)
+      true
     end
 
     def skip_recaptcha?

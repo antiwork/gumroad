@@ -1079,6 +1079,12 @@ describe OrdersController, :vcr do
             end
           end
 
+          # Stands in for the refusal that would have issued the offer, so examples about redeeming
+          # one do not depend on the example that earns it.
+          def issue_offer
+            $redis.set(RedisKey.recaptcha_challenge_offer(cookies[:_gumroad_guid]), "1")
+          end
+
           it "offers a challenge retry alongside the low-score message when the score alone refused the order" do
             refuse_on_score_only
 
@@ -1092,6 +1098,7 @@ describe OrdersController, :vcr do
           end
 
           it "verifies a challenge-fallback token against the challenge key on the unscored checkout surface" do
+            issue_offer
             expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
               .with(site_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"), surface: :checkout).and_return(true)
 
@@ -1103,6 +1110,7 @@ describe OrdersController, :vcr do
           end
 
           it "refuses the order with the generic message when the challenge token is invalid" do
+            issue_offer
             allow_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
 
             expect do
@@ -1116,6 +1124,7 @@ describe OrdersController, :vcr do
           # Terminal after one retry even if :checkout ever gets a score threshold of its own —
           # otherwise the client and server could hand the same refusal back and forth.
           it "does not offer the fallback a second time to a request that already carried the marker" do
+            issue_offer
             refuse_on_score_only
 
             post :create, params: multiple_purchase_params.merge(recaptcha_challenge_fallback: true)
@@ -1136,6 +1145,27 @@ describe OrdersController, :vcr do
             post :create, params: multiple_purchase_params.merge(recaptcha_challenge_fallback: true)
           end
 
+          # :checkout carries no score threshold, so an unearned marker is a way to opt out of the
+          # score gate entirely on the first attempt.
+          it "ignores a marker the server never offered and still verifies against the score key" do
+            expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
+              .with(site_key: "money_score_site_key", surface: :checkout_score).and_return(true)
+
+            post :create, params: multiple_purchase_params.merge(recaptcha_challenge_fallback: true)
+          end
+
+          it "spends the offer, so a replayed marker falls back to the score key" do
+            issue_offer
+
+            expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
+              .with(site_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"), surface: :checkout).and_return(true)
+            post :create, params: multiple_purchase_params.merge(recaptcha_challenge_fallback: true)
+
+            expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
+              .with(site_key: "money_score_site_key", surface: :checkout_score).and_return(true)
+            post :create, params: multiple_purchase_params.merge(recaptcha_challenge_fallback: true)
+          end
+
           it "keeps verifying against the score key when no marker is sent" do
             expect_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?)
               .with(site_key: "money_score_site_key", surface: :checkout_score).and_return(true)
@@ -1144,12 +1174,17 @@ describe OrdersController, :vcr do
           end
         end
 
+        # A buyer outside the cohort already checks out against the challenge key, so there is
+        # nothing to fall back to. The score-only marker is set here deliberately: without it the
+        # example passes whether or not the cohort is checked at all.
         it "does not offer a challenge retry to a buyer outside the cohort" do
-          allow_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)
+          allow_any_instance_of(OrdersController).to receive(:valid_recaptcha_response_and_hostname?) do |controller, **|
+            controller.instance_variable_set(:@recaptcha_failed_on_score_only, true)
+            false
+          end
 
           post :create, params: multiple_purchase_params
 
-          expect(response.parsed_body["error_message"]).to eq ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE
           expect(response.parsed_body["recaptcha_challenge_available"]).to be_nil
         end
       end
