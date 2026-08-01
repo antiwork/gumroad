@@ -11,7 +11,8 @@ describe "Profile settings email confirmation", type: :system, js: true do
 
     expect(page).to have_alert(text: "Confirm your email address (seller@example.com) before you can save changes to your profile.")
     expect(page).to have_field("Name", disabled: true)
-    expect(page).to have_button("Resend confirmation email")
+    click_button "Resend confirmation email"
+    expect(page).to have_text("Confirmation email sent!")
   end
 
   it "leaves a confirmed seller's editor untouched" do
@@ -20,5 +21,15 @@ describe "Profile settings email confirmation", type: :system, js: true do
 
     expect(page).to have_field("Name", disabled: false)
     expect(page).not_to have_text("before you can save changes to your profile")
+  end
+
+  it "gives the right refresh instruction when confirmation finishes in another tab" do
+    login_as(seller)
+    visit "/profile"
+    seller.confirm
+
+    click_button "Resend confirmation email"
+
+    expect(page).to have_alert(text: "Your email address is already confirmed — refresh the page to continue.")
   end
 end
