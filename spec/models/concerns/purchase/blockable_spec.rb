@@ -622,14 +622,41 @@ describe Purchase::Blockable do
         expect(PlatformBlock.active.find_by(object_value: "other-card-fingerprint")).to be_nil
       end
 
-      it "finds the sibling purchase by email when the acting purchase has no purchaser" do
-        guest_purchase = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-acting-guid")
-        sibling = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-other-guid")
+      it "finds the sibling purchase by email when the acting purchase has no purchaser and a shared card ties the rows together" do
+        guest_purchase = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-acting-guid", stripe_fingerprint: "guest-shared-card")
+        sibling = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-other-guid", stripe_fingerprint: "guest-shared-card")
         sibling.block_buyer!
 
         guest_purchase.unblock_buyer!
 
         expect(PlatformBlock.active.find_by(object_value: "guest-other-guid")).to be_nil
+      end
+
+      it "leaves alone a guest row that shares nothing but the checkout email, and reports its blocks as surviving" do
+        # A card tester checking out under this buyer's address produces exactly this row: same
+        # email, no account, its own browser and its own card.
+        tester_row = create(:purchase, link: product, email: purchase.email, purchaser: nil,
+                                       browser_guid: "tester-guid", stripe_fingerprint: "tester-card")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "tester-guid")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "tester-card")
+
+        surviving = purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "tester-guid")).to be_present
+        expect(PlatformBlock.active.find_by(object_value: "tester-card")).to be_present
+        expect(surviving.map(&:object_value)).to match_array(["tester-guid", "tester-card"])
+        expect(tester_row).to be_present
+      end
+
+      it "clears a guest row's browser block when a shared card corroborates the email match" do
+        guest_row = create(:purchase, link: product, email: purchase.email, purchaser: nil,
+                                      browser_guid: "corroborated-guest-guid", stripe_fingerprint: purchase.stripe_fingerprint)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "corroborated-guest-guid")
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "corroborated-guest-guid")).to be_nil
+        expect(guest_row).to be_present
       end
 
       it "does not touch another buyer's blocks" do

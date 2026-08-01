@@ -131,60 +131,90 @@ module Purchase::Blockable
   # Every active block that still holds this buyer after an unblock. Same identifier set
   # `buyer_blocked?` asks about, but resolved across the buyer's purchases and returning the rows
   # rather than a boolean, so the caller can name what survived.
+  #
+  # Also reports blocks on same-email guest rows that failed the corroboration bar in
+  # #corroborated_guest_purchases. Those are blocks the unblock refused to clear because the row
+  # may be somebody else's; reporting them keeps the refusal visible, so the agent sees the
+  # surviving row and judges it instead of the response reading as a full success while the buyer
+  # may still be held — the silence gumroad-private#1648 is about.
   def surviving_buyer_blocks
     scopes = buyer_blockable_values.map { |object_type, values| PlatformBlock.active.where(object_type:, object_value: values) }
     scopes << PlatformBlock.active.ip_address.where(object_value: ip_address) if ip_address.present?
+    blockable_values_for(same_email_guest_purchases - sibling_buyer_purchases).each do |object_type, values|
+      scopes << PlatformBlock.active.where(object_type:, object_value: values)
+    end
     return PlatformBlock.none if scopes.empty?
 
     scopes.reduce { |combined, scope| combined.or(scope) }
   end
 
   private def buyer_blockable_values
-    @_buyer_blockable_values ||= begin
-      guids = Set.new
-      emails = Set.new
-      fingerprints = Set.new
-
-      [self, *sibling_buyer_purchases].each do |purchase|
-        guids << purchase.browser_guid
-        emails.merge([purchase.email, purchase.paypal_email, purchase.gifter_email, purchase.purchaser_email])
-        fingerprints << purchase.charge_processor_fingerprint
-      end
-      fingerprints << recent_stripe_fingerprint
-
-      {
-        PlatformBlock::TYPES[:browser_guid] => guids.compact_blank.to_a,
-        PlatformBlock::TYPES[:email] => emails.compact_blank.to_a,
-        PlatformBlock::TYPES[:charge_processor_fingerprint] => fingerprints.compact_blank.to_a,
-      }.reject { |_, values| values.empty? }
-    end
+    @_buyer_blockable_values ||= blockable_values_for([self, *sibling_buyer_purchases], extra_fingerprints: [recent_stripe_fingerprint])
   end
 
-  # The buyer's other purchases. Newest first and capped — a buyer with thousands of rows
-  # contributes no new identifiers past the first few hundred, and an admin click must not turn
-  # into an unbounded scan.
+  private def blockable_values_for(purchases, extra_fingerprints: [])
+    guids = Set.new
+    emails = Set.new
+    fingerprints = Set.new
+
+    purchases.each do |purchase|
+      guids << purchase.browser_guid
+      emails.merge([purchase.email, purchase.paypal_email, purchase.gifter_email, purchase.purchaser_email])
+      fingerprints << purchase.charge_processor_fingerprint
+    end
+    fingerprints.merge(extra_fingerprints)
+
+    {
+      PlatformBlock::TYPES[:browser_guid] => guids.compact_blank.to_a,
+      PlatformBlock::TYPES[:email] => emails.compact_blank.to_a,
+      PlatformBlock::TYPES[:charge_processor_fingerprint] => fingerprints.compact_blank.to_a,
+    }.reject { |_, values| values.empty? }
+  end
+
+  # The buyer's other purchases, this one excluded: rows that resolved to the same account, plus
+  # guest rows a second identifier ties to the buyer (see #corroborated_guest_purchases). Newest
+  # first and capped per branch — a buyer with thousands of rows contributes no new identifiers
+  # past the first few hundred, and an admin click must not turn into an unbounded scan.
+  # Deliberately not memoized: #block_buyer! reads #recent_stripe_fingerprint through the
+  # attr-blockable machinery, so a memo taken then would still be live at unblock time and hide
+  # any purchase the buyer made in between.
   private def sibling_buyer_purchases
-    same_buyer_purchases.where.not(id:).order(id: :desc).limit(MAX_SIBLING_PURCHASES_FOR_UNBLOCK)
+    account_purchases =
+      if purchaser_id.present?
+        Purchase.where(purchaser_id:).where.not(id:).order(id: :desc).limit(MAX_SIBLING_PURCHASES_FOR_UNBLOCK).to_a
+      else
+        []
+      end
+
+    account_purchases + corroborated_guest_purchases(account_purchases)
   end
 
-  # Every purchase carrying this buyer's identity, this one included: rows that resolved to the
-  # same account, plus rows made under the same email that resolved to no account at all (the
-  # buyer's guest checkouts).
+  # The buyer's guest checkouts: same-email rows that resolved to no account at all. A checkout
+  # email is unauthenticated — anyone can type anyone's address, and card testers do exactly that —
+  # so sharing the email is NOT enough to call a guest row this buyer's: a tester who checked out
+  # under this buyer's address would otherwise get their own browser and card unblocked whenever
+  # an admin unblocks the buyer. A guest row only counts when a second, buyer-bound identifier
+  # ties it to a row we already trust (this one, or an account-bound sibling): its browser guid or
+  # its card fingerprint. One hop only — a corroborated guest row does not corroborate further
+  # rows. Rows that fail the bar contribute nothing here; their blocks are surfaced by
+  # #surviving_buyer_blocks for a human to judge.
   #
-  # An email match alone must NOT pull in rows that resolved to a DIFFERENT account. A checkout
-  # email is unauthenticated and gets reassigned, so a same-email row owned by another account can
-  # be another person's entirely — collecting its browser guid and card fingerprint here would let
-  # blocking or unblocking this buyer touch blocks that other account earned.
-  private def same_buyer_purchases
-    if purchaser_id.present? && email.present?
-      Purchase.where("purchaser_id = ? OR (email = ? AND purchaser_id IS NULL)", purchaser_id, email)
-    elsif purchaser_id.present?
-      Purchase.where(purchaser_id:)
-    elsif email.present?
-      Purchase.where(email:, purchaser_id: nil)
-    else
-      Purchase.none
+  # Same-email rows that resolved to a DIFFERENT account are excluded outright, corroborated or
+  # not — those identifiers belong to that account's blocks, not this buyer's.
+  private def corroborated_guest_purchases(account_purchases)
+    trusted = [self, *account_purchases]
+    trusted_guids = trusted.map(&:browser_guid).compact_blank.to_set
+    trusted_fingerprints = trusted.map(&:charge_processor_fingerprint).compact_blank.to_set
+
+    same_email_guest_purchases.select do |candidate|
+      trusted_guids.include?(candidate.browser_guid) || trusted_fingerprints.include?(candidate.charge_processor_fingerprint)
     end
+  end
+
+  private def same_email_guest_purchases
+    return [] if email.blank?
+
+    Purchase.where(email:, purchaser_id: nil).where.not(id:).order(id: :desc).limit(MAX_SIBLING_PURCHASES_FOR_UNBLOCK).to_a
   end
 
   def charge_processor_fingerprint
@@ -338,7 +368,7 @@ module Purchase::Blockable
 
   private
     def recent_stripe_fingerprint
-      same_buyer_purchases.with_stripe_fingerprint.last&.stripe_fingerprint
+      [self, *sibling_buyer_purchases].select { |purchase| purchase.stripe_fingerprint.present? }.max_by(&:id)&.stripe_fingerprint
     end
 
     def blockable_emails_if_fraudulent_transaction
