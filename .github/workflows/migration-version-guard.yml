@@ -38,22 +38,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Skip when this push did not touch db/migrate
+      - name: Skip when this push did not touch the migration state
         id: touched
         env:
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # Both paths matter: the checker compares main's migration filenames
+          # AND main's schema.rb version, which buries any open PR migration
+          # numbered at or below it. A schema-only push moves that line.
           # Zero SHA (branch creation) or a commit this clone does not have:
           # fall back to checking, since we cannot prove nothing moved.
           if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "$BEFORE" "$AFTER" -- db/migrate | grep -q .; then
+          elif git diff --name-only "$BEFORE" "$AFTER" -- db/migrate db/schema.rb | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Push did not touch db/migrate; no open PR can have newly collided."
+            echo "Push touched neither db/migrate nor db/schema.rb; no open PR can have newly collided."
           fi
 
       - name: Fail ci/green on open PRs that now collide

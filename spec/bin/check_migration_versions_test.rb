@@ -221,6 +221,87 @@ check_operational(
   head_migrations: %w[20261206000010_a.rb 20261206000011_b.rb]
 )
 
+# --- The guard workflow's path filter -------------------------------------
+#
+# The filter decides whether the checker above runs at all when main moves, so a
+# gap there is invisible to every check written so far. It is exercised here by
+# extracting the step's real `run:` body out of the workflow YAML -- a
+# paraphrase would drift the first time someone edits the workflow.
+
+require "yaml"
+
+WORKFLOW = File.expand_path("../../.github/workflows/migration-version-guard.yml", __dir__)
+
+def guard_filter_body
+  steps = YAML.load_file(WORKFLOW).fetch("jobs").fetch("recheck_open_prs").fetch("steps")
+  steps.find { |s| s["id"] == "touched" }.fetch("run")
+end
+
+# Runs the filter over a main that moved from `before` to `after`, where the
+# push wrote exactly `files`. Returns "true"/"false" -- whether open PRs get
+# re-checked.
+def filter_runs_for(files)
+  Dir.mktmpdir do |dir|
+    Dir.chdir(dir) do
+      system("git init -q -b main .", exception: true)
+      system("git config user.email t@t.t", exception: true)
+      system("git config user.name t", exception: true)
+      system("git config commit.gpgsign false", exception: true)
+      FileUtils.mkdir_p("db/migrate")
+      File.write("db/migrate/20261206000010_a.rb", "# noop\n")
+      File.write("db/schema.rb", "ActiveRecord::Schema[7.1].define(version: 2026_12_06_000010) do\nend\n")
+      File.write("README.md", "x\n")
+      system("git add -A && git commit -q -m base", exception: true)
+      before = `git rev-parse HEAD`.strip
+
+      files.each { |path, contents| FileUtils.mkdir_p(File.dirname(path)); File.write(path, contents) }
+      system("git add -A && git commit -q -m push", exception: true)
+      after = `git rev-parse HEAD`.strip
+
+      output = File.join(dir, "github_output")
+      File.write(output, "")
+      env = { "BEFORE" => before, "AFTER" => after, "GITHUB_OUTPUT" => output }
+      Open3.capture3(env, "bash", "-c", guard_filter_body, chdir: dir)
+      File.read(output)[/changed=(\w+)/, 1]
+    end
+  end
+end
+
+def check_filter(name, files:, expect:)
+  $count += 1
+  actual = filter_runs_for(files)
+  if actual == expect
+    puts "  ok    #{name}"
+  else
+    puts "  FAIL  #{name}"
+    $failures << "#{name}: expected changed=#{expect}, got changed=#{actual.inspect}"
+  end
+end
+
+# A main push that only raises schema.rb buries any open PR migration numbered
+# at or below the new line (rule 3), so it has to trigger the re-check even
+# though db/migrate did not move.
+check_filter(
+  "a schema.rb-only push on main re-checks open PRs",
+  files: { "db/schema.rb" => "ActiveRecord::Schema[7.1].define(version: 2026_12_06_000099) do\nend\n" },
+  expect: "true"
+)
+
+check_filter(
+  "a db/migrate push on main re-checks open PRs",
+  files: { "db/migrate/20261206000011_b.rb" => "# noop\n",
+           "db/schema.rb" => "ActiveRecord::Schema[7.1].define(version: 2026_12_06_000011) do\nend\n" },
+  expect: "true"
+)
+
+# The filter exists to keep every unrelated main push from re-checking every
+# open PR; if this ever reads true the guard is just running constantly.
+check_filter(
+  "a push touching neither path skips the re-check",
+  files: { "README.md" => "unrelated\n" },
+  expect: "false"
+)
+
 puts
 if $failures.empty?
   puts "#{$count} checks passed."
