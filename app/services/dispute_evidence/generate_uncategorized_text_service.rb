@@ -7,6 +7,10 @@ class DisputeEvidence::GenerateUncategorizedTextService
 
   include ActionView::Helpers::NumberHelper
 
+  # Comfortably past the longest URL any mapped carrier issues; past it the value is paste garbage
+  # and not worth the room in a field Stripe truncates as a whole.
+  MAX_TRACKING_URL_LENGTH = 500
+
   attr_reader :purchase
 
   def initialize(purchase)
@@ -36,13 +40,35 @@ class DisputeEvidence::GenerateUncategorizedTextService
       "Billing postal code: #{purchase.credit_card_zipcode}"
     end
 
-    # Always include the raw URL: the structured shipping fields only carry it when a known carrier
-    # can be attributed, and we get one submission.
+    # Always include the URL: the structured shipping fields only carry it when a known carrier can
+    # be attributed, and we get one submission. Labelled as the seller's, because it is — every
+    # other row here is ours, and this block is the seam where their text enters that document.
     def shipping_tracking_text
-      tracking_url = purchase.shipment&.tracking_url
-      return if tracking_url.blank?
+      tracking_url = submission_safe_tracking_url
+      return if tracking_url.nil?
 
-      "Shipment tracking URL: #{tracking_url}"
+      "Seller-provided shipment tracking URL: #{tracking_url}"
+    end
+
+    # `shipments.tracking_url` is a free-text param no controller validates, so a value carrying a
+    # newline would put seller-written lines into evidence Stripe reads as Gumroad's own. Omit
+    # anything that is not a plain http(s) URL rather than transcribing it: the stored value stays
+    # untouched for auditing, and dropping one unusable row costs less than vouching for its text.
+    def submission_safe_tracking_url
+      url = purchase.shipment&.tracking_url&.strip
+      return if url.blank? || url.length > MAX_TRACKING_URL_LENGTH || url.match?(/[[:cntrl:]]/)
+
+      parsed = begin
+        URI.parse(url)
+      rescue URI::InvalidURIError
+        nil
+      end
+      return unless parsed.is_a?(URI::HTTP) && parsed.host.present?
+      # Credentials would be secrets of the seller's we should not forward, and they read as part
+      # of the hostname to anyone skimming the evidence.
+      return if parsed.userinfo.present?
+
+      url
     end
 
     # Evidence of one or more non-disputed payments on the same card

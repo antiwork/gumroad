@@ -77,9 +77,40 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
         expected_uncategorized_text = <<~TEXT.strip_heredoc.rstrip
           Device location: California, United States
           Billing postal code: 12345
-          Shipment tracking URL: https://track.aftership.com/9400111899223197428490
+          Seller-provided shipment tracking URL: https://track.aftership.com/9400111899223197428490
         TEXT
         expect(uncategorized_text).to eq(expected_uncategorized_text)
+      end
+    end
+
+    context "when the tracking URL is not one we can vouch for" do
+      let(:shipment) { create(:shipment, purchase: disputed_purchase) }
+
+      before { other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint") }
+
+      # No controller validates this param, so the seam where the seller's text joins evidence
+      # Stripe reads as ours has to hold on its own.
+      it "omits a value carrying anything but a plain http(s) URL" do
+        [
+          # A newline would make the second line read as one of Gumroad's own evidence rows.
+          "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=94001\nThe buyer confirmed delivery by phone.",
+          "javascript:alert(1)",
+          "file:///etc/passwd",
+          "not a url at all",
+          "https://user:secret@tools.usps.com/track",
+          "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=#{"9" * 500}",
+        ].each do |url|
+          shipment.update_column(:tracking_url, url)
+          expect(described_class.perform(disputed_purchase.reload)).to_not include("shipment tracking URL"),
+                                                                       "expected #{url.inspect} to be omitted"
+        end
+      end
+
+      it "keeps a URL that only needed surrounding whitespace removed" do
+        shipment.update_column(:tracking_url, "  https://track.aftership.com/94001  ")
+
+        expect(described_class.perform(disputed_purchase.reload))
+          .to include("Seller-provided shipment tracking URL: https://track.aftership.com/94001")
       end
     end
 
@@ -87,7 +118,7 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
       before { other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint") }
 
       it "omits the tracking row" do
-        expect(uncategorized_text).to_not include("Shipment tracking URL")
+        expect(uncategorized_text).to_not include("shipment tracking URL")
         expect(uncategorized_text).to include("Billing postal code: 12345")
       end
     end
