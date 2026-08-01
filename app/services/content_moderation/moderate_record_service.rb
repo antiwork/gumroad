@@ -89,6 +89,11 @@ class ContentModeration::ModerateRecordService
     "directs buyers to message you on another platform to get it, which we don’t allow. Add the files, " \
     "videos, or written content buyers should get when they buy, then publish again."
 
+  # A page carrying more images than we will review is rejected rather than
+  # approved on a sample (see `check`), so the reason is about the page's size,
+  # not its content, and gets its own sentence saying what to change.
+  TOO_MANY_IMAGES_REASON_PREFIX = "too many images to review"
+
   # Turn raw moderation reasons (e.g. "OpenAI moderation flagged: violence
   # (score: 0.86, threshold: 0.9)" or "spam: repeated unrelated slogans") into
   # a friendly, de-duplicated phrase the seller can act on — without leaking
@@ -112,6 +117,10 @@ class ContentModeration::ModerateRecordService
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
+      "This #{noun} has more images than we can review, so we can’t publish it as is. " \
+      "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \
+      "(or split it across several #{noun}s) and try again."
     elsif rs.any? { |r| off_platform_fulfillment_reason?(r) }
       message = format(OFF_PLATFORM_FULFILLMENT_MESSAGE, noun: noun)
       # A run can flag off-platform fulfillment alongside another violation
@@ -126,8 +135,8 @@ class ContentModeration::ModerateRecordService
     end
   end
 
-  def self.check(record, entity_type)
-    new(record, entity_type).check
+  def self.check(record, entity_type, skip_images: false)
+    new(record, entity_type, skip_images:).check
   end
 
   def self.off_platform_fulfillment_reason?(reason)
@@ -135,9 +144,10 @@ class ContentModeration::ModerateRecordService
   end
   private_class_method :off_platform_fulfillment_reason?
 
-  def initialize(record, entity_type)
+  def initialize(record, entity_type, skip_images: false)
     @record = record
     @entity_type = entity_type
+    @skip_images = skip_images
   end
 
   def check
@@ -146,7 +156,19 @@ class ContentModeration::ModerateRecordService
     return CheckResult.new(passed: true, reasons: []) if record_moderation_disabled?
 
     content = extract_content
+    content = content.class.new(text: content.text, image_urls: []) if @skip_images
     return CheckResult.new(passed: true, reasons: []) if content.text.blank? && content.image_urls.empty?
+
+    if entity_type == :page && content.image_urls.size > ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS
+      # Approving a page approves what it DISPLAYS, so it is rejected rather than
+      # approved on a sample of its images.
+      reasons = ["#{TOO_MANY_IMAGES_REASON_PREFIX} (#{content.image_urls.size})"]
+      # `blocked: false`: the publish did stop, but the admin trail is read as
+      # abuse history, and a seller with a big gallery has not done anything
+      # wrong. The seller-facing message says what to change.
+      leave_admin_comment(reasons, blocked: false)
+      return CheckResult.new(passed: false, reasons: reasons)
+    end
 
     blocklist_result = ContentModeration::Strategies::BlocklistStrategy
                          .new(text: content.text, image_urls: content.image_urls)
@@ -179,7 +201,7 @@ class ContentModeration::ModerateRecordService
     # would otherwise be written during saves that go on to succeed.
     if reasons.any? { |r| spam_reason?(r) } && spam_flag_should_not_block?
       downgraded, reasons = reasons.partition { |r| spam_reason?(r) }
-      audit_reasons += downgraded.map { |r| "#{r} (not blocked: listing has content attached)" }
+      audit_reasons += downgraded.map { |r| "#{r} (#{spam_downgrade_note_reason})" }
     end
 
     leave_admin_comment(audit_reasons, blocked: false) if audit_reasons.any?
@@ -205,7 +227,15 @@ class ContentModeration::ModerateRecordService
     end
 
     def record_moderation_disabled?
-      entity_type == :product && record.content_moderation_disabled?
+      case entity_type
+      when :product then record.content_moderation_disabled?
+      # A page inherits the escape hatch from the product it takes over, so
+      # turning moderation off for a product covers its landing page too --
+      # otherwise the exemption would hold for the product and then block the
+      # page that replaces it.
+      when :page then record.pageable.is_a?(Link) && record.pageable.content_moderation_disabled?
+      else false
+      end
     end
 
     def spam_reason?(reason)
@@ -234,8 +264,37 @@ class ContentModeration::ModerateRecordService
     #
     # Posts are unaffected: they have no deliverable of their own, so a spam
     # flag on a post keeps blocking as before.
+    #
+    # A page has no deliverable of its own, so the product test above can't be
+    # applied to it. What stands in for it is whether the page belongs to a real
+    # storefront: a seller with live products or completed sales has something
+    # the page is plausibly selling, and blocking on tone there would mean an
+    # agent that wrote a perfectly ordinary sales page cannot save it and cannot
+    # be told what to change. A seller with neither is the shape this change
+    # exists to stop — an agent or the CLI standing up a link farm on a
+    # gumroad.com subdomain — and the spam preset (whose flag conditions name
+    # link farms and keyword stuffing explicitly) is the only preset that reads
+    # it, so for them a corroborated spam flag keeps blocking.
     def spam_flag_should_not_block?
+      return seller_has_storefront? if entity_type == :page
+
       entity_type == :product && product_has_substantive_deliverable?
+    end
+
+    # Why an admin is reading a downgraded spam flag rather than a block. A page
+    # is not a listing and has nothing attached, so it can't borrow the product
+    # wording.
+    def spam_downgrade_note_reason
+      entity_type == :page ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
+    end
+
+    # Whether the page's owner has anything on Gumroad besides the page. Kept to
+    # two indexed existence checks: this is asked inside a save, and only when
+    # there is a spam flag to downgrade.
+    def seller_has_storefront?
+      return false if user.blank?
+
+      user.links.alive.exists? || user.sales.successful.exists?
     end
 
     # The stricter half of "does this listing deliver anything", used only to
@@ -440,12 +499,22 @@ class ContentModeration::ModerateRecordService
       case entity_type
       when :product then extractor.extract_from_product(record)
       when :post then extractor.extract_from_post(record)
+      when :page then extractor.extract_from_page(record)
       end
     end
 
     def run_ai_strategies(content)
       strategies = [
-        ContentModeration::Strategies::ClassifierStrategy.new(text: content.text, image_urls: content.image_urls),
+        ContentModeration::Strategies::ClassifierStrategy.new(
+          text: content.text,
+          image_urls: content.image_urls,
+          # A page's images are arbitrary URLs the seller wrote into a public
+          # document, and the page is only allowed through if all of them were
+          # reviewed (`check` rejects a page over the budget), so every one gets a
+          # moderation attempt. Products and posts keep the default cap: their
+          # images come from our own uploads and their galleries are unbounded.
+          max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
+        ),
         # `corroborate_judgment_flags` makes a spam or off-platform-fulfillment
         # flag block only when it reproduces on resampling; a lone flag is
         # returned as audit_reasoning and recorded as a non-blocking note
@@ -524,10 +593,19 @@ class ContentModeration::ModerateRecordService
     # so downgraded flags stay countable against blocked ones.
     def leave_admin_comment(reasons, blocked: true)
       return if user.blank?
+      # The dry-run preview endpoints validate an unsaved candidate to tell an
+      # agent what a publish WOULD do. Nothing was published, so a note here
+      # would let an agent iterating on borderline copy accrue moderation history
+      # against the seller for content that never went live — and the preview
+      # response already carries the reason back to the caller. Keyed on the
+      # explicit flag rather than `new_record?`, which is also true for a real
+      # create.
+      return if record.try(:moderation_preview)
 
       record_label = case entity_type
                      when :product then "Product ##{record.id} (#{record.name})"
                      when :post then "Post ##{record.id} (#{record.name})"
+                     when :page then "Page ##{record.id} (#{page_label})"
       end
 
       action = blocked ? "blocked publish of" : "flagged but did not block"
@@ -546,6 +624,15 @@ class ContentModeration::ModerateRecordService
       @user ||= case entity_type
                 when :product then record.user
                 when :post then record.user
+                when :page then record.seller
       end
+    end
+
+    # Which page an admin note is about. A page has no name; the root takeover
+    # has no slug either, so it is identified by the surface it replaces.
+    def page_label
+      return "#{record.slug} — #{record.title}" if record.slugged?
+
+      record.pageable.is_a?(User) ? "profile page" : "product page for ##{record.pageable_id}"
     end
 end
