@@ -140,6 +140,30 @@ describe Admin::LinksController, type: :controller, inertia: true do
       expect(product.reload.purchase_disabled_at).to be_nil
     end
 
+    it "restores a product taken down by an admin" do
+      product.unpublish!(is_unpublished_by_admin: true)
+
+      post :publish, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      product.reload
+      expect(product.purchase_disabled_at).to be_nil
+      expect(product.is_unpublished_by_admin?).to be(false)
+    end
+
+    it "keeps the admin takedown when the publish fails" do
+      product.unpublish!(is_unpublished_by_admin: true)
+      product.user.update!(confirmed_at: nil)
+
+      post :publish, params: { external_id: product.external_id }
+
+      expect(response.parsed_body["success"]).to eq(false)
+      product.reload
+      expect(product.purchase_disabled_at).to be_present
+      expect(product.is_unpublished_by_admin?).to be(true)
+    end
+
     it "clears a default discount that detached while the product was deleted" do
       product.update!(deleted_at: 1.day.ago)
       offer_code = create(:offer_code, user: product.user, products: [product])

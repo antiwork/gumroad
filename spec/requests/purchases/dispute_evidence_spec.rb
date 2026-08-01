@@ -8,11 +8,20 @@ describe("Dispute evidence page", type: :system, js: true) do
   let(:purchase) { dispute_evidence.disputable.purchase_for_dispute_evidence }
   let(:product) { purchase.link }
 
+  # Submitting spends the seller's only Stripe evidence submission, so the Submit button
+  # opens a confirmation modal instead of submitting directly.
+  def submit_and_confirm
+    click_on("Submit")
+    within_modal "Submit your response?" do
+      click_on("Submit evidence")
+    end
+  end
+
   it "renders the page" do
     visit purchase_dispute_evidence_path(purchase.external_id)
 
     expect(page).to have_text("Submit additional information")
-    expect(page).to have_text("Any additional information you can provide in the next 72 hours will help us win on your behalf.")
+    expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
     expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
     expect(page).to have_text("Why should you win this dispute?")
     expect(page).not_to have_text("Why is the customer not entitled to a refund?")
@@ -57,7 +66,7 @@ describe("Dispute evidence page", type: :system, js: true) do
       within_fieldset("Why should you win this dispute?") do
         choose("The cardholder was refunded")
       end
-      click_on("Submit")
+      submit_and_confirm
 
       expect(page).to have_text("Thank you!")
 
@@ -109,7 +118,7 @@ describe("Dispute evidence page", type: :system, js: true) do
             choose("Other")
           end
           fill_in("Why was the customer's subscription not canceled?", with: "Cancellation rebuttal")
-          click_on("Submit")
+          submit_and_confirm
 
           expect(page).to have_text("Thank you!")
 
@@ -141,7 +150,7 @@ describe("Dispute evidence page", type: :system, js: true) do
           visit purchase_dispute_evidence_path(purchase.external_id)
 
           fill_in("Why is the customer not entitled to a refund?", with: "Refund refusal explanation")
-          click_on("Submit")
+          submit_and_confirm
 
           expect(page).to have_text("Thank you!")
 
@@ -163,7 +172,7 @@ describe("Dispute evidence page", type: :system, js: true) do
       page.execute_script("document.querySelector('textarea').removeAttribute('maxLength')")
 
       fill_in("Why should you win this dispute?", with: "a" * 3001)
-      click_on("Submit")
+      submit_and_confirm
 
       expect(page).to have_alert(text: "Reason for winning is too long")
     end
@@ -181,7 +190,7 @@ describe("Dispute evidence page", type: :system, js: true) do
       wait_for_ajax
       # For some reason, the signed_id is not passed to the server until we wait for a few seconds (wait_for_ajax is not enough)
       sleep(3)
-      click_on("Submit")
+      submit_and_confirm
 
       expect(page).to have_text("Thank you!")
 
@@ -189,20 +198,69 @@ describe("Dispute evidence page", type: :system, js: true) do
       expect(dispute_evidence.customer_communication_file.attached?).to be(true)
     end
 
-    it "allows the user to delete uploaded file" do
+    it "merges multiple files into a single PDF, preserving the upload order" do
+      # Purging in test ENV returns Aws::S3::Errors::AccessDenied
+      allow_any_instance_of(ActiveStorage::Blob).to receive(:purge).and_return(nil)
+      visit purchase_dispute_evidence_path(purchase.external_id)
+
+      page.attach_file([file_fixture("smilie.png"), file_fixture("test.pdf")]) do
+        click_on "Upload customer communication"
+      end
+      wait_for_ajax
+      expect(page).to have_selector("[role=listitem] h4", text: "1. smilie.png")
+      expect(page).to have_selector("[role=listitem] h4", text: "2. test.pdf")
+      # For some reason, the signed_id is not passed to the server until we wait for a few seconds (wait_for_ajax is not enough)
+      sleep(3)
+      submit_and_confirm
+
+      expect(page).to have_text("Thank you!")
+
+      dispute_evidence.reload
+      expect(dispute_evidence.customer_communication_file.attached?).to be(true)
+      expect(dispute_evidence.customer_communication_file.content_type).to eq("application/pdf")
+      pages = PDF::Reader.new(StringIO.new(dispute_evidence.customer_communication_file.download)).pages
+      expect(pages.size).to eq(2)
+      # The image page is sized to the source image (smilie.png is 1006x1006), which proves
+      # it comes before the carried-through PDF page.
+      first_page_media_box = pages.first.attributes[:MediaBox]
+      expect((first_page_media_box[2] - first_page_media_box[0]).round).to eq(1006)
+    end
+
+    it "allows the user to delete an uploaded file" do
       visit purchase_dispute_evidence_path(purchase.external_id)
 
       page.attach_file(file_fixture("smilie.png")) do
         click_on "Upload customer communication"
       end
       wait_for_ajax
-      expect(page).to have_selector("[role=listitem] h4", text: "Customer communication")
+      expect(page).to have_selector("[role=listitem] h4", text: "smilie.png")
       expect(page).to have_button("Submit")
 
       click_on("Remove")
       wait_for_ajax
       expect(page).to have_button("Upload customer communication")
       expect(page).to have_button("Submit", disabled: true)
+    end
+  end
+
+  describe "submit confirmation" do
+    it "warns that submitting is final and does not submit when the seller cancels" do
+      visit purchase_dispute_evidence_path(purchase.external_id)
+
+      expect(page).to have_text("Submitting is final.")
+
+      within_fieldset("Why should you win this dispute?") do
+        choose("The cardholder was refunded")
+      end
+      click_on("Submit")
+
+      within_modal "Submit your response?" do
+        expect(page).to have_text("You only get one submission for this dispute.")
+        click_on("Cancel")
+      end
+
+      expect(page).not_to have_text("Thank you!")
+      expect(dispute_evidence.reload.seller_submitted?).to be(false)
     end
   end
 end

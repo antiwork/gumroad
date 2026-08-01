@@ -103,21 +103,44 @@ describe("Library Scenario", type: :system, js: true) do
     end
   end
 
-  it "shows subscriptions where the original purchase is refunded" do
-    subscription_link = create(:subscription_product, name: "some name", user: @user)
-    subscription = create(:subscription, user: @user, link: subscription_link, created_at: 3.days.ago)
-    purchase = create(:purchase, link: subscription_link, subscription:, is_original_subscription_purchase: true, created_at: 3.days.ago, purchaser: @user)
-    create(:url_redirect, purchase:)
-
-    non_subscription_link = create(:product, is_recurring_billing: false, user: @user)
-    normal_purchase = create(:purchase, link: non_subscription_link, purchaser: @user)
-    create(:url_redirect, purchase: normal_purchase)
-
-    create(:purchase, link: subscription_link, subscription:, is_original_subscription_purchase: false, purchaser: @user)
-    purchase.update_attribute(:stripe_refunded, true)
+  it "links a refunded subscription purchase to its paid renewal" do
+    seller = create(:user)
+    product = create(:membership_product, name: "Membership archive", user: seller)
+    create(:product_file, link: product)
+    subscription = create(:subscription, user: @user, link: product, created_at: 3.days.ago)
+    purchase = create(
+      :purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: true,
+      created_at: 3.days.ago,
+      succeeded_at: 3.days.ago,
+      purchaser: @user,
+      email: @user.email
+    )
+    purchase.create_url_redirect!
+    renewal = create(
+      :purchase,
+      link: product,
+      subscription:,
+      is_original_subscription_purchase: false,
+      succeeded_at: 1.day.ago,
+      purchaser: @user,
+      email: @user.email
+    )
+    renewal.create_url_redirect!
+    purchase.update!(stripe_refunded: true)
     Link.import(refresh: true, force: true)
+
     visit "/library"
-    expect(page).to have_product_card(subscription_link)
+
+    expect(page).to have_product_card(product)
+    within find_product_card(product) do
+      expect(page).to have_link(href: renewal.url_redirect.download_page_url)
+      expect(page).not_to have_link(href: purchase.url_redirect.download_page_url)
+      find("a[href='#{renewal.url_redirect.download_page_url}']").click
+    end
+    expect(page).to have_current_path(renewal.url_redirect.download_page_url)
   end
 
   it "shows subscriptions where the subscription plan has been upgraded" do

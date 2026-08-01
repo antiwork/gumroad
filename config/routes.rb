@@ -668,6 +668,10 @@ Rails.application.routes.draw do
         post :remove_credit_card
       end
       resources :beneficial_owners, only: %i[index create update destroy], defaults: { format: :json }
+      # No destroy: removing the guardian while the requirement stands would only put the seller back
+      # to unpayable with no way forward, and the guardian's own withdrawal is an erasure request
+      # (GdprDataErasureService), not a settings action.
+      resources :guardians, only: %i[create update], defaults: { format: :json }
       resource :stripe, controller: :stripe, only: [] do
         collection do
           post :disconnect
@@ -903,7 +907,7 @@ Rails.application.routes.draw do
     end
 
     namespace :products do
-      resources :affiliated, only: [:index]
+      resources :affiliated, only: %i[index destroy]
       resources :collabs, only: [:index]
       resources :archived, only: %i[index create destroy]
     end

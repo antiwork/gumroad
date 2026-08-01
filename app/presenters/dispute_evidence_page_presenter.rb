@@ -24,7 +24,9 @@ class DisputeEvidencePagePresenter
         customer_email: dispute_evidence.customer_email,
         purchased_at: dispute_evidence.purchased_at,
         duration_left_to_submit_evidence_formatted:,
+        seller_response_due_at: dispute_evidence.seller_response_due_at&.iso8601,
         customer_communication_file_max_size: dispute_evidence.customer_communication_file_max_size,
+        customer_communication_files_max_count: DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES,
         blobs: blobs_props
       }
     end

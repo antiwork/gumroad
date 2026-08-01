@@ -133,6 +133,7 @@ class UserPagesController < ApplicationController
               (function () {
                 var frame = document.getElementById("gumroad-landing-frame");
                 var STORE_HOSTNAMES = #{store_hostnames_json};
+                #{custom_html_navigation_allowlist_js.indent(16).strip}
                 window.addEventListener("message", function (e) {
                   if (!frame || e.source !== frame.contentWindow) return;
                   var d = e.data;
@@ -140,8 +141,9 @@ class UserPagesController < ApplicationController
                   var url;
                   try { url = new URL(d.url); } catch (_err) { return; }
                   if (url.protocol !== "https:" && url.protocol !== "http:") return;
-                  if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
-                  window.location.href = url.href;
+                  var destination = gumroadNavigationTarget(url, STORE_HOSTNAMES);
+                  if (destination === null) return;
+                  window.location.href = destination;
                 });
               })();
             </script>

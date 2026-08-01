@@ -45,7 +45,7 @@ export type OfferCodeResponseData =
         | "not_existing_customer";
       error_message: string;
     }
-  | { valid: true; products_data: Record<string, Discount> };
+  | { valid: true; products_data: Record<string, Discount>; notice?: string };
 
 export type ProductOfferCodeSuggestion = {
   id: string;

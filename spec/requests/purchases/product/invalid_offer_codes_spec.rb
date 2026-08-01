@@ -43,7 +43,7 @@ describe("Invalid offer-code usage from product page", type: :system, js: true) 
       fill_in "Discount code", with: offer_code.code
       click_on "Apply"
 
-      expect(page).to have_alert(text: "Sorry, the discount code you wish to use has expired.")
+      expect(page).to have_alert(text: "Sorry, the discount code you wish to use has reached its usage limit.")
     end
   end
 
@@ -69,7 +69,7 @@ describe("Invalid offer-code usage from product page", type: :system, js: true) 
       offer_code = create(:offer_code, products: [product], amount_cents: 10, max_purchase_count: 0)
       visit "/l/#{product.unique_permalink}/#{offer_code.code}"
 
-      expect(page).to have_selector("[role='status']", text: "Sorry, the discount code you wish to use has expired.")
+      expect(page).to have_selector("[role='status']", text: "Sorry, the discount code you wish to use has reached its usage limit.")
       add_to_cart(product)
 
       check_out(product)

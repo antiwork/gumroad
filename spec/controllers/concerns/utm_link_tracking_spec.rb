@@ -184,6 +184,38 @@ describe UtmLinkTracking, type: :controller do
 
       expect(response).to be_successful
     end
+
+    it "reports the error and still renders the page when updating the link's click timestamps waits too long for a row lock" do
+      allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout), anything)
+
+      get :action, params: utm_params
+
+      expect(response).to be_successful
+    end
+
+    it "does not retry a lock wait timeout, which would queue behind the same lock" do
+      attempts = 0
+      allow_any_instance_of(UtmLink).to receive(:save!) do
+        attempts += 1
+        raise ActiveRecord::LockWaitTimeout
+      end
+      expect(ErrorNotifier).to receive(:notify).once.with(instance_of(ActiveRecord::LockWaitTimeout), anything)
+
+      get :action, params: utm_params
+
+      expect(attempts).to eq(1)
+      expect(response).to be_successful
+    end
+
+    it "reports the error and still renders the page when updating the link's click timestamps deadlocks" do
+      allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::Deadlocked)
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::Deadlocked), anything)
+
+      get :action, params: utm_params
+
+      expect(response).to be_successful
+    end
   end
 
   context "when two simultaneous first visits race to auto-create the same UTM link" do

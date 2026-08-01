@@ -102,6 +102,7 @@ describe("getPaymentDetailsSource", () => {
       cardCountry: "US",
       walletType: null,
       mountCurrency: "usd",
+      methodListToken: null,
       selectedMethodType: "card",
     };
     expect(getPaymentDetailsSource(clientConfirmPaymentMethod, true)).toBe("payment_element");
@@ -156,6 +157,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
         cardCountry: "US",
         walletType: "google_pay",
         mountCurrency: "usd",
+        methodListToken: null,
         selectedMethodType: "card",
       }),
       {},
@@ -163,6 +165,43 @@ describe("createPurchasesRequestData wallet_type threading", () => {
 
     expect(data.wallet_type).toBe("google_pay");
     expect(data.payment_details_source).toBe("payment_element");
+  });
+
+  // The token never leaving the browser silently re-enables gumroad-private#1528, so both the
+  // presence and the absence branch are pinned.
+  it("sends the mounted method-list token on the client-confirm lane", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({
+        type: "payment-element-client-confirm",
+        confirmationTokenId: "ctoken_123",
+        cardCountry: "GR",
+        walletType: null,
+        mountCurrency: "usd",
+        methodListToken: "signed-method-list-token",
+        selectedMethodType: "card",
+      }),
+      {},
+    );
+
+    expect(data.payment_method_list_token).toBe("signed-method-list-token");
+    expect(data.payment_element_mount_currency).toBe("usd");
+  });
+
+  it("sends no method-list token when the page mounted without one", () => {
+    const data = createPurchasesRequestData(
+      payloadWith({
+        type: "payment-element-client-confirm",
+        confirmationTokenId: "ctoken_123",
+        cardCountry: "GR",
+        walletType: null,
+        mountCurrency: "usd",
+        methodListToken: null,
+        selectedMethodType: "card",
+      }),
+      {},
+    );
+
+    expect(data.payment_method_list_token).toBeUndefined();
   });
 
   it("sends no wallet_type for a plain card through the Payment Element", () => {
@@ -214,6 +253,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
           cardCountry: "US",
           walletType: "google_pay",
           mountCurrency: "usd",
+          methodListToken: null,
           selectedMethodType: "card",
         }),
         {},

@@ -24,6 +24,9 @@ export type PurchasePaymentMethod =
       cardCountry: string | null;
       walletType: string | null;
       mountCurrency: string;
+      // Opaque signed token naming the methods this Element mounted with; null on a page that
+      // predates it, where the server re-resolves as before.
+      methodListToken: string | null;
       selectedMethodType: string;
     };
 
@@ -321,6 +324,8 @@ export const createPurchasesRequestData = (
   if (paymentDetailsSource) data.payment_details_source = paymentDetailsSource;
   if (payload.paymentMethod.type === "payment-element-client-confirm") {
     data.payment_element_mount_currency = payload.paymentMethod.mountCurrency;
+    if (payload.paymentMethod.methodListToken !== null)
+      data.payment_method_list_token = payload.paymentMethod.methodListToken;
   }
 
   // Client-confirm wallet payments: the payment details live in the ConfirmationToken, so the

@@ -427,7 +427,7 @@
 - id: 260
   slug: "260-your-payout-settings-page"
   title: "Filling out payout settings"
-  description: "Requirements: You must be 18 or older or get permission to use your legal guardian’s details. Use your full legal name (including any middle name) and/or full b"
+  description: "Requirements: If you are 18 or older, you fill out these settings yourself. If you are 13 to 17, you also need a legal guardian on the account. Use your full leg"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 266
   slug: "266-why-are-my-customers-purchases-failing"

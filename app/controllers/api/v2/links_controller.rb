@@ -224,6 +224,19 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
+    # Changing currency means re-denominating every alive Price row, and this
+    # endpoint can only carry the buy and rental amounts. A product whose prices
+    # live elsewhere (tier variants) or span several recurrences would migrate
+    # only partially and silently, so refuse rather than half-convert it.
+    if params.key?(:price_currency_type) && currency != @product.price_currency_type
+      if @product.is_tiered_membership
+        return render_response(false, message: "Currency cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
+      end
+      if @product.has_multiple_recurrences?
+        return render_response(false, message: "Currency cannot be updated for products with multiple payment options. Update them in the product editor.")
+      end
+    end
+
     if params.key?(:custom_html) && !Feature.active?(:custom_html_pages, current_resource_owner)
       return render_response(false, message: "You do not have access to custom HTML pages.")
     end
@@ -329,13 +342,29 @@ class Api::V2::LinksController < Api::V2::BaseController
         # reloads the row, which also swaps in a fresh (empty) association cache,
         # so the previous_custom_html read below reflects a concurrent writer's
         # committed page rather than one cached before the lock.
-        @product.lock! if params.key?(:custom_html)
+        # A currency change is also a read-copy-write: it reads the current buy and
+        # rental amounts and re-writes them under the new currency, so an overlapping
+        # price PUT would otherwise be copied over by a stale read.
+        @product.lock! if params.key?(:custom_html) || params.key?(:price_currency_type)
 
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)
         attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
+        # Currency before price: on a persisted product `price_cents=` writes a
+        # Price row scoped to the currency set at that moment. A currency change
+        # carries the current amounts across so rows exist in the target
+        # currency — rental included, or a buy_and_rent product silently loses
+        # its rental offer.
+        if params.key?(:price_currency_type)
+          attrs[:price_currency_type] = currency
+          buy_price_cents = @product.default_price_cents
+          attrs[:price_cents] = buy_price_cents if buy_price_cents.present?
+          if @product.rentable?
+            rental_price_cents = @product.rental_price_cents
+            attrs[:rental_price_cents] = rental_price_cents if rental_price_cents.present?
+          end
+        end
         attrs[:price_cents] = params[:price] if params.key?(:price)
-        attrs[:price_currency_type] = currency if params.key?(:price_currency_type)
         attrs[:customizable_price] = params[:customizable_price] if params.key?(:customizable_price)
         attrs[:suggested_price_cents] = params[:suggested_price_cents] if params.key?(:suggested_price_cents)
         attrs[:max_purchase_count] = params[:max_purchase_count] if params.key?(:max_purchase_count)
@@ -498,9 +527,11 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     result = Ai::PageSanitizer.sanitize_with_report(custom_html)
     sanitized = result.html.presence
-    candidate_page = Page.new(pageable: @product, custom_html: sanitized)
+    candidate_page = Page.new(pageable: @product, custom_html: sanitized, moderation_preview: true)
     candidate_page.validate
-    errors = candidate_page.errors.where(:custom_html)
+    # :base as well as :custom_html: moderation reports on :base, and a preview
+    # that ignored it would call a page publishable that the real write rejects.
+    errors = candidate_page.errors.where(:custom_html) + candidate_page.errors.where(:base)
 
     if errors.any?
       render_response(false, message: errors.map(&:full_message).to_sentence, sanitization_report: result.report)

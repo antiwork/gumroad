@@ -387,6 +387,11 @@ class Checkout::StripePaymentPresenter
             subunit_to_unit: subunit_to_unit(method_forced_element_currency),
           } : nil,
           payment_method_types:,
+          # Signed copy of the list directly above, echoed back at #prepare so the intent is built
+          # from what this page actually mounted rather than from a second resolver run whose
+          # country and Klarna-window inputs are sampled from a different request
+          # (gumroad-private#1528). Issued after every strip, so it describes the mounted Element.
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(payment_method_types:, sellers:),
           # Derived from the resolver's method list (not a second flag check) so the Element's Link
           # config and the deferred intent's payment_method_types cannot drift: Stripe rejects a
           # ConfirmationToken minted with Link against an intent whose method list omits it.

@@ -12,6 +12,13 @@ class PerformPayoutsUpToDelayDaysAgoWorker
   # leave `unpaid`, Payouts.create_payment no-ops for that user.
   sidekiq_options retry: 3, queue: :critical, lock: :until_executed
 
+  # Five weekly schedule entries, each with static YAML args, so each entry's digest is constant
+  # and strands independently: one OOM during Friday's PayPal batch would drop every later Friday
+  # PayPal enqueue. The attempt only reads seller ids and fans slices out, capped by
+  # QUERY_TIME_BUDGET; 1h leaves room for a fully retried read.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
+
   sidekiq_retries_exhausted do |job, exception|
     payout_processor_type, bank_account_types = job["args"]
     AccountingMailer.payout_batch_failed(payout_processor_type, bank_account_types, exception.class.name, exception.message).deliver_later

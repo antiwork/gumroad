@@ -49,6 +49,7 @@ class LibraryPresenter
       { id: purchase.link.external_id, label: purchase.link.name } if replaced_by_members.include?(purchase.id)
     end.uniq { _1[:id] }
     product_seller_data = {}
+    replacement_redirects = replacement_redirects_for(purchases)
 
     purchases = purchases.map do |purchase|
       next if purchase.link.is_recurring_billing && !purchase.subscription.grant_access_to_product?
@@ -75,7 +76,7 @@ class LibraryPresenter
           id: purchase.external_id,
           email: purchase.email,
           is_archived: purchase.is_archived,
-          download_url: purchase.url_redirect&.download_page_url,
+          download_url: library_download_location(purchase, replacement_redirects),
           variants: purchase.variant_attributes&.map(&:name)&.join(", "),
           bundle_id: purchase.bundle_purchase&.link&.external_id,
           is_bundle_purchase: replaced_by_members.include?(purchase.id),
@@ -84,4 +85,48 @@ class LibraryPresenter
     end.compact
     return purchases, creators, bundles
   end
+
+  private
+    def library_download_location(purchase, replacement_redirects)
+      return purchase.url_redirect&.download_page_url unless purchase.stripe_refunded
+
+      replacement_redirects[purchase.id]&.download_page_url
+    end
+
+    def replacement_redirects_for(purchases)
+      refunded_originals = purchases.select do |purchase|
+        purchase.stripe_refunded? &&
+          purchase.subscription_id.present? &&
+          (purchase.is_original_subscription_purchase? || purchase.is_gift_receiver_purchase?)
+      end
+      return {} if refunded_originals.empty?
+
+      purchase_pairs = refunded_originals.map { [_1.subscription_id, _1.link_id] }.uniq
+      # Only the viewer's own renewals are eligible, even though a transfer can leave the one paid
+      # renewal on the previous owner. UrlRedirectsController#check_permissions authorizes against
+      # the RENDERED purchase's purchaser, so publishing that renewal's redirect would bounce the
+      # viewer to purchaser verification they cannot clear (it wants the previous owner's email).
+      # A transferred membership whose signup was refunded therefore keeps no link here.
+      candidates = Purchase
+        .where([:subscription_id, :link_id] => purchase_pairs)
+        .where(purchaser_id: logged_in_user.id, purchase_state: %w[successful test_successful])
+        .not_fully_refunded
+        .not_chargedback_or_chargedback_reversed
+        .not_is_access_revoked
+        .not_is_original_subscription_purchase
+        .not_is_gift_receiver_purchase
+        .eager_load(:url_redirect)
+        .order(succeeded_at: :desc, id: :desc)
+        .group_by { [_1.subscription_id, _1.link_id] }
+
+      refunded_originals.to_h do |purchase|
+        successful_state = purchase.subscription.is_test_subscription? ? "test_successful" : "successful"
+        renewal = candidates.fetch([purchase.subscription_id, purchase.link_id], []).find do |candidate|
+          candidate.purchase_state == successful_state &&
+            candidate.url_redirect.present?
+        end
+
+        [purchase.id, renewal&.url_redirect]
+      end
+    end
 end

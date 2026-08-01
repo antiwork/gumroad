@@ -424,6 +424,9 @@ class Checkout::BuyerCurrencyQuote
     # Gumroad-managed seller (pre-existing reach — see
     # BuyerCurrencyEligibility.usd_holding_merchant_account?). That is why the specs stub the
     # write rather than letting it land on the shared account.
+    #
+    # A destination charge quotes on the platform account, so its marker lands there too — the
+    # rejection was the platform's, and every seller quoting through it hits the same wall.
     Rails.logger.info("Buyer currency quote fallback (settlement currency mismatch): #{e.message}")
     nil
   rescue StandardError => e
@@ -513,13 +516,19 @@ class Checkout::BuyerCurrencyQuote
       merchant_account = seller.merchant_account(StripeChargeProcessor.charge_processor_id) ||
                          MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       return unless merchant_account&.stripe_charge_processor?
-      return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
+      return unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account, seller:)
       # Checked per charge, and last, because the learned mismatch marker is scoped to both the
       # account and the presentment currency: a mismatch learned for this account's EUR must not
       # suppress quoting for its GBP, nor for a seller charging on a different account. Sellers
       # without their own Stripe Connect account share the Gumroad platform account, so they do
       # share a marker with each other (see the rescue in #create).
-      return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency)
+      return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
+
+      # The quote must be minted on the account this seller's PaymentIntent will be created on,
+      # which for a destination charge is the Gumroad platform account rather than the seller's
+      # connected account (see Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account).
+      quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
+      return if quote_merchant_account.blank?
 
       charge_canonical_total_cents = charge_line_items.sum(&:canonical_total_cents)
       # A seller whose lines are all free gets no quote, which nils the quote for the whole
@@ -536,13 +545,18 @@ class Checkout::BuyerCurrencyQuote
         StripeFxQuote.create(
           to_currency: Currency::USD,
           from_currency: buyer_currency,
-          stripe_account_id: merchant_account.charge_processor_merchant_id
+          stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
+          # Declared up front because Stripe matches the quote's destination against the
+          # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
+          destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
         )
       rescue StripeFxQuote::SettlementCurrencyMismatch
         # Record which account rejected the currency so the next checkout on that account
         # skips the doomed round trip, then re-raise: #create turns it into the quiet
-        # cart-wide canonical-USD fallback.
-        record_settlement_currency_mismatch(merchant_account, buyer_currency)
+        # cart-wide canonical-USD fallback. The marker goes on the account the quote was
+        # MINTED on (the platform account for a destination charge), because that is the
+        # account whose settlement currency Stripe objected to.
+        record_settlement_currency_mismatch(quote_merchant_account, buyer_currency)
         raise
       end
       converted_total_cents = presentment_cents_for(charge_canonical_total_cents, quote.fx_rate, buyer_currency)

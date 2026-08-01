@@ -164,6 +164,8 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   emailTypoSuggestion: null,
   acknowledgedEmails: new Set(),
   requireEmailTypoAcknowledgment: false,
+  checkoutPaymentStale: false,
+  resumeSubmitAfterCheckoutPayment: false,
   ...overrides,
 });
 
@@ -331,6 +333,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
       presentment_amount_cents: 4_990,
       listed_currency_display: { currency: "brl", subunit_to_unit: 100 },
       payment_method_types: ["card", "pix"],
+      payment_method_list_token: null,
       stripe_link_enabled: false,
       stripe_connect_account_id: null,
     },

@@ -86,6 +86,29 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubocop --format github
 
+  migration_versions:
+    name: Migration versions
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          # A duplicate version is only visible against the base branch's
+          # migration set, so the base ref has to be in the clone.
+          fetch-depth: 0
+          persist-credentials: false
+      # Filenames only, no bundle: this must fail before the shards spend an
+      # hour to reach the same `db:prepare` abort.
+      - name: Check migration versions against the base branch
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || 'main' }}
+        run: ruby bin/check-migration-versions "origin/$BASE_REF" HEAD
+
+      - name: Self-test the checker
+        run: ruby spec/bin/check_migration_versions_test.rb
+
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: blacksmith-8vcpu-ubuntu-2204

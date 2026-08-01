@@ -37,8 +37,9 @@ describe Products::AffiliatedController, inertia: true do
     let(:seller) { affiliate_user }
   end
 
-  it_behaves_like "authorize called for controller", Products::AffiliatedPolicy do
+  it_behaves_like "authorize called for action", :get, :index do
     let(:record) { :affiliated }
+    let(:policy_klass) { Products::AffiliatedPolicy }
   end
 
   describe "GET index", :vcr do
@@ -153,5 +154,116 @@ describe Products::AffiliatedController, inertia: true do
       product_name: ["Creator 1 Product 1", "Creator 1 Product 2", "The Works of Edgar Gumstein"],
       sales_count: [0, 1, 2]
     }
+
+    it "exposes the affiliate id and seller name for direct affiliations only" do
+      get :index, format: :json
+
+      products = response.parsed_body["affiliated_products"].index_by { _1["product_name"] }
+      expect(products[product_one.name]["affiliate_id"]).to eq(direct_affiliate.external_id)
+      expect(products[product_one.name]["seller_name"]).to eq(creator.name_or_username)
+      expect(products[global_affiliate_eligible_product.name]["affiliate_id"]).to be_nil
+      expect(products[global_affiliate_eligible_product.name]["seller_name"]).to be_nil
+    end
+
+    context "when signed in as a role that cannot end affiliations" do
+      # Signed in by hand instead of the role shared context: nesting it inside the outer admin
+      # context would point both `before` hooks at the same member and trip the one-membership-per-
+      # seller validation.
+      before do
+        marketing_member = create(:user)
+        create(:team_membership, user: marketing_member, seller: affiliate_user, role: TeamMembership::ROLE_MARKETING)
+        cookies.encrypted[:current_seller_id] = affiliate_user.id
+        sign_in marketing_member
+      end
+
+      it "marks no row removable, so the Remove control never renders" do
+        get :index, format: :json
+
+        expect(response.parsed_body["affiliated_products"]).to be_present
+        expect(response.parsed_body["affiliated_products"].map { _1["affiliate_id"] }).to all(be_nil)
+      end
+    end
+  end
+
+  describe "DELETE destroy" do
+    it_behaves_like "authorize called for action", :delete, :destroy do
+      let(:record) { direct_affiliate }
+      let(:request_params) { { id: direct_affiliate.external_id } }
+      let(:policy_klass) { Products::Affiliated::DirectAffiliatePolicy }
+      let(:request_format) { :json }
+    end
+
+    it "removes the affiliation and notifies the seller" do
+      expect do
+        delete :destroy, params: { id: direct_affiliate.external_id }, as: :json
+      end.to have_enqueued_mail(AffiliateMailer, :direct_affiliate_removal_by_affiliate_user).with(direct_affiliate.id)
+
+      expect(response).to have_http_status(:ok)
+      expect(direct_affiliate.reload.deleted?).to be(true)
+
+      # The response carries the refreshed page, so the seller's products are already gone from it.
+      body = response.parsed_body
+      expect(body["affiliated_products"]).to be_empty
+      expect(body["stats"]["total_products"]).to eq(0)
+      expect(body["stats"]["total_affiliated_creators"]).to eq(0)
+    end
+
+    it "404s for an affiliation belonging to someone else" do
+      other_affiliate = create(:direct_affiliate, seller: creator)
+
+      expect do
+        delete :destroy, params: { id: other_affiliate.external_id }, as: :json
+      end.to raise_error(ActionController::RoutingError)
+
+      expect(other_affiliate.reload.alive?).to be(true)
+    end
+
+    it "404s for an already removed affiliation" do
+      direct_affiliate.mark_deleted!
+
+      expect do
+        delete :destroy, params: { id: direct_affiliate.external_id }, as: :json
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "404s for the user's own global affiliate row" do
+      expect do
+        delete :destroy, params: { id: global_affiliate.external_id }, as: :json
+      end.to raise_error(ActionController::RoutingError)
+
+      expect(global_affiliate.reload.alive?).to be(true)
+    end
+
+    it "removes a legacy row that no longer passes model validations" do
+      direct_affiliate.update_columns(affiliate_basis_points: 9999)
+      expect(direct_affiliate.reload).not_to be_valid
+
+      delete :destroy, params: { id: direct_affiliate.external_id }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(direct_affiliate.reload.deleted?).to be(true)
+    end
+
+    # Two tabs both pass the `alive` lookup, then race the transition. The seam is mid-request: the
+    # authorization step runs after the row is loaded and before it is marked deleted, so removing
+    # the row there is the other request winning while this one is in flight.
+    it "404s without notifying the seller when a concurrent request removed the row first" do
+      allow(controller).to receive(:authorize).and_wrap_original do |original, *args|
+        DirectAffiliate.where(id: direct_affiliate.id).update_all(deleted_at: Time.current)
+        original.call(*args)
+      end
+      original_deleted_at = nil
+
+      expect do
+        expect do
+          delete :destroy, params: { id: direct_affiliate.external_id }, as: :json
+        end.to raise_error(ActionController::RoutingError)
+        original_deleted_at = direct_affiliate.reload.deleted_at
+      end.not_to have_enqueued_mail(AffiliateMailer, :direct_affiliate_removal_by_affiliate_user)
+
+      # The winner's timestamp survives — the loser must not re-stamp a row it did not transition.
+      expect(original_deleted_at).to be_present
+      expect(direct_affiliate.reload.deleted_at).to eq(original_deleted_at)
+    end
   end
 end

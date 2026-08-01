@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class PhilippinesBankAccount < BankAccount
+  include BicCountryValidation
+
   BANK_ACCOUNT_TYPE = "PH"
 
   BANK_CODE_FORMAT_REGEX = /\A[A-Za-z0-9]{8,11}\z/
@@ -44,8 +46,9 @@ class PhilippinesBankAccount < BankAccount
 
   private
     def validate_bank_code
-      return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      return errors.add(:base, "The bank code is invalid.") unless BANK_CODE_FORMAT_REGEX.match?(bank_code)
+
+      validate_bank_code_country(BANK_ACCOUNT_TYPE)
     end
 
     def validate_account_number

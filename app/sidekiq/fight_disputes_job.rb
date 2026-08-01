@@ -3,15 +3,20 @@
 class FightDisputesJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :default, lock: :until_executed
+  # Scans open dispute evidence hourly and fans out one job per row; the scan is the whole
+  # attempt.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 20.minutes
 
   TERMINAL_DISPUTE_STATES = %w[won lost closed].freeze
 
   def perform
-    # Only evidence whose seller window has been opened. hours_left_to_submit_evidence is 0 while
-    # seller_contacted_at is NULL, so an unannounced row would otherwise read as ready and be
-    # submitted before the seller was ever asked; CreateMissingDisputeEvidenceJob owns those.
+    # Ask for the raw window arithmetic, not hours_left_to_submit_evidence: that one reports 0 once
+    # the single Stripe submission is spent, which here would mean an already-submitted row read as
+    # ready and got forwarded a second time. The scope is filtered on seller_contacted, so a NULL
+    # stamp (owned by CreateMissingDisputeEvidenceJob) never reaches the arithmetic.
     DisputeEvidence.seller_contacted.not_resolved.includes(:dispute).find_each do |dispute_evidence|
-      next if dispute_evidence.hours_left_to_submit_evidence.positive?
+      next if DisputeEvidence.hours_left_in_window(dispute_evidence.seller_contacted_at).positive?
       next if TERMINAL_DISPUTE_STATES.include?(dispute_evidence.dispute.state)
       FightDisputeJob.perform_async(dispute_evidence.dispute.id)
     end

@@ -167,9 +167,31 @@ describe "Profile custom HTML rendering", type: :request do
       expect(response).to be_successful
       expect(response.body).to include(URI(seller.subdomain_with_protocol).host)
       expect(response.body).to include("seller.example.com")
-      VALID_REQUEST_HOSTS.each do |shared_host|
-        expect(response.body).not_to include("\"#{shared_host}\"")
+
+      # Scoped to the STORE_HOSTNAMES declarations, not the whole document: a
+      # shared host now also appears in GUMROAD_NAV_HOSTS, where it is reachable
+      # by exact GLOBAL_NAV_PATHS only. A bare body-wide `not_to include` would
+      # fail on that legitimate occurrence, and relaxing it away would delete the
+      # only assertion protecting the seller-controlled allowlist.
+      store_hostname_decls = response.body.scan(/STORE_HOSTNAMES = (\[[^\]]*\])/).flatten
+      expect(store_hostname_decls).not_to be_empty
+      store_hostname_decls.each do |decl|
+        VALID_REQUEST_HOSTS.each do |shared_host|
+          expect(decl).not_to include("\"#{shared_host}\"")
+        end
       end
+    end
+
+    it "reaches Gumroad's own account and cart pages by exact path, on a host no seller controls" do
+      get "http://seller.example.com/"
+
+      # The canonical host is deliberately absent from STORE_HOSTNAMES (above),
+      # so this is the only route to /library and /checkout — and it resolves an
+      # exact path, dropping anything the sandbox appended.
+      expect(response.body).to include(%(GUMROAD_NAV_HOSTS = #{VALID_REQUEST_HOSTS.to_json}))
+      expect(response.body).to include(%(GUMROAD_NAV_PATHS = #{RendersCustomHtmlPages::GLOBAL_NAV_PATHS.to_json}))
+      expect(response.body).to include("if (GUMROAD_NAV_PATHS.indexOf(path) === -1) return null;")
+      expect(response.body).to include("return url.origin + path;")
     end
 
     it "keeps the iframe sandbox unchanged — still no allow-same-origin or allow-top-navigation" do

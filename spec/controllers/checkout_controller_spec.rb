@@ -21,20 +21,22 @@ describe CheckoutController, type: :controller, inertia: true do
       expect(response).to be_successful
       expect(inertia.component).to eq("Checkout/Show")
       expect(inertia.props[:cart]).to eq(CartPresenter.new(logged_in_user: nil, ip: request.remote_ip, browser_guid: browser_guid).cart_props)
+      # Its own top-level prop, not a key of `checkout`: it is derived from the cart, so the page
+      # re-requests it alone after every cart edit (see the debounced save in Checkout/Show.tsx).
+      expect(inertia.props[:checkout_payment]).to eq(
+        integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
+        fallback_reason: "stripe_payment_element_flag_disabled",
+        disable_wallets: false,
+        request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: false,
+        flat_payment_methods: false,
+        elements_options: nil,
+      )
       expect(inertia.props[:checkout]).to eq({
                                                add_products: [],
                                                address: nil,
                                                ca_provinces: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first),
                                                cart_save_debounce_ms: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS.in_milliseconds,
-                                               checkout_payment: {
-                                                 integration: Checkout::StripePaymentPresenter::STRIPE_CARD_ELEMENT_INTEGRATION,
-                                                 fallback_reason: "stripe_payment_element_flag_disabled",
-                                                 disable_wallets: false,
-                                                 request_apple_pay_merchant_tokens: false,
-                                                 payment_element_wallets: false,
-                                                 flat_payment_methods: false,
-                                                 elements_options: nil,
-                                               },
                                                clear_cart: false,
                                                countries: Compliance::Countries.for_select.to_h,
                                                country: nil,

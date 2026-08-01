@@ -6,6 +6,11 @@ class CreateIndiaSalesReportJob
   include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  # Monthly, enqueued with no args, so the digest is constant. The report's own statement budget is
+  # 1h (redis-overridable); 2h covers that plus the S3 write.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 2.hours
+
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the month the failed run was for (not whatever "last month" is then).
   def self.default_alert_args(reference_time = Time.current)

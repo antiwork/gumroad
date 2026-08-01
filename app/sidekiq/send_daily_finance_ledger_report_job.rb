@@ -5,6 +5,11 @@ class SendDailyFinanceLedgerReportJob
   include FinanceReportFailureAlert
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
+  # Daily, enqueued with no args, so the digest is constant. The attempt builds and delivers the
+  # ledger mail inline.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
+
   # The scheduler fires with no args; pin the resolved day in the exhaustion alert so a
   # late re-run reports the day the failed run was for (not whatever "yesterday" is then).
   def self.default_alert_args(reference_time = Time.current)

@@ -73,7 +73,8 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
     expect(dispute_evidence.customer_purchase_ip).to eq(disputed_purchase.ip_address)
     expect(dispute_evidence.customer_email).to eq(disputed_purchase.email)
     expect(dispute_evidence.customer_name).to eq(disputed_purchase.full_name)
-    expect(dispute_evidence.billing_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
+    # The card's own billing address never reaches us as structured data (gumroad-private#1665).
+    expect(dispute_evidence.billing_address).to be_nil
     expect(dispute_evidence.shipping_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
     expect(dispute_evidence.shipped_at).to eq(shipment.shipped_at)
     expect(dispute_evidence.shipping_carrier).to eq("UPS")
@@ -95,6 +96,55 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
     expect(dispute_evidence.cancellation_policy_image).not_to be_attached
     expect(dispute_evidence.cancellation_policy_disclosure).to be_nil
     expect(dispute_evidence.access_activity_log).to eq("Sample activity logs")
+  end
+
+  context "when the shipment carries only a tracking URL" do
+    # No production path writes shipments.carrier or shipments.tracking_number — the dashboard and
+    # both API endpoints set tracking_url and nothing else — so this, not the fixture above, is the
+    # shape every real physical-goods dispute is built from.
+    before do
+      shipment.update!(carrier: nil, tracking_number: nil, tracking_url:)
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
+    end
+
+    context "and the URL is a known carrier's tracking form" do
+      let(:tracking_url) { "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490" }
+
+      it "submits the carrier and number recovered from it" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_carrier).to eq("USPS")
+        expect(dispute_evidence.shipping_tracking_number).to eq("9400111899223197428490")
+      end
+    end
+
+    context "and the URL is not attributable to a carrier" do
+      let(:tracking_url) { "https://track.aftership.com/9400111899223197428490" }
+
+      it "leaves the structured fields empty rather than guessing" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_carrier).to be_nil
+        expect(dispute_evidence.shipping_tracking_number).to be_nil
+      end
+    end
+  end
+
+  # A legacy row can carry a carrier with no number alongside a later seller-supplied URL from a
+  # different carrier. Per-field fallback would submit that mismatched pair as one-shot evidence.
+  context "when the shipment carries a stale carrier and a different carrier's URL" do
+    before do
+      shipment.update!(carrier: "FedEx", tracking_number: nil,
+                       tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
+    end
+
+    it "submits the pair recovered from the URL, not the stale carrier" do
+      dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+      expect(dispute_evidence.shipping_carrier).to eq("USPS")
+      expect(dispute_evidence.shipping_tracking_number).to eq("9400111899223197428490")
+    end
   end
 
   context "when dispute is on a combined charge" do
@@ -161,12 +211,14 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
       expect(dispute_evidence.customer_purchase_ip).to eq(purchase.ip_address)
       expect(dispute_evidence.customer_email).to eq(purchase.email)
       expect(dispute_evidence.customer_name).to eq(purchase.full_name)
-      expect(dispute_evidence.billing_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
+      # The card's own billing address never reaches us as structured data (gumroad-private#1665).
+      expect(dispute_evidence.billing_address).to be_nil
       expect(dispute_evidence.shipping_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
       expect(dispute_evidence.shipped_at).to eq(shipment.shipped_at)
       expect(dispute_evidence.shipping_carrier).to eq("UPS")
       expect(dispute_evidence.shipping_tracking_number).to eq(shipment.tracking_number)
 
+      other_purchases = charge.purchases.reject { _1.id == purchase.id }
       product_description = \
       "Product name: Sample product title at purchase time\n" +
           "Product as seen when purchased: #{Rails.application.routes.url_helpers.purchase_product_url(purchase.external_id, host: DOMAIN, protocol: PROTOCOL)}\n" +
@@ -174,7 +226,11 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
           "Product variant: Platinum\n" +
           "Quantity purchased: 2\n" +
           "Receipt: #{Rails.application.routes.url_helpers.receipt_purchase_url(purchase.external_id, email: purchase.email, host: DOMAIN, protocol: PROTOCOL)}\n" +
-          "Live product: #{purchase.link.long_url}"
+          "Live product: #{purchase.link.long_url}\n" +
+          "\n" +
+          "This charge also covers 2 other items:\n" +
+          "Product name: #{other_purchases[0].link.name}\n" +
+          "Product name: #{other_purchases[1].link.name}"
       expect(dispute_evidence.product_description).to eq(product_description)
 
       expect(dispute_evidence.uncategorized_text).to eq("Sample uncategorized text")
@@ -393,6 +449,102 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
 
       it "returns true" do
         expect(service_instance.send(:mobile_purchase?)).to eq(true)
+      end
+    end
+  end
+
+  # gumroad-private#1665: the evidence submitted to the card network must describe the transaction
+  # as it happened, not the seller's current view of it.
+  describe "provenance of the submitted buyer details" do
+    before do
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+      allow(DisputeEvidence::GenerateUncategorizedTextService).to receive(:perform).and_return("text")
+      allow(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform).and_return("logs")
+    end
+
+    it "submits the buyer identity and address as at checkout, not the seller's later edits" do
+      travel_to 1.hour.from_now do
+        disputed_purchase.update!(
+          email: "seller-changed@example.com",
+          full_name: "Edited Name",
+          street_address: "999 Edited Ave",
+          city: "Edited City",
+          state: "NY",
+          zip_code: "99999"
+        )
+      end
+
+      dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+      expect(dispute_evidence.customer_email).to eq("customer@example.com")
+      expect(dispute_evidence.customer_name).to eq("John Example")
+      expect(dispute_evidence.shipping_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
+    end
+
+    it "falls back to the live purchase when nothing edited it after checkout" do
+      # The `create` version is not a later edit: `version_at` selects the first version created
+      # strictly AFTER the timestamp, and this one shares the purchase's own `created_at`.
+      expect(disputed_purchase.versions.map(&:event)).to eq(["create"])
+
+      dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+      expect(dispute_evidence.customer_email).to eq(disputed_purchase.email)
+      expect(dispute_evidence.customer_name).to eq(disputed_purchase.full_name)
+      expect(dispute_evidence.shipping_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
+    end
+
+    it "never submits a shipping address in the billing_address slot" do
+      dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+      expect(dispute_evidence.billing_address).to be_nil
+      expect(dispute_evidence.shipping_address).to be_present
+    end
+
+    context "when a shipment sits on a product that never required shipping" do
+      # Reachable in production: `Shipment` gated creation only from #1665 onward, so legacy rows
+      # hang off digital purchases. The product is digital at checkout, so the shipment must not
+      # count — `save!(validate: false)` is how such a row exists at all.
+      let(:product) do
+        travel_to 1.hour.ago do
+          create(:product, name: "Sample product title at purchase time")
+        end
+      end
+
+      let!(:shipment) do
+        build(
+          :shipment,
+          carrier: "UPS",
+          tracking_number: "123456",
+          purchase: disputed_purchase,
+          ship_state: "shipped",
+          shipped_at: DateTime.parse("2023-02-10 14:55:32")
+        ).tap { _1.save!(validate: false) }
+      end
+
+      it "omits all shipping evidence" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_address).to be_nil
+        expect(dispute_evidence.shipped_at).to be_nil
+        expect(dispute_evidence.shipping_carrier).to be_nil
+        expect(dispute_evidence.shipping_tracking_number).to be_nil
+      end
+    end
+
+    context "when the seller disables shipping after the order shipped" do
+      before do
+        travel_to 2.hours.from_now do
+          disputed_purchase.link.update!(is_physical: false, require_shipping: false)
+        end
+      end
+
+      it "keeps the shipping evidence as at checkout" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
+
+        expect(dispute_evidence.shipping_address).to eq("123 Sample St, San Francisco, CA, 12343, United States")
+        expect(dispute_evidence.shipped_at).to eq(shipment.shipped_at)
+        expect(dispute_evidence.shipping_carrier).to eq("UPS")
+        expect(dispute_evidence.shipping_tracking_number).to eq("123456")
       end
     end
   end

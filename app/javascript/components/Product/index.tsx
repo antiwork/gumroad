@@ -610,7 +610,7 @@ export const Product = ({
             ) : (
               <Alert role="status" variant="danger">
                 {discountCode.error_code === "sold_out"
-                  ? "Sorry, the discount code you wish to use has expired."
+                  ? "Sorry, the discount code you wish to use has reached its usage limit."
                   : discountCode.error_code === "invalid_offer"
                     ? "Sorry, the discount code you wish to use is invalid."
                     : discountCode.error_code === "not_existing_customer"

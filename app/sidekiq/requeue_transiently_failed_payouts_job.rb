@@ -17,6 +17,8 @@ class RequeueTransientlyFailedPayoutsJob
   # on :default). Nothing here is latency-sensitive, and :critical is where buyer-facing receipts
   # live.
   sidekiq_options retry: 0, queue: :default, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   # Two requeues per payout period. A seller who keeps hitting transient failures is no longer
   # looking like a burst we can wait out, and reissuing all week only produces more failed rows;

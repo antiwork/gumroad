@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
 class NigeriaBankAccount < BankAccount
+  include BicCountryValidation
+
   BANK_ACCOUNT_TYPE = "NG"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
+  # \A..\z, not ^..$: line anchors would let "OPAHGB22\nXXXX" pass here and then miss the
+  # BIC country check below, which anchors on the whole string.
+  BANK_CODE_FORMAT_REGEX = /\A[0-9a-zA-Z]{8,11}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{10}$/
@@ -44,8 +48,9 @@ class NigeriaBankAccount < BankAccount
 
   private
     def validate_bank_code
-      return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      return errors.add(:base, "The bank code is invalid.") unless BANK_CODE_FORMAT_REGEX.match?(bank_code)
+
+      validate_bank_code_country(BANK_ACCOUNT_TYPE)
     end
 
     def validate_account_number

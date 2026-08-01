@@ -877,15 +877,20 @@ const CreditCardContent = ({
         // checkout's tax location (same shared rules as the Payment Request Button path) before
         // the purchase params are posted. Skipped for shippable carts, where the shipping
         // address governs the tax location — matching the Payment Request Button behavior.
+        const mountedElementConfig = assertDefined(
+          stripePaymentElementConfig,
+          "`stripePaymentElementConfig` should be defined when confirming via the Payment Element",
+        );
         const clientConfirmPaymentMethod: PurchasePaymentMethod = {
           type: "payment-element-client-confirm",
           confirmationTokenId: tokenResult.confirmationTokenId,
           cardCountry: tokenResult.cardCountry,
           walletType: tokenResult.wallet?.type ?? null,
-          mountCurrency: assertDefined(
-            stripePaymentElementConfig,
-            "`stripePaymentElementConfig` should be defined when confirming via the Payment Element",
-          ).currency,
+          mountCurrency: mountedElementConfig.currency,
+          // Same config object the Element was mounted from, so the token always describes the
+          // mounted method list rather than whatever the current props say.
+          methodListToken:
+            "payment_method_list_token" in mountedElementConfig ? mountedElementConfig.payment_method_list_token : null,
           selectedMethodType: paymentElementTypeRef.current,
         };
         if (tokenResult.wallet && !hasShipping(state)) {

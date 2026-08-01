@@ -367,12 +367,21 @@ module Charge::Disputable
       notice_worth_sending = DisputeEvidence.notice_worth_sending?(
         seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
       )
+      reminder_worth_scheduling = DisputeEvidence.accepting_evidence?(
+        seller_contacted_at: stamped_at, seller_submitted_at: submitted_at, resolved_at:
+      )
 
       # No per-step guards from here down: the completion marker written at the end prevents
       # any re-delivery from reaching this code, except for a crash inside the tiny window
       # between these enqueues and the marker write — that degrades to at-least-once
       # email/webhook delivery, which is normal for crash-retry semantics.
       ContactingCreatorMailer.chargeback_notice(dispute.id).deliver_later if notice_worth_sending
+      DisputeEvidence.schedule_due_soon_reminder(
+        dispute_id: dispute.id,
+        seller_contacted_at: stamped_at,
+        seller_submitted_at: submitted_at,
+        resolved_at:
+      ) if reminder_worth_scheduling
       AdminMailer.chargeback_notify(dispute.id).deliver_later
       CustomerLowPriorityMailer.chargeback_notice_to_customer(dispute.id).deliver_later(wait: 5.seconds)
 

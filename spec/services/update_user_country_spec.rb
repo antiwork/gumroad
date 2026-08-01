@@ -101,6 +101,16 @@ describe UpdateUserCountry do
       end
     end
 
+    it "clears the record of an invalidated PayPal payout address along with the address" do
+      @user.invalidated_paypal_payout_address = "refused@example.com"
+      @user.save!(validate: false)
+
+      UpdateUserCountry.new(new_country_code: "GB", user: @user).process
+
+      expect(@user.reload.invalidated_paypal_payout_address).to be_nil
+      expect(@user.payment_address).to eq("")
+    end
+
     context "when changing from Japan with invalid kana data" do
       before do
         @user.alive_user_compliance_info.mark_deleted(validate: false)

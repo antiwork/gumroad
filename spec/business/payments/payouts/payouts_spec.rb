@@ -296,6 +296,173 @@ describe Payouts do
       end
     end
 
+    describe "sellers under 18" do
+      let(:payout_date) { Date.today }
+
+      # A US seller who is 15 today, with enough balance and a working payout route, so the ONLY
+      # thing that can make them unpayable is the legal-guardian requirement. Age comes from the
+      # birthday because that is what the requirement reads; a fixed date would age out of the
+      # 13-17 window and quietly turn every example here into an adult-seller example.
+      def minor_seller(country: "United States", guardian: nil)
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        create(:user_compliance_info, user: seller, country:, birthday: 15.years.ago.to_date, guardian:)
+        seller
+      end
+
+      it "does not pay out a minor with no guardian" do
+        seller = minor_seller
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "pays out a minor whose guardian details are complete" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller)
+        create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(true)
+      end
+
+      # The distinction the whole gate turns on: a guardian ROW is not a satisfied requirement. An
+      # incomplete guardian is exactly the state our payment partner refuses to verify, so treating
+      # its presence as enough would pay out against an account that is still unverified.
+      it "does not pay out a minor whose guardian is missing their tax identifier" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller, individual_tax_id: nil)
+        create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "does not pay out a minor whose guardian has not accepted our payment partner's terms" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller, stripe_tos_accepted: false, stripe_tos_accepted_at: nil, stripe_tos_ip: nil)
+        create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "does not pay out a minor in a country with no guardian path, even with a complete guardian" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller)
+        create(:user_compliance_info, user: seller, country: "Brazil", state: "SP", zip_code: "01000-000",
+                                      birthday: 15.years.ago.to_date, guardian:)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(false)
+      end
+
+      it "pays out an adult seller with no guardian" do
+        seller = create(:compliant_user, payment_address: "adult@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        create(:user_compliance_info, user: seller, birthday: 30.years.ago.to_date)
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(true)
+      end
+
+      # Support releasing a balance by hand has already made this judgement, the same as every other
+      # gate in this method.
+      it "pays out a minor with no guardian when the payout comes from admin" do
+        seller = minor_seller
+
+        expect(described_class.is_user_payable(seller, payout_date, from_admin: true)).to be(true)
+      end
+
+      # There is no Gumroad-managed account for a guardian to go on, the payout settings page offers
+      # these sellers no form, and Stripe verifies the account under its own agreement with them. So
+      # blocking here would strand them with nothing to do — the one outcome this gate must not
+      # cause, and the reason the presenter exempts the same sellers.
+      it "pays out a minor with no guardian who is paid through their own connected Stripe account" do
+        seller = minor_seller
+        allow(seller).to receive(:has_stripe_account_connected?).and_return(true)
+        allow(seller).to receive(:stripe_connect_account).and_return(
+          double(is_a_brazilian_stripe_connect_account?: false)
+        )
+
+        expect(described_class.is_user_payable(seller, payout_date)).to be(true)
+      end
+
+      # The guardian gate sits ahead of the others, so folding the seller's OWN details into it
+      # would blame the guardian for a missing tax id and, because the note does not repeat,
+      # permanently withhold the one naming the field they are actually missing.
+      it "does not blame the guardian when the seller's own details are what is incomplete" do
+        seller = create(:compliant_user, payment_address: "minor@example.com")
+        create(:balance, user: seller, amount_cents: 200_00, date: payout_date - 3)
+        guardian = create(:guardian, user: seller)
+        compliance_info = create(:user_compliance_info, user: seller, birthday: 15.years.ago.to_date, guardian:)
+        compliance_info.update_columns(individual_tax_id: nil)
+
+        described_class.is_user_payable(seller.reload, payout_date, add_comment: true)
+
+        expect(seller.comments.with_type_payout_note.last&.content.to_s)
+          .not_to include("sellers under 18 need a legal guardian")
+      end
+
+      describe "the note the seller reads" do
+        it "tells a minor to add a guardian, visibly" do
+          seller = minor_seller
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+
+          note = seller.comments.with_type_payout_note.last
+          expect(note.content).to include("sellers under 18 need a legal guardian")
+          expect(note.content).to include("Add your guardian's details in your payout settings")
+          expect(PayoutNoteVisibility.seller_visible?(note)).to be(true)
+        end
+
+        it "tells a minor with no guardian path that payouts start at 18, and does not ask for a guardian" do
+          seller = minor_seller(country: "Brazil")
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+
+          note = seller.comments.with_type_payout_note.last
+          expect(note.content).to include("cannot verify a seller under 18 in your country")
+          expect(note.content).to include("Payouts will start once you turn 18")
+          expect(note.content).not_to include("Add your guardian's details")
+          expect(PayoutNoteVisibility.seller_visible?(note)).to be(true)
+        end
+
+        it "writes no note when add_comment is false" do
+          seller = minor_seller
+
+          expect do
+            described_class.is_user_payable(seller, payout_date, add_comment: false)
+          end.not_to change { seller.comments.with_type_payout_note.count }
+        end
+
+        # Otherwise a seller on daily payouts buries their own note within a month: the Payouts
+        # banner only scans back PayoutNoteVisibility::MAX_NOTES_SCANNED notes, so the one thing
+        # telling them what to do scrolls out of the window and the page goes silent.
+        it "does not repeat the note on the next payout run" do
+          seller = minor_seller
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+
+          expect do
+            described_class.is_user_payable(seller, payout_date, add_comment: true)
+          end.not_to change { seller.comments.with_type_payout_note.count }
+        end
+
+        # The two wordings say different things about what the seller can do, so a stale one must not
+        # suppress the other. This is why the dedupe keys on one pattern per wording rather than one
+        # pattern covering both.
+        it "writes the unsupported-country note over an existing add-a-guardian note" do
+          seller = minor_seller
+
+          described_class.is_user_payable(seller, payout_date, add_comment: true)
+          seller.alive_user_compliance_info.update_columns(country: "Brazil", state: "SP", zip_code: "01000-000")
+
+          described_class.is_user_payable(seller.reload, payout_date, add_comment: true)
+
+          expect(seller.comments.with_type_payout_note.last.content).to include("cannot verify a seller under 18 in your country")
+        end
+      end
+    end
+
     describe "instant payouts with settling funds" do
       let(:settling_seller) { create(:compliant_user) }
 
@@ -835,15 +1002,10 @@ describe Payouts do
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
-      # Pinned to a Wednesday, because `Date.today - 1` is only a *past* payout period on six
-      # days out of seven. The gate in .create_payments_for_balances_up_to_date_for_users
-      # compares `date + PAYOUT_DELAY_DAYS` against the seller's cycle, and cycles are Fridays:
-      # run this on a Saturday and `payout_date` IS the Friday just gone, so the balance
-      # created 3 days earlier falls inside that cycle's period (cycle - PAYOUT_DELAY_DAYS)
-      # instead of before it. The cycle then stops advancing for being under the minimum, and
-      # `date + PAYOUT_DELAY_DAYS` lands exactly ON it — `>=` accepts, and all three examples
-      # here invert. On any other weekday the balance sits outside the period, the cycle
-      # advances a week, and the gate rejects as these examples assume.
+      # Pinned because these examples only hold Wed-Fri. From Saturday through Tuesday the
+      # balance below lands inside the upcoming Friday cycle's period, so it clears the minimum,
+      # the cycle stays put, and the gate in .create_payments_for_balances_up_to_date_for_users
+      # accepts where these examples expect a reject.
       before do
         travel_to(Time.utc(2026, 8, 5, 12))
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
@@ -851,9 +1013,7 @@ describe Payouts do
       end
 
       it "does not create payments if the seller's payout cycle is past this payout date" do
-        # #next_payout_cycle_date, not #next_payout_date: the cycle is what the gate in
-        # .create_payments_for_balances_up_to_date_for_users actually reads, so stubbing the
-        # seller's own rail day left this example asserting nothing about the branch it names.
+        # The gate reads #next_payout_cycle_date, not the seller's own rail day.
         allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 2.weeks)
 
         expect do
@@ -862,8 +1022,9 @@ describe Payouts do
       end
 
       it "creates payments when retrying even though the cycle has moved past this payout date" do
-        # The real requeue shape: a payment row already exists for today, which advances
-        # #next_payout_cycle_date whether or not that payment succeeded.
+        # The real requeue shape: a payment row already exists for the period, failed or not.
+        # What puts the cycle past this payout date here is the balance being too new for the
+        # coming Friday's period, not this row — the row's own advance needs cycle == today.
         create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
                 .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
         expect(payout_date + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
@@ -876,6 +1037,7 @@ describe Payouts do
       it "skips the seller when not retrying and the cycle has moved past this payout date" do
         create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
                 .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+        expect(payout_date + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
 
         expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([], payout_date.to_s)
 

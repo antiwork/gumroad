@@ -393,6 +393,122 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:unsupported_charge_model)
   end
 
+  describe "destination charges" do
+    # A Gumroad-managed Stripe Custom account: it belongs to a user (so it is not the
+    # platform row) but it is not a Stripe Connect account either, so Stripe charges it
+    # with a destination charge — the PaymentIntent is created on the platform account and
+    # this account receives transfer_data[destination].
+    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
+    # MerchantAccount.gumroad is the platform row (the one with no user). It is normally
+    # seeded in the test database; create it when a fresh database has not been seeded, so
+    # the lookup the production code makes finds the same row these examples assert on.
+    let!(:platform_merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+        account.update!(charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+      end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+    end
+
+    it "falls back while the destination-charge ramp flag is off" do
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:unsupported_charge_model)
+    end
+
+    it "still routes the quote to the platform account while the ramp flag is off" do
+      # The ramp flag decides whether the CARD lane may quote a destination charge at all.
+      # It cannot decide WHICH account a quote is minted on: the forced-currency lane
+      # (iDEAL/Bancontact/UPI/Pix) already accepts destination charges regardless of this
+      # flag, and its intent is created on the platform account either way. Returning the
+      # seller's account here would mint that lane's quote in a different account from its
+      # intent, which Stripe rejects.
+      expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(platform_merchant_account)
+    end
+
+    it "declares the seller's account as the quote's transfer destination" do
+      # A destination charge's intent carries transfer_data[destination], and Stripe refuses
+      # a quote that does not name the same account, so the quote and the intent have to
+      # agree on the destination as well as on which account mints the quote.
+      expect(described_class.fx_quote_destination_account_id(merchant_account))
+        .to eq(merchant_account.charge_processor_merchant_id)
+    end
+
+    it "declares the transfer destination regardless of the ramp flag" do
+      # Same reason the account routing is not flag-gated: whether the intent carries a
+      # transfer is a fact about how Stripe creates it, and the forced-currency lane creates
+      # destination charges with the flag off.
+      Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+      expect(described_class.fx_quote_destination_account_id(merchant_account))
+        .to eq(merchant_account.charge_processor_merchant_id)
+    ensure
+      Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+    end
+
+    context "with the destination-charge ramp flag on" do
+      before { Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+      after { Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+
+      it "is eligible" do
+        expect(decision).to be_eligible
+        expect(decision.currency).to eq(Currency::CAD)
+        expect(decision.fallback_reason).to be_nil
+      end
+
+      it "quotes against the platform account, which is where the intent is created" do
+        expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(platform_merchant_account)
+      end
+
+      it "stays eligible when the seller's own account settles in a non-USD currency" do
+        # The charge converts the buyer's currency to the PLATFORM's settlement currency;
+        # the seller's euros come from the later transfer, which no FX quote covers.
+        merchant_account.update!(currency: Currency::EUR)
+
+        expect(decision).to be_eligible
+        expect(decision.currency).to eq(Currency::CAD)
+      end
+
+      it "falls back when the PLATFORM account settles the buyer's currency in itself" do
+        platform_merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+
+        expect(decision).not_to be_eligible
+        expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+      end
+
+      it "ignores a mismatch marker on the seller's own account" do
+        # The seller's account never mints the quote for this charge model, so a marker
+        # learned there says nothing about whether this charge can be quoted.
+        merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+
+        expect(decision).to be_eligible
+      end
+    end
+  end
+
+  describe "direct charges" do
+    it "sends no transfer destination, because a direct charge carries no transfer" do
+      # A direct charge is created on the seller's own connected account and pays them
+      # directly, so the intent has no transfer_data — and a quote that named a destination
+      # would be refused on it.
+      expect(described_class.fx_quote_destination_account_id(merchant_account)).to be_nil
+    end
+
+    it "still quotes against the seller's own connected account" do
+      # A direct charge creates the intent on the seller's account, so nothing about the
+      # destination lane may move the quote off it — with the ramp flag on or off.
+      expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(merchant_account)
+
+      Feature.activate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+      expect(described_class.fx_quote_merchant_account(merchant_account)).to eq(merchant_account)
+    ensure
+      Feature.deactivate_user(described_class::DESTINATION_CHARGE_FEATURE_NAME, seller)
+    end
+
+    it "still falls back when the seller's own account settles the buyer's currency in itself" do
+      merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+  end
+
   describe "#method_forced_decision" do
     let(:payment_method) { "ideal" }
 

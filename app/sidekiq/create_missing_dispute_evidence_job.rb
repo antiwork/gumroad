@@ -25,6 +25,8 @@
 class CreateMissingDisputeEvidenceJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   # The states a dispute can still be answered in. Won, lost, and closed disputes are already
   # decided, so a missing evidence row on one of those is history rather than something to act
@@ -189,6 +191,12 @@ class CreateMissingDisputeEvidenceJob
         ErrorNotifier.notify(message)
         return
       end
+      DisputeEvidence.schedule_due_soon_reminder(
+        dispute_id: dispute.id,
+        seller_contacted_at: window_start,
+        seller_submitted_at: nil,
+        resolved_at: nil
+      )
 
       ErrorNotifier.notify(
         "CreateMissingDisputeEvidenceJob: dispute #{dispute.id} was never asked for evidence and has " \

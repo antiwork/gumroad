@@ -44,7 +44,8 @@ describe Checkout::BuyerCurrencyQuote do
     allow(StripeFxQuote).to receive(:create).with(
       to_currency: Currency::USD,
       from_currency: Currency::CAD,
-      stripe_account_id: merchant_account.charge_processor_merchant_id
+      stripe_account_id: merchant_account.charge_processor_merchant_id,
+      destination_account_id: nil
     ).and_return(stripe_fx_quote)
   end
 
@@ -447,10 +448,10 @@ describe Checkout::BuyerCurrencyQuote do
         other_seller_account = create(:merchant_account_stripe_connect, user: other_seller, currency: Currency::USD)
         other_seller.update!(check_merchant_account_is_linked: true)
         allow(StripeFxQuote).to receive(:create)
-          .with(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: merchant_account.charge_processor_merchant_id)
+          .with(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: merchant_account.charge_processor_merchant_id, destination_account_id: nil)
           .and_return(stripe_fx_quote)
         allow(StripeFxQuote).to receive(:create)
-          .with(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: other_seller_account.charge_processor_merchant_id)
+          .with(to_currency: Currency::USD, from_currency: Currency::CAD, stripe_account_id: other_seller_account.charge_processor_merchant_id, destination_account_id: nil)
           .and_raise(StripeFxQuote::SettlementCurrencyMismatch, "settles in cad")
         expect_any_instance_of(MerchantAccount).to receive(:record_settlement_currency_mismatch!).with(Currency::CAD) do |account|
           expect(account.id).to eq(other_seller_account.id)
@@ -910,7 +911,8 @@ describe Checkout::BuyerCurrencyQuote do
       allow(StripeFxQuote).to receive(:create).with(
         to_currency: Currency::USD,
         from_currency: Currency::JPY,
-        stripe_account_id: merchant_account.charge_processor_merchant_id
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
       ).and_return(jpy_quote)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "126.79.0.1")
@@ -957,7 +959,8 @@ describe Checkout::BuyerCurrencyQuote do
       allow(StripeFxQuote).to receive(:create).with(
         to_currency: Currency::USD,
         from_currency: Currency::CAD,
-        stripe_account_id: seller_merchant_account.charge_processor_merchant_id
+        stripe_account_id: seller_merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
       ).and_raise(StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd")
 
       expect do
@@ -1001,6 +1004,58 @@ describe Checkout::BuyerCurrencyQuote do
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
 
       expect(result).to be_nil
+    end
+
+    context "destination charges" do
+      # A Gumroad-managed Stripe Custom account: owned by the seller, but Stripe creates
+      # the PaymentIntent on the platform account and transfers to this one afterwards.
+      let!(:seller_merchant_account) do
+        seller.update!(check_merchant_account_is_linked: true)
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_seller_custom", currency: Currency::USD)
+      end
+
+      it "returns nil while the destination-charge ramp flag is off" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")).to be_nil
+      end
+
+      context "with the destination-charge ramp flag on" do
+        before { Feature.activate_user(Checkout::BuyerCurrencyEligibility::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+        after { Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::DESTINATION_CHARGE_FEATURE_NAME, seller) }
+
+        it "mints the quote on the platform account, not the seller's" do
+          # The intent for a destination charge is created on the platform account, and a
+          # quote is only honoured in the account context that minted it.
+          expect(StripeFxQuote).to receive(:create).with(
+            to_currency: Currency::USD,
+            from_currency: Currency::CAD,
+            stripe_account_id: merchant_account.charge_processor_merchant_id,
+            # Stripe refuses a quote whose destination does not match the intent's
+            # transfer_data[destination], so the seller's account has to be named here even
+            # though the quote is minted on the platform account.
+            destination_account_id: "acct_seller_custom"
+          ).and_return(stripe_fx_quote)
+
+          result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+          expect(result).to have_attributes(currency: Currency::CAD)
+          # The quote id now lives on the per-charge record rather than the cart-level result,
+          # since a multi-seller cart locks one FX quote per prospective charge.
+          expect(result.charges.sole).to have_attributes(stripe_fx_quote_id: "fxq_test")
+        end
+
+        it "records a settlement mismatch on the platform account, which is the one that rejected it" do
+          allow(StripeFxQuote).to receive(:create).and_raise(
+            StripeFxQuote::SettlementCurrencyMismatch, "FX quote settles in cad, expected usd"
+          )
+
+          described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+          expect(merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD)).to be(true)
+          expect(seller_merchant_account.reload.settlement_currency_mismatch_active?(Currency::CAD)).to be(false)
+        end
+      end
     end
   end
 
