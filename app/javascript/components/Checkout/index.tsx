@@ -150,11 +150,15 @@ export const Checkout = ({
           "error",
         );
       } else {
-        if (pppDiscountGreaterCount > 0)
-          showAlert(
-            "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount.",
-            "warning",
-          );
+        // One showAlert, because the toast is a single slot — a second call replaces the first
+        // before it paints. Both reasons can be true and each names a different set of lines.
+        const warnings = [
+          pppDiscountGreaterCount > 0
+            ? "The offer code will not be applied to some products for which the purchasing power parity discount is greater than the offer code discount."
+            : null,
+          discount.notice,
+        ].filter(Boolean);
+        if (warnings.length > 0) showAlert(warnings.join(" "), "warning");
         updateCart({
           discountCodes: [
             { code, products: discount.products_data, fromUrl },

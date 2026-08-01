@@ -254,6 +254,84 @@ describe PaypalMerchantAccountManager, :vcr do
       end
     end
 
+    describe "connecting a PayPal account whose email PayPal has permanently refused for payouts" do
+      let(:creator) { create(:user) }
+      let(:paypal_merchant_id) { "GSQ5PDPXZCWGW" }
+      let(:refused_email) { "refused@example.com" }
+
+      before do
+        creator.mark_compliant!(author_name: "ContentModeration")
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+        create(:payment_completed, user: creator)
+        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(
+          "country" => "US",
+          "primary_currency" => "USD",
+          "primary_email_confirmed" => true,
+          "payments_receivable" => true,
+          "primary_email" => refused_email,
+          "oauth_integrations" => [{
+            "integration_type" => "OAUTH_THIRD_PARTY",
+            "integration_method" => "PAYPAL",
+            "oauth_third_party" => [{ "partner_client_id" => PAYPAL_PARTNER_CLIENT_ID }]
+          }]
+        )
+      end
+
+      # Connect is a second door to the same payout address and the payout processor refuses by
+      # address, so without this the seller is told the connection worked, sees it listed as
+      # connected, and every payout goes on being blocked. gumroad-private#1478.
+      it "refuses the connection and leaves no live merchant account behind" do
+        create(:payment_failed, user: creator, payment_address: refused_email,
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("PayPal won't accept payouts to that account. Please connect a different PayPal account.")
+        expect(creator.merchant_accounts.alive.paypal.count).to eq(0)
+        expect(creator.merchant_accounts.charge_processor_verified.paypal.count).to eq(0)
+      end
+
+      # The guard has to be about the rejection, not about Connect. If it fired for any seller with
+      # any failed payment the example above would pass for the wrong reason.
+      it "connects normally when the rejection is a repairable currency one" do
+        create(:payment_failed, user: creator, payment_address: refused_email,
+                                failure_reason: "PAYPAL 14159", txn_id: nil, processor_fee_cents: nil)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("You have successfully connected your PayPal account with Gumroad.")
+        expect(creator.merchant_accounts.charge_processor_verified.paypal.count).to eq(1)
+      end
+
+      # A successful payout after the rejection means the account was repaired, and
+      # terminal_failure_for_payout_email? already scopes to failures since the last completed
+      # payout. Pinning it here stops a future widening of the guard from locking those sellers out.
+      it "connects normally when a payout to that address has succeeded since the rejection" do
+        create(:payment_failed, user: creator, payment_address: refused_email,
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil,
+                                created_at: 2.days.ago)
+        create(:payment_completed, user: creator, payment_address: refused_email, created_at: 1.day.ago)
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("You have successfully connected your PayPal account with Gumroad.")
+        expect(creator.merchant_accounts.charge_processor_verified.paypal.count).to eq(1)
+      end
+
+      # Tearing down an already-live merchant account on a webhook would stop the seller taking
+      # payments, which no rejection of a payout justifies.
+      it "leaves an already-verified merchant account connected" do
+        create(:payment_failed, user: creator, payment_address: refused_email,
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        create(:merchant_account_paypal, charge_processor_merchant_id: paypal_merchant_id, user: creator,
+                                         charge_processor_alive_at: 1.hour.ago, charge_processor_verified_at: 1.hour.ago)
+
+        subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(creator.merchant_accounts.alive.paypal.charge_processor_verified.count).to eq(1)
+      end
+    end
+
     it "marks all other paypal merchant accounts of the creator as deleted" do
       creator = create(:user)
       creator.mark_compliant!(author_name: "ContentModeration")

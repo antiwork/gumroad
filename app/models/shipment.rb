@@ -13,6 +13,28 @@ class Shipment < ApplicationRecord
     "Canada Post" => "https://www.canadapost.ca/cpotools/apps/track/personal/findByTrackNumber?LOCALE=en&trackingNumber="
   }.freeze
 
+  # The formats each mapped carrier issues. Reaching a carrier's tracking form is not enough: a
+  # ten-digit remainder on the USPS form is a DHL waybill someone pasted, not a USPS number.
+  # Keys must mirror CARRIER_TRACKING_URL_MAPPING — a carrier with no entry derives nothing, and
+  # the spec pins the parity rather than letting an evidence build raise over a missing key.
+  CARRIER_TRACKING_NUMBER_FORMAT = {
+    # 20/22-digit IMpb and its longer variants, or the 13-character S10 international form.
+    "USPS" => /\A(?:\d{20}|\d{22}|\d{26}|\d{30}|\d{34}|[A-Za-z]{2}\d{9}[A-Za-z]{2})\z/,
+    "UPS" => /\A1Z[A-Za-z0-9]{16}\z/i,
+    "FedEx" => /\A(?:\d{12}|\d{15}|\d{20})\z/,
+    "DHL" => /\A\d{10}\z/,
+    # DHL eCommerce publishes no crisp format, so the range is deliberately wider than the
+    # 20/22/26/30-digit and two-letter-plus-18-digit values production actually shows.
+    "DHL Global Mail" => /\A(?:\d{20,30}|[A-Za-z]{2}\d{18})\z/,
+    "OnTrac" => /\A[A-Za-z0-9]{15}\z/,
+    "Canada Post" => /\A\d{16}\z/
+  }.freeze
+
+  # Whitespace the seller pasted, percent-encoded by the browser before it reached the column.
+  # `%20` leads 1,932 of the newest 200,000 shipments' USPS numbers; without trimming it the
+  # number never matches its carrier's format and the strongest evidence we hold is dropped.
+  PERCENT_ENCODED_WHITESPACE = /\A(?:%(?:20|09|0[AaDd]))+|(?:%(?:20|09|0[AaDd]))+\z/
+
   validates :purchase, presence: true
 
   # The purchase's updated_at should reflect changes to its shipment.
@@ -37,6 +59,43 @@ class Shipment < ApplicationRecord
     return nil unless CARRIER_TRACKING_URL_MAPPING.key?(carrier)
 
     CARRIER_TRACKING_URL_MAPPING[carrier] + tracking_number
+  end
+
+  # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
+  # `tracking_url` — so read them back out of the URL when it is one of the forms above.
+  # A scheme is required: the column also holds bare tracking numbers and free-text notes, and
+  # without it any text shaped like a carrier host would be promoted to structured evidence.
+  # Host is folded but the path and query keys are compared exactly, because their casing is
+  # significant to the carrier — `QTC_TLABELS1` is not a form USPS serves.
+  # Returns nil rather than a guess: dispute evidence submits once, and a wrong number is worse
+  # than an absent one, so the remainder must match a format that carrier issues.
+  def carrier_and_tracking_number_from_url
+    # No writer strips this column, and the free-text evidence path strips before using it; without
+    # the same treatment here a trailing space would cost the structured pair but keep the URL row.
+    # `scrub` first because it is free text: on an invalid byte sequence `strip` raises
+    # `Encoding::CompatibilityError` (and the regex below `ArgumentError`), failing the whole
+    # evidence build rather than skipping one unusable field.
+    url = tracking_url&.scrub&.strip
+    return if url.blank?
+
+    schemeless = url[%r{\Ahttps?://(.+)\z}i, 1]
+    return if schemeless.nil?
+
+    url_host, slash, url_rest = schemeless.partition("/")
+    return if slash.empty?
+
+    CARRIER_TRACKING_URL_MAPPING.each do |carrier_name, prefix|
+      prefix_host, _, prefix_rest = prefix.sub(%r{\Ahttps?://}i, "").partition("/")
+      next unless url_host.casecmp?(prefix_host)
+      next unless url_rest.start_with?(prefix_rest)
+
+      number = url_rest[prefix_rest.length..]
+      # Two passes: one value can carry an encoded token at each end.
+      number = number.sub(PERCENT_ENCODED_WHITESPACE, "").sub(PERCENT_ENCODED_WHITESPACE, "")
+      format = CARRIER_TRACKING_NUMBER_FORMAT[carrier_name]
+      return [carrier_name, number] if format && number.match?(format)
+    end
+    nil
   end
 
   private

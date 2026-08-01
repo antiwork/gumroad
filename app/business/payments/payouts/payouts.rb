@@ -25,6 +25,12 @@ class Payouts
   # Same idea for the daily "not eligible for instant payouts" note below: recognise one this class
   # already wrote, whatever payout date it names.
   INSTANT_PAYOUT_INELIGIBLE_NOTE_REGEX = /\APayout on .+ was skipped because the account is not eligible for instant payouts\.\z/
+  # Recognise a legal-guardian note this class already wrote, whatever payout date it names. One
+  # pattern per wording, not one covering both: a seller moves between them when they correct a
+  # birthday or change country, and the new wording says something different about what they can do,
+  # so it has to get past the dedupe. A combined pattern would let the stale note suppress it.
+  GUARDIAN_REQUIRED_NOTE_REGEX = /\AYour payout on .+ was skipped because sellers under 18 need a legal guardian/
+  GUARDIAN_UNSUPPORTED_NOTE_REGEX = /\AYour payout on .+ was skipped because our payment partner cannot verify a seller under 18/
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -44,6 +50,19 @@ class Payouts
           user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was #{reason}.")
         end
       end
+      return false
+    end
+
+    # A seller under 18 cannot be verified on their own, so paying them out would send money against
+    # an account our payment partner will not stand behind.
+    #
+    # Placed ahead of the pause check because this is the blocker the seller can actually clear, and
+    # the pause is usually downstream of it: the unmet legal-guardian requirement is what makes our
+    # payment partner stop payouts on a minor's account in the first place. A seller who is also
+    # paused for an unrelated reason loses nothing by reading this first — they have to add the
+    # guardian either way, and the pause note returns once they have.
+    unless from_admin || guardian_requirement_met?(user)
+      add_guardian_requirement_note(user, payout_date) if add_comment
       return false
     end
 
@@ -227,6 +246,76 @@ class Payouts
       newest_note.content.to_s.match?(note_regex)
   end
   private_class_method :newest_note_is_hidden_repeat?
+
+  # Whether we hold what our payment partner needs to verify a seller who is under 18.
+  #
+  # True for the overwhelming majority of sellers, who are adults: the two cheap reads here answer
+  # the question without touching the guardian at all. Only a seller whose stored birthday is 13-17
+  # loads anything further.
+  #
+  # Reads the seller's LIVE compliance revision. No revision at all is not treated as a guardian
+  # problem — such a seller has no birthday on file, so nothing says they are a minor, and their
+  # missing details are the other gates' business. Same for the seller's own details being
+  # incomplete: this gate answers the guardian question only, so the note naming the field they are
+  # really missing still gets written by the gate that owns it.
+  #
+  # A seller paid through a Stripe account they connected themselves is exempt. There is no
+  # Gumroad-managed account for a guardian to go on, the payout settings page offers them no form,
+  # and Stripe verifies that account under its own agreement with them — so blocking here would
+  # strand them with no action available, which is the one outcome this requirement must not cause.
+  def self.guardian_requirement_met?(user)
+    return true if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
+
+    compliance_info = user.alive_user_compliance_info
+    return true if compliance_info.nil?
+    return true unless compliance_info.under_legal_guardian_age?
+
+    compliance_info.legal_guardian_requirement_met?
+  end
+  private_class_method :guardian_requirement_met?
+
+  # Tells a minor's seller what to do, or — where there is nothing they can do — says so plainly.
+  #
+  # Written seller-visible, unlike most notes this class suppresses: it is the only thing on the
+  # Payouts page that will explain why the money stopped, and the seller has an action to take. The
+  # unsupported-country wording deliberately promises nothing about a date, because we do not know
+  # when our payment partner will add a guardian path there.
+  def self.add_guardian_requirement_note(user, payout_date)
+    compliance_info = user.alive_user_compliance_info
+
+    content, note_regex =
+      if compliance_info&.legal_guardian_unsupported?
+        [
+          "Your payout on #{payout_date} was skipped because our payment partner cannot verify a seller under 18 in your country. " \
+          "Payouts will start once you turn 18.",
+          GUARDIAN_UNSUPPORTED_NOTE_REGEX
+        ]
+      else
+        [
+          "Your payout on #{payout_date} was skipped because sellers under 18 need a legal guardian on the account before our payment partner will verify it. " \
+          "Add your guardian's details in your payout settings and your payouts will start automatically.",
+          GUARDIAN_REQUIRED_NOTE_REGEX
+        ]
+      end
+
+    # Repeats every payout run otherwise, and the banner only scans back
+    # PayoutNoteVisibility::MAX_NOTES_SCANNED notes — a seller on daily payouts would bury their own
+    # note within a month, at which point the page has nothing to tell them. Matched on shape
+    # because the note embeds its own payout date.
+    return if newest_note_matches?(user, note_regex)
+
+    user.add_payout_note(content:)
+  end
+  private_class_method :add_guardian_requirement_note
+
+  # True when the newest note on the account is already one of the given shape, whatever its
+  # visibility. Distinct from newest_note_is_hidden_repeat? above, which only skips SUPPRESSED
+  # repeats — this one dedupes a note the seller can see, so it must not require the note to be
+  # hidden.
+  def self.newest_note_matches?(user, note_regex)
+    user.latest_payout_note&.content.to_s.match?(note_regex)
+  end
+  private_class_method :newest_note_matches?
 
   def self.add_below_minimum_payout_note(user, payout_date, account_balance)
     current_balance = user.formatted_dollar_amount(account_balance)

@@ -314,8 +314,21 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
         }
       end
 
-      purchase.unblock_buyer!
+      surviving = purchase.unblock_buyer!
       create_unblock_buyer_comments!(purchase)
+
+      if surviving.any?
+        # Say so rather than reporting a bare success. Three years of "Buyer unblocked" notes were
+        # written over unblocks that left a row behind, and the silence is what hid it
+        # (gumroad-private#1648).
+        return render json: {
+          success: true,
+          status: "partially_unblocked",
+          surviving_blocks: surviving.map { |block| { object_type: block.object_type, object_value: block.object_value } },
+          message: "Unblocked buyer for purchase number #{purchase.external_id_numeric}, but #{surviving.size} block(s) still hold this buyer: " \
+                   "#{surviving.map { |block| "#{block.object_type} #{block.object_value}" }.join(", ")}"
+        }
+      end
 
       render json: {
         success: true,

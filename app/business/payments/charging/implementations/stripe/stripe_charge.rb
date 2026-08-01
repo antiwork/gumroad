@@ -1,11 +1,35 @@
 # frozen_string_literal: true
 
 class StripeCharge < BaseProcessorCharge
+  # Past this, a succeeded destination payment with no balance transaction never gets one
+  # (gumroad-private#1608).
+  DESTINATION_PAYMENT_SETTLEMENT_GRACE = 24.hours
+
+  # Shared with the refund path, which must reverse an uncredited destination payment to the same
+  # zero-in-account-currency the charge recorded. Fails closed: without the payment object or the
+  # account's currency we cannot tell "never credited" from "not settled yet", so keep waiting.
+  def self.destination_payment_permanently_uncredited?(stripe_destination_payment, merchant_account_currency:)
+    return false if stripe_destination_payment.nil? || merchant_account_currency.blank?
+    return false unless stripe_destination_payment[:status] == "succeeded" && stripe_destination_payment[:captured]
+
+    created = stripe_destination_payment[:created]
+    return false if created.blank?
+
+    Time.zone.at(created) <= DESTINATION_PAYMENT_SETTLEMENT_GRACE.ago
+  end
+
   # Public: Create a BaseProcessorCharge from a Stripe::Charge and a Stripe::BalanceTransaction
+  #
+  # merchant_account_currency is the DESTINATION account's, not the charge's — see
+  # #build_flow_of_funds.
   def initialize(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
-                 stripe_destination_payment_balance_transaction, stripe_destination_transfer)
+                 stripe_destination_payment_balance_transaction, stripe_destination_transfer,
+                 stripe_destination_payment: nil, merchant_account_currency: nil)
     self.charge_processor_id = StripeChargeProcessor.charge_processor_id
     return if stripe_charge.nil?
+
+    @stripe_destination_payment = stripe_destination_payment
+    @merchant_account_currency = merchant_account_currency
 
     self.id = stripe_charge[:id]
     self.status = stripe_charge[:status].to_s.downcase
@@ -31,6 +55,12 @@ class StripeCharge < BaseProcessorCharge
   end
 
   private
+    def destination_payment_permanently_uncredited?
+      self.class.destination_payment_permanently_uncredited?(
+        @stripe_destination_payment, merchant_account_currency: @merchant_account_currency
+      )
+    end
+
     def fetch_risk_level(stripe_charge)
       self.risk_level = stripe_charge[:outcome][:risk_level]
     end
@@ -82,8 +112,10 @@ class StripeCharge < BaseProcessorCharge
 
     def build_flow_of_funds(stripe_charge, stripe_charge_balance_transaction, stripe_application_fee_balance_transaction,
                             stripe_destination_payment_balance_transaction, stripe_destination_transfer)
-      return if stripe_charge[:destination] && (stripe_destination_payment_balance_transaction.nil? ||
-        (stripe_application_fee_balance_transaction.nil? && stripe_destination_transfer.nil?))
+      if stripe_charge[:destination]
+        return if stripe_application_fee_balance_transaction.nil? && stripe_destination_transfer.nil?
+        return if stripe_destination_payment_balance_transaction.nil? && !destination_payment_permanently_uncredited?
+      end
 
       issued_amount = FlowOfFunds::Amount.new(currency: stripe_charge[:currency],
                                               cents: stripe_charge[:amount])
@@ -109,11 +141,22 @@ class StripeCharge < BaseProcessorCharge
         # Note: The settled and merchant account gross amount will always be the same with Stripe Connect.
         # The transaction settles in the merchant account currency and the gross amount is the full settled amount.
 
-        merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: stripe_destination_payment_balance_transaction[:currency],
-                                                                cents: stripe_destination_payment_balance_transaction[:amount])
+        if stripe_destination_payment_balance_transaction.present?
+          merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: stripe_destination_payment_balance_transaction[:currency],
+                                                                  cents: stripe_destination_payment_balance_transaction[:amount])
 
-        merchant_account_net_amount = FlowOfFunds::Amount.new(currency: stripe_destination_payment_balance_transaction[:currency],
-                                                              cents: stripe_destination_payment_balance_transaction[:net])
+          merchant_account_net_amount = FlowOfFunds::Amount.new(currency: stripe_destination_payment_balance_transaction[:currency],
+                                                                cents: stripe_destination_payment_balance_transaction[:net])
+        else
+          # Stripe accepted the destination payment but never credited the account: the transfer
+          # is our one-subunit floor in the CHARGE's currency (see
+          # StripeIntentChargeRouting::MINIMUM_DESTINATION_TRANSFER_AMOUNT_CENTS) and rounds below
+          # one subunit of the account's. Record what the account received — nothing — in ITS
+          # currency. The transfer's own cents would overstate the credit, and a holding currency
+          # that does not match the account's makes the seller's whole payout unpayable.
+          merchant_account_gross_amount = FlowOfFunds::Amount.new(currency: @merchant_account_currency, cents: 0)
+          merchant_account_net_amount = FlowOfFunds::Amount.new(currency: @merchant_account_currency, cents: 0)
+        end
       elsif stripe_application_fee_balance_transaction.present?
         # For direct charges in case of Stripe Connect accounts, there will be no destination on the Stripe charge,
         # but there will be an associated application_fee. We get the gumroad amount from the

@@ -217,6 +217,95 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:insufficient_times_of_use)
   end
 
+  describe "partial application when the cart is wider than the remaining uses" do
+    let(:products) { create_list(:product, 3, user: seller, price_cents: 2000, price_currency_type: "usd") }
+    let(:one_each) do
+      products.to_h { [it.unique_permalink, { quantity: "1", permalink: it.unique_permalink }] }
+    end
+
+    before { universal_offer_code.update!(max_purchase_count: 2) }
+
+    it "discounts the lines that fit, reports the skipped reason, and does not error" do
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, one_each).process
+
+      expect(result[:products_data].size).to eq(2)
+      expect(result[:error_code]).to be_nil
+      expect(result[:partial_ineligibility_code]).to eq(:sold_out)
+    end
+
+    it "consumes uses in cart order, leaving the later lines undiscounted" do
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, one_each).process
+
+      expect(result[:products_data].keys).to eq(products.first(2).map(&:unique_permalink))
+      expect(result[:error_code]).to be_nil
+    end
+
+    it "errors only when no line fits" do
+      universal_offer_code.update!(max_purchase_count: 0)
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, one_each).process
+
+      expect(result[:products_data]).to eq({})
+      expect(result[:error_code]).to eq(:sold_out)
+      expect(result).to have_key(:partial_ineligibility_code)
+      expect(result[:partial_ineligibility_code]).to be_nil
+    end
+
+    it "reports no partial code when every line fits" do
+      universal_offer_code.update!(max_purchase_count: 3)
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, one_each).process
+
+      expect(result[:products_data].size).to eq(3)
+      expect(result[:error_code]).to be_nil
+      # have_key, not just nil: on the pre-fix service the key is absent entirely,
+      # which would read as nil and let this example pass either way.
+      expect(result).to have_key(:partial_ineligibility_code)
+      expect(result[:partial_ineligibility_code]).to be_nil
+    end
+
+    it "honours cart order even when it differs from the products' creation order" do
+      reversed = products.reverse.to_h { [it.unique_permalink, { quantity: "1", permalink: it.unique_permalink }] }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, reversed).process
+
+      expect(result[:products_data].keys).to eq(products.reverse.first(2).map(&:unique_permalink))
+    end
+
+    it "counts uses per unit, not per line, so one over-quantity line can exhaust the code" do
+      universal_offer_code.update!(max_purchase_count: 2)
+      three_of_one = { products.first.unique_permalink => { quantity: "3", permalink: products.first.unique_permalink } }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, three_of_one).process
+
+      expect(result[:products_data]).to eq({})
+      expect(result[:error_code]).to eq(:insufficient_times_of_use)
+    end
+
+    it "never quotes more uses than the code has left, so the charge-time cross-line check agrees" do
+      universal_offer_code.update!(max_purchase_count: 2)
+      mixed = products.to_h { [it.unique_permalink, { quantity: "2", permalink: it.unique_permalink }] }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, mixed).process
+
+      # Purchase.validate_offer_code_usage_across_line_items fails the whole group when
+      # the discounted lines' quantities exceed quantity_left. Keep this invariant or a
+      # buyer sees a partial discount and then gets blocked at checkout.
+      quoted_quantity = result[:products_data].keys.sum { mixed[it][:quantity].to_i }
+      expect(quoted_quantity).to be <= universal_offer_code.quantity_left
+    end
+
+    it "keeps an unmet-minimum line from poisoning the lines that qualify" do
+      universal_offer_code.update!(max_purchase_count: nil, minimum_quantity: 2)
+      mixed = one_each.dup
+      mixed[products.first.unique_permalink] = { quantity: "2", permalink: products.first.unique_permalink }
+
+      result = OfferCodeDiscountComputingService.new(universal_offer_code.code, mixed).process
+
+      expect(result[:products_data].keys).to eq([products.first.unique_permalink])
+      expect(result[:error_code]).to be_nil
+      expect(result[:partial_ineligibility_code]).to eq(:unmet_minimum_purchase_quantity)
+    end
+  end
+
   context "when offer code is not yet valid" do
     before do
       offer_code.update!(valid_at: 1.years.from_now)
@@ -296,7 +385,7 @@ describe OfferCodeDiscountComputingService do
              })
         .process
 
-      expect(result).to eq(error_code: :invalid_offer, products_data: {})
+      expect(result).to eq(error_code: :invalid_offer, products_data: {}, partial_ineligibility_code: nil)
     end
   end
 

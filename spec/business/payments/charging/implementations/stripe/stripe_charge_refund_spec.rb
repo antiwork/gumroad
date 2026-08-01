@@ -272,4 +272,60 @@ describe StripeChargeRefund, :vcr do
       end
     end
   end
+
+  # gumroad-private#1608: the charge side records zero in the account's own currency for a
+  # destination payment Stripe never credited. The reversal has to agree — balances are keyed on
+  # holding_currency, so a debit in any other currency lands on a different Balance row than the
+  # credit it reverses, and a non-USD row on a Gumroad-held balance blocks the seller's payout.
+  describe "reversing a destination payment that was never credited" do
+    let(:merchant_account_currency) { Currency::EUR }
+
+    let(:uncredited_charge) do
+      Stripe::Charge.construct_from(id: "ch_test_1608", currency: "usd", amount: 93,
+                                    destination: "acct_test_1608", transfer: "tr_test_1608",
+                                    application_fee: nil)
+    end
+
+    let(:uncredited_refund) do
+      Stripe::Refund.construct_from(id: "re_test_1608", charge: "ch_test_1608",
+                                    currency: "usd", amount: 93)
+    end
+
+    let(:refund_balance_transaction) do
+      Stripe::BalanceTransaction.construct_from(id: "txn_test_1608r", currency: "usd", amount: -93)
+    end
+
+    let(:flow_of_funds) do
+      described_class.new(uncredited_charge, uncredited_refund, nil, refund_balance_transaction,
+                          nil, nil, nil,
+                          destination_payment_uncredited: true,
+                          merchant_account_currency:).flow_of_funds
+    end
+
+    it "reverses the merchant account amounts to zero in the account's own currency" do
+      expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::EUR)
+      expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(0)
+      expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::EUR)
+      expect(flow_of_funds.merchant_account_net_amount.cents).to eq(0)
+    end
+
+    it "returns the whole refund from Gumroad's side, since the account was credited nothing" do
+      expect(flow_of_funds.gumroad_amount.currency).to eq("usd")
+      expect(flow_of_funds.gumroad_amount.cents).to eq(-93)
+    end
+
+    it "keeps the issued and settled amounts unchanged" do
+      expect(flow_of_funds.issued_amount.cents).to eq(-93)
+      expect(flow_of_funds.settled_amount.cents).to eq(-93)
+    end
+
+    context "when the account's currency is unknown" do
+      let(:merchant_account_currency) { nil }
+
+      it "falls back to the existing behaviour rather than guessing a currency" do
+        expect(flow_of_funds.merchant_account_gross_amount).to be_nil
+        expect(flow_of_funds.merchant_account_net_amount).to be_nil
+      end
+    end
+  end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_06_000021) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_06_000022) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2504,6 +2504,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000021) do
     t.bigint "flags", default: 0, null: false
     t.date "effective_on"
     t.datetime "notified_subscriber_at"
+    t.string "notification_claim_id", limit: 36
+    t.datetime "notification_claimed_at"
     t.index ["base_variant_id"], name: "index_subscription_plan_changes_on_base_variant_id"
     t.index ["subscription_id"], name: "index_subscription_plan_changes_on_subscription_id"
   end

@@ -26,6 +26,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     seller,
     customHtmlPagesEnabled,
     customHtmlStoreHostnames,
+    customHtmlGlobalNavHosts,
+    customHtmlGlobalNavPaths,
   } = useProductEditContext();
 
   const url = useProductUrl();
@@ -221,7 +223,12 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     );
 
   return customHtmlPagesEnabled && hasLandingPage ? (
-    <LandingPagePreview uniquePermalink={uniquePermalink} storeHostnames={customHtmlStoreHostnames} />
+    <LandingPagePreview
+      uniquePermalink={uniquePermalink}
+      storeHostnames={customHtmlStoreHostnames}
+      globalNavHosts={customHtmlGlobalNavHosts}
+      globalNavPaths={customHtmlGlobalNavPaths}
+    />
   ) : (
     defaultPreview
   );

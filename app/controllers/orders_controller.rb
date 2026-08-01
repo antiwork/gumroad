@@ -147,6 +147,24 @@ class OrdersController < ApplicationController
     # `payment_intent.payment_failed` fired at all.
     CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE = "card_error"
 
+    # Codes that prove the same thing when the type does not. Stripe's `type` describes the shape
+    # of the API rejection, so `invalid_request_error` covers both "your request was malformed"
+    # (no charge, no webhook) and "this intent already failed authentication" (charge attempted,
+    # webhook fired).
+    #
+    # Exact match, not a prefix: the browser posts Stripe.js's raw `error.code`, never the
+    # `_<decline_code>` form the server composes, so a prefix buys nothing here — and it would
+    # silently suppress a future Stripe code that merely extends one of these, which is the
+    # opposite of the fail-open rule the denylist below follows.
+    #
+    # `payment_intent_unexpected_state` and `payment_intent_mandate_invalid` are deliberately
+    # absent — both are confirm-time rejections that never transition the intent, so nothing else
+    # records them and they must keep reporting.
+    CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_CODES = %w[
+      payment_intent_authentication_failure
+      payment_intent_payment_attempt_failed
+    ].freeze
+
     # Report only failures nothing else records.
     #
     # Both conditions are required. Stripe attaches `payment_method` to any error involving one,
@@ -165,11 +183,20 @@ class OrdersController < ApplicationController
     # added later must not go unmonitored because nobody updated this list, and a buyer who
     # suppresses their own report only loses their own signal.
     def confirm_error_reportable?(error_details)
-      return true unless error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
+      return true unless confirm_error_charge_attempted?(error_details)
 
       method_type = error_details[:payment_method_type].presence ||
                     error_details[:selected_payment_method_type]
       !method_type.in?(CONFIRM_ERROR_SERVER_RECORDED_PAYMENT_METHOD_TYPES)
+    end
+
+    # Whether a charge was attempted. Deliberately not a `purchases.stripe_error_code` lookup:
+    # that write arrives anywhere from 0 to ~690s after the browser posts here, so reading the row
+    # would suppress or report by luck of the race.
+    def confirm_error_charge_attempted?(error_details)
+      return true if error_details[:stripe_error_type] == CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_TYPE
+
+      error_details[:stripe_error_code].in?(CONFIRM_ERROR_ATTEMPTED_STRIPE_ERROR_CODES)
     end
 
     # Fail-open per-order throttle for confirm_error Sentry reports. Counts reports per order
@@ -216,7 +243,7 @@ class OrdersController < ApplicationController
 
       # Verify reCAPTCHA response
       if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: CheckoutRecaptcha.site_key(logged_in_user), surface: CheckoutRecaptcha.surface(logged_in_user))
-        render_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+        render_error(recaptcha_failure_message)
       end
     end
 

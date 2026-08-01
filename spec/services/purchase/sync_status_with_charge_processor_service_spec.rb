@@ -148,6 +148,55 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(purchase.reload).to be_successful
   end
 
+  it "finalizes a combined-charge purchase whose destination payment Stripe never credited, booking zero in the account's currency" do
+    # gumroad-private#1608 end to end: the seller's cut is our one-subunit floor in the charge's
+    # currency, which rounds below one subunit of the destination account's currency, so Stripe
+    # accepts the destination payment and never produces a balance transaction for it. Nothing
+    # here is stubbed below the processor's HTTP calls — the "CH-" transfer_group must really
+    # resolve to the Charge's merchant account for the currency label to be right.
+    merchant_account = create(:merchant_account, user: @seller, currency: Currency::EUR,
+                                                 charge_processor_merchant_id: "acct_1608")
+    charge = create(:charge, seller: @seller, merchant_account:, processor_transaction_id: "ch_1608")
+    purchase = create(:purchase, link: @product, seller: @seller, purchase_state: "in_progress",
+                                 charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                 merchant_account:, stripe_transaction_id: "ch_1608")
+    charge.purchases << purchase
+
+    stripe_charge = Stripe::Charge.construct_from(
+      id: "ch_1608", status: "succeeded", refunded: false, dispute: nil,
+      currency: "usd", amount: purchase.total_transaction_cents,
+      destination: "acct_1608", transfer: "tr_1608",
+      transfer_data: { destination: "acct_1608", amount: 1 },
+      transfer_group: charge.id_with_prefix,
+      balance_transaction: Stripe::BalanceTransaction.construct_from(
+        id: "txn_1608", currency: "usd", amount: purchase.total_transaction_cents,
+        net: purchase.total_transaction_cents - 30, status: "available",
+        fee_details: [{ type: "stripe_fee", currency: "usd", amount: 30 }]
+      ),
+      application_fee: nil, payment_method: "pm_1608", payment_method_details: nil, outcome: nil
+    )
+    allow(Stripe::Charge).to receive(:retrieve).with(hash_including(id: "ch_1608"), any_args).and_return(stripe_charge)
+    allow(Stripe::Charge).to receive(:retrieve).with(hash_including(id: "py_1608"), any_args)
+      .and_return(Stripe::Charge.construct_from(id: "py_1608", status: "succeeded", captured: true,
+                                                currency: "usd", amount: 1, balance_transaction: nil,
+                                                created: 48.hours.ago.to_i))
+    allow(Stripe::Transfer).to receive(:retrieve)
+      .and_return(Stripe::Transfer.construct_from(id: "tr_1608", amount: 1, currency: "usd",
+                                                  destination: "acct_1608", destination_payment: "py_1608"))
+
+    expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase, require_final_charge_status: true).perform).to be(true)
+
+    expect(purchase.reload).to be_successful
+    seller_balance_transaction = purchase.balance_transactions.find_by(user: @seller)
+    expect(seller_balance_transaction).to be_present
+    # The account received nothing, recorded in ITS currency — not the transfer's usd cents.
+    expect(seller_balance_transaction.holding_amount_currency).to eq(Currency::EUR)
+    expect(seller_balance_transaction.holding_amount_gross_cents).to eq(0)
+    expect(seller_balance_transaction.holding_amount_net_cents).to eq(0)
+    # And the balance it lands on stays payable, which a usd label on a eur account would break.
+    expect(StripePayoutProcessor.is_balance_payable(seller_balance_transaction.balance)).to be(true)
+  end
+
   it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
     purchase = build(:purchase, link: @product, purchase_state: "in_progress")
     purchase.save!(validate: false)

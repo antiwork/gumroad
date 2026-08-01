@@ -330,6 +330,7 @@ class UsersController < ApplicationController
               (function () {
                 var frame = document.getElementById("gumroad-landing-frame");
                 var STORE_HOSTNAMES = #{store_hostnames_json};
+                #{custom_html_navigation_allowlist_js.indent(16).strip}
                 window.addEventListener("message", function (e) {
                   // Only the sandboxed landing iframe (opaque origin, so
                   // e.origin is the literal string "null") may drive this.
@@ -338,11 +339,13 @@ class UsersController < ApplicationController
                   var url;
                   try { url = new URL(String(e.data.url), window.location.href); } catch (_err) { return; }
                   // The iframe content is seller-authored and untrusted: only
-                  // navigate the visitor's tab to this seller's own store, and
-                  // only over http(s) — never javascript:/data:/etc.
+                  // navigate the visitor's tab to this seller's own store or one
+                  // of Gumroad's blessed account/cart paths, and only over
+                  // http(s) — never javascript:/data:/etc.
                   if (url.protocol !== "https:" && url.protocol !== "http:") return;
-                  if (STORE_HOSTNAMES.indexOf(url.hostname) === -1) return;
-                  window.location.href = url.href;
+                  var destination = gumroadNavigationTarget(url, STORE_HOSTNAMES);
+                  if (destination === null) return;
+                  window.location.href = destination;
                 });
               })();
             </script>

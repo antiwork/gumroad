@@ -1546,6 +1546,20 @@ describe Api::Internal::Admin::PurchasesController do
       expect(purchase.reload.is_buyer_blocked_by_admin?).to be(false)
     end
 
+    it "reports partially_unblocked with the surviving blocks when the unblock leaves rows behind" do
+      purchase.block_buyer!(blocking_user_id: admin_user.id)
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "surviving-guid")
+      surviving = PlatformBlock.active.where(object_value: "surviving-guid")
+      allow_any_instance_of(Purchase).to receive(:unblock_buyer!).and_return(surviving)
+
+      post :unblock_buyer, params: params
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true, "status" => "partially_unblocked")
+      expect(response.parsed_body["surviving_blocks"]).to eq([{ "object_type" => PlatformBlock::TYPES[:browser_guid], "object_value" => "surviving-guid" }])
+      expect(response.parsed_body["message"]).to include("1 block(s) still hold this buyer")
+    end
+
     it "creates an unblock comment on the purchaser when present" do
       buyer = create(:user, email: "buyer@example.com")
       purchase.update!(purchaser: buyer)

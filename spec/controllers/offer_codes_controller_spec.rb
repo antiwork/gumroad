@@ -29,7 +29,49 @@ describe OfferCodesController do
       offer_code.update_attribute(:max_purchase_count, 0)
       get :compute_discount, params: offer_code_params
 
-      expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use has expired.", "error_code" => "sold_out", "valid" => false })
+      expect(response.parsed_body).to eq({ "error_message" => "Sorry, the discount code you wish to use has reached its usage limit.", "error_code" => "sold_out", "valid" => false })
+    end
+
+    context "when the cart is wider than the code's remaining uses" do
+      let(:seller) { create(:user) }
+      let!(:capped_code) { create(:universal_offer_code, user: seller, amount_cents: 100, max_purchase_count: 2) }
+      let(:cart_products) { create_list(:product, 3, user: seller, price_cents: 500) }
+      let(:params) do
+        {
+          code: capped_code.code,
+          products: cart_products.to_h { [it.unique_permalink, { permalink: it.unique_permalink, quantity: 1 }] }
+        }
+      end
+
+      it "discounts the lines that fit and explains why the rest are excluded" do
+        get :compute_discount, params: params
+
+        body = response.parsed_body
+        expect(body["valid"]).to be true
+        expect(body["products_data"].size).to eq(2)
+        expect(body["notice"]).to eq("The discount code was applied to some products. The rest exceed its remaining usage limit.")
+      end
+
+      it "rejects the whole cart only when no line fits" do
+        capped_code.update!(max_purchase_count: 0)
+        get :compute_discount, params: params
+
+        expect(response.parsed_body).to eq({
+                                             "valid" => false,
+                                             "error_code" => "sold_out",
+                                             "error_message" => "Sorry, the discount code you wish to use has reached its usage limit.",
+                                           })
+      end
+
+      it "omits the notice when the code covers the whole cart" do
+        capped_code.update!(max_purchase_count: 3)
+        get :compute_discount, params: params
+
+        body = response.parsed_body
+        expect(body["valid"]).to be true
+        expect(body["products_data"].size).to eq(3)
+        expect(body).not_to have_key("notice")
+      end
     end
 
     it "doesn't return error in response when offer code discount is greater than the original price of the product but applicable to other product in a bundle" do

@@ -64,5 +64,77 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
         expect(uncategorized_text).to eq(expected_uncategorized_text)
       end
     end
+
+    context "when the purchase was shipped with a tracking URL" do
+      before do
+        other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint")
+        create(:shipment, purchase: disputed_purchase, tracking_url: "https://track.aftership.com/9400111899223197428490")
+      end
+
+      # The structured shipping fields only take a URL attributable to a known carrier, so an
+      # unattributable one would otherwise be dropped from the single submission entirely.
+      it "includes the tracking URL" do
+        expected_uncategorized_text = <<~TEXT.strip_heredoc.rstrip
+          Device location: California, United States
+          Billing postal code: 12345
+          Seller-provided shipment tracking URL: https://track.aftership.com/9400111899223197428490
+        TEXT
+        expect(uncategorized_text).to eq(expected_uncategorized_text)
+      end
+    end
+
+    context "when the tracking URL is not one we can vouch for" do
+      let(:shipment) { create(:shipment, purchase: disputed_purchase) }
+
+      before { other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint") }
+
+      # No controller validates this param, so the seam where the seller's text joins evidence
+      # Stripe reads as ours has to hold on its own.
+      it "omits a value carrying anything but a plain http(s) URL" do
+        [
+          # A newline would make the second line read as one of Gumroad's own evidence rows.
+          "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=94001\nThe buyer confirmed delivery by phone.",
+          "javascript:alert(1)",
+          "file:///etc/passwd",
+          "not a url at all",
+          "https://user:secret@tools.usps.com/track",
+          "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=#{"9" * 500}",
+        ].each do |url|
+          shipment.update_column(:tracking_url, url)
+          expect(described_class.perform(disputed_purchase.reload)).to_not(include("shipment tracking URL"), "expected #{url.inspect} to be omitted")
+        end
+      end
+
+      it "keeps a URL that only needed surrounding whitespace removed" do
+        shipment.update_column(:tracking_url, "  https://track.aftership.com/94001  ")
+
+        expect(described_class.perform(disputed_purchase.reload))
+          .to include("Seller-provided shipment tracking URL: https://track.aftership.com/94001")
+      end
+
+      it "omits, rather than raising on, a value that is not valid UTF-8" do
+        # Set in memory, NOT through the column: the utf8mb4 column drops the invalid byte on write,
+        # so a saved-then-reloaded value is always valid and could never reach the guard. An unsaved
+        # record is the only way the byte survives to `strip`, which raises
+        # `Encoding::CompatibilityError` before any guard below it runs.
+        shipment.tracking_url = "https://track.aftership.com/94001\xFF".dup.force_encoding("UTF-8")
+        expect(shipment.tracking_url.valid_encoding?).to be(false)
+        allow(disputed_purchase).to receive(:shipment).and_return(shipment)
+
+        text = nil
+        expect { text = described_class.perform(disputed_purchase) }.to_not raise_error
+        expect(text).to include("Billing postal code: 12345")
+        expect(text).to_not include("shipment tracking URL")
+      end
+    end
+
+    context "when the purchase has no shipment" do
+      before { other_undisputed_purchase.update!(stripe_fingerprint: "other_fintgerprint") }
+
+      it "omits the tracking row" do
+        expect(uncategorized_text).to_not include("shipment tracking URL")
+        expect(uncategorized_text).to include("Billing postal code: 12345")
+      end
+    end
   end
 end

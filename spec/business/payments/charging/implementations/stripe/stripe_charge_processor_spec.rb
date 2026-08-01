@@ -303,6 +303,98 @@ describe StripeChargeProcessor, :vcr do
         expect(charge.status).to eq("failed")
       end
     end
+
+    describe "when the destination payment has no balance transaction" do
+      # gumroad-private#1608: StripeCharge can only tell a permanently-uncredited destination
+      # payment from an unsettled one if it is handed the payment object AND the destination
+      # account's own currency, so verify the processor actually supplies both.
+      let(:merchant_account) { create(:merchant_account, currency: Currency::EUR, charge_processor_merchant_id: "acct_test_1608") }
+
+      # The platform side of these charges is fully settled; only the connected account's tiny
+      # destination payment is missing its balance transaction.
+      let(:platform_balance_transaction) do
+        Stripe::BalanceTransaction.construct_from(
+          id: "txn_test_1608", currency: "usd", amount: 93, net: 63, status: "available",
+          fee_details: [{ type: "stripe_fee", currency: "usd", amount: 30 }]
+        )
+      end
+
+      let(:mock_charge) do
+        Stripe::Charge.construct_from(
+          id: "ch_test_1608",
+          status: "succeeded",
+          refunded: false,
+          dispute: nil,
+          amount: 93,
+          currency: "usd",
+          destination: "acct_test_1608",
+          transfer: "tr_test_1608",
+          transfer_data: { destination: "acct_test_1608", amount: 1 },
+          transfer_group: "CH-85441166",
+          balance_transaction: platform_balance_transaction,
+          application_fee: nil,
+          payment_method: "pm_test_1608",
+          payment_method_details: nil,
+          outcome: nil
+        )
+      end
+
+      before do
+        allow(Stripe::Charge).to receive(:retrieve).with(hash_including(id: "ch_test_1608")).and_return(mock_charge)
+        allow(Stripe::Charge).to receive(:retrieve).with(hash_including(id: "py_test_1608"), anything)
+          .and_return(Stripe::Charge.construct_from(id: "py_test_1608", status: "succeeded", captured: true,
+                                                    currency: "usd", amount: 1, balance_transaction: nil,
+                                                    created: 48.hours.ago.to_i,
+                                                    refunds: Stripe::ListObject.construct_from(object: "list", data: []),
+                                                    application_fee: nil))
+        allow(Stripe::Transfer).to receive(:retrieve)
+          .and_return(Stripe::Transfer.construct_from(id: "tr_test_1608", amount: 1, currency: "usd",
+                                                      destination: "acct_test_1608", destination_payment: "py_test_1608"))
+        allow(subject).to receive(:merchant_account_for_transfer_group).with("CH-85441166").and_return(merchant_account)
+      end
+
+      it "passes the destination payment and the account's currency through to StripeCharge" do
+        expect(StripeCharge).to receive(:new)
+          .with(mock_charge, platform_balance_transaction, nil, nil, anything,
+                hash_including(merchant_account_currency: Currency::EUR))
+          .and_call_original
+
+        subject.get_charge("ch_test_1608")
+      end
+
+      it "builds merchant account amounts of zero in the account's own currency" do
+        flow_of_funds = subject.get_charge("ch_test_1608").flow_of_funds
+
+        expect(flow_of_funds).to be_present
+        expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::EUR)
+        expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(0)
+      end
+
+      # The reversal must be told the same thing, or the refund debits a different Balance row
+      # than the credit it reverses.
+      describe "and the charge is later refunded" do
+        let(:stripe_refund) do
+          Stripe::Refund.construct_from(id: "re_test_1608", charge: "ch_test_1608",
+                                        currency: "usd", amount: 93,
+                                        balance_transaction: Stripe::BalanceTransaction.construct_from(
+                                          id: "txn_test_1608r", currency: "usd", amount: -93
+                                        ))
+        end
+
+        before do
+          allow(Stripe::Refund).to receive(:retrieve).with(hash_including(id: "re_test_1608")).and_return(stripe_refund)
+        end
+
+        it "reverses to zero in the account's own currency" do
+          flow_of_funds = subject.get_refund("re_test_1608").flow_of_funds
+
+          expect(flow_of_funds.merchant_account_gross_amount.currency).to eq(Currency::EUR)
+          expect(flow_of_funds.merchant_account_gross_amount.cents).to eq(0)
+          expect(flow_of_funds.merchant_account_net_amount.currency).to eq(Currency::EUR)
+          expect(flow_of_funds.merchant_account_net_amount.cents).to eq(0)
+        end
+      end
+    end
   end
 
   describe "#search_charge" do
@@ -4338,5 +4430,57 @@ describe StripeChargeProcessor, :vcr do
           .to raise_error(/no presentment snapshot/)
       end
     end
+  end
+end
+
+# Outside the `:vcr` block above: none of this needs a recorded charge, and a new example name in
+# there would want a cassette CI is not allowed to record.
+describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
+  # A free purchase so the setup never charges: this asserts the payload we hand Stripe, not how
+  # the charge was made.
+  let(:disputed_purchase) do
+    create(:free_purchase, link: create(:physical_product), full_name: "John Example",
+                           street_address: "123 Sample St", city: "San Francisco", state: "CA",
+                           country: "United States", zip_code: "12343")
+  end
+  let!(:shipment) do
+    create(:shipment, purchase: disputed_purchase, ship_state: "shipped",
+                      carrier: nil, tracking_number: nil, shipped_at: DateTime.parse("2023-02-10 14:55:32"))
+  end
+
+  before do
+    create(:dispute_formalized, purchase: disputed_purchase)
+    allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(nil)
+    allow(Stripe::Charge).to receive(:retrieve).and_return(double(dispute: "dp_test"))
+  end
+
+  # The service specs stop at the DisputeEvidence record; this is the boundary where the recovered
+  # pair and the free-text row actually reach Stripe, and it is a one-shot submission.
+  def evidence_sent_to_stripe
+    DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
+    sent = nil
+    allow(Stripe::Dispute).to receive(:update) { |_id, evidence:| sent = evidence }
+    described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+    sent
+  end
+
+  it "sends the carrier, tracking number and shipment URL recovered from the seller's tracking URL" do
+    shipment.update!(tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
+
+    evidence = evidence_sent_to_stripe
+
+    expect(evidence[:shipping_carrier]).to eq("USPS")
+    expect(evidence[:shipping_tracking_number]).to eq("9400111899223197428490")
+    expect(evidence[:uncategorized_text]).to include("Seller-provided shipment tracking URL: #{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
+  end
+
+  it "omits a tracking URL that is not a plain http(s) URL" do
+    # Without this the seller's second line would read as one of Gumroad's own evidence rows.
+    shipment.update_column(:tracking_url, "https://tools.usps.com/track?n=94001\nThe buyer confirmed delivery by phone.")
+
+    evidence = evidence_sent_to_stripe
+
+    expect(evidence[:uncategorized_text]).to_not include("shipment tracking URL")
+    expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
   end
 end

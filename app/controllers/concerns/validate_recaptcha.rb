@@ -10,6 +10,15 @@ module ValidateRecaptcha
     "privacy extensions, or VPNs — try disabling them for this page or using a " \
     "private/incognito window, then try again."
 
+  # Score-based keys never show a challenge, so a genuine, correctly-hosted token can be refused
+  # purely on risk score — ~755 checkouts a day hit that with the message above, which is false
+  # there (gumroad-private#1590).
+  CAPTCHA_LOW_SCORE_MESSAGE = "Sorry, we could not complete this purchase — our fraud check " \
+    "scored this browser session as risky. Nothing is wrong with your payment method. Try " \
+    "again on a different network (turn off a VPN or switch off Wi-Fi to mobile data), or " \
+    "from a different browser or device. If it keeps happening, contact support and we will " \
+    "help you finish your purchase."
+
   ENTERPRISE_VERIFICATION_URL =
     "https://recaptchaenterprise.googleapis.com/v1/projects/#{GOOGLE_CLOUD_PROJECT_ID}/" \
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"
@@ -68,6 +77,7 @@ module ValidateRecaptcha
       surface = surface.to_sym
       assessment = recaptcha_assessment(site_key:)
       threshold = recaptcha_score_threshold(surface)
+      @recaptcha_failed_on_score_only = false
 
       if assessment[:infra_error]
         fail_open = recaptcha_fail_open?(surface)
@@ -84,8 +94,13 @@ module ValidateRecaptcha
 
       hostname_ok = require_hostname ? hostname_allowed?(assessment[:hostname]) : true
       token_ok = assessment[:valid] && hostname_ok
-      score_ok = threshold.nil? || (assessment[:score].present? && assessment[:score] >= threshold)
+      scored = assessment[:score].present?
+      score_ok = threshold.nil? || (scored && assessment[:score] >= threshold)
       decision = token_ok && score_ok
+
+      # An absent score also fails `score_ok`, but "scored as risky" would be equally false
+      # there, so nil-score failures keep the generic copy.
+      @recaptcha_failed_on_score_only = token_ok && scored && !score_ok
 
       log_recaptcha_score(
         surface:,
@@ -96,6 +111,10 @@ module ValidateRecaptcha
       )
 
       decision
+    end
+
+    def recaptcha_failure_message
+      @recaptcha_failed_on_score_only ? CAPTCHA_LOW_SCORE_MESSAGE : CAPTCHA_FAILURE_MESSAGE
     end
 
     def recaptcha_assessment(site_key:)
