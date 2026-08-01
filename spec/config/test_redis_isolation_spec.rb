@@ -398,9 +398,9 @@ describe TestRedisIsolation do
 
     it "records the endpoints boot started from, before it rewrites them" do
       skip_without_a_free_block
-      claimed = nil
+      claims = []
       allow(described_class).to receive(:claim_slot).and_wrap_original do |original, **kwargs|
-        claimed = original.call(**kwargs)
+        original.call(**kwargs).tap { claims << it }
       end
 
       begin
@@ -410,7 +410,7 @@ describe TestRedisIsolation do
         expect(described_class.boot_endpoints)
           .to eq(base_env.values_at(*described_class::STORE_ENV_VARS).map { parse(it) })
       ensure
-        discard(claimed)
+        claims.each { discard(it) }
       end
     end
 
