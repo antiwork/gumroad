@@ -420,19 +420,22 @@ describe("Offer-code usage from product page", type: :system, js: true) do
         expect(page).to have_selector("[role='status']", text: "$1 off will be applied at checkout (Code SXSW) This discount will apply when you spend $2 or more in selected products.", normalize_ws: true)
         add_to_cart(product3, offer_code:)
         expect(page).to have_selector("[aria-label='Discount code']", text: offer_code.code)
-        expect(page).to have_text("Total US$1", normalize_ws: true)
+        # $1 off the ORDER, not $1 off each eligible line: subtotal $3 less one $1 discount.
+        # Both eligible lines still carry the code (see the coverage-vs-amount split in
+        # OfferCodeDiscountComputingService), which is why the code chip is still shown.
+        expect(page).to have_text("Total US$2", normalize_ws: true)
 
         check_out(product3)
 
-        purchase1 = Purchase.last
-        expect(purchase1.price_cents).to eq(0)
-        expect(purchase1.offer_code).to eq(offer_code)
-        purchase2 = Purchase.second_to_last
-        expect(purchase2.price_cents).to eq(100)
-        expect(purchase2.offer_code).to eq(nil)
-        purchase3 = Purchase.third_to_last
-        expect(purchase3.price_cents).to eq(0)
-        expect(purchase3.offer_code).to eq(offer_code)
+        # Which of the two eligible lines the money lands on follows cart order, so the
+        # assertion is on the invariant instead: the code is spent exactly once, and the
+        # ineligible product is untouched.
+        discounted = Purchase.last(3)
+        expect(discounted.map(&:price_cents).sum).to eq(200)
+        expect(discounted.count { _1.price_cents.zero? }).to eq(1)
+        expect(discounted.select { _1.offer_code == offer_code }.count { _1.price_cents.zero? }).to eq(1)
+        expect(discounted.find { _1.link == product2 }.price_cents).to eq(100)
+        expect(discounted.find { _1.link == product2 }.offer_code).to eq(nil)
       end
 
       context "when a product in the cart has a quantity greater than 1" do
@@ -490,25 +493,24 @@ describe("Offer-code usage from product page", type: :system, js: true) do
           expect(page).to have_selector("[role='status']", text: "$1 off will be applied at checkout (Code SXSW) This discount will apply when you spend $2 or more in Seller's products.", normalize_ws: true)
           add_to_cart(product2, offer_code:)
           expect(page).to have_selector("[aria-label='Discount code']", text: offer_code.code)
-          expect(page).to have_text("Total US$0", normalize_ws: true)
+          # Subtotal $2 less the single $1 the code is worth. Before gumroad-private#1636 this
+          # read $0, because a $1 code was silently multiplying into $1 off every line.
+          expect(page).to have_text("Total US$1", normalize_ws: true)
 
           visit "#{product3.long_url}/#{offer_code.code}"
           expect(page).to have_selector("[role='status']", text: "$1 off will be applied at checkout (Code SXSW) This discount will apply when you spend $2 or more in Seller's products.", normalize_ws: true)
           add_to_cart(product3, offer_code:)
           expect(page).to have_selector("[aria-label='Discount code']", text: offer_code.code)
-          expect(page).to have_text("Total US$0", normalize_ws: true)
+          expect(page).to have_text("Total US$2", normalize_ws: true)
 
-          check_out(product3, is_free: true)
+          check_out(product3)
 
-          purchase1 = Purchase.last
-          expect(purchase1.price_cents).to eq(0)
-          expect(purchase1.offer_code).to eq(offer_code)
-          purchase2 = Purchase.second_to_last
-          expect(purchase2.price_cents).to eq(0)
-          expect(purchase2.offer_code).to eq(offer_code)
-          purchase3 = Purchase.third_to_last
-          expect(purchase3.price_cents).to eq(0)
-          expect(purchase3.offer_code).to eq(offer_code)
+          # Universal, so all three lines are covered by the code, but only one is charged
+          # against it. Which line takes the money follows cart order, so assert the invariant.
+          purchases = Purchase.last(3)
+          expect(purchases.map(&:price_cents).sum).to eq(200)
+          expect(purchases.count { _1.price_cents.zero? }).to eq(1)
+          expect(purchases.select { _1.offer_code == offer_code }.count { _1.price_cents.zero? }).to eq(1)
         end
       end
     end
