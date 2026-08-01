@@ -140,6 +140,17 @@ describe Admin::LinksController, type: :controller, inertia: true do
       expect(product.reload.purchase_disabled_at).to be_nil
     end
 
+    it "lets an admin republish an admin-unpublished product" do
+      product.update!(is_unpublished_by_admin: true)
+
+      post :publish, params: { external_id: product.external_id }
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.purchase_disabled_at).to be_nil
+      expect(product.is_unpublished_by_admin?).to be(false)
+    end
+
     it "clears a default discount that detached while the product was deleted" do
       product.update!(deleted_at: 1.day.ago)
       offer_code = create(:offer_code, user: product.user, products: [product])
