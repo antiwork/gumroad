@@ -125,6 +125,17 @@ describe Shipment do
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
     end
 
+    it "returns nothing when the value has no scheme" do
+      # A quarter of the column is bare tracking numbers and free-text notes rather than URLs, so
+      # text that merely starts with a carrier's host is not a link the seller followed.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"].sub(%r{\Ahttps?://}, "")
+      shipment.update!(tracking_url: "#{usps}1Z999AA10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+
+      shipment.update!(tracking_url: "see tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1Z999AA10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+    end
+
     it "returns nothing when the remainder is not a plausible tracking number" do
       # Extra query parameters mean we cannot tell where the number ends, and a wrong number
       # submitted as evidence is worse than none. Lengths no mapped carrier issues are paste garbage.

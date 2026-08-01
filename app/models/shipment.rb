@@ -41,6 +41,8 @@ class Shipment < ApplicationRecord
 
   # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
   # `tracking_url` — so read them back out of the URL when it is one of the forms above.
+  # A scheme is required: the column also holds bare tracking numbers and free-text notes, and
+  # without it any text shaped like a carrier host would be promoted to structured evidence.
   # Only the scheme and host are compared case-insensitively; the stored prefixes are http for
   # carriers that now serve https, and hosts are case-insensitive by definition. Path and query
   # keys are compared exactly, because their casing is significant to the carrier — `QTC_TLABELS1`
@@ -50,7 +52,10 @@ class Shipment < ApplicationRecord
   def carrier_and_tracking_number_from_url
     return if tracking_url.blank?
 
-    url_host, slash, url_rest = tracking_url.sub(%r{\Ahttps?://}i, "").partition("/")
+    schemeless = tracking_url[%r{\Ahttps?://(.+)\z}im, 1]
+    return if schemeless.nil?
+
+    url_host, slash, url_rest = schemeless.partition("/")
     return if slash.empty?
 
     CARRIER_TRACKING_URL_MAPPING.each do |carrier_name, prefix|
