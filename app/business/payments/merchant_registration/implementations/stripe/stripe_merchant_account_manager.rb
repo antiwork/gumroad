@@ -720,12 +720,13 @@ module StripeMerchantAccountManager
   rescue Stripe::StripeError => e
     # Note first, then decide whether to re-raise: the main payload has already advanced the
     # compliance marker, so a call that dies without leaving the marker behind is never retried.
-    record_identity_rejection_note(user, e, account_country, scope: entity_key, confirmed: e.is_a?(Stripe::InvalidRequestError))
+    marker_recorded = record_identity_rejection_note(user, e, account_country, scope: entity_key, confirmed: e.is_a?(Stripe::InvalidRequestError))
     Rails.logger.warn "Stripe did not accept the #{entity_key} identity fields for user #{user&.id} on a " \
                       "#{account_country.inspect} account: #{e.class}: #{e.message}"
-    # A verdict is the case this method exists to swallow. Anything else is a transport or
-    # permission failure the caller still needs to see.
-    raise unless e.is_a?(Stripe::InvalidRequestError)
+    # A verdict is the case this method exists to swallow — but only while the marker persisted.
+    # Anything else (transport or permission failure, or a marker write that itself failed) the
+    # caller still needs to see, because there is no other state left to drive the retry.
+    raise unless e.is_a?(Stripe::InvalidRequestError) && marker_recorded
     false
   end
 
@@ -739,9 +740,12 @@ module StripeMerchantAccountManager
   # `confirmed: false` means Stripe never judged the identifier (transport, rate limit, permissions)
   # — same retry marker, different claim, because support must not chase a rejection Stripe never
   # made.
+  #
+  # Returns whether the marker is in place. The caller swallows the Stripe rejection on the strength
+  # of this note existing, so a failed write here must not read as success.
   private_class_method
   def self.record_identity_rejection_note(user, error, account_country, scope:, confirmed: true)
-    return if user.blank?
+    return false if user.blank?
 
     prefix = identity_rejection_note_prefix(scope)
     detail = error&.message.presence&.to_s&.truncate(300) || "no reason given"
@@ -762,9 +766,11 @@ module StripeMerchantAccountManager
       existing.each { |note| note.mark_deleted! }
       user.add_payout_note(content:, seller_visible: false)
     end
+    true
   rescue => e
     Rails.logger.error "Failed to record Stripe identity-rejection payout note for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+    false
   end
 
   # The isolated call only runs while the countries disagree, so the cohort's natural resolution —
@@ -954,10 +960,10 @@ module StripeMerchantAccountManager
     clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     true
   rescue Stripe::StripeError => e
-    record_identity_rejection_note(user, e, account_country, scope: :representative, confirmed: e.is_a?(Stripe::InvalidRequestError))
+    marker_recorded = record_identity_rejection_note(user, e, account_country, scope: :representative, confirmed: e.is_a?(Stripe::InvalidRequestError))
     Rails.logger.warn "Stripe did not accept the representative's identity fields for user #{user&.id} on a " \
                       "#{account_country.inspect} account: #{e.class}: #{e.message}"
-    raise unless e.is_a?(Stripe::InvalidRequestError)
+    raise unless e.is_a?(Stripe::InvalidRequestError) && marker_recorded
     false
   end
 

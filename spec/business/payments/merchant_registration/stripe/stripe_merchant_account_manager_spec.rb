@@ -9698,6 +9698,25 @@ describe StripeMerchantAccountManager, :vcr do
           expect(note.content).not_to include("validates the ID against itself")
         end
 
+        # The swallow is only safe on the strength of the marker existing: a verdict suppressed
+        # while the note write failed leaves nothing to drive the retry, which is the permanent
+        # silent drop the marker exists to prevent.
+        it "re-raises the rejection when the retry marker cannot be recorded" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+          allow(user).to receive(:add_payout_note).and_wrap_original do |original, **kwargs|
+            # RecordInvalid, not a connection-flavored error: Makara reads "server has gone away"
+            # as a dead primary and blacklists the pool for the rest of the process.
+            raise ActiveRecord::RecordInvalid.new(Comment.new) if kwargs[:content].start_with?(StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX)
+
+            original.call(**kwargs)
+          end
+
+          expect { subject.update_account(user, passphrase: "1234") }.to raise_error(rejection)
+        end
+
         # ...and that marker has to actually drive the re-send, or recording it bought nothing.
         it "re-sends an identifier whose call never returned a verdict" do
           transport = Stripe::APIConnectionError.new("Connection to Stripe timed out")
@@ -13835,6 +13854,16 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.update_person(user, stripe_account, nil, "1234")
 
         expect(representative_rejection_notes.count).to eq(1)
+      end
+
+      # Same guard as the account path: the note is the only retry state, so a verdict must not be
+      # swallowed when the write that was supposed to persist it failed.
+      it "re-raises the rejection when the retry marker cannot be recorded" do
+        allow(user).to receive(:add_payout_note).and_raise(ActiveRecord::RecordInvalid.new(Comment.new))
+
+        expect do
+          described_class.update_person(user, stripe_account, nil, "1234")
+        end.to raise_error(rejection)
       end
     end
   end
