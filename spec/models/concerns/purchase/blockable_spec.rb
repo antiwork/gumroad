@@ -608,7 +608,9 @@ describe Purchase::Blockable do
         purchase.unblock_buyer!
 
         expect(PlatformBlock.active.find_by(object_value: "other-device-guid")).to be_nil
-        expect(other_purchase.reload.buyer_blocked?).to eq(false)
+        # The sibling row still reads blocked overall: block_buyer! blocked its IP too, and IP
+        # blocks deliberately stay row-scoped, so only the browser assertion belongs here.
+        expect(other_purchase.reload.blocked_by_browser_guid?).to eq(false)
       end
 
       it "clears a card fingerprint block belonging to another purchase" do
@@ -637,6 +639,18 @@ describe Purchase::Blockable do
         purchase.unblock_buyer!
 
         expect(PlatformBlock.active.find_by(object_value: "stranger-guid")).to be_present
+      end
+
+      it "leaves alone the blocks of a different account that shares the checkout email" do
+        former_account_purchase = create(:purchase, link: product, email: purchase.email, purchaser: create(:user),
+                                                    browser_guid: "former-account-guid", stripe_fingerprint: "former-account-fingerprint")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: former_account_purchase.browser_guid)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: former_account_purchase.stripe_fingerprint)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "former-account-guid")).to be_present
+        expect(PlatformBlock.active.find_by(object_value: "former-account-fingerprint")).to be_present
       end
 
       it "leaves IP blocks on the buyer's other purchases alone" do

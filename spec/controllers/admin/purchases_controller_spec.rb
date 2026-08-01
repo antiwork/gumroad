@@ -106,6 +106,31 @@ describe Admin::PurchasesController, :vcr, inertia: true do
     end
   end
 
+  describe "POST unblock_buyer" do
+    before do
+      @purchase = create(:purchase, purchaser: create(:user))
+      @purchase.block_buyer!(blocking_user_id: @admin_user.id)
+    end
+
+    it "unblocks the buyer and reports a plain success when nothing survives" do
+      post :unblock_buyer, params: { external_id: @purchase.external_id }
+
+      expect(response.parsed_body).to eq("success" => true)
+      expect(@purchase.reload.buyer_blocked?).to eq(false)
+    end
+
+    it "reports the blocks that survive the unblock" do
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "surviving-guid")
+      surviving = PlatformBlock.active.where(object_value: "surviving-guid")
+      allow_any_instance_of(Purchase).to receive(:unblock_buyer!).and_return(surviving)
+
+      post :unblock_buyer, params: { external_id: @purchase.external_id }
+
+      expect(response.parsed_body).to include("success" => true, "status" => "partially_unblocked")
+      expect(response.parsed_body["message"]).to include("1 block(s) still hold this buyer: browser_guid surviving-guid")
+    end
+  end
+
   describe "POST refund_taxes_only" do
     before do
       @purchase = create(:purchase_in_progress, chargeable: create(:chargeable), purchaser: create(:user))

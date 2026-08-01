@@ -160,20 +160,31 @@ module Purchase::Blockable
     end
   end
 
-  # The buyer's other purchases, found by the two identities a purchase carries: the email it was
-  # made under and the account it resolved to. Newest first and capped — a buyer with thousands of
-  # rows contributes no new identifiers past the first few hundred, and an admin click must not
-  # turn into an unbounded scan.
+  # The buyer's other purchases. Newest first and capped — a buyer with thousands of rows
+  # contributes no new identifiers past the first few hundred, and an admin click must not turn
+  # into an unbounded scan.
   private def sibling_buyer_purchases
-    scope = if purchaser_id.present?
-      Purchase.where("purchaser_id = ? OR email = ?", purchaser_id, email)
-    elsif email.present?
-      Purchase.where(email:)
-    else
-      return Purchase.none
-    end
+    same_buyer_purchases.where.not(id:).order(id: :desc).limit(MAX_SIBLING_PURCHASES_FOR_UNBLOCK)
+  end
 
-    scope.where.not(id:).order(id: :desc).limit(MAX_SIBLING_PURCHASES_FOR_UNBLOCK)
+  # Every purchase carrying this buyer's identity, this one included: rows that resolved to the
+  # same account, plus rows made under the same email that resolved to no account at all (the
+  # buyer's guest checkouts).
+  #
+  # An email match alone must NOT pull in rows that resolved to a DIFFERENT account. A checkout
+  # email is unauthenticated and gets reassigned, so a same-email row owned by another account can
+  # be another person's entirely — collecting its browser guid and card fingerprint here would let
+  # blocking or unblocking this buyer touch blocks that other account earned.
+  private def same_buyer_purchases
+    if purchaser_id.present? && email.present?
+      Purchase.where("purchaser_id = ? OR (email = ? AND purchaser_id IS NULL)", purchaser_id, email)
+    elsif purchaser_id.present?
+      Purchase.where(purchaser_id:)
+    elsif email.present?
+      Purchase.where(email:, purchaser_id: nil)
+    else
+      Purchase.none
+    end
   end
 
   def charge_processor_fingerprint
@@ -327,9 +338,7 @@ module Purchase::Blockable
 
   private
     def recent_stripe_fingerprint
-      Purchase.with_stripe_fingerprint
-              .where("purchaser_id = ? or email = ?", purchaser_id, email)
-              .last&.stripe_fingerprint
+      same_buyer_purchases.with_stripe_fingerprint.last&.stripe_fingerprint
     end
 
     def blockable_emails_if_fraudulent_transaction
