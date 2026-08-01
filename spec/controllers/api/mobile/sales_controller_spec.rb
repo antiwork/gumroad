@@ -154,6 +154,9 @@ describe Api::Mobile::SalesController, :vcr do
 
   describe "POST mark_as_shipped" do
     it "marks the purchase as shipped" do
+      # Shipments only exist for orders that needed delivery (gumroad-private#1665).
+      @product.update!(require_shipping: true)
+
       post :mark_as_shipped, params: @params.merge(id: @purchase.external_id, tracking_url: "https://example.com/track")
 
       expect(response).to be_successful
@@ -163,6 +166,8 @@ describe Api::Mobile::SalesController, :vcr do
     end
 
     it "rejects tracking values that are not full URLs" do
+      @product.update!(require_shipping: true)
+
       post :mark_as_shipped, params: @params.merge(id: @purchase.external_id, tracking_url: "1Z999AA10123456784")
 
       expect(response).to have_http_status(:unprocessable_entity)
@@ -170,17 +175,12 @@ describe Api::Mobile::SalesController, :vcr do
       expect(@purchase.reload.shipment).to eq(nil)
     end
 
-    it "returns a controlled error and does not mark shipped when the shipment fails to persist" do
-      shipment = Shipment.new(purchase: @purchase)
-      shipment.errors.add(:base, "Something went wrong")
-      allow(shipment).to receive(:save).and_return(false)
-      allow(Shipment).to receive(:new).and_return(shipment)
-
+    it "returns a controlled error and does not mark shipped when the product never required shipping" do
       post :mark_as_shipped, params: @params.merge(id: @purchase.external_id)
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["success"]).to eq(false)
-      expect(response.parsed_body["message"]).to eq("Something went wrong")
+      expect(response.parsed_body["message"]).to eq("Purchase does not require shipping")
       expect(@purchase.reload.shipment).to be_nil
     end
   end

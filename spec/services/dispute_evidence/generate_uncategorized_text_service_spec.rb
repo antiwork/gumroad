@@ -13,6 +13,9 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
   let(:disputed_purchase) do
     create(
       :disputed_purchase,
+      # Shipments only exist for orders that needed delivery (gumroad-private#1665), and the
+      # shipping-tracking rows below are the point of this spec.
+      link: product,
       email: "customer@example.com",
       full_name: "Joe Doe",
       ip_state: "California",
