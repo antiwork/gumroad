@@ -1,5 +1,5 @@
 /* eslint-disable no-console -- standalone QA probe; stdout IS the evidence transcript. */
-import { launch, newCtx, login, ROOT } from "./lib6762.mjs";
+import { launch, newCtx, login, ROOT } from "./pr-6762-capture-lib.mjs";
 
 const browser = await launch();
 const ctx = await newCtx(browser);
@@ -17,7 +17,10 @@ const out = await page.evaluate(() => {
     headOrder: { prTailwindLinkIndex: linkIdx, tiptapStyleIndex: tiptapIdx, tiptapIsLater: tiptapIdx > linkIdx },
     tiptapNodeAttrs: tt ? [...tt.attributes].map((a) => `${a.name}="${a.value}"`) : null,
     tiptapMarkers: tt
-      ? { hasTippy: /tippy-box/u.test(tt.textContent), hasHideselection: /ProseMirror-hideselection/u.test(tt.textContent) }
+      ? {
+          hasTippy: /tippy-box/u.test(tt.textContent),
+          hasHideselection: /ProseMirror-hideselection/u.test(tt.textContent),
+        }
       : null,
     // Both selectors are identical specificity, so document order alone decides.
     winner: (() => {
@@ -31,7 +34,7 @@ const out = await page.evaluate(() => {
     editorsOnPage: document.querySelectorAll(".ProseMirror").length,
     // the pages sidebar rename editors are the other useEditor() callers on this route
     pageTabEditors: [...document.querySelectorAll(".ProseMirror")].map((p) =>
-      (p.closest("[role=listitem], li, [data-page-tab]") ? "sidebar" : "content"),
+      p.closest("[role=listitem], li, [data-page-tab]") ? "sidebar" : "content",
     ),
   };
 });

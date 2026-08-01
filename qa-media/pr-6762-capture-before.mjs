@@ -1,6 +1,6 @@
 /* eslint-disable no-console -- standalone QA capture script; stdout IS the evidence transcript. */
 import fs from "fs";
-import { launch, newCtx, login, ROOT } from "./lib6762.mjs";
+import { launch, newCtx, login, ROOT } from "./pr-6762-capture-lib.mjs";
 
 const OUT = "/tmp/pvw-20260731/shots";
 fs.mkdirSync(OUT, { recursive: true });
@@ -74,7 +74,9 @@ for (const view of [
         } catch {
           return null;
         }
-        return rules.length ? { source: s.href ? "link (PR's tailwind.css)" : "<style> (Tiptap injectCSS)", rules } : null;
+        return rules.length
+          ? { source: s.href ? "link (PR's tailwind.css)" : "<style> (Tiptap injectCSS)", rules }
+          : null;
       })
       .filter(Boolean),
   );
@@ -150,7 +152,8 @@ for (const view of [
       found: true,
       pmPosition: getComputedStyle(pm).position,
       hitTagged: hit?.tagName,
-      hitIsInsideOverlay: !!hit?.closest?.("[class]") && /Upload your files/iu.test(hit.closest("div")?.textContent ?? ""),
+      hitIsInsideOverlay:
+        !!hit?.closest?.("[class]") && /Upload your files/iu.test(hit.closest("div")?.textContent ?? ""),
       hitSwallowedByEditor: !!hit?.closest?.(".ProseMirror"),
     };
   });
