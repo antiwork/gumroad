@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 ActiveRecord::Base.logger = nil
 Rails.logger.level = Logger::FATAL
 require "base64"
