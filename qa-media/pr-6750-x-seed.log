@@ -1,0 +1,22 @@
+MARK6750X seller=1
+MARK6750X A id=1 perm=demo price=1000 cust=false
+MARK6750X B id=18 perm=c price=1000 alive=true
+MARK6750X X id=19 perm=of price=3000 alive=true
+MARK6750X UPSELL id=1 cross_sell=true product=of selected=["demo"]
+MARK6750X OC code=QA6750FIXED cents=100 is_cents=true universal=true
+MARK6750X PC code=QA6750PCT pct=10 is_cents=false
+MARK6750X ARM1-FIXED line perm=demo name=QA6750 Widget A cents=100 type=fixed
+MARK6750X ARM1-FIXED line perm=of name=QA6750 Widget X (cross-sell) cents=0 type=fixed
+MARK6750X ARM1-FIXED line perm=c name=QA6750 Widget B cents=0 type=fixed
+MARK6750X ARM1-FIXED lines=3 positive_lines=1 discount_sum=100
+MARK6750X ARM1-FIXED error_code=nil partial=nil
+MARK6750X ARM2-PCT line perm=demo name=QA6750 Widget A cents= type=percent
+MARK6750X ARM2-PCT line perm=of name=QA6750 Widget X (cross-sell) cents= type=percent
+MARK6750X ARM2-PCT line perm=c name=QA6750 Widget B cents= type=percent
+MARK6750X ARM2-PCT lines=3 positive_lines=0 discount_sum=0
+MARK6750X ARM2-PCT error_code=nil partial=nil
+MARK6750X ARM3-FIXED-1LINE line perm=demo name=QA6750 Widget A cents=100 type=fixed
+MARK6750X ARM3-FIXED-1LINE line perm=of name=QA6750 Widget X (cross-sell) cents=0 type=fixed
+MARK6750X ARM3-FIXED-1LINE lines=2 positive_lines=1 discount_sum=100
+MARK6750X ARM3-FIXED-1LINE error_code=nil partial=nil
+MARK6750X DONE

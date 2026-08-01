@@ -1,0 +1,4 @@
+MARK6750R POSTFIX XFIRST sum=0 lines={"of" => 0, "demo" => 0, "c" => 0}
+MARK6750R POSTFIX XFIRST error=nil partial=nil
+MARK6750R PREFIX  XFIRST sum=100 lines={"of" => 100, "demo" => 0, "c" => 0}
+MARK6750R DONE
