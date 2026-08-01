@@ -16,7 +16,7 @@ OfferCodeDiscountComputingService.class_eval do
   # define_method — it dies with "tried to create Proc object without a block". Parenthesise.
   define_method(:optimistically_apply_to_applicable_cross_sells) do |products_data, link|
     before = products_data.transform_values { _1[:discount][:cents] }
-    orig.bind(self).call(products_data, link)
+    orig.bind_call(self, products_data, link)
     after = products_data.transform_values { _1[:discount][:cents] }
     WRITES << "cross_sell_pass for=#{link.unique_permalink} before=#{before.inspect} after=#{after.inspect}"
   end

@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
-import { chromium } from "playwright";
 import fs from "fs";
+
+import { chromium } from "playwright";
 
 const ROOT = "https://fix-gp1636-fixed-amount-once-per.apps.staging.gumroad.org";
 const OUT = "/Users/gumclaw/qa/pr6750x";
 fs.mkdirSync(OUT, { recursive: true });
-const log = (s) => console.log("MARK6750C " + s);
+const log = (s) => console.log(`MARK6750C ${s}`);
 
 const br = await chromium.launch();
 
@@ -23,9 +24,7 @@ async function leg(name, viewport) {
 
   // Scroll the cross-sell heading to the top of the frame so its card + price are in shot.
   const ok = await page.evaluate(() => {
-    const h = [...document.querySelectorAll("h1,h2,h3,h4")].find((e) =>
-      /also bought/i.test(e.textContent || ""),
-    );
+    const h = [...document.querySelectorAll("h1,h2,h3,h4")].find((e) => /also bought/iu.test(e.textContent || ""));
     if (!h) return false;
     window.scrollTo(0, window.scrollY + h.getBoundingClientRect().top - 20);
     return true;
@@ -35,12 +34,10 @@ async function leg(name, viewport) {
 
   // Read the cross-sell card's own rendered price strings.
   const card = await page.evaluate(() => {
-    const h = [...document.querySelectorAll("h1,h2,h3,h4")].find((e) =>
-      /also bought/i.test(e.textContent || ""),
-    );
-    let n = h.nextElementSibling;
+    const h = [...document.querySelectorAll("h1,h2,h3,h4")].find((e) => /also bought/iu.test(e.textContent || ""));
+    const n = h.nextElementSibling;
     const txt = n ? n.innerText : "";
-    return { text: txt, money: [...txt.matchAll(/\$-?[\d.,]+/g)].map((x) => x[0]) };
+    return { text: txt, money: [...txt.matchAll(/\$-?[\d.,]+/gu)].map((x) => x[0]) };
   });
   log(`${name} crosssell_card_text=${JSON.stringify(card.text)}`);
   log(`${name} crosssell_card_money=${JSON.stringify(card.money)}`);

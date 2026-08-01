@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
-import { chromium } from "playwright";
 import fs from "fs";
+
+import { chromium } from "playwright";
 
 const ROOT = "https://fix-gp1636-fixed-amount-once-per.apps.staging.gumroad.org";
 const OUT = "/Users/gumclaw/qa/pr6750x";
 fs.mkdirSync(OUT, { recursive: true });
-const log = (s) => console.log("MARK6750B " + s);
+const log = (s) => console.log(`MARK6750B ${s}`);
 
 // The Discounts row carries a removable code Pill as a child, so it is never a leaf node the
 // way Subtotal/Total are. Read the summary out of the rendered text instead of the DOM shape.
@@ -13,7 +14,7 @@ const readTotals = (p) =>
   p.evaluate(() => {
     const txt = document.body.innerText;
     const grab = (label) => {
-      const re = new RegExp(`${label}[\\s\\S]{0,80}?(US\\$-?[\\d.,]+)`);
+      const re = new RegExp(`${label}[\\s\\S]{0,80}?(US\\$-?[\\d.,]+)`, "u");
       return txt.match(re)?.[1] ?? null;
     };
     return { Subtotal: grab("Subtotal"), Discounts: grab("Discounts"), Total: grab("\\bTotal\\b") };
@@ -42,9 +43,9 @@ async function leg(name, viewport, code) {
   const hasX = body.includes("Widget X");
   log(`${name} cross_sell_rendered=${hasX}`);
   // Every money string on the page, so the body can quote what the buyer sees.
-  log(`${name} money=${JSON.stringify([...body.matchAll(/US\$-?[\d.,]+/g)].map((x) => x[0]))}`);
+  log(`${name} money=${JSON.stringify([...body.matchAll(/US\$-?[\d.,]+/gu)].map((x) => x[0]))}`);
 
-  if (!/Sorry/.test(body)) log(`${name} no fatal error toast`);
+  if (!/Sorry/u.test(body)) log(`${name} no fatal error toast`);
   else throw new Error(`${name}: fatal error toast on page`);
 
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: viewport.width < 500 });

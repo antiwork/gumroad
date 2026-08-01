@@ -1,17 +1,18 @@
 /* eslint-disable no-console */
-import { chromium } from "playwright";
 import fs from "fs";
+
+import { chromium } from "playwright";
 
 const ROOT = "https://fix-gp1636-fixed-amount-once-per.apps.staging.gumroad.org";
 const OUT = "/Users/gumclaw/qa/pr6750x";
 fs.mkdirSync(OUT, { recursive: true });
-const log = (s) => console.log("MARK6750D " + s);
+const log = (s) => console.log(`MARK6750D ${s}`);
 
 const readTotals = (p) =>
   p.evaluate(() => {
     const txt = document.body.innerText;
     const grab = (label) => {
-      const re = new RegExp(`${label}[\\s\\S]{0,80}?(US\\$-?[\\d.,]+)`);
+      const re = new RegExp(`${label}[\\s\\S]{0,80}?(US\\$-?[\\d.,]+)`, "u");
       return txt.match(re)?.[1] ?? null;
     };
     return { Subtotal: grab("Subtotal"), Discounts: grab("Discounts"), Total: grab("\\bTotal\\b") };
@@ -46,13 +47,13 @@ async function leg(name, viewport) {
 
   const body = await page.evaluate(() => document.body.innerText);
   if (!body.includes("Widget X")) throw new Error(`${name}: cross-sell not in cart`);
-  if (/Sorry/.test(body)) throw new Error(`${name}: fatal error toast on page`);
+  if (/Sorry/u.test(body)) throw new Error(`${name}: fatal error toast on page`);
   log(`${name} cart_lines=${["Widget A", "Widget B", "Widget X"].filter((n) => body.includes(n)).join(",")}`);
 
   // Scroll the order summary into frame.
   await page.evaluate(() => {
     const el = [...document.querySelectorAll("*")].find(
-      (e) => e.children.length === 0 && /^Subtotal$/.test((e.textContent || "").trim()),
+      (e) => e.children.length === 0 && /^Subtotal$/u.test((e.textContent || "").trim()),
     );
     if (el) window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 140);
   });
