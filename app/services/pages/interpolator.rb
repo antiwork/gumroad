@@ -11,8 +11,27 @@ class Pages::Interpolator
     # (BestOfferCodeService, ProductPresenter::Card), so the plain set price here would disagree
     # with the page this markup replaces.
     "price" => ->(product) { product.price_formatted_verbose(for_default_duration: true, discounted: true).to_s },
-    "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) }
+    "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) },
+    # Bundles show a combined summary on the native page, so a custom page must too or the
+    # two disagree. Gated on display_product_reviews? — a seller who turned reviews off on
+    # the native page has not opted into publishing them from custom markup.
+    # Nothing is written when reviews are hidden or there are none, so whatever the page
+    # already has inside the element stays: the marker degrades to the author's own copy
+    # rather than rendering "0 reviews" under a brand-new product.
+    "rating" => ->(product) { review_summary(product)&.fetch(:average)&.to_s },
+    "review-count" => ->(product) { review_summary(product)&.fetch(:count)&.to_s },
   }.freeze
+
+  # nil rather than a zeroed hash: the callers above treat nil as "leave the element alone",
+  # which is what makes a hidden or unreviewed product fall back to the author's copy.
+  def self.review_summary(product)
+    return unless product.display_product_reviews?
+
+    stats = product.is_bundle ? product.bundle_rating_stats : product.rating_stats
+    return if stats[:count].to_i.zero?
+
+    stats
+  end
 
   PROFILE_FIELDS = {
     "name" => ->(user) { user.name_or_username.to_s },
@@ -75,7 +94,13 @@ class Pages::Interpolator
 
     fragment.css("[data-gumroad-field]").each do |node|
       handler = FIELDS[node["data-gumroad-field"]]
-      node.inner_html = ERB::Util.h(handler.call(product)) if handler
+      next unless handler
+
+      value = handler.call(product)
+      # nil means "this field has nothing to say" (reviews hidden, or none yet) — leave the
+      # author's own copy in place, matching interpolate_profile. An empty STRING still writes,
+      # so a product with a blank description keeps clearing its placeholder as before.
+      node.inner_html = ERB::Util.h(value) unless value.nil?
     end
 
     # The selection params (variant/quantity/PWYW price/recurrence) are
