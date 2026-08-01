@@ -48,8 +48,7 @@ class Admin::LinksController < Admin::BaseController
 
   def publish
     begin
-      @product.is_unpublished_by_admin = false
-      @product.publish!
+      @product.publish_by_admin!
     rescue Link::LinkInvalid, WithProductFilesInvalid
       return render json: { success: false, error_message: @product.errors.full_messages.join(", ") }
     rescue => e

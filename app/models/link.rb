@@ -536,6 +536,14 @@ class Link < ApplicationRecord
     save!
   end
 
+  # Staff restore path — the only caller allowed to clear the admin-takedown marker.
+  # The clear rides along in publish!'s save!, so a publish that fails its other
+  # guards leaves the takedown intact.
+  def publish_by_admin!
+    self.is_unpublished_by_admin = false
+    publish!
+  end
+
   # Memberships are unpublished rather than deleted so existing members keep their access
   # while the listing comes off sale. Returns the disposition applied, because the caller
   # cannot infer it afterwards — `alive?` is false for both.
