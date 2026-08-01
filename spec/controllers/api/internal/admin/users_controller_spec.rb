@@ -3630,6 +3630,20 @@ describe Api::Internal::Admin::UsersController do
       # Unpublished, not deleted: the row survives so existing members keep access.
       expect(membership.deleted_at).to be_nil
       expect(membership.purchase_disabled_at).to be_present
+      expect(membership.is_unpublished_by_admin).to be(true)
+    end
+
+    it "leaves the seller unflagged when the product takedown fails" do
+      allow_any_instance_of(Link).to receive(:take_down_for_tos_violation!).and_raise(ActiveRecord::RecordInvalid)
+
+      expect do
+        expect do
+          post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+        end.to raise_error(ActiveRecord::RecordInvalid)
+      end.to not_change { user.reload.user_risk_state }
+        .and not_change { user.comments.reload.count }
+
+      expect(product.reload.deleted_at).to be_nil
     end
 
     it "records the admin API audit log with the TOS flag action key" do

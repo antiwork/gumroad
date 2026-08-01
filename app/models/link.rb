@@ -540,7 +540,8 @@ class Link < ApplicationRecord
   # cannot infer it afterwards — `alive?` is false for both.
   def take_down_for_tos_violation!
     if is_tiered_membership?
-      unpublish!
+      # by_admin: or the seller can just republish the listing we said we took down.
+      unpublish!(is_unpublished_by_admin: true)
       "unpublished"
     else
       delete!
