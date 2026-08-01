@@ -85,6 +85,20 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].size).to eq(2)
     end
 
+    # The covered-at-zero branch must still walk cross-sells: an upsell hanging off the
+    # skipped line would otherwise vanish from products_data and render at full price.
+    it "surfaces cross-sells for lines covered at zero" do
+      cross_sell_product1 = create(:product, user: seller, price_cents: 3000)
+      cross_sell_product2 = create(:product, user: seller, price_cents: 4000)
+      create(:upsell, seller:, product: cross_sell_product1, cross_sell: true, selected_products: [product])
+      create(:upsell, seller:, product: cross_sell_product2, cross_sell: true, selected_products: [product2])
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data]).to include(cross_sell_product1.unique_permalink, cross_sell_product2.unique_permalink)
+    end
+
     # Pins the limit documented in #process (gumroad-private#1650): the code lands whole on one
     # line and the remainder is dropped rather than spilling onto the next. The second line is
     # still covered, at zero. Spilling is a deliberate change and should redden here.

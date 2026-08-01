@@ -40,7 +40,10 @@ class OfferCodeDiscountComputingService
       # Skipping eligibility here is deliberate: the cart-level amount was already spent, so
       # re-checking times-of-use would report :sold_out for a line nobody is charging.
       if once_per_cart?(offer_code) && already_applied?(offer_code)
-        products_data[link.unique_permalink] = { discount: resolved_discount.merge(cents: 0) } if resolved_discount
+        if resolved_discount
+          products_data[link.unique_permalink] = { discount: resolved_discount.merge(cents: 0) }
+          optimistically_apply_to_applicable_cross_sells(products_data, link)
+        end
         next
       end
 
