@@ -116,6 +116,21 @@ describe Bundles::ProductController, inertia: true do
         expect(flash[:notice]).to be_blank
       end
 
+      # Universal codes are scoped to the bundle's *current* currency, so once
+      # the new currency is saved the old-currency ones vanish from
+      # product_and_universal_offer_codes — the controller has to capture the
+      # list before the change or these codes go stale with nothing said.
+      it "also warns about a universal fixed-amount code left behind in the old currency" do
+        create(:universal_offer_code, user: seller, amount_cents: 500, currency_type: "usd", code: "unistale")
+
+        put :update, params: { bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000 }
+
+        expect(bundle.reload.price_currency_type).to eq("eur")
+        expect(flash[:warning]).to include("unistale")
+        expect(flash[:warning]).to include("tenoff")
+        expect(flash[:notice]).to be_blank
+      end
+
       it "stays quiet when the currency did not move" do
         put :update, params: { bundle_id: bundle.external_id, price_cents: 2500 }
 

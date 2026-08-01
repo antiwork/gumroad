@@ -15,6 +15,7 @@ class Bundles::ProductController < Bundles::BaseController
     should_unpublish = params[:unpublish].present? && @bundle.published?
     was_published = @bundle.published?
     currency_before = @bundle.price_currency_type
+    offer_codes_before_currency_change = nil
 
     ActiveRecord::Base.transaction do
       @bundle.is_bundle = true
@@ -24,6 +25,10 @@ class Bundles::ProductController < Bundles::BaseController
       # follows client key order. Carries the stored amount when the form omits it.
       changing_currency = product_permitted_params.key?(:price_currency_type)
       if changing_currency
+        # universal_offer_codes scopes on the current price_currency_type, so
+        # old-currency universal codes vanish from the list the moment the new
+        # currency lands — capture the candidates while it still reads the old one.
+        offer_codes_before_currency_change = @bundle.product_and_universal_offer_codes
         carried_price_cents = product_permitted_params[:price_cents].presence || @bundle.price_cents
         @bundle.price_currency_type = product_permitted_params[:price_currency_type]
         @bundle.price_cents = carried_price_cents if carried_price_cents.present?
@@ -60,7 +65,8 @@ class Bundles::ProductController < Bundles::BaseController
     # applicable? skips the check entirely for product-specific codes. Warn like
     # LinksController#update does, or the discount silently stops quoting.
     if currency_before != @bundle.price_currency_type
-      stale_codes = @bundle.product_and_universal_offer_codes.reject do |offer_code|
+      offer_code_candidates = (offer_codes_before_currency_change || []) | @bundle.product_and_universal_offer_codes
+      stale_codes = offer_code_candidates.reject do |offer_code|
         offer_code.is_currency_valid?(@bundle) && offer_code.is_amount_valid?(@bundle)
       end.map(&:code)
 
