@@ -674,6 +674,52 @@ describe Purchase::Blockable do
         expect(housemate_row).to be_present
       end
 
+      # gumroad-private#1648 widened the unblock across sibling rows, but siblings are selected by
+      # purchaser_id and a checkout/PayPal/gifter address is unauthenticated text anyone can type.
+      # Widening those would let an unblock of this buyer deactivate a block a DIFFERENT person
+      # earned, whose address happens to sit on one of the buyer's rows.
+      it "does not unblock a third party whose address was typed into a sibling row's checkout email" do
+        create(:purchase, link: product, email: "victim@example.com", purchaser: buyer, browser_guid: "sibling-guid")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "victim@example.com")
+
+        surviving = purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "victim@example.com")).to be_present
+        # ...and the refusal is visible, so an agent judges the surviving row rather than reading
+        # an unqualified success while the buyer may still be held.
+        expect(surviving.map(&:object_value)).to include("victim@example.com")
+      end
+
+      it "does not unblock a third party whose PayPal address sits on a sibling row" do
+        create(:purchase, link: product, purchaser: buyer, browser_guid: "sibling-paypal-guid",
+                          charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "someone-else@paypal.example")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "someone-else@paypal.example")
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "someone-else@paypal.example")).to be_present
+      end
+
+      # The account-owned address is the one identifier on a sibling that is not typed in — it is
+      # delegated to the purchaser record — so widening it is the whole point of the change and
+      # must not be lost to the narrowing above.
+      it "still clears a block on the buyer's own account email reached through a sibling row" do
+        create(:purchase, link: product, email: "checkout-alias@example.com", purchaser: buyer, browser_guid: "sibling-guid-2")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: buyer.email)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: buyer.email)).to be_nil
+      end
+
+      it "still clears a block on the acting row's own checkout email" do
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: purchase.email)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: purchase.email)).to be_nil
+      end
+
       it "does not touch another buyer's blocks" do
         stranger = create(:purchase, link: product, email: "stranger@example.com", browser_guid: "stranger-guid")
         stranger.block_buyer!

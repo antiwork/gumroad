@@ -143,23 +143,46 @@ module Purchase::Blockable
     blockable_values_for(same_email_guest_purchases - sibling_buyer_purchases).each do |object_type, values|
       scopes << PlatformBlock.active.where(object_type:, object_value: values)
     end
+    # The typed-in addresses on sibling rows, which the unblock deliberately does not clear (see
+    # #blockable_values_for). Reported for the same reason as the uncorroborated guest rows: a
+    # refusal the caller cannot see reads as a successful unblock while the buyer is still held.
+    withheld_sibling_emails = blockable_values_for(sibling_buyer_purchases)[PlatformBlock::TYPES[:email]].to_a -
+                              buyer_blockable_values[PlatformBlock::TYPES[:email]].to_a
+    scopes << PlatformBlock.active.email.where(object_value: withheld_sibling_emails) if withheld_sibling_emails.any?
     return PlatformBlock.none if scopes.empty?
 
     scopes.reduce { |combined, scope| combined.or(scope) }
   end
 
   private def buyer_blockable_values
-    @_buyer_blockable_values ||= blockable_values_for([self, *sibling_buyer_purchases], extra_fingerprints: [recent_stripe_fingerprint])
+    @_buyer_blockable_values ||= blockable_values_for([self, *sibling_buyer_purchases], extra_fingerprints: [recent_stripe_fingerprint], widened_emails: false)
   end
 
-  private def blockable_values_for(purchases, extra_fingerprints: [])
+  # `widened_emails: false` keeps a sibling row's typed-in addresses out of the unblock set, and
+  # is the default for anything that CLEARS blocks. A checkout, PayPal or gifter email is
+  # unauthenticated text on a row — the buyer can put anyone's address there, and a gift row
+  # legitimately carries the recipient's. Siblings are selected by `purchaser_id`, so widening
+  # those would let an unblock of this buyer deactivate a PlatformBlock earned by a different
+  # person whose address happens to sit on one of the buyer's rows. Only `purchaser_email` is
+  # account-owned (it is delegated to the purchaser record), so that is the one a sibling
+  # contributes; the acting row's own addresses stay in scope because the admin is acting on it.
+  #
+  # Guids and card fingerprints ARE widened from siblings, for the reason #unblock_buyer! gives:
+  # they name a browser and a physical card, not a string somebody typed.
+  private def blockable_values_for(purchases, extra_fingerprints: [], widened_emails: true)
     guids = Set.new
     emails = Set.new
     fingerprints = Set.new
 
     purchases.each do |purchase|
       guids << purchase.browser_guid
-      emails.merge([purchase.email, purchase.paypal_email, purchase.gifter_email, purchase.purchaser_email])
+      emails.merge(
+        if widened_emails || purchase == self
+          [purchase.email, purchase.paypal_email, purchase.gifter_email, purchase.purchaser_email]
+        else
+          [purchase.purchaser_email]
+        end
+      )
       fingerprints << purchase.charge_processor_fingerprint
     end
     fingerprints.merge(extra_fingerprints)
