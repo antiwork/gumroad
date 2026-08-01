@@ -144,6 +144,9 @@ module TestRedisIsolation
       # would keep serving the databases this process inherited.
       Sidekiq.default_configuration.instance_variable_set(:@redis, nil)
 
+      # Modis has Sidekiq's memoization trap too, neutralized rather than absent: its pool
+      # factory reads redis_options at connection-create time, and connection_pool defaults
+      # to auto_reload_after_fork. If either changes, clear Modis.connection_pools here.
       Modis.redis_options = { url: "redis://#{env.fetch('RPUSH_REDIS_HOST')}" } if defined?(Modis)
 
       return unless defined?(Rack::Attack)

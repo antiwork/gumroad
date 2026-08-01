@@ -424,8 +424,9 @@ describe TestRedisIsolation do
     it "re-leases from the boot endpoints so repeated forks do not walk the floor upward" do
       # Each fork inherits an ENV already rewritten to a leased block. Deriving the floor
       # from that rather than the original .env.test values would push it up every time.
-      # Asserted as "every block sits in the range the boot floor allows" rather than
-      # "the blocks are contiguous": a sibling example may hold a slot in between.
+      # Each block is tied to the boot floor's own arithmetic rather than to a range: a
+      # walked floor maps a different slot number onto the same databases, so a range
+      # assertion accepts exactly the collision this file exists to prevent.
       skip_without_a_free_block
       allow(described_class).to receive(:reconnect_stores)
       capture_claims
@@ -435,9 +436,11 @@ describe TestRedisIsolation do
       2.times { expect(fork_command(env)).to be_present }
 
       floor = described_class.reserved_databases(base_env.values_at(*described_class::STORE_ENV_VARS).map { parse(it) })
-      ceiling = floor + described_class.slot_count(databases:, reserved: floor) * stores
       expect(claims.length).to eq(3)
-      expect(claims.map { it.fetch(:databases).min }).to all(be_between(floor, ceiling))
+      claims.each do |claim|
+        expect(claim.fetch(:databases))
+          .to eq(described_class.databases_for_slot(claim.fetch(:slot), databases:, reserved: floor))
+      end
       expect(claims.flat_map { it.fetch(:databases) }.uniq.length).to eq(3 * stores)
     end
 
@@ -456,6 +459,8 @@ describe TestRedisIsolation do
         forked = claims.last
         expect($redis.connection.fetch(:db)).to eq(forked.fetch(:databases).first)
         expect(Sidekiq.redis { |connection| connection.config.db }).to eq(forked.fetch(:databases)[1])
+        expect(Modis.with_connection { it.connection.fetch(:db) }).to eq(forked.fetch(:databases)[2])
+        expect(Rack::Attack.cache.store.connection.fetch(:db)).to eq(forked.fetch(:databases)[3])
       ensure
         $redis = original
         described_class.reconnect_stores(ENV)
