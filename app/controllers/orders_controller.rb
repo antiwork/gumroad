@@ -54,6 +54,10 @@ class OrdersController < ApplicationController
     order_params = build_order_params.merge(
       confirmation_token: params[:confirmation_token].presence,
       payment_element_mount_currency: params[:payment_element_mount_currency].presence,
+      # The signed method list this checkout page mounted its Element with. Same reason as the
+      # ConfirmationToken above for keeping it out of permitted_order_params: only this endpoint
+      # accepts it. Verified (not trusted) in Order::PreparePaymentIntentService.
+      payment_method_list_token: params[:payment_method_list_token].presence,
     )
 
     order, purchase_responses, offer_codes = Order::CreateService.new(

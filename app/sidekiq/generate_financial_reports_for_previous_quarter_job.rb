@@ -5,6 +5,11 @@ class GenerateFinancialReportsForPreviousQuarterJob
   include FinanceReportFailureAlert
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  # Quarterly, enqueued with no args, so the digest is constant. The attempt only enqueues the
+  # per-report jobs.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 15.minutes
+
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the quarter the failed run was for (not whatever "last quarter" is then).
   def self.default_alert_args(reference_time = Time.current)

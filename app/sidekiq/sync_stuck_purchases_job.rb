@@ -3,6 +3,8 @@
 class SyncStuckPurchasesJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   def perform
     purchase_creation_time_range = Range.new(3.days.ago, 4.hours.ago)

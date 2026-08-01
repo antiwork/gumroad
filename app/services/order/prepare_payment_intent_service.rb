@@ -820,9 +820,32 @@ class Order::PreparePaymentIntentService
       )
     end
 
-    # This is the Element's baseline menu; prepare may narrow it but must retain the selected method.
+    # Non-nil once block_ineligible_for_client_confirm has passed: the deferred intent's
+    # payment_method_types must equal the Payment Element's or Stripe rejects the ConfirmationToken.
+    #
+    # The checkout page's own signed list wins over a second resolver run when it verifies. Two of
+    # the resolver's inputs are sampled from a different request here than at page load — the buyer's
+    # country and the Klarna amount window — so re-resolving is what produced the confirm failures
+    # in gumroad-private#1528. Re-resolving stays the fallback for pages that predate the token, and
+    # the strips below run over either list.
     def resolved_payment_method_types
-      payment_method_resolution.payment_method_types
+      issued_payment_method_types || payment_method_resolution.payment_method_types
+    end
+
+    def issued_payment_method_types
+      return @issued_payment_method_types if defined?(@issued_payment_method_types)
+
+      submitted = params[:payment_method_list_token].presence
+      issued = Checkout::PaymentMethodListToken.verify(submitted, sellers: [seller])
+      # Expiry (a long-open tab) is routine here; a tampered token or a presenter/service
+      # disagreement about the seller set is not. Warn rather than error because the bucket mixes
+      # both, and log at all because a silent fallback is what made #1528 invisible.
+      Rails.logger.warn("Unverifiable payment_method_list_token for order #{order.id}") if submitted.present? && issued.nil?
+      # The token proves the list came from us, not that every method on it may still be offered:
+      # it was signed before a flag could roll back or a connected account could lose a capability.
+      # So each method still passes the same policy allowlist a client-supplied ConfirmationToken
+      # type does (gumroad-private#1143). Dropping to nil when nothing survives re-resolves.
+      @issued_payment_method_types = issued&.select { payment_method_offerable?(_1) }.presence
     end
 
     # The buyer confirmed with a method-forced local method, so the intent must list that
@@ -945,8 +968,25 @@ class Order::PreparePaymentIntentService
       # after the Element mounts must not re-append alipay onto a non-US connected account's
       # intent, where the incompatible entry fails the whole intent create
       # (gumroad-private#1026). See Checkout::PaymentMethodResolver#alipay_methods. The
-      # per-account capability re-check below still applies on top of it.
-      return nil unless method_type.in?(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES) ||
+      # per-account capability re-check inside payment_method_offerable? applies on top of it.
+      return nil unless payment_method_offerable?(method_type)
+
+      forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
+      return method_type if forced_currency.blank?
+
+      intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      forced_currency == intent_currency ? method_type : nil
+    end
+
+    # Whether this seller could legitimately be offering the method right now: the resolver's POLICY
+    # sources (always-on launched methods, the ACH opt-in, Klarna's and Alipay's launch flag plus
+    # merchant-account gate, the forced-currency locals) intersected with what the charged ACCOUNT
+    # can accept. Shared by the previewed-method append and the issued-list echo because both take a
+    # method list the CLIENT supplied: neither may enable a method past its rollout gate, and both
+    # must fail closed on capability drift rather than putting an entry Stripe will reject on the
+    # intent (which fails the whole cart, cards included — gumroad-private#1143, #1026).
+    def payment_method_offerable?(method_type)
+      offerable = method_type.in?(Checkout::PaymentMethodResolver::LAUNCHED_PAYMENT_METHOD_TYPES) ||
         (method_type.in?(Checkout::PaymentMethodResolver::SELLER_OPT_IN_PAYMENT_METHOD_TYPES) && seller.ach_payments_enabled?) ||
         (method_type == Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE &&
           Feature.active?(Checkout::PaymentMethodResolver::KLARNA_LAUNCH_FEATURE, seller) &&
@@ -956,21 +996,7 @@ class Order::PreparePaymentIntentService
           Checkout::PaymentMethodResolver.alipay_supported_merchant_account?(seller)) ||
         Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
 
-      # The policy allowlist above is not enough on its own: it mirrors the resolver's
-      # POLICY sources but the resolver's final step is an intersection with what the charged
-      # ACCOUNT can accept (launched & account_supported_methods). For a direct-charge seller
-      # whose capability snapshot dropped a method (link/cashapp/us_bank_account deactivated
-      # after the Element mounted), re-appending the token's type puts an incompatible entry
-      # on the intent and Stripe rejects the ENTIRE intent create — failing the whole cart,
-      # cards included (the gumroad-private#1026 failure mode). Re-check the same gate here so
-      # capability drift fails the stale token closed at confirm instead.
-      return nil unless account_supports_previewed_method?(method_type)
-
-      forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
-      return method_type if forced_currency.blank?
-
-      intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
-      forced_currency == intent_currency ? method_type : nil
+      offerable && account_supports_previewed_method?(method_type)
     end
 
     # Mirrors the resolver's account_supported_methods for the single previewed method: the

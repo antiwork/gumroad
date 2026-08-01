@@ -25,6 +25,8 @@
 class CreateMissingDisputeEvidenceJob
   include Sidekiq::Job
   sidekiq_options retry: 3, queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   # The states a dispute can still be answered in. Won, lost, and closed disputes are already
   # decided, so a missing evidence row on one of those is history rather than something to act

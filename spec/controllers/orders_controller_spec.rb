@@ -2491,6 +2491,22 @@ describe OrdersController, :vcr do
       expect(response.parsed_body["success"]).to be(true)
     end
 
+    # Both halves of the token's threading are pinned here: the controller has to merge it into the
+    # order params, and Order::CreateService has to keep it OUT of the Purchase attributes. The POST
+    # runs the real Order::CreateService, so letting the token through would raise
+    # UnknownAttributeError in build_purchase before this expectation could even be reached.
+    it "passes the signed payment-method list token to the prepare service without treating it as a Purchase attribute" do
+      token = Checkout::PaymentMethodListToken.issue(payment_method_types: %w[card link], sellers: [seller])
+
+      expect(Order::PreparePaymentIntentService).to receive(:new).with(
+        hash_including(params: hash_including(payment_method_list_token: token))
+      ).and_call_original
+
+      post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_method_list_token: token }.merge(common_params)
+
+      expect(response.parsed_body["line_items"]["unique-id-0"]["requires_payment_confirmation"]).to be(true)
+    end
+
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
       allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
       allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)

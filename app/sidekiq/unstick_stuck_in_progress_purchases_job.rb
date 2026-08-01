@@ -9,6 +9,11 @@
 class UnstickStuckInProgressPurchasesJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  # Walks the 3-90 day in_progress window once a day and re-checks each row against the charge
+  # processor, so the attempt scales with the backlog rather than with a fixed page. An hour is
+  # well past anything observed and still leaves the daily interval a wide margin.
+  recurring_lock_ttl max_attempt: 1.hour
 
   def perform(purchase_ids = nil)
     Purchase::UnstickStuckInProgressService.process(dry_run: false, ids: purchase_ids)

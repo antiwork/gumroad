@@ -35,6 +35,91 @@ describe Page do
     end
   end
 
+  describe "content moderation" do
+    let(:strategy_result) { Struct.new(:status, :reasoning, keyword_init: true) }
+
+    def stub_strategies(blocklist: "compliant", classifier: "compliant", prompt: "compliant", reasons: [])
+      {
+        ContentModeration::Strategies::BlocklistStrategy => blocklist,
+        ContentModeration::Strategies::ClassifierStrategy => classifier,
+        ContentModeration::Strategies::PromptStrategy => prompt,
+      }.each do |klass, status|
+        allow(klass).to receive(:new).and_return(
+          instance_double(klass, perform: strategy_result.new(status:, reasoning: status == "flagged" ? reasons : []))
+        )
+      end
+    end
+
+    before do
+      Feature.activate(:content_moderation)
+      stub_strategies
+    end
+
+    it "blocks a page whose content is flagged and tells the seller what to change" do
+      stub_strategies(blocklist: "flagged", reasons: ["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
+
+      page = described_class.new(pageable: user, slug: "about", title: "About", custom_html: "<p>Anything</p>")
+
+      expect(page).not_to be_valid
+      expect(page.errors[:base].first).to include("violent content")
+      expect(page.errors[:base].first).to include("About")
+    end
+
+    it "saves a page whose content passes" do
+      page = described_class.new(pageable: user, slug: "about", title: "About", custom_html: "<p>Hand-lettered posters</p>")
+
+      expect(page).to be_valid
+    end
+
+    it "moderates the root custom HTML takeover as well as slugged pages" do
+      stub_strategies(blocklist: "flagged", reasons: ["Matched blocked word: forbidden"])
+
+      expect(described_class.new(pageable: user, custom_html: "<p>Anything</p>")).not_to be_valid
+    end
+
+    it "moderates rich text pages written in the editor" do
+      stub_strategies(blocklist: "flagged", reasons: ["Matched blocked word: forbidden"])
+
+      expect(described_class.new(pageable: user, slug: "about", title: "About", content: "<p>Anything</p>")).not_to be_valid
+    end
+
+    it "does not re-moderate a save that leaves the content alone" do
+      page = described_class.create!(pageable: user, slug: "about", title: "About", content: "<p>Hi</p>")
+      expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+      page.update!(slug: "about-us")
+    end
+
+    it "skips moderation for VIP creators" do
+      stub_strategies(blocklist: "flagged", reasons: ["Matched blocked word: forbidden"])
+      allow(user).to receive(:vip_creator?).and_return(true)
+
+      expect(described_class.new(pageable: user, slug: "about", title: "About", content: "<p>Anything</p>")).to be_valid
+    end
+
+    it "moderates the submitted HTML rather than the sanitized result" do
+      # marquee is dropped by the sanitizer but its text is visible to the
+      # extractor, so this text only reaches moderation if the check runs on the
+      # submitted document.
+      expect(ContentModeration::Strategies::BlocklistStrategy).to receive(:new) do |text:, image_urls:|
+        expect(text).to include("hiddenFromSanitizer")
+        instance_double(ContentModeration::Strategies::BlocklistStrategy, perform: strategy_result.new(status: "compliant", reasoning: []))
+      end
+
+      described_class.new(pageable: user, slug: "about", title: "About", custom_html: "<p>Visible copy</p><marquee>hiddenFromSanitizer</marquee>").valid?
+    end
+
+    it "lets a seller unpublish a page without waiting on the moderation service" do
+      page = described_class.create!(pageable: user, custom_html: "<p>Hand-lettered posters</p>")
+      stub_strategies(blocklist: "flagged", reasons: ["Matched blocked word: forbidden"])
+      expect(ContentModeration::ContentExtractor).not_to receive(:new)
+
+      page.custom_html = nil
+
+      expect(page).to be_valid
+    end
+  end
+
   describe "slugged pages (first-class Pages)" do
     it "requires a title" do
       page = described_class.new(pageable: user, slug: "about", content: "<p>Hi</p>")

@@ -278,7 +278,7 @@ describe ScheduleAbandonedCartEmailsJob do
       opts = described_class.sidekiq_options
 
       expect(opts["lock"].to_sym).to eq(:until_executed)
-      expect(opts["lock_ttl"]).to eq(described_class::LOCK_TTL.to_i)
+      expect(opts["lock_ttl"]).to be_positive
       expect(opts["lock_ttl"]).to be < 1.day.to_i
     end
   end

@@ -17,6 +17,7 @@ class ApplicationController < ActionController::Base
   include UtmLinkTracking
   include RackMiniProfilerAuthorization
   include InertiaRendering
+  include PromotesDashboardNavItems
   include PageMeta::Base, PageMeta::Analytics
 
   before_action :set_default_page_title

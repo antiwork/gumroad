@@ -4,6 +4,11 @@ class SyncStuckPayoutsJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :default, lock: :until_executed
 
+  # Two static-arg entries (daily STRIPE, weekly PAYPAL), so each digest is constant. The attempt
+  # is one processor round-trip per stuck payout, and a wide backlog is exactly when it is slow.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 2.hours
+
   def perform(processor)
     stuck_payments(processor).find_each do |payment|
       Rails.logger.info("Syncing #{processor} payout #{payment.id} stuck in #{payment.state} state")

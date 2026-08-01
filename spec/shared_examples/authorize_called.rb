@@ -94,7 +94,10 @@ RSpec.shared_context "with switching account to user with given role for seller"
 
     login_as user_with_role_for_seller
     visit(options[:host] ? settings_main_url(host: options[:host]) : settings_main_path)
-    within "nav[aria-label='Main']" do
+    # Scoped to the footer, where the account switcher lives: the link list also carries a
+    # disclosure button now ("Everything else"), so a nameless lookup across the whole nav is
+    # ambiguous — and this user's name may be nil.
+    within "nav[aria-label='Main'] footer" do
       expect(page).to have_selector(:disclosure_button, user_with_role_for_seller.name)
       toggle_disclosure(user_with_role_for_seller.name, expand: true)
     end

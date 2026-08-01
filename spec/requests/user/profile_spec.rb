@@ -38,6 +38,8 @@ describe "User profile page", type: :system, js: true do
         expect(page).to have_menuitem("Unbecome")
       end
       toggle_disclosure "#{creator.display_name}", expand: false
+      # Profile starts under "Everything else" until the seller uses it (DashboardNav).
+      within("nav[aria-label='Main']") { click_on "Everything else" }
       click_on "Profile"
 
       logout

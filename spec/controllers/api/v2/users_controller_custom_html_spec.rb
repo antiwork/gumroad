@@ -223,6 +223,16 @@ describe Api::V2::UsersController do
       expect(preview_html).to eq(stored_html)
     end
 
+    it "reports a moderation block, so the preview agrees with the PUT that would reject it" do
+      allow(ContentModeration::ModerateRecordService).to receive(:check)
+        .and_return(ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["Matched blocked word: forbidden"]))
+
+      post :preview_custom_html, params: { format: :json, access_token: @token.token, custom_html: "<section><h1>Copy</h1></section>" }
+
+      expect(response.parsed_body["success"]).to eq(false)
+      expect(response.parsed_body["message"]).to match(/content guidelines/i)
+    end
+
     it "rejects oversized input before the sanitizer parses it" do
       oversized = "<section>#{"a" * Page::MAX_CUSTOM_HTML_LENGTH}</section>"
 

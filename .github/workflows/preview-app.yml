@@ -12,6 +12,11 @@ name: Preview app
 # preview_gate.sh runs on every branch build and uploads the preview pipeline
 # regardless of how the build was started. If this job is skipped (or its
 # credentials are absent) the push still produces a preview app.
+#
+# Keep BUILDKITE_PIPELINE unset while Buildkite's native GitHub push integration
+# is building branches — setting it makes every push start TWO builds of the same
+# commit (the native one and this API-triggered one). Only configure these vars
+# if that integration is turned off.
 on:
   push:
     branches-ignore:
@@ -44,15 +49,18 @@ jobs:
             exit 0
           fi
 
+          # Build the payload with jq — branch names may legally contain characters
+          # (double quotes, backslashes) that would break a hand-interpolated JSON
+          # heredoc and get the request rejected.
+          payload=$(jq -cn --arg commit "$HEAD_SHA" --arg branch "$HEAD_REF" '{
+            commit: $commit,
+            branch: $branch,
+            message: ("Preview app for " + $branch),
+            ignore_pipeline_branch_filters: true
+          }')
+
           curl -fsSL -X POST \
             "https://api.buildkite.com/v2/organizations/${BUILDKITE_ORG}/pipelines/${BUILDKITE_PIPELINE}/builds" \
             -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d @- <<JSON
-          {
-            "commit": "${HEAD_SHA}",
-            "branch": "${HEAD_REF}",
-            "message": "Preview app for ${HEAD_REF}",
-            "ignore_pipeline_branch_filters": true
-          }
-          JSON
+            -d "$payload"

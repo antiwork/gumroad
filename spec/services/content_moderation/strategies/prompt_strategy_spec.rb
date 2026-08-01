@@ -389,6 +389,19 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
 
       expect(client).to have_received(:chat).at_least(:once)
     end
+
+    it "sends the same images on every call, so repeated preset evaluations judge one set" do
+      strategy = described_class.new(
+        text: "test",
+        image_urls: (1..25).map { |n| "https://cdn.example.com/#{n}.png" }
+      )
+
+      first = strategy.send(:build_messages, "rules").last[:content].select { |part| part[:type] == "image_url" }
+      second = strategy.send(:build_messages, "rules").last[:content].select { |part| part[:type] == "image_url" }
+
+      expect(first.size).to eq(described_class::MAX_IMAGES_PER_PRESET)
+      expect(second).to eq(first)
+    end
   end
 
   context "when OpenAI times out" do

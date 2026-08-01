@@ -261,6 +261,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
       presentment_amount_cents: 4_990,
       listed_currency_display: listedCurrencyDisplay,
       payment_method_types: ["card", "pix"],
+      payment_method_list_token: null,
       stripe_link_enabled: false,
       stripe_connect_account_id: null,
     },
