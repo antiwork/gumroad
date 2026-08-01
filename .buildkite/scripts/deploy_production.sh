@@ -139,18 +139,20 @@ run_healthcheck_waits() {
 # A wait that finishes early goes stale while the other one is still busy: a protected job
 # starting in that window would never be seen again before the deploy. Serially the
 # long-running check ran last, so it was always fresh at deploy time — restore that by
-# rechecking it after the parallel waits drain and re-entering the waits if it went busy
-# again. Only the long-running blocker gets this treatment: payout staleness is accepted by
-# design (an interrupted slice is re-run by Sidekiq, hence proceed-on-timeout), and looping
-# on it would break its promise of never holding a deploy more than its own wait budget.
+# rechecking it after the parallel waits drain and re-waiting if it went busy again. Only
+# the long-running blocker gets this treatment, and only IT re-waits on retries: payout
+# staleness is accepted by design (an interrupted slice is re-run by Sidekiq, hence
+# proceed-on-timeout), and re-entering the payout wait each round would multiply its
+# 45-minute budget by the confirmation rounds — up to 225 extra minutes against the
+# deploy step's 240-minute allowance.
 # 503 loops. A confirmation poll that cannot be read (404, LB 5xx, curl's 000) is NOT
 # clearance: this is a fresh read taken after the waits cleared, so it gets the same
 # fail-safe-window semantics the waits use — skip inside the window, proceed outside it.
 # Only 200 proceeds unconditionally.
 CONFIRMATION_ROUNDS=5
 confirmation_round=1
+run_healthcheck_waits
 while true; do
-  run_healthcheck_waits
   long_status=$(poll_healthcheck "$LONG_RUNNING_JOBS_HEALTHCHECK_URL")
   if [ "$long_status" = "200" ]; then
     break
@@ -169,6 +171,14 @@ while true; do
   fi
   logger "Long-running job busy again after the waits cleared — waiting again (confirmation round $confirmation_round/$CONFIRMATION_ROUNDS)"
   confirmation_round=$((confirmation_round + 1))
+  long_rc=0
+  wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" 40 skip \
+    "$LONG_RUNNING_FAILSAFE_WINDOW_TEST" || long_rc=$?
+  if [ "$long_rc" -eq "$SKIP_DEPLOY" ]; then
+    exit 0
+  elif [ "$long_rc" -ne 0 ]; then
+    exit "$long_rc"
+  fi
 done
 
 ECR_REGISTRY=${ECR_REGISTRY}
