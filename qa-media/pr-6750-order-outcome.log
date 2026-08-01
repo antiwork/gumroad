@@ -1,0 +1,7 @@
+MARK6750 purchases n=2
+MARK6750 PURCHASE id=16 link=QA6750 Widget B price_cents=900 displayed=900 total=900 state=successful err=nil offer="QA6750FIXED" succeeded=true
+MARK6750 PURCHASE id=17 link=QA6750 Widget A price_cents=900 displayed=900 total=900 state=failed err="perceived_price_cents_not_matching" offer="QA6750FIXED" succeeded=false
+MARK6750 CHARGED_TOTAL=900 (quoted 1900) lines_succeeded=1/2
+MARK6750 FAILED=[["QA6750 Widget A", "perceived_price_cents_not_matching"]]
+MARK6750 code_uses=1
+MARK6750 DONE
