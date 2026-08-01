@@ -466,14 +466,10 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
-    # Same problem, different field. The isolated identity call swallows its rejection, so the main
-    # payload still lands and the metadata marker still advances — which makes the next save diff the
-    # compliance record against itself and drop the identifier the seller is waiting on. Without this
-    # the rejected ID is only ever retried if something else happens to change it. Scoped to the
-    # mismatch that produces these notes, so a normal save does not pay for the lookup.
-    if account_country_conflicts_with_legal_entity?(stripe_account_country(stripe_account), country_code)
-      force_identity_into_diff!(diff_attributes, current_attributes, user)
-    end
+    # Same problem, different field — see force_identity_into_diff!. Deliberately NOT scoped to the
+    # mismatch: the cohort's natural resolution is the seller correcting their legal-entity country,
+    # and on that save the identifier must go back on the payload for the note to ever be retired.
+    force_identity_into_diff!(diff_attributes, current_attributes, user)
 
     account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
     updated_stripe_account = account_update.stripe_account
@@ -536,7 +532,7 @@ module StripeMerchantAccountManager
     identity_attributes = {}
     if account_country_conflicts_with_legal_entity?(account_country, legal_entity_country)
       identity_attributes = only_identity_fields(diff_attributes)
-      attributes = without_account_country_validated_fields(diff_attributes.deep_dup)
+      attributes = without_account_country_validated_fields(diff_attributes)
       attributes = without_identity_fields(attributes) if identity_attributes.present?
       if attributes != diff_attributes
         record_service_agreement_failure_note(user, nil) if notify
@@ -549,7 +545,11 @@ module StripeMerchantAccountManager
       end
     end
 
+    # Snapshot before the call for the same reason the isolated path does: only notes that predate
+    # this request describe a state this request can have resolved.
+    stale_note_ids = identity_notes_resolved_by(user, attributes)
     updated = Stripe::Account.update(stripe_account.id, force_utf8_encoding(attributes))
+    clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     # After the main payload lands, not before: a rejected identifier must not take the fields that
     # would otherwise have succeeded down with it.
     sent_identity = submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country)
@@ -651,8 +651,10 @@ module StripeMerchantAccountManager
   private_constant :IDENTITY_SUBHASH_KEYS
 
   # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
-  # address" from "Stripe refused your tax ID", because only the second is the seller's to fix.
-  IDENTITY_REJECTION_NOTE_PREFIX = "Stripe rejected tax/national ID"
+  # address" from "Stripe has not taken your tax ID", because only the second is the seller's to
+  # fix. Worded around acceptance rather than rejection because the same note also marks an
+  # identifier whose isolated call never returned a verdict.
+  IDENTITY_REJECTION_NOTE_PREFIX = "Stripe has not accepted tax/national ID"
 
   # Each identifier is a separate Stripe requirement that can be rejected independently, so each
   # gets its own note namespace. Sharing one would let a representative success clear a company
@@ -711,36 +713,45 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.submit_entity_identity_fields(user, stripe_account, entity_key, entity_attributes, account_country)
-    return false if entity_attributes.blank?
-
     stale_note_ids = identity_rejection_note_ids(user, scope: entity_key)
     Stripe::Account.update(stripe_account.id, force_utf8_encoding(entity_key => entity_attributes))
     clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     true
-  rescue Stripe::InvalidRequestError => e
-    record_identity_rejection_note(user, e, account_country, scope: entity_key)
-    Rails.logger.warn "Stripe rejected the #{entity_key} identity fields for user #{user&.id} on a " \
-                      "#{account_country.inspect} account: #{e.message}"
+  rescue Stripe::StripeError => e
+    # Note first, then decide whether to re-raise: the main payload has already advanced the
+    # compliance marker, so a call that dies without leaving the marker behind is never retried.
+    record_identity_rejection_note(user, e, account_country, scope: entity_key, confirmed: e.is_a?(Stripe::InvalidRequestError))
+    Rails.logger.warn "Stripe did not accept the #{entity_key} identity fields for user #{user&.id} on a " \
+                      "#{account_country.inspect} account: #{e.class}: #{e.message}"
+    # A verdict is the case this method exists to swallow. Anything else is a transport or
+    # permission failure the caller still needs to see.
+    raise unless e.is_a?(Stripe::InvalidRequestError)
     false
   end
 
-  # One note per rejection reason, refreshed rather than accumulated: the seller retries this save
-  # repeatedly and a note per attempt would bury the payout notes (the same reasoning as the
-  # service-agreement note, which is written once per account).
+  # One note per reason, refreshed rather than accumulated: the seller retries this save repeatedly
+  # and a note per attempt would bury the payout notes.
   #
-  # Deliberately NOT gated on the caller's `notify`, unlike the service-agreement and postal-code
-  # notes: this note doubles as the retry marker `force_identity_into_diff!` consults, so a rejection
-  # first seen on a notify: false sweep would otherwise leave no state behind and never be re-sent.
-  # The dedup is what keeps the silent sweep from accumulating notes, and the note is never
-  # seller-visible either way.
+  # Deliberately NOT gated on the caller's `notify`, unlike the sibling service-agreement and
+  # postal-code notes: this note doubles as the retry marker `force_identity_into_diff!` consults,
+  # so a rejection first seen on a notify: false sweep would leave no state and never be re-sent.
+  #
+  # `confirmed: false` means Stripe never judged the identifier (transport, rate limit, permissions)
+  # — same retry marker, different claim, because support must not chase a rejection Stripe never
+  # made.
   private_class_method
-  def self.record_identity_rejection_note(user, error, account_country, scope:)
+  def self.record_identity_rejection_note(user, error, account_country, scope:, confirmed: true)
     return if user.blank?
 
     prefix = identity_rejection_note_prefix(scope)
-    detail = error.respond_to?(:message) && error&.message.present? ? error.message.to_s.truncate(300) : "no reason given"
-    content = "#{prefix} — Stripe account country #{account_country.inspect} " \
-              "validates the ID against itself, not the seller's legal-entity country: #{detail}"
+    detail = error&.message.presence&.to_s&.truncate(300) || "no reason given"
+    reason = if confirmed
+      "Stripe account country #{account_country.inspect} validates the ID against itself, not the " \
+        "seller's legal-entity country"
+    else
+      "the isolated call failed before Stripe judged the ID (#{error.class})"
+    end
+    content = "#{prefix} — #{reason}: #{detail}"
 
     user.with_lock do
       existing = user.comments.with_type_payout_note.alive
@@ -754,6 +765,20 @@ module StripeMerchantAccountManager
   rescue => e
     Rails.logger.error "Failed to record Stripe identity-rejection payout note for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+  end
+
+  # The isolated call only runs while the countries disagree, so the cohort's natural resolution —
+  # the seller corrects their legal-entity country — takes the identifier back onto the main payload
+  # and would otherwise leave the note behind forever, pointing support at a verification that is no
+  # longer blocked. Only entities whose identifier is actually on this payload are cleared.
+  private_class_method
+  def self.identity_notes_resolved_by(user, attributes)
+    ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.flat_map do |entity_key|
+      entity = attributes[entity_key]
+      next [] unless entity.is_a?(Hash) && entity.slice(*IDENTITY_SUBHASH_KEYS).compact_blank.any?
+
+      identity_rejection_note_ids(user, scope: entity_key)
+    end
   end
 
   # Snapshot of the notes this scope's clear is allowed to remove, taken BEFORE the Stripe call.
@@ -872,18 +897,22 @@ module StripeMerchantAccountManager
     # (gumroad-private#1575).
     person_identity_attributes = {}
     account_country = stripe_account_country(stripe_account)
+    # Same retry gap as the account path, and unscoped for the same reason — see
+    # force_identity_into_diff!. Hand-rolled because the person payload is flat, not keyed by entity.
+    if identity_rejection_note_ids(user, scope: :representative).any?
+      outstanding = current_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
+      diff_attributes = diff_attributes.merge(outstanding) if outstanding.present?
+      diff_attributes = diff_attributes.except(:ssn_last_4) if diff_attributes[:id_number].present?
+    end
     if account_country_conflicts_with_legal_entity?(account_country, user_compliance_info.legal_entity_country_code)
-      # Same retry gap as the account path: the isolated call swallows its rejection, so an unchanged
-      # save diffs the representative's identifier away and never re-sends it. An outstanding note
-      # means Stripe has not accepted it, so put it back.
-      if identity_rejection_note_ids(user, scope: :representative).any?
-        outstanding = current_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
-        diff_attributes = diff_attributes.merge(outstanding) if outstanding.present?
-        diff_attributes = diff_attributes.except(:ssn_last_4) if diff_attributes[:id_number].present?
-      end
       person_identity_attributes = diff_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
       diff_attributes = diff_attributes.except(*IDENTITY_SUBHASH_KEYS) if person_identity_attributes.present?
     end
+
+    # See identity_notes_resolved_by: once the countries agree the identifier rides the main person
+    # payload again, and this is the only place left that can retire the note.
+    resolved_note_ids = diff_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank.any? ?
+      identity_rejection_note_ids(user, scope: :representative) : []
 
     begin
       Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
@@ -908,6 +937,7 @@ module StripeMerchantAccountManager
       end
       Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(diff_attributes))
     end
+    clear_identity_rejection_notes(user, note_ids: resolved_note_ids)
     submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country)
     ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
   end
@@ -923,10 +953,11 @@ module StripeMerchantAccountManager
     Stripe::Account.update_person(stripe_account.id, stripe_person.id, force_utf8_encoding(identity_attributes))
     clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     true
-  rescue Stripe::InvalidRequestError => e
-    record_identity_rejection_note(user, e, account_country, scope: :representative)
-    Rails.logger.warn "Stripe rejected the representative's identity fields for user #{user&.id} on a " \
-                      "#{account_country.inspect} account: #{e.message}"
+  rescue Stripe::StripeError => e
+    record_identity_rejection_note(user, e, account_country, scope: :representative, confirmed: e.is_a?(Stripe::InvalidRequestError))
+    Rails.logger.warn "Stripe did not accept the representative's identity fields for user #{user&.id} on a " \
+                      "#{account_country.inspect} account: #{e.class}: #{e.message}"
+    raise unless e.is_a?(Stripe::InvalidRequestError)
     false
   end
 

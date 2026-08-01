@@ -9321,7 +9321,7 @@ describe StripeMerchantAccountManager, :vcr do
         allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
           stripe_account = original_stripe_account_retrieve.call(*args)
           stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
-          stripe_account["country"] = stripe_account_country
+          stripe_account["country"] = @stripe_account_country_override || stripe_account_country
           stripe_account
         end
       end
@@ -9676,6 +9676,71 @@ describe StripeMerchantAccountManager, :vcr do
               expect(attributes[:individual][:id_number]).to eq("1234567890")
             end
           end
+        end
+
+        # The main payload has already advanced the compliance marker by the time the isolated call
+        # runs, so a call that dies without leaving a note behind is never retried at all. A
+        # transport failure is exactly that case, and it is not a verdict — the caller still sees it.
+        it "leaves a retry marker and re-raises when the isolated call fails without a verdict" do
+          transport = Stripe::APIConnectionError.new("Connection to Stripe timed out")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise transport if attributes.dig(:individual, :id_number).present?
+          end
+
+          expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::APIConnectionError)
+
+          note = user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                     .last
+          expect(note).to be_present
+          # Support must not chase a rejection Stripe never made.
+          expect(note.content).to include("before Stripe judged the ID")
+          expect(note.content).not_to include("validates the ID against itself")
+        end
+
+        # ...and that marker has to actually drive the re-send, or recording it bought nothing.
+        it "re-sends an identifier whose call never returned a verdict" do
+          transport = Stripe::APIConnectionError.new("Connection to Stripe timed out")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise transport if attributes.dig(:individual, :id_number).present?
+          end
+          expect { subject.update_account(user, passphrase: "1234") }.to raise_error(Stripe::APIConnectionError)
+          advance_compliance_marker!
+
+          calls = []
+          allow(Stripe::Account).to receive(:update) { |_id, attributes| calls << attributes }
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(calls.any? { |attributes| attributes.dig(:individual, :id_number) == "1234567890" }).to be(true)
+        end
+
+        # The isolated call only runs while the countries disagree, so once the seller corrects
+        # their legal-entity country the identifier rides the main payload and this is the only
+        # place left that can retire the note.
+        it "clears the note when the identifier lands on the main payload after the countries agree" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+          subject.update_account(user, passphrase: "1234")
+          outstanding = -> {
+            user.comments.with_type_payout_note.alive
+                .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX}%")
+                .count
+          }
+          expect(outstanding.call).to eq(1)
+
+          # The seller corrects their legal-entity country, so the account and the entity now agree.
+          # Flipped through the group's own retrieve stub rather than a second `retrieve` call,
+          # which would be an HTTP request the cassette does not carry.
+          @stripe_account_country_override = "KR"
+          allow(Stripe::Account).to receive(:update)
+          advance_compliance_marker!
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(outstanding.call).to eq(0)
         end
       end
     end
