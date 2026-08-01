@@ -1,0 +1,18 @@
+desktop   two-hops-back : /l/hop-a-r779281 -> HTTP 200 final=hop-c-r779281 notfound=false
+desktop   one-hop-back  : /l/hop-b-r779281 -> HTTP 200 final=hop-c-r779281 notfound=false
+desktop   current-slug  : /l/hop-c-r779281 -> HTTP 200 final=hop-c-r779281 notfound=false
+mobile375 two-hops-back : /l/hop-a-r779281 -> HTTP 200 final=hop-c-r779281 notfound=false
+mobile375 one-hop-back  : /l/hop-b-r779281 -> HTTP 200 final=hop-c-r779281 notfound=false
+mobile375 current-slug  : /l/hop-c-r779281 -> HTTP 200 final=hop-c-r779281 notfound=false
+bare      two-hops-back : https://gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/hop-a-r779281 -> HTTP 200 final=https://seller.gp1619-legacy-permalink-on-renam.apps.staging.gumroad.org/l/hop-c-r779281
+
+--- provenance ---
+Screenshots above were captured for RUN=r779281 at head b43bc6518 (x-revision b43bc65183b5).
+pr-6721-remerge-probe.rb was then RuboCop-autocorrected (frozen_string_literal comment only,
+no logic change) and RE-RUN on the pod to prove the committed file is the one that works;
+that re-run minted a fresh nonce RUN=r998329 and returned the same result:
+  MARK resolve slug=hop-a-r998329 scoped=1 unscoped=1 expected=1
+  MARK resolve slug=hop-b-r998329 scoped=1 unscoped=1 expected=1
+  MARK resolve slug=hop-c-r998329 scoped=1 unscoped=1 expected=1
+The probe generates its own nonce per run by design, so the slug names differ between the
+screenshot run and the post-lint re-run while the asserted behaviour is identical.
