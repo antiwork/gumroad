@@ -597,6 +597,180 @@ describe Purchase::Blockable do
       purchase.unblock_buyer!
       expect(purchase.is_buyer_blocked_by_admin).to eq(false)
     end
+
+    context "when the block was written from a different purchase of the same buyer" do
+      it "clears a browser_guid block belonging to another purchase" do
+        other_purchase = create(:purchase, link: product, email: purchase.email, purchaser: buyer, browser_guid: "other-device-guid")
+        other_purchase.block_buyer!
+
+        expect(other_purchase.reload.buyer_blocked?).to eq(true)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "other-device-guid")).to be_nil
+        # The sibling row still reads blocked overall: block_buyer! blocked its IP too, and IP
+        # blocks deliberately stay row-scoped, so only the browser assertion belongs here.
+        expect(other_purchase.reload.blocked_by_browser_guid?).to eq(false)
+      end
+
+      it "clears a card fingerprint block belonging to another purchase" do
+        other_purchase = create(:purchase, link: product, email: purchase.email, purchaser: buyer, stripe_fingerprint: "other-card-fingerprint")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: other_purchase.charge_processor_fingerprint)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "other-card-fingerprint")).to be_nil
+      end
+
+      it "finds the sibling purchase by email when the acting purchase has no purchaser and a shared card ties the rows together" do
+        guest_purchase = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-acting-guid", stripe_fingerprint: "guest-shared-card")
+        sibling = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-other-guid", stripe_fingerprint: "guest-shared-card")
+        sibling.block_buyer!
+
+        guest_purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "guest-other-guid")).to be_nil
+      end
+
+      it "leaves alone a guest row that shares nothing but the checkout email, and reports its blocks as surviving" do
+        # A card tester checking out under this buyer's address produces exactly this row: same
+        # email, no account, its own browser and its own card.
+        tester_row = create(:purchase, link: product, email: purchase.email, purchaser: nil,
+                                       browser_guid: "tester-guid", stripe_fingerprint: "tester-card")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "tester-guid")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "tester-card")
+
+        surviving = purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "tester-guid")).to be_present
+        expect(PlatformBlock.active.find_by(object_value: "tester-card")).to be_present
+        expect(surviving.map(&:object_value)).to match_array(["tester-guid", "tester-card"])
+        expect(tester_row).to be_present
+      end
+
+      it "clears a guest row's browser block when a shared card corroborates the email match" do
+        guest_row = create(:purchase, link: product, email: purchase.email, purchaser: nil,
+                                      browser_guid: "corroborated-guest-guid", stripe_fingerprint: purchase.stripe_fingerprint)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: "corroborated-guest-guid")
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "corroborated-guest-guid")).to be_nil
+        expect(guest_row).to be_present
+      end
+
+      it "does not let a shared browser corroborate a guest row: its own card stays blocked and is reported" do
+        # Another person guest-checking-out under the buyer's email on the buyer's machine (a shared
+        # household browser) matches on guid, but the card is theirs. A guid names a browser, not a
+        # buyer, so it must not pull the row's card into the unblock.
+        housemate_row = create(:purchase, link: product, email: purchase.email, purchaser: nil,
+                                          browser_guid: purchase.browser_guid, stripe_fingerprint: "housemate-card")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "housemate-card")
+
+        surviving = purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "housemate-card")).to be_present
+        expect(surviving.map(&:object_value)).to include("housemate-card")
+        expect(housemate_row).to be_present
+      end
+
+      # gumroad-private#1648 widened the unblock across sibling rows, but siblings are selected by
+      # purchaser_id and a checkout/PayPal/gifter address is unauthenticated text anyone can type.
+      # Widening those would let an unblock of this buyer deactivate a block a DIFFERENT person
+      # earned, whose address happens to sit on one of the buyer's rows.
+      it "does not unblock a third party whose address was typed into a sibling row's checkout email" do
+        create(:purchase, link: product, email: "victim@example.com", purchaser: buyer, browser_guid: "sibling-guid")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "victim@example.com")
+
+        surviving = purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "victim@example.com")).to be_present
+        # ...and the refusal is visible, so an agent judges the surviving row rather than reading
+        # an unqualified success while the buyer may still be held.
+        expect(surviving.map(&:object_value)).to include("victim@example.com")
+      end
+
+      it "does not unblock a third party whose PayPal address sits on a sibling row" do
+        create(:purchase, link: product, purchaser: buyer, browser_guid: "sibling-paypal-guid",
+                          charge_processor_id: PaypalChargeProcessor.charge_processor_id, card_visual: "someone-else@paypal.example")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "someone-else@paypal.example")
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "someone-else@paypal.example")).to be_present
+      end
+
+      # The account-owned address is the one identifier on a sibling that is not typed in — it is
+      # delegated to the purchaser record — so widening it is the whole point of the change and
+      # must not be lost to the narrowing above.
+      it "still clears a block on the buyer's own account email reached through a sibling row" do
+        create(:purchase, link: product, email: "checkout-alias@example.com", purchaser: buyer, browser_guid: "sibling-guid-2")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: buyer.email)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: buyer.email)).to be_nil
+      end
+
+      it "still clears a block on the acting row's own checkout email" do
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: purchase.email)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: purchase.email)).to be_nil
+      end
+
+      it "does not touch another buyer's blocks" do
+        stranger = create(:purchase, link: product, email: "stranger@example.com", browser_guid: "stranger-guid")
+        stranger.block_buyer!
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "stranger-guid")).to be_present
+      end
+
+      it "leaves alone the blocks of a different account that shares the checkout email" do
+        former_account_purchase = create(:purchase, link: product, email: purchase.email, purchaser: create(:user),
+                                                    browser_guid: "former-account-guid", stripe_fingerprint: "former-account-fingerprint")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: former_account_purchase.browser_guid)
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: former_account_purchase.stripe_fingerprint)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "former-account-guid")).to be_present
+        expect(PlatformBlock.active.find_by(object_value: "former-account-fingerprint")).to be_present
+      end
+
+      it "leaves IP blocks on the buyer's other purchases alone" do
+        other_purchase = create(:purchase, link: product, email: purchase.email, purchaser: buyer, ip_address: "203.0.113.9")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "203.0.113.9", expires_in: 1.day)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "203.0.113.9")).to be_present
+        expect(other_purchase).to be_present
+      end
+    end
+
+    describe "the return value" do
+      it "is empty when nothing is left holding the buyer" do
+        purchase.block_buyer!
+
+        expect(purchase.unblock_buyer!).to be_empty
+      end
+
+      it "reports a block that survives because it is not one of the buyer's own identifiers" do
+        purchase.block_buyer!
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.day)
+        # unblock_by_ip_address! clears the acting row's IP, so re-block it from elsewhere to stand
+        # in for a shared-IP block the buyer did not earn.
+        allow(purchase).to receive(:unblock_by_ip_address!)
+
+        surviving = purchase.unblock_buyer!
+
+        expect(surviving.map(&:object_value)).to eq([purchase.ip_address])
+      end
+    end
   end
 
   describe "#mark_failed" do
