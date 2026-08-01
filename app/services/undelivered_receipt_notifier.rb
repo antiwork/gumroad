@@ -53,17 +53,25 @@ class UndeliveredReceiptNotifier
     purchase_ids
   end
 
-  # Gives a claim back, for every path where nothing reached the seller. A claim is not evidence they
-  # were told, so it must not outlive a send that did not happen.
-  #
-  # Giving the key back is not enough on its own: the sweep enqueued this digest and moved its cursor
-  # past these buyers' `email_infos` rows in the same run, and it only ever queries forward. The
-  # pending set is added to FIRST so that a failure between the two writes leaves a retryable buyer
-  # rather than a dropped one — the claim it still holds expires on its own within SEND_CLAIM_TTL.
-  def self.release_claim(purchase_ids)
+  # Keeps a buyer reachable after the sweep has moved past their `email_infos` row. The scan only ever
+  # queries forward from its cursor, so a buyer it has already walked past exists nowhere else.
+  def self.track_for_retry(purchase_ids)
     return if purchase_ids.blank?
 
     $redis.sadd(RedisKey.undelivered_receipt_pending_retry, purchase_ids)
+  rescue => e
+    report(e)
+  end
+
+  # Gives a claim back, for every path where nothing reached the seller. A claim is not evidence they
+  # were told, so it must not outlive a send that did not happen.
+  #
+  # Tracked FIRST so that a failure between the two writes leaves a retryable buyer rather than a
+  # dropped one — the claim it still holds expires on its own within SEND_CLAIM_TTL.
+  def self.release_claim(purchase_ids)
+    return if purchase_ids.blank?
+
+    track_for_retry(purchase_ids)
     purchase_ids.each { |purchase_id| $redis.del(RedisKey.undelivered_receipt_notified(purchase_id)) }
   rescue => e
     report(e)

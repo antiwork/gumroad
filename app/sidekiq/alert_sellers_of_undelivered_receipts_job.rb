@@ -141,8 +141,11 @@ class AlertSellersOfUndeliveredReceiptsJob
         # also be reached by this run's scan.
         ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids.uniq).deliver_later(queue: "low")
       rescue => e
-        # One seller's failure must not cost the rest their notice — nothing re-enqueues them, since
-        # the sweep advances its cursor past these rows.
+        # One seller's failure must not cost the rest their notice. Nothing claimed these buyers —
+        # the mailer never rendered — so the delivery callback will not hand them back, and this run
+        # still advances its cursor past their rows. Tracking them here is the only thing that keeps
+        # them reachable.
+        UndeliveredReceiptNotifier.track_for_retry(purchase_ids.uniq)
         ErrorNotifier.notify(e)
       end
     end

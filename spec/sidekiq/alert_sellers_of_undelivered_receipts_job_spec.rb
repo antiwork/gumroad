@@ -124,8 +124,7 @@ describe AlertSellersOfUndeliveredReceiptsJob do
       .not_to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
   end
 
-  # Each seller's notice is independent: nothing re-enqueues the ones skipped, because the cursor
-  # advances past their rows either way.
+  # Each seller's notice is independent.
   it "still notifies the remaining sellers when one seller's enqueue fails" do
     other_seller = create(:user)
     other_product = create(:product, user: other_seller)
@@ -140,6 +139,23 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     expect { described_class.new.perform }
       .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
       .with(other_seller.id, [second.id])
+  end
+
+  # The mailer never rendered, so nothing claimed these buyers and the delivery callback will not hand
+  # them back — while the cursor still moves past their rows in this same run.
+  it "keeps a seller's buyers reachable when the enqueue itself fails" do
+    purchase = undelivered_purchase
+    allow(ContactingCreatorMailer).to receive(:undelivered_receipts).with(seller.id, [purchase.id]).and_raise(StandardError)
+    expect(ErrorNotifier).to receive(:notify)
+
+    described_class.new.perform
+
+    expect(UndeliveredReceiptNotifier.pending_retry_purchase_ids(10)).to eq([purchase.id])
+
+    allow(ContactingCreatorMailer).to receive(:undelivered_receipts).and_call_original
+    expect { described_class.new.perform }
+      .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+      .with(seller.id, [purchase.id])
   end
 
   # A missing cursor means no safe start: resuming from zero would walk the whole table and re-report
