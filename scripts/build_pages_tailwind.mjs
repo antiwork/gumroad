@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -304,7 +304,10 @@ addWithVariants(
 export const pagesTailwindClasses = classes;
 
 // Importing this file must not build anything; only running it directly should.
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Both sides are realpath'd: Node realpaths import.meta.url but leaves an absolute
+// argv[1] as given, so any symlink in the path (macOS /tmp, a release `current`)
+// would otherwise silently skip the build and exit 0.
+if (process.argv[1] && realpathSync(resolve(process.argv[1])) === fileURLToPath(import.meta.url)) {
   build();
 }
 
