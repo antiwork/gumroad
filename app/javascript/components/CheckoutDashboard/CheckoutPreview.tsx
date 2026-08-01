@@ -77,7 +77,7 @@ export const CheckoutPreview = ({
             isPreorder: false,
             nativeType: "digital",
             recurrence: null,
-            canGift: true,
+            canGift: cartItem.product.can_gift,
           },
         ],
         paypalClientId: "",

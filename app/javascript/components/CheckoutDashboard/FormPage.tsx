@@ -456,6 +456,7 @@ const FormPage = ({
               has_offer_codes: displayOfferCodeField,
               custom_fields: customFields.map(({ key, ...field }) => ({ ...field, id: key })),
               has_tipping_enabled: tippingEnabled,
+              can_gift: !giftingDisabled,
             },
           }}
           recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
