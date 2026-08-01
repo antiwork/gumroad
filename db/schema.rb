@@ -1757,6 +1757,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000020) do
     t.index ["product_id"], name: "index_product_integrations_on_product_id"
   end
 
+  create_table "product_permalink_redirects", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "product_id", null: false
+    t.bigint "seller_id", null: false
+    t.string "permalink", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_id"], name: "index_product_permalink_redirects_on_product_id"
+    t.index ["seller_id", "permalink"], name: "idx_product_permalink_redirects_on_seller_and_permalink", unique: true
+  end
+
   create_table "product_review_responses", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.bigint "product_review_id", null: false

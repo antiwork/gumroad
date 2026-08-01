@@ -1516,6 +1516,27 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
   end
 
+  test "an existing same-seller legacy mapping remains authoritative" do
+    seller = create_user
+    mapped = create_product(user: seller, unique_permalink: "aaa", custom_permalink: "mapped-new")
+    LegacyPermalink.create!(permalink: "slug", product: mapped)
+    renamed = create_product(user: seller, unique_permalink: "bbb", custom_permalink: "slug")
+
+    renamed.update!(custom_permalink: "renamed-new")
+
+    assert_nil ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug")
+    assert_equal mapped, Link.fetch_leniently("slug", user: seller)
+
+    ProductPermalinkRedirect.create!(seller:, product: renamed, permalink: "slug")
+    assert_equal mapped, Link.fetch_leniently("slug", user: seller)
+
+    mapped.update!(deleted_at: Time.current)
+    assert_equal renamed, Link.fetch_leniently("slug", user: seller)
+
+    mapped.update!(deleted_at: nil)
+    assert_equal mapped, Link.fetch_leniently("slug", user: seller)
+  end
+
   test "a mapping to a gone product does not resolve on the scoped host" do
     product = create_product(unique_permalink: "aaa", custom_permalink: "old-slug")
     product.update!(custom_permalink: "new-slug")
@@ -1540,6 +1561,7 @@ class LinkTest < ActiveSupport::TestCase
     # moment the claim lapses.
     assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
     claimant.update!(custom_permalink: "claimant-moved")
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
     assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
     assert_equal first, Link.fetch_leniently("slug")
   end
@@ -1560,15 +1582,24 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal product, Link.fetch_leniently("old-slug")
   end
 
-  test "a rename does not map a slug another live product still answers on" do
-    other = create_product(unique_permalink: "bbb", custom_permalink: "shared")
+  test "a renamed product keeps its scoped redirect while another seller holds the slug live" do
+    claimant = create_product(unique_permalink: "bbb", custom_permalink: "shared")
     product = create_product(unique_permalink: "aaa", custom_permalink: "shared")
 
     product.update!(custom_permalink: "mine")
 
     assert_nil LegacyPermalink.find_by(permalink: "shared")
-    # `other` keeps answering on the slug it still holds.
-    assert_equal other, Link.fetch_leniently("shared")
+    assert_equal product.id, ProductPermalinkRedirect.find_by(seller_id: product.user_id, permalink: "shared").product_id
+    assert_equal product, Link.fetch_leniently("shared", user: product.user)
+    assert_equal claimant, Link.fetch_leniently("shared", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("shared")
+
+    claimant.update!(custom_permalink: "claimant-moved")
+
+    assert_equal claimant.id, ProductPermalinkRedirect.find_by(seller_id: claimant.user_id, permalink: "shared").product_id
+    assert_equal product, Link.fetch_leniently("shared", user: product.user)
+    assert_equal claimant, Link.fetch_leniently("shared", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("shared")
   end
 
   test "the first writer keeps a legacy mapping when a second product claims and releases the same slug" do
@@ -1585,12 +1616,10 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal first, Link.fetch_leniently("slug")
   end
 
-  test "a mapping is withdrawn when a live claim lands between the check and the insert" do
+  test "scoped redirects survive when a live claim lands during the global insert" do
     releasing = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     claimant = create_product(unique_permalink: "bbb")
 
-    # The interleave a plain check-then-insert cannot exclude: the claim commits
-    # after the availability check passed.
     original = LegacyPermalink.method(:create)
     LegacyPermalink.stub(:create, ->(attrs) {
       claimant.update!(custom_permalink: "slug")
@@ -1600,13 +1629,25 @@ class LinkTest < ActiveSupport::TestCase
     end
 
     assert_nil LegacyPermalink.find_by(permalink: "slug")
+    assert_equal releasing.id, ProductPermalinkRedirect.find_by(seller_id: releasing.user_id, permalink: "slug").product_id
+    assert_equal releasing, Link.fetch_leniently("slug", user: releasing.user)
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("slug")
+
+    claimant.update!(custom_permalink: "claimant-moved")
+
+    assert_equal claimant.id, ProductPermalinkRedirect.find_by(seller_id: claimant.user_id, permalink: "slug").product_id
+    assert_equal releasing, Link.fetch_leniently("slug", user: releasing.user)
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
     assert_equal claimant, Link.fetch_leniently("slug")
   end
 
   test "saving a product without touching the custom permalink writes no mapping" do
     product = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     assert_no_difference -> { LegacyPermalink.count } do
-      product.update!(name: "Renamed product")
+      assert_no_difference -> { ProductPermalinkRedirect.count } do
+        product.update!(name: "Renamed product")
+      end
     end
   end
 

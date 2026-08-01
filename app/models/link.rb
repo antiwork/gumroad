@@ -806,12 +806,14 @@ class Link < ApplicationRecord
     live_match = Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
     return live_match if live_match.present?
 
-    # A live product always outranks a redirect for the slug it currently answers
-    # on, including bare `gumroad.com/l/:slug` where `by_user(nil)` is unscoped —
-    # otherwise one seller's mapping serves over another seller's live listing.
-    # The fallback exists because `long_url` builds seller-scoped URLs, so without
-    # it a renamed slug 404s on the host sellers actually share.
-    Link.by_user(user).visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
+    legacy_redirect = Link.by_user(user).visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
+    return legacy_redirect if legacy_redirect.present? || user.blank?
+
+    # A seller-scoped row fills collisions the global legacy table cannot
+    # represent without taking precedence from its established mappings.
+    Link.by_user(user).visible.find_by(
+      id: ProductPermalinkRedirect.select(:product_id).where(seller_id: user.id, permalink: general_permalink)
+    )
   end
 
   def self.fetch(unique_permalink, user: nil)
@@ -1608,23 +1610,8 @@ class Link < ApplicationRecord
       deleted_product&.update(custom_permalink: nil)
     end
 
-    # Records outgoing slugs so `fetch_leniently` forwards the old URL
-    # (gumroad-private#1619).
-    #
-    # Staged per save, drained once per commit: `saved_change_to_*` describes only
-    # the LAST save, and the product editor saves twice per request
-    # (`save_custom_attributes`, then `save!`), so a commit-time gate on it never
-    # fires for the flow this exists to fix.
-    #
-    # An existing mapping is never taken over. `permalink` is globally unique
-    # while `custom_permalink` is unique per seller, so two sellers can have held
-    # one slug, and soft deletion is reversible (`publish!` clears `deleted_at`) —
-    # stealing a dormant row would forward that seller's shared links here the
-    # moment they restore. Such a rename keeps the 404 it already had.
-    #
-    # A mapping for a slug a live product answers on is dead on arrival — the
-    # reader is live-first on both branches — so never write one, and withdraw
-    # the row this call created if a claim lands between check and insert.
+    # Stage per save because the product editor saves twice, and its second save
+    # clears the permalink change from dirty tracking before commit.
     def stage_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?
@@ -1642,13 +1629,27 @@ class Link < ApplicationRecord
       discard_renamed_custom_permalinks
       return if outgoing_slugs.blank?
 
-      # Every hop is mapped, including a slug that only existed inside this
-      # transaction. `live_product_answers_on?` refuses one the product still
-      # answers on, unless the same transaction also soft-deleted it.
+      # Map every hop, including a slug that only existed inside this transaction.
       outgoing_slugs.uniq.each { redirect_renamed_custom_permalink(_1) }
     end
 
     def redirect_renamed_custom_permalink(outgoing)
+      record_product_permalink_redirect(outgoing)
+      record_legacy_permalink(outgoing)
+    end
+
+    def record_product_permalink_redirect(outgoing)
+      return if ProductPermalinkRedirect.exists?(seller_id: user_id, permalink: outgoing)
+      return if LegacyPermalink.joins(:product).where(permalink: outgoing, links: { user_id: }).exists?
+
+      redirect = ProductPermalinkRedirect.create(permalink: outgoing, product_id: id, seller_id: user_id)
+      Rails.logger.warn("ProductPermalinkRedirect not recorded for #{outgoing.inspect}: #{redirect.errors.full_messages.to_sentence}") unless redirect.persisted?
+    rescue ActiveRecord::RecordNotUnique
+      # A concurrent rename by this seller won the row; first writer keeps it.
+      nil
+    end
+
+    def record_legacy_permalink(outgoing)
       return if live_product_answers_on?(outgoing)
       return if LegacyPermalink.exists?(permalink: outgoing)
 

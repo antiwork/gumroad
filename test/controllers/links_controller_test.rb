@@ -1012,7 +1012,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_collaborator_can_access(:put, :update, product: @product, params: @params, status: 200)
   end
 
-  test "PUT update records a legacy mapping when the seller renames the product URL" do
+  test "PUT update records redirects when the seller renames the product URL" do
     @product.update!(custom_permalink: "old-slug")
 
     put :update, params: @params.merge(custom_permalink: "new-slug"), as: :json
@@ -1021,15 +1021,18 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "new-slug", @product.reload.custom_permalink
     # The editor saves the product twice per request, so a commit-time
     # `saved_change_to_custom_permalink?` gate never fires here.
+    assert_equal @product.id, ProductPermalinkRedirect.find_by(seller_id: @seller.id, permalink: "old-slug")&.product_id
     assert_equal @product.id, LegacyPermalink.find_by(permalink: "old-slug")&.product_id
     assert_equal @product, Link.fetch_leniently("old-slug", user: @seller)
   end
 
-  test "PUT update writes no legacy mapping when the product URL is untouched" do
+  test "PUT update writes no redirects when the product URL is untouched" do
     @product.update!(custom_permalink: "kept-slug")
 
     assert_no_difference -> { LegacyPermalink.count } do
-      put :update, params: @params, as: :json
+      assert_no_difference -> { ProductPermalinkRedirect.count } do
+        put :update, params: @params, as: :json
+      end
     end
 
     assert_response :success
