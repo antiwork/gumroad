@@ -19,7 +19,12 @@ class PostToPingEndpointsWorker
       ping_params = purchase.payload_for_ping_notification(url_parameters:, resource_name:)
     end
 
-    post_urls = user.urls_for_ping_notification(resource_name)
+    targets = user.ping_notification_targets(resource_name)
+    # Notified from the delivery path only. urls_for_ping_notification also backs the can_ping flag
+    # on every sale JSON render, and a read has no business emailing anyone.
+    notify_undeliverable_subscriptions(targets.undeliverable_subscriptions)
+
+    post_urls = targets.post_urls
     return if post_urls.empty?
 
     post_urls.each do |post_url, content_type|
@@ -27,4 +32,17 @@ class PostToPingEndpointsWorker
       PostToIndividualPingEndpointWorker.perform_async(post_url, ping_params.deep_stringify_keys, content_type, user.id)
     end
   end
+
+  private
+    # This queue is :critical, so nothing in here may reach the caller: a notifier failure must not
+    # hold up the webhooks that DO work, and neither may a Sentry client that is itself down.
+    def notify_undeliverable_subscriptions(subscriptions)
+      UndeliverablePingSubscriptionNotifier.notify_all(subscriptions)
+    rescue => e
+      begin
+        ErrorNotifier.notify(e)
+      rescue
+        nil
+      end
+    end
 end
