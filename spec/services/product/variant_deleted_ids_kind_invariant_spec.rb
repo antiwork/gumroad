@@ -99,12 +99,23 @@ describe "deleted_ids[:variants] kind invariant" do
       data/product_save_contract.ts
     ]
 
+    mutators = %w[push pop shift unshift splice sort reverse fill copyWithin]
+
     # Any spelling that can WRITE the collection — dot or bracket property
     # assignment on any receiver, logical assignment, element assignment
-    # through an index, or in-place array mutation behind `.`, `?.`, or `!.`.
-    # A producer can rename its variable or switch notation, but it still has
-    # to spell the property name.
-    write_pattern = /confirmed_removed_variant_ids["'\]\s!]*(?:\[[^\[\]]*\]\s*)*(?:\|\|=|&&=|\?\?=|=(?![=>])|\??\.\s*(?:push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin)\b)/
+    # through an index, or in-place array mutation reached either through
+    # `.`/`?.`/`!.` or through a bracket-accessed method name that is
+    # immediately called (`ids["push"](id)`). A producer can rename its
+    # variable or switch notation, but it still has to spell the property name
+    # and the mutator name.
+    #
+    # Regex, not an AST walk, on purpose: this tripwire has to survive without
+    # a TypeScript parser in the Ruby suite, so it is deliberately WIDER than
+    # the real grammar — it prefers flagging a read over missing a write. The
+    # classification example below is what keeps that width honest in both
+    # directions.
+    bracket_mutator_call = /(?:\?\.)?\s*\[\s*["'`](?:#{Regexp.union(mutators).source})["'`]\s*\]\s*(?:\?\.)?\s*\(/
+    write_pattern = /confirmed_removed_variant_ids["'\]\s!]*(?:#{bracket_mutator_call}|(?:\[[^\[\]]*\]\s*)*(?:\|\|=|&&=|\?\?=|=(?![=>])|\??\.\s*(?:#{Regexp.union(mutators).source})\b))/
 
     it "has no producer of confirmed_removed_variant_ids outside the version-row editors" do
       expect(files_matching.call(/confirmed_removed_variant_ids/)).to eq((permitted_producers + permitted_readers).sort),
@@ -144,6 +155,13 @@ describe "deleted_ids[:variants] kind invariant" do
         "product.confirmed_removed_variant_ids[index] = id",
         'product["confirmed_removed_variant_ids"][0] = id',
         "confirmed_removed_variant_ids.splice(index, 1)",
+        # Bracket-accessed mutator names: valid TypeScript, and the shape a
+        # writer would reach for to duck a `.push` scan.
+        'confirmed_removed_variant_ids["push"](id)',
+        "confirmed_removed_variant_ids['unshift'](id)",
+        'confirmed_removed_variant_ids["splice"](0, 1)',
+        'product["confirmed_removed_variant_ids"]["push"](id)',
+        'confirmed_removed_variant_ids?.["push"](id)',
       ]
       reads = [
         "product.confirmed_removed_variant_ids ?? []",
@@ -152,6 +170,11 @@ describe "deleted_ids[:variants] kind invariant" do
         "confirmed_removed_variant_ids[0] === id",
         "confirmed_removed_variant_ids: string[]",
         "const ids = product.confirmed_removed_variant_ids.map((id) => id)",
+        # Bracket access that is NOT a call, and a bracket name that is not a
+        # mutator — neither can change the collection.
+        'const fn = confirmed_removed_variant_ids["push"];',
+        'confirmed_removed_variant_ids["includes"](id)',
+        'confirmed_removed_variant_ids["length"]',
       ]
 
       expect(writes.grep(write_pattern)).to eq(writes)
@@ -169,9 +192,23 @@ describe "deleted_ids[:variants] kind invariant" do
 
       # The save serializer prefers a prebuilt product.deletion_operations over
       # the built one, so a second producer does not need this file at all — it
-      # can hand the payload a ready-made object. Lock who can name that
-      # property, and that the serializer's only use is the fallback read.
+      # can hand the payload a ready-made object whose ids never passed through
+      # confirmed_removed_variant_ids at all. Limiting WHICH files may name the
+      # property is not enough: the property must have no writer anywhere.
       expect(files_matching.call(/deletion_operations/)).to eq(%w[components/ProductEdit/state.ts data/product_edit.ts])
+
+      deletion_ops_write = /deletion_operations["'\]\s!?]*(?:#{bracket_mutator_call}|(?:\[[^\[\]]*\]\s*)*(?:\|\|=|&&=|\?\?=|=(?![=>])))/
+      expect(files_matching.call(deletion_ops_write)).to be_empty,
+                                                         "Something now assigns product.deletion_operations. The save serializer prefers a " \
+                                                         "prebuilt payload over buildDeletionOperations, so those ids bypass " \
+                                                         "confirmed_removed_variant_ids entirely and a grouping id can reach " \
+                                                         "deleted_ids[:variants] — see gumroad-private#1503."
+
+      # state.ts may only DECLARE the optional property; a declaration cannot
+      # produce a payload, which is why the fallback read below is the only path.
+      state_source = File.read(javascript_root.join("components", "ProductEdit", "state.ts"))
+      expect(state_source.scan(/^\s*deletion_operations\?:\s*DeletionOperations;$/).size).to eq(1)
+      expect(state_source.scan(/deletion_operations/).size).to eq(2) # the declaration, plus the comment above it
 
       serializer_source = File.read(javascript_root.join("data", "product_edit.ts"))
       expect(serializer_source.scan(/deletion_operations/).size).to eq(2)
