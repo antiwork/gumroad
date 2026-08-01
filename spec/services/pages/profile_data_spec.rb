@@ -337,13 +337,13 @@ describe Pages::ProfileData do
         expect(payload.to_json).not_to include("oneproduct.example.com")
       end
 
-      it "leaves the custom-domain host behind when the certificate ages out with no DB write" do
+      it "leaves the custom-domain host behind when the certificate expires with no DB write" do
         domain = create(:custom_domain, :verified_with_certificate, user: seller, domain: "shop.example.com")
         domain.set_routability!(true)
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include("shop.example.com")
 
         # active? goes false purely by the clock, so the domain row's updated_at never moves.
-        domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+        domain.update_columns(ssl_certificate_issued_at: (CustomDomain::CERTIFICATE_LIFETIME + 1.day).ago)
 
         expect(Pages::ProfileData.build(seller.reload)[:products].first[:url]).to include(seller.subdomain)
       end
