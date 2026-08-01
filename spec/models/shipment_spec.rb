@@ -23,6 +23,23 @@ describe Shipment do
       expect(Shipment.new(purchase: create(:physical_purchase, link: product))).to be_valid
     end
 
+    it "rejects a shipment when the seller enables shipping after a digital checkout", :versioning do
+      purchase = travel_to(1.hour.ago) { create(:purchase) }
+      purchase.link.update!(require_shipping: true)
+
+      shipment = Shipment.new(purchase:)
+
+      expect(shipment).not_to be_valid
+      expect(shipment.errors.full_messages).to include("Purchase does not require shipping")
+    end
+
+    it "allows a shipment when the seller disables shipping after a physical checkout", :versioning do
+      purchase = travel_to(1.hour.ago) { create(:physical_purchase, link: create(:physical_product)) }
+      purchase.link.update!(is_physical: false, require_shipping: false)
+
+      expect(Shipment.new(purchase:)).to be_valid
+    end
+
     it "still allows updates to a pre-existing shipment on a non-shipping product" do
       shipment = create(:shipment)
       shipment.purchase.link.update_columns(flags: 0, require_shipping: false)
