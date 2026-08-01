@@ -835,17 +835,25 @@ describe Payouts do
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
-      # The premise "the cycle has moved past payout_date" only holds Wed-Fri: earlier in the
-      # week the next-Friday cycle still covers the balance dated payout_date - 3, so the gate
-      # pays instead of skipping. Pin a Wednesday.
+      # Pinned to a Wednesday, because these examples' premise — the cycle has moved past
+      # `payout_date` — only holds Wed/Thu/Fri. The gate in
+      # .create_payments_for_balances_up_to_date_for_users compares `date + PAYOUT_DELAY_DAYS`
+      # against the seller's cycle, and cycles are Fridays. Sat-Tue the next-Friday cycle still
+      # covers the balance dated `payout_date - 3`, so #next_payout_cycle_date stops there
+      # rather than advancing a week and the gate pays instead of skipping. On Wed/Thu/Fri that
+      # balance sits outside the period, the cycle advances a week, and the gate rejects as
+      # these examples assume.
       before do
-        travel_to Time.utc(2026, 7, 29, 12, 0, 0)
+        travel_to(Time.utc(2026, 8, 5, 12))
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
         create(:user_compliance_info, user: seller)
       end
 
-      it "does not create payments if next_payout_date does not match payout date" do
-        allow(seller).to receive(:next_payout_date).and_return(payout_date + 1.week)
+      it "does not create payments if the seller's payout cycle is past this payout date" do
+        # #next_payout_cycle_date, not #next_payout_date: the cycle is what the gate in
+        # .create_payments_for_balances_up_to_date_for_users actually reads, so stubbing the
+        # seller's own rail day left this example asserting nothing about the branch it names.
+        allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 2.weeks)
 
         expect do
           described_class.create_payments_for_balances_up_to_date_for_users(payout_date, PayoutProcessorType::PAYPAL, [seller])
