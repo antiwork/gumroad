@@ -79,11 +79,11 @@ module DashboardNav
     items << "profile" if seller.products.alive.exists?
     items << "pages" if seller.pages.exists?
     items << "collaborators" if seller.collaborators.exists?
-    items << "checkout" if seller.offer_codes.exists? || seller.upsells.exists?
-    items << "emails" if seller.installments.exists?
+    items << "checkout" if seller.offer_codes.exists? || seller.upsells.exists? || seller.custom_fields.exists?
+    items << "emails" if seller.installments.exists? || seller.followers.active.exists?
     items << "workflows" if seller.workflows.exists?
     items << "analytics" if seller.sales.exists?
-    items << "affiliates" if seller.direct_affiliates.alive.exists?
+    items << "affiliates" if seller.direct_affiliates.alive.exists? || seller.affiliate_requests.exists?
     items << "community" if seller.seller_communities.alive.exists?
     items << "agent" if seller.ai_conversations.exists?
     items << "library" if user.purchases.exists?

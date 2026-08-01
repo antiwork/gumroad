@@ -3,6 +3,21 @@
 require "spec_helper"
 
 describe DashboardNav do
+  describe "item keys" do
+    # The client nav hardcodes the same keys. Drift is silent in both directions: a key only the
+    # client knows renders a row that can never leave the overflow, because promoted_nav_items=
+    # intersects with PROMOTABLE_ITEMS and discards it; a key only Ruby knows gets promoted and
+    # never rendered.
+    it "match the keys the client nav renders" do
+      source = Rails.root.join("app/javascript/components/client-components/Nav/index.tsx").read
+      client_keys = source.scan(/^\s+key: "([a-z_]+)",$/).flatten
+      client_core = source[/^const CORE_ITEMS = \[(.*?)\];$/m, 1].to_s.scan(/"([a-z_]+)"/).flatten
+
+      expect(client_keys.sort).to eq described_class::ITEMS.sort
+      expect(client_core).to eq described_class::CORE_ITEMS
+    end
+  end
+
   describe ".item_for_path" do
     it "maps promotable dashboard paths to their item" do
       expect(described_class.item_for_path("/workflows")).to eq "workflows"
@@ -64,6 +79,16 @@ describe DashboardNav do
       expect(described_class.dashboard_path?("/discover")).to be true
     end
 
+    it "recognizes every core surface, since dropping one silently stops seeding there" do
+      # /customers is the Sales page and /settings the pinned footer destination — both render the
+      # nav for sellers who may never touch a promotable path.
+      expect(described_class::CORE_PATH_PREFIXES).to match_array %w[/dashboard /products /bundles /customers /payouts /settings /discover /help]
+      described_class::CORE_PATH_PREFIXES.each do |prefix|
+        expect(described_class.dashboard_path?(prefix)).to be true
+        expect(described_class.item_for_path(prefix)).to be_nil
+      end
+    end
+
     it "rejects paths that do not render the dashboard nav" do
       expect(described_class.dashboard_path?("/l/some-product")).to be false
       expect(described_class.dashboard_path?("/checkout-abandoned")).to be false
@@ -105,6 +130,36 @@ describe DashboardNav do
       affiliate.mark_deleted!
 
       expect(described_class.earned_items(user: seller, seller:)).not_to include "affiliates"
+    end
+
+    it "credits affiliates from a pending request, before anyone is accepted" do
+      create(:affiliate_request, seller:)
+
+      expect(described_class.earned_items(user: seller, seller:)).to include "affiliates"
+    end
+
+    it "credits checkout from a custom field, with no discount or upsell" do
+      create(:custom_field, seller:)
+
+      expect(described_class.earned_items(user: seller, seller:)).to include "checkout"
+    end
+
+    it "credits emails from a follower list, before anything is sent" do
+      create(:active_follower, user: seller)
+
+      expect(described_class.earned_items(user: seller, seller:)).to include "emails"
+    end
+
+    it "credits community from a live community" do
+      create(:community, seller:)
+
+      expect(described_class.earned_items(user: seller, seller:)).to include "community"
+    end
+
+    it "credits pages from a page" do
+      seller.pages.create!(title: "About", slug: "about-#{SecureRandom.hex(4)}")
+
+      expect(described_class.earned_items(user: seller, seller:)).to include "pages"
     end
 
     it "returns only promotable keys" do
