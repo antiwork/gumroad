@@ -99,6 +99,20 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data]).to include(cross_sell_product1.unique_permalink, cross_sell_product2.unique_permalink)
     end
 
+    # The spent code covers cross-sells at zero too: re-resolving the full amount for a
+    # cross-sell would deduct the fixed discount a second time in the same cart.
+    it "does not grant the fixed amount again on cross-sells once it is spent" do
+      cross_sell_product1 = create(:product, user: seller, price_cents: 3000)
+      cross_sell_product2 = create(:product, user: seller, price_cents: 4000)
+      create(:upsell, seller:, product: cross_sell_product1, cross_sell: true, selected_products: [product])
+      create(:upsell, seller:, product: cross_sell_product2, cross_sell: true, selected_products: [product2])
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
+
+      expect(result[:products_data].size).to eq(4)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+    end
+
     # Coverage at zero is not a free pass on line-level eligibility: a later line that
     # doesn't meet minimum_quantity must error as it would if the code weren't spent yet.
     it "enforces minimum quantity on lines covered at zero" do

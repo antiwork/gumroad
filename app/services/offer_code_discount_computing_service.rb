@@ -223,6 +223,12 @@ class OfferCodeDiscountComputingService
         resolved_discount = offer_code.evaluate_for_buyer(buyer, product: cross_sell.product)
         next unless resolved_discount
 
+        # A spent once-per-cart code covers the cross-sell at zero, same as a later
+        # cart line — otherwise the fixed amount is deducted a second time.
+        if once_per_cart?(offer_code) && already_applied?(offer_code)
+          resolved_discount = resolved_discount.merge(cents: 0)
+        end
+
         products_data[cross_sell.product.unique_permalink] = { discount: resolved_discount }
       end
     end
