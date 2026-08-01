@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Walkthrough for antiwork/gumroad#6741 — a receipt resend must not erase the
 # original send's delivery record.
 #
