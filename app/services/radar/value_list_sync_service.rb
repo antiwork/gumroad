@@ -6,6 +6,32 @@ class Radar::ValueListSyncService
   SYNC_WINDOW = 25.hours
   STRIPE_FINGERPRINT_PATTERN = /\A[A-Za-z0-9]+\z/
 
+  LIST_FOR_TYPE = {
+    PlatformBlock::TYPES[:email] => { list_alias: BLOCKED_EMAILS_LIST, name: "Gumroad Blocked Emails", item_type: "email" },
+    PlatformBlock::TYPES[:charge_processor_fingerprint] => { list_alias: BLOCKED_CARDS_LIST, name: "Gumroad Blocked Cards", item_type: "card_fingerprint" },
+  }.freeze
+
+  # The other PlatformBlock types (ip_address, browser_guid, email_domain, product) are enforced
+  # in-app, so there is no Radar item to remove for them.
+  def self.syncs?(object_type)
+    LIST_FOR_TYPE.key?(object_type)
+  end
+
+  # Removal is the customer-blocking direction: until the item leaves Radar the buyer is rejected
+  # at `not_sent_to_network`, indistinguishable from an issuer decline. Adds can wait for the
+  # daily job; this cannot.
+  def remove_block(platform_block)
+    list_config = LIST_FOR_TYPE[platform_block.object_type]
+    return false if list_config.nil?
+    return false if platform_block.reload.blocked_at.present?
+
+    value = platform_block.object_value
+    return false if platform_block.charge_processor_fingerprint? && !value.match?(STRIPE_FINGERPRINT_PATTERN)
+
+    remove_item_from_list(find_or_create_list(**list_config).id, value)
+    true
+  end
+
   def sync_blocked_emails
     value_list = find_or_create_list(
       list_alias: BLOCKED_EMAILS_LIST,

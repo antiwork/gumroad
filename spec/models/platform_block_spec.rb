@@ -60,6 +60,44 @@ describe PlatformBlock do
       expect(second.id).to eq(first.id)
       expect(second.blocked_at).to be_present
     end
+
+    describe "Radar removal" do
+      it "enqueues the Radar removal for an email block" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "radar@example.com")
+
+        expect do
+          record.unblock!
+        end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
+
+        expect(Radar::RemoveValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "enqueues the Radar removal for a card fingerprint block" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m111")
+
+        expect do
+          record.unblock!
+        end.to change { Radar::RemoveValueListItemJob.jobs.size }.by(1)
+      end
+
+      it "does not enqueue for types Radar never received" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
+
+        expect do
+          record.unblock!
+        end.not_to change { Radar::RemoveValueListItemJob.jobs.size }
+      end
+
+      it "does not enqueue when the row was already unblocked" do
+        record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "already@example.com")
+        record.unblock!
+        Radar::RemoveValueListItemJob.jobs.clear
+
+        expect do
+          record.unblock!
+        end.not_to change { Radar::RemoveValueListItemJob.jobs.size }
+      end
+    end
   end
 
   describe "expiration" do

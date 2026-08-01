@@ -261,4 +261,83 @@ describe Radar::ValueListSyncService do
       expect { service.sync_blocked_cards }.not_to raise_error
     end
   end
+
+  describe "#remove_block" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
+    end
+
+    def stub_item(value, id)
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: value)
+        .and_return(double(data: [double("ValueListItem", id:)]))
+    end
+
+    it "removes an unblocked email without waiting for the daily window" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "now@example.com")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("now@example.com", "rsli_1")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_1")
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
+    it "removes a block whose unblock happened outside the sync window, which the daily job never revisits" do
+      block = travel_to(10.days.ago) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "stranded@example.com") }
+      block.update_columns(blocked_at: nil, expires_at: nil, updated_at: 10.days.ago)
+      stub_item("stranded@example.com", "rsli_2")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_2")
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
+    it "removes an unblocked card fingerprint" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m111")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+      stub_item("UTLL7GN3iOh1m111", "rsli_3")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_3")
+
+      expect(service.remove_block(block)).to be(true)
+    end
+
+    it "leaves Radar alone when the row was re-blocked between enqueue and run" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "reblocked@example.com")
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(block)).to be(false)
+    end
+
+    it "skips types that were never pushed to Radar" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.212", expires_in: 1.hour)
+      block.update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(block)).to be(false)
+    end
+
+    it "skips fingerprints the add path would have rejected, mirroring the daily job's filter" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "not a fingerprint")
+      block.update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.remove_block(block)).to be(false)
+    end
+  end
+
+  describe ".syncs?" do
+    it "is true only for the types the daily job pushes to Radar" do
+      expect(described_class.syncs?(PlatformBlock::TYPES[:email])).to be(true)
+      expect(described_class.syncs?(PlatformBlock::TYPES[:charge_processor_fingerprint])).to be(true)
+
+      (PlatformBlock::TYPES.values - [PlatformBlock::TYPES[:email], PlatformBlock::TYPES[:charge_processor_fingerprint]]).each do |type|
+        expect(described_class.syncs?(type)).to be(false)
+      end
+    end
+  end
 end
