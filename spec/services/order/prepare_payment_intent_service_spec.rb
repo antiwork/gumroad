@@ -1347,6 +1347,39 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:payment_method_types]).to eq(%w[card link ideal])
           expect(create_args[:payment_method_types]).not_to include("cashapp", "us_bank_account")
         end
+
+        # A destination-charge seller (Gumroad-managed Stripe Custom account) with the
+        # destination-charge ramp flag off. Charge::MethodForcedPresentment returns nil here,
+        # and on THIS lane nil is not the card path's quiet canonical-USD fallback: the buyer
+        # already confirmed on a forced-currency element, so #method_forced_presentment_required?
+        # turns the nil into a clean synchronous failure with no PaymentIntent and no Stripe
+        # quote call. Pinned because the alternative — creating a USD intent — would produce an
+        # intent the EUR ConfirmationToken can never confirm, leaving the purchase in_progress
+        # until the abandonment worker.
+        context "with a destination-charge seller and the destination ramp flag off" do
+          let(:seller) { create(:user, disable_buyer_local_currency: false) }
+          let!(:connect_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
+          # The platform account has to exist, or the quote would be withheld for the unrelated
+          # reason that there is no account to mint it on — the example would pass without
+          # exercising the ramp flag at all.
+          let!(:platform_merchant_account) do
+            MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+              account.update!(currency: Currency::USD)
+            end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+          end
+
+          it "fails closed without creating an intent or calling Stripe for a quote" do
+            expect(StripeFxQuote).not_to receive(:create)
+
+            order, params = build_order
+            create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_destination_off")
+
+            expect(create_args).to be_nil
+            expect(responses["unique-id-0"][:success]).to eq(false)
+            expect(order.purchases.first.reload).to be_failed
+            expect(order.charges.last&.charge_presentment).to be_nil
+          end
+        end
       end
 
       context "with a product priced in the forced currency (direct listed-amount case)" do
