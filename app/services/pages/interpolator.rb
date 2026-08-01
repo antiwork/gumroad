@@ -12,14 +12,21 @@ class Pages::Interpolator
     # with the page this markup replaces.
     "price" => ->(product) { product.price_formatted_verbose(for_default_duration: true, discounted: true).to_s },
     "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) },
-    # bundle_rating_stats, not rating_stats: the native page merges a bundle's contents' reviews
-    # into one summary (ProductPresenter::ProductProps), so the plain row would disagree with the
-    # page this markup replaces. Trailing ".0" is stripped because the native page renders the
-    # rating as a JSON number, where 4.0 prints as "4".
-    "rating" => ->(product) { review_summary(product)&.fetch(:average)&.to_s&.delete_suffix(".0") },
-    "review-count" => ->(product) { review_summary(product)&.fetch(:count)&.to_s },
   }.freeze
 
+  # Both fields read the aggregate that interpolate computes at most once per render — for a
+  # bundle it loads every content product's stat row, so recomputing per marker scales the
+  # query count with how often the page repeats the markers.
+  REVIEW_FIELDS = {
+    # Trailing ".0" is stripped because the native page renders the rating as a JSON number,
+    # where 4.0 prints as "4".
+    "rating" => ->(summary) { summary.fetch(:average).to_s.delete_suffix(".0") },
+    "review-count" => ->(summary) { summary.fetch(:count).to_s },
+  }.freeze
+
+  # bundle_rating_stats, not rating_stats: the native page merges a bundle's contents' reviews
+  # into one summary (ProductPresenter::ProductProps), so the plain row would disagree with the
+  # page this markup replaces.
   def self.review_summary(product)
     return unless product.display_product_reviews?
 
@@ -88,11 +95,21 @@ class Pages::Interpolator
 
     fragment = Loofah.fragment(html)
 
-    fragment.css("[data-gumroad-field]").each do |node|
-      handler = FIELDS[node["data-gumroad-field"]]
-      next unless handler
+    # :unloaded, not nil, because nil is the meaningful "reviews hidden or none yet" result and
+    # must be memoized too.
+    summary = :unloaded
 
-      value = handler.call(product)
+    fragment.css("[data-gumroad-field]").each do |node|
+      field = node["data-gumroad-field"]
+      if (handler = FIELDS[field])
+        value = handler.call(product)
+      elsif (handler = REVIEW_FIELDS[field])
+        summary = review_summary(product) if summary == :unloaded
+        value = summary && handler.call(summary)
+      else
+        next
+      end
+
       # nil means "leave the author's own copy in place" (reviews hidden, or none yet), matching
       # interpolate_profile. An empty STRING still writes, so a blank description keeps clearing
       # its placeholder as before.

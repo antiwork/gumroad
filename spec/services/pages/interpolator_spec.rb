@@ -76,6 +76,19 @@ describe Pages::Interpolator do
         expect(result).to include(%(<span data-gumroad-field="rating">4</span>))
       end
 
+      # For a bundle each aggregation loads every content product's stat row, so per-marker
+      # recomputation would scale the query count with how often the page repeats the markers.
+      it "computes the review summary once even when the markers repeat" do
+        product = reviewed.reload
+        expect(product).to receive(:bundle_rating_stats).once.and_call_original
+        html = %(<span data-gumroad-field="rating">x</span><span data-gumroad-field="review-count">x</span>) * 2
+
+        result = described_class.interpolate(html, product:)
+
+        expect(result.scan(%(<span data-gumroad-field="rating">4.5</span>)).size).to eq(2)
+        expect(result.scan(%(<span data-gumroad-field="review-count">4</span>)).size).to eq(2)
+      end
+
       # The native bundle page merges its contents' reviews in, so a bundle's own row alone
       # would disagree with the page this markup replaces.
       it "uses the combined bundle summary for a bundle" do
