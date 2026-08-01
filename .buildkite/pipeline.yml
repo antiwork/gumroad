@@ -27,7 +27,7 @@ steps:
 
   - label: ":docker: Build Nginx Image"
     key: build-nginx-image
-    branches: "main"
+    branches: "main comp-assets-*"
     command: ".buildkite/scripts/build_nginx.sh"
     timeout_in_minutes: 15
     plugins:

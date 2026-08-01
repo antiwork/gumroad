@@ -79,7 +79,8 @@ run_healthcheck_waits() {
     wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15 proceed \
       '[ "$(date -u +%u)" -ge 2 ] && [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H)" -eq 10 ]'
     rc=$?
-    echo "$rc" > "$tmpdir/payout.rc"
+    printf '%s\n' "$rc" > "$tmpdir/payout.rc.tmp"
+    mv "$tmpdir/payout.rc.tmp" "$tmpdir/payout.rc"
     exit 0
   ) &
   payout_pid=$!
@@ -89,7 +90,8 @@ run_healthcheck_waits() {
     wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
       '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
     rc=$?
-    echo "$rc" > "$tmpdir/long.rc"
+    printf '%s\n' "$rc" > "$tmpdir/long.rc.tmp"
+    mv "$tmpdir/long.rc.tmp" "$tmpdir/long.rc"
     exit 0
   ) &
   long_pid=$!
@@ -100,6 +102,7 @@ run_healthcheck_waits() {
       [ -f "$tmpdir/$name.seen" ] && continue
       [ -f "$tmpdir/$name.rc" ] || continue
       rc=$(cat "$tmpdir/$name.rc")
+      case "$rc" in ''|*[!0-9]*) continue ;; esac
       touch "$tmpdir/$name.seen"
       remaining=$((remaining - 1))
       if [ "$rc" -eq "$SKIP_DEPLOY" ]; then
