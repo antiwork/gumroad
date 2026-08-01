@@ -50,8 +50,9 @@ class Shipment < ApplicationRecord
   def carrier_and_tracking_number_from_url
     # No writer strips this column, and the free-text evidence path strips before using it; without
     # the same treatment here a trailing space would cost the structured pair but keep the URL row.
-    # `scrub` first because it is free text: `strip` raises on an invalid byte sequence, which would
-    # fail the whole evidence build rather than skip one unusable field.
+    # `scrub` first because it is free text: on an invalid byte sequence `strip` raises
+    # `Encoding::CompatibilityError` (and the regex below `ArgumentError`), failing the whole
+    # evidence build rather than skipping one unusable field.
     url = tracking_url&.scrub&.strip
     return if url.blank?
 

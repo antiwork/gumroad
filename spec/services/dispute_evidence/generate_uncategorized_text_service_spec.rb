@@ -113,12 +113,16 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
       end
 
       it "omits, rather than raising on, a value that is not valid UTF-8" do
-        # Without `scrub`, `strip` raises `ArgumentError` before any guard runs and the whole
-        # evidence build fails over one bad byte in free text.
-        shipment.update_column(:tracking_url, "https://track.aftership.com/94001\xFF".dup.force_encoding("UTF-8"))
+        # Set in memory, NOT through the column: the utf8mb4 column drops the invalid byte on write,
+        # so a saved-then-reloaded value is always valid and could never reach the guard. An unsaved
+        # record is the only way the byte survives to `strip`, which raises
+        # `Encoding::CompatibilityError` before any guard below it runs.
+        shipment.tracking_url = "https://track.aftership.com/94001\xFF".dup.force_encoding("UTF-8")
+        expect(shipment.tracking_url.valid_encoding?).to be(false)
+        allow(disputed_purchase).to receive(:shipment).and_return(shipment)
 
         text = nil
-        expect { text = described_class.perform(disputed_purchase.reload) }.to_not raise_error
+        expect { text = described_class.perform(disputed_purchase) }.to_not raise_error
         expect(text).to include("Billing postal code: 12345")
         expect(text).to_not include("shipment tracking URL")
       end

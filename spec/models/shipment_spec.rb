@@ -165,13 +165,24 @@ describe Shipment do
       expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "9400111899223197428490"])
     end
 
-    it "returns nothing rather than raising when the stored value is not valid UTF-8" do
-      # Free text: without `scrub`, `strip` raises `ArgumentError` here and the whole
-      # dispute-evidence build fails instead of skipping one unusable field.
-      shipment.update_column(:tracking_url, "https://tools.usps.com/go/x\xFF".dup.force_encoding("UTF-8"))
+    it "returns nothing rather than raising when the value in memory is not valid UTF-8" do
+      # Assigned, not saved: the utf8mb4 column drops the invalid byte on write, so anything read
+      # back is valid and the guard would never be reached. Unsaved is the only state where the
+      # byte survives to `strip`, which raises `Encoding::CompatibilityError` — failing the whole
+      # dispute-evidence build instead of skipping one unusable field.
+      shipment.tracking_url = "https://tools.usps.com/go/x\xFF".dup.force_encoding("UTF-8")
+      expect(shipment.tracking_url.valid_encoding?).to be(false)
 
-      expect { shipment.reload.carrier_and_tracking_number_from_url }.to_not raise_error
-      expect(shipment.reload.carrier_and_tracking_number_from_url).to be_nil
+      expect { shipment.carrier_and_tracking_number_from_url }.to_not raise_error
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
+    end
+
+    it "keeps a multibyte URL intact rather than mangling it" do
+      # `scrub` must only replace invalid bytes; a legitimate non-ASCII path is not one.
+      url = "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490é"
+      shipment.update!(tracking_url: url)
+
+      expect(shipment.reload.tracking_url).to eq(url)
     end
 
     it "returns nothing when no tracking URL was supplied" do
