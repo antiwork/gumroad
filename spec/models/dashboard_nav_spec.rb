@@ -5,7 +5,7 @@ require "spec_helper"
 describe DashboardNav do
   describe "item keys" do
     # The client nav hardcodes the same keys. Drift is silent in both directions: a key only the
-    # client knows renders a row that can never leave the overflow, because promoted_nav_items=
+    # client knows renders a row that can never leave the overflow, because promoted_nav_item_keys
     # intersects with PROMOTABLE_ITEMS and discards it; a key only Ruby knows gets promoted and
     # never rendered.
     it "match the keys the client nav renders" do

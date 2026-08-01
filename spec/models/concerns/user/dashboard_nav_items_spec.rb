@@ -12,7 +12,8 @@ describe User::DashboardNavItems do
     end
 
     it "drops keys that are no longer promotable" do
-      user.update!(promoted_nav_items: %w[workflows retired_destination])
+      create(:dashboard_nav_promotion, user:, nav_item: "workflows")
+      create(:dashboard_nav_promotion, user:, nav_item: "retired_destination")
 
       expect(user.promoted_nav_item_keys).to eq %w[workflows]
     end
@@ -35,17 +36,16 @@ describe User::DashboardNavItems do
       user.promote_nav_item!("products")
       user.promote_nav_item!("not_a_destination")
 
-      expect(user.reload.promoted_nav_items).to be_nil
+      expect(user.reload.dashboard_nav_items_seeded?).to be false
     end
 
     it "does not touch the database again when the item is already recorded" do
       user.promote_nav_item!("workflows")
 
-      # The regression that matters is the row lock, not the column value: an already-promoted
-      # destination is visited on most page loads, so it must not open a transaction at all.
+      # An already-promoted destination is visited on most page loads, so it must not write at all.
       writes = []
       subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
-        writes << payload[:sql] if payload[:sql].match?(/FOR UPDATE|UPDATE `users`/)
+        writes << payload[:sql] if payload[:sql].match?(/INSERT|UPDATE|FOR UPDATE/)
       end
 
       user.promote_nav_item!("workflows")
@@ -72,6 +72,22 @@ describe User::DashboardNavItems do
       expect(reloaded.payout_threshold_cents).to eq 25_00
     end
 
+    it "survives a stale copy of the user saving an unrelated json_data attribute afterwards" do
+      # The clobber this pins: a request loads the user, the seed and a promotion land, then the
+      # first request saves an unrelated JSON-backed setting — a full-column json_data write from
+      # its stale in-memory copy. Storage in json_data would lose both writes here.
+      stale = User.find(user.id)
+
+      user.seed_promoted_nav_items!(seller: user)
+      user.promote_nav_item!("workflows")
+      stale.update!(payout_threshold_cents: 25_00)
+
+      reloaded = user.reload
+      expect(reloaded.dashboard_nav_items_seeded?).to be true
+      expect(reloaded.promoted_nav_item_keys).to eq %w[workflows]
+      expect(reloaded.payout_threshold_cents).to eq 25_00
+    end
+
     it "keeps a promotion another process recorded" do
       user.promote_nav_item!("workflows")
       User.find(user.id).promote_nav_item!("emails")
@@ -95,7 +111,7 @@ describe User::DashboardNavItems do
     it "marks a seller with nothing earned as seeded so it does not re-scan" do
       user.seed_promoted_nav_items!(seller: user)
 
-      expect(user.reload.promoted_nav_items).to eq []
+      expect(user.reload.promoted_nav_item_keys).to eq []
       expect(user.dashboard_nav_items_seeded?).to be true
     end
 
@@ -117,8 +133,6 @@ describe User::DashboardNavItems do
     end
 
     it "seeds a legacy row whose json_data is NULL" do
-      # Reading json_data instantiates it and marks the record dirty, and `lock!` refuses a dirty
-      # record — so locking `self` here would raise a bare RuntimeError and 500 the page.
       user.update_column(:json_data, nil)
       legacy = User.find(user.id)
       create(:workflow, seller: legacy)
@@ -129,7 +143,7 @@ describe User::DashboardNavItems do
 
     it "seeds a user whose record would fail validation" do
       # An ungated legacy validation must not keep the seed from persisting: if it did, the
-      # seed-once guard would never latch and every page load would re-scan and re-lock the row.
+      # seed-once guard would never latch and every page load would re-scan.
       user.update_column(:google_analytics_id, "UA-12345-6")
       stale = User.find(user.id)
       expect(stale).not_to be_valid

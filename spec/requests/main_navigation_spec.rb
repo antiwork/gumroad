@@ -10,7 +10,7 @@ describe "Main Navigation", type: :system, js: true do
       login_as user
       # The sidebar starts small and grows as destinations are used (DashboardNav); these examples are
       # about what the nav renders once a seller has earned every row.
-      user.update!(promoted_nav_items: DashboardNav::PROMOTABLE_ITEMS)
+      DashboardNav::PROMOTABLE_ITEMS.each { |item| user.promote_nav_item!(item) }
     end
 
     it "renders all menu links" do

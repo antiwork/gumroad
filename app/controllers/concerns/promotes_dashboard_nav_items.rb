@@ -4,7 +4,7 @@
 # Promotion is keyed on the person browsing, not the seller being browsed: it answers "have you used
 # this". It records a visit and never grants access — the policy-gated rows keep their own gates in
 # the nav, so a promotion for a destination this user cannot open renders nothing.
-module DashboardNavPromotion
+module PromotesDashboardNavItems
   extend ActiveSupport::Concern
 
   included do

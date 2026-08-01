@@ -87,7 +87,7 @@ describe "Dashboard nav progressive disclosure", type: :system, js: true do
   end
 
   it "drops Everything else once every destination is promoted" do
-    seller.update!(promoted_nav_items: DashboardNav::PROMOTABLE_ITEMS)
+    DashboardNav::PROMOTABLE_ITEMS.each { |item| seller.promote_nav_item!(item) }
 
     visit dashboard_path
 
