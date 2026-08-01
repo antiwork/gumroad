@@ -152,4 +152,76 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     expect { described_class.new.perform }
       .not_to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
   end
+
+  describe "buyers whose notice was claimed and never sent" do
+    # The cursor advanced past this buyer's row in the run that enqueued the digest, and the scan only
+    # ever queries forward — the retry set is the only thing that brings them back.
+    it "reports a buyer the mailer gave the claim back for" do
+      purchase = undelivered_purchase
+      described_class.new.perform
+      UndeliveredReceiptNotifier.release_claim([purchase.id])
+
+      expect { described_class.new.perform }
+        .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+        .with(seller.id, [purchase.id])
+    end
+
+    it "names the buyer once when the retry set and the scan both find them" do
+      purchase = undelivered_purchase
+      UndeliveredReceiptNotifier.release_claim([purchase.id])
+
+      expect { described_class.new.perform }
+        .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+        .with(seller.id, [purchase.id])
+    end
+
+    it "stops tracking a buyer who has since recovered" do
+      purchase = undelivered_purchase
+      described_class.new.perform
+      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      create(:url_redirect, purchase:, link: product, uses: 1)
+
+      expect { described_class.new.perform }
+        .not_to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+      expect(UndeliveredReceiptNotifier.pending_retry_purchase_ids(10)).to be_empty
+    end
+
+    # A buyer stays in the set until a message actually goes out; only the mailer's settle clears
+    # them. What the drain decides is whether there is anything left to send at all.
+    it "stops tracking a buyer the seller has already been told about" do
+      purchase = undelivered_purchase
+      described_class.new.perform
+      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      $redis.set(RedisKey.undelivered_receipt_notified(purchase.id), Time.current.to_i)
+
+      described_class.new.perform
+
+      expect(UndeliveredReceiptNotifier.pending_retry_purchase_ids(10)).to be_empty
+    end
+
+    # Dropping a buyer because the send-once store was unreadable would lose exactly the notice this
+    # set exists to keep.
+    it "keeps tracking a buyer when the send-once store cannot be read" do
+      purchase = undelivered_purchase
+      described_class.new.perform
+      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      allow(UndeliveredReceiptNotifier).to receive(:notified?).and_return(nil)
+
+      described_class.new.perform
+
+      expect(UndeliveredReceiptNotifier.pending_retry_purchase_ids(10)).to eq([purchase.id])
+    end
+
+    it "takes no more than MAX_RETRIES_PER_RUN of them in one run" do
+      first = undelivered_purchase
+      second = undelivered_purchase
+      described_class.new.perform
+      UndeliveredReceiptNotifier.release_claim([first.id, second.id])
+      stub_const("#{described_class}::MAX_RETRIES_PER_RUN", 1)
+
+      expect { described_class.new.perform }
+        .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+        .with { |_seller_id, purchase_ids| expect(purchase_ids.size).to eq(1) }
+    end
+  end
 end

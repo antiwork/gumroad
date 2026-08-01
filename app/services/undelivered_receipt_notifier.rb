@@ -15,15 +15,17 @@ class UndeliveredReceiptNotifier
   # Judging sooner would report buyers who were about to open their download page.
   SETTLE_GRACE = 2.days
 
-  # Whether we sent this seller the notice for this purchase. Permanent: the facts it reports do not
-  # change on their own, so a second copy is a nag about the same buyer.
+  # Whether we sent this seller the notice for this purchase, or `nil` when the store could not say.
+  # Permanent once set: the facts it reports do not change on their own, so a second copy is a nag
+  # about the same buyer.
   def self.notified?(purchase_id)
     $redis.exists?(RedisKey.undelivered_receipt_notified(purchase_id))
   rescue => e
     report(e)
     # An unreadable store must not send: this key is the only thing standing between a nightly sweep
-    # and re-emailing every seller in the window on every run.
-    true
+    # and re-emailing every seller in the window on every run. `nil` rather than `true` so a caller
+    # deciding whether to stop tracking a buyer can tell "already told them" from "cannot tell".
+    nil
   end
 
   # How many buyers one email names before it summarizes. A seller with more than this has a systemic
@@ -53,8 +55,35 @@ class UndeliveredReceiptNotifier
 
   # Gives a claim back, for every path where nothing reached the seller. A claim is not evidence they
   # were told, so it must not outlive a send that did not happen.
+  #
+  # Giving the key back is not enough on its own: the sweep enqueued this digest and moved its cursor
+  # past these buyers' `email_infos` rows in the same run, and it only ever queries forward. The
+  # pending set is added to FIRST so that a failure between the two writes leaves a retryable buyer
+  # rather than a dropped one — the claim it still holds expires on its own within SEND_CLAIM_TTL.
   def self.release_claim(purchase_ids)
+    return if purchase_ids.blank?
+
+    $redis.sadd(RedisKey.undelivered_receipt_pending_retry, purchase_ids)
     purchase_ids.each { |purchase_id| $redis.del(RedisKey.undelivered_receipt_notified(purchase_id)) }
+  rescue => e
+    report(e)
+  end
+
+  # Buyers whose notice was claimed and then given back, up to `limit`. Sampled rather than ordered:
+  # in normal operation this set is empty or tiny, and no buyer in it is more urgent than another.
+  def self.pending_retry_purchase_ids(limit)
+    Array($redis.srandmember(RedisKey.undelivered_receipt_pending_retry, limit)).map(&:to_i)
+  rescue => e
+    report(e)
+    []
+  end
+
+  # Drops buyers out of the retry set, either because the notice finally went out or because there is
+  # nothing left to tell the seller. Anything left in there is re-judged on every run forever.
+  def self.clear_pending_retry(purchase_ids)
+    return if purchase_ids.blank?
+
+    $redis.srem(RedisKey.undelivered_receipt_pending_retry, purchase_ids)
   rescue => e
     report(e)
   end
@@ -66,6 +95,9 @@ class UndeliveredReceiptNotifier
     purchase_ids.each do |purchase_id|
       $redis.set(RedisKey.undelivered_receipt_notified(purchase_id), Time.current.to_i)
     end
+    # Cleared here rather than at enqueue: a job that dies between the two would otherwise leave a
+    # buyer whose claim expires with nothing holding onto them.
+    clear_pending_retry(purchase_ids)
   rescue => e
     report(e)
   end

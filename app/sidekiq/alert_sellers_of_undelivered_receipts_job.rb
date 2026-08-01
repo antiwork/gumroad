@@ -25,6 +25,10 @@ class AlertSellersOfUndeliveredReceiptsJob
   # cannot do anything useful about a buyer from months ago.
   INITIAL_LOOKBACK = 7.days
 
+  # How many previously-failed notices one run picks back up. The set is empty in normal operation;
+  # the bound is there so a bad night for the mail transport cannot make the next run unbounded.
+  MAX_RETRIES_PER_RUN = 1_000
+
   def perform
     cursor = current_cursor
     return if cursor.nil?
@@ -32,6 +36,8 @@ class AlertSellersOfUndeliveredReceiptsJob
     last_judged = cursor
     scanned = 0
     by_seller = {}
+
+    collect_pending_retries(by_seller)
 
     catch(:stop) do
       while scanned < MAX_ROWS_PER_RUN
@@ -57,6 +63,26 @@ class AlertSellersOfUndeliveredReceiptsJob
   end
 
   private
+    # Buyers a previous run claimed and then could not send to. The cursor is already past their
+    # `email_infos` rows and the scan only ever moves forward, so nothing else would ever look at
+    # them again. Anything no longer worth an email leaves the set here rather than being re-judged
+    # every night forever.
+    def collect_pending_retries(by_seller)
+      purchase_ids = UndeliveredReceiptNotifier.pending_retry_purchase_ids(MAX_RETRIES_PER_RUN)
+      return if purchase_ids.empty?
+
+      purchases = Purchase.where(id: purchase_ids).includes(:url_redirect).index_by(&:id)
+      resolved = purchase_ids.select do |purchase_id|
+        purchase = purchases[purchase_id]
+        # A purchase that no longer exists has no seller to tell and no row to come back on.
+        next true if purchase.nil?
+
+        collect_purchase(purchase, by_seller) == :resolved
+      end
+
+      UndeliveredReceiptNotifier.clear_pending_retry(resolved)
+    end
+
     def judgeable?(row)
       row.sent_at.present? && row.sent_at <= UndeliveredReceiptNotifier::SETTLE_GRACE.ago
     end
@@ -76,13 +102,25 @@ class AlertSellersOfUndeliveredReceiptsJob
     def collect(row, by_seller)
       purchase = purchase_for(row)
       return if purchase.nil?
-      return if UndeliveredReceiptNotifier.notified?(purchase.id)
-      return unless UndeliveredReceiptNotifier.undelivered?(purchase)
+
+      collect_purchase(purchase, by_seller)
+    end
+
+    # Answers what this buyer's notice needs now: `:collected` to be named in this run's digest,
+    # `:resolved` when there is nothing left to tell the seller, or `:unknown` when the send-once
+    # store could not be read. The retry path drops a buyer only on `:resolved` — treating an
+    # unreadable store as "done" would lose exactly the notices that set exists to keep.
+    def collect_purchase(purchase, by_seller)
+      notified = UndeliveredReceiptNotifier.notified?(purchase.id)
+      return :unknown if notified.nil?
+      return :resolved if notified
+      return :resolved unless UndeliveredReceiptNotifier.undelivered?(purchase)
 
       seller = purchase.seller
-      return if seller.nil? || seller.suspended? || seller.deleted?
+      return :resolved if seller.nil? || seller.suspended? || seller.deleted?
 
       (by_seller[seller.id] ||= []) << purchase.id
+      :collected
     end
 
     def purchase_for(row)
@@ -99,8 +137,9 @@ class AlertSellersOfUndeliveredReceiptsJob
         # The full set, untruncated: the mailer re-judges every buyer, and only then cuts the list
         # down. Truncating here would let ten recovered buyers suppress a digest an eleventh needed.
         # The mailer also claims and settles the send-once record, so nothing is marked notified for a
-        # message that never left.
-        ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids).deliver_later(queue: "low")
+        # message that never left. Deduplicated because a buyer carried over from the retry set can
+        # also be reached by this run's scan.
+        ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids.uniq).deliver_later(queue: "low")
       rescue => e
         # One seller's failure must not cost the rest their notice — nothing re-enqueues them, since
         # the sweep advances its cursor past these rows.

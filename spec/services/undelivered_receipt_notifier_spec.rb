@@ -109,12 +109,68 @@ describe UndeliveredReceiptNotifier do
     end
 
     # The record is the only thing between a nightly sweep and re-emailing every seller in the window,
-    # so an unreadable store must suppress rather than send.
-    it "reports notified when the store cannot be read" do
+    # so an unreadable store must suppress rather than send. It answers `nil` rather than `true` so a
+    # caller can tell that apart from having actually told the seller.
+    it "cannot say whether the seller was notified when the store cannot be read" do
       allow($redis).to receive(:exists?).and_raise(StandardError)
       expect(ErrorNotifier).to receive(:notify)
 
-      expect(described_class.notified?(purchase.id)).to eq(true)
+      expect(described_class.notified?(purchase.id)).to be_nil
+    end
+
+    it "stops tracking a buyer for retry once the notice is recorded" do
+      described_class.release_claim([purchase.id])
+
+      described_class.record_sent([purchase.id])
+
+      expect(described_class.pending_retry_purchase_ids(10)).to be_empty
+    end
+  end
+
+  describe ".release_claim and the pending retry set" do
+    # The sweep advanced its cursor past this buyer's row in the run that enqueued the digest, and it
+    # only ever queries forward. Handing the claim back without this set drops the notice for good.
+    it "keeps a buyer whose notice was claimed and never sent" do
+      described_class.claim_send([purchase.id])
+
+      described_class.release_claim([purchase.id])
+
+      expect(described_class.notified?(purchase.id)).to eq(false)
+      expect(described_class.pending_retry_purchase_ids(10)).to eq([purchase.id])
+    end
+
+    it "holds one entry per buyer across repeated failures" do
+      described_class.release_claim([purchase.id])
+      described_class.release_claim([purchase.id])
+
+      expect(described_class.pending_retry_purchase_ids(10)).to eq([purchase.id])
+    end
+
+    it "returns no more than the requested number" do
+      other = create(:purchase)
+      described_class.release_claim([purchase.id, other.id])
+
+      expect(described_class.pending_retry_purchase_ids(1).size).to eq(1)
+    end
+
+    it "drops a buyer that is cleared" do
+      described_class.release_claim([purchase.id])
+
+      described_class.clear_pending_retry([purchase.id])
+
+      expect(described_class.pending_retry_purchase_ids(10)).to be_empty
+    end
+
+    # Adding to the set before deleting the claim: a failure between the two leaves a buyer who is
+    # tracked and whose claim expires on its own, rather than one nothing is holding onto.
+    it "still tracks the buyer when giving the claim key back fails" do
+      described_class.claim_send([purchase.id])
+      allow($redis).to receive(:del).and_raise(StandardError)
+      expect(ErrorNotifier).to receive(:notify)
+
+      described_class.release_claim([purchase.id])
+
+      expect(described_class.pending_retry_purchase_ids(10)).to eq([purchase.id])
     end
   end
 end
