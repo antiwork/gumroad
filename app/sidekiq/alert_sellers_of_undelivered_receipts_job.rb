@@ -21,10 +21,6 @@ class AlertSellersOfUndeliveredReceiptsJob
   # persists, so the next run continues rather than skipping what this one did not reach.
   MAX_ROWS_PER_RUN = 200_000
 
-  # How many buyers one email names before it summarizes. A seller with more than this has a systemic
-  # problem the list would not help them read.
-  MAX_LISTED_PER_SELLER = 10
-
   # Where a first run starts when no cursor exists: recent enough to be actionable, since a seller
   # cannot do anything useful about a buyer from months ago.
   INITIAL_LOOKBACK = 7.days
@@ -37,17 +33,23 @@ class AlertSellersOfUndeliveredReceiptsJob
     scanned = 0
     by_seller = {}
 
-    while scanned < MAX_ROWS_PER_RUN
-      rows = candidate_rows(last_judged)
-      break if rows.empty?
+    catch(:stop) do
+      while scanned < MAX_ROWS_PER_RUN
+        rows = candidate_rows(last_judged)
+        throw :stop if rows.empty?
 
-      settled, unsettled = rows.partition { |row| row.sent_at.present? && row.sent_at <= UndeliveredReceiptNotifier::SETTLE_GRACE.ago }
-      # Stop at the first row too young to judge rather than skipping it: advancing past it would
-      # decide its case by never looking at it again.
-      settled.each { |row| collect(row, by_seller) }
-      scanned += settled.size
-      last_judged = settled.last.id if settled.any?
-      break if unsettled.any?
+        rows.each do |row|
+          # Stop AT the first row too young to judge, not after it. `partition` would let a settled
+          # row later in the same batch move the cursor past this one, and the next run queries after
+          # the cursor — the skipped row is then never reconsidered and its seller never told.
+          throw :stop unless judgeable?(row)
+
+          collect(row, by_seller)
+          scanned += 1
+          last_judged = row.id
+          throw :stop if scanned >= MAX_ROWS_PER_RUN
+        end
+      end
     end
 
     notify(by_seller)
@@ -55,6 +57,10 @@ class AlertSellersOfUndeliveredReceiptsJob
   end
 
   private
+    def judgeable?(row)
+      row.sent_at.present? && row.sent_at <= UndeliveredReceiptNotifier::SETTLE_GRACE.ago
+    end
+
     def candidate_rows(after_id)
       EmailInfo.where(type: CustomerEmailInfo.name, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
                .where(state: %w[sent bounced])
@@ -90,11 +96,11 @@ class AlertSellersOfUndeliveredReceiptsJob
 
     def notify(by_seller)
       by_seller.each do |seller_id, purchase_ids|
-        ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids.first(MAX_LISTED_PER_SELLER), purchase_ids.size)
-                               .deliver_later(queue: "low")
-        # Recorded for every purchase the sweep found, including those the email only counted: they
-        # were reported, and re-finding them tomorrow would re-send the same summary.
-        UndeliveredReceiptNotifier.record_sent(purchase_ids)
+        # The full set, untruncated: the mailer re-judges every buyer, and only then cuts the list
+        # down. Truncating here would let ten recovered buyers suppress a digest an eleventh needed.
+        # The mailer also claims and settles the send-once record, so nothing is marked notified for a
+        # message that never left.
+        ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids).deliver_later(queue: "low")
       rescue => e
         # One seller's failure must not cost the rest their notice — nothing re-enqueues them, since
         # the sweep advances its cursor past these rows.

@@ -26,8 +26,42 @@ class UndeliveredReceiptNotifier
     true
   end
 
-  # Called after the message is handed to the delivery method, never before — a record written for a
-  # notice that never left would cost the seller the notice itself.
+  # How many buyers one email names before it summarizes. A seller with more than this has a systemic
+  # problem the list would not help them read. Applied at render over the re-judged set, never by the
+  # sweep: truncating before the recheck lets ten recovered buyers suppress a digest that a buyer
+  # outside the ten still needed.
+  MAX_LISTED_PER_SELLER = 10
+
+  # How long a claim stays provisional. It only has to cover handing one message to the delivery
+  # method; expiring is the backstop for a render that dies before it can say the send did not happen.
+  SEND_CLAIM_TTL = 10.minutes
+
+  # Takes the notice for these buyers, returning the ones this render now owns. One write rather than
+  # a read followed by one: the sweep's `notified?` cannot separate two renders of the same buyer, and
+  # the job's own Sidekiq retry re-collects the same rows before any mail has been delivered.
+  #
+  # An unusable store sends. Silence is the failure this notice exists to break, and the cost of the
+  # other direction is a possible repeat.
+  def self.claim_send(purchase_ids)
+    purchase_ids.select do |purchase_id|
+      $redis.set(RedisKey.undelivered_receipt_notified(purchase_id), Time.current.to_i, nx: true, ex: SEND_CLAIM_TTL.to_i)
+    end
+  rescue => e
+    report(e)
+    purchase_ids
+  end
+
+  # Gives a claim back, for every path where nothing reached the seller. A claim is not evidence they
+  # were told, so it must not outlive a send that did not happen.
+  def self.release_claim(purchase_ids)
+    purchase_ids.each { |purchase_id| $redis.del(RedisKey.undelivered_receipt_notified(purchase_id)) }
+  rescue => e
+    report(e)
+  end
+
+  # Makes the render's claim permanent; it does not create it. Called after the message is handed to
+  # the delivery method, never before — a record written for a notice that never left would cost the
+  # seller the notice itself.
   def self.record_sent(purchase_ids)
     purchase_ids.each do |purchase_id|
       $redis.set(RedisKey.undelivered_receipt_notified(purchase_id), Time.current.to_i)

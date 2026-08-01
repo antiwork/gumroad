@@ -146,8 +146,7 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
   end
 
   def undelivered_receipts
-    purchase_ids = Purchase.last(2).map(&:id)
-    ContactingCreatorMailer.undelivered_receipts(Purchase.last&.seller_id, purchase_ids, purchase_ids.size)
+    ContactingCreatorMailer.undelivered_receipts(Purchase.last&.seller_id, Purchase.last(2).map(&:id))
   end
 
   def video_preview_conversion_error

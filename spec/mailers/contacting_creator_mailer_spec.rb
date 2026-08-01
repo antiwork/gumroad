@@ -1531,10 +1531,12 @@ describe ContactingCreatorMailer do
       purchase
     end
 
+    def notified_key(purchase) = RedisKey.undelivered_receipt_notified(purchase.id)
+
     it "names the buyer and product for a single affected sale" do
       purchase = undelivered_purchase
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id], 1)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
 
       expect(mail.to).to eq [seller.email]
       expect(mail.subject).to eq "A buyer may not have received their receipt"
@@ -1547,7 +1549,7 @@ describe ContactingCreatorMailer do
       first = undelivered_purchase
       second = undelivered_purchase
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [first.id, second.id], 2)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [first.id, second.id])
 
       expect(mail.subject).to eq "2 buyers may not have received their receipt"
       expect(mail.body.encoded).to include "2 of your buyers"
@@ -1560,7 +1562,7 @@ describe ContactingCreatorMailer do
       recovered = undelivered_purchase
       create(:url_redirect, purchase: recovered, link: product, uses: 1)
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id], 2)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id])
 
       expect(mail.body.encoded).to include listed.email
       expect(mail.body.encoded).not_to include recovered.email
@@ -1573,37 +1575,132 @@ describe ContactingCreatorMailer do
       recovered = undelivered_purchase
       create(:url_redirect, purchase: recovered, link: product, uses: 1)
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id], 2)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [listed.id, recovered.id])
 
       expect(mail.subject).to eq "A buyer may not have received their receipt"
       expect(mail.body.encoded).not_to include "and 1 more"
     end
 
     it "counts the buyers it does not list" do
-      purchase = undelivered_purchase
+      purchases = Array.new(UndeliveredReceiptNotifier::MAX_LISTED_PER_SELLER + 3) { undelivered_purchase }
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id], 4)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, purchases.map(&:id))
 
-      expect(mail.subject).to eq "4 buyers may not have received their receipt"
+      expect(mail.subject).to eq "13 buyers may not have received their receipt"
       expect(mail.body.encoded).to include "and 3 more"
+    end
+
+    # Truncating before the recheck let the first ten buyers decide the digest for everyone: if those
+    # ten recovered, the mailer suppressed the message while the eleventh was still affected, and the
+    # job marked all of them notified. The list is cut down here, after the recheck, for that reason.
+    it "still reports an unlisted buyer when every listed buyer has recovered" do
+      recovered = Array.new(UndeliveredReceiptNotifier::MAX_LISTED_PER_SELLER) do
+        purchase = undelivered_purchase
+        create(:url_redirect, purchase:, link: product, uses: 1)
+        purchase
+      end
+      still_affected = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, recovered.map(&:id) + [still_affected.id])
+
+      expect(mail.subject).to eq "A buyer may not have received their receipt"
+      expect(mail.body.encoded).to include still_affected.email
+      expect($redis.exists?(notified_key(recovered.first))).to be false
     end
 
     it "sends nothing when every listed buyer has recovered" do
       recovered = undelivered_purchase
       create(:url_redirect, purchase: recovered, link: product, uses: 1)
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [recovered.id], 1)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [recovered.id])
 
       expect(mail.message).to be_a ActionMailer::Base::NullMail
     end
 
     it "sends nothing when the seller is gone by render time" do
       purchase = undelivered_purchase
+
       seller.update!(deleted_at: Time.current)
 
-      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id], 1)
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
 
       expect(mail.message).to be_a ActionMailer::Base::NullMail
+    end
+
+    # A claim is not evidence the seller was told, so it expires: a render killed between claiming and
+    # delivering costs a delayed notice rather than a permanent silence.
+    it "holds the claim provisionally on a render that has not delivered" do
+      purchase = undelivered_purchase
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).message
+
+      expect($redis.ttl(notified_key(purchase))).to be_between(1, UndeliveredReceiptNotifier::SEND_CLAIM_TTL.to_i)
+    end
+
+    it "records the buyers it named, with no expiry" do
+      purchase = undelivered_purchase
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).deliver_now
+
+      expect($redis.exists?(notified_key(purchase))).to be true
+      expect($redis.ttl(notified_key(purchase))).to eq(-1)
+    end
+
+    # A permanent record written for a notice that never left costs the seller the notice itself:
+    # every later sweep skips that buyer.
+    it "gives the claim back when the message is suppressed at render" do
+      recovered = undelivered_purchase
+      create(:url_redirect, purchase: recovered, link: product, uses: 1)
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [recovered.id]).deliver_now
+
+      expect($redis.exists?(notified_key(recovered))).to be false
+    end
+
+    it "gives the claim back when delivery is not performed" do
+      purchase = undelivered_purchase
+
+      mail = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+      mail.message.perform_deliveries = false
+      mail.deliver_now
+
+      expect($redis.exists?(notified_key(purchase))).to be false
+    end
+
+    it "gives the claim back when delivery raises" do
+      purchase = undelivered_purchase
+
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(StandardError, "transport down")
+      expect do
+        ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).deliver_now
+      end.to raise_error(StandardError, "transport down")
+
+      expect($redis.exists?(notified_key(purchase))).to be false
+
+      allow_any_instance_of(Mail::Message).to receive(:deliver).and_call_original
+      retried = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(retried.message).not_to be_a ActionMailer::Base::NullMail
+    end
+
+    # The settling callback runs for every action on this mailer — deliver callbacks cannot be scoped
+    # with `only:` — so the ivar is what keeps it from touching another action's bookkeeping.
+    it "touches no send-once state when an unrelated email is delivered" do
+      expect(UndeliveredReceiptNotifier).not_to receive(:record_sent)
+      expect(UndeliveredReceiptNotifier).not_to receive(:release_claim)
+
+      ContactingCreatorMailer.unstampable_pdf_notification(product.id).deliver_now
+    end
+
+    # The claim is what separates two renders of the same buyer: the sweep's read cannot, and the
+    # job's own Sidekiq retry re-collects these rows before any mail has been delivered.
+    it "does not name the same buyer in a second concurrent render" do
+      purchase = undelivered_purchase
+
+      ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id]).message
+      second = ContactingCreatorMailer.undelivered_receipts(seller.id, [purchase.id])
+
+      expect(second.message).to be_a ActionMailer::Base::NullMail
     end
   end
 
