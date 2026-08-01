@@ -62,10 +62,14 @@ describe TestRedisIsolation do
 
   # Flipper wraps the Redis adapter in Memoizable and ActorLimit, so walk to the leaf
   # rather than assuming the depth of the stack the engine builds.
-  def flipper_database
+  def flipper_client
     adapter = Flipper.adapter
     adapter = adapter.adapter while adapter.respond_to?(:adapter)
-    adapter.instance_variable_get(:@client).connection.fetch(:db)
+    adapter.instance_variable_get(:@client)
+  end
+
+  def flipper_database
+    flipper_client.connection.fetch(:db)
   end
 
   # A stock `redis-server` ships 16 databases, which leaves no block above the .env.test
@@ -528,7 +532,7 @@ describe TestRedisIsolation do
         # the assertion below is vacuous — Flipper.adapter would lazily build against the
         # already-reassigned $redis and pass with or without the reset.
         Flipper.enabled?(:a_flag_that_does_not_exist)
-        flipper_before = flipper_database
+        client_before = flipper_client
 
         expect(fork_command(env)).to be_present
 
@@ -537,7 +541,10 @@ describe TestRedisIsolation do
         expect(Sidekiq.redis { |connection| connection.config.db }).to eq(forked.fetch(:databases)[1])
         expect(Modis.with_connection { it.connection.fetch(:db) }).to eq(forked.fetch(:databases)[2])
         expect(Rack::Attack.cache.store.connection.fetch(:db)).to eq(forked.fetch(:databases)[3])
-        expect(flipper_database).to eq(forked.fetch(:databases).first).and(satisfy { it != flipper_before })
+        # Identity, not database number: a suite that itself holds the slot this example
+        # leases would compare a stale adapter against its own equal database and fail.
+        expect(flipper_database).to eq(forked.fetch(:databases).first)
+        expect(flipper_client).not_to equal(client_before)
       ensure
         $redis = original
         described_class.reconnect_stores(ENV)

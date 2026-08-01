@@ -140,6 +140,8 @@ module TestRedisIsolation
     # Redis::Namespace. They are safe only because test never eager-loads under spring
     # (config/environments/test.rb sets eager_load from CI), so a fork autoloads them
     # after this runs. `CI=1 bin/rspec` under spring would pin them to the server's block.
+    # config/initializers/rack_profiler.rb captures the boot $redis the same way; inert
+    # because MiniProfiler never authorizes in test.
     def reconnect_stores(env)
       $redis = Redis.new(url: "redis://#{env.fetch('REDIS_HOST')}")
 
