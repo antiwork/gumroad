@@ -64,15 +64,40 @@ class PaypalMerchantAccountManager
     merchant_account.meta = meta if meta.present?
 
     merchant_account_changed = merchant_account.changed?
+    # Captured before the save because the save is what un-deletes the row; afterwards there is no
+    # way to tell a fresh connection from one that was already live.
+    already_verified = merchant_account.charge_processor_verified?
 
     return "There was an error connecting your PayPal account with Gumroad." unless merchant_account.save
+
+    parsed_response = nil
+
+    unless already_verified
+      parsed_response = merchant_account.paypal_account_details
+      connected_email = parsed_response&.dig("primary_email")
+
+      # Connect is a second door to the same payout address, and the payout processor refuses by
+      # address (PaypalPayoutProcessor.terminal_failure_for_payout_email?) no matter which door it
+      # came through. Without this the seller connects the permanently refused account, is told it
+      # worked, sees it listed as connected, and every payout goes on being blocked — worse than
+      # the direct-form case UpdatePayoutMethod already covers, because now they have positive
+      # confirmation that they are fine. gumroad-private#1478.
+      #
+      # Only new connections are judged. An account already verified is left alone: tearing down a
+      # live merchant account on a webhook would stop the seller taking payments, which no
+      # rejection of a *payout* justifies.
+      if connected_email.present? && PaypalPayoutProcessor.terminal_failure_for_payout_email?(user, connected_email)
+        merchant_account.delete_charge_processor_account!
+        return "PayPal won't accept payouts to that account. Please connect a different PayPal account."
+      end
+    end
 
     if merchant_account.charge_processor_verified?
       MerchantRegistrationMailer.paypal_account_updated(user.id).deliver_later(queue: "default") if merchant_account_changed
       return "You have successfully connected your PayPal account with Gumroad."
     end
 
-    parsed_response = merchant_account.paypal_account_details
+    parsed_response ||= merchant_account.paypal_account_details
 
     if parsed_response.present?
       paypal_account_country_code = parsed_response["country"]
