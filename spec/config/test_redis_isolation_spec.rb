@@ -387,12 +387,20 @@ describe TestRedisIsolation do
       end
     end
 
+    # This run's own boot already memoized @boot_endpoints, and a fork re-leases from
+    # those — so without pinning them here the examples would lease from the block this
+    # run holds instead of from base_env, and collide with their own boot claim.
+    before do
+      allow(described_class).to receive(:boot_endpoints)
+        .and_return(base_env.values_at(*described_class::STORE_ENV_VARS).map { parse(it) })
+    end
+
     def boot(env)
       described_class.install!(env:, warn_io: StringIO.new, key_prefix: test_prefix)
     end
 
     def fork_command(env)
-      described_class.reinstall_after_fork!(env:, warn_io: StringIO.new)
+      described_class.reinstall_after_fork!(env:, warn_io: StringIO.new, key_prefix: test_prefix)
     end
 
     it "gives a forked command its own block instead of the one it inherited" do

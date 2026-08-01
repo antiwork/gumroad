@@ -119,11 +119,11 @@ module TestRedisIsolation
     # Leasing reads the ORIGINAL endpoints, not the rewritten ENV: the floor is derived from
     # the values a fallback run would use, and boot has already replaced those with leased
     # ones. Re-deriving from ENV would walk the floor up on every fork.
-    def reinstall_after_fork!(env: ENV, warn_io: $stderr)
+    def reinstall_after_fork!(env: ENV, warn_io: $stderr, key_prefix: LEASE_KEY_PREFIX)
       return nil if boot_endpoints.nil?
 
       boot_endpoints.each_with_index { |endpoint, index| env[STORE_ENV_VARS.fetch(index)] = "#{endpoint[:server]}/#{endpoint[:database]}" }
-      slot = install!(env:, warn_io:)
+      slot = install!(env:, warn_io:, key_prefix:)
       return nil if slot.nil?
 
       reconnect_stores(env)
