@@ -1,10 +1,11 @@
 #!/bin/bash
 # Mutation harness: each mutation removes one half of the fix; the named spec must redden.
+# Run from a gumroad checkout with a working test DB, e.g.
+#   DATABASE_NAME=lane0_test REDIS_HOST="localhost:6380/0" ./qa-media/mutation-harness-gp1696.sh
 set -u
-cd ~/.hermes/lanes/wt0 || exit 1
-export DATABASE_NAME=lane0_test TEST_DATABASE_NAME=lane0_test REDIS_HOST="localhost:6380/0" \
-  SIDEKIQ_REDIS_HOST="localhost:6380/1" DISABLE_SPRING=1 OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES \
-  VITE_RUBY_AUTO_BUILD=false CUSTOM_DOMAIN="app.test.gumroad.com:31340" PATH="$HOME/.rbenv/shims:$PATH"
+cd "$(git rev-parse --show-toplevel)" || exit 1
+export DISABLE_SPRING=1 OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES \
+  VITE_RUBY_AUTO_BUILD=false PATH="$HOME/.rbenv/shims:$PATH"
 
 CTRL=app/controllers/bundles/product_controller.rb
 SPEC=spec/controllers/bundles/product_controller_spec.rb
@@ -58,6 +59,20 @@ old="        :price_currency_type,\n"
 assert old in s, "MUT3 anchor missing"
 open(p,"w").write(s.replace(old,"",1))
 print("MUT3 applied")
+PY
+run
+cp /tmp/ctrl.orig "$CTRL"
+
+echo
+echo "=== MUTATION 4: drop the stale-offer-code warning ==="
+python3 - <<'PY'
+p="app/controllers/bundles/product_controller.rb"
+s=open(p).read()
+old="""    if currency_before != @bundle.price_currency_type"""
+new="""    if false"""
+assert old in s, "MUT4 anchor missing"
+open(p,"w").write(s.replace(old,new,1))
+print("MUT4 applied")
 PY
 run
 cp /tmp/ctrl.orig "$CTRL"

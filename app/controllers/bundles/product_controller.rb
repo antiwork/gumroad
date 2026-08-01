@@ -14,25 +14,26 @@ class Bundles::ProductController < Bundles::BaseController
 
     should_unpublish = params[:unpublish].present? && @bundle.published?
     was_published = @bundle.published?
+    currency_before = @bundle.price_currency_type
 
     ActiveRecord::Base.transaction do
       @bundle.is_bundle = true
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
-      # Currency before price, with the amount re-sent explicitly. `price_cents=`
-      # writes a Price row scoped to price_currency_type as it stands at that
-      # moment, and assign_attributes skips the setter when the submitted amount
-      # equals the current one — so re-denominating alone would leave the bundle
-      # with no Price row in the new currency and fail validation on a blank
-      # default price. Mirrors Api::V2::LinksController#update.
-      if product_permitted_params.key?(:price_currency_type)
+      # Currency must land before the amount: `price_cents=` files a Price row under
+      # whatever `price_currency_type` reads at that instant, and assign_attributes
+      # follows client key order. Carries the stored amount when the form omits it.
+      changing_currency = product_permitted_params.key?(:price_currency_type)
+      if changing_currency
         carried_price_cents = product_permitted_params[:price_cents].presence || @bundle.price_cents
         @bundle.price_currency_type = product_permitted_params[:price_currency_type]
         @bundle.price_cents = carried_price_cents if carried_price_cents.present?
       end
-      @bundle.assign_attributes(product_permitted_params.except(
+      skipped_params = [
         :custom_button_text_option, :custom_summary, :custom_attributes, :covers, :refund_policy, :product_refund_policy_enabled,
-        :seller_refund_policy_enabled, :installment_plan, :default_offer_code_id, :price_currency_type)
-      )
+        :seller_refund_policy_enabled, :installment_plan, :default_offer_code_id, :price_currency_type
+      ]
+      skipped_params << :price_cents if changing_currency
+      @bundle.assign_attributes(product_permitted_params.except(*skipped_params))
       @bundle.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
       @bundle.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
       @bundle.save_custom_attributes(product_permitted_params[:custom_attributes]) unless product_permitted_params[:custom_attributes].nil?
@@ -53,14 +54,30 @@ class Bundles::ProductController < Bundles::BaseController
       @bundle.unpublish! if should_unpublish
     end
 
+    notice = "Changes saved!"
+    # A bundle's own fixed-amount codes survive a currency change unflagged:
+    # clear_detached_default_offer_code only currency-checks universal ones, and
+    # applicable? skips the check entirely for product-specific codes. Warn like
+    # LinksController#update does, or the discount silently stops quoting.
+    if currency_before != @bundle.price_currency_type
+      stale_codes = @bundle.product_and_universal_offer_codes.reject do |offer_code|
+        offer_code.is_currency_valid?(@bundle) && offer_code.is_amount_valid?(@bundle)
+      end.map(&:code)
+
+      if stale_codes.any?
+        notice = nil
+        flash[:warning] = "Changes saved, but the following offer #{"code".pluralize(stale_codes.count)} no longer #{stale_codes.one? ? "matches" : "match"} this bundle's currency and will not apply at checkout: #{stale_codes.join(", ")}."
+      end
+    end
+
     if should_unpublish
       redirect_back fallback_location: edit_bundle_product_path(@bundle.external_id), notice: "Unpublished!", status: :see_other
     elsif params[:redirect_to].present?
-      redirect_to params[:redirect_to], notice: "Changes saved!", status: :see_other
+      redirect_to params[:redirect_to], notice:, status: :see_other
     elsif was_published
-      redirect_back fallback_location: edit_bundle_product_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+      redirect_back fallback_location: edit_bundle_product_path(@bundle.external_id), notice:, status: :see_other
     else
-      redirect_to edit_bundle_content_path(@bundle.external_id), notice: "Changes saved!", status: :see_other
+      redirect_to edit_bundle_content_path(@bundle.external_id), notice:, status: :see_other
     end
   rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid, Link::LinkInvalid => e
     error_message = @bundle.errors.full_messages.first || e.message

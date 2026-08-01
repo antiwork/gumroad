@@ -38,9 +38,10 @@ describe Bundles::ProductController, inertia: true do
     end
 
     # The seller's actual path: they touch only the currency dropdown, so the
-    # form re-sends the unchanged amount. assign_attributes would skip
-    # `price_cents=` as a no-op change and leave no Price row in the new
-    # currency, so the save fails on a blank default price.
+    # form re-sends the unchanged amount. The Price row is filed under whatever
+    # currency is set when `price_cents=` runs, so if the amount landed first
+    # there would be no row in the new currency and the save would fail on a
+    # blank default price.
     it "carries the existing amount into the new currency when the amount is unchanged" do
       put :update, params: { bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000 }
 
@@ -76,6 +77,37 @@ describe Bundles::ProductController, inertia: true do
 
       expect(bundle.reload.price_currency_type).to eq("usd")
       expect(bundle.price_cents).to eq(2500)
+    end
+
+    # A product-specific fixed-amount code is not detached or currency-checked
+    # anywhere on this path, so without the warning the seller's discount stops
+    # quoting with nothing said. Mirrors LinksController#update.
+    context "when a fixed-amount offer code no longer matches the new currency" do
+      let!(:offer_code) { create(:offer_code, user: seller, products: [bundle], code: "tenoff", amount_cents: 500, currency_type: "usd") }
+
+      it "warns the seller and names the code" do
+        put :update, params: { bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000 }
+
+        expect(bundle.reload.price_currency_type).to eq("eur")
+        expect(flash[:warning]).to include("tenoff")
+        expect(flash[:warning]).to include("will not apply at checkout")
+        expect(flash[:notice]).to be_blank
+      end
+
+      it "stays quiet when the currency did not move" do
+        put :update, params: { bundle_id: bundle.external_id, price_cents: 2500 }
+
+        expect(flash[:warning]).to be_blank
+        expect(flash[:notice]).to eq("Changes saved!")
+      end
+    end
+
+    it "stays quiet on a currency change when no offer code is attached" do
+      put :update, params: { bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000 }
+
+      expect(bundle.reload.price_currency_type).to eq("eur")
+      expect(flash[:warning]).to be_blank
+      expect(flash[:notice]).to eq("Changes saved!")
     end
 
     # An unsupported currency is caught by the model's own
