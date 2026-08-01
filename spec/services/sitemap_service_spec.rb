@@ -33,11 +33,14 @@ describe SitemapService do
     # the per-product `add` reads keeps the cost flat as products are added.
     it "does not query per product for the seller or the cover image" do
       seller = create(:user)
+      # One clock sample for fixtures and generation: sampling twice can straddle a month
+      # boundary, and generating an empty month makes the flatness comparison vacuous.
+      sitemap_month = Time.current
 
       count_association_queries = lambda do |product_count|
         Link.alive.delete_all
         product_count.times do
-          product = create(:product, user: seller, created_at: Time.current)
+          product = create(:product, user: seller, created_at: sitemap_month)
           # Without a cover the preview chain has nothing to load and this assertion holds
           # no matter what SITEMAP_PRELOADS contains.
           create(:asset_preview, link: product)
@@ -48,7 +51,7 @@ describe SitemapService do
           queries += 1 if /FROM `(users|asset_previews)`/.match?(payload[:sql])
         end
         begin
-          service.generate(Date.current)
+          service.generate(sitemap_month.to_date)
         ensure
           ActiveSupport::Notifications.unsubscribe(subscriber)
         end
