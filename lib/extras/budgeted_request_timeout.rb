@@ -11,19 +11,28 @@
 # Delegating to a second Rack::Timeout instance rather than mutating `service_timeout`
 # per request keeps the gem's own wait/expiry/SIGTERM accounting intact on both budgets.
 class BudgetedRequestTimeout < Rack::Timeout
+  # Rails appends `(.:format)` to every route, so `/orders/:id/finalize.json` reaches the same
+  # action as the bare path. The character class mirrors ActionDispatch::Routing::SEPARATORS:
+  # anything narrower leaves an exotic format routing to a charge on the short budget.
+  FORMAT_SUFFIX = %r{(?:\.[^/.?]+)?}
+
   # Paths that reach charge creation or its finalization. Custom domains and the api/discover
-  # hosts mount these route sets at the same paths, so matching PATH_INFO covers every host.
+  # hosts mount most of these at the same paths, so matching PATH_INFO covers every host.
   EXTENDED_BUDGET_PATHS = [
     # Not every /orders action reaches the processor: `confirm_error` only records a browser-side
     # confirm rejection that happens before any charge exists, so it stays on the general budget.
-    %r{\A/orders\z},
-    %r{\A/orders/prepare\z},
-    %r{\A/orders/[^/]+/(confirm|finalize)\z},
+    %r{\A/orders#{FORMAT_SUFFIX}\z},
+    %r{\A/orders/prepare#{FORMAT_SUFFIX}\z},
+    %r{\A/orders/[^/]+/(confirm|finalize)#{FORMAT_SUFFIX}\z},
     # Stripe's 3DS return_url. Finalizes the confirmed charge in-request, same as /orders/:id/finalize.
     %r{\A/checkout/returns/[^/]+\z},
-    %r{\A/purchases/[^/]+/confirm\z},
-    %r{\A/service_charges(\z|/[^/]+/confirm\z)},
-    %r{\A/preorders/[^/]+/charge_preorder\z},
+    %r{\A/purchases/[^/]+/confirm#{FORMAT_SUFFIX}\z},
+    %r{\A/service_charges#{FORMAT_SUFFIX}\z},
+    %r{\A/service_charges/[^/]+/confirm#{FORMAT_SUFFIX}\z},
+    %r{\A/preorders/[^/]+/charge_preorder#{FORMAT_SUFFIX}\z},
+    # Commission::create_completion_purchase! charges the buyer's saved card for the remainder
+    # in-request, then records success; the mobile API mounts the same action under /mobile.
+    %r{\A/(mobile/)?commissions/[^/]+/complete#{FORMAT_SUFFIX}\z},
     # PUT /subscriptions/:id -> Subscription::UpdaterService, which charges the upgrade inline.
     %r{\A/subscriptions/[^/]+\z},
   ].freeze

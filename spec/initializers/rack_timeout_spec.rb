@@ -64,10 +64,39 @@ describe BudgetedRequestTimeout do
         "/service_charges",
         "/service_charges/abc123/confirm",
         "/preorders/abc123/charge_preorder",
+        "/commissions/abc123/complete",
+        "/mobile/commissions/abc123/complete",
         "/subscriptions/abc123",
       ].each do |path|
         expect(described_class.extended_budget_path?(path)).to be(true), "#{path} must get the checkout budget"
       end
+    end
+
+    # Every Rails route carries an implicit `(.:format)`, so the suffixed form reaches the same
+    # charging action. Matching only the bare path would run those on the general budget.
+    it "matches the same actions with a format suffix" do
+      [
+        "/orders.json",
+        "/orders/prepare.json",
+        "/orders/abc123/confirm.json",
+        "/orders/abc123/finalize.json",
+        "/checkout/returns/abc123.json",
+        "/purchases/abc123/confirm.json",
+        "/service_charges.json",
+        "/service_charges/abc123/confirm.json",
+        "/preorders/abc123/charge_preorder.json",
+        "/commissions/abc123/complete.json",
+        "/mobile/commissions/abc123/complete.json",
+        "/subscriptions/abc123.json",
+      ].each do |path|
+        expect(described_class.extended_budget_path?(path)).to be(true), "#{path} must get the checkout budget"
+      end
+    end
+
+    # `(.:format)` accepts anything up to the next separator, not just word characters, so a
+    # narrower suffix would route an exotic format to a charge on the short budget.
+    it "matches a format Rails would accept but a word-character suffix would not" do
+      expect(described_class.extended_budget_path?("/orders/abc123/finalize.v2-1")).to be true
     end
 
     it "does not match ordinary web paths" do
@@ -78,12 +107,20 @@ describe BudgetedRequestTimeout do
         "/orders_history",
         # Recorded before any charge exists, so it has nothing to leave half-finalized.
         "/orders/abc123/confirm_error",
+        # The format suffix must not smuggle a non-charging action into the carve-out either.
+        "/orders/abc123/confirm_error.json",
+        "/orders_history.json",
+        "/service_charges_report.json",
+        # `update` only attaches files -- no charge to leave half-recorded.
+        "/commissions/abc123",
+        "/commissions/abc123.json",
         "/checkout",
         "/purchases/abc123/receipt",
         "/purchases/abc123/subscribe",
         "/library",
         "/service_charges_report",
         "/subscriptions/abc123/manage",
+        "/subscriptions/abc123/manage.json",
         nil,
         "",
       ].each do |path|
@@ -116,8 +153,10 @@ describe BudgetedRequestTimeout do
     it "gives checkout the longer budget and everything else the short one" do
       expect(applied_budget("/orders/abc123/confirm")).to eq described_class::Budget.checkout
       expect(applied_budget("/checkout/returns/abc123")).to eq described_class::Budget.checkout
+      expect(applied_budget("/orders/abc123/finalize.json")).to eq described_class::Budget.checkout
       expect(applied_budget("/l/some-product")).to eq 15
       expect(applied_budget("/orders/abc123/confirm_error")).to eq 15
+      expect(applied_budget("/orders/abc123/confirm_error.json")).to eq 15
       expect(applied_budget("/orders/abc123/confirm")).to be > applied_budget("/l/some-product")
     end
   end
