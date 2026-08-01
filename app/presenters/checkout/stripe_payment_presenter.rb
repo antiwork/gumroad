@@ -207,26 +207,15 @@ class Checkout::StripePaymentPresenter
 
     # A cart that reads as zero here only because the buyer has not named their price yet (see the
     # zero-total comment in fallback_reason_for). Such a cart keeps the Payment Element, but it must
-    # take the canonical server-confirm lane rather than the client-confirm one, because everything
-    # the client-confirm lane fixes at page load is derived from a total that does not exist yet:
+    # take the canonical server-confirm lane rather than the client-confirm one. The method-forced
+    # surface mounts the Element with a server-rendered presentment_amount_cents: the cart's listed
+    # subtotal in the forced currency. On a pay-what-you-want cart that number is 0, and the browser
+    # prefers it over its own total for the whole session, so the Element would still be mounted at
+    # zero after the buyer typed $25.
     #
-    #   1. The method-forced surface mounts the Element with a server-rendered
-    #      presentment_amount_cents — the cart's listed subtotal in the forced currency. On a
-    #      pay-what-you-want cart that number is 0, and the browser prefers it over its own total
-    #      for the whole session (getStripePaymentElementAmount returns it whenever it is non-null),
-    #      so the Element would still be mounted at zero after the buyer typed $25.
-    #   2. The Element's payment_method_types must equal the deferred intent's, or Stripe rejects
-    #      the payment_method_types-scoped ConfirmationToken and the buyer cannot pay with ANY
-    #      method, card included. Klarna's gate is cart-total-dependent
-    #      (KLARNA_MIN_USD_CHARGE_CENTS), so a cart that mounts at zero resolves without Klarna
-    #      while Order::PreparePaymentIntentService — which re-resolves from the real purchase
-    #      amounts — adds it back once the buyer has named an eligible amount.
-    #
-    # The canonical server-confirm Payment Element has neither property: its amount is derived in
-    # the browser from the loaded total (and the browser declines to mount below Stripe's minimum
-    # until a real total exists), and it carries a fixed ["card"] method list with no deferred
-    # intent to match. So a pending-price cart still gets the Payment Element and its wallets; it
-    # gives up only the local payment methods, which it could not have mounted correctly anyway.
+    # The canonical server-confirm Payment Element instead derives its amount from the loaded total
+    # in the browser. A pending-price cart therefore keeps the Payment Element and its wallets, but
+    # gives up the local methods that cannot be mounted with the final amount yet.
     def price_still_pending?(items)
       !items.sum { _1[:price_cents].to_i }.positive? && items.any? { _1[:has_customizable_price] }
     end
@@ -346,11 +335,10 @@ class Checkout::StripePaymentPresenter
         # mounts the element in the forced currency instead. The US-locked methods (Cash App
         # Pay, ACH) are USD-only, so drop them from the element exactly as
         # Order::PreparePaymentIntentService#intent_payment_method_types drops them from a
-        # non-USD intent: the element's list and the intent's list must match or Stripe
-        # rejects the ConfirmationToken. Every method on this element — card and Link
-        # included — charges through the forced-currency intent (the prepare service keys
-        # the presentment on the element's mount currency, not just the picked method),
-        # because the ConfirmationToken inherits the element's currency and could never
+        # non-USD intent. Neither surface may list a method incompatible with its currency;
+        # prepare may otherwise narrow the intent while retaining the selected method. Every
+        # method on this element — card and Link included — charges through the forced-currency
+        # intent because the ConfirmationToken inherits the element's currency and could never
         # confirm a USD intent.
         payment_method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
       end

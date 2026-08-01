@@ -57,11 +57,11 @@ export type PaymentElementConfig = {
   stripe_link_enabled: boolean;
 };
 // Client-confirm checkout mints a ConfirmationToken from the Payment Element, so it omits
-// payment_method_creation and stays in payment mode. The method list is server-resolved
-// (Checkout::PaymentMethodResolver) and must match the deferred intent's;
-// the browser never widens it — card everywhere, Link when the resolver leaves it enabled, plus
-// the US-locked methods (cashapp, us_bank_account) for US buyers. Recurring UPI registration is
-// the narrow card + UPI exception.
+// payment_method_creation and stays in payment mode. The server-resolved method list
+// (Checkout::PaymentMethodResolver) is the baseline menu; prepare may narrow the deferred intent
+// while retaining the selected method, and the browser never widens it. It includes card
+// everywhere, Link when the resolver leaves it enabled, and the US-locked methods (cashapp,
+// us_bank_account) for US buyers. Recurring UPI registration is the narrow card + UPI exception.
 // Currency is "usd" everywhere except the method-forced local-method surface (iDEAL/Bancontact/UPI),
 // where the server mounts the element in the payment method's forced currency (e.g. "eur") and
 // supplies presentment_amount_cents — the whole cart's listed subtotal in that currency,

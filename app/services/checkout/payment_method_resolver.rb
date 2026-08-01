@@ -4,10 +4,9 @@
 # may confirm client-side at all, and which Stripe payment methods it may use. The frontend cannot
 # widen it.
 #
-# The deferred PaymentIntent's payment_method_types must equal the Payment Element's or Stripe
-# rejects the ConfirmationToken — hence an explicit array, never automatic_payment_methods. The
-# presenter and PreparePaymentIntentService both resolve through here from the same GeoIP basis, and
-# the service hard-stops an ineligible cart before creating the intent, so a mismatch fails closed.
+# The Payment Element uses this list as its baseline menu. Prepare may narrow the deferred intent,
+# but it must retain the selected method. Both sides resolve here from the same GeoIP basis, and the
+# service hard-stops an ineligible cart before creating the intent, so policy drift fails closed.
 #
 # Listing a method the account or the intent's currency cannot take fails the ENTIRE intent create,
 # taking card down with it (gumroad-private#1026) — that is why every gate below fails closed.
