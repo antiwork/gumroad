@@ -136,7 +136,19 @@ module ValidateRecaptcha
 
     def hostname_allowed?(hostname)
       return true unless Rails.env.production?
+      # Only the top level of the verification response is guaranteed to be an object, so
+      # tokenProperties.hostname can arrive as any JSON scalar. A non-string is not a hostname
+      # we can allow, and every comparison below would raise on it — which lands on the caller's
+      # 500 rather than a clean failed verification.
+      return false unless hostname.is_a?(String)
       return false if hostname.blank?
+
+      # Google echoes the hostname as the browser sent it, so a legal absolute FQDN arrives
+      # with its trailing dot and in the browser's casing. Rack does not strip either
+      # (Request#host only splits the port), so a "<seller>.gumroad.com." visitor was refused
+      # with a valid token and no way to fix it — the edge normalizes the Host header Rails
+      # sees, which is why nothing but this path noticed.
+      hostname = hostname.downcase.delete_suffix(".")
 
       # TODO: Refactor subdomain check. Use Subdomain module if possible
       hostname == DOMAIN || hostname.end_with?(".#{ROOT_DOMAIN}") || CustomDomain.find_by_host(hostname).present?
