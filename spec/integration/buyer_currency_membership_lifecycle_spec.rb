@@ -38,7 +38,8 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       purchase.price = product.prices.alive.first || product.prices.first
       purchase.variant_attributes = []
       purchase.save!(validate: false)
-      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      charge = create(:charge, seller:, merchant_account:)
+      charge_presentment = create(:charge_presentment, charge:, presentment_currency: "eur", fx_rate: 0.9)
       create(:purchase_presentment, purchase:, charge_presentment:,
                                     presentment_currency: "eur", presentment_price_cents: 899,
                                     presentment_gumroad_tax_cents: 0, presentment_total_cents: 899)
@@ -60,6 +61,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
                                               rate_converted_to_usd: BigDecimal("83"))
       charge_presentment = create(
         :charge_presentment,
+        charge: create(:charge, seller:, merchant_account:),
         presentment_currency: Currency::INR,
         stripe_fx_quote_id: nil,
         stripe_fx_quote_expires_at: nil,
@@ -111,7 +113,8 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
 
     it "writes nothing for a gift, whose subscription belongs to someone who never saw the price" do
       purchase = create(:membership_purchase, link: product, seller:, price_cents: 1000)
-      charge_presentment = create(:charge_presentment, presentment_currency: "eur", fx_rate: 0.9)
+      charge = create(:charge, seller:, merchant_account:)
+      charge_presentment = create(:charge_presentment, charge:, presentment_currency: "eur", fx_rate: 0.9)
       create(:purchase_presentment, purchase:, charge_presentment:,
                                     presentment_currency: "eur", presentment_price_cents: 899,
                                     presentment_gumroad_tax_cents: 0, presentment_total_cents: 899)
