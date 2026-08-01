@@ -37,6 +37,7 @@ class Checkout::PaymentMethodResolver
   LINK_PAYMENT_METHOD_TYPE = "link"
   UPI_PAYMENT_METHOD_TYPE = "upi"
   UPI_RECURRING_LAUNCH_FEATURE = :checkout_local_method_upi_recurring
+  UPI_RECURRING_SERVICING_FEATURE = :upi_autopay_renewals
   # Stripe caps each UPI recurring debit at INR 15,000. Gumroad stores INR in paise.
   UPI_RECURRING_MAX_INR_CENTS = 1_500_000
   # Per-seller Flipper flag so it can ramp and roll back independently (gumroad-private#933).

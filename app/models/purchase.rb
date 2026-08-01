@@ -4264,6 +4264,9 @@ class Purchase < ApplicationRecord
 
       upi_autopay = credit_card&.recurring_upi?
       if upi_autopay
+        if Feature.inactive?(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+          fail_upi_recurring_authorization!("servicing flag inactive")
+        end
         fail_upi_recurring_authorization!("charge processor changed") unless charge_processor_id == StripeChargeProcessor.charge_processor_id
         fail_upi_recurring_authorization!("merchant account changed") unless merchant_account&.stripe_charge_processor?
         fail_upi_recurring_authorization!("purchase is not a subscription renewal") if subscription.blank? || is_original_subscription_purchase?

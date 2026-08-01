@@ -325,9 +325,25 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
       end
 
       before do
+        Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
         fixing.destroy!
         subscription.update!(credit_card: upi_card)
         renewal.update!(credit_card: upi_card)
+      end
+
+      it "requests a payment-method update without calling Stripe when servicing is disabled" do
+        Feature.deactivate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+        expect(ErrorNotifier).to receive(:notify).with(
+          "UPI Autopay renewal rejected before Stripe submit",
+          reason: "servicing flag inactive",
+          purchase_id: renewal.id
+        )
+
+        result = renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+
+        expect(result).to be_nil
+        expect(renewal.stripe_error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
       end
 
       it "hands INR to the processor without consulting the acquisition flags" do
