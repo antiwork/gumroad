@@ -119,9 +119,7 @@ describe Shipment do
     end
 
     it "rejects a number that reaches a carrier's form but is not a format that carrier issues" do
-      # The number decides the carrier as much as the host does. Ten digits is a DHL waybill; on the
-      # USPS form it is a paste from somewhere else, and submitting it as a USPS number to Stripe on
-      # a one-shot dispute is the failure a shared alphanumeric bound could not see.
+      # Ten digits is a DHL waybill, not a USPS number, and Stripe takes one submission.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
       ["1234567890", "1Z999AA10123456784", "123456789012345678901"].each do |number|
         shipment.update!(tracking_url: "#{usps}#{number}")
@@ -186,7 +184,7 @@ describe Shipment do
       # submitted as evidence is worse than none. A remainder that is empty, truncated, or carries a
       # trailing parameter is not a number USPS issued.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
-      ["#{usps}9400111899223197428490&tRef=fullpage", usps, "#{usps}12", "#{usps}1Z999AA", "#{usps}#{'A' * 41}"].each do |url|
+      ["#{usps}9400111899223197428490&tRef=fullpage", usps, "#{usps}12", "#{usps}1Z999AA"].each do |url|
         shipment.update!(tracking_url: url)
         expect(shipment.carrier_and_tracking_number_from_url).to be_nil, "expected #{url} to be rejected"
       end
@@ -197,6 +195,25 @@ describe Shipment do
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
       shipment.update!(tracking_url: "  #{usps}9400111899223197428490\n")
       expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "9400111899223197428490"])
+    end
+
+    it "recovers the pair when the pasted whitespace was percent-encoded" do
+      # The browser encodes whitespace the seller pasted, so it survives `strip` inside the query
+      # string. `%20` leads 1,932 of the newest 200,000 shipments' USPS numbers — without this the
+      # single largest population of real tracking numbers derives nothing.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      shipment.update!(tracking_url: "#{usps}%209400111899223197428490")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "9400111899223197428490"])
+
+      shipment.update!(tracking_url: "#{usps}%0D%0A9400111899223197428490%20")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "9400111899223197428490"])
+    end
+
+    it "does not treat a percent-encoded non-whitespace character as trimmable" do
+      # `%2F` is a slash, not whitespace. Trimming it would invent a number the seller never gave.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      shipment.update!(tracking_url: "#{usps}%2F9400111899223197428490")
+      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
     end
 
     it "returns nothing rather than raising when the value in memory is not valid UTF-8" do

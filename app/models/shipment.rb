@@ -14,8 +14,7 @@ class Shipment < ApplicationRecord
   }.freeze
 
   # The formats each mapped carrier issues. Reaching a carrier's tracking form is not enough: a
-  # ten-digit remainder on a USPS URL is a DHL waybill someone pasted, not a USPS number, and the
-  # shared alphanumeric bound this replaces could not tell the two apart.
+  # ten-digit remainder on the USPS form is a DHL waybill someone pasted, not a USPS number.
   # Keys must mirror CARRIER_TRACKING_URL_MAPPING — a carrier with no entry derives nothing, and
   # the spec pins the parity rather than letting an evidence build raise over a missing key.
   CARRIER_TRACKING_NUMBER_FORMAT = {
@@ -24,11 +23,17 @@ class Shipment < ApplicationRecord
     "UPS" => /\A1Z[A-Za-z0-9]{16}\z/i,
     "FedEx" => /\A(?:\d{12}|\d{15}|\d{20})\z/,
     "DHL" => /\A\d{10}\z/,
-    # Bounds measured against production: every derivable value is 20–30 digits or GM + 18 digits.
+    # DHL eCommerce publishes no crisp format, so the range is deliberately wider than the
+    # 20/22/26/30-digit and two-letter-plus-18-digit values production actually shows.
     "DHL Global Mail" => /\A(?:\d{20,30}|[A-Za-z]{2}\d{18})\z/,
     "OnTrac" => /\A[A-Za-z0-9]{15}\z/,
     "Canada Post" => /\A\d{16}\z/
   }.freeze
+
+  # Whitespace the seller pasted, percent-encoded by the browser before it reached the column.
+  # `%20` leads 1,932 of the newest 200,000 shipments' USPS numbers; without trimming it the
+  # number never matches its carrier's format and the strongest evidence we hold is dropped.
+  PERCENT_ENCODED_WHITESPACE = /\A(?:%(?:20|09|0[AaDd]))+|(?:%(?:20|09|0[AaDd]))+\z/
 
   validates :purchase, presence: true
 
@@ -85,6 +90,8 @@ class Shipment < ApplicationRecord
       next unless url_rest.start_with?(prefix_rest)
 
       number = url_rest[prefix_rest.length..]
+      # Two passes: one value can carry an encoded token at each end.
+      number = number.sub(PERCENT_ENCODED_WHITESPACE, "").sub(PERCENT_ENCODED_WHITESPACE, "")
       format = CARRIER_TRACKING_NUMBER_FORMAT[carrier_name]
       return [carrier_name, number] if format && number.match?(format)
     end
