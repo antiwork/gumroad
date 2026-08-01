@@ -5,6 +5,12 @@ require "spec_helper"
 describe User::DashboardNavItems do
   let(:user) { create(:user) }
 
+  it "keeps the seed marker out of the nav's own keys" do
+    # A destination keyed "seeded" would be handed to every seeded user unearned, and visiting it
+    # would latch the seed-once guard without a scan.
+    expect(DashboardNav::ITEMS).not_to include User::DashboardNavItems::SEEDED_MARKER
+  end
+
   describe "#promoted_nav_item_keys" do
     it "is empty before seeding" do
       expect(user.promoted_nav_item_keys).to eq []
@@ -36,7 +42,7 @@ describe User::DashboardNavItems do
       user.promote_nav_item!("products")
       user.promote_nav_item!("not_a_destination")
 
-      expect(user.reload.dashboard_nav_items_seeded?).to be false
+      expect(user.reload.dashboard_nav_promotions).to be_empty
     end
 
     it "does not touch the database again when the item is already recorded" do

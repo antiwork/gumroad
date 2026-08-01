@@ -87,7 +87,7 @@ describe PromotesDashboardNavItems, type: :request do
       "X-Inertia-Partial-Data" => "props",
     }
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "ignores an Inertia prefetch, so hovering a row does not promote it" do
@@ -98,7 +98,7 @@ describe PromotesDashboardNavItems, type: :request do
       "Purpose" => "prefetch",
     }
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "does not seed a team member from the seller they are switched into" do
@@ -114,7 +114,7 @@ describe PromotesDashboardNavItems, type: :request do
 
     # Whatever the switched-into store contains is not something THIS user has used, and the seed
     # must not latch at all — a latch here would freeze the empty result for their own account too.
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "ignores requests to paths that do not render the dashboard nav" do
@@ -122,7 +122,7 @@ describe PromotesDashboardNavItems, type: :request do
 
     get short_link_path(product.unique_permalink)
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "does not seed from the dashboard's JSON stat endpoints" do
@@ -132,13 +132,13 @@ describe PromotesDashboardNavItems, type: :request do
 
     get dashboard_customers_count_path
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "does not promote on a non-GET request" do
     post dashboard_dismiss_getting_started_checklist_path
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "keeps serving the page when the promotion write fails" do
@@ -170,7 +170,7 @@ describe PromotesDashboardNavItems, type: :request do
 
     get workflows_path
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "records nothing on a request that is not on a Gumroad host" do
@@ -186,12 +186,12 @@ describe PromotesDashboardNavItems, type: :request do
     get workflows_path
 
     expect(response).to have_http_status(:not_found)
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 
   it "records nothing for a non-HTML request to a promotable path" do
     get workflows_path, headers: { "Accept" => "application/json" }
 
-    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+    expect(seller.reload.dashboard_nav_promotions).to be_empty
   end
 end
