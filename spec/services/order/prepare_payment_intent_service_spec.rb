@@ -559,6 +559,115 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
       end
 
+      # The presenter reads the checkout page's own remote_ip, this service reads the ip_country
+      # stamped at order creation, so a buyer whose apparent location moves mid-checkout gets a US
+      # Element and a non-US intent — and Stripe then rejects the ConfirmationToken for every method,
+      # card included. See Checkout::PaymentMethodListToken.
+      it "builds the intent from the page's issued method list when the persisted country would drop the US-locked methods" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Greece") }
+        params[:payment_method_list_token] = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link cashapp], sellers: [seller]
+        )
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_issued_list").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      end
+
+      # The token settles which methods the Element offered, never whether a method may still be
+      # offered at all: it was signed before a flag could roll back or an account could lose a
+      # capability. So a replayed list cannot enable a method past its rollout gate — the same
+      # allowlist a client-supplied ConfirmationToken type passes (gumroad-private#1143).
+      it "drops a method from the issued list that this seller may no longer offer" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "United States") }
+        params[:payment_method_list_token] = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link cashapp klarna], sellers: [seller]
+        )
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_issued_gate").perform
+
+        # Klarna's launch flag is off for this seller, so it never reaches the intent even though
+        # the signed list names it.
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      end
+
+      # A crafted or replayed list must not widen past a rollout gate, and a checkout page that
+      # predates the token must behave exactly as today — both land on re-resolving.
+      it "ignores an unverifiable list and re-resolves" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "Greece") }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        params[:payment_method_list_token] = "not-a-real-token"
+        described_class.new(order:, params:, confirmation_token: "ctoken_forged_list").perform
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
+      end
+
+      # The final-amount strip runs over a verified issued list exactly as it does over a
+      # re-resolved one: klarna on an out-of-window cart fails the intent CREATE, taking down the
+      # whole cart including the buyer who picked card.
+      it "strips klarna from a verified issued list when the final amount is outside Stripe's Klarna window" do
+        Feature.activate_user(:checkout_local_method_klarna, seller)
+        expensive_product = create(:product, user: seller, price_cents: 5_000_00)
+        params = { line_items: [{ uid: "unique-id-0", permalink: expensive_product.unique_permalink, perceived_price_cents: expensive_product.price_cents, quantity: 1 }] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        order.purchases.each { _1.update!(ip_country: "United States") }
+        params[:payment_method_list_token] = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link cashapp klarna], sellers: [seller]
+        )
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_issued_window").perform
+
+        expect(create_args[:payment_method_types]).to eq(%w[card link cashapp])
+      ensure
+        Feature.deactivate_user(:checkout_local_method_klarna, seller)
+      end
+
       # Klarna joins the intent only when its launch flag is on AND the final charged total sits
       # inside Stripe's Klarna USD window — the same resolver both the presenter and this service
       # read, so the Element's list and the intent's list stay equal.

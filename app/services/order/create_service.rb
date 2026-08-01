@@ -60,7 +60,7 @@ class Order::CreateService
               # (which receives the order params directly from the controller); it is not a
               # Purchase attribute, so letting it through raises ActiveModel::UnknownAttributeError
               # in Purchase::CreateService#build_purchase.
-              :payment_element_mount_currency
+              :payment_element_mount_currency, :payment_method_list_token
             )
             .merge(line_item_params.except(:uid, :permalink))
             .merge({ cart_items: })

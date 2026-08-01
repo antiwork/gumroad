@@ -100,6 +100,7 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
     presentment_amount_cents: null,
     listed_currency_display: null,
     payment_method_types: ["card"],
+    payment_method_list_token: null,
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
   },

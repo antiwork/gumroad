@@ -80,6 +80,10 @@ export type PaymentElementClientConfirmConfig = {
   presentment_amount_cents: number | null;
   listed_currency_display: ListedCurrencyDisplayConfig | null;
   payment_method_types: string[];
+  // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
+  // deferred intent is built from the list this page actually mounted rather than a second
+  // server-side resolution (gumroad-private#1528). Opaque to the browser.
+  payment_method_list_token: string | null;
   stripe_link_enabled: boolean;
   stripe_connect_account_id: string | null;
 };
