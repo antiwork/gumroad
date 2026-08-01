@@ -1,3 +1,6 @@
+// Playwright is deliberately not a repo dependency: these are one-shot QA captures
+// for PR #6762 and qa-media is pruned after merge. Before running any script here:
+//   npm install --no-save playwright@1.62.0 && npx playwright install chromium
 import { chromium } from "playwright";
 
 export const APEX = "fix-visible-gap-cursor-in-conten.apps.staging.gumroad.org";
