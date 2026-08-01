@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 # Cross-seller contention leg for gumroad#6721 / gumroad-private#1653.
 # A DIFFERENT seller claims, LIVE, the slug that seller@'s legacy mapping holds.
 # Before the reorder the bare domain served the MAPPED product (wrong seller).
 # After it, the live claimant must win, and the mapping row must survive untouched.
 SLUG = "xseller-old-974496"
 
-owner   = User.find_by(email: "seller@gumroad.com")
+owner = User.find_by(email: "seller@gumroad.com")
 claimant = User.find_by(email: "gumbo_film@gumroad.com")
 puts "MARK owner=#{owner.id} claimant=#{claimant.id}"
 
