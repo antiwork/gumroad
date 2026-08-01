@@ -5,6 +5,12 @@ require "spec_helper"
 describe AffiliatedProductsPresenter do
   include CurrencyHelper
 
+  # The removal keys (`affiliate_id`, `seller_name`) are asserted on their own below; the
+  # per-product expectations here are about the listing itself.
+  def listed_products(props)
+    props[:affiliated_products].map { _1.except(:affiliate_id, :seller_name) }
+  end
+
   describe "#affiliated_products_page_props", :vcr do
     # Users
     let(:creator_one) { create(:user, username: "creator1") }
@@ -183,7 +189,7 @@ describe AffiliatedProductsPresenter do
         affiliate_query_param: Affiliate::SHORT_QUERY_PARAM,
       }
 
-      expect(props[:affiliated_products]).to match_array all_product_details
+      expect(listed_products(props)).to match_array all_product_details
       expect(props[:stats]).to eq stats
       expect(props[:global_affiliates_data]).to eq global_affiliates_data
       expect(props[:discover_url]).to eq UrlService.discover_domain_with_protocol
@@ -214,7 +220,7 @@ describe AffiliatedProductsPresenter do
               affiliate_type: "direct_affiliate",
               url: direct_affiliate_one.referral_url_for_product(creator_one_product_one) }
           ]
-          expect(props[:affiliated_products]).to match_array products_details
+          expect(listed_products(props)).to match_array products_details
         end
       end
 
@@ -239,7 +245,7 @@ describe AffiliatedProductsPresenter do
               affiliate_type: "direct_affiliate",
               url: direct_affiliate_one.referral_url_for_product(creator_one_product_two) }
           ]
-          expect(props[:affiliated_products]).to match_array products_details
+          expect(listed_products(props)).to match_array products_details
         end
       end
 
@@ -248,7 +254,7 @@ describe AffiliatedProductsPresenter do
 
         it "returns an empty array" do
           props = described_class.new(affiliate_user, query:).affiliated_products_page_props
-          expect(props[:affiliated_products]).to be_empty
+          expect(listed_products(props)).to be_empty
         end
       end
     end
@@ -259,7 +265,7 @@ describe AffiliatedProductsPresenter do
       it "returns page 1 by default" do
         props = described_class.new(affiliate_user).affiliated_products_page_props
         expect(props[:affiliated_products].count).to eq 5
-        expect(props[:affiliated_products]).to match_array all_product_details.take(5)
+        expect(listed_products(props)).to match_array all_product_details.take(5)
         pagination = props[:pagination]
         expect(pagination[:page]).to eq(1)
         expect(pagination[:pages]).to eq(2)
@@ -268,7 +274,7 @@ describe AffiliatedProductsPresenter do
       it "returns the specified page if in range" do
         props = described_class.new(affiliate_user, page: 2).affiliated_products_page_props
         expect(props[:affiliated_products].count).to eq 3
-        expect(props[:affiliated_products]).to match_array all_product_details.drop(5)
+        expect(listed_products(props)).to match_array all_product_details.drop(5)
         pagination = props[:pagination]
         expect(pagination[:page]).to eq(2)
         expect(pagination[:pages]).to eq(2)
@@ -354,7 +360,7 @@ describe AffiliatedProductsPresenter do
 
       it "returns the products sorted by created timestamp by default" do
         props = described_class.new(affiliate_user).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$2.36",
@@ -366,7 +372,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$0",
@@ -380,7 +386,7 @@ describe AffiliatedProductsPresenter do
 
       it "returns the products sorted by revenue when specified" do
         props = described_class.new(affiliate_user, sort: { key: "revenue", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$0",
@@ -392,7 +398,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "revenue", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 10,
           humanized_revenue: "$0",
@@ -404,7 +410,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, sort: { key: "revenue", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 25,
           humanized_revenue: "$3.94",
@@ -416,7 +422,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "revenue", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$2.36",
@@ -430,7 +436,7 @@ describe AffiliatedProductsPresenter do
 
       it "returns the products sorted by sales when specified" do
         props = described_class.new(affiliate_user, sort: { key: "sales_count", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$0",
@@ -442,7 +448,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "sales_count", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 10,
           humanized_revenue: "$0",
@@ -454,7 +460,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, sort: { key: "sales_count", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$2.36",
@@ -466,7 +472,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "sales_count", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 25,
           humanized_revenue: "$3.94",
@@ -480,7 +486,7 @@ describe AffiliatedProductsPresenter do
 
       it "returns the products sorted by name when specified" do
         props = described_class.new(affiliate_user, sort: { key: "product_name", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$2.36",
@@ -492,7 +498,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "product_name", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$0",
@@ -504,31 +510,31 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, sort: { key: "product_name", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly({
-                                                                 fee_percentage: 15,
-                                                                 humanized_revenue: "$0.01",
-                                                                 product_name: global_affiliate_eligible_product.name,
-                                                                 revenue: 1,
-                                                                 sales_count: 1,
-                                                                 affiliate_type: "direct_affiliate",
-                                                                 url: direct_affiliate_one.referral_url_for_product(global_affiliate_eligible_product)
-                                                               })
+        expect(listed_products(props)).to contain_exactly({
+                                                            fee_percentage: 15,
+                                                            humanized_revenue: "$0.01",
+                                                            product_name: global_affiliate_eligible_product.name,
+                                                            revenue: 1,
+                                                            sales_count: 1,
+                                                            affiliate_type: "direct_affiliate",
+                                                            url: direct_affiliate_one.referral_url_for_product(global_affiliate_eligible_product)
+                                                          })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "product_name", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly({
-                                                                 fee_percentage: 10,
-                                                                 humanized_revenue: "$0",
-                                                                 product_name: global_affiliate_eligible_product.name,
-                                                                 revenue: 0,
-                                                                 sales_count: 0,
-                                                                 affiliate_type: "global_affiliate",
-                                                                 url: global_affiliate.referral_url_for_product(global_affiliate_eligible_product),
-                                                               })
+        expect(listed_products(props)).to contain_exactly({
+                                                            fee_percentage: 10,
+                                                            humanized_revenue: "$0",
+                                                            product_name: global_affiliate_eligible_product.name,
+                                                            revenue: 0,
+                                                            sales_count: 0,
+                                                            affiliate_type: "global_affiliate",
+                                                            url: global_affiliate.referral_url_for_product(global_affiliate_eligible_product),
+                                                          })
       end
 
       it "returns the products sorted by commission when specified" do
         props = described_class.new(affiliate_user, sort: { key: "commission", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 5,
           humanized_revenue: "$1.04",
@@ -540,7 +546,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "commission", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 10,
           humanized_revenue: "$0",
@@ -552,7 +558,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, sort: { key: "commission", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 25,
           humanized_revenue: "$3.94",
@@ -564,7 +570,7 @@ describe AffiliatedProductsPresenter do
         })
 
         props = described_class.new(affiliate_user, page: 2, sort: { key: "commission", direction: "desc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly(
+        expect(listed_products(props)).to contain_exactly(
         {
           fee_percentage: 15,
           humanized_revenue: "$2.36",
@@ -578,20 +584,20 @@ describe AffiliatedProductsPresenter do
 
       it "returns the products sorted by created timestamp when the sort field is invalid" do
         props = described_class.new(affiliate_user, sort: { key: "invalid", direction: "asc" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly all_product_details.first
+        expect(listed_products(props)).to contain_exactly all_product_details.first
       end
 
       it "returns the products in ascending order when the sort direction is invalid" do
         props = described_class.new(affiliate_user, sort: { key: "revenue", direction: "desc; invalid or nefarious SQL" }).affiliated_products_page_props
-        expect(props[:affiliated_products]).to contain_exactly({
-                                                                 fee_percentage: 15,
-                                                                 humanized_revenue: "$0",
-                                                                 product_name: "Creator 1 Product 2",
-                                                                 revenue: 0,
-                                                                 sales_count: 0,
-                                                                 affiliate_type: "direct_affiliate",
-                                                                 url: direct_affiliate_one.referral_url_for_product(creator_one_product_two)
-                                                               })
+        expect(listed_products(props)).to contain_exactly({
+                                                            fee_percentage: 15,
+                                                            humanized_revenue: "$0",
+                                                            product_name: "Creator 1 Product 2",
+                                                            revenue: 0,
+                                                            sales_count: 0,
+                                                            affiliate_type: "direct_affiliate",
+                                                            url: direct_affiliate_one.referral_url_for_product(creator_one_product_two)
+                                                          })
       end
     end
   end
@@ -608,6 +614,62 @@ describe AffiliatedProductsPresenter do
       expect(props[:global_affiliates_data][:global_affiliate_sales]).to be_nil
       expect(props[:global_affiliates_data][:cookie_expiry_days]).to eq GlobalAffiliate::AFFILIATE_COOKIE_LIFETIME_DAYS
       expect(props[:global_affiliates_data][:affiliate_query_param]).to eq Affiliate::SHORT_QUERY_PARAM
+    end
+  end
+
+  # Kept out of the `:vcr` block above: nothing here needs a purchase, so these
+  # examples do not have to sit behind that block's Stripe cassettes.
+  describe "#affiliated_products_page_props removal keys" do
+    let(:affiliate_user) { create(:affiliate_user) }
+    let(:creator) { create(:user, username: "removalcreator") }
+    let!(:product) { create(:product, name: "Removal Product", user: creator) }
+    # The global row is wired up directly rather than through the `:recommendable`
+    # trait, which creates a purchase (and so needs this file's Stripe cassettes).
+    let!(:global_product) { create(:product, name: "Global Product") }
+    let!(:global_row) { create(:product_affiliate, affiliate: affiliate_user.global_affiliate, product: global_product, affiliate_basis_points: 10_00) }
+
+    let!(:direct_affiliate) do
+      affiliate = create(:direct_affiliate, affiliate_user:, seller: creator, affiliate_basis_points: 15_00)
+      create(:product_affiliate, affiliate:, product:, affiliate_basis_points: 15_00)
+      affiliate
+    end
+
+    it "marks direct affiliations as removable and global ones as not" do
+      props = described_class.new(affiliate_user, can_remove_affiliations: true).affiliated_products_page_props
+
+      direct = props[:affiliated_products].find { _1[:affiliate_type] == "direct_affiliate" }
+      expect(direct[:affiliate_id]).to eq(direct_affiliate.external_id)
+      expect(direct[:seller_name]).to eq(creator.name_or_username)
+
+      global = props[:affiliated_products].find { _1[:affiliate_type] == "global_affiliate" }
+      expect(global[:product_name]).to eq("Global Product")
+      expect(global[:affiliate_id]).to be_nil
+      expect(global[:seller_name]).to be_nil
+    end
+
+    it "marks nothing removable for a viewer who cannot end affiliations" do
+      props = described_class.new(affiliate_user).affiliated_products_page_props
+
+      expect(props[:affiliated_products]).to be_present
+      expect(props[:affiliated_products].map { _1[:affiliate_id] }).to all(be_nil)
+    end
+
+    it "counts only creators the user is still affiliated with" do
+      expect(described_class.new(affiliate_user).affiliated_products_page_props[:stats][:total_affiliated_creators]).to eq(2)
+
+      direct_affiliate.mark_deleted!
+
+      props = described_class.new(affiliate_user).affiliated_products_page_props
+      expect(props[:stats][:total_affiliated_creators]).to eq(1)
+      expect(props[:affiliated_products].map { _1[:product_name] }).not_to include("Removal Product")
+    end
+
+    it "reports account-wide stats while a search narrows the listing" do
+      props = described_class.new(affiliate_user, query: "Removal").affiliated_products_page_props
+
+      expect(props[:affiliated_products].map { _1[:product_name] }).to eq(["Removal Product"])
+      expect(props[:stats][:total_products]).to eq(2)
+      expect(props[:stats][:total_affiliated_creators]).to eq(2)
     end
   end
 
