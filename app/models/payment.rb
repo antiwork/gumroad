@@ -315,6 +315,16 @@ class Payment < ApplicationRecord
       FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.include?(failure_reason)
   end
 
+  # True when there is no payout method left to point the seller at: PayPal refuses the country on
+  # the account's address, and bank transfer is not offered in the seller's. Read off the terminal
+  # list rather than naming 3148, but the copy it selects only holds while that list stays
+  # country-scoped — see the guard beside NO_OTHER_PAYPAL_ACCOUNT_HELPS_REASONS.
+  def paypal_failure_without_available_payout_rail?
+    terminal_paypal_failure? &&
+      !repairable_in_place_paypal_failure? &&
+      !user.can_setup_bank_payouts?
+  end
+
   # True when the seller is currently reading copy that says we removed their PayPal address, i.e.
   # when the invalidation actually happened for THIS payout. Keyed on this payment's address, not
   # merely "the account has a removed address on record": a seller invalidated on an old address who
@@ -336,7 +346,9 @@ class Payment < ApplicationRecord
   # but the hundreds of sellers who were already stuck before that stopped are still holding one,
   # as is anyone paused for an unrelated reason, so the paused wording still has to exist.
   def terminal_paypal_failure_seller_solution
-    fix = if repairable_in_place_paypal_failure?
+    fix = if paypal_failure_without_available_payout_rail?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL
+    elsif repairable_in_place_paypal_failure?
       # The seller can clear this on the account they already use, so lead with that — see
       # Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
       if user.can_setup_bank_payouts?

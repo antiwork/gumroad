@@ -175,7 +175,8 @@ describe ContactingCreatorMailer do
     it "promises the next payout date when the account is not under a payout hold" do
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("next payout date")
+      expect(mail.body.encoded).to include("add a bank account there")
+      expect(mail.body.encoded).to include("Your balance will be sent on the next payout date after that.")
       expect(mail.body.encoded).to_not include("on hold")
     end
 
@@ -210,8 +211,41 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("PayPal is the only payout method we can offer in your country")
+      expect(mail.body.encoded).to include("We've stopped retrying this payout, because every attempt to that account will be refused")
+      expect(mail.body.encoded).to include("PayPal will not send payments to accounts registered in that country, and bank transfer is not available in yours")
+      expect(mail.body.encoded).to include("If you do not, we have no way to pay you right now")
+      expect(mail.body.encoded).to_not include("until you change how you get paid")
       expect(mail.body.encoded).to_not include("add a bank account")
+      expect(mail.body.encoded).to_not include("is not forfeited")
+      expect(mail.body.encoded).to_not include("next payout date")
+      expect(mail.body.encoded).to_not include("reply to this email so we can review the hold")
+    end
+
+    # The no-rail wording replaces the fix, not the hold disclosure: the hold is a separate fact and
+    # is still what a seller who does find a payable account would hit next.
+    it "still names a hold for a PayPal-only seller whose account is on hold" do
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+      expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
+      payment.user.update!(payouts_paused_internally: true)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("we have no way to pay you right now")
+      expect(mail.body.encoded).to include("Payouts on your account are also on hold")
+      expect(mail.body.encoded).to_not include("add a bank account")
+    end
+
+    it "keeps the in-place PayPal-only path for a currency rejection" do
+      payment.update!(failure_reason: "PAYPAL 14159")
+      payment.user.alive_user_compliance_info.mark_deleted!
+      create(:user_compliance_info, user: payment.user, country: "Ukraine")
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("add US dollars as a currency you accept")
+      expect(mail.body.encoded).to include("use a different PayPal account")
+      expect(mail.body.encoded).to_not include("we have no way to pay you right now")
     end
   end
 
