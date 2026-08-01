@@ -16,6 +16,12 @@ module BicCountryValidation
 
   private
     def validate_bank_code_country(expected_country)
+      # Only judge a code the current save is writing. The rows this rule exists to stop are
+      # already in the table, and BankAccount#mark_deleted! saves with validation — rejecting them
+      # here would block account closure (User#deactivate!), GDPR erasure, country changes, and
+      # switching payout method, i.e. trap the seller in the broken state instead of ending it.
+      return unless new_record? || will_save_change_to_bank_number?
+
       match = BIC_FORMAT_REGEX.match(bank_code.to_s)
       return if match.nil?
       return if match[:country].casecmp?(expected_country)

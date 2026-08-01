@@ -5,7 +5,9 @@ class NigeriaBankAccount < BankAccount
 
   BANK_ACCOUNT_TYPE = "NG"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
+  # \A..\z, not ^..$: line anchors would let "OPAHGB22\nXXXX" pass here and then miss the
+  # BIC country check below, which anchors on the whole string.
+  BANK_CODE_FORMAT_REGEX = /\A[0-9a-zA-Z]{8,11}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{10}$/

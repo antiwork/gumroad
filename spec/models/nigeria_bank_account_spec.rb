@@ -54,5 +54,35 @@ describe NigeriaBankAccount do
     it "leaves a non-BIC code to the format validator" do
       expect(build(:nigeria_bank_account, bank_number: "02607315")).to be_valid
     end
+
+    it "rejects a foreign BIC padded past the format check with a newline" do
+      expect(build(:nigeria_bank_account, bank_number: "OPAHGB22\nXXXX")).not_to be_valid
+    end
+
+    # The rows this rule rejects are already in the table, and every account-ending path saves
+    # them through a validating mark_deleted!.
+    describe "a persisted row whose stored BIC names another country" do
+      let(:bank_account) do
+        account = build(:nigeria_bank_account, bank_number: "OPAHGB22")
+        account.save!(validate: false)
+        account
+      end
+
+      it "can still be soft-deleted" do
+        expect { bank_account.mark_deleted! }.to change { bank_account.reload.deleted_at }.from(nil)
+      end
+
+      it "still rejects the code once the seller edits it" do
+        bank_account.bank_number = "TRWIUS35"
+
+        expect(bank_account).not_to be_valid
+      end
+
+      it "accepts an edit that corrects the country" do
+        bank_account.bank_number = "ABNGNGLAXXX"
+
+        expect(bank_account).to be_valid
+      end
+    end
   end
 end
