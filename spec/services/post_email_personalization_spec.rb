@@ -60,6 +60,16 @@ describe PostEmailPersonalization do
         .to eq("{{first_name}}" => "Jordi", "{{first_name|pal}}" => "Jordi")
     end
 
+    it "keys by the token exactly as authored, whitespace included" do
+      expect(described_class.substitutions("Hi {{ first_name | friend }},", nil))
+        .to eq("{{ first_name | friend }}" => "friend")
+    end
+
+    it "keeps whitespace variants of the same fallback as separate keys" do
+      expect(described_class.substitutions("{{first_name|pal}} {{ first_name | pal }}", nil))
+        .to eq("{{first_name|pal}}" => "pal", "{{ first_name | pal }}" => "pal")
+    end
+
     it "is empty when the post uses no token" do
       expect(described_class.substitutions("Hello everyone", "Jordi")).to eq({})
     end

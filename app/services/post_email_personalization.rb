@@ -29,11 +29,13 @@ module PostEmailPersonalization
     name.to_s.strip.split(/\s+/).first.presence
   end
 
-  # SendGrid substitutes by exact key, so every distinct spelling of the token that appears in
-  # this post needs its own key/value pair — including each per-post default.
+  # SendGrid substitutes by exact key, so each key must be the token exactly as it appears in the
+  # post — reconstructing it from the captured fallback would drop the author's whitespace and
+  # never match. One key/value pair per distinct spelling, including each per-post default.
   def substitutions(content, first_name)
-    content.to_s.scan(TOKEN).map(&:first).uniq.index_with { first_name.presence || _1.presence&.strip || DEFAULT }
-      .transform_keys { _1.nil? ? "{{first_name}}" : "{{first_name|#{_1}}}" }
+    content.to_s.to_enum(:scan, TOKEN)
+      .map { [Regexp.last_match(0), Regexp.last_match(1)] }.uniq.to_h
+      .transform_values { first_name.presence || _1.presence&.strip || DEFAULT }
   end
 
   def apply(content, first_name)
