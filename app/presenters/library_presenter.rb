@@ -18,9 +18,9 @@ class LibraryPresenter
 
     base = logged_in_user.purchases.visible_in_library
     denied_ids = no_access_membership_purchase_ids(base)
-    visible = denied_ids.any? ? base.where.not(id: denied_ids) : base
+    visible = base.where.not(id: denied_ids)
     replaced_ids = replaced_bundle_purchase_ids(base)
-    cards = replaced_ids.any? ? visible.where.not(id: replaced_ids) : visible
+    cards = visible.where.not(id: replaced_ids)
 
     pagination, page_purchases = paged_purchases(filtered(cards, query:, creator_ids:, bundle_ids:, show_archived_only:), sort:, page:)
 
@@ -141,10 +141,8 @@ class LibraryPresenter
       end
     end
 
-    # Membership purchases whose subscription no longer grants access. Checked through the
-    # model (not reimplemented in SQL) so this cannot drift from grant_access_to_product?;
-    # a purchase whose subscription row is missing stays visible — wrongly hiding a purchase
-    # is the worse failure (gumroad-private#1585).
+    # A purchase whose subscription row is missing stays visible: wrongly hiding a purchase is
+    # the worse failure (gumroad-private#1585).
     def no_access_membership_purchase_ids(base)
       pairs = base.joins(:link).merge(Link.is_recurring_billing).pluck(:id, :subscription_id)
       return [] if pairs.empty?

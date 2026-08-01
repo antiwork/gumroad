@@ -21,11 +21,11 @@ class LibraryController < Sellers::BaseController
     presenter = LibraryPresenter.new(logged_in_user)
 
     render inertia: "Library/Index", props: presenter.library_props(
-      page: params[:page],
-      sort: params[:sort],
-      query: params[:query],
-      creator_ids: params[:creators].to_s.split(","),
-      bundle_ids: params[:bundles].to_s.split(","),
+      page: string_param(:page),
+      sort: string_param(:sort),
+      query: string_param(:query),
+      creator_ids: string_param(:creators).split(","),
+      bundle_ids: string_param(:bundles).split(","),
       show_archived_only: params[:show_archived_only] == "true",
     ).merge(
       purchase_analytics: purchase_analytics_props,
@@ -58,6 +58,13 @@ class LibraryController < Sellers::BaseController
   end
 
   private
+    # Every filter param is a scalar in the URLs the page builds. An array- or hash-shaped one is
+    # not a filter to honour, and reaches String-only code (sanitize_sql_like, to_i) if passed on.
+    def string_param(name)
+      value = params[name]
+      value.is_a?(String) ? value : ""
+    end
+
     def tracked_purchase_external_ids
       raw_ids = params[:purchase_id]
       (raw_ids.is_a?(Array) ? raw_ids : Array(raw_ids))

@@ -47,6 +47,14 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         )
       end
 
+      it "ignores array- and hash-shaped page and query params instead of erroring" do
+        get :index, params: { page: ["2"], query: { a: "b" } }
+
+        expect(response).to be_successful
+        expect(inertia.props[:pagination][:page]).to eq(1)
+        expect(inertia.props[:search][:query]).to eq("")
+      end
+
       it "serves the requested page of results" do
         create_list(:purchase, 15, purchaser: user)
 

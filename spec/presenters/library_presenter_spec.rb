@@ -227,8 +227,12 @@ describe LibraryPresenter do
       end
 
       it "counts archived and unarchived purchases" do
+        # Asymmetric on purpose: with 1/1 the two counts are indistinguishable, so swapping the
+        # scopes would survive this example.
+        create(:purchase, purchaser: buyer, is_archived: true, link: create(:product, name: "Second archived product"))
+
         props = library_props
-        expect(props[:archived_count]).to eq(1)
+        expect(props[:archived_count]).to eq(2)
         expect(props[:unarchived_count]).to eq(1)
       end
 
