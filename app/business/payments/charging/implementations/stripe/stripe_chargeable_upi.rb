@@ -39,24 +39,24 @@ class StripeChargeableUpi
   def requires_mandate? = false
 
   def prepare!
-    fail_reauthorization!("recurring authorization was not verified") if @recurring_authorization_verified_at.blank?
-    fail_reauthorization!("payment method or customer is missing") if payment_method_id.blank? || @customer_id.blank?
+    fail_payment_method_update!("recurring authorization was not verified") if @recurring_authorization_verified_at.blank?
+    fail_payment_method_update!("payment method or customer is missing") if payment_method_id.blank? || @customer_id.blank?
     # Destination/direct routing is outside the platform-account contract verified for this rollout.
-    fail_reauthorization!("charge model changed") unless @merchant_account&.is_managed_by_gumroad?
-    fail_reauthorization!("charged account changed") unless @stripe_account_id == expected_stripe_account_id
+    fail_payment_method_update!("charge model changed") unless @merchant_account&.is_managed_by_gumroad?
+    fail_payment_method_update!("charged account changed") unless @stripe_account_id == expected_stripe_account_id
 
     begin
       with_stripe_error_handler do
         @payment_method = Stripe::PaymentMethod.retrieve(payment_method_id, { stripe_account: @stripe_account_id }.compact)
       end
     rescue ChargeProcessorInvalidRequestError
-      # A missing or account-invisible PaymentMethod needs reauthorization, not an outage retry.
-      fail_reauthorization!("payment method could not be retrieved")
+      # A missing or account-invisible PaymentMethod needs replacement, not an outage retry.
+      fail_payment_method_update!("payment method could not be retrieved")
     end
 
-    fail_reauthorization!("payment method is not UPI") unless @payment_method[:type] == payment_method_type
+    fail_payment_method_update!("payment method is not UPI") unless @payment_method[:type] == payment_method_type
     attached_customer_id = stripe_object_id(@payment_method[:customer])
-    fail_reauthorization!("payment method is attached to a different customer") unless attached_customer_id == @customer_id
+    fail_payment_method_update!("payment method is attached to a different customer") unless attached_customer_id == @customer_id
 
     true
   end
@@ -82,11 +82,11 @@ class StripeChargeableUpi
       object.respond_to?(:id) ? object.id : object
     end
 
-    def fail_reauthorization!(reason)
+    def fail_payment_method_update!(reason)
       ErrorNotifier.notify("Saved UPI recurring payment method rejected before Stripe submit", reason:)
       raise ChargeProcessorCardError.new(
         PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
-        StripeChargeProcessor::UPI_REAUTHORIZATION_MESSAGE
+        StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE
       )
     end
 end

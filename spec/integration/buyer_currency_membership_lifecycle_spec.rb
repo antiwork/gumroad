@@ -345,7 +345,7 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
         expect(upi_card.reload.stripe_payment_intent_id).to eq("pi_upi_signup")
       end
 
-      it "fails for re-authorization rather than calling Stripe in USD when the fixing is missing" do
+      it "requests a payment-method update rather than calling Stripe in USD when the fixing is missing" do
         upi_fixing.destroy!
         expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
         expect(ErrorNotifier).to receive(:notify).with(

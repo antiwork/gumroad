@@ -278,7 +278,7 @@ describe Purchase::LaterChargePresentmentService do
       expect(result.processor_currency).to eq(Currency::INR)
     end
 
-    it "requests re-authorization instead of using a fixing in another currency" do
+    it "requests a payment-method update instead of using a fixing in another currency" do
       expect(ErrorNotifier).to receive(:notify).with(
         "Required-currency renewal rejected before processor submit",
         reason: :required_currency_mismatch,
@@ -294,7 +294,7 @@ describe Purchase::LaterChargePresentmentService do
       end
     end
 
-    it "requests re-authorization instead of falling back to USD when the fixing is missing" do
+    it "requests a payment-method update instead of falling back to USD when the fixing is missing" do
       stored.destroy!
       expect(ErrorNotifier).to receive(:notify).with(
         "Required-currency renewal rejected before processor submit",

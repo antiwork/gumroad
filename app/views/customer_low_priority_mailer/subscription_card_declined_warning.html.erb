@@ -1,6 +1,9 @@
-<%= header_section("Your card was declined.") %>
+<%= header_section(@subject) %>
 <div>
-  <% if @subscription.is_installment_plan %>
+  <% if @payment_method_is_upi %>
+    <p>This is a reminder that we couldn't process the recurring payment for <%= @subscription.link.name %> using your saved UPI payment method. Please <%= link_to "update your payment method", @edit_card_url %> to complete the transaction.</p>
+    <p>If a payment is not successful within 48 hours, your subscription to <%= @subscription.link.name %> will be canceled.</p>
+  <% elsif @subscription.is_installment_plan %>
     <p>This is a reminder that we attempted to charge your card for your installment plan to <%= @subscription.link.name %>, but were unable. Please <%= link_to "update your card", @edit_card_url %> to complete the transaction.</p>
     <p>If a charge to your credit card is not successful within 48 hours, your installment plan to <%= @subscription.link.name %> will be paused, and you will lose access to the product.</p>
   <% else %>

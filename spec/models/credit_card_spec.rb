@@ -246,6 +246,21 @@ describe CreditCard do
       end.to raise_error(ArgumentError, /did not preserve a valid maximum UPI debit/)
     end
 
+    it "rejects a UPI intent whose persisted maximum exceeds Stripe's recurring limit" do
+      payment_intent.metadata = {
+        StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY =>
+          (Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS + 1).to_s
+      }
+
+      expect do
+        described_class.create_from_client_confirmed_intent!(
+          payment_intent:,
+          processor_charge:,
+          merchant_account: nil
+        )
+      end.to raise_error(ArgumentError, /did not preserve a valid maximum UPI debit/)
+    end
+
     it "rejects a UPI intent outside INR even if it otherwise succeeded" do
       payment_intent.currency = Currency::USD
 

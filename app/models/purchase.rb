@@ -4227,8 +4227,13 @@ class Purchase < ApplicationRecord
     def prepare_merchant_account(charge_processor_id, resolved_merchant_account: nil)
       # Note: This assumes for the time being that all chargeables have only one internal chargeable.
       # Single-seller callers may pass a pre-resolved account to skip the per-purchase lookup.
-      self.merchant_account = resolved_merchant_account || seller.merchant_account(charge_processor_id)
-      self.merchant_account ||= MerchantAccount.gumroad(charge_processor_id)
+      self.merchant_account = if credit_card&.recurring_upi?
+        # UPI Autopay is enrolled on Gumroad's Stripe account; a seller connecting Stripe later
+        # must not move the saved Customer and PaymentMethod to an account that cannot see them.
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+      else
+        resolved_merchant_account || seller.merchant_account(charge_processor_id) || MerchantAccount.gumroad(charge_processor_id)
+      end
       if merchant_account&.is_a_brazilian_stripe_connect_account? && affiliate.present?
         self.error_code = PurchaseErrorCode::BRAZILIAN_MERCHANT_ACCOUNT_WITH_AFFILIATE
         errors.add(:base, "Affiliate sales are not currently supported for this product.")
@@ -4289,7 +4294,7 @@ class Purchase < ApplicationRecord
       ErrorNotifier.notify("UPI Autopay renewal rejected before Stripe submit", reason:, purchase_id: id)
       raise ChargeProcessorCardError.new(
         PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
-        StripeChargeProcessor::UPI_REAUTHORIZATION_MESSAGE
+        StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE
       )
     end
 

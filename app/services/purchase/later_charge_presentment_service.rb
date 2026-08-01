@@ -225,7 +225,7 @@ class Purchase::LaterChargePresentmentService
 
         raise ChargeProcessorCardError.new(
           PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
-          StripeChargeProcessor::UPI_REAUTHORIZATION_MESSAGE
+          StripeChargeProcessor::UPI_PAYMENT_METHOD_UPDATE_MESSAGE
         )
       end
 

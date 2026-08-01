@@ -32,7 +32,7 @@ describe StripeChargeableUpi do
       expect(chargeable.stripe_charge_params).to eq(customer: "cus_upi", payment_method: "pm_upi")
     end
 
-    it "fails for re-authorization when the charged account changed" do
+    it "requests a payment-method update when the charged account changed" do
       seller = create(:user)
       merchant_account = create(:merchant_account_stripe_connect, user: seller)
       mismatched = described_class.new(
@@ -54,7 +54,7 @@ describe StripeChargeableUpi do
       end
     end
 
-    it "fails for re-authorization when the seller moved to destination charges" do
+    it "requests a payment-method update when the seller moved to destination charges" do
       seller = create(:user)
       destination_account = create(:merchant_account, user: seller)
       changed_model = described_class.new(
@@ -76,7 +76,7 @@ describe StripeChargeableUpi do
       end
     end
 
-    it "fails for re-authorization when Stripe can no longer retrieve the saved payment method" do
+    it "requests a payment-method update when Stripe can no longer retrieve the saved payment method" do
       allow(Stripe::PaymentMethod).to receive(:retrieve)
         .and_raise(Stripe::InvalidRequestError.new("No such PaymentMethod", "payment_method"))
       expect(ErrorNotifier).to receive(:notify).with(

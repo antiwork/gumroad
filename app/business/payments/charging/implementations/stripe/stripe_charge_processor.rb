@@ -23,7 +23,7 @@ class StripeChargeProcessor
   REFUND_REASON_FRAUDULENT = "fraudulent"
 
   MANDATE_PREFIX = "Mandate-"
-  UPI_REAUTHORIZATION_MESSAGE = "Your UPI recurring payment authorization is unavailable. Please re-enter your payment method to continue your membership."
+  UPI_PAYMENT_METHOD_UPDATE_MESSAGE = "Your saved UPI payment method can no longer be used. Please update your payment method to continue your membership."
   # Stripe does not echo UPI mandate_options, so finalization validates this server-authored copy.
   UPI_RECURRING_MAX_AMOUNT_METADATA_KEY = "gumroad_upi_max_amount_cents"
 
@@ -1360,7 +1360,7 @@ class StripeChargeProcessor
       return if reason.nil?
 
       ErrorNotifier.notify("UPI Autopay renewal rejected before Stripe submit", reason:)
-      raise ChargeProcessorCardError.new(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED, UPI_REAUTHORIZATION_MESSAGE)
+      raise ChargeProcessorCardError.new(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED, UPI_PAYMENT_METHOD_UPDATE_MESSAGE)
     end
 
     def get_mandate_id_from_chargeable(chargeable, merchant_account)

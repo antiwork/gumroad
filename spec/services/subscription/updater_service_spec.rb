@@ -156,6 +156,36 @@ describe Subscription::UpdaterService, :vcr do
             expect(@user.reload.credit_card).to eq @credit_card
           end
         end
+
+        it "replaces a saved UPI payment method with a card" do
+          upi_card = CreditCard.create!(
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            payment_method_type: "upi",
+            stripe_customer_id: "cus_upi",
+            processor_payment_method_id: "pm_upi",
+            stripe_fingerprint: "pm_upi",
+            visual: "UPI",
+            card_type: CardType::UPI,
+            card_country: Compliance::Countries::IND.alpha2,
+            recurring_authorization_verified_at: Time.current,
+            recurring_authorization_currency: Currency::INR,
+            recurring_authorization_max_amount_cents: 100_000
+          )
+          @subscription.update!(credit_card: upi_card)
+          @original_purchase.update!(credit_card: upi_card)
+
+          result = Subscription::UpdaterService.new(
+            subscription: @subscription,
+            gumroad_guid: @gumroad_guid,
+            params: update_card_params,
+            logged_in_user: @user,
+            remote_ip: @remote_ip,
+          ).perform
+
+          expect(result[:success]).to be(true)
+          expect(@subscription.reload.credit_card).not_to be_recurring_upi
+          expect(@subscription.credit_card).not_to eq(upi_card)
+        end
       end
 
       describe "restarting a membership" do
