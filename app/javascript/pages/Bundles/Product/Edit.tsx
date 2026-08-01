@@ -239,7 +239,7 @@ export default function BundlesProductEdit() {
           bundle={previewBundle}
           id={id}
           uniquePermalink={unique_permalink}
-          currencyType={currency_type}
+          currencyType={form.data.price_currency_type}
           salesCountForInventory={sales_count_for_inventory}
           ratings={ratings}
           sellerRefundPolicyEnabled={seller_refund_policy_enabled}

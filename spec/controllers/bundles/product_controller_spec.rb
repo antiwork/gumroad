@@ -72,11 +72,33 @@ describe Bundles::ProductController, inertia: true do
       expect(bundle.price_cents).to eq(3500)
     end
 
+    # Non-default currency on purpose: with a usd fixture this is green whether
+    # the omit branch preserves the value or resets it to the seller default.
     it "leaves the currency alone when the request omits it" do
+      bundle.update!(price_currency_type: "gbp", price_cents: 2000)
+
       put :update, params: { bundle_id: bundle.external_id, price_cents: 2500 }
 
-      expect(bundle.reload.price_currency_type).to eq("usd")
+      expect(bundle.reload.price_currency_type).to eq("gbp")
       expect(bundle.price_cents).to eq(2500)
+    end
+
+    # The form re-sends the current default_offer_code_id on every save, so
+    # without the unchanged-id short circuit in update_default_offer_code a
+    # universal currency-scoped code fails the whole save with the unrelated
+    # "Offer code must apply to this product".
+    it "still changes the currency when the resent default offer code is universal and currency-scoped" do
+      offer_code = create(:universal_offer_code, user: seller, amount_cents: 100, currency_type: "usd", code: "univ")
+      bundle.update!(default_offer_code: offer_code)
+
+      put :update, params: {
+        bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000,
+        default_offer_code_id: offer_code.external_id
+      }
+
+      bundle.reload
+      expect(bundle.price_currency_type).to eq("eur")
+      expect(bundle.default_offer_code).to be_nil
     end
 
     # A product-specific fixed-amount code is not detached or currency-checked

@@ -140,6 +140,12 @@ class Bundles::ProductController < Bundles::BaseController
 
       offer_code = @bundle.user.offer_codes.alive.find_by_external_id!(default_offer_code_id)
 
+      # The form re-sends the current id on every save, so a currency change
+      # would otherwise be rejected outright by applicable? below. Leave an
+      # unchanged id to Link#clear_detached_default_offer_code, which drops it
+      # when it stops applying.
+      return if offer_code == @bundle.default_offer_code
+
       raise Link::LinkInvalid, "Offer code cannot be expired" if offer_code.inactive?
       raise Link::LinkInvalid, "Offer code must apply to this product" unless offer_code.applicable?(@bundle)
 
