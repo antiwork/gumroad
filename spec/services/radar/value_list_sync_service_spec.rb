@@ -354,6 +354,73 @@ describe Radar::ValueListSyncService do
     end
   end
 
+  describe "#add_block" do
+    before do
+      allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
+      allow(Stripe::Radar::ValueListItem).to receive(:list).and_return(double(data: []))
+    end
+
+    it "pushes a newly blocked email to Radar without waiting for the daily window" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "fresh@example.com")
+
+      expect(Stripe::Radar::ValueListItem).to receive(:create).with(value_list: "rsl_123", value: "fresh@example.com")
+
+      expect(service.add_block(block)).to be(true)
+    end
+
+    # The converse of the removal race, and the reason remove_block's final check does not need a
+    # lock: an unblock committing after add_block's reload would otherwise leave a live Radar item
+    # rejecting a buyer who is no longer blocked, until tomorrow's sync.
+    it "removes the item when the row is unblocked between the check and the create" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "raced-add@example.com")
+      allow(Stripe::Radar::ValueListItem).to receive(:list)
+        .with(value_list: "rsl_123", value: "raced-add@example.com")
+        .and_return(double(data: [double("ValueListItem", id: "rsli_20")]))
+
+      allow(Stripe::Radar::ValueListItem).to receive(:create) do
+        PlatformBlock.find(block.id).update_columns(blocked_at: nil, expires_at: nil)
+      end
+
+      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_20")
+
+      expect(service.add_block(block)).to be(false)
+    end
+
+    it "does not remove the item when no concurrent unblock happened" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "clean-add@example.com")
+      allow(Stripe::Radar::ValueListItem).to receive(:create)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:delete)
+
+      expect(service.add_block(block)).to be(true)
+    end
+
+    it "skips a row already cleared before the job ran" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "already-clear@example.com")
+      PlatformBlock.find(block.id).update_columns(blocked_at: nil, expires_at: nil)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(block)).to be(false)
+    end
+
+    it "skips types that are never pushed to Radar" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.214", expires_in: 1.hour)
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(block)).to be(false)
+    end
+
+    it "skips fingerprints the daily job's filter would have rejected" do
+      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "not a fingerprint")
+
+      expect(Stripe::Radar::ValueListItem).not_to receive(:create)
+
+      expect(service.add_block(block)).to be(false)
+    end
+  end
+
   describe "add loop re-check" do
     before do
       allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))

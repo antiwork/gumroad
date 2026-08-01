@@ -35,6 +35,11 @@ class PlatformBlock < ApplicationRecord
         blocked_by: by,
         expires_at: expires_in.present? ? now + expires_in : nil,
       )
+      # Symmetric with unblock!: a block added while a concurrent removal is mid-flight would
+      # otherwise go unenforced in Radar until tomorrow's sync, because the removal's own final
+      # check can only see the row before it commits. Read the type off the record, not the
+      # argument — callers pass it as a symbol too, and syncs? matches the persisted string.
+      Radar::AddValueListItemJob.perform_async(record.id) if Radar::ValueListSyncService.syncs?(record.object_type)
     end
   end
 

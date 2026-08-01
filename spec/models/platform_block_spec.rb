@@ -36,6 +36,38 @@ describe PlatformBlock do
       expect(record).to be_persisted
       expect(record.object_value).to eq("x@example.com")
     end
+
+    describe "Radar add" do
+      it "enqueues the Radar add for an email block" do
+        record = nil
+
+        expect do
+          record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "radar-add@example.com")
+        end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
+
+        expect(Radar::AddValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "enqueues the Radar add for a card fingerprint block" do
+        expect do
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m222")
+        end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
+      end
+
+      it "does not enqueue for types Radar never receives" do
+        expect do
+          PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "157.45.09.213", expires_in: 1.hour)
+        end.not_to change { Radar::AddValueListItemJob.jobs.size }
+      end
+
+      # add! is also called with a symbol object_type from some callers, and syncs? matches on the
+      # string form — the guard has to normalise or the whole re-assertion silently never fires.
+      it "enqueues when the caller passes a symbol object_type" do
+        expect do
+          PlatformBlock.add!(object_type: :email, object_value: "symbol-type@example.com")
+        end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
+      end
+    end
   end
 
   describe "#unblock!" do

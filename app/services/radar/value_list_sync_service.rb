@@ -39,6 +39,32 @@ class Radar::ValueListSyncService
     true
   end
 
+  # The counterpart to remove_block, enqueued off add!. Neither side can be made atomic with the
+  # Stripe call, so the two are made to converge instead: whichever order an add and a removal
+  # interleave in, the loser's own job re-reads the row and re-asserts Radar within seconds.
+  # Without this, only the removal recovered and a block added mid-removal stayed unenforced
+  # until the daily sync.
+  def add_block(platform_block)
+    list_config = LIST_FOR_TYPE[platform_block.object_type]
+    return false if list_config.nil?
+    return false if platform_block.reload.blocked_at.nil?
+
+    value = platform_block.object_value
+    return false if platform_block.charge_processor_fingerprint? && !value.match?(STRIPE_FINGERPRINT_PATTERN)
+
+    value_list_id = find_or_create_list(**list_config).id
+    add_item_to_list(value_list_id, value)
+
+    # Cleared while the add was in flight: leaving the item behind keeps rejecting a buyer whose
+    # block is gone, which is the failure this whole change exists to stop.
+    if !reblocked?(platform_block.object_type, value)
+      remove_item_from_list(value_list_id, value)
+      return false
+    end
+
+    true
+  end
+
   def sync_blocked_emails
     value_list = find_or_create_list(**LIST_FOR_TYPE[PlatformBlock::TYPES[:email]])
 
