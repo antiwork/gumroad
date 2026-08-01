@@ -5,9 +5,9 @@ class SitemapService
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
 
-  # Flattens the per-row seller and cover lookups the `add` loop below makes. The retina
-  # variant is NOT covered: `preview_url` calls `.processed`, which resolves each cover's
-  # variant record individually, so that cost stays per-row whatever is preloaded here.
+  # Flattens the per-row seller and cover lookups the `add` loop below makes. The
+  # variant_records leg matters: with it loaded, `.processed` finds the retina variant in
+  # memory. Only a cover being processed for the FIRST time still costs a write per row.
   SITEMAP_PRELOADS = [
     :user,
     { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }

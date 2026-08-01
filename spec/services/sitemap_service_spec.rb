@@ -58,9 +58,9 @@ describe SitemapService do
       # Tripling the month's size must not add a statement for these. A fixed bound would
       # pin whatever SitemapGenerator does today; flatness is the property the preload owes.
       #
-      # Active Storage is deliberately not counted here: `preview_url` resolves through
-      # AssetPreview#retina_variant, and `.processed` looks up (and may create) each cover's
-      # variant record individually, so that tail stays per-row and no preload removes it.
+      # Active Storage tables are not counted: every cover here is processed for the first
+      # time, which writes a variant record per row. The preload's variant_records leg pays
+      # off only for already-processed covers, which a cold fixture cannot stage.
       expect(count_association_queries.call(6)).to eq(count_association_queries.call(2))
     end
 
