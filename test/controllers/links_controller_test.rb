@@ -5510,9 +5510,22 @@ class LinksControllerShowTest < ActionController::TestCase
     @legacy_product = create_product(user: @legacy_user, custom_permalink: "custom")
   end
 
-  test "GET show redirects to a product defined by legacy permalink" do
+  test "GET show serves the oldest live product over a legacy mapping on the bare domain" do
     setup_legacy_products
     @request.host = DOMAIN
+
+    get :show, params: { id: "custom" }
+
+    # A mapping must never serve over another seller's live listing
+    # (gumroad-private#1653); @other_product is the oldest live holder.
+    assert_redirected_to @other_product.long_url
+  end
+
+  test "GET show redirects via a legacy mapping on the bare domain when no live product holds the slug" do
+    setup_legacy_products
+    @request.host = DOMAIN
+    [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
+    @product_with_legacy_mapping.update!(custom_permalink: "mapped-moved")
 
     get :show, params: { id: "custom" }
 
