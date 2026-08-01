@@ -166,10 +166,10 @@
    what this editor uses to mean "your content lands here". */
 
 /* The caret is absolutely positioned and needs the editor as its containing block, but
-   `position: relative` unconditionally would raise .ProseMirror into the positioned paint layer
-   above the empty-state overlay that precedes it, so the editor's own empty <p> swallows clicks
-   on "Upload your files". `:has` limits that to the moments a caret is actually on screen —
-   ProseMirror only inserts the widget beside an atom node, which an empty document has none of. */
+   `position: relative` unconditionally raises .ProseMirror above the empty-state overlay that
+   precedes it, so the editor's own empty <p> swallows clicks on "Upload your files". The widget
+   only exists while a gap-cursor selection is active, and an empty document has no valid gap
+   position, so `:has` keeps both properties. */
 .ProseMirror:has(.ProseMirror-gapcursor) {
   position: relative;
 }
@@ -179,9 +179,8 @@
   pointer-events: none;
   position: absolute;
   margin: 0;
-  /* Pin both edges rather than setting a width: an absolutely-positioned box with auto offsets
-     keeps its static left (the CONTENT edge), so `width: 100%` — resolved against the padding
-     box — overhangs padded editors by padding-left and adds horizontal page overflow. */
+  /* Pin both edges rather than setting a width: `width: 100%` resolves against the padding box
+     while the box keeps its static left (the content edge), so it overhangs padded editors. */
   left: 0;
   right: 0;
 }

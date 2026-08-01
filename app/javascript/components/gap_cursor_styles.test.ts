@@ -52,10 +52,8 @@ describe("gap cursor styling", () => {
   });
 
   it("pins both edges of the caret host, because ProseMirror's widget div is empty", () => {
-    // The host shrink-to-fits to 0 without this and the ::after bar, sized against it, paints
-    // nothing (measured: 0px). `width: 100%` fixes that but resolves against the padding box
-    // while the box keeps its static content-edge left, overhanging padded editors by 15px and
-    // adding horizontal page overflow — so pin left/right instead.
+    // `width: 100%` also fills the empty host, but it resolves against the padding box while the
+    // box keeps its static content-edge left, so it overhangs padded editors and overflows.
     const host = /\.ProseMirror-gapcursor\s*\{(?<body>[^}]*)\}/u.exec(ourCss)?.groups?.body ?? "";
     expect(host).toMatch(/left:\s*0/u);
     expect(host).toMatch(/right:\s*0/u);
@@ -67,5 +65,8 @@ describe("gap cursor styling", () => {
     const rule = /\.ProseMirror-gapcursor::after\s*\{(?<body>[^}]*)\}/u.exec(ourCss)?.groups?.body ?? "";
     expect(rule).toMatch(/border-top:[^;]*rgb\(var\(--accent\)\)/u);
     expect(rule).not.toMatch(/black/u);
+    // The bar is absolutely positioned with empty content, so it shrink-to-fits to 0 and paints
+    // nothing without this — the original defect, which every other assertion here passes over.
+    expect(rule).toMatch(/width:\s*100%/u);
   });
 });
