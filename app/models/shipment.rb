@@ -13,6 +13,23 @@ class Shipment < ApplicationRecord
     "Canada Post" => "https://www.canadapost.ca/cpotools/apps/track/personal/findByTrackNumber?LOCALE=en&trackingNumber="
   }.freeze
 
+  # The formats each mapped carrier issues. Reaching a carrier's tracking form is not enough: a
+  # ten-digit remainder on a USPS URL is a DHL waybill someone pasted, not a USPS number, and the
+  # shared alphanumeric bound this replaces could not tell the two apart.
+  # Keys must mirror CARRIER_TRACKING_URL_MAPPING — a carrier with no entry derives nothing, and
+  # the spec pins the parity rather than letting an evidence build raise over a missing key.
+  CARRIER_TRACKING_NUMBER_FORMAT = {
+    # 20/22-digit IMpb and its longer variants, or the 13-character S10 international form.
+    "USPS" => /\A(?:\d{20}|\d{22}|\d{26}|\d{30}|\d{34}|[A-Za-z]{2}\d{9}[A-Za-z]{2})\z/,
+    "UPS" => /\A1Z[A-Za-z0-9]{16}\z/i,
+    "FedEx" => /\A(?:\d{12}|\d{15}|\d{20})\z/,
+    "DHL" => /\A\d{10}\z/,
+    # Bounds measured against production: every derivable value is 20–30 digits or GM + 18 digits.
+    "DHL Global Mail" => /\A(?:\d{20,30}|[A-Za-z]{2}\d{18})\z/,
+    "OnTrac" => /\A[A-Za-z0-9]{15}\z/,
+    "Canada Post" => /\A\d{16}\z/
+  }.freeze
+
   validates :purchase, presence: true
 
   # The purchase's updated_at should reflect changes to its shipment.
@@ -46,7 +63,7 @@ class Shipment < ApplicationRecord
   # Host is folded but the path and query keys are compared exactly, because their casing is
   # significant to the carrier — `QTC_TLABELS1` is not a form USPS serves.
   # Returns nil rather than a guess: dispute evidence submits once, and a wrong number is worse
-  # than an absent one.
+  # than an absent one, so the remainder must match a format that carrier issues.
   def carrier_and_tracking_number_from_url
     # No writer strips this column, and the free-text evidence path strips before using it; without
     # the same treatment here a trailing space would cost the structured pair but keep the URL row.
@@ -68,9 +85,8 @@ class Shipment < ApplicationRecord
       next unless url_rest.start_with?(prefix_rest)
 
       number = url_rest[prefix_rest.length..]
-      # The shortest number any mapped carrier issues is DHL's 10 digits; a shorter remainder is a
-      # truncated paste, and submitting it as a real tracking number is the failure this guards.
-      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{10,40}\z/)
+      format = CARRIER_TRACKING_NUMBER_FORMAT[carrier_name]
+      return [carrier_name, number] if format && number.match?(format)
     end
     nil
   end

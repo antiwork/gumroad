@@ -90,12 +90,55 @@ describe Shipment do
     # The shape production actually stores: a tracking URL and nothing else.
     let(:shipment) { create(:shipment, carrier: nil, tracking_number: nil) }
 
+    # One number each carrier really issues, so the round-trip is not asserted with a value the
+    # carrier's own format would reject.
+    real_numbers = {
+      "USPS" => "9400111899223197428490",
+      "UPS" => "1Z999AA10123456784",
+      "FedEx" => "123456789012",
+      "DHL" => "1234567890",
+      "DHL Global Mail" => "94748100000000000000",
+      "OnTrac" => "C10999911111111",
+      "Canada Post" => "1234567890123456"
+    }.freeze
+
     it "recovers the carrier and number for every mapped carrier" do
       Shipment::CARRIER_TRACKING_URL_MAPPING.each do |carrier, prefix|
-        shipment.update!(tracking_url: "#{prefix}1Z999AA10123456784")
-        expect(shipment.carrier_and_tracking_number_from_url).to eq([carrier, "1Z999AA10123456784"]),
+        number = real_numbers.fetch(carrier)
+        shipment.update!(tracking_url: "#{prefix}#{number}")
+        expect(shipment.carrier_and_tracking_number_from_url).to eq([carrier, number]),
                                                                  "expected #{carrier} to round-trip from #{prefix}"
       end
+    end
+
+    it "knows a format for every mapped carrier" do
+      # A carrier present in the URL mapping but absent from the format mapping derives nothing at
+      # all — silently, and only for that carrier. Adding a carrier means adding both.
+      expect(Shipment::CARRIER_TRACKING_NUMBER_FORMAT.keys)
+        .to match_array(Shipment::CARRIER_TRACKING_URL_MAPPING.keys)
+    end
+
+    it "rejects a number that reaches a carrier's form but is not a format that carrier issues" do
+      # The number decides the carrier as much as the host does. Ten digits is a DHL waybill; on the
+      # USPS form it is a paste from somewhere else, and submitting it as a USPS number to Stripe on
+      # a one-shot dispute is the failure a shared alphanumeric bound could not see.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      ["1234567890", "1Z999AA10123456784", "123456789012345678901"].each do |number|
+        shipment.update!(tracking_url: "#{usps}#{number}")
+        expect(shipment.carrier_and_tracking_number_from_url).to be_nil,
+                                                                 "expected USPS to reject #{number}"
+      end
+
+      shipment.update!(tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING['DHL']}1234567890")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["DHL", "1234567890"])
+    end
+
+    it "accepts the USPS international form as well as the domestic one" do
+      # S10 (two letters, nine digits, two letters) is a real USPS number and is not 20-plus digits,
+      # so a digits-only format would drop it.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      shipment.update!(tracking_url: "#{usps}LZ123456789US")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "LZ123456789US"])
     end
 
     it "matches regardless of the URL's scheme" do
@@ -113,10 +156,11 @@ describe Shipment do
     it "returns nothing when the path or query keys differ in case from the carrier's form" do
       # Only the host is case-insensitive. `QTC_TLABELS1` is not a URL USPS serves, so the number
       # after it is not a USPS tracking number and must not become structured evidence.
-      shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?QTC_TLABELS1=1Z999AA10123456784")
+      # The number is a real USPS one, so only the casing can be what rejects these.
+      shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?QTC_TLABELS1=9400111899223197428490")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
 
-      shipment.update!(tracking_url: "https://tools.usps.com/GO/TrackConfirmAction?qtc_tLabels1=1Z999AA10123456784")
+      shipment.update!(tracking_url: "https://tools.usps.com/GO/TrackConfirmAction?qtc_tLabels1=9400111899223197428490")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
     end
 
@@ -127,35 +171,25 @@ describe Shipment do
 
     it "returns nothing when the value has no scheme" do
       # The column also holds bare tracking numbers and free-text notes, so text that merely starts
-      # with a carrier's host is not a link the seller followed.
+      # with a carrier's host is not a link the seller followed. The number is a real USPS one, so
+      # only the missing scheme can be what rejects these.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"].sub(%r{\Ahttps?://}, "")
-      shipment.update!(tracking_url: "#{usps}1Z999AA10123456784")
+      shipment.update!(tracking_url: "#{usps}9400111899223197428490")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
 
-      shipment.update!(tracking_url: "see tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1Z999AA10123456784")
+      shipment.update!(tracking_url: "see tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
     end
 
     it "returns nothing when the remainder is not a plausible tracking number" do
       # Extra query parameters mean we cannot tell where the number ends, and a wrong number
-      # submitted as evidence is worse than none. Lengths no mapped carrier issues are paste garbage:
-      # DHL's 10 digits is the shortest real format, so a 7-character remainder is a truncated paste.
+      # submitted as evidence is worse than none. A remainder that is empty, truncated, or carries a
+      # trailing parameter is not a number USPS issued.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
-      ["#{usps}1Z999AA10123456784&tRef=fullpage", usps, "#{usps}12", "#{usps}1Z999AA", "#{usps}#{'A' * 41}"].each do |url|
+      ["#{usps}9400111899223197428490&tRef=fullpage", usps, "#{usps}12", "#{usps}1Z999AA", "#{usps}#{'A' * 41}"].each do |url|
         shipment.update!(tracking_url: url)
         expect(shipment.carrier_and_tracking_number_from_url).to be_nil, "expected #{url} to be rejected"
       end
-    end
-
-    it "rejects a remainder shorter than the shortest real carrier format" do
-      # DHL's 10 digits is the shortest number any mapped carrier issues, so the bound sits there:
-      # nine characters is a truncated paste, ten is a real DHL waybill.
-      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
-      shipment.update!(tracking_url: "#{usps}123456789")
-      expect(shipment.carrier_and_tracking_number_from_url).to be_nil
-
-      shipment.update!(tracking_url: "#{usps}1234567890")
-      expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "1234567890"])
     end
 
     it "recovers the pair from a value stored with surrounding whitespace" do
