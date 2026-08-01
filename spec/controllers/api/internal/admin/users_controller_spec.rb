@@ -3630,6 +3630,21 @@ describe Api::Internal::Admin::UsersController do
       # Unpublished, not deleted: the row survives so existing members keep access.
       expect(membership.deleted_at).to be_nil
       expect(membership.purchase_disabled_at).to be_present
+      expect(membership.is_unpublished_by_admin?).to be(true)
+    end
+
+    it "does not let a seller republish an admin-taken-down membership" do
+      membership = create(:membership_product, user:)
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: membership.external_id }
+
+      membership.reload
+      expect do
+        membership.publish!
+      end.to raise_error(Link::LinkInvalid, "This product was unpublished by Gumroad and cannot be republished by the seller.")
+      expect(membership.reload.purchase_disabled_at).to be_present
+      expect(membership.deleted_at).to be_nil
+      expect(membership.is_unpublished_by_admin?).to be(true)
     end
 
     it "records the admin API audit log with the TOS flag action key" do

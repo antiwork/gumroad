@@ -494,6 +494,7 @@ class Link < ApplicationRecord
   end
 
   def publish!
+    enforce_not_unpublished_by_admin!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
@@ -540,7 +541,9 @@ class Link < ApplicationRecord
   # cannot infer it afterwards — `alive?` is false for both.
   def take_down_for_tos_violation!
     if is_tiered_membership?
-      unpublish!
+      # Every other admin-initiated unpublish sets this (User::Risk), and it is what
+      # distinguishes a takedown from the seller unpublishing their own listing.
+      unpublish!(is_unpublished_by_admin: true)
       "unpublished"
     else
       delete!
@@ -1565,6 +1568,13 @@ class Link < ApplicationRecord
       elsif !default_offer_code.applicable?(self)
         errors.add(:default_offer_code, "must apply to this product")
       end
+    end
+
+    def enforce_not_unpublished_by_admin!
+      return unless is_unpublished_by_admin?
+
+      errors.add(:base, "This product was unpublished by Gumroad and cannot be republished by the seller.")
+      raise LinkInvalid, "This product was unpublished by Gumroad and cannot be republished by the seller."
     end
 
     def enforce_user_email_confirmation!

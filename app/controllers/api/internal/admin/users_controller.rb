@@ -345,12 +345,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     record_admin_write(action: "users.flag_for_tos_violation", target: user) do
-      # The product takedown has to happen on BOTH branches. A seller with several
-      # infringing listings gets flagged once and then reported one product at a time,
-      # so returning early on `already_flagged` left every listing after the first one
-      # live and purchasable while telling the operator the action had succeeded
-      # (gumroad-private#1623: four impersonating listings sold for 33 days after
-      # takedown). The user-level flag is idempotent; the product-level one is not.
+      # Always take down the reported product: a seller can already be flagged from a
+      # prior listing, but this listing still needs its own enforcement action.
       already_flagged = user.flagged_for_tos_violation?
       product_status = nil
 
