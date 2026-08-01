@@ -659,6 +659,21 @@ describe Purchase::Blockable do
         expect(guest_row).to be_present
       end
 
+      it "does not let a shared browser corroborate a guest row: its own card stays blocked and is reported" do
+        # Another person guest-checking-out under the buyer's email on the buyer's machine (a shared
+        # household browser) matches on guid, but the card is theirs. A guid names a browser, not a
+        # buyer, so it must not pull the row's card into the unblock.
+        housemate_row = create(:purchase, link: product, email: purchase.email, purchaser: nil,
+                                          browser_guid: purchase.browser_guid, stripe_fingerprint: "housemate-card")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "housemate-card")
+
+        surviving = purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "housemate-card")).to be_present
+        expect(surviving.map(&:object_value)).to include("housemate-card")
+        expect(housemate_row).to be_present
+      end
+
       it "does not touch another buyer's blocks" do
         stranger = create(:purchase, link: product, email: "stranger@example.com", browser_guid: "stranger-guid")
         stranger.block_buyer!

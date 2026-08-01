@@ -193,21 +193,22 @@ module Purchase::Blockable
   # email is unauthenticated — anyone can type anyone's address, and card testers do exactly that —
   # so sharing the email is NOT enough to call a guest row this buyer's: a tester who checked out
   # under this buyer's address would otherwise get their own browser and card unblocked whenever
-  # an admin unblocks the buyer. A guest row only counts when a second, buyer-bound identifier
-  # ties it to a row we already trust (this one, or an account-bound sibling): its browser guid or
-  # its card fingerprint. One hop only — a corroborated guest row does not corroborate further
-  # rows. Rows that fail the bar contribute nothing here; their blocks are surfaced by
-  # #surviving_buyer_blocks for a human to judge.
+  # an admin unblocks the buyer. A guest row only counts when its card fingerprint matches a row
+  # we already trust (this one, or an account-bound sibling) — the fingerprint is derived from a
+  # physical card in the buyer's hands, so it is the one corroborating identifier that is itself
+  # buyer-bound. A browser guid match deliberately does NOT corroborate: a guid names a browser,
+  # and browsers are shared, so another person's guest checkout under the buyer's email on the
+  # buyer's machine would match on guid and get their own card unblocked. One hop only — a
+  # corroborated guest row does not corroborate further rows. Rows that fail the bar contribute
+  # nothing here; their blocks are surfaced by #surviving_buyer_blocks for a human to judge.
   #
   # Same-email rows that resolved to a DIFFERENT account are excluded outright, corroborated or
   # not — those identifiers belong to that account's blocks, not this buyer's.
   private def corroborated_guest_purchases(account_purchases)
-    trusted = [self, *account_purchases]
-    trusted_guids = trusted.map(&:browser_guid).compact_blank.to_set
-    trusted_fingerprints = trusted.map(&:charge_processor_fingerprint).compact_blank.to_set
+    trusted_fingerprints = [self, *account_purchases].map(&:charge_processor_fingerprint).compact_blank.to_set
 
     same_email_guest_purchases.select do |candidate|
-      trusted_guids.include?(candidate.browser_guid) || trusted_fingerprints.include?(candidate.charge_processor_fingerprint)
+      trusted_fingerprints.include?(candidate.charge_processor_fingerprint)
     end
   end
 
