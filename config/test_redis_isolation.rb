@@ -124,8 +124,12 @@ module TestRedisIsolation
 
       boot_endpoints.each_with_index { |endpoint, index| env[STORE_ENV_VARS.fetch(index)] = "#{endpoint[:server]}/#{endpoint[:database]}" }
       slot = install!(env:, warn_io:, key_prefix:)
-      return nil if slot.nil?
 
+      # Reconnect even when the lease failed. The stores in this fork are still connected to
+      # the block the spring server leased at preload, and ENV above now names the fallback
+      # ones — so returning early leaves concurrent forks flushing the server's block while
+      # the warning says they fell back to .env.test. Fallback is disjoint from every leased
+      # block, so moving them there is the pre-branch behavior the warning describes.
       reconnect_stores(env)
       slot
     end

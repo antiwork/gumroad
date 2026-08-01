@@ -461,6 +461,34 @@ describe TestRedisIsolation do
         described_class.reconnect_stores(ENV)
       end
     end
+
+    it "moves the stores to the fallback databases when no slot is free" do
+      # A fork that cannot lease is still connected to the block the spring server leased at
+      # preload, so returning early leaves two such forks flushing that block while the
+      # capacity warning claims they fell back to .env.test.
+      skip_without_a_free_block
+      capture_claims
+      original = $redis
+      fallback = parse(base_env.fetch("REDIS_HOST")).fetch(:database)
+
+      begin
+        env = base_env.dup
+        expect(boot(env)).to be_present
+        expect($redis.connection.fetch(:db)).not_to eq(fallback)
+
+        warnings = StringIO.new
+        allow(described_class).to receive(:claim_slot).and_return(nil)
+        expect(described_class.reinstall_after_fork!(env:, warn_io: warnings, key_prefix: test_prefix)).to be_nil
+
+        expect(env.fetch("REDIS_HOST")).to eq(base_env.fetch("REDIS_HOST"))
+        expect($redis.connection.fetch(:db)).to eq(fallback)
+        expect(Sidekiq.redis { |connection| connection.config.db })
+          .to eq(parse(base_env.fetch("SIDEKIQ_REDIS_HOST")).fetch(:database))
+      ensure
+        $redis = original
+        described_class.reconnect_stores(ENV)
+      end
+    end
   end
 
   describe "the isolation this run is itself using" do
