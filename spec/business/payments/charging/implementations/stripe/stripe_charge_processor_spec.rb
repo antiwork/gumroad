@@ -484,46 +484,6 @@ describe StripeChargeProcessor, :vcr do
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
     end
 
-    it "sends the carrier, tracking number and normalized shipment URL recovered from the seller's tracking URL" do
-      # The service specs stop at the DisputeEvidence record; this is the boundary where the pair
-      # and the free-text row actually reach Stripe, and where the shape of that payload is fixed.
-      shipment.update!(carrier: nil, tracking_number: nil,
-                       tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
-      disputed_purchase.dispute.dispute_evidence.destroy!
-      DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
-      stripe_charge.refresh
-
-      expect(Stripe::Dispute).to receive(:update).with(
-        stripe_charge.dispute,
-        evidence: hash_including({
-                                   shipping_carrier: "USPS",
-                                   shipping_tracking_number: "9400111899223197428490",
-                                   uncategorized_text: a_string_including(
-                                     "Seller-provided shipment tracking URL: #{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490"
-                                   )
-                                 })
-      ).and_call_original
-
-      subject.fight_chargeback(charge_id, disputed_purchase.dispute.reload.dispute_evidence)
-    end
-
-    it "omits a tracking URL that is not a plain http(s) URL from what Stripe receives" do
-      # A newline here would otherwise put the seller's own sentence into evidence Stripe reads as
-      # Gumroad's, and the submission cannot be corrected afterwards.
-      shipment.update!(carrier: nil, tracking_number: nil)
-      shipment.update_column(:tracking_url, "https://tools.usps.com/track?n=94001\nThe buyer confirmed delivery by phone.")
-      disputed_purchase.dispute.dispute_evidence.destroy!
-      DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
-      stripe_charge.refresh
-
-      expect(Stripe::Dispute).to receive(:update) do |_dispute, evidence:|
-        expect(evidence[:uncategorized_text]).to_not include("shipment tracking URL")
-        expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
-      end
-
-      subject.fight_chargeback(charge_id, disputed_purchase.dispute.reload.dispute_evidence)
-    end
-
     it "includes the customer communication file's Stripe file id in the dispute evidence" do
       dispute_evidence = disputed_purchase.dispute.dispute_evidence
       dispute_evidence.customer_communication_file.attach(fixture_file_upload("smilie.png"))
@@ -4275,5 +4235,57 @@ describe StripeChargeProcessor, :vcr do
           .to raise_error(/no presentment snapshot/)
       end
     end
+  end
+end
+
+# Outside the `:vcr` block above: none of this needs a recorded charge, and a new example name in
+# there would want a cassette CI is not allowed to record.
+describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
+  # A free purchase so the setup never charges: this asserts the payload we hand Stripe, not how
+  # the charge was made.
+  let(:disputed_purchase) do
+    create(:free_purchase, link: create(:physical_product), full_name: "John Example",
+                           street_address: "123 Sample St", city: "San Francisco", state: "CA",
+                           country: "United States", zip_code: "12343")
+  end
+  let!(:shipment) do
+    create(:shipment, purchase: disputed_purchase, ship_state: "shipped",
+                      carrier: nil, tracking_number: nil, shipped_at: DateTime.parse("2023-02-10 14:55:32"))
+  end
+
+  before do
+    create(:dispute_formalized, purchase: disputed_purchase)
+    allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(nil)
+    allow(Stripe::Charge).to receive(:retrieve).and_return(double(dispute: "dp_test"))
+  end
+
+  # The service specs stop at the DisputeEvidence record; this is the boundary where the recovered
+  # pair and the free-text row actually reach Stripe, and it is a one-shot submission.
+  def evidence_sent_to_stripe
+    DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
+    sent = nil
+    allow(Stripe::Dispute).to receive(:update) { |_id, evidence:| sent = evidence }
+    described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+    sent
+  end
+
+  it "sends the carrier, tracking number and shipment URL recovered from the seller's tracking URL" do
+    shipment.update!(tracking_url: "#{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
+
+    evidence = evidence_sent_to_stripe
+
+    expect(evidence[:shipping_carrier]).to eq("USPS")
+    expect(evidence[:shipping_tracking_number]).to eq("9400111899223197428490")
+    expect(evidence[:uncategorized_text]).to include("Seller-provided shipment tracking URL: #{Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]}9400111899223197428490")
+  end
+
+  it "omits a tracking URL that is not a plain http(s) URL" do
+    # Without this the seller's second line would read as one of Gumroad's own evidence rows.
+    shipment.update_column(:tracking_url, "https://tools.usps.com/track?n=94001\nThe buyer confirmed delivery by phone.")
+
+    evidence = evidence_sent_to_stripe
+
+    expect(evidence[:uncategorized_text]).to_not include("shipment tracking URL")
+    expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
   end
 end

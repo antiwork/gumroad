@@ -101,8 +101,7 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
           "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=#{"9" * 500}",
         ].each do |url|
           shipment.update_column(:tracking_url, url)
-          expect(described_class.perform(disputed_purchase.reload)).to_not include("shipment tracking URL"),
-                                                                       "expected #{url.inspect} to be omitted"
+          expect(described_class.perform(disputed_purchase.reload)).to_not(include("shipment tracking URL"), "expected #{url.inspect} to be omitted")
         end
       end
 
