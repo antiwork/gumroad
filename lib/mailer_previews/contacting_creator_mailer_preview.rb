@@ -141,6 +141,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.unstampable_pdf_notification(Link.last&.id)
   end
 
+  def undeliverable_ping_subscription
+    ContactingCreatorMailer.undeliverable_ping_subscription(ResourceSubscription.last&.id)
+  end
+
   def video_preview_conversion_error
     ContactingCreatorMailer.video_preview_conversion_error(Link.last&.id)
   end
