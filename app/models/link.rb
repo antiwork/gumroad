@@ -803,17 +803,13 @@ class Link < ApplicationRecord
   #                         NOTE: a custom permalink can match different products by different sellers,
   #                         this option should only be used to support legacy URLs.
   def self.fetch_leniently(general_permalink, user: nil)
-    product_via_legacy_permalink = Link.visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink)) if user.blank?
+    live_match = Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    return live_match if live_match.present?
 
-    live_match = product_via_legacy_permalink ||
-      Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
-    return live_match if live_match.present? || user.blank?
-
-    # Seller-scoped hosts (`seller.gumroad.com/l/:slug`, custom domains) are the
-    # URLs `long_url` builds, and only the unscoped branch consults the legacy
-    # table — so a renamed slug 404s here without this fallback. Live match wins,
-    # and the mapping is confined to this seller's own products.
-    Link.visible.by_user(user).find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
+    # A live product always outranks a redirect for the slug it currently answers
+    # on, including bare `gumroad.com/l/:slug` where `by_user(nil)` is unscoped —
+    # otherwise one seller's mapping serves over another seller's live listing.
+    Link.by_user(user).visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
   end
 
   def self.fetch(unique_permalink, user: nil)

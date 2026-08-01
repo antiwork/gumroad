@@ -1397,19 +1397,28 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil Link.fetch_leniently("no-longer-alive") # deleted
   end
 
-  test "fetch_leniently uses a legacy permalink mapping when present" do
+  test "fetch_leniently falls back to a legacy permalink mapping when nothing live answers" do
     ctx = fetch_leniently_context
-    # no mapping yet
-    assert_equal ctx[:product_2], Link.fetch_leniently("custom")
-    assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
+    assert_nil Link.fetch_leniently("retired")
 
-    LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
-    assert_equal ctx[:product_6], Link.fetch_leniently("custom")
+    LegacyPermalink.create!(permalink: "retired", product: ctx[:product_6])
+    assert_equal ctx[:product_6], Link.fetch_leniently("retired")
+    assert_equal ctx[:product_6], Link.fetch_leniently("retired", user: ctx[:user_2])
+    assert_nil Link.fetch_leniently("retired", user: ctx[:user_1])
 
     ctx[:product_6].mark_deleted!
-    assert_equal ctx[:product_2], Link.fetch_leniently("custom") # falls back past the deleted mapped product
+    assert_nil Link.fetch_leniently("retired")
+  end
 
+  test "a live product outranks a legacy mapping for the same slug on every branch" do
+    ctx = fetch_leniently_context
+    LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
+
+    # product_2 is the oldest live holder of "custom", so it answers the bare
+    # domain even though the mapping points elsewhere.
+    assert_equal ctx[:product_2], Link.fetch_leniently("custom")
     assert_equal ctx[:product_2], Link.fetch_leniently("custom", user: ctx[:user_1])
+    assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
   end
 
   # --- custom permalink rename redirects (gumroad-private#1619) --------------
@@ -1523,8 +1532,13 @@ class LinkTest < ActiveSupport::TestCase
 
     # The claimant's shared URL is seller-scoped, so their live product answers it.
     assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
-    # The bare-domain lookup keeps its documented legacy-first order; the earlier
-    # seller's mapping is not destroyed to satisfy the newer claim.
+    # The bare domain is live-first too, so the mapping cannot serve the earlier
+    # seller's product over the claimant's live listing (gumroad-private#1653).
+    assert_equal claimant, Link.fetch_leniently("slug")
+    # The mapping is not destroyed to achieve that — it resumes forwarding the
+    # moment the claim lapses.
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    claimant.update!(custom_permalink: "claimant-moved")
     assert_equal first, Link.fetch_leniently("slug")
   end
 
