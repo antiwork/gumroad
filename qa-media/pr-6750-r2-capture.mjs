@@ -1,13 +1,14 @@
 /* eslint-disable no-console */
-import { chromium } from "playwright";
 import fs from "fs";
+
+import { chromium } from "playwright";
 
 const ROOT = "https://fix-gp1636-fixed-amount-once-per.apps.staging.gumroad.org";
 const OUT = "/tmp/g6750r2/shots";
 fs.mkdirSync(OUT, { recursive: true });
 const lines = [];
 const log = (s) => {
-  console.log("MARK6750 " + s);
+  console.log(`MARK6750 ${s}`);
   lines.push(s);
 };
 
@@ -19,7 +20,7 @@ const readTotals = (p) =>
   p.evaluate(() => {
     const txt = document.body.innerText;
     const grab = (label) => {
-      const re = new RegExp(`${label}[\\s\\S]{0,80}?(US\\$-?[\\d.,]+)`);
+      const re = new RegExp(`${label}[\\s\\S]{0,80}?(US\\$-?[\\d.,]+)`, "u");
       return txt.match(re)?.[1] ?? null;
     };
     return { Subtotal: grab("Subtotal"), Discounts: grab("Discounts"), Total: grab("\\bTotal\\b") };
@@ -90,23 +91,51 @@ async function leg(name, viewport, adds, code, { pinToast = false } = {}) {
 const NOTICE = "The discount code was applied to some products. The rest do not meet its minimum quantity.";
 
 // ARM 1 — headline shape: two $10 lines at qty 1, universal $1 fixed code spent ONCE per cart.
-const r1 = await leg("pr-6750-r2-once-per-cart-desktop", { width: 1440, height: 1100 }, [["demo", 1], ["c", 1]], "QA6750FIXED");
-if (!/19/.test(r1.totals.Total || "")) throw new Error(`ARM1 expected Total US$19, got ${JSON.stringify(r1.totals)}`);
-if (!/-1/.test(r1.totals.Discounts || "")) throw new Error(`ARM1 expected Discounts US$-1, got ${JSON.stringify(r1.totals)}`);
+const r1 = await leg(
+  "pr-6750-r2-once-per-cart-desktop",
+  { width: 1440, height: 1100 },
+  [
+    ["demo", 1],
+    ["c", 1],
+  ],
+  "QA6750FIXED",
+);
+if (!/19/u.test(r1.totals.Total || "")) throw new Error(`ARM1 expected Total US$19, got ${JSON.stringify(r1.totals)}`);
+if (!/-1/u.test(r1.totals.Discounts || ""))
+  throw new Error(`ARM1 expected Discounts US$-1, got ${JSON.stringify(r1.totals)}`);
 
 // ARM 2 — NEW at this head: line A qty 2 meets the code's minimum of 2, line B qty 1 does not.
 // Must be a PARTIAL application with an info notice, not a fatal error that drops the code.
-const r2 = await leg("pr-6750-r2-partial-notice-desktop", { width: 1440, height: 1100 }, [["demo", 2], ["c", 1]], "QA6750MINQTY", { pinToast: true });
+const r2 = await leg(
+  "pr-6750-r2-partial-notice-desktop",
+  { width: 1440, height: 1100 },
+  [
+    ["demo", 2],
+    ["c", 1],
+  ],
+  "QA6750MINQTY",
+  { pinToast: true },
+);
 if (!r2.alerts.includes(NOTICE)) throw new Error(`ARM2 notice absent: ${JSON.stringify(r2.alerts)}`);
-if (/Sorry/.test(r2.alerts)) throw new Error(`ARM2 rendered a FATAL error toast: ${JSON.stringify(r2.alerts)}`);
+if (/Sorry/u.test(r2.alerts)) throw new Error(`ARM2 rendered a FATAL error toast: ${JSON.stringify(r2.alerts)}`);
 // The cart renders US$-2 for a ONE-dollar once-per-cart code: the surviving line is qty 2 and the
 // client multiplies the per-line discount by quantity. Assert it so the defect is recorded, not
 // glossed: a code the service spent once still reads as spent twice in the summary.
-if (!/-2/.test(r2.totals.Discounts || "")) throw new Error(`ARM2 expected the US$-2 quantity-multiplied summary, got ${JSON.stringify(r2.totals)}`);
+if (!/-2/u.test(r2.totals.Discounts || ""))
+  throw new Error(`ARM2 expected the US$-2 quantity-multiplied summary, got ${JSON.stringify(r2.totals)}`);
 
-const r3 = await leg("pr-6750-r2-partial-notice-mobile", { width: 375, height: 900 }, [["demo", 2], ["c", 1]], "QA6750MINQTY", { pinToast: true });
+const r3 = await leg(
+  "pr-6750-r2-partial-notice-mobile",
+  { width: 375, height: 900 },
+  [
+    ["demo", 2],
+    ["c", 1],
+  ],
+  "QA6750MINQTY",
+  { pinToast: true },
+);
 if (!r3.alerts.includes(NOTICE)) throw new Error(`ARM3 mobile notice absent: ${JSON.stringify(r3.alerts)}`);
 
 await br.close();
-fs.writeFileSync("/tmp/g6750r2/browser-log.txt", lines.join("\n") + "\n");
+fs.writeFileSync("/tmp/g6750r2/browser-log.txt", `${lines.join("\n")}\n`);
 log("DONE");
