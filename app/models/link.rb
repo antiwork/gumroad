@@ -535,6 +535,19 @@ class Link < ApplicationRecord
     save!
   end
 
+  # Memberships are unpublished rather than deleted so existing members keep their access
+  # while the listing comes off sale. Returns the disposition applied, because the caller
+  # cannot infer it afterwards — `alive?` is false for both.
+  def take_down_for_tos_violation!
+    if is_tiered_membership?
+      unpublish!
+      "unpublished"
+    else
+      delete!
+      "deleted"
+    end
+  end
+
   def publishable?
     user.can_publish_products?
   end

@@ -3596,9 +3596,11 @@ describe Api::Internal::Admin::UsersController do
         user_id: user.external_id,
         product_id: product.external_id,
         status: "flagged_for_tos_violation",
-        message: "User flagged for a policy violation"
+        product_status: "deleted",
+        message: "User flagged for a policy violation; product taken down"
       }.as_json)
       expect(user.reload).to be_flagged_for_tos_violation
+      expect(product.reload.deleted_at).to be_present
 
       user_comment = user.comments.last
       expect(user_comment).to have_attributes(
@@ -3617,6 +3619,19 @@ describe Api::Internal::Admin::UsersController do
       )
     end
 
+    it "unpublishes rather than deletes a membership so existing members keep access" do
+      membership = create(:membership_product, user:)
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: membership.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["product_status"]).to eq("unpublished")
+      membership.reload
+      # Unpublished, not deleted: the row survives so existing members keep access.
+      expect(membership.deleted_at).to be_nil
+      expect(membership.purchase_disabled_at).to be_present
+    end
+
     it "records the admin API audit log with the TOS flag action key" do
       expect do
         post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
@@ -3632,21 +3647,31 @@ describe Api::Internal::Admin::UsersController do
       )
     end
 
-    it "returns success without creating another comment when the user is already flagged for a policy violation" do
-      user.flag_for_tos_violation!(author_id: admin_user.id, product_id: product.id)
+    it "still takes the product down when the user is already flagged for a policy violation" do
+      user.flag_for_tos_violation!(author_id: admin_user.id, product_id: create(:product, user:).id)
+      second_product = create(:product, user:)
 
       expect do
-        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
-      end.not_to change { user.comments.reload.count }
+        post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: second_product.external_id }
+      end.to change { second_product.comments.reload.count }.by(1)
+        .and not_change { user.comments.reload.count }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to eq({
         success: true,
         user_id: user.external_id,
-        product_id: product.external_id,
+        product_id: second_product.external_id,
         status: "already_flagged",
-        message: "User is already flagged for a policy violation"
+        product_status: "deleted",
+        message: "User was already flagged for a policy violation; product taken down"
       }.as_json)
+      expect(second_product.reload.deleted_at).to be_present
+
+      expect(second_product.comments.last).to have_attributes(
+        author_id: admin_user.id,
+        comment_type: Comment::COMMENT_TYPE_FLAGGED,
+        content: include(second_product.name)
+      )
     end
 
     it "returns 422 when the state machine rejects the flag" do

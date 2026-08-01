@@ -96,7 +96,7 @@ class Admin::LinksController < Admin::BaseController
       user.update!(tos_violation_reason: suspend_tos_reason)
       comment_content = "Flagged for a policy violation on #{Time.current.to_fs(:formatted_date_full_month)} for a product named '#{@product.name}' (#{suspend_tos_reason})"
       user.flag_for_tos_violation!(author_id: current_user.id, product_id: @product.id, content: comment_content)
-      unpublish_or_delete_product!(@product)
+      @product.take_down_for_tos_violation!
     end
 
     render json: { success: true }
@@ -170,10 +170,6 @@ class Admin::LinksController < Admin::BaseController
     def fetch_product!
       @product = Link.find_by_external_id(params[:external_id])
       @product || e404
-    end
-
-    def unpublish_or_delete_product!(product)
-      product.is_tiered_membership? ? product.unpublish! : product.delete!
     end
 
     def fetch_discord_redirect_uri(product)
