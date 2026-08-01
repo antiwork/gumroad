@@ -29,12 +29,20 @@ class OfferCodeDiscountComputingService
 
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
-      # A fixed-amount code is an amount off the order, so later lines are skipped by
-      # design, not for ineligibility — this must not poison error_code for the cart.
-      # Any remainder on the discounted line is dropped: a partial amount cannot be
-      # charged while Purchase#offer_amount_off re-derives the full amount_cents.
-      # Tracked in gumroad-private#1650.
-      next if once_per_cart?(offer_code) && already_applied?(offer_code)
+      # A fixed-amount code is an amount off the order, so a later line takes no money.
+      # It is still *covered* by the code, and products_data carries both meanings: the
+      # amount to deduct, and the set of products the code applies to. Consumers of the
+      # second meaning (keeping the code when a line is removed, visibleDiscounts, the
+      # per-item lookup in cartState, and the rehydration after a failed or SCA-challenged
+      # charge in Order::CreateService / ConfirmService) must still see this line, so it is
+      # emitted with a zero amount rather than omitted.
+      #
+      # Skipping eligibility here is deliberate: the cart-level amount was already spent, so
+      # re-checking times-of-use would report :sold_out for a line nobody is charging.
+      if once_per_cart?(offer_code) && already_applied?(offer_code)
+        products_data[link.unique_permalink] = { discount: resolved_discount.merge(cents: 0) } if resolved_discount
+        next
+      end
 
       units = usage_units(offer_code, purchase_quantity)
 
@@ -42,7 +50,7 @@ class OfferCodeDiscountComputingService
         track_usage(offer_code, units)
         mark_applied(offer_code)
         products_data[link.unique_permalink] = { discount: resolved_discount }
-        optimistically_apply_to_applicable_cross_sells(products_data, link) unless once_per_cart?(offer_code)
+        optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity, units, resolved_discount)
       end

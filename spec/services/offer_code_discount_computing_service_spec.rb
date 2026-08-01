@@ -48,11 +48,16 @@ describe OfferCodeDiscountComputingService do
                                     amount_cents: 500, currency_type: product.price_currency_type)
     end
 
-    it "discounts only the first eligible line, not every line" do
+    # products_data means two things at once: how much to take off a line, and which products
+    # the code covers. The money lands once; the coverage stays complete, because dropping a
+    # line here silently drops the code from the cart on removal and on post-SCA rehydration.
+    it "charges the discount on one line but reports coverage for every eligible line" do
       result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
 
       expect(result[:error_code]).to be_nil
-      expect(result[:products_data].size).to eq(1)
+      expect(result[:products_data].size).to eq(2)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+      expect(result[:products_data].values.count { _1[:discount][:cents].zero? }).to eq(1)
     end
 
     it "spends one use regardless of cart breadth, so a capped code survives a wide cart" do
@@ -62,7 +67,7 @@ describe OfferCodeDiscountComputingService do
       result = OfferCodeDiscountComputingService.new(fixed_code.code, products_data).process
 
       expect(result[:error_code]).to be_nil
-      expect(result[:products_data].size).to eq(1)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
     end
 
     it "still reports sold_out when no uses remain at all" do
@@ -80,9 +85,9 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].size).to eq(2)
     end
 
-    # Pins the limit documented at the skip in #process (gumroad-private#1650): the code lands
-    # whole on one line and the remainder is dropped. Spilling it across lines is a deliberate
-    # change and should redden here rather than pass silently.
+    # Pins the limit documented in #process (gumroad-private#1650): the code lands whole on one
+    # line and the remainder is dropped rather than spilling onto the next. The second line is
+    # still covered, at zero. Spilling is a deliberate change and should redden here.
     it "drops the remainder when the discounted line costs less than the code" do
       cheap = create(:product, user: seller, price_cents: 300)
       dearer = create(:product, user: seller, price_cents: 400)
@@ -94,8 +99,10 @@ describe OfferCodeDiscountComputingService do
       result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
 
       expect(result[:error_code]).to be_nil
-      expect(result[:products_data].size).to eq(1)
-      expect(result[:products_data].values.first[:discount]).to include(type: "fixed", cents: 500)
+      expect(result[:products_data].size).to eq(2)
+      charged = result[:products_data].values.select { _1[:discount][:cents].positive? }
+      expect(charged.size).to eq(1)
+      expect(charged.first[:discount]).to include(type: "fixed", cents: 500)
     end
   end
 
