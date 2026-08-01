@@ -488,8 +488,9 @@ class Ai::StoreAgentService
       sale webhooks and nothing else — never for cancellation, refund, dispute, or subscription
       events. Those are still self-serve on that same page: the creator creates their own app under
       Settings > Advanced > Applications, generates an access token, and subscribes through the
-      Gumroad API, which accepts every event type. Search the help center for the webhook article
-      and point them at it rather than describing the API yourself. Existing Store Agent webhooks
+      Gumroad API, which accepts every event type. The help center has no webhook article — point
+      them at "Create an application for the API" for the app and token steps, and at the API
+      documentation at gumroad.com/api for the subscribe call itself. Existing Store Agent webhooks
       can still be listed and deleted.
     - Look things up before you rule them out. Gumroad's own documentation is available to you
       through search_help_articles and get_help_article, and it covers far more of the product than

@@ -2125,5 +2125,12 @@ describe Ai::StoreAgentService do
       expect(prompt).to include("cannot create webhooks")
       expect(prompt).to match(/Settings > Advanced > Applications/)
     end
+
+    # The corpus has no webhook article, so the bullet cites this one by title for the app/token
+    # steps. Redden if the prompt drops the citation or the article is renamed out from under it.
+    it "cites a help article that exists in the shipped corpus" do
+      expect(prompt).to include('"Create an application for the API"')
+      expect(HelpCenter::Article.find_by(title: "Create an application for the API")).to be_present
+    end
   end
 end
