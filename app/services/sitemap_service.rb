@@ -5,9 +5,13 @@ class SitemapService
   MAX_SITEMAP_LINKS = 50_000
   SITEMAP_PATH_MONTHLY = "sitemap/products/monthly"
 
-  # Everything the per-product `add` below touches. Without these the walk costs
-  # a handful of queries per row, which is what made a full month time out.
-  SITEMAP_PRELOADS = [:user, { display_asset_previews: { file_attachment: :blob } }].freeze
+  # Flattens the per-row seller and cover lookups the `add` loop below makes. The retina
+  # variant is NOT covered: `preview_url` calls `.processed`, which resolves each cover's
+  # variant record individually, so that cost stays per-row whatever is preloaded here.
+  SITEMAP_PRELOADS = [
+    :user,
+    { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }
+  ].freeze
   private_constant :SITEMAP_PRELOADS
 
   def generate(date = Date.current)

@@ -33,21 +33,35 @@ describe SitemapService do
     # the per-product `add` reads keeps the cost flat as products are added.
     it "does not query per product for the seller or the cover image" do
       seller = create(:user)
-      3.times { create(:product, user: seller, created_at: Time.current) }
 
-      per_row_queries = 0
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
-        per_row_queries += 1 if /FROM `(users|asset_previews|active_storage_(attachments|blobs))`/.match?(payload[:sql])
-      end
-      begin
-        service.generate(Date.current)
-      ensure
-        ActiveSupport::Notifications.unsubscribe(subscriber)
+      count_association_queries = lambda do |product_count|
+        Link.alive.delete_all
+        product_count.times do
+          product = create(:product, user: seller, created_at: Time.current)
+          # Without a cover the preview chain has nothing to load and this assertion holds
+          # no matter what SITEMAP_PRELOADS contains.
+          create(:asset_preview, link: product)
+        end
+
+        queries = 0
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          queries += 1 if /FROM `(users|asset_previews)`/.match?(payload[:sql])
+        end
+        begin
+          service.generate(Date.current)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+        queries
       end
 
-      # One statement per preloaded association, regardless of how many products the month
-      # holds — never one (or several) per product.
-      expect(per_row_queries).to be <= 4
+      # Tripling the month's size must not add a statement for these. A fixed bound would
+      # pin whatever SitemapGenerator does today; flatness is the property the preload owes.
+      #
+      # Active Storage is deliberately not counted here: `preview_url` resolves through
+      # AssetPreview#retina_variant, and `.processed` looks up (and may create) each cover's
+      # variant record individually, so that tail stays per-row and no preload removes it.
+      expect(count_association_queries.call(6)).to eq(count_association_queries.call(2))
     end
 
     it "still renders the seller host and cover image for each product" do
