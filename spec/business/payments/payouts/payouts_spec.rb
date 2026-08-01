@@ -835,15 +835,10 @@ describe Payouts do
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
-      # Pinned to a Wednesday, because `Date.today - 1` is only a *past* payout period on six
-      # days out of seven. The gate in .create_payments_for_balances_up_to_date_for_users
-      # compares `date + PAYOUT_DELAY_DAYS` against the seller's cycle, and cycles are Fridays:
-      # run this on a Saturday and `payout_date` IS the Friday just gone, so the balance
-      # created 3 days earlier falls inside that cycle's period (cycle - PAYOUT_DELAY_DAYS)
-      # instead of before it. The cycle then stops advancing for being under the minimum, and
-      # `date + PAYOUT_DELAY_DAYS` lands exactly ON it — `>=` accepts, and all three examples
-      # here invert. On any other weekday the balance sits outside the period, the cycle
-      # advances a week, and the gate rejects as these examples assume.
+      # Pinned because these examples only hold Wed-Fri. From Saturday through Tuesday the
+      # balance below lands inside the upcoming Friday cycle's period, so it clears the minimum,
+      # the cycle stays put, and the gate in .create_payments_for_balances_up_to_date_for_users
+      # accepts where these examples expect a reject.
       before do
         travel_to(Time.utc(2026, 8, 5, 12))
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
@@ -851,9 +846,7 @@ describe Payouts do
       end
 
       it "does not create payments if the seller's payout cycle is past this payout date" do
-        # #next_payout_cycle_date, not #next_payout_date: the cycle is what the gate in
-        # .create_payments_for_balances_up_to_date_for_users actually reads, so stubbing the
-        # seller's own rail day left this example asserting nothing about the branch it names.
+        # The gate reads #next_payout_cycle_date, not the seller's own rail day.
         allow(seller).to receive(:next_payout_cycle_date).and_return(payout_date + 2.weeks)
 
         expect do
@@ -862,8 +855,9 @@ describe Payouts do
       end
 
       it "creates payments when retrying even though the cycle has moved past this payout date" do
-        # The real requeue shape: a payment row already exists for today, which advances
-        # #next_payout_cycle_date whether or not that payment succeeded.
+        # The real requeue shape: a payment row already exists for the period, failed or not.
+        # What puts the cycle past this payout date here is the balance being too new for the
+        # coming Friday's period, not this row — the row's own advance needs cycle == today.
         create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
                 .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
         expect(payout_date + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
