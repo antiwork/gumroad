@@ -56,6 +56,10 @@ sync_radar_value_lists:
   cron: "0 3 * * *" # UTC 03:00
   class: Radar::SyncValueListsJob
   description: Syncs blocked emails and card fingerprints to Stripe Radar value lists
+unstick_stuck_in_progress_purchases:
+  cron: "30 4 * * *" # UTC 04:30
+  class: UnstickStuckInProgressPurchasesJob
+  description: Recovers purchases left in_progress past SyncStuckPurchasesJob's 3-day window, and alerts on any it cannot heal
 perform_daily_instant_payouts_worker:
   cron: "0 8 * * *" # UTC 08:00, should be run before the weekly payouts job at 10:00
   class: PerformDailyInstantPayoutsWorker

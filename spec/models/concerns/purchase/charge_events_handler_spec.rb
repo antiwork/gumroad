@@ -181,6 +181,32 @@ describe Purchase::ChargeEventsHandler, :vcr do
     end
   end
 
+  describe "serializing an Indian off-session success event" do
+    let(:purchase) do
+      create(
+        :recurring_membership_purchase,
+        stripe_transaction_id: "ch_2ORDpK9e1RjUNIyY0eJyh91P",
+        purchase_state: "in_progress",
+        card_country: Compliance::Countries::IND.alpha2
+      )
+    end
+    let(:event) { build(:charge_event_charge_succeeded, charge_id: purchase.stripe_transaction_id) }
+
+    it "does not finalize after another caller succeeds while the processor lookup is in flight" do
+      allow(ChargeProcessor).to receive(:get_charge).and_return(nil)
+      allow(purchase).to receive(:with_lock).and_wrap_original do |original, &block|
+        Purchase.where(id: purchase.id).update_all(purchase_state: "successful")
+        original.call(&block)
+      end
+      expect(purchase).to_not receive(:save_charge_data)
+      expect(purchase).to_not receive(:update_balance_and_mark_successful!)
+
+      purchase.handle_event_succeeded!(event)
+
+      expect(purchase.reload).to be_successful
+    end
+  end
+
   describe "payment failed event for purchase" do
     before do
       @initial_balance = 200
