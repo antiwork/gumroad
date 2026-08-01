@@ -3725,6 +3725,29 @@ describe Api::Internal::Admin::UsersController do
       expect(user.reload).to be_compliant
     end
 
+    it "reads the seller's flag state under the row lock so a concurrent report cannot leave a listing live" do
+      # The race: both requests read `flagged_for_tos_violation?` as false, both take the
+      # flag branch, and the loser's state transition raises before reaching its own
+      # takedown. Locking first makes the second request see the flag and take the
+      # already_flagged branch, which still takes its product down.
+      expect_any_instance_of(User).to receive(:lock!).and_call_original
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+
+      expect(response).to have_http_status(:ok)
+      expect(product.reload.deleted_at).to be_present
+    end
+
+    it "returns 422 when the state machine rejects the flag, without the lock swallowing it" do
+      user.update!(verified: true)
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(user.reload).to be_compliant
+    end
+
     it "rejects mismatched expected_email without mutating the user" do
       expect do
         post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id, expected_email: "other@example.com" }
