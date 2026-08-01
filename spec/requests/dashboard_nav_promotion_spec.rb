@@ -64,7 +64,9 @@ describe DashboardNavPromotion, type: :request do
     # rendered yet.
     expect(seller.reload.promoted_nav_item_keys).to eq []
 
-    follow_redirect!
+    # Not follow_redirect!: the host stub rewrites Location to an absolute URL on a host the
+    # integration session has no cookies for, so following it lands on /login instead of the page.
+    get URI.parse(response.location).path
 
     expect(response).to be_successful
     expect(seller.reload.promoted_nav_item_keys).to include "emails"
