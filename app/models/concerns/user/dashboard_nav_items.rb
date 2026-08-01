@@ -2,11 +2,9 @@
 
 # Which dashboard nav destinations this user has earned. See DashboardNav.
 #
-# Promotions live in their own table rather than under a users.json_data key because json_data is
-# one serialized column with last-write-wins semantics: any request holding a stale copy of the
-# user that later saves an unrelated JSON-backed setting would silently erase promotions recorded
-# in between. Rows here are only ever inserted, so there is no read-modify-write to race and no
-# lock to take.
+# Own table rather than a users.json_data key: that column is one last-write-wins document, so a
+# request holding a stale user would erase promotions recorded in between. Rows here are only
+# inserted, so there is no read-modify-write to race and no lock to take.
 module User::DashboardNavItems
   extend ActiveSupport::Concern
 

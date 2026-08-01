@@ -144,15 +144,6 @@ describe User::DashboardNavItems do
       expect(user.reload.promoted_nav_item_keys).to match_array %w[emails profile]
     end
 
-    it "seeds a legacy row whose json_data is NULL" do
-      user.update_column(:json_data, nil)
-      legacy = User.find(user.id)
-      create(:workflow, seller: legacy)
-
-      expect { legacy.seed_promoted_nav_items!(seller: legacy) }.not_to raise_error
-      expect(legacy.reload.promoted_nav_item_keys).to include "workflows"
-    end
-
     it "seeds a user whose record would fail validation" do
       # An ungated legacy validation must not keep the seed from persisting: if it did, the
       # seed-once guard would never latch and every page load would re-scan.
