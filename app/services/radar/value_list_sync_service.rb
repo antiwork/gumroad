@@ -17,9 +17,7 @@ class Radar::ValueListSyncService
     LIST_FOR_TYPE.key?(object_type)
   end
 
-  # Removal is the customer-blocking direction: until the item leaves Radar the buyer is rejected
-  # at `not_sent_to_network`, indistinguishable from an issuer decline. Adds can wait for the
-  # daily job; this cannot.
+  # A stale removal keeps rejecting a legitimate buyer; adds can wait for the daily sync.
   def remove_block(platform_block)
     list_config = LIST_FOR_TYPE[platform_block.object_type]
     return false if list_config.nil?
@@ -33,11 +31,7 @@ class Radar::ValueListSyncService
   end
 
   def sync_blocked_emails
-    value_list = find_or_create_list(
-      list_alias: BLOCKED_EMAILS_LIST,
-      name: "Gumroad Blocked Emails",
-      item_type: "email"
-    )
+    value_list = find_or_create_list(**LIST_FOR_TYPE[PlatformBlock::TYPES[:email]])
 
     blocked_emails = PlatformBlock.email.active.where("blocked_at >= ?", SYNC_WINDOW.ago)
     blocked_emails.each do |blocked_object|
@@ -57,11 +51,7 @@ class Radar::ValueListSyncService
   end
 
   def sync_blocked_cards
-    value_list = find_or_create_list(
-      list_alias: BLOCKED_CARDS_LIST,
-      name: "Gumroad Blocked Cards",
-      item_type: "card_fingerprint"
-    )
+    value_list = find_or_create_list(**LIST_FOR_TYPE[PlatformBlock::TYPES[:charge_processor_fingerprint]])
 
     blocked_cards = PlatformBlock.charge_processor_fingerprint.active
       .where("blocked_at >= ?", SYNC_WINDOW.ago)

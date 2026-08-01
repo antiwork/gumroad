@@ -9,8 +9,12 @@ describe Radar::RemoveValueListItemJob do
     allow(Stripe::Radar::ValueList).to receive(:list).and_return(double(data: [value_list]))
   end
 
-  it "runs in the default queue: critical is reserved for receipt email, and mass unblock fans out" do
+  it "runs in the default queue" do
     expect(described_class.sidekiq_options["queue"]).to eq("default")
+  end
+
+  it "deduplicates concurrent removals of the same row" do
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
   end
 
   it "removes the unblocked email from the Radar list" do

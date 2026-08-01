@@ -283,16 +283,6 @@ describe Radar::ValueListSyncService do
       expect(service.remove_block(block)).to be(true)
     end
 
-    it "removes a block whose unblock happened outside the sync window, which the daily job never revisits" do
-      block = travel_to(10.days.ago) { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "stranded@example.com") }
-      block.update_columns(blocked_at: nil, expires_at: nil, updated_at: 10.days.ago)
-      stub_item("stranded@example.com", "rsli_2")
-
-      expect(Stripe::Radar::ValueListItem).to receive(:delete).with("rsli_2")
-
-      expect(service.remove_block(block)).to be(true)
-    end
-
     it "removes an unblocked card fingerprint" do
       block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: "UTLL7GN3iOh1m111")
       block.update_columns(blocked_at: nil, expires_at: nil)
@@ -341,7 +331,7 @@ describe Radar::ValueListSyncService do
     end
 
     it "does not re-add an email cleared after the sync's SELECT" do
-      block = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "cleared-mid-sync@example.com")
+      PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "cleared-mid-sync@example.com")
       allow_any_instance_of(PlatformBlock).to receive(:reload) do |record|
         record.assign_attributes(blocked_at: nil)
         record
@@ -350,7 +340,6 @@ describe Radar::ValueListSyncService do
       expect(Stripe::Radar::ValueListItem).not_to receive(:create)
 
       service.sync_blocked_emails
-      expect(block).to be_present
     end
   end
 

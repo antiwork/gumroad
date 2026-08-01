@@ -90,8 +90,6 @@ describe PlatformBlock do
         end.not_to change { Radar::RemoveValueListItemJob.jobs.size }
       end
 
-      # Re-unblocking is the only recovery for a row already stranded in Radar: update! writes no
-      # SQL on an already-clear row, so the daily job's updated_at window will never see it again.
       it "enqueues again on an already-unblocked row, so re-unblocking repairs a stranded item" do
         record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "stranded@example.com")
         record.unblock!

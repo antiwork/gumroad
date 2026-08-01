@@ -3,10 +3,9 @@
 class Radar::RemoveValueListItemJob
   include Sidekiq::Job
 
-  # `default`, not `critical`: the admin mass-unblock page fans out one job per matching row, each
-  # making up to three sequential Stripe calls, and `critical` is reserved for receipt emails.
-  # Seconds of queue latency against the 24h this replaces.
-  sidekiq_options queue: "default", retry: 5
+  # Not critical: that queue is receipt email only, and seconds of latency is nothing against the
+  # 24h this replaces. Locked because unblock_buyer! clears the same email row up to four times.
+  sidekiq_options queue: "default", retry: 5, lock: :until_executed
 
   def perform(platform_block_id)
     platform_block = PlatformBlock.find_by(id: platform_block_id)
