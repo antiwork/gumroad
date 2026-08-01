@@ -40,15 +40,11 @@ module User::DashboardNavItems
   end
 
   private
-    # json_data is one column, so a blind write here would drop a concurrent write to any other
-    # attribute in it. Re-read under the row lock and merge instead. Writes are rare (once per seed,
-    # once per newly used destination), so the lock is not on any hot path.
-    #
-    # Two traps this shape avoids. The lock is taken on a freshly loaded record because `lock!`
-    # raises on a dirty one, and merely READING json_data dirties a row whose column is NULL. And
-    # the write skips validations: a seller carrying legacy data that fails an ungated User
-    # validation (an old-format Google Analytics id, say) would otherwise never persist a seed, so
-    # the seed-once guard would never latch and every page load would re-scan and re-lock.
+    # json_data is one column, so a blind write would drop a concurrent write to another attribute
+    # in it — re-read under the row lock and merge. Two ordering traps: the lock needs a freshly
+    # loaded record, because `lock!` raises on a dirty one and merely READING json_data dirties a
+    # row whose column is NULL; and the write skips validations, or a seller with legacy data
+    # failing an ungated User validation never latches the seed and re-scans on every page load.
     def merge_promoted_nav_items!(items)
       locked = User.find(id)
       locked.with_lock do

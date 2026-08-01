@@ -27,8 +27,7 @@ module DashboardNavPromotion
 
       logged_in_user.seed_promoted_nav_items!(seller: current_seller)
     rescue StandardError => e
-      # Never fail a page over sidebar bookkeeping. Deliberately broader than ActiveRecordError:
-      # `lock!` raises a bare RuntimeError when the record is dirty, which would 500 the page.
+      # Never fail a page over sidebar bookkeeping.
       ErrorNotifier.notify(e)
     end
 

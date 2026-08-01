@@ -48,8 +48,9 @@ module DashboardNav
   # always in the core list or because it is reached from the pinned footer.
   CORE_PATH_PREFIXES = %w[/dashboard /products /bundles /customers /payouts /settings /discover /help].freeze
 
-  # Matched longest-prefix first so /dashboard/sales resolves to analytics rather than to a shorter
-  # sibling.
+  # Matched longest-prefix first, so adding a prefix nested under an existing one (a bare
+  # "/checkout" alongside "/checkout/form") resolves to the more specific entry rather than to
+  # whichever the hash happens to yield first. Nothing is nested today.
   ORDERED_PROMOTABLE_PREFIXES = PATH_PREFIXES.sort_by { |prefix, _| -prefix.length }.freeze
 
   # Returns the promotable item key a dashboard path belongs to, or nil.

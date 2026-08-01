@@ -105,11 +105,16 @@ describe DashboardNavPromotion, type: :request do
     other_seller = create(:user)
     create(:workflow, seller: other_seller)
     create(:team_membership, user: seller, seller: other_seller, role: TeamMembership::ROLE_ADMIN)
+    # current_seller comes from an encrypted cookie a request spec cannot set, and POSTing
+    # /sellers/switch drops the session, so stub the switched-into state directly. Without it
+    # current_seller == logged_in_user and this example never reaches the guard it pins.
+    allow_any_instance_of(ApplicationController).to receive(:current_seller).and_return(other_seller)
 
     get dashboard_path
 
-    # Whatever the switched-into store contains is not something THIS user has used.
-    expect(seller.reload.promoted_nav_item_keys).not_to include "workflows"
+    # Whatever the switched-into store contains is not something THIS user has used, and the seed
+    # must not latch at all — a latch here would freeze the empty result for their own account too.
+    expect(seller.reload.promoted_nav_items).to be_nil
   end
 
   it "ignores requests to paths that do not render the dashboard nav" do
@@ -131,6 +136,17 @@ describe DashboardNavPromotion, type: :request do
     expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
 
     get workflows_path
+
+    expect(response).to be_successful
+  end
+
+  it "keeps serving the page when the seed fails" do
+    # The seed runs before_action, so an unrescued failure here 500s the page instead of degrading
+    # to a nav that has not grown yet.
+    allow_any_instance_of(User).to receive(:seed_promoted_nav_items!).and_raise(ActiveRecord::LockWaitTimeout)
+    expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout))
+
+    get dashboard_path
 
     expect(response).to be_successful
   end
