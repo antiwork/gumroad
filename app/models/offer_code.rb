@@ -462,23 +462,16 @@ class OfferCode < ApplicationRecord
     # assignment landed sweeps its defaulting products after commit. Set-based
     # so a code defaulting many products costs a couple of queries, not one per
     # product; gated to edits that can change applicability.
+    # The clearing UPDATE re-runs the detachment predicate, so a product
+    # reattached between selection and the write is left alone; the pluck only
+    # narrows which rows to attempt.
     def repair_detached_default_discounts
       forget_applicability_changes
 
-      detached = Link.visible.where(default_offer_code_id: id)
-      if !deleted? && code.present?
-        detached = if universal?
-          excluded_scope = detached.where(id: excluded_products.select(:id))
-          currency_type.present? ? detached.where.not(price_currency_type: currency_type).or(excluded_scope) : excluded_scope
-        else
-          detached.where.not(id: products.select(:id))
-        end
-      end
-
-      product_ids = detached.pluck(:id)
+      product_ids = Link.visible.where(default_offer_code_id: id).with_detached_default_offer_code.pluck(:id)
       return if product_ids.empty?
 
-      Link.where(id: product_ids, default_offer_code_id: id).update_all(default_offer_code_id: nil)
+      Link.where(id: product_ids).with_detached_default_offer_code.update_all(default_offer_code_id: nil)
       Link.where(id: product_ids).find_each(&:invalidate_cache)
     end
 
