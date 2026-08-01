@@ -1719,13 +1719,20 @@ class Link < ApplicationRecord
     end
 
     def record_product_permalink_redirect(outgoing)
-      return if ProductPermalinkRedirect.exists?(seller_id: user_id, permalink: outgoing)
+      existing = ProductPermalinkRedirect.find_by(seller_id: user_id, permalink: outgoing)
+      if existing
+        # Both rows are this seller's, so the latest release wins: the URL keeps
+        # serving what it served just before the rename, not an earlier holder.
+        existing.update(product_id: id) unless existing.product_id == id
+        return
+      end
       return if LegacyPermalink.joins(:product).where(permalink: outgoing, links: { user_id: }).exists?
 
       redirect = ProductPermalinkRedirect.create(permalink: outgoing, product_id: id, seller_id: user_id)
       Rails.logger.warn("ProductPermalinkRedirect not recorded for #{outgoing.inspect}: #{redirect.errors.full_messages.to_sentence}") unless redirect.persisted?
     rescue ActiveRecord::RecordNotUnique
-      # A concurrent rename by this seller won the row; first writer keeps it.
+      # A concurrent rename by this seller created the row between the lookup
+      # and the insert; both targets are this seller's, either one is fine.
       nil
     end
 

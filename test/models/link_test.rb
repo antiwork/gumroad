@@ -1600,6 +1600,25 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal claimant, Link.fetch_leniently("shared")
   end
 
+  test "reusing a released slug for a second product repoints the seller's redirect when that product releases it" do
+    # Another seller holds the slug live throughout, so no legacy mapping is
+    # recorded and the seller-scoped redirect alone answers the retired slug.
+    create_product(unique_permalink: "zzz", custom_permalink: "slug")
+    seller = create_user
+    first = create_product(user: seller, unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-new")
+    assert_nil LegacyPermalink.find_by(permalink: "slug")
+    assert_equal first.id, ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug").product_id
+
+    second = create_product(user: seller, unique_permalink: "bbb", custom_permalink: "slug")
+    second.update!(custom_permalink: "second-new")
+
+    # The redirect follows the seller's latest release, so the old URL keeps
+    # serving what it served just before the rename, not an earlier holder.
+    assert_equal second.id, ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug").product_id
+    assert_equal second, Link.fetch_leniently("slug", user: seller)
+  end
+
   test "the first writer keeps a legacy mapping when a second product claims and releases the same slug" do
     first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     first.update!(custom_permalink: "first-new")
