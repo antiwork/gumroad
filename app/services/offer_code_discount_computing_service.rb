@@ -33,6 +33,12 @@ class OfferCodeDiscountComputingService
       # per line multiplies the seller's intended discount by cart breadth. Once it has
       # landed on a line, later lines are skipped silently — that is the design, not an
       # ineligibility, so it must not poison error_code for the whole cart.
+      #
+      # Known limit: when that line costs less than the code, the remainder is dropped
+      # rather than spilling onto later lines. Spilling is not expressible today —
+      # purchases carry only offer_code_id, so checkout re-derives the full amount_cents
+      # per line (Purchase#offer_amount_off) and a partial amount cannot be charged.
+      # Closing it needs an order-level discount or a per-line amount on the purchase.
       next if once_per_cart?(offer_code) && already_applied?(offer_code)
 
       units = usage_units(offer_code, purchase_quantity)

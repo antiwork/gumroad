@@ -79,6 +79,25 @@ describe OfferCodeDiscountComputingService do
       expect(result[:error_code]).to be_nil
       expect(result[:products_data].size).to eq(2)
     end
+
+    # Pins the known limit documented at the skip in #process: the code lands whole on one
+    # line and any remainder is dropped, because a purchase stores only offer_code_id and
+    # checkout re-derives the full amount_cents. If this ever spills across lines, that is a
+    # deliberate change and this example should fail rather than pass silently.
+    it "drops the remainder when the discounted line costs less than the code" do
+      cheap = create(:product, user: seller, price_cents: 300)
+      dearer = create(:product, user: seller, price_cents: 400)
+      products = {
+        cheap.unique_permalink => { quantity: "1", permalink: cheap.unique_permalink },
+        dearer.unique_permalink => { quantity: "1", permalink: dearer.unique_permalink },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].size).to eq(1)
+      expect(result[:products_data].values.first[:discount]).to include(type: "fixed", cents: 500)
+    end
   end
 
   it "returns sold_out error_code in result when offer code is sold out" do
