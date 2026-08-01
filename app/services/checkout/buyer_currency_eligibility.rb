@@ -462,7 +462,14 @@ class Checkout::BuyerCurrencyEligibility
     # any currency is written for these charges — there is nothing for a non-USD settlement
     # currency to corrupt. Payouts for such sellers are made by Stripe itself, not by us.
     return fallback(:future_charge_setup) if setup_future_charges
-    return fallback(:off_session) if off_session
+    # Same carve-out as the general-mode exit above, and for the same reason: a renewal that
+    # stored a fixed amount at signup charges that stored amount, so no live FX quote is
+    # involved and going off-session is safe. The asymmetry was not deliberate — the general
+    # exit gained the carve-out and this one was missed, silently making every forced-currency
+    # renewal charge canonical USD. For a mandate denominated in a local currency that is not a
+    # degraded fallback but an unchargeable request: an INR UPI Autopay mandate can only ever be
+    # debited in INR (gumroad-private#1434).
+    return fallback(:off_session) if off_session && !subscription_renewal_with_stored_amount?
     return fallback(:no_purchases) if purchases.empty?
 
     product_currencies = []

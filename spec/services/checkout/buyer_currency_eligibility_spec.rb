@@ -876,6 +876,50 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(off_session_decision.fallback_reason).to eq(:off_session)
     end
 
+    # The forced path is the one a local-currency mandate renews on, and a mandate denominated in
+    # that currency cannot be debited in dollars at all — so unlike the general mode, falling back
+    # here produces an unchargeable request rather than a merely degraded one (gumroad-private#1434).
+    it "allows an off-session renewal that has a stored fixed amount, matching the general mode" do
+      product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 7300)
+      subscription = create(:membership_purchase, link: product, seller:).subscription
+      renewal = create(:purchase, link: product, seller:, subscription:, is_original_subscription_purchase: false)
+      create(:later_charge_presentment,
+             owner: subscription,
+             presentment_currency: Currency::INR,
+             presentment_price_cents: 7300,
+             canonical_price_cents: 100)
+
+      renewal_decision = described_class.new(order:,
+                                             seller:,
+                                             merchant_account:,
+                                             chargeable:,
+                                             purchases: [renewal],
+                                             params:,
+                                             setup_future_charges:,
+                                             off_session: true).method_forced_decision(payment_method: "upi")
+
+      expect(renewal_decision).to be_eligible
+      expect(renewal_decision.currency).to eq(Currency::INR)
+    end
+
+    it "still withholds an off-session renewal that stored no amount, so it bills canonical dollars" do
+      product = create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 7300)
+      subscription = create(:membership_purchase, link: product, seller:).subscription
+      renewal = create(:purchase, link: product, seller:, subscription:, is_original_subscription_purchase: false)
+
+      renewal_decision = described_class.new(order:,
+                                             seller:,
+                                             merchant_account:,
+                                             chargeable:,
+                                             purchases: [renewal],
+                                             params:,
+                                             setup_future_charges:,
+                                             off_session: true).method_forced_decision(payment_method: "upi")
+
+      expect(renewal_decision).not_to be_eligible
+      expect(renewal_decision.fallback_reason).to eq(:off_session)
+    end
+
     it "allows the direct listed-amount path for multi-item carts uniformly priced in the forced currency" do
       purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
       purchases << create(:purchase,
