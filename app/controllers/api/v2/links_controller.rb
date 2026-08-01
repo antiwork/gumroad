@@ -334,8 +334,19 @@ class Api::V2::LinksController < Api::V2::BaseController
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)
         attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
+        # Currency before price, and never one without the other. On a persisted
+        # product `price_cents=` writes a Price row scoped to whatever
+        # price_currency_type is set at that moment, so assigning price first
+        # lands the row in the OLD currency and the default_price_cents
+        # validation then finds nothing in the new one. A currency-only change
+        # has the same problem from the other side: nothing else creates a row
+        # in the target currency, so carry the current amount across.
+        if params.key?(:price_currency_type)
+          attrs[:price_currency_type] = currency
+          current_price_cents = @product.default_price_cents
+          attrs[:price_cents] = current_price_cents if current_price_cents.present?
+        end
         attrs[:price_cents] = params[:price] if params.key?(:price)
-        attrs[:price_currency_type] = currency if params.key?(:price_currency_type)
         attrs[:customizable_price] = params[:customizable_price] if params.key?(:customizable_price)
         attrs[:suggested_price_cents] = params[:suggested_price_cents] if params.key?(:suggested_price_cents)
         attrs[:max_purchase_count] = params[:max_purchase_count] if params.key?(:max_purchase_count)

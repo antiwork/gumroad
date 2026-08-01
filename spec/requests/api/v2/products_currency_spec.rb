@@ -68,6 +68,68 @@ describe "Products API currency normalization", type: :request do
     expect(seller.links.last.price_currency_type).to eq("eur")
   end
 
+  it "changes the display currency when price and currency are sent together" do
+    product = create(:product, user: seller, price_currency_type: "usd", price_cents: 9_900)
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, price: 9_900, price_currency_type: "eur" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("success" => true)
+    expect(product.reload.price_currency_type).to eq("eur")
+    expect(product.default_price_cents).to eq(9_900)
+    expect(product.prices.alive.where(currency: "eur").last.price_cents).to eq(9_900)
+  end
+
+  it "changes the display currency when only the currency is sent, carrying the existing amount" do
+    product = create(:product, user: seller, price_currency_type: "usd", price_cents: 9_900)
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, price_currency_type: "eur" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("success" => true)
+    expect(product.reload.price_currency_type).to eq("eur")
+    expect(product.default_price_cents).to eq(9_900)
+  end
+
+  it "applies the sent price to the new currency rather than the old one" do
+    product = create(:product, user: seller, price_currency_type: "usd", price_cents: 9_900)
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, price: 4_500, price_currency_type: "eur" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("success" => true)
+    expect(product.reload.price_currency_type).to eq("eur")
+    expect(product.default_price_cents).to eq(4_500)
+    expect(product.prices.alive.where(currency: "usd").last.price_cents).to eq(9_900)
+  end
+
+  it "changes the display currency of a bundle" do
+    product = create(:product, :bundle, user: seller, price_currency_type: "usd", price_cents: 9_900)
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, price_currency_type: "eur" }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("success" => true)
+    expect(product.reload.price_currency_type).to eq("eur")
+    expect(product.default_price_cents).to eq(9_900)
+  end
+
+  it "changes the price without touching the currency when no currency is sent" do
+    product = create(:product, user: seller, price_currency_type: "eur", price_cents: 9_900)
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, price: 4_500 }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("success" => true)
+    expect(product.reload.price_currency_type).to eq("eur")
+    expect(product.default_price_cents).to eq(4_500)
+  end
+
   it "names the currency the caller actually sent when rejecting it" do
     post "/api/v2/products",
          params: { access_token: token.token, name: "Bad currency", price: 21_999, price_currency_type: "ZZZ" }
