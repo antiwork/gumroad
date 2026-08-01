@@ -1,0 +1,19 @@
+===MARKS===
+CODE fixed=QA6750FIXED cents=100 is_cents=true
+CODE pct=QA6750PCT pct=10 is_cents=false
+LINK A=demo/1000 B=c/1000 X=of/3000
+ARM1 flag=OFF(DEFAULT) data={"demo" => 100, "of" => 100, "c" => 100} error=nil partial=nil
+ARM1 subtotal=2000 discount_sum=300 quoted_total=1700   <- today's behaviour, per line
+ARM2 flag=ON          data={"demo" => 100, "of" => 0, "c" => 0} error=nil partial=nil
+ARM2 subtotal=2000 discount_sum=100 quoted_total=1900   <- opted in, once per cart
+ARM3 3-line flag=OFF data={"demo" => 100, "of" => 100, "c" => 100} discount_sum=300 total=4700
+ARM3 3-line flag=ON  data={"demo" => 100, "of" => 0, "c" => 0} discount_sum=100 total=4900
+ARM4 pct flag=ON(set) is_cents=false data={"demo" => "10%", "of" => "10%", "c" => "10%"} error=nil  <- unchanged, branch keyed on is_cents?
+ARM4 pct flag=OFF     data={"demo" => "10%", "of" => "10%", "c" => "10%"}  <- identical to flag=ON
+ARM5 flags_col=4 once_per_cart=true cancellation=false via_cli=false  <- bit 3, siblings untouched
+ARM5 flags_col=0 once_per_cart=false
+ARM5 brand_new_fixed_code once_per_cart=false flags=0  <- opt-in default
+ARM5 codes_platform_wide_with_flag_on=0/18  <- deploy alone flips nothing
+ARM6 flag=ON QUOTE discount=100 (total 1900)  CHARGE per_line=[100, 100] sum=200 (total 1800)
+ARM6 divergence=100c  <- headline defect UNCHANGED by this commit
+FINAL QA6750FIXED once_per_cart=true flags=4
