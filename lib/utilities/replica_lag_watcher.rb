@@ -44,9 +44,12 @@ class ReplicaLagWatcher
 
       connections.each do |connection|
         status = connection.query("SHOW SLAVE STATUS").to_a[0]
-        # No status = the host is not a replica. Happens when DATABASE_HOST is pointed at a
-        # read replica (e.g. the read-only console), which leaves the primary in REPLICAS_HOSTS.
-        raise("#{connection.query_options[:host]} is not a replica. Are you connected to a read replica? Connect to the primary to use ReplicaLagWatcher.") if status.nil?
+        if status.nil?
+          raise("#{connection.query_options[:host]} is in REPLICAS_HOSTS but is not replicating — it is likely the primary. " \
+                "This happens when the process boots with DATABASE_HOST set to a read replica (e.g. the read-only console): " \
+                "the replica is subtracted from REPLICAS_HOSTS, leaving the primary in the list. " \
+                "Run ReplicaLagWatcher from a process connected to the primary.")
+        end
         lag = status["Seconds_Behind_Master"]
         raise("#{connection.query_options[:host]} lag = null. Is this replica available and replicating?") if lag.nil?
         if lag > options.fetch(:max_lag_allowed)

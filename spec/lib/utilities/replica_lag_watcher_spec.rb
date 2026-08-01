@@ -70,7 +70,7 @@ describe ReplicaLagWatcher do
       expect(described_class.connections.first).to receive(:query).with("SHOW SLAVE STATUS").and_return([])
       expect do
         described_class.lagging?(@options)
-      end.to raise_error(/primary.host is not a replica. Are you connected to a read replica?/)
+      end.to raise_error(/primary.host is in REPLICAS_HOSTS but is not replicating/)
     end
 
     it "returns nil if it doesn't need to check for lag" do
