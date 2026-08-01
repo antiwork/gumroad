@@ -60,6 +60,14 @@ describe TestRedisIsolation do
     }
   end
 
+  # Flipper wraps the Redis adapter in Memoizable and ActorLimit, so walk to the leaf
+  # rather than assuming the depth of the stack the engine builds.
+  def flipper_database
+    adapter = Flipper.adapter
+    adapter = adapter.adapter while adapter.respond_to?(:adapter)
+    adapter.instance_variable_get(:@client).connection.fetch(:db)
+  end
+
   # A stock `redis-server` ships 16 databases, which leaves no block above the .env.test
   # indexes — so the examples that need a real lease would fail there for a reason that
   # is not a regression. Skip loudly instead.
@@ -515,6 +523,13 @@ describe TestRedisIsolation do
       begin
         env = base_env.dup
         expect(boot(env)).to be_present
+        # Spring builds Flipper's DSL during preload and memoizes it per thread, so the
+        # stale adapter only exists if something read a flag before the fork. Without this
+        # the assertion below is vacuous — Flipper.adapter would lazily build against the
+        # already-reassigned $redis and pass with or without the reset.
+        Flipper.enabled?(:a_flag_that_does_not_exist)
+        flipper_before = flipper_database
+
         expect(fork_command(env)).to be_present
 
         forked = claims.last
@@ -522,6 +537,7 @@ describe TestRedisIsolation do
         expect(Sidekiq.redis { |connection| connection.config.db }).to eq(forked.fetch(:databases)[1])
         expect(Modis.with_connection { it.connection.fetch(:db) }).to eq(forked.fetch(:databases)[2])
         expect(Rack::Attack.cache.store.connection.fetch(:db)).to eq(forked.fetch(:databases)[3])
+        expect(flipper_database).to eq(forked.fetch(:databases).first).and(satisfy { it != flipper_before })
       ensure
         $redis = original
         described_class.reconnect_stores(ENV)

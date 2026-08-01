@@ -153,6 +153,11 @@ module TestRedisIsolation
       # to auto_reload_after_fork. If either changes, clear Modis.connection_pools here.
       Modis.redis_options = { url: "redis://#{env.fetch('RPUSH_REDIS_HOST')}" } if defined?(Modis)
 
+      # Flipper's adapter block reads `$redis` when it builds, but the built DSL is memoized
+      # in `Thread.current[:flipper_instance]`, which survives the fork. Dropping it makes the
+      # next flag read rebuild the adapter against the client assigned above.
+      Flipper.instance = nil if defined?(Flipper)
+
       return unless defined?(Rack::Attack)
       connection = Redis.new(url: "redis://#{env.fetch('RACK_ATTACK_REDIS_HOST')}")
       Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisProxy.new(connection)
