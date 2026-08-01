@@ -30,9 +30,9 @@ require "socket"
 # Spring preloads the app once per checkout, so a lease claimed at boot belongs to the
 # server. `reinstall_after_fork!` (wired up in config/spring.rb) re-leases per command, so
 # two concurrent commands from one checkout get separate blocks too. The pid guard on the
-# release is what keeps a fork from dropping the lease its server still holds. Note the
-# opt-out below is read at boot, so under a live spring server it needs `DISABLE_SPRING=1`
-# or a `bin/spring stop` first.
+# release is what keeps a fork from dropping the lease its server still holds. The opt-out
+# below is honoured per command, but a server already booted with it set stays opted out
+# until `bin/spring stop`.
 #
 # Capacity is the constraint: 16 databases is one concurrent run, hence
 # `--databases 64` in docker/docker-compose-{local,test-and-ci}.yml. With no free
@@ -112,9 +112,7 @@ module TestRedisIsolation
       nil
     end
 
-    # Re-lease per forked command. Spring preloads once per checkout, so a lease claimed at
-    # boot belongs to the server and every command forked from it inherits that one block.
-    # Each fork claims its own and re-points the stores that captured a connection at boot.
+    # Re-lease per forked command, re-pointing the stores that connected at boot.
     #
     # Leasing reads the ORIGINAL endpoints, not the rewritten ENV: the floor is derived from
     # the values a fallback run would use, and boot has already replaced those with leased
@@ -136,6 +134,12 @@ module TestRedisIsolation
 
     # Stores that read a *_REDIS_HOST once at boot and cached a connection or URL from it.
     # Anything resolving the env var per call needs nothing here.
+    #
+    # Constants that capture $redis at class load are the exception this cannot reach —
+    # ProductDuplicatorService and PaypalPartnerRestCredentials wrap it in a frozen
+    # Redis::Namespace. They are safe only because test never eager-loads under spring
+    # (config/environments/test.rb sets eager_load from CI), so a fork autoloads them
+    # after this runs. `CI=1 bin/rspec` under spring would pin them to the server's block.
     def reconnect_stores(env)
       $redis = Redis.new(url: "redis://#{env.fetch('REDIS_HOST')}")
 

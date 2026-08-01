@@ -371,11 +371,72 @@ describe TestRedisIsolation do
     end
   end
 
+  describe ".boot_endpoints" do
+    # The on-switch for the whole fork path: if boot never records the endpoints,
+    # reinstall_after_fork! returns immediately and every command silently keeps the
+    # block its spring server leased. The examples below stub this out of necessity —
+    # this run's own boot already populated it — so it needs covering on its own.
+    around do |example|
+      original = described_class.instance_variable_get(:@boot_endpoints)
+      described_class.instance_variable_set(:@boot_endpoints, nil)
+      example.run
+    ensure
+      described_class.instance_variable_set(:@boot_endpoints, original)
+    end
+
+    it "records the endpoints boot started from, before it rewrites them" do
+      skip_without_a_free_block
+      claimed = nil
+      allow(described_class).to receive(:claim_slot).and_wrap_original do |original, **kwargs|
+        claimed = original.call(**kwargs)
+      end
+
+      begin
+        env = base_env.dup
+        expect(described_class.install!(env:, warn_io: StringIO.new, key_prefix: test_prefix)).to be_present
+
+        expect(described_class.boot_endpoints)
+          .to eq(base_env.values_at(*described_class::STORE_ENV_VARS).map { parse(it) })
+      ensure
+        discard(claimed)
+      end
+    end
+
+    it "keeps the first boot's endpoints when install! runs again on rewritten values" do
+      # The second call sees the leased block boot just wrote. Letting it win would move
+      # the floor onto the leased range and hand later forks overlapping blocks.
+      skip_without_a_free_block
+      claims = []
+      allow(described_class).to receive(:claim_slot).and_wrap_original do |original, **kwargs|
+        original.call(**kwargs).tap { claims << it }
+      end
+
+      begin
+        env = base_env.dup
+        expect(described_class.install!(env:, warn_io: StringIO.new, key_prefix: test_prefix)).to be_present
+        first = described_class.boot_endpoints
+
+        expect(described_class.install!(env:, warn_io: StringIO.new, key_prefix: test_prefix)).to be_present
+
+        expect(described_class.boot_endpoints).to eq(first)
+      ensure
+        claims.each { discard(it) }
+      end
+    end
+
+    it "stays nil when boot never leased, so a fork has nothing to re-lease from" do
+      env = base_env.merge("DISABLE_TEST_REDIS_ISOLATION" => "1")
+
+      expect(described_class.install!(env:, warn_io: StringIO.new, key_prefix: test_prefix)).to be_nil
+
+      expect(described_class.boot_endpoints).to be_nil
+      expect(described_class.reinstall_after_fork!(env:, warn_io: StringIO.new)).to be_nil
+    end
+  end
+
   describe ".reinstall_after_fork!" do
-    # Spring preloads once per checkout, so the block leased at boot belongs to the server
-    # and every command forked from it inherits the same one. Without this path two
-    # concurrent `bin/rspec` runs flush each other's databases — this file's own race,
-    # relocated from .env.test onto a leased block.
+    # Without this path two concurrent `bin/rspec` runs share their spring server's block
+    # and flush each other — this file's own race, moved onto a leased block.
     attr_reader :claims
 
     before { @claims = [] }
