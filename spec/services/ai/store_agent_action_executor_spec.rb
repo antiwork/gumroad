@@ -145,20 +145,41 @@ describe Ai::StoreAgentActionExecutor do
         end.not_to change { seller.links.count }
       end
 
+      it "rejects a stale webhook creation confirmation before dispatching" do
+        expect do
+          result = executor.execute(
+            type: "api_write",
+            params: api_write(
+              endpoint: "create_resource_subscription",
+              params: { "resource_name" => "sale", "post_url" => "https://example.com/hook" },
+            ),
+          )
+
+          expect(result[:success]).to be(false)
+          expect(result[:message]).to eq("That action isn't supported.")
+          expect(result[:failure_reason]).to eq("unsupported_action")
+          expect(result[:retry_safe]).to be(true)
+        end.not_to change { seller.resource_subscriptions.count }
+      end
+
       it "classifies a reflected API validation message without losing the seller-facing detail" do
-        secret = "seller-secret-token"
+        product = create(:product, user: seller)
+
         result = executor.execute(
           type: "api_write",
           params: api_write(
-            endpoint: "create_resource_subscription",
-            params: { "resource_name" => "sale", "post_url" => "not-a-url?token=#{secret}" },
+            endpoint: "create_offer_code",
+            path_params: { "link_id" => product.external_id },
+            params: { "name" => "Half off", "amount_off" => 50, "offer_type" => "percent", "max_purchase_count" => -1 },
           ),
         )
 
         expect(result[:success]).to be(false)
-        expect(result[:message]).to include(secret)
+        expect(result[:message]).to be_present
         expect(result[:failure_reason]).to eq("api_failure")
-        # The public v2 endpoint reports validation failure in a 200 envelope with success: false.
+        # Api::V2::BaseController reports validation failure in a 200 envelope with success: false;
+        # that is the dominant failure shape for the whole agent write surface, so keep it covered
+        # here even though the endpoint that originally exercised it is gone.
         expect(result[:failure_status]).to eq(200)
         expect(result).not_to have_key(:retry_safe)
       end
@@ -227,10 +248,7 @@ describe Ai::StoreAgentActionExecutor do
         expect(result[:message]).to match(/permission/i)
       end
 
-      it "refuses creating a webhook (admin-only) for a marketing member without mutating" do
-        # The v2 resource_subscriptions endpoint only needs view_sales, but installing a webhook is
-        # OAuth-app management — admin-only in the dashboard — so the agent gates it admin_only. A
-        # marketing member must not be able to point store webhooks at an arbitrary URL.
+      it "does not expose webhook creation to a marketing member" do
         expect do
           result = executor.execute(
             type: "api_write",
@@ -238,7 +256,7 @@ describe Ai::StoreAgentActionExecutor do
           )
 
           expect(result[:success]).to be(false)
-          expect(result[:message]).to match(/permission/i)
+          expect(result[:failure_reason]).to eq("unsupported_action")
         end.not_to change { seller.resource_subscriptions.count }
       end
 

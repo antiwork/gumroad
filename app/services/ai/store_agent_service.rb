@@ -455,7 +455,8 @@ class Ai::StoreAgentService
     - api_read: run any READ endpoint to fetch live data (products, sales, payouts, discounts,
       subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
     - api_write: prepare any change (create/update/delete products, discounts, variants, upsells,
-      emails, refunds, shipping, licenses, webhooks, profile, and more). Writes never take effect
+      emails, refunds, shipping, licenses, profile, and more; webhooks can be listed and deleted
+      but not created — direct creators to Settings > Advanced > Ping). Writes never take effect
       immediately — they produce a proposed change the creator reviews and confirms in the UI.
     - complete_turn: finish every creator-facing reply with a typed outcome after all api_read or
       api_write results are back.

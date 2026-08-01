@@ -62,6 +62,23 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "resource subscription endpoints" do
+    it "allows listing and deletion but not webhook creation" do
+      expect(described_class.find("list_resource_subscriptions")).to be_present
+      expect(described_class.find("delete_resource_subscription")).to be_present
+      expect(described_class.find("create_resource_subscription")).to be_nil
+      expect(described_class.write_ids).not_to include("create_resource_subscription")
+      expect(described_class.manifest(:write)).not_to include("Create a webhook resource subscription")
+    end
+
+    it "lets listing pass the resource_name the v2 index requires" do
+      endpoint = described_class.find("list_resource_subscriptions")
+
+      expect(endpoint.unknown_param_keys_error("resource_name" => "sale")).to be_nil
+      expect(ResourceSubscription.valid_resource_name?("sale")).to be(true)
+    end
+  end
+
   # gumroad-private#1463: with no documentation to read, the agent answered product questions from
   # its own assumptions and told a seller a supported feature did not exist.
   describe "help center endpoints" do

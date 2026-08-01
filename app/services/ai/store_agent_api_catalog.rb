@@ -261,12 +261,13 @@ module Ai::StoreAgentApiCatalog
     ep("get_payout", :get, "/payouts/:id", "Get one payout by id.", read: true, scope: "view_payouts", path_params: %w[id]),
 
     # ---- Resource subscriptions (webhooks) ----
-    # The underlying v2 endpoints only require view_sales, but creating/removing a webhook is OAuth-
-    # app management, which the dashboard restricts to admins/owner. Gate them admin_only here so a
-    # marketing member can't install a data-exfiltrating webhook through the agent. Listing is gated
-    # too since it exposes the configured callback URLs. (Flagged for product review — see PR thread.)
-    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the creator's webhook resource subscriptions.", read: true, scope: "view_sales", admin_only: true),
-    ep("create_resource_subscription", :put, "/resource_subscriptions", "Create a webhook resource subscription.", scope: "view_sales", admin_only: true, params: %w[resource_name post_url]),
+    # Listing/deletion stay available so the agent can explain and clean up existing webhooks.
+    # Creation is deliberately absent until agent-created subscriptions have durable authorization.
+    # admin_only on all of these: the v2 endpoints only need view_sales, but these are OAuth-app
+    # management (and listing exposes configured callback URLs), which the dashboard restricts to
+    # admins/owner. resource_name is required by the controller's index, which renders
+    # success:false without it — omit it here and listing can never succeed.
+    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the creator's webhook resource subscriptions for one event type (resource_name: #{ResourceSubscription::VALID_RESOURCE_NAMES.join(', ')}).", read: true, scope: "view_sales", admin_only: true, params: %w[resource_name]),
     ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a webhook resource subscription.", scope: "view_sales", admin_only: true, path_params: %w[id]),
 
     # ---- Tax forms & earnings ----
