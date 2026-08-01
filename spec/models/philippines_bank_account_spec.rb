@@ -3,6 +3,24 @@
 require "spec_helper"
 
 describe PhilippinesBankAccount do
+  describe "bank code country" do
+    it "rejects a BIC registered outside the Philippines" do
+      ba = build(:philippines_bank_account, bank_number: "TRWIUS35")
+
+      expect(ba).not_to be_valid
+      expect(ba.errors.full_messages.join).to include("must be for a bank in Philippines")
+    end
+
+    it "accepts a Philippine BIC" do
+      expect(build(:philippines_bank_account, bank_number: "UBPHPHMM")).to be_valid
+    end
+
+    # 1,502 healthy rows use a numeric clearing code in this column, so the rule must not see them.
+    it "accepts a numeric clearing code" do
+      expect(build(:philippines_bank_account, bank_number: "01004001")).to be_valid
+    end
+  end
+
   describe "#bank_account_type" do
     it "returns philippines" do
       expect(create(:philippines_bank_account).bank_account_type).to eq("PH")
@@ -25,7 +43,7 @@ describe PhilippinesBankAccount do
     it "returns valid for 11 characters" do
       ba = create(:philippines_bank_account)
       expect(ba).to be_valid
-      expect(ba.routing_number).to eq("BCDEFGHI123")
+      expect(ba.routing_number).to eq("BCDEPHM1123")
     end
   end
 
@@ -37,12 +55,12 @@ describe PhilippinesBankAccount do
 
   describe "#validate_bank_code" do
     it "allows 8 to 11 characters only" do
-      expect(build(:philippines_bank_account, bank_code: "BCDEFGHI")).to be_valid
-      expect(build(:philippines_bank_account, bank_code: "BCDEFGHI1")).to be_valid
-      expect(build(:philippines_bank_account, bank_code: "BCDEFGHI12")).to be_valid
-      expect(build(:philippines_bank_account, bank_code: "BCDEFGHI123")).to be_valid
-      expect(build(:philippines_bank_account, bank_code: "BCDEFGH")).not_to be_valid
-      expect(build(:philippines_bank_account, bank_code: "BCDEFGHI1234")).not_to be_valid
+      expect(build(:philippines_bank_account, bank_code: "BCDEPHM1")).to be_valid
+      expect(build(:philippines_bank_account, bank_code: "BCDEPHM11")).to be_valid
+      expect(build(:philippines_bank_account, bank_code: "BCDEPHM112")).to be_valid
+      expect(build(:philippines_bank_account, bank_code: "BCDEPHM1123")).to be_valid
+      expect(build(:philippines_bank_account, bank_code: "BCDEPHM")).not_to be_valid
+      expect(build(:philippines_bank_account, bank_code: "BCDEPHM11234")).not_to be_valid
     end
   end
 

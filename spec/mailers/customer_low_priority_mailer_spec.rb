@@ -549,7 +549,7 @@ describe CustomerLowPriorityMailer do
 
     describe "with tracking" do
       before do
-        @shipment = create(:shipment, purchase: @purchase, ship_state: :shipped, tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
+        @shipment = create(:shipment, purchase: @purchase, ship_state: :shipped, tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490")
       end
 
       it "mails to and reply-to the correct email" do
@@ -571,6 +571,37 @@ describe CustomerLowPriorityMailer do
       it "has the tracking url in the body" do
         mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
         expect(mail.body.encoded).to include @shipment.tracking_url
+      end
+
+      it "uses the trusted label only for a verified carrier tracking link" do
+        mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
+        expect(mail.body.decoded).to include "Track your package"
+        expect(mail.body.decoded).not_to include "Seller-provided tracking link"
+      end
+
+      it "labels seller-provided tracking links with the destination host" do
+        @shipment.update!(tracking_url: "https://www.google.com/track")
+
+        mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
+        expect(mail.body.decoded).to include "Seller-provided tracking link"
+        expect(mail.body.decoded).to include "Destination: www.google.com"
+      end
+
+      it "labels an arbitrary page on a carrier host as seller-provided" do
+        @shipment.update!(tracking_url: "https://tools.usps.com/not-a-tracking-form")
+
+        mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
+        expect(mail.body.decoded).to include "Seller-provided tracking link"
+        expect(mail.body.decoded).to include "Destination: tools.usps.com"
+      end
+
+      it "does not render legacy invalid tracking links" do
+        @shipment.update_column(:tracking_url, "1Z999AA10123456784")
+
+        mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
+        expect(mail.body.decoded).to include "has been shipped and should arrive soon"
+        expect(mail.body.decoded).not_to include "Track your package"
+        expect(mail.body.decoded).not_to include "1Z999AA10123456784"
       end
     end
   end

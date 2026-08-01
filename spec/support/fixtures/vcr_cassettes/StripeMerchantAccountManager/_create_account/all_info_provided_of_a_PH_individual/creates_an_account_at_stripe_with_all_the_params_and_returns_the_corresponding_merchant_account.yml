@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=transfers&country=PH&default_currency=php&metadata[user_id]=6299207829457&metadata[tos_agreement_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&metadata[user_compliance_info_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&metadata[bank_account_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&tos_acceptance[service_agreement]=recipient&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[address][line1]=address_full_match&individual[address][city]=Manila&individual[address][postal_code]=1002&individual[address][country]=PH&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&bank_account[country]=PH&bank_account[currency]=php&bank_account[account_number]=01567890123456789&bank_account[routing_number]=BCDEFGHI123&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=false
+      string: type=custom&requested_capabilities[0]=transfers&country=PH&default_currency=php&metadata[user_id]=6299207829457&metadata[tos_agreement_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&metadata[user_compliance_info_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&metadata[bank_account_id]=fjUeSyuGe9Mc1g9Wla8aXQ%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&tos_acceptance[service_agreement]=recipient&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[address][line1]=address_full_match&individual[address][city]=Manila&individual[address][postal_code]=1002&individual[address][country]=PH&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&bank_account[country]=PH&bank_account[currency]=php&bank_account[account_number]=01567890123456789&bank_account[routing_number]=BCDEPHM1123&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=false
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/10.11.0
@@ -160,7 +160,7 @@ http_interactions:
                   "past_due": [],
                   "pending_verification": []
                 },
-                "routing_number": "BCDEFGHI123",
+                "routing_number": "BCDEPHM1123",
                 "status": "new"
               }
             ],

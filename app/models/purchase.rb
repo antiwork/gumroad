@@ -2080,6 +2080,16 @@ class Purchase < ApplicationRecord
     shipping_info
   end
 
+  # Whether this order needed delivery when it was placed. The live product flags are
+  # seller-mutable after checkout, so anything arguing about what the buyer was owed — dispute
+  # evidence, most of all — must read the product as it stood at purchase time. Falls back to the
+  # live product when no version covers the purchase, or when the purchase is mid-checkout and
+  # has no created_at yet — the live product IS its checkout state.
+  def required_delivery_at_checkout?
+    product = (link.paper_trail.version_at(created_at) if created_at) || link
+    product.is_physical? || product.require_shipping?
+  end
+
   def gross_amount_refunded_cents
     amount_refunded_cents + gumroad_tax_refunded_cents
   end

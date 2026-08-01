@@ -6,9 +6,10 @@ require "shared_examples/authorize_called"
 describe ShipmentsController, :vcr do
   describe "POST mark_as_shipped" do
     let(:seller) { create(:named_seller) }
-    let(:product) { create(:product, user: seller) }
-    let(:purchase) { create(:purchase, link: product, seller:) }
-    let(:purchase_with_shipment) { create(:purchase, link: product, seller:) }
+    # Shipments only exist for orders that needed delivery (gumroad-private#1665).
+    let(:product) { create(:physical_product, user: seller) }
+    let(:purchase) { create(:physical_purchase, link: product, seller:) }
+    let(:purchase_with_shipment) { create(:physical_purchase, link: product, seller:) }
     let!(:shipment) { create(:shipment, purchase: purchase_with_shipment) }
     let(:tracking_url) { "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890" }
 
@@ -49,6 +50,14 @@ describe ShipmentsController, :vcr do
         expect(response).to be_successful
         expect(shipment.reload.shipped?).to be(true)
         expect(shipment.tracking_url).to eq(tracking_url)
+      end
+
+      it "rejects tracking values that are not full URLs" do
+        expect { post :mark_as_shipped, params: { purchase_id: purchase.external_id, tracking_url: "1Z999AA10123456784" } }.not_to change { Shipment.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["message"]).to eq("Tracking URL #{Shipment::VALID_TRACKING_LINK_MESSAGE}")
+        expect(purchase.reload.shipment).to eq(nil)
       end
     end
   end

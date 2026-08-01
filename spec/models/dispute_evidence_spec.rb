@@ -185,6 +185,103 @@ describe DisputeEvidence do
         expect(dispute_evidence.hours_left_to_submit_evidence).to eq(DisputeEvidence::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - 3)
       end
     end
+
+    # Stripe takes one submission per dispute. Once it is spent the seller cannot add anything, no
+    # matter what the 72-hour clock says — support quoted "68 hours" off this on a spent slot and
+    # invited a seller to assemble evidence that could never be filed (gumroad-private#1612).
+    context "when the seller has already submitted, with clock time left" do
+      before do
+        dispute_evidence.update!(seller_contacted_at: 4.hours.ago, seller_submitted_at: 1.hour.ago)
+      end
+
+      it "reports no hours left" do
+        expect(described_class.hours_left_in_window(dispute_evidence.seller_contacted_at)).to be > 0
+        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(0)
+      end
+    end
+
+    context "when the evidence is resolved, with clock time left" do
+      before do
+        dispute_evidence.update!(seller_contacted_at: 4.hours.ago)
+        dispute_evidence.update_as_resolved!(resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+      end
+
+      it "reports no hours left" do
+        expect(described_class.hours_left_in_window(dispute_evidence.seller_contacted_at)).to be > 0
+        expect(dispute_evidence.hours_left_to_submit_evidence).to eq(0)
+      end
+    end
+  end
+
+  describe ".seller_response_due_at" do
+    it "returns nil without a seller-contacted stamp" do
+      expect(described_class.seller_response_due_at(nil)).to be_nil
+    end
+
+    it "returns the end of the seller submission window" do
+      stamp = Time.current
+
+      expect(described_class.seller_response_due_at(stamp))
+        .to eq(stamp + described_class::SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS.hours)
+    end
+  end
+
+  describe ".seller_response_reminder_at" do
+    it "returns 24 hours before the seller response deadline" do
+      stamp = Time.current
+
+      expect(described_class.seller_response_reminder_at(stamp))
+        .to eq(described_class.seller_response_due_at(stamp) - described_class::EVIDENCE_REMINDER_LEAD_TIME)
+    end
+  end
+
+  describe ".schedule_due_soon_reminder" do
+    around do |example|
+      travel_to(Time.zone.local(2026, 1, 1, 12)) { example.run }
+    end
+
+    it "schedules a reminder 24 hours before the response deadline" do
+      dispute_evidence.update!(seller_contacted_at: Time.current)
+
+      described_class.schedule_due_soon_reminder(
+        dispute_id: dispute_evidence.dispute.id,
+        seller_contacted_at: dispute_evidence.seller_contacted_at,
+        seller_submitted_at: nil,
+        resolved_at: nil
+      )
+
+      expect(DisputeEvidenceDueSoonReminderJob)
+        .to have_enqueued_sidekiq_job(dispute_evidence.dispute.id)
+        .at(dispute_evidence.seller_response_due_at - described_class::EVIDENCE_REMINDER_LEAD_TIME)
+    end
+
+    it "does not schedule once the reminder time has already passed" do
+      dispute_evidence.update!(seller_contacted_at: 50.hours.ago)
+
+      described_class.schedule_due_soon_reminder(
+        dispute_id: dispute_evidence.dispute.id,
+        seller_contacted_at: dispute_evidence.seller_contacted_at,
+        seller_submitted_at: nil,
+        resolved_at: nil
+      )
+
+      expect(DisputeEvidenceDueSoonReminderJob)
+        .not_to have_enqueued_sidekiq_job(dispute_evidence.dispute.id)
+    end
+
+    it "does not schedule once the seller has submitted" do
+      dispute_evidence.update!(seller_contacted_at: Time.current, seller_submitted_at: Time.current)
+
+      described_class.schedule_due_soon_reminder(
+        dispute_id: dispute_evidence.dispute.id,
+        seller_contacted_at: dispute_evidence.seller_contacted_at,
+        seller_submitted_at: dispute_evidence.seller_submitted_at,
+        resolved_at: nil
+      )
+
+      expect(DisputeEvidenceDueSoonReminderJob)
+        .not_to have_enqueued_sidekiq_job(dispute_evidence.dispute.id)
+    end
   end
 
   describe ".hours_left_in_window" do

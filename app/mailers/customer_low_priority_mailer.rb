@@ -306,7 +306,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     return unless EmailFormatValidator.valid?(purchase.email)
 
     @product = purchase.link
-    @tracking_url = @shipment.calculated_tracking_url
+    @tracking_link = @shipment.tracking_link_for_display
     mail(
       to: purchase.email,
       reply_to: @product.user.support_or_form_email,

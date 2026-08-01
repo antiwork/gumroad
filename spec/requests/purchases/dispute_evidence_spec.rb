@@ -21,7 +21,7 @@ describe("Dispute evidence page", type: :system, js: true) do
     visit purchase_dispute_evidence_path(purchase.external_id)
 
     expect(page).to have_text("Submit additional information")
-    expect(page).to have_text("Any additional information you can provide in the next 72 hours will help us win on your behalf.")
+    expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
     expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
     expect(page).to have_text("Why should you win this dispute?")
     expect(page).not_to have_text("Why is the customer not entitled to a refund?")

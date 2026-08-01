@@ -54,6 +54,10 @@ class DisputeEvidence::GenerateUncategorizedTextService
     # newline would put seller-written lines into evidence Stripe reads as Gumroad's own. Dropping
     # an unusable row costs less than vouching for its text.
     def submission_safe_tracking_url
+      # Same gate as CreateFromDisputeService#shipment_for: a shipment row predating Shipment's
+      # create-time validation can hang off a digital purchase, and its URL is shipping evidence too.
+      return unless purchase.required_delivery_at_checkout?
+
       # `scrub` before `strip`: on an invalid byte sequence `strip` raises
       # `Encoding::CompatibilityError` before any guard below runs, failing the whole evidence
       # build rather than dropping one unusable row.
