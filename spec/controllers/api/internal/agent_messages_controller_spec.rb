@@ -182,12 +182,53 @@ describe Api::Internal::AgentMessagesController do
         expect(history.map { |message| message[:proposal_state] }).to eq(
           [
             "no proposed action was recorded for this message",
-            "a proposed action was recorded for this message; confirmation outcome and card visibility are unknown",
-            "proposal execution started; do not confirm again",
-            "the proposed action was applied and cannot be confirmed again",
-            "proposal outcome is unknown; do not confirm again",
+            "a proposal was recorded, but its current result and card visibility are unknown; never send the creator back to that card",
+            "execution started; do not confirm again",
+            "the action was applied and cannot be confirmed again",
+            "the result is unknown; do not confirm again",
           ],
         )
+        # Every proposal turn's own creator-facing copy is gone from what the model sees; only the
+        # turn with no proposal keeps its text.
+        expect(history.map { |message| message[:content] }).to eq(
+          [
+            "No proposal",
+            "You proposed a change on this turn.",
+            "You proposed a change on this turn.",
+            "You proposed a change on this turn.",
+            "You proposed a change on this turn.",
+          ],
+        )
+      end
+
+      # gp#1470's production shape: a proposal applied earlier, then a turn whose persisted copy
+      # points the creator back at that card. Replaying it let the model repeat it as live.
+      it "replaces an applied proposal turn's confirm-that-card copy with server-owned state" do
+        conversation = create(:ai_conversation, seller:)
+        proposal = { "type" => "api_write", "params" => { "endpoint" => "update_user_custom_html" } }
+        create(:ai_message, ai_conversation: conversation, content: "Upload the portrait")
+        applied = create(
+          :ai_message,
+          ai_conversation: conversation,
+          role: "assistant",
+          content: "The portrait upload is the proposal already sitting in front of you from my earlier turn — confirm that card and it goes through.",
+          metadata: { "proposed_action" => proposal, "action_status" => "applied", "client_turn_id" => "8f14e45f", "objects" => [{ "id" => "prod_1" }] },
+        )
+
+        history = controller.send(:agent_conversation_history, conversation)
+
+        expect(history.last).to eq(
+          role: "assistant",
+          content: "You proposed a change on this turn.",
+          proposal_state: "the action was applied and cannot be confirmed again",
+        )
+        replayed = history.map { |message| message.values.join(" ") }.join(" ")
+        expect(replayed).not_to include("confirm that card")
+        expect(replayed).not_to include("update_user_custom_html")
+        expect(replayed).not_to include("8f14e45f")
+        expect(replayed).not_to include("prod_1")
+        # The creator's own transcript is untouched — this only changes what the model is told.
+        expect(applied.reload.content).to include("confirm that card")
       end
 
       it "404s when the conversation belongs to another seller" do
