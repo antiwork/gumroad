@@ -25,8 +25,25 @@ describe SyncGuardianToStripeJob do
   # Nothing of ours to add a Person to, and Stripe verifies that account under its own agreement
   # with the seller — the same exemption the payout gate and the settings page apply.
   it "does nothing for a seller paid through their own connected Stripe account" do
-    allow_any_instance_of(User).to receive(:has_stripe_account_connected?).and_return(true)
+    create(:merchant_account_stripe_connect, user: seller, country: "US")
+    seller.update!(check_merchant_account_is_linked: true)
     expect(StripeGuardianManager).not_to receive(:sync)
+
+    described_class.new.perform(seller.id)
+  end
+
+  # Stripe cannot pay a Brazilian connected account out, so the payout gate does not exempt it and
+  # the settings page asks this seller for a guardian. Exempting here on the broader
+  # has_stripe_account_connected? accepted the guardian, told the seller they were done, and never
+  # sent it — leaving the requirement that stopped their payouts unmet with nothing left to do.
+  it "still syncs for a minor whose connected Stripe account is Brazilian" do
+    create(:merchant_account_stripe_connect, user: seller, country: "BR")
+    seller.update!(check_merchant_account_is_linked: true)
+    merchant_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_spec_guardian_sync_br")
+
+    expect(Stripe::Account).to receive(:retrieve)
+      .with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+    expect(StripeGuardianManager).to receive(:sync).with(seller, stripe_account, passphrase: anything)
 
     described_class.new.perform(seller.id)
   end

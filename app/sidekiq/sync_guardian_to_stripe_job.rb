@@ -18,9 +18,12 @@ class SyncGuardianToStripeJob
     user = User.find(user_id)
 
     # A seller paid through their own connected Stripe account has no Gumroad-managed account for a
-    # guardian to go on, and Stripe verifies them under their own agreement — the same reason
-    # UserComplianceInfo#requires_legal_guardian? never asks them for one.
-    return if user.has_stripe_account_connected?
+    # guardian to go on, and Stripe verifies them under their own agreement. Reads the payout gate's
+    # own predicate, not the broader has_stripe_account_connected?, so this job syncs for exactly the
+    # sellers the settings page asks and the guardian endpoint accepts: a Brazilian connected account
+    # is not exempt anywhere in that set, and skipping it here would leave a guardian the seller was
+    # told was complete never sent to the managed account Stripe is actually verifying.
+    return if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
 
     merchant_account = user.stripe_account
     return if merchant_account.nil?
