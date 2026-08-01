@@ -222,6 +222,15 @@ describe("dashboard nav progressive disclosure", () => {
     expect(screen.getByRole("link", { name: "Workflows" })).toBeTruthy();
   });
 
+  it("keeps the disclosure control inside the sidebar box, like every other row", () => {
+    // `all-unset` clears box-sizing, so a `w-full` + `px-6` control renders 48px wider than the
+    // 208px sidebar and the overhang is only hidden by the nav's overflow clip.
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    expect(control.className).toContain("box-border");
+  });
+
   it("drops Everything else once nothing is left in it", () => {
     renderNav({ promoted: ALL_PROMOTABLE });
 
