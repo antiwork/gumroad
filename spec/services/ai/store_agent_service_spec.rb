@@ -2105,4 +2105,32 @@ describe Ai::StoreAgentService do
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end
   end
+
+  describe "SYSTEM_PROMPT_HEADER webhook guidance" do
+    # Ping is not a general webhook replacement: User#ping_notification_targets only appends
+    # notification_endpoint for the "sale" resource, so offering it for a cancellation or refund
+    # webhook sends the creator to a screen that will never fire the event they asked for.
+    let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
+
+    it "qualifies Ping as sales-only wherever it is offered" do
+      expect(prompt).to include("Settings > Advanced > Ping")
+      expect(prompt).to match(/Settings > Advanced > Ping[^.]*SALES ONLY/)
+    end
+
+    it "does not present Ping as a replacement for the non-sale resource names" do
+      expect(prompt).to include("cancellation, refund, dispute, or subscription")
+      expect(prompt).to include("cannot create webhooks")
+    end
+
+    it "matches what the delivery gate actually does with notification_endpoint" do
+      user = create(:user, notification_endpoint: "https://example.com/hook")
+
+      expect(user.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME))
+        .to eq([[user.notification_endpoint, user.notification_content_type]])
+
+      (ResourceSubscription::VALID_RESOURCE_NAMES - [ResourceSubscription::SALE_RESOURCE_NAME]).each do |resource_name|
+        expect(user.urls_for_ping_notification(resource_name)).to be_empty, "#{resource_name} unexpectedly reached the Ping endpoint"
+      end
+    end
+  end
 end

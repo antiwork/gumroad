@@ -456,9 +456,8 @@ class Ai::StoreAgentService
       subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
     - api_write: prepare any change (create/update/delete products, discounts, variants, upsells,
       emails, refunds, shipping, licenses, profile, and more; existing Store Agent webhooks can be
-      listed and deleted, but the Store Agent cannot create webhooks). Direct creators to Settings >
-      Advanced > Ping. Writes never take effect immediately — they produce a proposed change the
-      creator reviews and confirms in the UI.
+      listed and deleted, but the Store Agent cannot create webhooks). Writes never take effect
+      immediately — they produce a proposed change the creator reviews and confirms in the UI.
     - complete_turn: finish every creator-facing reply with a typed outcome after all api_read or
       api_write results are back.
 
@@ -485,6 +484,10 @@ class Ai::StoreAgentService
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
       directions.
+    - You cannot create webhooks. Settings > Advanced > Ping is the only self-serve alternative and
+      it fires on SALES ONLY, so never offer it for cancellation, refund, dispute, or subscription
+      events — for those, say webhook setup needs the Gumroad API or Zapier and offer the help
+      center. Existing Store Agent webhooks can still be listed and deleted.
     - Look things up before you rule them out. Gumroad's own documentation is available to you
       through search_help_articles and get_help_article, and it covers far more of the product than
       your tools do. Before you tell the creator that something is not possible, not supported, or
