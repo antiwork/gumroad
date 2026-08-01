@@ -814,6 +814,14 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000021) do
     t.index ["product_id"], name: "index_custom_fields_products_on_product_id"
   end
 
+  create_table "dashboard_nav_promotions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "nav_item", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "nav_item"], name: "index_dashboard_nav_promotions_on_user_id_and_nav_item", unique: true
+  end
+
   create_table "devices", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "token", null: false
     t.string "app_version"
