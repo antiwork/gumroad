@@ -835,15 +835,15 @@ describe Payouts do
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
-      # Pinned to a Wednesday, because `Date.today - 1` is only a *past* payout period on six
-      # days out of seven. The gate in .create_payments_for_balances_up_to_date_for_users
+      # Pinned to a Wednesday, because `Date.today - 1` is only a *past* payout period on
+      # Wednesday through Friday. The gate in .create_payments_for_balances_up_to_date_for_users
       # compares `date + PAYOUT_DELAY_DAYS` against the seller's cycle, and cycles are Fridays:
-      # run this on a Saturday and `payout_date` IS the Friday just gone, so the balance
-      # created 3 days earlier falls inside that cycle's period (cycle - PAYOUT_DELAY_DAYS)
-      # instead of before it. The cycle then stops advancing for being under the minimum, and
-      # `date + PAYOUT_DELAY_DAYS` lands exactly ON it — `>=` accepts, and all three examples
-      # here invert. On any other weekday the balance sits outside the period, the cycle
-      # advances a week, and the gate rejects as these examples assume.
+      # from Saturday through Tuesday `payout_date` has not fallen behind the cycle yet, so the
+      # balance created 3 days earlier falls inside that cycle's period
+      # (cycle - PAYOUT_DELAY_DAYS) instead of before it. The cycle then stops advancing for
+      # being under the minimum, `date + PAYOUT_DELAY_DAYS` lands on or before it, `>=` accepts,
+      # and these examples invert. Measured: Sat/Sun/Mon/Tue all fail, Wednesday is the first
+      # clean day.
       before do
         travel_to(Time.utc(2026, 8, 5, 12))
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
