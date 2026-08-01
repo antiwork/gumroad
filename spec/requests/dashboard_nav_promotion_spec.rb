@@ -150,10 +150,16 @@ describe DashboardNavPromotion, type: :request do
   it "records nothing on a request that is not on a Gumroad host" do
     # Seller subdomains and custom domains serve storefronts, where a slugged page can collide with a
     # dashboard path and would otherwise credit the row to a passing buyer.
+    #
+    # The stub also disables the routing constraint /workflows lives inside, so this lands on the
+    # catch-all 404 — which is still an ApplicationController action running the same callbacks.
+    # Assert that status: if the 404 ever stops running them, this example would go on passing for
+    # the wrong reason rather than pinning the guard.
     allow(GumroadDomainConstraint).to receive(:matches?).and_return(false)
 
     get workflows_path
 
+    expect(response).to have_http_status(:not_found)
     expect(seller.reload.promoted_nav_items).to be_nil
   end
 

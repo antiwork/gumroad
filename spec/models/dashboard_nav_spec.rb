@@ -150,6 +150,12 @@ describe DashboardNav do
       expect(described_class.earned_items(user: seller, seller:)).to include "emails"
     end
 
+    it "does not credit emails from a follower who never confirmed" do
+      create(:follower, user: seller)
+
+      expect(described_class.earned_items(user: seller, seller:)).not_to include "emails"
+    end
+
     it "credits community from a live community" do
       create(:community, seller:)
 
