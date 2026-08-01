@@ -203,6 +203,10 @@ module Payment::FailureReason
     "PayPal is the only payout method we can offer in your country, so to get paid you'll need to connect a " \
     "PayPal account registered in a country that can receive PayPal payments. You can change it in your " \
     "payout settings."
+  TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL =
+    "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
+    "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
+    "and we hope to be able to pay it out in the future."
 
   # For a rejection the seller can clear without leaving the account they already use (14159), the
   # in-place repair is offered first, because it is the only fix that costs them nothing: no new

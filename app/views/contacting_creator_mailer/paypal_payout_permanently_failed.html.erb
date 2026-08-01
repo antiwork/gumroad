@@ -3,7 +3,11 @@
   <p>Hi there. We tried to send you <%= @amount %> through PayPal, but <%= @reason %>.</p>
   <% if @retries_stopped %>
     <p>
-      This will keep happening until you change how you get paid, so we've stopped retrying it. Your balance is safe and stays on your account.
+      <% if @no_payout_rail_available %>
+        We've stopped retrying this payout because the attempts cannot succeed right now. Your balance is safe and stays on your account.
+      <% else %>
+        This will keep happening until you change how you get paid, so we've stopped retrying it. Your balance is safe and stays on your account.
+      <% end %>
     </p>
   <% elsif @retries_paused_by_pause %>
     <p>
@@ -14,7 +18,11 @@
       We'll keep trying on your usual payout schedule, but every attempt will fail until this is fixed. Your balance is safe and stays on your account.
     </p>
   <% end %>
-  <% if @can_receive_us_dollars_on_same_account %>
+  <% if @no_payout_rail_available %>
+    <p>
+      PayPal is the only payout method we can offer in your country, and PayPal will not send payments to accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, and we hope to be able to pay it out in the future.
+    </p>
+  <% elsif @can_receive_us_dollars_on_same_account %>
     <p>
       You can fix this on the PayPal account you already use: sign in to PayPal and add US dollars as a currency you accept.
       <% if @can_use_bank_account %>
@@ -48,38 +56,40 @@
       <% end %>
     </p>
   <% end %>
-  <% if @payouts_on_hold && @payouts_paused_by_seller %>
-    <p>
-      <%# Both pauses are on. Naming only the hold would leave them waiting on us while their own
-          toggle is still stopping the money. %>
-      <% if @retries_paused_by_pause %>
-        Two separate pauses are on your account: a hold on our side, which is ours to lift, and your own pause in your payout settings. Once a working payout method is on file,
-      <% else %>
-        Payouts on your account are also on hold on our side, and paused in your own payout settings. Once a working payout method is on file,
-      <% end %>
-      <a href='<%= settings_payments_url %>'>resume payouts in your settings</a> and reply to this email so we can review the hold and release your balance.
-    </p>
-  <% elsif @payouts_on_hold %>
-    <p>
-      <%# The pause is already named above when it is what stopped the retries, so don't restate it. %>
-      <% if @retries_paused_by_pause %>
-        That hold is ours to lift: once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
-      <% else %>
-        Payouts on your account are also on hold. Once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
-      <% end %>
-    </p>
-  <% elsif @payouts_paused_by_seller %>
-    <p>
-      <% if @retries_paused_by_pause %>
-        You paused them yourself, so once a working payout method is on file and you
-      <% else %>
-        Payouts on your account are also paused in your settings. Once a working payout method is on file and you
-      <% end %>
-      <a href='<%= settings_payments_url %>'>resume payouts there</a>, your balance will be sent on the next payout date.
-    </p>
-  <% else %>
-    <p>
-      Your balance will be sent on the next payout date after that.
-    </p>
+  <% unless @no_payout_rail_available %>
+    <% if @payouts_on_hold && @payouts_paused_by_seller %>
+      <p>
+        <%# Both pauses are on. Naming only the hold would leave them waiting on us while their own
+            toggle is still stopping the money. %>
+        <% if @retries_paused_by_pause %>
+          Two separate pauses are on your account: a hold on our side, which is ours to lift, and your own pause in your payout settings. Once a working payout method is on file,
+        <% else %>
+          Payouts on your account are also on hold on our side, and paused in your own payout settings. Once a working payout method is on file,
+        <% end %>
+        <a href='<%= settings_payments_url %>'>resume payouts in your settings</a> and reply to this email so we can review the hold and release your balance.
+      </p>
+    <% elsif @payouts_on_hold %>
+      <p>
+        <%# The pause is already named above when it is what stopped the retries, so don't restate it. %>
+        <% if @retries_paused_by_pause %>
+          That hold is ours to lift: once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
+        <% else %>
+          Payouts on your account are also on hold. Once a working payout method is on file, reply to this email and we'll review the hold and release your balance.
+        <% end %>
+      </p>
+    <% elsif @payouts_paused_by_seller %>
+      <p>
+        <% if @retries_paused_by_pause %>
+          You paused them yourself, so once a working payout method is on file and you
+        <% else %>
+          Payouts on your account are also paused in your settings. Once a working payout method is on file and you
+        <% end %>
+        <a href='<%= settings_payments_url %>'>resume payouts there</a>, your balance will be sent on the next payout date.
+      </p>
+    <% else %>
+      <p>
+        Your balance will be sent on the next payout date after that.
+      </p>
+    <% end %>
   <% end %>
 </div>

@@ -153,6 +153,64 @@ describe Payment::FailureReason do
             payment.update!(payment_address: "refused@example.com")
           end
 
+          describe "#terminal_paypal_failure_seller_solution" do
+            def switch_to_paypal_only_country
+              payment.user.alive_user_compliance_info.mark_deleted!
+              create(:user_compliance_info, user: payment.user, country: "Ukraine")
+            end
+
+            it "tells a seller with no available payout rail that there is no current payout method" do
+              switch_to_paypal_only_country
+
+              payment.mark_failed!("PAYPAL 3148")
+
+              solution = payment.reload.terminal_paypal_failure_seller_solution
+              expect(solution).to eq(
+                "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
+                "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
+                "and we hope to be able to pay it out in the future."
+              )
+              expect(solution).to_not include("different PayPal account")
+              expect(solution).to_not include("next payout date")
+            end
+
+            it "keeps the existing bank account path for country-level PayPal rejections where bank payouts are available" do
+              payment.mark_failed!("PAYPAL 3148")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "We've removed that PayPal account from your payout settings, since we can't pay to it. Add a bank account " \
+                "there instead, or a PayPal account registered in a country that can receive PayPal payments. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+            end
+
+            it "keeps the in-place PayPal-only path for currency rejections where bank payouts are unavailable" do
+              switch_to_paypal_only_country
+
+              payment.mark_failed!("PAYPAL 14159")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "Sign in to PayPal and add US dollars to the currencies your account can receive. PayPal is the only payout " \
+                "method we can offer in your country, so the alternative is to use a different PayPal account that can " \
+                "receive US dollars, which you can change in your payout settings. " \
+                "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
+              )
+            end
+
+            it "does not append pause-specific next steps for a seller with no available payout rail" do
+              switch_to_paypal_only_country
+              payment.user.update!(payouts_paused_internally: true)
+
+              payment.mark_failed!("PAYPAL 3148")
+
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
+                "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
+                "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
+                "and we hope to be able to pay it out in the future."
+              )
+            end
+          end
+
           it "tells the seller PayPal will not send the payout and what to change" do
             expect do
               payment.mark_failed!("PAYPAL 3148")
