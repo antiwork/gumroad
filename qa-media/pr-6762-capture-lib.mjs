@@ -7,7 +7,7 @@ export const APEX = "fix-visible-gap-cursor-in-conten.apps.staging.gumroad.org";
 export const ROOT = `https://${APEX}`;
 
 export async function launch() {
-  return chromium.launch();
+  return await chromium.launch();
 }
 
 export async function newCtx(browser, { width = 1440, height = 1100 } = {}) {

@@ -1,5 +1,6 @@
 /* eslint-disable no-console -- standalone QA capture script; stdout IS the evidence transcript. */
 import fs from "fs";
+
 import { launch, newCtx, login, ROOT } from "./pr-6762-capture-lib.mjs";
 
 const OUT = "/tmp/pvw-20260731/shots";
