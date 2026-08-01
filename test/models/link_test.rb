@@ -1478,7 +1478,7 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil Link.fetch_leniently("old-slug", user: other)
   end
 
-  test "a mapping pointing at a soft-deleted product is left alone, because deletion is reversible" do
+  test "a soft-deleted product keeps its legacy mapping while another seller keeps a scoped redirect" do
     gone = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     gone.update!(custom_permalink: "gone-moved")
     assert_equal gone.id, LegacyPermalink.find_by(permalink: "slug").product_id
@@ -1487,10 +1487,9 @@ class LinkTest < ActiveSupport::TestCase
     renamer = create_product(unique_permalink: "bbb", custom_permalink: "slug")
     renamer.update!(custom_permalink: "renamer-moved")
 
-    # Taking the row would forward `gone`'s already-shared links to `renamer`
-    # the moment `gone` is restored.
     assert_equal gone.id, LegacyPermalink.find_by(permalink: "slug").product_id
-    assert_nil Link.fetch_leniently("slug", user: renamer.user)
+    assert_equal renamer.id, ProductPermalinkRedirect.find_by(seller_id: renamer.user_id, permalink: "slug").product_id
+    assert_equal renamer, Link.fetch_leniently("slug", user: renamer.user)
   end
 
   test "a restored product still serves the slug its mapping was recorded for" do
