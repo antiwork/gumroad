@@ -1415,8 +1415,8 @@ class LinkTest < ActiveSupport::TestCase
     LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
 
     # product_2 is the oldest live holder of "custom", so it answers the bare
-    # domain even though the mapping points elsewhere. The scoped assertions
-    # were already live-first before this change and pin that they stay so.
+    # domain even though the mapping points elsewhere. The scoped assertions are
+    # order-insensitive here; the scoped pin is the seller's-own-host test below.
     assert_equal ctx[:product_2], Link.fetch_leniently("custom")
     assert_equal ctx[:product_2], Link.fetch_leniently("custom", user: ctx[:user_1])
     assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])

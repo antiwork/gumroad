@@ -1622,9 +1622,9 @@ class Link < ApplicationRecord
     # stealing a dormant row would forward that seller's shared links here the
     # moment they restore. Such a rename keeps the 404 it already had.
     #
-    # The unscoped reader checks this table before the live match, so a mapping
-    # for a slug a live product answers on would shadow it: never write one, and
-    # withdraw the row this call created if a claim lands between check and insert.
+    # A mapping for a slug a live product answers on is dead on arrival — the
+    # reader is live-first on both branches — so never write one, and withdraw
+    # the row this call created if a claim lands between check and insert.
     def stage_renamed_custom_permalink
       outgoing = custom_permalink_previously_was.presence
       return if outgoing.blank?

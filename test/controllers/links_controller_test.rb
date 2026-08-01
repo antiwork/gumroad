@@ -5532,14 +5532,17 @@ class LinksControllerShowTest < ActionController::TestCase
     assert_redirected_to @product_with_legacy_mapping.long_url
   end
 
-  test "GET show redirects to an earlier product matched by permalink when legacy permalink points to a deleted product" do
+  test "GET show 404s on the bare domain when the only mapping points at a deleted product" do
     setup_legacy_products
     @request.host = DOMAIN
+    # Clear the live holders first, or the live-first read answers before the
+    # mapping is ever consulted and the deleted target is never exercised.
+    [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
     @product_with_legacy_mapping.mark_deleted!
 
     get :show, params: { id: "custom" }
 
-    assert_redirected_to @other_product.long_url
+    assert_response :not_found
   end
 
   test "GET show renders the user's product when request comes from a custom domain (legacy lookup)" do
