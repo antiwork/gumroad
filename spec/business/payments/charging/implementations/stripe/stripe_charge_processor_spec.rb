@@ -604,6 +604,8 @@ describe StripeChargeProcessor, :vcr do
     end
 
     context "when the associated product is a membership" do
+      # A membership never ships, so the shared shipment let can't build against it.
+      let!(:shipment) { nil }
       let(:disputed_purchase) do
         create(
           :membership_purchase,
