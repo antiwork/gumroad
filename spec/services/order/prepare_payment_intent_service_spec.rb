@@ -2159,8 +2159,10 @@ describe Order::PreparePaymentIntentService, :vcr do
       def prepare_upi_autopay(order, params, payment_method_type: "upi")
         preview = if payment_method_type == "card"
           Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
-        else
+        elsif payment_method_type == "upi"
           Stripe::StripeObject.construct_from(type: "upi", upi: {}, card: nil)
+        else
+          Stripe::StripeObject.construct_from(type: payment_method_type, payment_method_type.to_sym => {}, card: nil)
         end
         allow(Stripe::ConfirmationToken).to receive(:retrieve)
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
@@ -2220,6 +2222,18 @@ describe Order::PreparePaymentIntentService, :vcr do
           supported_types: ["india"]
         )
         expect(mandate_options[:amount]).to be > Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
+      end
+
+      it "rejects a crafted Link token before creating a recurring intent" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_country: "India") }
+
+        create_args, responses = prepare_upi_autopay(order, params, payment_method_type: "link")
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to be(false)
+        expect(order.charges).to be_empty
+        expect(order.purchases.first.reload).to be_failed
       end
 
       it "fails before Stripe when the maximum permitted debit exceeds INR 15,000" do

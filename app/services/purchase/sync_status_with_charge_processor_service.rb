@@ -23,7 +23,7 @@ class Purchase::SyncStatusWithChargeProcessorService
 
     # Client-confirmed recovery must use the PaymentIntent finalizer so recurring instruments are
     # persisted before fulfillment. The delegated finalizer owns its own row lock.
-    if purchase.charge&.client_confirmed?
+    if client_confirmed_charge?
       purchase.with_lock { restore_failed_purchase_to_in_progress! }
       Order::FinalizeConfirmedChargeService.new(order: purchase.charge.order).perform
       return purchase.reload.successful?
@@ -84,11 +84,17 @@ class Purchase::SyncStatusWithChargeProcessorService
     false
   rescue StandardError => e
     ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
-    purchase.mark_failed! if mark_as_failed
+    # An unavailable client-confirm finalizer cannot prove the PaymentIntent failed; it may already
+    # have captured funds. Leave it recoverable rather than telling the buyer payment failed.
+    purchase.mark_failed! if mark_as_failed && !client_confirmed_charge?
     false
   end
 
   private
+    def client_confirmed_charge?
+      purchase.charge&.client_confirmed?
+    end
+
     def classify(charge, success_statuses)
       return :missing if charge.nil?
       return :refunded if charge.try(:refunded) || charge.try(:refunded?)

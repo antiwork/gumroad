@@ -57,6 +57,7 @@ class Order::PreparePaymentIntentService
     return responses if preview.nil?
 
     apply_previewed_card_country(preview)
+    return responses if block_unsupported_recurring_payment_method
     return responses if block_region_locked_payment_method_country_mismatch
     return responses if block_purchasing_power_parity_mismatches
 
@@ -261,6 +262,17 @@ class Order::PreparePaymentIntentService
 
     def upi_selected?
       @previewed_payment_method_type == Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE
+    end
+
+    # Recurring UPI enrollment persists only card and UPI methods after capture. Reject a stale or
+    # crafted wallet token before creating an intent so fulfillment cannot fail after money moves.
+    def block_unsupported_recurring_payment_method
+      return false unless recurring_upi_registration?
+      return false if @previewed_payment_method_type.in?(%w[card upi])
+
+      Rails.logger.info("UPI Autopay registration blocked for order #{order.id}: #{@previewed_payment_method_type.inspect} cannot be saved for renewals")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
     end
 
     def block_purchasing_power_parity_mismatches

@@ -41,6 +41,20 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
         fail_purchase
       end
     end
+  rescue StandardError => e
+    raise unless charge_intent.succeeded?
+
+    # Stripe has captured the payment, so a local invariant failure must not return a resubmittable
+    # error or transition the purchase to failed. The row stays recoverable by status sync.
+    ErrorNotifier.notify(
+      e,
+      context: {
+        purchase_id: purchase.id,
+        payment_intent_id: charge_intent.payment_intent.id,
+      }
+    )
+    purchase.reload.update_column(:stripe_status, StripeIntentStatus::SUCCESS)
+    :pending
   end
 
   private

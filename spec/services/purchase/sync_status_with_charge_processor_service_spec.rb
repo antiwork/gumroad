@@ -197,6 +197,21 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(StripePayoutProcessor.is_balance_payable(seller_balance_transaction.balance)).to be(true)
   end
 
+  it "does not mark a client-confirmed purchase failed when its finalizer is unavailable" do
+    order = create(:order)
+    charge = create(:charge, order:, seller: @seller, client_confirmed: true,
+                             stripe_payment_intent_id: "pi_client_confirmed_recovery")
+    purchase = create(:purchase_in_progress, link: @product)
+    charge.purchases << purchase
+    finalizer = instance_double(Order::FinalizeConfirmedChargeService)
+    allow(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    allow(finalizer).to receive(:perform).and_raise(ChargeProcessorUnavailableError, "Stripe unavailable")
+    allow(ErrorNotifier).to receive(:notify)
+
+    expect(described_class.new(purchase, mark_as_failed: true).perform).to be(false)
+    expect(purchase.reload).to be_in_progress
+  end
+
   it "returns false and leaves the purchase in_progress when a combined charge has nil flow_of_funds (transient unsettled state)" do
     purchase = build(:purchase, link: @product, purchase_state: "in_progress")
     purchase.save!(validate: false)

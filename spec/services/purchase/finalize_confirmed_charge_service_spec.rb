@@ -64,7 +64,11 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
       let(:purchase) do
         build(:membership_purchase, link: product, seller:, purchase_state: "in_progress",
-                                    merchant_account:, credit_card: nil, subscription: nil).tap do |purchase|
+                                    merchant_account:, credit_card: nil, subscription: nil,
+                                    price_cents: 1205, total_transaction_cents: 1205,
+                                    displayed_price_currency_type: Currency::INR,
+                                    displayed_price_cents: 100_000,
+                                    rate_converted_to_usd: BigDecimal("83")).tap do |purchase|
           purchase.price = product.prices.alive.first || product.prices.first
           purchase.variant_attributes = []
           purchase.save!(validate: false)
@@ -72,6 +76,7 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
       let(:processor_charge) do
         BaseProcessorCharge.new.tap do |charge|
+          charge.id = "ch_upi_signup"
           charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
           charge.payment_method_type = "upi"
           charge.card_instance_id = "pm_upi_signup"
@@ -121,16 +126,52 @@ describe Purchase::FinalizeConfirmedChargeService do
         )
       end
 
-      it "rolls back the reusable instrument and subscription when no INR fixing can be stored" do
-        allow(ErrorNotifier).to receive(:notify)
+      it "fulfills the captured signup with its subscription, reusable method, and INR fixing" do
+        create(
+          :purchase_presentment,
+          purchase:,
+          charge_presentment: nil,
+          presentment_currency: Currency::INR,
+          presentment_price_cents: 100_000,
+          presentment_tip_cents: 0,
+          presentment_seller_tax_cents: 0,
+          presentment_gumroad_tax_cents: 0,
+          presentment_shipping_cents: 0,
+          presentment_total_cents: 100_000,
+          presentment_gumroad_amount_cents: 10_000
+        )
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to be_nil
+        expect(purchase.reload).to be_successful
+        expect(purchase.credit_card).to be_recurring_upi
+        expect(purchase.subscription).to be_present
+        expect(purchase.subscription.credit_card).to eq(purchase.credit_card)
+        expect(purchase.subscription.current_later_charge_presentment).to have_attributes(
+          presentment_currency: Currency::INR,
+          presentment_price_cents: 100_000,
+          canonical_price_cents: 1205
+        )
+      end
+
+      it "keeps a captured payment recoverable when no INR fixing can be stored" do
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(RuntimeError), purchase_id: purchase.id).ordered
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(RuntimeError),
+          context: {
+            purchase_id: purchase.id,
+            payment_intent_id: payment_intent.id,
+          }
+        ).ordered
 
         expect do
-          described_class.new(purchase:, charge_intent:).perform
-        end.to raise_error(RuntimeError, /without a durable INR renewal fixing/)
-          .and not_change(CreditCard, :count)
+          expect(described_class.new(purchase:, charge_intent:).perform).to eq(:pending)
+        end.to not_change(CreditCard, :count)
           .and not_change(Subscription, :count)
 
         expect(purchase.reload).to be_in_progress
+        expect(purchase.stripe_status).to eq(StripeIntentStatus::SUCCESS)
         expect(purchase.credit_card).to be_nil
         expect(purchase.subscription).to be_nil
       end
