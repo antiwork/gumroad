@@ -2105,4 +2105,32 @@ describe Ai::StoreAgentService do
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
     end
   end
+
+  describe "SYSTEM_PROMPT_HEADER webhook guidance" do
+    # Ping is not a general webhook replacement: User#ping_notification_targets only appends
+    # notification_endpoint for the "sale" resource, so offering it for a cancellation or refund
+    # webhook sends the creator to a screen that will never fire the event they asked for.
+    let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
+
+    # Every mention, not just one: a single qualified sentence elsewhere in the prompt would let an
+    # unqualified "direct creators to Ping" be reintroduced with this spec still green.
+    it "qualifies Ping as sales-only at every mention" do
+      mentions = prompt.scan(/.{0,120}Settings > Advanced > Ping.{0,120}/)
+
+      expect(mentions.size).to eq(1)
+      mentions.each { expect(_1).to match(/SALES ONLY/) }
+    end
+
+    it "names the self-serve route that does cover the non-sale events" do
+      expect(prompt).to include("cannot create webhooks")
+      expect(prompt).to match(/Settings > Advanced > Applications/)
+    end
+
+    # The corpus has no webhook article, so the bullet cites this one by title for the app/token
+    # steps. Redden if the prompt drops the citation or the article is renamed out from under it.
+    it "cites a help article that exists in the shipped corpus" do
+      expect(prompt).to include('"Create an application for the API"')
+      expect(HelpCenter::Article.find_by(title: "Create an application for the API")).to be_present
+    end
+  end
 end
