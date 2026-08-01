@@ -210,6 +210,17 @@ const LegalGuardianSection = ({
     }
   };
 
+  // Enter in a text field saves, the way it would if this section were a <form>. Scoped to inputs so
+  // Enter on the terms checkbox or a select keeps its native meaning, and it defers to whatever
+  // element is already handling the key (a combobox closing its list) via defaultPrevented.
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== "Enter" || event.defaultPrevented) return;
+    if (!(event.target instanceof HTMLInputElement) || event.target.type === "checkbox") return;
+
+    event.preventDefault();
+    void handleSubmit();
+  };
+
   return (
     <section className="grid gap-4">
       <header className="grid gap-2">
@@ -231,8 +242,9 @@ const LegalGuardianSection = ({
       )}
 
       {/* A div, not a form, and the button below is type="button" with an onClick. The payout-settings
-          page wraps this whole section in its own <form>, and nesting one inside it is invalid HTML. */}
-      <div className="grid gap-4">
+          page wraps this whole section in its own <form>, and nesting one inside it is invalid HTML.
+          The keydown handler restores the Enter-to-save a real form would have given these fields. */}
+      <div className="grid gap-4" onKeyDown={handleKeyDown}>
         <div>{formError ? <Alert variant="danger">{formError}</Alert> : null}</div>
 
         <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">

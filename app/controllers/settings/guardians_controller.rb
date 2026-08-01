@@ -77,8 +77,13 @@ class Settings::GuardiansController < Settings::BaseController
     # anyone else would collect an adult's identity details we have no lawful use for and cannot
     # send anywhere — see UserComplianceInfo#requires_legal_guardian?, which is also what decides
     # whether the form is offered.
+    #
+    # The connected-account exemption reads the payout gate's own predicate rather than the broader
+    # has_stripe_account_connected?, so this endpoint accepts a guardian from exactly the sellers
+    # Payouts.is_user_payable blocks. A Brazilian connected account is not exempt there, and
+    # refusing it here would leave that seller blocked with no way to unblock themselves.
     def ensure_guardian_required
-      return if !current_seller.has_stripe_account_connected? &&
+      return if !StripePayoutProcessor.pays_user_via_stripe_connect?(current_seller) &&
                 current_seller.alive_user_compliance_info&.requires_legal_guardian?
       render json: { error: "A legal guardian isn't required on this account." }, status: :forbidden
     end

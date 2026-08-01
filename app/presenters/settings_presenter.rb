@@ -315,9 +315,13 @@ class SettingsPresenter
 
       # A seller paid through a Stripe account they connected themselves is never asked. There is no
       # Gumroad-managed account for a guardian to go on and Stripe verifies that account under its
-      # own agreement with them — which is also why Payouts.is_user_payable exempts them, so the set
-      # of sellers the gate blocks and the set this form is offered to stay the same set.
-      if seller.has_stripe_account_connected?
+      # own agreement with them.
+      #
+      # Read through the same predicate the payout gate exempts on, not the broader
+      # has_stripe_account_connected?: a Brazilian connected account cannot be paid out by Stripe,
+      # so the gate does NOT exempt it, and the broader check here would hide this section from a
+      # minor the gate is blocking — the one outcome this requirement must not cause.
+      if StripePayoutProcessor.pays_user_via_stripe_connect?(seller)
         return { required: false, unsupported: false, blocking_payouts: false, guardian: nil }
       end
 

@@ -71,6 +71,18 @@ describe("Legal guardian payout setup", type: :system, js: true) do
       expect(seller.alive_user_compliance_info.has_completed_payout_compliance_info?).to be(true)
     end
 
+    # The section cannot be a <form> (it renders inside the page's own), so Enter has to be wired by
+    # hand. Without it a keyboard user has to tab all the way to the button to save.
+    it "saves when Enter is pressed in a guardian field" do
+      visit settings_payments_path
+
+      fill_in_guardian_details
+      find_field("Guardian's ZIP code").send_keys(:enter)
+
+      expect(page).to have_alert(text: "Your legal guardian's details are saved")
+      expect(seller.guardians.alive.sole.full_name).to eq("Dana Okafor")
+    end
+
     it "records the guardian's own acceptance of our payment partner's terms, with when and from where" do
       visit settings_payments_path
       fill_in_guardian_details

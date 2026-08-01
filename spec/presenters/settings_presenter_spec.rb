@@ -1590,13 +1590,29 @@ describe SettingsPresenter do
     # payout gate does not enforce is the mirror image of the stranding this pairing prevents.
     it "never asks a seller paid through their own connected Stripe account" do
       create(:user_compliance_info, user: seller, birthday: minor_birthday)
-      allow_any_instance_of(User).to receive(:has_stripe_account_connected?).and_return(true)
+      create(:merchant_account_stripe_connect, user: seller, country: "US")
+      seller.update!(check_merchant_account_is_linked: true)
 
       props = presenter.payments_props[:legal_guardian]
 
       expect(props[:required]).to be(false)
       expect(props[:unsupported]).to be(false)
       expect(props[:blocking_payouts]).to be(false)
+    end
+
+    # A Brazilian connected account cannot be paid out by Stripe, so the payout gate does NOT exempt
+    # it. Exempting it here on the broader has_stripe_account_connected? left this seller blocked
+    # while the page said nothing at all about why.
+    it "still reports the age requirement to a minor whose connected Stripe account is Brazilian" do
+      create(:user_compliance_info, user: seller, birthday: minor_birthday,
+                                    country: "Brazil", state: "SP", zip_code: "01000-000")
+      create(:merchant_account_stripe_connect, user: seller, country: "BR")
+      seller.update!(check_merchant_account_is_linked: true)
+
+      props = presenter.payments_props[:legal_guardian]
+
+      expect(props[:unsupported]).to be(true)
+      expect(props[:blocking_payouts]).to be(true)
     end
 
     # Their route is picking a country, not waiting to turn 18 — the country modal is already

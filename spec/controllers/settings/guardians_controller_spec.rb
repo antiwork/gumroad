@@ -167,12 +167,27 @@ describe Settings::GuardiansController, type: :controller do
     # blocked set and the asked set identical.
     it "refuses a seller paid through their own connected Stripe account" do
       create(:user_compliance_info, user: seller, birthday: minor_birthday)
-      allow_any_instance_of(User).to receive(:has_stripe_account_connected?).and_return(true)
+      create(:merchant_account_stripe_connect, user: seller, country: "US")
+      seller.update!(check_merchant_account_is_linked: true)
 
       post :create, params: valid_params, format: :json
 
       expect(response).to have_http_status(:forbidden)
       expect(seller.guardians).to be_empty
+    end
+
+    # Stripe cannot pay out a Brazilian connected account, so the payout gate does not exempt it and
+    # this seller is blocked on the guardian like any other. Refusing here on the broader
+    # has_stripe_account_connected? left them blocked with the only unblocking action rejected.
+    it "accepts a guardian from a minor whose connected Stripe account is Brazilian" do
+      create(:user_compliance_info, user: seller, birthday: minor_birthday)
+      create(:merchant_account_stripe_connect, user: seller, country: "BR")
+      seller.update!(check_merchant_account_is_linked: true)
+
+      post :create, params: valid_params, format: :json
+
+      expect(response).to have_http_status(:created)
+      expect(seller.guardians.alive.count).to eq(1)
     end
 
     # The gate that keeps an adult's identity details from being collected where they can serve no
