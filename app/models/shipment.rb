@@ -52,6 +52,12 @@ class Shipment < ApplicationRecord
   validates :purchase, presence: true
   before_validation :strip_tracking_url
   validate :tracking_url_must_be_display_safe
+  # Create-only: violating rows already exist and must stay updatable (`mark_shipped!` is an
+  # update). Ungated, a shipment on a digital purchase injects shipping evidence into a
+  # digital-product dispute and emails the buyer "Your order has shipped". Checkout-time, not
+  # live: a seller flipping shipping on later must not authorize a false shipment on an old
+  # digital order, and flipping it off must not block shipping an order that owes delivery.
+  validate :purchase_requires_shipping, on: :create
 
   # The purchase's updated_at should reflect changes to its shipment.
   after_update :touch_purchase
@@ -167,6 +173,13 @@ class Shipment < ApplicationRecord
       return if self.class.display_safe_tracking_link(tracking_url).present?
 
       errors.add(:tracking_url, VALID_TRACKING_LINK_MESSAGE)
+    end
+
+    def purchase_requires_shipping
+      return if purchase.blank?
+      return if purchase.required_delivery_at_checkout?
+
+      errors.add(:purchase, "does not require shipping")
     end
 
     def marked_as_shipped!
