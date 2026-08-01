@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { pagesTailwindClasses } from "../../../../scripts/build_pages_tailwind.mjs";
 
-// Custom pages are styled from a pregenerated stylesheet: the build enumerates every class
-// it is willing to support and hands that list to Tailwind. A utility left out of the list
-// still compiles cleanly — it just never exists — so the page silently renders without it.
-// These pin the two omissions that reached production (gumroad-private#1686): gradient
-// direction utilities (831 pages, 150 of them with headlines painted invisible by
-// `text-transparent bg-clip-text`) and margin-auto (2,895 pages unable to center a block).
+// These utilities must be enumerated explicitly or Tailwind omits them from the generated stylesheet.
 describe("pages Tailwind class list", () => {
   const has = (name: string) => pagesTailwindClasses.has(name);
 
