@@ -41,6 +41,14 @@ class Shipment < ApplicationRecord
   CARRIER_TRACKING_HOSTS = CARRIER_TRACKING_URL_MAPPING.values.map { |tracking_link| URI.parse(tracking_link).host.downcase }.freeze
   VALID_TRACKING_LINK_MESSAGE = "must be a full URL beginning with http:// or https://"
 
+  # Rails humanizes this to "Tracking url", which reads as a typo in a message we show sellers.
+  def self.human_attribute_name(attr, _)
+    case attr
+    when "tracking_url" then "Tracking URL"
+    else super
+    end
+  end
+
   validates :purchase, presence: true
   before_validation :strip_tracking_url
   validate :tracking_url_must_be_display_safe
