@@ -158,6 +158,60 @@
   @apply bg-transparent;
 }
 
+/* Gap cursor: the caret you get when clicking beside an atom node (a file embed, upsell card,
+   video). Without these rules the caret is upstream's 20px black hairline, which is invisible on
+   a dark background and reads as an uneditable page (gumroad-private#1652). The accent bar is
+   already what this editor uses to mean "your content lands here".
+
+   ⚠️ Every selector here carries a leading `.ProseMirror` for SPECIFICITY, not for scoping.
+   `baseEditorOptions` sets `injectCSS: false`, but sibling editors built with a bare `useEditor`
+   (the page-name field in ContentTab/PageTab, the tab-name field in Profile/EditPage) leave it at
+   its `true` default, and Tiptap's `createStyleTag` appends ONE shared `style[data-tiptap-style]`
+   carrying upstream's gapcursor rules to <head> at editor-construction time. A bare
+   `.ProseMirror-gapcursor` here ties that tag on specificity and loses on document order, so the
+   caret renders as the black hairline in the built app while every source-level test passes.
+   Verified on the hosted preview: 20px/1px black before, 816px/4px accent after. */
+
+/* The caret is absolutely positioned and needs the editor as its containing block, but
+   `position: relative` unconditionally raises .ProseMirror above the empty-state overlay that
+   precedes it, so the editor's own empty <p> swallows clicks on "Upload your files". The widget
+   only exists while a gap-cursor selection is active, and an empty document has no valid gap
+   position, so `:has` keeps both properties. */
+.ProseMirror:has(.ProseMirror-gapcursor) {
+  position: relative;
+}
+
+.ProseMirror .ProseMirror-gapcursor {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+  margin: 0;
+  /* Pin both edges rather than setting a width: `width: 100%` resolves against the padding box
+     while the box keeps its static left (the content edge), so it overhangs padded editors. */
+  left: 0;
+  right: 0;
+}
+
+.ProseMirror .ProseMirror-gapcursor::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 100%;
+  border-top: 4px solid rgb(var(--accent));
+  animation: prosemirror-gapcursor-blink 1.1s steps(2, start) infinite;
+}
+
+.ProseMirror.ProseMirror-focused .ProseMirror-gapcursor {
+  display: block;
+}
+
+@keyframes prosemirror-gapcursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
 /* Tiptap placeholder plugin */
 .ProseMirror p.is-editor-empty:first-child::before,
 .ProseMirror .node-image.is-empty .figcaption::before {

@@ -34,6 +34,9 @@ class DisputeEvidence < ApplicationRecord
   SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS = 72
   STRIPE_MAX_COMBINED_FILE_SIZE = 5_000_000.bytes
   MINIMUM_RECOMMENDED_CUSTOMER_COMMUNICATION_FILE_SIZE = 1_000_000.bytes
+  # Bounds the inline merge work in Purchases::DisputeEvidenceController#update; Stripe still
+  # receives a single merged customer_communication_file.
+  MAX_CUSTOMER_COMMUNICATION_FILES = 10
   ALLOWED_FILE_CONTENT_TYPES = %w[image/jpeg image/png application/pdf].freeze
 
   RESOLUTIONS = %w(unknown submitted rejected).freeze

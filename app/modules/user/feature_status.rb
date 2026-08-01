@@ -64,7 +64,12 @@ class User
     end
 
     def can_setup_paypal_payouts?
-      payment_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt? || signed_up_from_kazakhstan? || signed_up_from_india?
+      # `invalidated_paypal_payout_address` grandfathers the same way `payment_address` does: these
+      # sellers qualified only because they had an address on file, and we are the ones who took it
+      # off (Payment#invalidate_paypal_payout_address). Without this, invalidating revokes the PayPal
+      # option in native-payout countries while the copy we send tells them to add a PayPal account.
+      # The refused address itself is still refused, in UpdatePayoutMethod.
+      payment_address.present? || invalidated_paypal_payout_address.present? || !native_payouts_supported? || signed_up_from_united_arab_emirates? || signed_up_from_egypt? || signed_up_from_kazakhstan? || signed_up_from_india?
     end
 
     def charge_paypal_payout_fee?

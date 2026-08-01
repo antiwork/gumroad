@@ -47,7 +47,7 @@ describe RefreshCustomDomainRoutabilityWorker do
     let(:resolving_domains) { [] }
 
     it "does not perform DNS verification" do
-      custom_domain.update_columns(ssl_certificate_issued_at: 8.days.ago)
+      custom_domain.update_columns(ssl_certificate_issued_at: (CustomDomain::CERTIFICATE_LIFETIME + 1.day).ago)
 
       expect(CustomDomainVerificationService).not_to receive(:new)
 

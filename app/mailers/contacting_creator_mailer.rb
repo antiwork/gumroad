@@ -23,6 +23,7 @@ class ContactingCreatorMailer < ApplicationMailer
   # It runs for every action on this mailer, and the ivar check inside is what scopes it: an `only:`
   # here would be accepted and silently ignored, since deliver callbacks take `:if`/`:unless` only.
   around_deliver :settle_undeliverable_ping_subscription_notice
+  around_deliver :settle_undelivered_receipts_notice
 
   layout "layouts/email"
 
@@ -249,6 +250,10 @@ class ContactingCreatorMailer < ApplicationMailer
     # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
     # PayPal-only countries, where "add a bank account" is advice they cannot act on.
     @can_use_bank_account = @seller.can_setup_bank_payouts?
+    # Whether we actually removed their PayPal address, which the copy below claims. Not every
+    # retry-blocking rejection removes one — a seller paid through a connected PayPal account has no
+    # saved address for us to take away, and saying we took it would be false.
+    @payout_address_removed = @payment.paypal_payout_address_invalidated?
   end
 
   def flagged_for_explicit_nsfw_tos_violation(user_id)
@@ -392,6 +397,36 @@ class ContactingCreatorMailer < ApplicationMailer
     @application_name = @resource_subscription.oauth_application&.name
     @missing_post_url = rendered_reason == UndeliverablePingSubscriptionNotifier::MISSING_POST_URL
     @subject = "Your #{@resource_subscription.resource_name} webhook is not being sent"
+  end
+
+  # `purchase_ids` is everything the sweep found for this seller, untruncated: the list is cut down
+  # here, after the recheck, so that buyers who recovered cannot crowd out one who did not.
+  def undelivered_receipts(seller_id, purchase_ids)
+    @seller = User.alive.find_by(id: seller_id)
+    return do_not_send if @seller.nil?
+
+    # Re-judged here rather than trusted from the sweep: a buyer can open their content in the gap
+    # between the scan and this render, and then this email would tell the seller to chase someone who
+    # already has what they paid for.
+    still_affected = Purchase.where(id: purchase_ids).includes(:link, :url_redirect).select do |purchase|
+      UndeliveredReceiptNotifier.undelivered?(purchase)
+    end
+    return do_not_send if still_affected.empty?
+
+    # Claimed rather than checked, and settled after delivery by
+    # `settle_undelivered_receipts_notice`: the sweep's read cannot separate two renders of the same
+    # buyer, and the job's own retry re-collects these rows before any mail has gone out.
+    claimed = UndeliveredReceiptNotifier.claim_send(still_affected.map(&:id)).to_set
+    still_affected.select! { |purchase| claimed.include?(purchase.id) }
+    return do_not_send if still_affected.empty?
+
+    @undelivered_receipt_purchase_ids = still_affected.map(&:id)
+    # The count is what the seller acts on: it counts everyone this email stands behind, listed or
+    # summarized, and never the sweep's figure from before the recheck.
+    @total = still_affected.size
+    @purchases = still_affected.first(UndeliveredReceiptNotifier::MAX_LISTED_PER_SELLER)
+    @undisclosed_count = @total - @purchases.size
+    @subject = "#{@total == 1 ? "A buyer" : "#{@total} buyers"} may not have received their receipt"
   end
 
   def chargeback_lost_no_refund_policy(dispute_id)
@@ -781,6 +816,22 @@ class ContactingCreatorMailer < ApplicationMailer
         UndeliverablePingSubscriptionNotifier.public_send(
           settle, @resource_subscription.id, @undeliverable_ping_subscription_reason
         )
+      end
+    end
+
+    # The render claimed each buyer's one notice; this decides whether they were spent. Mirrors
+    # `settle_undeliverable_ping_subscription_notice` — only a message actually transmitted spends a
+    # claim, and a suppressed, dropped, or raised delivery gives every claim back so a later sweep can
+    # report those buyers again.
+    def settle_undelivered_receipts_notice
+      delivered = false
+      yield
+      delivered = message.to.present? && message.perform_deliveries
+    ensure
+      # `ensure` rather than an after callback, so a raised delivery settles too.
+      unless @undelivered_receipt_purchase_ids.blank?
+        settle = delivered ? :record_sent : :release_claim
+        UndeliveredReceiptNotifier.public_send(settle, @undelivered_receipt_purchase_ids)
       end
     end
 

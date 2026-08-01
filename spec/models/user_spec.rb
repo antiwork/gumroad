@@ -802,7 +802,9 @@ describe User, :vcr do
     it "leaves out a verified custom domain whose SSL certificate has gone stale" do
       creator = create(:user, username: "joyce")
       create(:custom_domain, :verified_with_certificate, user: creator, domain: "expired.example.com")
-        .update!(ssl_certificate_issued_at: 2.weeks.ago)
+        # Past the certificate's real lifetime. A two-week-old certificate is the normal
+        # steady state, not a stale one — see CustomDomain::CERTIFICATE_LIFETIME.
+        .update!(ssl_certificate_issued_at: (CustomDomain::CERTIFICATE_LIFETIME + 1.day).ago)
 
       expect(creator.reload.custom_html_store_hostnames).not_to include("expired.example.com")
     end

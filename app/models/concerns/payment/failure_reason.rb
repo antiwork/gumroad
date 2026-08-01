@@ -184,11 +184,25 @@ module Payment::FailureReason
   # Ukraine, because PayPal is the only rail we offer there) — telling them to add a bank account
   # would be advice they cannot follow, which is the same kind of dead end this change exists to
   # remove.
+  #
+  # These are reached only for a retry-blocking rejection, which is also the only one that takes the
+  # PayPal address off the account (Payment#invalidate_paypal_payout_address). The WE_REMOVED variants
+  # say so; the CONNECTED ones are for sellers whose payout email comes from a connected PayPal
+  # account, where there is nothing of ours to remove.
   TERMINAL_PAYPAL_FAILURE_SELLER_FIX_WITH_BANK =
-    "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars."
+    "We've removed that PayPal account from your payout settings, since we can't pay to it. Add a bank account " \
+    "there instead, or a PayPal account registered in a country that can receive PayPal payments."
   TERMINAL_PAYPAL_FAILURE_SELLER_FIX_PAYPAL_ONLY =
-    "PayPal is the only payout method we can offer in your country, so to get paid you'll need to use a " \
-    "different PayPal account that can receive US dollars. You can change it in your payout settings."
+    "We've removed that PayPal account from your payout settings, since we can't pay to it. PayPal is the only " \
+    "payout method we can offer in your country, so to get paid you'll need to add a PayPal account registered " \
+    "in a country that can receive PayPal payments."
+  TERMINAL_PAYPAL_FAILURE_SELLER_FIX_CONNECTED_WITH_BANK =
+    "To get paid, add a bank account in your payout settings, or connect a PayPal account registered in a " \
+    "country that can receive PayPal payments."
+  TERMINAL_PAYPAL_FAILURE_SELLER_FIX_CONNECTED_PAYPAL_ONLY =
+    "PayPal is the only payout method we can offer in your country, so to get paid you'll need to connect a " \
+    "PayPal account registered in a country that can receive PayPal payments. You can change it in your " \
+    "payout settings."
 
   # For a rejection the seller can clear without leaving the account they already use (14159), the
   # in-place repair is offered first, because it is the only fix that costs them nothing: no new
