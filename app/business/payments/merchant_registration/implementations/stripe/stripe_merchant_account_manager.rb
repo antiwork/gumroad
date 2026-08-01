@@ -471,6 +471,17 @@ module StripeMerchantAccountManager
     # and on that save the identifier must go back on the payload for the note to ever be retired.
     force_identity_into_diff!(diff_attributes, current_attributes, user)
 
+    # update_person is the only path that retires a representative-scoped note, and it is skipped
+    # once the seller is no longer a business — so a rejection recorded while they were a company
+    # would outlive the entity it describes. Scoped to the transition itself rather than to every
+    # individual save, because the two scopes are deliberately independent namespaces: an ordinary
+    # individual save must not delete a representative note (see the isolation spec).
+    # Snapshot the ids BEFORE the update for the same reason clear_identity_rejection_notes takes
+    # ids rather than re-querying — a note written by an overlapping resync is a diagnostic this
+    # save has no result for.
+    switching_to_individual = !user_compliance_info.is_business? && last_user_compliance_info&.is_business?
+    obsolete_representative_note_ids = switching_to_individual ? identity_rejection_note_ids(user, scope: :representative) : []
+
     account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
     updated_stripe_account = account_update.stripe_account
 
@@ -481,6 +492,11 @@ module StripeMerchantAccountManager
       # states the owner list is complete. Scoped to accounts we found blocked on it; the callee
       # re-reads the ownership before making the statement.
       attest_owners_provided(stripe_account.id) if owner_list_complete && updated_stripe_account && owners_provided_blocking_payouts?(updated_stripe_account)
+    else
+      # The individual update landed, so representative verification no longer applies and the note
+      # is describing an entity Stripe is no longer being asked about. Left in place it reads as a
+      # live block to support and keeps force_identity_into_diff!'s retry signal armed forever.
+      clear_identity_rejection_notes(user, note_ids: obsolete_representative_note_ids)
     end
 
     # Re-sync the guardian on every account update, not only when their own details changed: the

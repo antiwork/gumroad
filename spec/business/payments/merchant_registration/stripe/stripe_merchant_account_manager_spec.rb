@@ -9320,7 +9320,7 @@ describe StripeMerchantAccountManager, :vcr do
         original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
         allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
           stripe_account = original_stripe_account_retrieve.call(*args)
-          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_1.external_id
+          stripe_account["metadata"]["user_compliance_info_id"] = (@last_user_compliance_info_override || user_compliance_info_1).external_id
           stripe_account["country"] = @stripe_account_country_override || stripe_account_country
           stripe_account
         end
@@ -9547,6 +9547,31 @@ describe StripeMerchantAccountManager, :vcr do
           subject.update_account(user, passphrase: "1234")
 
           expect(user.comments.with_type_payout_note.alive.where(content: representative_note)).to exist
+        end
+
+        # update_person is the only path that retires a representative note, and it is skipped once
+        # the seller is no longer a business. Without an explicit retirement the note outlives the
+        # entity it describes: support reads it as a live verification block, and it keeps
+        # force_identity_into_diff! re-sending an identifier for a person Stripe is no longer asked
+        # about.
+        it "retires the representative's rejection note when the seller switches to an individual" do
+          # last_user_compliance_info is read from the account metadata, not from the record
+          # history, so the previous entity has to be staged there for the switch to be visible.
+          @last_user_compliance_info_override = create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul",
+                                                                              is_business: true, business_name: "Acme",
+                                                                              business_type: UserComplianceInfo::BusinessTypes::LLC,
+                                                                              business_tax_id: "9876543210")
+          representative_note = user.add_payout_note(
+            content: "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (representative) — still outstanding",
+            seller_visible: false
+          )
+          create(:user_compliance_info, user:, country: "Korea, Republic of", city: "Seoul",
+                                        individual_tax_id: "1234567890")
+          allow(Stripe::Account).to receive(:update)
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(representative_note.reload.deleted_at).to be_present
         end
 
         # Two resyncs for the same seller overlap. The clear must not delete a rejection recorded
