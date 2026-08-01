@@ -74,15 +74,13 @@ class CustomerLowPriorityMailerPreview < ActionMailer::Preview
   end
 
   def order_shipped_with_tracking
-    purchase = Link.first&.sales&.last
-    shipment = Shipment.create(purchase:, tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890", carrier: "USPS")
+    shipment = Shipment.create(purchase: shippable_purchase, tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890", carrier: "USPS")
     shipment.mark_shipped
     CustomerLowPriorityMailer.order_shipped(shipment.id)
   end
 
   def order_shipped
-    purchase = Link.first&.sales&.last
-    shipment = Shipment.create(purchase:)
+    shipment = Shipment.create(purchase: shippable_purchase)
     shipment.mark_shipped
     CustomerLowPriorityMailer.order_shipped(shipment.id)
   end
@@ -115,4 +113,10 @@ class CustomerLowPriorityMailerPreview < ActionMailer::Preview
     wishlist_follower = WishlistFollower.alive.last
     CustomerLowPriorityMailer.wishlist_updated(wishlist_follower&.id, wishlist_follower&.wishlist&.wishlist_products&.alive&.count || 0)
   end
+
+  private
+    # Shipment now validates this on create, so the preview needs a sale that actually ships.
+    def shippable_purchase
+      Purchase.joins(:link).where("links.flags & #{Link.flag_mapping["flags"][:is_physical]} > 0 OR links.require_shipping = TRUE").last
+    end
 end

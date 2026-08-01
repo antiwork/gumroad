@@ -6,9 +6,10 @@ require "shared_examples/authorize_called"
 describe ShipmentsController, :vcr do
   describe "POST mark_as_shipped" do
     let(:seller) { create(:named_seller) }
-    let(:product) { create(:product, user: seller) }
-    let(:purchase) { create(:purchase, link: product, seller:) }
-    let(:purchase_with_shipment) { create(:purchase, link: product, seller:) }
+    # Shipments only exist for orders that needed delivery (gumroad-private#1665).
+    let(:product) { create(:physical_product, user: seller) }
+    let(:purchase) { create(:physical_purchase, link: product, seller:) }
+    let(:purchase_with_shipment) { create(:physical_purchase, link: product, seller:) }
     let!(:shipment) { create(:shipment, purchase: purchase_with_shipment) }
     let(:tracking_url) { "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890" }
 

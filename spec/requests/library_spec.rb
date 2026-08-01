@@ -234,7 +234,7 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to have_status(text: "You have 2 archived purchases. Click here to view")
 
     click_on "Click here to view"
-    expect(page.current_url).to include("show_archived_only=true")
+    expect(page).to have_current_path(/show_archived_only=true/)
     expect(page).to have_checked_field("Show archived only")
 
     expect(page).to have_product_card(purchase1.link)
@@ -387,28 +387,31 @@ describe("Library Scenario", type: :system, js: true) do
 
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       find_and_click("label", text: @creator.name)
+      # The filter now applies on the server, so wait for the refreshed page before
+      # reading checkbox state, which Capybara does not retry.
+      expect(page).to have_text("Showing 1-10 of 10")
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
       expect(find_field(@creator.name, visible: false).checked?).to eq(true)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-10 of 10")
       scroll_to find_product_card(@b.link)
       expect(page).to have_product_card(count: 10)
       expect_to_show_purchases_in_order([@j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
 
       find_and_click("label", text: @creator.name)
+      expect(page).to have_text("Showing 1-12 of 12")
       find_and_click("label", text: @another_creator.name)
+      expect(page).to have_text("Showing 1-2 of 2")
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(true)
       expect(find_field("All Creators", visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-2 of 2")
       expect(page).to have_product_card(count: 2)
       expect_to_show_purchases_in_order([another_b, another_a])
 
       find_and_click("label", text: "All Creators")
+      expect(page).to have_text("Showing 1-12 of 12")
       expect(find_field("All Creators", visible: false).checked?).to eq(true)
       expect(find_field(@creator.name, visible: false).checked?).to eq(false)
       expect(find_field(@another_creator.name, visible: false).checked?).to eq(false)
-      expect(page).to have_text("Showing 1-12 of 12")
       scroll_to find_product_card(@d.link)
       expect_to_show_purchases_in_order([another_b, another_a, @j, @i, @h, @g, @f, @e, @d, @c, @b, @a])
     end

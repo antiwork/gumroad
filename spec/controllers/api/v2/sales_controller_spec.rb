@@ -784,7 +784,8 @@ describe Api::V2::SalesController do
 
   describe "PUT 'mark_as_shipped'" do
     before do
-      @product = create(:product, user: @seller)
+      # Shipments only exist for orders that needed delivery (gumroad-private#1665).
+      @purchase.link.update!(require_shipping: true)
       @params = { id: @purchase.external_id }
     end
 
@@ -862,6 +863,18 @@ describe Api::V2::SalesController do
           success: false,
           message: "The sale was not found."
         }.as_json)
+      end
+
+      it "refuses to create a shipment when the product never required shipping" do
+        @purchase.link.update!(require_shipping: false)
+
+        put :mark_as_shipped, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Purchase does not require shipping"
+        }.as_json)
+        expect(@purchase.reload.shipment).to be_nil
       end
     end
 

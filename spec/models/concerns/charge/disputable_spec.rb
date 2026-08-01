@@ -1953,7 +1953,8 @@ describe Charge::Disputable, :vcr do
         expect(dispute_evidence.customer_email).to eq disputed_purchase.email
         expect(dispute_evidence.uncategorized_text).to eq "Sample uncategorized text"
         expect(dispute_evidence.purchased_at).to eq disputed_purchase.created_at
-        expect(dispute_evidence.billing_address).to eq "123 Sample St, San Francisco, CA, 12343, United States"
+        # The card's own billing address never reaches us as structured data (gumroad-private#1665).
+        expect(dispute_evidence.billing_address).to be_nil
         expect(dispute_evidence.shipping_address).to eq "123 Sample St, San Francisco, CA, 12343, United States"
         expect(dispute_evidence.receipt_image).to be_attached
         expect(dispute_evidence.shipping_carrier).to eq "UPS"

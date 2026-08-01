@@ -213,8 +213,17 @@ export default function LibraryPage() {
     setEnteredQuery(search.query);
   }
 
+  // Two quick filter clicks would otherwise both build on the props of the page they were
+  // clicked from, so the second visit silently reverts the first. Base each navigation on
+  // the last requested params until the server echoes them back.
+  const pendingSearch = React.useRef<SearchParams | null>(null);
+  React.useEffect(() => {
+    pendingSearch.current = null;
+  }, [search]);
+
   const navigate = (updates: Partial<SearchParams> & { page?: number }) => {
-    const next = { ...search, ...updates };
+    const next = { ...(pendingSearch.current ?? search), ...updates };
+    pendingSearch.current = next;
     const data: Record<string, string> = { sort: next.sort };
     if (next.query) data.query = next.query;
     if (next.creators.length > 0) data.creators = next.creators.join(",");
