@@ -80,6 +80,19 @@ class Product::SaveContract
   # inferred so that adding a sixth is a deliberate act with a test attached.
   COLLECTIONS = %i[rich_content variants files public_files integrations].freeze
 
+  # `deleted_ids[:variants]` carries VERSION ids only — never VariantCategory
+  # (grouping) ids. An external id is `ObfuscateIds.encrypt(primary_key)` with no
+  # table discriminator, and `variants`/`variant_categories` have independent
+  # auto-increment counters, so a version and a grouping can share one id string.
+  # The deletion paths in Product::VariantCategoryUpdaterService resolve these ids
+  # against versions with no collision check, which is correct only while this
+  # holds. Put a grouping id in here and that grouping's colliding VERSION is what
+  # disappears, while the grouping survives and the save reports 200.
+  #
+  # Enforced by spec/services/product/variant_deleted_ids_kind_invariant_spec.rb.
+  # A grouping goes away as a consequence of losing its last version, not by being
+  # named — if you add grouping-level deletion, give it its own collection.
+
   # Kill switch. Defaults OFF: with the flag inactive every collection reports
   # `submitted?` exactly as the old code behaved (absent/[] still reaches the
   # existing diff-and-delete paths), so enabling and disabling this is a pure
