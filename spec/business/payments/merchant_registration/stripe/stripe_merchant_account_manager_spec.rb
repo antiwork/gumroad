@@ -9537,7 +9537,7 @@ describe StripeMerchantAccountManager, :vcr do
         # while its own Stripe call was in flight — that diagnostic is the only thing on the account
         # saying why the seller is still blocked.
         it "keeps a rejection recorded while the accepted call was in flight" do
-          seller_prefix = "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (seller)"
+          seller_prefix = "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (individual)"
           stale_note = user.add_payout_note(content: "#{seller_prefix} — from the previous attempt", seller_visible: false)
           concurrent_note = nil
 
@@ -9552,6 +9552,98 @@ describe StripeMerchantAccountManager, :vcr do
           expect(concurrent_note).to be_present
           expect(concurrent_note.reload.deleted_at).to be_nil
           expect(stale_note.reload.deleted_at).to be_present
+        end
+
+        # One combined identity call is still all-or-nothing: Stripe rejecting the individual's ID
+        # would take a perfectly valid company tax ID down with it, which is the exact failure the
+        # split exists to prevent.
+        it "sends each entity's identifier in its own call" do
+          calls = []
+          allow(Stripe::Account).to receive(:update) { |_id, attributes| calls << attributes }
+          allow(described_class).to receive(:only_identity_fields).and_return(
+            individual: { id_number: "1234567890" }, company: { tax_id: "9876543210" }
+          )
+
+          subject.update_account(user, passphrase: "1234")
+
+          identity_calls = calls.select { |attributes| attributes.keys.all? { |key| %i[individual company].include?(key) } && attributes.values.all? { |entity| entity.keys.all? { |key| %i[id_number ssn_last_4 tax_id].include?(key) } } }
+          expect(identity_calls).to contain_exactly(
+            { individual: { id_number: "1234567890" } },
+            { company: { tax_id: "9876543210" } }
+          )
+        end
+
+        it "still sends the accepted entity's identifier when the other is rejected" do
+          sent = []
+          allow(described_class).to receive(:only_identity_fields).and_return(
+            individual: { id_number: "1234567890" }, company: { tax_id: "9876543210" }
+          )
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]") if attributes.dig(:individual, :id_number).present?
+
+            sent << attributes
+          end
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(sent).to include(company: { tax_id: "9876543210" })
+          expect(user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (individual)%")
+                     .count).to eq(1)
+          expect(user.comments.with_type_payout_note.alive
+                     .where("content LIKE ?", "#{StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX} (company)%")
+                     .count).to eq(0)
+        end
+
+        # The isolated call swallows its rejection, so the main payload lands and the compliance
+        # marker advances. Without forcing the identifier back in, the seller's next unchanged save
+        # diffs the compliance record against itself and the rejected ID is never retried.
+        #
+        # Both specs advance the marker the way the real update does — the shared `before` pins it
+        # to the first record, which would leave the identifier in the diff on its own and make
+        # either assertion vacuous.
+        def advance_compliance_marker!
+          # Call through the group's own retrieve stub once and keep the object, rather than
+          # re-wrapping it — capturing `Stripe::Account.method(:retrieve)` here would capture that
+          # stub and recurse into itself.
+          stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+          stripe_account["metadata"]["user_compliance_info_id"] = user_compliance_info_2.external_id
+          allow(Stripe::Account).to receive(:retrieve)
+            .with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+        end
+
+        it "re-sends a rejected identifier on the next unchanged save" do
+          rejection = Stripe::InvalidRequestError.new("Invalid ID number", "individual[id_number]")
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+          subject.update_account(user, passphrase: "1234")
+          advance_compliance_marker!
+
+          calls = []
+          allow(Stripe::Account).to receive(:update) do |_id, attributes|
+            calls << attributes
+            raise rejection if attributes.dig(:individual, :id_number).present?
+          end
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(calls.any? { |attributes| attributes.dig(:individual, :id_number) == "1234567890" }).to be(true)
+        end
+
+        # And it has to stop once Stripe accepts, or every later save pays for a pointless
+        # second round-trip forever.
+        it "stops re-sending once the identifier is accepted" do
+          allow(Stripe::Account).to receive(:update)
+          subject.update_account(user, passphrase: "1234")
+          advance_compliance_marker!
+
+          calls = []
+          allow(Stripe::Account).to receive(:update) { |_id, attributes| calls << attributes }
+
+          subject.update_account(user, passphrase: "1234")
+
+          expect(calls.any? { |attributes| attributes.dig(:individual, :id_number).present? }).to be(false)
         end
 
         # The split is scoped to the mismatch. On a matched account the identifier belongs on the

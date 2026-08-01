@@ -466,6 +466,15 @@ module StripeMerchantAccountManager
       force_address_into_diff!(diff_attributes, current_attributes, entity_key)
     end
 
+    # Same problem, different field. The isolated identity call swallows its rejection, so the main
+    # payload still lands and the metadata marker still advances — which makes the next save diff the
+    # compliance record against itself and drop the identifier the seller is waiting on. Without this
+    # the rejected ID is only ever retried if something else happens to change it. Scoped to the
+    # mismatch that produces these notes, so a normal save does not pay for the lookup.
+    if account_country_conflicts_with_legal_entity?(stripe_account_country(stripe_account), country_code)
+      force_identity_into_diff!(diff_attributes, current_attributes, user)
+    end
+
     account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
     updated_stripe_account = account_update.stripe_account
 
@@ -535,8 +544,8 @@ module StripeMerchantAccountManager
                           "#{account_country.inspect} disagrees with the legal-entity country"
       end
       if attributes.values.all?(&:blank?)
-        submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify:)
-        return AccountUpdate.new(nil, attributes)
+        sent_identity = submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify:)
+        return AccountUpdate.new(nil, attributes.deep_merge(sent_identity))
       end
     end
 
@@ -544,7 +553,7 @@ module StripeMerchantAccountManager
     # After the main payload lands, not before: a rejected identifier must not take the fields that
     # would otherwise have succeeded down with it.
     sent_identity = submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify:)
-    AccountUpdate.new(updated, sent_identity ? attributes.deep_merge(identity_attributes) : attributes)
+    AccountUpdate.new(updated, attributes.deep_merge(sent_identity))
   rescue Stripe::InvalidRequestError => e
     # Keyed off what was actually sent, not the original diff: retrying from `diff_attributes` here
     # would restore the fields the branch above deliberately held back.
@@ -645,10 +654,11 @@ module StripeMerchantAccountManager
   # address" from "Stripe refused your tax ID", because only the second is the seller's to fix.
   IDENTITY_REJECTION_NOTE_PREFIX = "Stripe rejected tax/national ID"
 
-  # The seller's own identifier and the representative's are separate Stripe requirements that can
-  # be rejected independently, so each gets its own note namespace. Sharing one would let a
-  # representative success clear a company rejection that is still blocking verification.
-  IDENTITY_REJECTION_NOTE_SCOPES = %i[seller representative].freeze
+  # Each identifier is a separate Stripe requirement that can be rejected independently, so each
+  # gets its own note namespace. Sharing one would let a representative success clear a company
+  # rejection that is still blocking verification. The account-level scopes are the entity hashes
+  # themselves, so a per-entity call has a note namespace to match.
+  IDENTITY_REJECTION_NOTE_SCOPES = (ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS + %i[representative]).freeze
   private_constant :IDENTITY_REJECTION_NOTE_SCOPES
 
   private_class_method
@@ -681,8 +691,9 @@ module StripeMerchantAccountManager
     attributes
   end
 
-  # Send the identifiers as their OWN all-or-nothing call, so a rejection costs only the identifier.
-  # Returns whether they landed.
+  # Send the identifiers as their OWN all-or-nothing calls — one per entity hash, so a rejected
+  # `individual[id_number]` cannot also take down a valid `company[tax_id]`. Returns the subset that
+  # Stripe accepted, so the caller records only what actually landed.
   #
   # The rejection is swallowed rather than raised on purpose: by the time this runs the rest of the
   # seller's payload is already on the account, and re-raising would surface as a failed save for
@@ -691,15 +702,24 @@ module StripeMerchantAccountManager
   # filtering these fields (gumroad-private#1575).
   private_class_method
   def self.submit_identity_fields_in_isolation(user, stripe_account, identity_attributes, account_country, notify: true)
-    return false if identity_attributes.blank?
+    return {} if identity_attributes.blank?
 
-    stale_note_ids = identity_rejection_note_ids(user, scope: :seller)
-    Stripe::Account.update(stripe_account.id, force_utf8_encoding(identity_attributes))
+    identity_attributes.select do |entity_key, entity_attributes|
+      submit_entity_identity_fields(user, stripe_account, entity_key, entity_attributes, account_country, notify:)
+    end
+  end
+
+  private_class_method
+  def self.submit_entity_identity_fields(user, stripe_account, entity_key, entity_attributes, account_country, notify: true)
+    return false if entity_attributes.blank?
+
+    stale_note_ids = identity_rejection_note_ids(user, scope: entity_key)
+    Stripe::Account.update(stripe_account.id, force_utf8_encoding(entity_key => entity_attributes))
     clear_identity_rejection_notes(user, note_ids: stale_note_ids)
     true
   rescue Stripe::InvalidRequestError => e
-    record_identity_rejection_note(user, e, account_country, scope: :seller) if notify
-    Rails.logger.warn "Stripe rejected the identity fields for user #{user&.id} on a " \
+    record_identity_rejection_note(user, e, account_country, scope: entity_key) if notify
+    Rails.logger.warn "Stripe rejected the #{entity_key} identity fields for user #{user&.id} on a " \
                       "#{account_country.inspect} account: #{e.message}"
     false
   end
@@ -847,6 +867,14 @@ module StripeMerchantAccountManager
     person_identity_attributes = {}
     account_country = stripe_account_country(stripe_account)
     if account_country_conflicts_with_legal_entity?(account_country, user_compliance_info.legal_entity_country_code)
+      # Same retry gap as the account path: the isolated call swallows its rejection, so an unchanged
+      # save diffs the representative's identifier away and never re-sends it. An outstanding note
+      # means Stripe has not accepted it, so put it back.
+      if identity_rejection_note_ids(user, scope: :representative).any?
+        outstanding = current_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
+        diff_attributes = diff_attributes.merge(outstanding) if outstanding.present?
+        diff_attributes = diff_attributes.except(:ssn_last_4) if diff_attributes[:id_number].present?
+      end
       person_identity_attributes = diff_attributes.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
       diff_attributes = diff_attributes.except(*IDENTITY_SUBHASH_KEYS) if person_identity_attributes.present?
     end
@@ -1052,6 +1080,32 @@ module StripeMerchantAccountManager
       address = source[address_key]
       target[address_key] = address if address.present?
     end
+    diff_attributes
+  end
+
+  # Put the current identity fields back into the diff when an unresolved rejection note says Stripe
+  # has not accepted them. The isolated call swallows its rejection so the compliance marker advances
+  # anyway; without this, an unchanged save produces no identity diff and the rejected identifier is
+  # never re-sent. The note is cleared on acceptance, so this stops on its own.
+  private_class_method
+  def self.force_identity_into_diff!(diff_attributes, current_attributes, user)
+    ACCOUNT_COUNTRY_VALIDATED_ENTITY_KEYS.each do |entity_key|
+      next if identity_rejection_note_ids(user, scope: entity_key).empty?
+
+      source = current_attributes[entity_key]
+      next unless source.is_a?(Hash)
+
+      identity = source.slice(*IDENTITY_SUBHASH_KEYS).compact_blank
+      next if identity.empty?
+
+      target = (diff_attributes[entity_key] ||= {})
+      identity.each { |key, value| target[key] = value }
+    end
+
+    # Mirrors the guard in `update_account`: a full id_number and a stale ssn_last_4 on the same
+    # payload is itself an invalid request, and re-adding both is exactly how that happens here.
+    diff_attributes[:individual]&.delete(:ssn_last_4) if diff_attributes.dig(:individual, :id_number).present?
+
     diff_attributes
   end
 
