@@ -5,16 +5,20 @@ require "spec_helper"
 describe "Profile settings email confirmation", type: :system, js: true do
   let(:seller) { create(:user, email: "seller@example.com", username: "unconfirmedseller", confirmed_at: nil) }
 
-  before do
-    login_as(seller)
-  end
-
   it "warns unconfirmed sellers before they edit an unsavable profile" do
+    login_as(seller)
     visit "/profile"
 
     expect(page).to have_alert(text: "Confirm your email address (seller@example.com) before you can save changes to your profile.")
-    expect(page).to have_button("Update profile", disabled: true)
     expect(page).to have_field("Name", disabled: true)
     expect(page).to have_button("Resend confirmation email")
+  end
+
+  it "leaves a confirmed seller's editor untouched" do
+    login_as(create(:user, email: "confirmed@example.com", username: "confirmedseller"))
+    visit "/profile"
+
+    expect(page).to have_field("Name", disabled: false)
+    expect(page).not_to have_text("before you can save changes to your profile")
   end
 end

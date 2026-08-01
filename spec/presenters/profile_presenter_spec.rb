@@ -238,6 +238,18 @@ describe ProfilePresenter do
 
         expect(presenter.profile_settings_props(request:)[:email_confirmation]).to be_nil
       end
+
+      it "doesn't allow resending for a non-owner team member" do
+        seller.update_columns(confirmed_at: nil)
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation][:can_resend]).to eq(false)
+      end
+
+      it "names the pending address when an unconfirmed seller also has an email change in flight" do
+        seller.update_columns(confirmed_at: nil, unconfirmed_email: "new-address@example.com")
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation][:email]).to eq("new-address@example.com")
+      end
     end
 
     context "when the custom_html_pages feature is enabled and a custom profile page is live" do

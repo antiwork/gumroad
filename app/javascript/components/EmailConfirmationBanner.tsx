@@ -36,7 +36,7 @@ export const EmailConfirmationBanner = ({ email, can_resend, children }: EmailCo
       const responseData = typia.assert<{ success: boolean }>(await response.json());
       if (!responseData.success) {
         setResendState("initial");
-        showAlert("Your email address is already confirmed — refresh the page to update this view.", "error");
+        showAlert("Your email address is already confirmed — refresh the page to update your dashboard.", "error");
         return;
       }
       setResendState("sent");
