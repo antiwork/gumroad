@@ -380,7 +380,7 @@ class PurchasesController < ApplicationController
 
       # Verify reCAPTCHA response
       unless skip_recaptcha?
-        render_error(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE) unless valid_recaptcha_response_and_hostname?(site_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"))
+        render_error(recaptcha_failure_message) unless valid_recaptcha_response_and_hostname?(site_key: GlobalConfig.get("RECAPTCHA_MONEY_SITE_KEY"))
       end
     end
 
