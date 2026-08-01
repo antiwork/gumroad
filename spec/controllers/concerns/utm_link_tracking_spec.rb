@@ -185,7 +185,7 @@ describe UtmLinkTracking, type: :controller do
       expect(response).to be_successful
     end
 
-    it "reports the error and still renders the page when the visit write waits too long for a row lock" do
+    it "reports the error and still renders the page when updating the link's click timestamps waits too long for a row lock" do
       allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::LockWaitTimeout)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::LockWaitTimeout), anything)
 
@@ -208,7 +208,7 @@ describe UtmLinkTracking, type: :controller do
       expect(response).to be_successful
     end
 
-    it "reports the error and still renders the page when the visit write deadlocks" do
+    it "reports the error and still renders the page when updating the link's click timestamps deadlocks" do
       allow_any_instance_of(UtmLink).to receive(:save!).and_raise(ActiveRecord::Deadlocked)
       expect(ErrorNotifier).to receive(:notify).with(instance_of(ActiveRecord::Deadlocked), anything)
 

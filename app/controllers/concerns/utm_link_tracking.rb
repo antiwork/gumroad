@@ -76,16 +76,14 @@ module UtmLinkTracking
         UpdateUtmLinkStatsJob.perform_async(utm_link.id)
       end
     rescue ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked => e
-      # Row contention on the utm_links row, not a race this method can resolve by retrying:
-      # the visit write and the first_click_at/last_click_at update above take a row lock that
-      # a concurrent visit for the same link — or a maintenance task touching it, e.g.
-      # Onetime::DedupDuplicateUtmLinks — may already hold. InnoDB's lock wait is 50s, so a
-      # retry would just queue behind the same lock and spend another 50s.
+      # Row contention on the utm_links row the timestamp update below writes — a concurrent
+      # visit to the same link, or Onetime::DedupDuplicateUtmLinks, may already hold it. This
+      # runs in a before_action on public GETs, so an uncaught timeout 500s the product page.
       #
-      # Rescued here rather than allowed to propagate because this runs in a before_action on
-      # public GETs: an uncaught timeout takes down the product page itself, turning an
-      # analytics write into a 500 for a buyer who is only trying to read the page. Same
-      # contract as the rescue below — report and swallow so the page still renders.
+      # Neither is retried, unlike the uniqueness races below. A LockWaitTimeout has already
+      # waited out InnoDB's timeout (50s by default), so a retry queues behind the same lock;
+      # a deadlock victim could retry cheaply, but losing one visit is cheaper than a second
+      # retry path on a page-blocking write.
       ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
       # Two simultaneous first visits with the same UTM parameters can both find no existing
@@ -106,7 +104,7 @@ module UtmLinkTracking
       # working for such links — the lookup above deterministically picks the oldest duplicate,
       # and the model only re-validates uniqueness when identifying fields change (not on
       # click-timestamp updates). Merging the duplicate rows themselves is handled by the
-      # Onetime::DedupUtmLinks task; see https://github.com/antiwork/gumroad/issues/5989.
+      # Onetime::DedupDuplicateUtmLinks task; see https://github.com/antiwork/gumroad/issues/5989.
       #
       # In both recoverable cases the winning request has committed the link by the time we get here, so
       # retrying once lets this request find that link and still record the visit. For
