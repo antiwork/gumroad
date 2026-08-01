@@ -256,6 +256,16 @@ describe ValidateRecaptcha, type: :controller do
           expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
         end
 
+        it "keeps the generic copy when the response carried no score at all" do
+          stub_recaptcha_response(valid: true, score: nil)
+
+          post :checkout_score_message_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+          expect(parsed_body["error"]).not_to include("scored this browser session as risky")
+        end
+
         it "keeps the ad-blocker copy when a high-scoring token came from a disallowed host" do
           allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("production"))
           stub_recaptcha_response(valid: true, score: 0.9, hostname: "evil.example.com")

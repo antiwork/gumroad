@@ -96,13 +96,16 @@ module ValidateRecaptcha
 
       hostname_ok = require_hostname ? hostname_allowed?(assessment[:hostname]) : true
       token_ok = assessment[:valid] && hostname_ok
-      score_ok = threshold.nil? || (assessment[:score].present? && assessment[:score] >= threshold)
+      scored = assessment[:score].present?
+      score_ok = threshold.nil? || (scored && assessment[:score] >= threshold)
       decision = token_ok && score_ok
 
-      # Remembered so the caller can pick the right copy. Only a token that was genuine and
-      # correctly hosted, and failed on score alone, gets the low-score message — a bad token
-      # really can be an ad blocker.
-      @recaptcha_failed_on_score_only = !decision && token_ok && !score_ok
+      # Remembered so the caller can pick the right copy. Only a token that was genuine,
+      # correctly hosted, and carrying a score Google actually returned that fell under the
+      # bar gets the low-score message. An absent score also fails `score_ok`, but claiming
+      # the session "scored as risky" when Google scored nothing is the same kind of lie this
+      # message exists to stop, so that case keeps the generic copy.
+      @recaptcha_failed_on_score_only = !decision && token_ok && scored && !score_ok
 
       log_recaptcha_score(
         surface:,
