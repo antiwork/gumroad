@@ -5540,9 +5540,9 @@ class LinksControllerShowTest < ActionController::TestCase
     [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
     @product_with_legacy_mapping.mark_deleted!
 
-    get :show, params: { id: "custom" }
-
-    assert_response :not_found
+    # `e404` raises rather than rendering, so this is the file's convention for a
+    # missed `GET show` lookup (see the "NOT real" case above).
+    assert_raises(ActionController::RoutingError) { get :show, params: { id: "custom" } }
   end
 
   test "GET show renders the user's product when request comes from a custom domain (legacy lookup)" do
