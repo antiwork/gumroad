@@ -61,8 +61,10 @@ class Cart < ApplicationRecord
     alive? && updated_at >= ABANDONED_IF_UPDATED_AFTER_AGO.ago.beginning_of_day && updated_at <= ABANDONED_IF_UPDATED_BEFORE_AGO.ago && sent_abandoned_cart_emails.none? && alive_cart_products.exists?
   end
 
+  # The id tiebreak is load-bearing: this order decides which lines a capped discount code covers,
+  # and two products added in the same tick would otherwise swap winners between reloads.
   def visible_cart_products
-    alive_cart_products.joins(:product).merge(Link.not_archived).order(created_at: :desc)
+    alive_cart_products.joins(:product).merge(Link.not_archived).order(created_at: :desc, id: :desc)
   end
 
   # Product ids in this cart whose recipient already owns the product.

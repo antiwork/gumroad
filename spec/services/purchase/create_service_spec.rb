@@ -2262,7 +2262,7 @@ describe Purchase::CreateService, :vcr do
         purchase, error = Purchase::CreateService.new(product:, params: gift_params).perform
 
         expect(purchase).not_to be_successful
-        expect(error).to eq "Sorry, the discount code you wish to use has expired."
+        expect(error).to eq "Sorry, the discount code you wish to use has reached its usage limit."
       end
 
       it "does not associate the offer code with the giftee purchase" do

@@ -4815,7 +4815,7 @@ class Purchase < ApplicationRecord
         errors.add :base, "Sorry, the discount code you are using is invalid for the quantity you have selected."
       else
         self.error_code = PurchaseErrorCode::OFFER_CODE_SOLD_OUT
-        errors.add :base, "Sorry, the discount code you wish to use has expired."
+        errors.add :base, "Sorry, the discount code you wish to use has reached its usage limit."
       end
 
       true
