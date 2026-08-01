@@ -95,6 +95,9 @@ describe Ai::StoreAgentService do
 
       expect(captured[:system]).to include("Gumroad's store assistant")
       expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "complete_turn")
+      expect(captured[:system]).to include("existing Store Agent webhooks can be")
+      expect(captured[:system]).to include("the Store Agent cannot create webhooks")
+      expect(captured[:system]).to match(/Settings >\s+Advanced > Ping/)
       # System prompt is NOT echoed into the messages array (it's Anthropic's top-level param).
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
     end
@@ -323,6 +326,21 @@ describe Ai::StoreAgentService do
         )
 
         service.respond(messages: [{ role: "user", content: "show product abc123" }])
+      end
+
+      it "lists only Store Agent-owned webhooks" do
+        expect(api_client).to receive(:get).with(
+          "/resource_subscriptions",
+          { "resource_name" => "sale", "current_oauth_application_only" => true },
+        ).and_return({ "success" => true, "resource_subscriptions" => [], "http_status" => 200 })
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_read", { "endpoint" => "list_resource_subscriptions", "params" => { "resource_name" => "sale" } }),
+          text_result("You have no Store Agent webhooks for sales."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "List my Store Agent sale webhooks" }])
+
+        expect(result[:reply]).to eq("You have no Store Agent webhooks for sales.")
       end
 
       # Regression: gumroad-private#1168. list_products is paginated (10 per page) but the agent

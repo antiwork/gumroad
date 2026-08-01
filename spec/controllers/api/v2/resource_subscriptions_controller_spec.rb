@@ -43,6 +43,21 @@ describe Api::V2::ResourceSubscriptionsController do
       expect(response.parsed_body["resource_subscriptions"].last["post_url"]).to eq("https://postmebabyonemoretime.org")
     end
 
+    it "can limit results to subscriptions owned by the current OAuth application" do
+      current_application_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "sale")
+      another_application = create(:oauth_application, owner: create(:user))
+      another_application_subscription = create(:resource_subscription, user: @user, oauth_application: another_application, resource_name: "sale")
+
+      get :index, params: { access_token: @token.token, resource_name: "sale" }
+      expect(response.parsed_body["resource_subscriptions"].pluck("id")).to contain_exactly(
+        current_application_subscription.external_id,
+        another_application_subscription.external_id,
+      )
+
+      get :index, params: { access_token: @token.token, resource_name: "sale", current_oauth_application_only: true }
+      expect(response.parsed_body["resource_subscriptions"].pluck("id")).to eq([current_application_subscription.external_id])
+    end
+
     it "responds with an error JSON message for an invalid resource name" do
       get :index, params: { access_token: @token.token, resource_name: "invalid_resource" }
 
