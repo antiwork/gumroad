@@ -162,11 +162,19 @@ describe Api::Mobile::SalesController, :vcr do
       expect(@purchase.shipment.tracking_url).to eq("https://example.com/track")
     end
 
+    it "rejects tracking values that are not full URLs" do
+      post :mark_as_shipped, params: @params.merge(id: @purchase.external_id, tracking_url: "1Z999AA10123456784")
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Tracking URL #{Shipment::VALID_TRACKING_LINK_MESSAGE}")
+      expect(@purchase.reload.shipment).to eq(nil)
+    end
+
     it "returns a controlled error and does not mark shipped when the shipment fails to persist" do
       shipment = Shipment.new(purchase: @purchase)
       shipment.errors.add(:base, "Something went wrong")
-      allow(shipment).to receive(:persisted?).and_return(false)
-      allow(Shipment).to receive(:create).and_return(shipment)
+      allow(shipment).to receive(:save).and_return(false)
+      allow(Shipment).to receive(:new).and_return(shipment)
 
       post :mark_as_shipped, params: @params.merge(id: @purchase.external_id)
 

@@ -35,7 +35,23 @@ class Shipment < ApplicationRecord
   # number never matches its carrier's format and the strongest evidence we hold is dropped.
   PERCENT_ENCODED_WHITESPACE = /\A(?:%(?:20|09|0[AaDd]))+|(?:%(?:20|09|0[AaDd]))+\z/
 
+  TRACKING_LINK_MAX_LENGTH = 2_083
+  TRACKING_LINK_SCHEMES = %w[http https].freeze
+  TRACKING_LINK_CONTROL_CHARACTER_REGEX = /[[:cntrl:]]/
+  TRACKING_LINK_NON_ASCII_REGEX = /[^\x00-\x7F]/
+  VALID_TRACKING_LINK_MESSAGE = "must be a full URL beginning with http:// or https://"
+
+  # Rails humanizes this to "Tracking url", which reads as a typo in a message we show sellers.
+  def self.human_attribute_name(attr, _)
+    case attr
+    when "tracking_url" then "Tracking URL"
+    else super
+    end
+  end
+
   validates :purchase, presence: true
+  before_validation :strip_tracking_url
+  validate :tracking_url_must_be_display_safe
 
   # The purchase's updated_at should reflect changes to its shipment.
   after_update :touch_purchase
@@ -54,11 +70,45 @@ class Shipment < ApplicationRecord
   end
 
   def calculated_tracking_url
-    return tracking_url if tracking_url.present?
-    return nil if tracking_number.nil? || carrier.nil?
-    return nil unless CARRIER_TRACKING_URL_MAPPING.key?(carrier)
+    tracking_link_for_display&.fetch(:url)
+  end
 
-    CARRIER_TRACKING_URL_MAPPING[carrier] + tracking_number
+  def tracking_link_for_display
+    display_safe_tracking_link = self.class.display_safe_tracking_link(raw_tracking_link)
+    return if display_safe_tracking_link.blank?
+
+    # A carrier hostname alone must not earn the trusted label — https://tools.usps.com/anything is
+    # still a seller-chosen destination. Trust only a link we derived ourselves (tracking_url blank)
+    # or a stored URL whose carrier form and tracking number both verify.
+    verified_carrier_link = tracking_url.blank? || carrier_and_tracking_number_from_url.present?
+
+    {
+      url: display_safe_tracking_link,
+      label: verified_carrier_link ? "Track your package" : "Seller-provided tracking link",
+      host: verified_carrier_link ? nil : self.class.parsed_tracking_uri(display_safe_tracking_link).host.downcase,
+    }
+  end
+
+  def self.display_safe_tracking_link(value)
+    normalized_value = value.to_s.strip
+    return if normalized_value.blank?
+    return if normalized_value.length > TRACKING_LINK_MAX_LENGTH
+    return if normalized_value.match?(TRACKING_LINK_CONTROL_CHARACTER_REGEX)
+
+    uri = parsed_tracking_uri(normalized_value)
+    return unless TRACKING_LINK_SCHEMES.include?(uri.scheme&.downcase)
+    return if uri.host.blank?
+    return if uri.userinfo.present?
+
+    normalized_value
+  rescue URI::InvalidURIError
+    nil
+  end
+
+  # URI.parse rejects the multibyte URLs sellers paste from international carrier pages, so
+  # non-ASCII is escaped for parsing only — the stored and rendered value stays as typed.
+  def self.parsed_tracking_uri(value)
+    URI.parse(value.gsub(TRACKING_LINK_NON_ASCII_REGEX) { |character| URI::DEFAULT_PARSER.escape(character) })
   end
 
   # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
@@ -99,6 +149,26 @@ class Shipment < ApplicationRecord
   end
 
   private
+    def raw_tracking_link
+      return tracking_url if tracking_url.present?
+      return if tracking_number.blank? || carrier.blank?
+      return unless CARRIER_TRACKING_URL_MAPPING.key?(carrier)
+
+      CARRIER_TRACKING_URL_MAPPING[carrier] + tracking_number
+    end
+
+    def strip_tracking_url
+      self.tracking_url = tracking_url.strip if will_save_change_to_tracking_url? && tracking_url.present?
+    end
+
+    def tracking_url_must_be_display_safe
+      # Existing shipments have free-text values; reject only new writes so those rows stay editable.
+      return unless will_save_change_to_tracking_url? && tracking_url.present?
+      return if self.class.display_safe_tracking_link(tracking_url).present?
+
+      errors.add(:tracking_url, VALID_TRACKING_LINK_MESSAGE)
+    end
+
     def marked_as_shipped!
       update!(shipped_at: Time.current)
     end
