@@ -206,6 +206,127 @@ describe Payment do
         payment.mark_failed!("PAYPAL 3015")
       end.to_not have_enqueued_mail(ContactingCreatorMailer, :paypal_payout_permanently_failed)
     end
+
+    describe "invalidating the payout address" do
+      before { compliant_creator.update!(payment_address: "seller@example.com") }
+
+      it "removes the refused address so the settings page stops offering it" do
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.payment_address).to be_blank
+        expect(compliant_creator.invalidated_paypal_payout_address).to eq("seller@example.com")
+      end
+
+      # The copy we send tells these sellers to add a PayPal account, and in a native-payout country
+      # `payment_address` being present was the only thing qualifying them for the PayPal form —
+      # so clearing it would hide the form and refuse the submit, making that copy a dead end.
+      it "leaves the seller able to add a different PayPal account" do
+        allow(compliant_creator).to receive(:native_payouts_supported?).and_return(true)
+        # Precondition: the only thing qualifying them is the address about to be removed.
+        expect(compliant_creator.can_setup_paypal_payouts?).to eq(true)
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.payment_address).to be_blank
+        expect(compliant_creator.can_setup_paypal_payouts?).to eq(true)
+      end
+
+      # The rejection lookups are all keyed on the address, so removing it without keeping a record
+      # would release the block and erase the seller's explanation at the same time.
+      it "keeps the seller blocked and explained afterwards" do
+        payment.mark_failed!("PAYPAL 3148")
+        compliant_creator.reload
+
+        expect(PaypalPayoutProcessor.terminal_failure_blocking_payouts?(compliant_creator)).to eq(true)
+        expect(PaypalPayoutProcessor.rejection_to_explain(compliant_creator)).to eq(payment)
+        expect(PaypalPayoutProcessor.is_user_payable(compliant_creator, 10_00)).to eq(false)
+      end
+
+      it "records the removal for support" do
+        payment.mark_failed!("PAYPAL 3148")
+
+        note = compliant_creator.reload.comments.with_type_payout_note
+                                .find { |comment| comment.content.include?("removed because PayPal permanently refused") }
+        expect(note).to be_present
+        expect(note.content).to include("seller@example.com")
+        expect(PayoutNoteVisibility.seller_visible?(note)).to eq(false)
+      end
+
+      # The seller reads that we removed it, so the removal has to precede the copy — otherwise the
+      # first note and the first email deny what just happened.
+      it "writes a note that matches the state it just left the account in" do
+        create(:user_compliance_info, user: compliant_creator, country: "United States")
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.latest_seller_visible_payout_note.content)
+          .to include("We've removed that PayPal account from your payout settings")
+      end
+
+      # A currency rejection is repairable on the same account and we keep retrying it, so removing
+      # the address would take away a payout method that is about to start working.
+      it "leaves the address in place for a currency rejection" do
+        payment.mark_failed!("PAYPAL 14159")
+
+        expect(compliant_creator.reload.payment_address).to eq("seller@example.com")
+        expect(compliant_creator.invalidated_paypal_payout_address).to be_blank
+      end
+
+      it "leaves the address in place for a retryable rejection" do
+        payment.mark_failed!("PAYPAL 3015")
+
+        expect(compliant_creator.reload.payment_address).to eq("seller@example.com")
+      end
+
+      # A rejection older than a payout that later succeeded is history, not this account's
+      # situation — the retry block ignores it for the same reason.
+      it "does not remove an address a later payout succeeded to" do
+        payment.update!(created_at: 4.weeks.ago)
+        create(:payment_completed, user: compliant_creator, payment_address: "seller@example.com",
+                                   created_at: 1.week.ago)
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.payment_address).to eq("seller@example.com")
+      end
+
+      # A failure row can be transitioned after the seller has already moved on. Removing whatever
+      # is on the account now would take away an address PayPal never refused.
+      it "does not remove an address this payout was never sent to" do
+        compliant_creator.update!(payment_address: "new@example.com")
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(compliant_creator.reload.payment_address).to eq("new@example.com")
+        expect(compliant_creator.invalidated_paypal_payout_address).to be_blank
+      end
+
+      # There is nothing of ours to remove, and the copy must not claim otherwise. The address-keyed
+      # block still holds them.
+      it "claims no removal for a seller paid through a connected PayPal account" do
+        create(:user_compliance_info, user: compliant_creator, country: "United States")
+        compliant_creator.update!(payment_address: "")
+        create(:merchant_account_paypal, user: compliant_creator)
+        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details)
+          .and_return("primary_email" => "seller@example.com")
+
+        payment.mark_failed!("PAYPAL 3148")
+        compliant_creator.reload
+
+        expect(compliant_creator.invalidated_paypal_payout_address).to be_blank
+        expect(compliant_creator.latest_seller_visible_payout_note.content).to_not include("We've removed")
+        expect(PaypalPayoutProcessor.terminal_failure_blocking_payouts?(compliant_creator)).to eq(true)
+      end
+
+      it "records the failure even when the seller's record is invalid for unrelated reasons" do
+        compliant_creator.update_columns(name: "x" * 1_000)
+
+        payment.mark_failed!("PAYPAL 3148")
+
+        expect(payment.reload.state).to eq("failed")
+        expect(compliant_creator.reload.payment_address).to be_blank
+      end
+    end
   end
 
   describe "send_payout_failure_email" do

@@ -44,6 +44,14 @@ class PaypalPayoutProcessor
     # page has always kept them out of its banner (it filtered them out by content), so they are
     # written with seller_visible: false to keep that behaviour now that visibility is explicit.
 
+    # We emptied this on purpose, so the "no valid payment address" branch below would both describe
+    # it wrongly and write a weekly note — and these sellers stay here indefinitely, so those rows
+    # would bury the explanation out of the scanned window (see the comment further down).
+    if payout_email.blank? && user.invalidated_paypal_payout_address.present?
+      ensure_terminal_failure_explanation_visible(user) if add_comment
+      return false
+    end
+
     # User is payable on PayPal if they've provided an email address.
     if !EmailFormatValidator.valid?(payout_email)
       user.add_payout_note(content: "Payout via PayPal on #{payout_date} skipped because the account does not have a valid PayPal payment address", seller_visible: false) if add_comment
@@ -83,7 +91,7 @@ class PaypalPayoutProcessor
     # seller-facing note naming PayPal and the fix, and a weekly internal note would add another
     # row to the hundreds of automated comments these accounts already carry without telling the
     # seller anything new. Sellers who were already stuck before this check existed have no such
-    # failure to have written one, so Onetime::ExplainTerminalPaypalPayoutFailures backfilled the
+    # failure to have written one, so Onetime::ResolveTerminalPaypalPayoutFailures backfilled the
     # note for them.
     #
     # Staying silent is not on its own enough to keep that explanation in front of the seller: the
@@ -172,7 +180,10 @@ class PaypalPayoutProcessor
     return false if user.active_bank_account.present?
     return false if StripePayoutProcessor.pays_user_via_stripe_connect?(user)
 
-    payout_email = user.paypal_payout_email
+    # The address we took off the account counts, since every rejection is recorded against an
+    # address and removing it is not the seller fixing anything — see
+    # User#paypal_payout_email_for_failure_lookup.
+    payout_email = user.paypal_payout_email_for_failure_lookup
     return false if payout_email.blank?
 
     terminal_failure_for_payout_email?(user, payout_email, reasons:)
@@ -190,7 +201,7 @@ class PaypalPayoutProcessor
   # Rejections from before a payout that later succeeded are dropped: they are history rather than
   # the seller's situation. If that leaves nothing, the whole set is used instead, so a caller that
   # has already decided the seller is blocked cannot end up writing no explanation at all.
-  def self.rejection_to_explain(user, payout_email = user.paypal_payout_email)
+  def self.rejection_to_explain(user, payout_email = user.paypal_payout_email_for_failure_lookup)
     return nil if payout_email.blank?
 
     payouts_to_address = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address: payout_email)

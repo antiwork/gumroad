@@ -25,12 +25,27 @@
     </p>
   <% elsif @can_use_bank_account %>
     <p>
-      To get paid, <a href='<%= settings_payments_url %>'>add a bank account in your payout settings</a>, or switch to a different PayPal account that can receive US dollars.
+      <%# Reached only for the rejection that also takes the address off the account, so the copy
+          says so rather than sending them to change something that is no longer there — except for
+          a seller paid through a connected PayPal account, where there was no saved address to
+          remove. An account in the same country would be refused the same way, so the alternative
+          is described by country, not by currency. %>
+      <% if @payout_address_removed %>
+        We've removed that PayPal account from your payout settings, since we can't pay to it. To get paid,
+        <a href='<%= settings_payments_url %>'>add a bank account there</a> instead, or a PayPal account registered in a country that can receive PayPal payments.
+      <% else %>
+        To get paid, <a href='<%= settings_payments_url %>'>add a bank account in your payout settings</a>, or connect a PayPal account registered in a country that can receive PayPal payments.
+      <% end %>
     </p>
   <% else %>
     <p>
-      PayPal is the only payout method we can offer in your country, so to get paid you'll need to
-      <a href='<%= settings_payments_url %>'>use a different PayPal account</a> that can receive US dollars.
+      <% if @payout_address_removed %>
+        We've removed that PayPal account from your payout settings, since we can't pay to it. PayPal is the only payout method we can offer in your country, so to get paid you'll need to
+        <a href='<%= settings_payments_url %>'>add a PayPal account</a> registered in a country that can receive PayPal payments.
+      <% else %>
+        PayPal is the only payout method we can offer in your country, so to get paid you'll need to
+        <a href='<%= settings_payments_url %>'>connect a PayPal account</a> registered in a country that can receive PayPal payments.
+      <% end %>
     </p>
   <% end %>
   <% if @payouts_on_hold && @payouts_paused_by_seller %>

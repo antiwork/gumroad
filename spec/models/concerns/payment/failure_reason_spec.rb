@@ -146,18 +146,24 @@ describe Payment::FailureReason do
             # Gumroad supports bank payouts here, so the note may suggest one. Most sellers who hit
             # these rejections are in PayPal-only countries, covered separately below.
             create(:user_compliance_info, user: payment.user, country: "United States")
+            # The retry-blocking rejection also takes the PayPal address off the account, and the
+            # note says so — this is the state the seller reads it in. The payout carries the address
+            # it was attempted against, as a real payout run always sets it.
+            payment.user.update!(payment_address: "refused@example.com")
+            payment.update!(payment_address: "refused@example.com")
           end
 
           it "tells the seller PayPal will not send the payout and what to change" do
             expect do
               payment.mark_failed!("PAYPAL 3148")
-            end.to change { payment.user.comments.count }.by(1)
+            end.to change { payment.user.comments.count }.by(2)
 
             note = payment.user.comments.last
             expect(note.content).to eq(
               "Your payout on #{payment.created_at.to_fs(:formatted_date_full_month)} could not be sent because " \
               "PayPal will not send payouts to your PayPal account, because payments cannot be received in the country on that account's address. " \
-              "Add a bank account in your payout settings, or use a different PayPal account that can receive US dollars. " \
+              "We've removed that PayPal account from your payout settings, since we can't pay to it. Add a bank account there instead, " \
+              "or a PayPal account registered in a country that can receive PayPal payments. " \
               "Your balance is safe in the meantime and will be paid out on the next payout date after a working payout method is on file."
             )
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
@@ -226,6 +232,17 @@ describe Payment::FailureReason do
             expect(note.content).to include("PayPal is the only payout method we can offer in your country")
             expect(note.content).to_not include("Add a bank account")
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
+          end
+
+          # The explanation must be the newest note the seller can read; the internal record of the
+          # removal is written first and hidden, so it cannot take the banner (gumroad-private#1478).
+          it "leaves the explanation as the newest note the seller can see" do
+            payment.mark_failed!("PAYPAL 3148")
+
+            expect(payment.user.reload.latest_seller_visible_payout_note.content)
+              .to include("could not be sent because")
+            expect(payment.user.comments.with_type_payout_note.map(&:content))
+              .to include(a_string_including("removed because PayPal permanently refused"))
           end
         end
       end

@@ -249,6 +249,10 @@ class ContactingCreatorMailer < ApplicationMailer
     # Bank transfer is not offered everywhere. Most sellers who hit these rejections are in
     # PayPal-only countries, where "add a bank account" is advice they cannot act on.
     @can_use_bank_account = @seller.can_setup_bank_payouts?
+    # Whether we actually removed their PayPal address, which the copy below claims. Not every
+    # retry-blocking rejection removes one — a seller paid through a connected PayPal account has no
+    # saved address for us to take away, and saying we took it would be false.
+    @payout_address_removed = @payment.paypal_payout_address_invalidated?
   end
 
   def flagged_for_explicit_nsfw_tos_violation(user_id)

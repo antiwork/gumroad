@@ -25,12 +25,16 @@ describe ContactingCreatorMailer do
   end
 
   describe "paypal payout permanently failed" do
-    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13) }
+    let(:payment) { create(:payment_failed, failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil, amount_cents: 439_13, payment_address: "refused@example.com") }
 
     before do
       # Gumroad supports bank payouts here, so the email may suggest one. Sellers in PayPal-only
       # countries — the majority of those hitting these rejections — are covered separately below.
       create(:user_compliance_info, user: payment.user, country: "United States")
+      # The retry-blocking rejection took the PayPal address off the account before this email was
+      # enqueued, which is the state the copy describes. The removal is keyed on the address THIS
+      # payout was sent to, so the payment has to carry it too.
+      payment.user.update!(payment_address: "", invalidated_paypal_payout_address: payment.payment_address)
     end
 
     it "names PayPal, the restriction, and the fix" do
@@ -40,8 +44,36 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq("Your PayPal account can't receive your payout.")
       expect(mail.body.encoded).to include("$439.13")
       expect(mail.body.encoded).to include("payments cannot be received in the country on that account&#39;s address")
-      expect(mail.body.encoded).to include("add a bank account in your payout settings")
+      expect(mail.body.encoded).to include("We've removed that PayPal account from your payout settings")
+      expect(mail.body.encoded).to include("add a bank account there")
       expect(mail.body.encoded).to include("stopped retrying it")
+    end
+
+    # The email is the only place most of these sellers hear about it, so it must not send them to
+    # change a PayPal address that is no longer on the account (gumroad-private#1478).
+    it "does not tell the seller to switch the PayPal account we removed" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("switch to a different PayPal account")
+    end
+
+    # 3148 is about the country on the account's address, so an account in the same country that
+    # accepts dollars would be refused exactly the same way — offering that as the fix is wrong.
+    it "describes the working alternative by country rather than by currency" do
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to include("registered in a country that can receive PayPal payments")
+    end
+
+    # A seller paid through a connected PayPal account has no saved address for us to remove, so
+    # claiming we removed one would be false.
+    it "claims no removal when there was no saved address to remove" do
+      payment.user.update!(invalidated_paypal_payout_address: nil)
+
+      mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
+
+      expect(mail.body.encoded).to_not include("We've removed")
+      expect(mail.body.encoded).to include("connect a PayPal account registered in a country that can receive PayPal payments")
     end
 
     it "names the currency restriction for a currency rejection" do

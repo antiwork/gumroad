@@ -280,6 +280,55 @@ describe PaypalPayoutProcessor do
 
           expect(described_class.terminal_failure_blocking_payouts?(user)).to eq(false)
         end
+
+        # After the address is invalidated the account has no PayPal payout email at all, so every
+        # address-keyed lookup has to fall back to the address we removed or the block, the note and
+        # the explanation all quietly disappear (gumroad-private#1478).
+        describe "and the refused address has been removed from the account" do
+          before do
+            user.update!(payment_address: "", invalidated_paypal_payout_address: "seller@gr.co")
+          end
+
+          it "stays blocked" do
+            expect(described_class.terminal_failure_blocking_payouts?(user.reload)).to eq(true)
+            expect(described_class.is_user_payable(user, 10_01)).to eq(false)
+          end
+
+          it "still knows which rejection to explain" do
+            expect(described_class.rejection_to_explain(user.reload)).to eq(@refused)
+          end
+
+          # These sellers stay in this state indefinitely, so a weekly note would push the
+          # explanation out of the window the banner scans and leave them reading nothing again.
+          it "writes no weekly note about a missing payment address" do
+            expect do
+              described_class.is_user_payable(user.reload, 10_01, add_comment: true)
+            end.to_not change { user.comments.with_type_payout_note.count }
+          end
+
+          it "restores the explanation when the seller can no longer see it" do
+            user.add_payout_note(content: "Payout on July 3, 2026 was skipped because the account was under review.",
+                                 seller_visible: true)
+
+            described_class.is_user_payable(user.reload, 10_01, add_comment: true)
+
+            expect(user.reload.latest_seller_visible_payout_note.content)
+              .to eq(@refused.terminal_paypal_failure_seller_note)
+          end
+
+          # A seller who never had a saved address (paid through a connected PayPal account) is a
+          # different case, and must still get the plain "no valid payment address" handling.
+          it "does not swallow the missing-address note for a seller we never invalidated" do
+            user.update!(invalidated_paypal_payout_address: nil)
+
+            expect do
+              described_class.is_user_payable(user.reload, 10_01, add_comment: true)
+            end.to change { user.comments.with_type_payout_note.count }.by(1)
+
+            expect(user.comments.with_type_payout_note.last.content)
+              .to include("does not have a valid PayPal payment address")
+          end
+        end
       end
 
       describe "payment address contains non-ascii characters" do

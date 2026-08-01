@@ -272,5 +272,71 @@ describe UpdatePayoutMethod do
         expect { service.process }.to raise_error(RuntimeError, "boom")
       end
     end
+
+    describe "saving a PayPal address PayPal has permanently refused" do
+      let(:user) { create(:named_user) }
+      let(:params) { ActionController::Parameters.new(payment_address: "refused@example.com") }
+
+      before do
+        create(:payment_failed, user:, payment_address: "refused@example.com",
+                                failure_reason: "PAYPAL 3148", txn_id: nil, processor_fee_cents: nil)
+        user.update!(payment_address: "", invalidated_paypal_payout_address: "refused@example.com")
+      end
+
+      # Accepting it would put the seller straight back behind the payout block, with their settings
+      # page once again claiming they have a working payout method (gumroad-private#1478).
+      it "is refused, and the account is left alone" do
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(error: :paypal_address_permanently_refused)
+        expect(user.reload.payment_address).to be_blank
+        expect(user.invalidated_paypal_payout_address).to eq("refused@example.com")
+      end
+
+      # A different address has no rejection standing against it, and once the seller has chosen a
+      # payout method the record of the one we removed has done its job.
+      it "accepts a different address and clears the record of the removed one" do
+        params = ActionController::Parameters.new(payment_address: "working@example.com")
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.payment_address).to eq("working@example.com")
+        expect(user.invalidated_paypal_payout_address).to be_blank
+      end
+
+      # A currency rejection is repairable on the same account, so re-saving that address is a
+      # legitimate thing for a seller to do after fixing it.
+      it "accepts an address whose only rejection was a currency one" do
+        user.payments.each { |payment| payment.update!(failure_reason: "PAYPAL 14159") }
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.payment_address).to eq("refused@example.com")
+      end
+
+      # Switching to a bank account resolves the situation just as much as saving a working PayPal
+      # address does. Leaving the record set would let the old rejection come back as this account's
+      # live situation the moment the bank account goes away — UpdateUserCountry deletes it, so that
+      # is reachable, and the seller would be blocked by a rejection of an address they no longer use.
+      it "clears the record of the removed address when the seller switches to a bank account" do
+        bank_params = ActionController::Parameters.new(
+          bank_account: {
+            type: AchAccount.name, account_number: "000123456789", account_number_confirmation: "000123456789",
+            routing_number: "110000000", account_holder_full_name: "Gum Road"
+          }
+        )
+
+        result = described_class.new(user_params: bank_params, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.invalidated_paypal_payout_address).to be_blank
+        # Asserted with the bank account gone, since its mere presence short-circuits the block —
+        # asserting while it is alive would pass no matter what the record holds.
+        user.bank_accounts.alive.each(&:mark_deleted!)
+        expect(PaypalPayoutProcessor.terminal_failure_blocking_payouts?(user.reload)).to eq(false)
+      end
+    end
   end
 end
