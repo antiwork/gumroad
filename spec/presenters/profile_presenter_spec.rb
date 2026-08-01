@@ -203,6 +203,7 @@ describe ProfilePresenter do
           memberships: [ProductPresenter.card_for_web(product: membership_product, show_seller: false)],
           profile_version: a_kind_of(String),
           seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
+          email_confirmation: nil,
           custom_html_pages_enabled: false,
           has_custom_landing_page: false,
           username: seller.username,
@@ -212,6 +213,54 @@ describe ProfilePresenter do
         }
       )
       expect(props[:profile_settings]).not_to have_key(:username)
+    end
+
+    describe "email_confirmation" do
+      it "is nil when the seller's email is confirmed" do
+        expect(presenter.profile_settings_props(request:)[:email_confirmation]).to be_nil
+      end
+
+      it "includes confirmation details when the seller's email is unconfirmed" do
+        seller.update_columns(confirmed_at: nil)
+        owner_pundit_user = SellerContext.new(user: seller, seller:)
+        props = described_class.new(pundit_user: owner_pundit_user, seller: seller.reload).profile_settings_props(request:)
+
+        expect(props[:email_confirmation]).to eq(
+          {
+            email: seller.email,
+            can_resend: true,
+          }
+        )
+      end
+
+      it "is nil when a confirmed seller has a pending email change" do
+        seller.update_columns(unconfirmed_email: "new-address@example.com")
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation]).to be_nil
+      end
+
+      it "doesn't allow resending for a non-owner team member" do
+        seller.update_columns(confirmed_at: nil)
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation][:can_resend]).to eq(false)
+      end
+
+      it "names the pending address when an unconfirmed seller also has an email change in flight" do
+        seller.update_columns(confirmed_at: nil, unconfirmed_email: "new-address@example.com")
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation][:email]).to eq("new-address@example.com")
+      end
+
+      it "represents an unconfirmed seller with no email without offering a resend" do
+        seller.update_columns(confirmed_at: nil, email: nil, unconfirmed_email: nil)
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation]).to eq(
+          {
+            email: nil,
+            can_resend: false,
+          }
+        )
+      end
     end
 
     context "when the custom_html_pages feature is enabled and a custom profile page is live" do
