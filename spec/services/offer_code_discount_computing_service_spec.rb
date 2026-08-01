@@ -113,6 +113,23 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
     end
 
+    # The winning line can itself be a cross-sell of a later line. The later line's
+    # cross-sell pass must not rewrite its allocation, or the cart loses the discount.
+    it "keeps the winning line's discount when it is also a cross-sell of a later line" do
+      cross_sell_line = create(:product, user: seller, price_cents: 3000)
+      create(:upsell, seller:, product: cross_sell_line, cross_sell: true, selected_products: [product])
+      products = {
+        cross_sell_line.unique_permalink => { quantity: "1", permalink: cross_sell_line.unique_permalink },
+        product.unique_permalink => { quantity: "1", permalink: product.unique_permalink },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data][cross_sell_line.unique_permalink][:discount][:cents]).to eq(500)
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(1)
+    end
+
     # Coverage at zero is not a free pass on line-level eligibility: a later line that
     # doesn't meet minimum_quantity must error as it would if the code weren't spent yet.
     it "enforces minimum quantity on lines covered at zero" do

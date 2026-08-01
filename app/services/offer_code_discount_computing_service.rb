@@ -217,6 +217,10 @@ class OfferCodeDiscountComputingService
     # be able to see the correct discount and adjust accordingly.
     def optimistically_apply_to_applicable_cross_sells(products_data, link)
       link.available_cross_sells.each do |cross_sell|
+        # A cross-sell that already holds an allocation — typically because it is itself a
+        # cart line — keeps it: rewriting here would zero out the line that won the code.
+        next if products_data.key?(cross_sell.product.unique_permalink)
+
         offer_code = find_applicable_offer_code_for(cross_sell.product)
         next unless offer_code
 
