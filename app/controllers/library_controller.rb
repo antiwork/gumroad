@@ -18,14 +18,19 @@ class LibraryController < Sellers::BaseController
     authorize Purchase
 
     set_meta_tag(title: "Library")
-    purchase_results, creator_counts, bundles = LibraryPresenter.new(logged_in_user).library_cards
+    presenter = LibraryPresenter.new(logged_in_user)
 
-    render inertia: "Library/Index", props: {
-      results: purchase_results,
-      creators: creator_counts,
-      bundles:,
+    render inertia: "Library/Index", props: presenter.library_props(
+      page: params[:page],
+      sort: params[:sort],
+      query: params[:query],
+      creator_ids: params[:creators].to_s.split(","),
+      bundle_ids: params[:bundles].to_s.split(","),
+      show_archived_only: params[:show_archived_only] == "true",
+    ).merge(
       purchase_analytics: purchase_analytics_props,
-    }
+      receipt_purchases: presenter.receipt_purchases(tracked_purchase_external_ids),
+    )
   end
 
   def archive
@@ -53,11 +58,15 @@ class LibraryController < Sellers::BaseController
   end
 
   private
-    def purchase_analytics_props
+    def tracked_purchase_external_ids
       raw_ids = params[:purchase_id]
-      external_ids = (raw_ids.is_a?(Array) ? raw_ids : Array(raw_ids))
+      (raw_ids.is_a?(Array) ? raw_ids : Array(raw_ids))
         .select { |id| id.is_a?(String) }
         .first(MAX_TRACKED_PURCHASE_ANALYTICS)
+    end
+
+    def purchase_analytics_props
+      external_ids = tracked_purchase_external_ids
       return {} if external_ids.empty?
 
       logged_in_user.purchases.by_external_ids(external_ids).each_with_object({}) do |purchase, props|

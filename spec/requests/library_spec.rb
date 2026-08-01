@@ -247,7 +247,7 @@ describe("Library Scenario", type: :system, js: true) do
     end
     click_on "Unarchive"
 
-    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_current_path("/library?sort=recently_updated&show_archived_only=true")
     expect(page).to have_product_card(purchase3.link)
     expect(page).to_not have_product_card(purchase1.link)
 
@@ -279,7 +279,7 @@ describe("Library Scenario", type: :system, js: true) do
     click_on "Unarchive"
     wait_for_ajax
 
-    expect(page).to have_current_path("/library?show_archived_only=true&sort=recently_updated")
+    expect(page).to have_current_path("/library?sort=recently_updated&show_archived_only=true")
 
     visit "/library"
     wait_for_ajax

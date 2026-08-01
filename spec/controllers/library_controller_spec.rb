@@ -29,6 +29,31 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         expect(inertia.component).to eq("Library/Index")
         expect(inertia.props[:results]).to be_an(Array)
         expect(inertia.props[:results].map { |r| r.dig(:product, :name) }).to include("Visible Product")
+        expect(inertia.props[:pagination]).to eq(page: 1, pages: 1, from: 1, to: 1, count: 1)
+        expect(inertia.props[:archived_count]).to eq(0)
+        expect(inertia.props[:unarchived_count]).to eq(1)
+        expect(inertia.props[:receipt_purchases]).to eq([])
+      end
+
+      it "passes the filter params through to the presenter and echoes them back" do
+        get :index, params: { sort: "purchase_date", query: "Visible", creators: "abc,def", bundles: "ghi", show_archived_only: "true", page: "1" }
+
+        expect(inertia.props[:search]).to eq(
+          sort: "purchase_date",
+          query: "Visible",
+          creators: ["abc", "def"],
+          bundles: ["ghi"],
+          show_archived_only: true
+        )
+      end
+
+      it "serves the requested page of results" do
+        create_list(:purchase, 15, purchaser: user)
+
+        get :index, params: { page: "2" }
+
+        expect(inertia.props[:pagination]).to eq(page: 2, pages: 2, from: 16, to: 16, count: 16)
+        expect(inertia.props[:results].size).to eq(1)
       end
 
       it "doesn't show refunded purchases" do
@@ -118,6 +143,31 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
         get :index, params: { purchase_id: [other_purchase.external_id] }
 
         expect(inertia.props[:purchase_analytics]).to eq({})
+      end
+    end
+
+    describe "receipt_purchases prop" do
+      it "returns the receipt data for the buyer's purchases named in purchase_id params" do
+        purchase = create(:free_purchase, purchaser: user, link: create(:product))
+
+        get :index, params: { purchase_id: [purchase.external_id] }
+
+        expect(inertia.props[:receipt_purchases]).to eq([
+                                                          {
+                                                            id: purchase.external_id,
+                                                            email: purchase.email,
+                                                            permalink: purchase.link.unique_permalink,
+                                                            has_third_party_analytics: false,
+                                                          }
+                                                        ])
+      end
+
+      it "does not expose purchases that don't belong to the buyer" do
+        other_purchase = create(:free_purchase, link: create(:product))
+
+        get :index, params: { purchase_id: [other_purchase.external_id] }
+
+        expect(inertia.props[:receipt_purchases]).to eq([])
       end
     end
 
