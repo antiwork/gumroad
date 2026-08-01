@@ -179,9 +179,11 @@
   pointer-events: none;
   position: absolute;
   margin: 0;
-  /* ProseMirror's widget is an empty div, so it shrink-to-fits to 0 and the bar below —
-     sized against it — paints nothing. Upstream sidesteps this with a fixed 20px caret. */
-  width: 100%;
+  /* Pin both edges rather than setting a width: an absolutely-positioned box with auto offsets
+     keeps its static left (the CONTENT edge), so `width: 100%` — resolved against the padding
+     box — overhangs padded editors by padding-left and adds horizontal page overflow. */
+  left: 0;
+  right: 0;
 }
 
 .ProseMirror-gapcursor::after {

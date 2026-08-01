@@ -51,11 +51,16 @@ describe("gap cursor styling", () => {
     expect(ourCss).not.toMatch(/^\.ProseMirror\s*\{[^}]*position:\s*relative/mu);
   });
 
-  it("gives the caret host a width, because ProseMirror's widget div is empty", () => {
-    // The host shrink-to-fits to 0 without this, and the ::after bar is sized against it, so
-    // every other assertion here can pass over a caret that paints nothing (measured: 0px).
+  it("pins both edges of the caret host, because ProseMirror's widget div is empty", () => {
+    // The host shrink-to-fits to 0 without this and the ::after bar, sized against it, paints
+    // nothing (measured: 0px). `width: 100%` fixes that but resolves against the padding box
+    // while the box keeps its static content-edge left, overhanging padded editors by 15px and
+    // adding horizontal page overflow — so pin left/right instead.
     const host = /\.ProseMirror-gapcursor\s*\{(?<body>[^}]*)\}/u.exec(ourCss)?.groups?.body ?? "";
-    expect(host).toMatch(/width:\s*100%/u);
+    expect(host).toMatch(/left:\s*0/u);
+    expect(host).toMatch(/right:\s*0/u);
+    // Anchored to a declaration start so the word "width" in the comment above doesn't match.
+    expect(host).not.toMatch(/^\s*width:/mu);
   });
 
   it("draws the caret with the accent colour, so it stays visible in dark mode", () => {
