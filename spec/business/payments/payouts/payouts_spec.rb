@@ -870,6 +870,7 @@ describe Payouts do
       it "skips the seller when not retrying and the cycle has moved past this payout date" do
         create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
                 .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+        expect(payout_date + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
 
         expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([], payout_date.to_s)
 
