@@ -345,23 +345,36 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
 
     record_admin_write(action: "users.flag_for_tos_violation", target: user) do
-      if user.flagged_for_tos_violation?
-        return render json: internal_admin_user_success_payload(user, {
-                                                                  product_id: product.external_id,
-                                                                  status: "already_flagged",
-                                                                  message: "User is already flagged for a policy violation"
-                                                                })
+      # Always take down the reported product: a seller can already be flagged from a
+      # prior listing, but this listing still needs its own enforcement action.
+      already_flagged = user.flagged_for_tos_violation?
+      product_status = nil
+
+      ActiveRecord::Base.transaction do
+        if already_flagged
+          product.comments.create!(
+            content: flag_for_tos_violation_comment_content(product),
+            author_id: current_admin_actor_id,
+            comment_type: Comment::COMMENT_TYPE_FLAGGED
+          )
+        else
+          user.flag_for_tos_violation!(
+            author_id: current_admin_actor_id,
+            product_id: product.id,
+            content: flag_for_tos_violation_comment_content(product)
+          )
+        end
+
+        product_status = product.take_down_for_tos_violation!
       end
 
-      user.flag_for_tos_violation!(
-        author_id: current_admin_actor_id,
-        product_id: product.id,
-        content: flag_for_tos_violation_comment_content(product)
-      )
       render json: internal_admin_user_success_payload(user, {
                                                          product_id: product.external_id,
-                                                         status: "flagged_for_tos_violation",
-                                                         message: "User flagged for a policy violation"
+                                                         status: already_flagged ? "already_flagged" : "flagged_for_tos_violation",
+                                                         product_status:,
+                                                         message: already_flagged ?
+                                                           "User was already flagged for a policy violation; product taken down" :
+                                                           "User flagged for a policy violation; product taken down"
                                                        })
     rescue StateMachines::InvalidTransition => e
       render json: { success: false, message: e.message }, status: :unprocessable_entity

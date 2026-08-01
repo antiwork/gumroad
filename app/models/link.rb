@@ -494,6 +494,7 @@ class Link < ApplicationRecord
   end
 
   def publish!
+    enforce_not_unpublished_by_admin!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
@@ -531,8 +532,30 @@ class Link < ApplicationRecord
 
   def unpublish!(is_unpublished_by_admin: false)
     self.purchase_disabled_at ||= Time.current
-    self.is_unpublished_by_admin = is_unpublished_by_admin
+    self.is_unpublished_by_admin = true if is_unpublished_by_admin
     save!
+  end
+
+  # Staff restore path — the only caller allowed to clear the admin-takedown marker.
+  # The clear rides along in publish!'s save!, so a publish that fails its other
+  # guards leaves the takedown intact.
+  def publish_by_admin!
+    self.is_unpublished_by_admin = false
+    publish!
+  end
+
+  # Memberships are unpublished rather than deleted so existing members keep their access
+  # while the listing comes off sale. Returns the disposition applied, because the caller
+  # cannot infer it afterwards — `alive?` is false for both.
+  def take_down_for_tos_violation!
+    if is_tiered_membership?
+      # Seller publish flows must not be able to reverse an admin takedown.
+      unpublish!(is_unpublished_by_admin: true)
+      "unpublished"
+    else
+      delete!
+      "deleted"
+    end
   end
 
   def publishable?
@@ -1552,6 +1575,13 @@ class Link < ApplicationRecord
       elsif !default_offer_code.applicable?(self)
         errors.add(:default_offer_code, "must apply to this product")
       end
+    end
+
+    def enforce_not_unpublished_by_admin!
+      return unless is_unpublished_by_admin?
+
+      errors.add(:base, "This product was unpublished by Gumroad and cannot be republished by the seller.")
+      raise LinkInvalid, "This product was unpublished by Gumroad and cannot be republished by the seller."
     end
 
     def enforce_user_email_confirmation!

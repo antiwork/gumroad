@@ -93,6 +93,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     # upstream rejection for what was our own timeout.
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     elapsed = 0
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
     allow(client).to receive(:moderations) do |parameters:|
       raise Faraday::ServerError.new("boom") if parameters[:input].size > 1
@@ -142,6 +143,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     # The deadline reads the monotonic clock, which `travel` does not move.
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     elapsed = 0
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
     allow(client).to receive(:moderations) do |parameters:|
       call_inputs << parameters[:input]
@@ -163,6 +165,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     image_urls = (1..5).map { |n| "https://cdn.example.com/#{n}.png" }
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     elapsed = 0
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
     single_input_calls = 0
     allow(client).to receive(:moderations) do |parameters:|
@@ -189,6 +192,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
   it "does not retry a timed-out image once the phase deadline has passed" do
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     elapsed = 0
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
     calls = 0
     allow(client).to receive(:moderations) do |parameters:|
@@ -208,6 +212,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
   it "clamps a fallback request that starts just inside the deadline to the time that is left" do
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     elapsed = 0
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { start + elapsed }
     clamped_client = instance_double(OpenAI::Client)
     allow(clamped_client).to receive(:moderations).and_return({ "results" => [{ "category_scores" => {} }] })
