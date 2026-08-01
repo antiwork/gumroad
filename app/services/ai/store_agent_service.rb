@@ -606,9 +606,12 @@ class Ai::StoreAgentService
       native page, price and buy button included, so it MUST contain a working buy element like
       <a data-gumroad-action="buy">Buy now</a> — without one, buyers cannot purchase the product.
       Product pages do NOT receive the gumroad-data JSON; instead the server fills elements marked
-      data-gumroad-field="name", "price", or "description" with the product's live values on every
-      render. That price is the amount a first-time buyer pays — default offer code applied, and
-      memberships quoted at their default recurrence — matching the native page it replaces.
+      data-gumroad-field="name", "price", "description", "rating", or "review-count" with the
+      product's live values on every render. That price is the amount a first-time buyer pays —
+      default offer code applied, and memberships quoted at their default recurrence — matching
+      the native page it replaces. "rating" and "review-count" write nothing when the seller has
+      reviews hidden or the product has none, so whatever the page already has inside those
+      elements stays — put a sensible fallback there rather than a placeholder.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
       you actually called api_write in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation

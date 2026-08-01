@@ -12,23 +12,19 @@ class Pages::Interpolator
     # with the page this markup replaces.
     "price" => ->(product) { product.price_formatted_verbose(for_default_duration: true, discounted: true).to_s },
     "description" => ->(product) { ActionView::Base.full_sanitizer.sanitize(product.description.to_s) },
-    # Bundles show a combined summary on the native page, so a custom page must too or the
-    # two disagree. Gated on display_product_reviews? — a seller who turned reviews off on
-    # the native page has not opted into publishing them from custom markup.
-    # Nothing is written when reviews are hidden or there are none, so whatever the page
-    # already has inside the element stays: the marker degrades to the author's own copy
-    # rather than rendering "0 reviews" under a brand-new product.
-    "rating" => ->(product) { review_summary(product)&.fetch(:average)&.to_s },
+    # bundle_rating_stats, not rating_stats: the native page merges a bundle's contents' reviews
+    # into one summary (ProductPresenter::ProductProps), so the plain row would disagree with the
+    # page this markup replaces. Trailing ".0" is stripped because the native page renders the
+    # rating as a JSON number, where 4.0 prints as "4".
+    "rating" => ->(product) { review_summary(product)&.fetch(:average)&.to_s&.delete_suffix(".0") },
     "review-count" => ->(product) { review_summary(product)&.fetch(:count)&.to_s },
   }.freeze
 
-  # nil rather than a zeroed hash: the callers above treat nil as "leave the element alone",
-  # which is what makes a hidden or unreviewed product fall back to the author's copy.
   def self.review_summary(product)
     return unless product.display_product_reviews?
 
-    stats = product.is_bundle ? product.bundle_rating_stats : product.rating_stats
-    return if stats[:count].to_i.zero?
+    stats = product.bundle_rating_stats
+    return if stats[:count].zero?
 
     stats
   end
@@ -97,9 +93,9 @@ class Pages::Interpolator
       next unless handler
 
       value = handler.call(product)
-      # nil means "this field has nothing to say" (reviews hidden, or none yet) — leave the
-      # author's own copy in place, matching interpolate_profile. An empty STRING still writes,
-      # so a product with a blank description keeps clearing its placeholder as before.
+      # nil means "leave the author's own copy in place" (reviews hidden, or none yet), matching
+      # interpolate_profile. An empty STRING still writes, so a blank description keeps clearing
+      # its placeholder as before.
       node.inner_html = ERB::Util.h(value) unless value.nil?
     end
 

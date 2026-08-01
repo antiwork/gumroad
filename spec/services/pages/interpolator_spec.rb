@@ -48,9 +48,6 @@ describe Pages::Interpolator do
         expect(result).not_to include("no reviews")
       end
 
-      # A seller who turned reviews off on the native page has not opted into publishing them
-      # from custom markup, so the marker must leave the author's own copy in place rather than
-      # leaking a rating the native page hides.
       it "leaves the element untouched when the seller has reviews hidden" do
         reviewed.update!(display_product_reviews: false)
         html = %(<span data-gumroad-field="rating">Loved by our customers</span>)
@@ -61,18 +58,26 @@ describe Pages::Interpolator do
         expect(result).not_to include("4.5")
       end
 
-      # Writing "0" under a brand-new product is worse than the author's placeholder.
       it "leaves the element untouched when the product has no reviews" do
         html = %(<span data-gumroad-field="review-count">Be the first to review</span>)
 
         result = described_class.interpolate(html, product: product)
 
         expect(result).to include("Be the first to review")
-        expect(result).not_to include(">0<")
+        expect(result).not_to include(%(<span data-gumroad-field="review-count">0</span>))
       end
 
-      # The native bundle page shows its contents' reviews merged in, so a custom bundle page
-      # that showed only the bundle's own count would disagree with the page it replaces.
+      # The native page renders the rating as a JSON number, so 4.0 reaches the buyer as "4".
+      it "renders a whole-number average without a trailing zero" do
+        whole = create(:product).tap { |p| 2.times { review!(p, 4) } }
+
+        result = described_class.interpolate(%(<span data-gumroad-field="rating">x</span>), product: whole.reload)
+
+        expect(result).to include(%(<span data-gumroad-field="rating">4</span>))
+      end
+
+      # The native bundle page merges its contents' reviews in, so a bundle's own row alone
+      # would disagree with the page this markup replaces.
       it "uses the combined bundle summary for a bundle" do
         bundle = create(:product, :bundle, name: "Bundle")
         inner = create(:product, user: bundle.user)
@@ -85,7 +90,6 @@ describe Pages::Interpolator do
         expect(result).to include(%(<span data-gumroad-field="review-count">4</span>))
       end
     end
-
 
     # The native /l/ page this markup replaces auto-applies the default offer code
     # (BestOfferCodeService), so the undiscounted set price would sit next to a checkout that
