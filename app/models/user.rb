@@ -1146,19 +1146,37 @@ class User < ApplicationRecord
   end
 
   # Anchored on the payout account, not the Gumroad signup date: a seller can hold an
-  # account for years before connecting one. A recreated payout account resets this.
+  # account for years before connecting one.
   #
   # Every account a payout could land on has to season: the destination is picked at payout time,
   # so seasoning only the managed account leaves a fresh connected account as a hole.
+  #
+  # An account inherits seasoning from the retired account of the same kind it replaced. A country
+  # change or payout-method switch retires one row and creates another, and reading only the live
+  # row restarts the clock on a seller who has been processing with us for years. A newly connected
+  # rail has no predecessor to inherit from, so it still seasons on its own.
   def stripe_accounts_seasoned_for_instant_payouts?
     managed_account = stripe_account
     return false if managed_account.nil?
 
     [managed_account, stripe_connect_account].compact.all? do |account|
-      account.created_at <= MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
+      seasoned_for_instant_payouts?(account)
     end
   end
   private :stripe_accounts_seasoned_for_instant_payouts?
+
+  def seasoned_for_instant_payouts?(account)
+    cutoff = MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
+    return true if account.created_at <= cutoff
+
+    same_kind = merchant_accounts.stripe.select do |candidate|
+      candidate.id != account.id &&
+        candidate.is_a_stripe_connect_account? == account.is_a_stripe_connect_account?
+    end
+
+    same_kind.any? { |predecessor| predecessor.created_at <= cutoff }
+  end
+  private :seasoned_for_instant_payouts?
 
   def instant_payouts_supported?
     eligible_for_instant_payouts? && (active_bank_account&.supports_instant_payouts? || false)

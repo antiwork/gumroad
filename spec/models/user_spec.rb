@@ -3610,8 +3610,17 @@ describe User, :vcr do
     end
 
     # A payout-method switch, country change or admin recreation makes a fresh
-    # MerchantAccount row, so a long-standing seller re-seasons from zero.
-    it "returns false when a seller with many payouts has a freshly recreated account" do
+    # MerchantAccount row. Seasoning is inherited from the account it replaced, so a
+    # long-standing seller does not re-season from zero.
+    it "stays eligible when a seller's account was recreated but an older retired one exists" do
+      create_list(:payment_completed, 4, user:)
+      merchant_account.mark_deleted!
+      create(:merchant_account, user:, created_at: 10.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+    end
+
+    it "returns false when the only account ever held is younger than 60 days" do
       create_list(:payment_completed, 4, user:)
       merchant_account.update!(created_at: 10.days.ago)
 
@@ -3642,6 +3651,21 @@ describe User, :vcr do
 
       it "returns true once both accounts are seasoned" do
         create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+      end
+
+      # The seasoned managed account must not lend its age to a different rail: a fresh
+      # connected account is a new destination, not a replacement for the managed one.
+      it "returns false for a fresh connected account even though the managed one is seasoned" do
+        create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
+
+      it "returns true when a fresh connected account replaced an older retired connected one" do
+        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago).mark_deleted!
+        create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
 
         expect(user.reload.eligible_for_instant_payouts?).to eq(true)
       end
