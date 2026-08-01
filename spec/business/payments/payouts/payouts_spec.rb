@@ -835,8 +835,9 @@ describe Payouts do
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
-      # The cycle is Friday-anchored, so on a Saturday `Date.today - 1` IS the current
-      # payout date and "the cycle has moved past it" stops being true. Pin a Wednesday.
+      # The premise "the cycle has moved past payout_date" only holds Wed-Fri: earlier in the
+      # week the next-Friday cycle still covers the balance dated payout_date - 3, so the gate
+      # pays instead of skipping. Pin a Wednesday.
       before do
         travel_to Time.utc(2026, 7, 29, 12, 0, 0)
         create(:balance, user: seller, date: payout_date - 3, amount_cents: 1000_00)
@@ -866,6 +867,7 @@ describe Payouts do
       it "skips the seller when not retrying and the cycle has moved past this payout date" do
         create(:payment, user: seller, payout_period_end_date: payout_date, state: "processing")
                 .mark_failed!(Payment::FailureReason::PROCESSOR_RATE_LIMITED)
+        expect(payout_date + User::PayoutSchedule::PAYOUT_DELAY_DAYS).to be < seller.reload.next_payout_cycle_date
 
         expect(PaypalPayoutProcessor).to receive(:enqueue_payments).with([], payout_date.to_s)
 
