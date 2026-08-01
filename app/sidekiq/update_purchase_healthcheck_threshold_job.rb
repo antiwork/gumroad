@@ -17,17 +17,20 @@ class UpdatePurchaseHealthcheckThresholdJob
   # Survives ~6 missed runs, then the endpoint fails closed on the absent key.
   THRESHOLD_TTL = 1.hour
 
+  sidekiq_options retry: 0, queue: :critical, lock: :until_executed
+
   # A SIGKILL (OOM, deploy pod reap) skips the `ensure` that releases an
   # `until_executed` lock, and this job's digest is constant because it takes no
   # arguments — so one stranded lock silently drops every subsequent enqueue
   # (gumroad-private#1576). That failure is worse here than elsewhere: the
   # threshold key then expires and the healthcheck it feeds goes quiet in exactly
-  # the conditions that kill workers. Bounded above a slow run (seven windowed
-  # COUNTs on purchases) and far below THRESHOLD_TTL, so a strand costs a couple
-  # of refreshes rather than the page.
-  LOCK_TTL = 2.minutes
-
-  sidekiq_options retry: 0, queue: :critical, lock: :until_executed, lock_ttl: LOCK_TTL.to_i
+  # the conditions that kill workers. A minute covers a slow run (seven windowed
+  # COUNTs on purchases); the resulting TTL still sits far below THRESHOLD_TTL, so
+  # a strand costs a few refreshes rather than the page. Like the other per-minute
+  # job here, the interval is below any survivable attempt, so no TTL clears both
+  # bounds and safety wins.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.minute
 
   def perform
     now = Time.current
