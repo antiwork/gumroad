@@ -29,16 +29,11 @@ class OfferCodeDiscountComputingService
 
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
-      # A fixed-amount code is an amount off the order, not off every line: applying it
-      # per line multiplies the seller's intended discount by cart breadth. Once it has
-      # landed on a line, later lines are skipped silently — that is the design, not an
-      # ineligibility, so it must not poison error_code for the whole cart.
-      #
-      # Known limit: when that line costs less than the code, the remainder is dropped
-      # rather than spilling onto later lines. Spilling is not expressible today —
-      # purchases carry only offer_code_id, so checkout re-derives the full amount_cents
-      # per line (Purchase#offer_amount_off) and a partial amount cannot be charged.
-      # Closing it needs an order-level discount or a per-line amount on the purchase.
+      # A fixed-amount code is an amount off the order, so later lines are skipped by
+      # design, not for ineligibility — this must not poison error_code for the cart.
+      # Any remainder on the discounted line is dropped: a partial amount cannot be
+      # charged while Purchase#offer_amount_off re-derives the full amount_cents.
+      # Tracked in gumroad-private#1650.
       next if once_per_cart?(offer_code) && already_applied?(offer_code)
 
       units = usage_units(offer_code, purchase_quantity)

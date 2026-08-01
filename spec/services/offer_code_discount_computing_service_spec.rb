@@ -80,10 +80,9 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].size).to eq(2)
     end
 
-    # Pins the known limit documented at the skip in #process: the code lands whole on one
-    # line and any remainder is dropped, because a purchase stores only offer_code_id and
-    # checkout re-derives the full amount_cents. If this ever spills across lines, that is a
-    # deliberate change and this example should fail rather than pass silently.
+    # Pins the limit documented at the skip in #process (gumroad-private#1650): the code lands
+    # whole on one line and the remainder is dropped. Spilling it across lines is a deliberate
+    # change and should redden here rather than pass silently.
     it "drops the remainder when the discounted line costs less than the code" do
       cheap = create(:product, user: seller, price_cents: 300)
       dearer = create(:product, user: seller, price_cents: 400)
