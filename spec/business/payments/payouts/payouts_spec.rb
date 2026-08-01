@@ -832,6 +832,13 @@ describe Payouts do
     end
 
     describe "payout schedule" do
+      # These examples need a payout_date whose cycle has already been spent, which only holds
+      # when payout_date falls midweek: the cycle is anchored on the platform's Friday, so a
+      # payout_date of Fri-Mon still advances to the very next Friday and lands exactly on
+      # payout_date + PAYOUT_DELAY_DAYS rather than past it. Pin the clock so the scenario does
+      # not depend on the day the suite happens to run.
+      before { travel_to Date.new(2026, 8, 6).in_time_zone("UTC").change(hour: 12) }
+
       let(:seller) { create(:compliant_user, payment_address: "seller@example.com") }
       let(:payout_date) { Date.today - 1 }
 
