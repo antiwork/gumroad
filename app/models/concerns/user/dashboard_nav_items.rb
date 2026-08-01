@@ -16,15 +16,24 @@ module User::DashboardNavItems
   SEEDED_MARKER = "seeded"
 
   included do
-    has_many :dashboard_nav_promotions
+    has_many :dashboard_nav_promotions, dependent: :delete_all
+  end
+
+  # The keys are memoized per instance, so a reload has to drop them or a caller that reloads to
+  # observe a write still sees the pre-write list.
+  def reload(...)
+    @loaded_nav_items = nil
+    super
   end
 
   def dashboard_nav_items_seeded?
-    dashboard_nav_promotions.exists?
+    loaded_nav_items.any?
   end
 
+  # Read once per request. Every nav render asks for this several times, and `pluck` would go to
+  # the database each time — the callbacks run on every dashboard page load.
   def promoted_nav_item_keys
-    dashboard_nav_promotions.pluck(:nav_item) & DashboardNav::PROMOTABLE_ITEMS
+    loaded_nav_items & DashboardNav::PROMOTABLE_ITEMS
   end
 
   # Records that this user has used `item`, returning the resulting key list. No-op when the item is
@@ -44,10 +53,18 @@ module User::DashboardNavItems
   end
 
   private
+    def loaded_nav_items
+      @loaded_nav_items ||= dashboard_nav_promotions.pluck(:nav_item)
+    end
+
     # insert_all skips rows the unique index already holds, so two requests seeding or promoting
-    # concurrently both land whatever the other did not.
+    # concurrently both land whatever the other did not. It bypasses Active Record, so the memo is
+    # ours to invalidate.
     def record_nav_items(items)
+      return promoted_nav_item_keys if items.empty?
+
       DashboardNavPromotion.insert_all(items.map { |item| { user_id: id, nav_item: item } })
+      @loaded_nav_items = nil
       promoted_nav_item_keys
     end
 end

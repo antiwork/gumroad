@@ -153,4 +153,44 @@ describe User::DashboardNavItems do
       expect(stale.reload.dashboard_nav_items_seeded?).to be true
     end
   end
+
+  describe "reads on a warm page load" do
+    it "queries the promotions table once however many times the nav asks" do
+      user.promote_nav_item!("workflows")
+      fresh = User.find(user.id)
+
+      reads = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        reads << payload[:sql] if payload[:sql].include?("dashboard_nav_promotions")
+      end
+
+      # The callbacks and the nav presenter each ask; a per-call pluck would go to the database
+      # every time, on every dashboard page load.
+      3.times { fresh.promoted_nav_item_keys }
+      fresh.dashboard_nav_items_seeded?
+
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+      expect(reads.size).to eq 1
+    end
+
+    it "drops the memo on reload, so a caller observing its own write is not stale" do
+      fresh = User.find(user.id)
+      expect(fresh.promoted_nav_item_keys).to eq []
+
+      User.find(user.id).promote_nav_item!("workflows")
+
+      expect(fresh.reload.promoted_nav_item_keys).to eq %w[workflows]
+    end
+  end
+
+  describe "user deletion" do
+    it "takes its promotions with it rather than orphaning rows" do
+      user.promote_nav_item!("workflows")
+      id = user.id
+
+      user.destroy
+
+      expect(DashboardNavPromotion.where(user_id: id)).to be_empty
+    end
+  end
 end
