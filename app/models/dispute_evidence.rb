@@ -93,14 +93,8 @@ class DisputeEvidence < ApplicationRecord
     (SUBMIT_EVIDENCE_WINDOW_DURATION_IN_HOURS - (Time.current - seller_contacted_at) / 1.hour).round
   end
 
-  # Hours the seller has left to ADD anything, which is not the same as hours left on the clock.
-  # Stripe accepts exactly one evidence submission per dispute, so the moment seller_submitted_at
-  # or resolved_at is stamped the slot is spent and no later upload can be filed — while the raw
-  # 72-hour arithmetic keeps counting down. Support read "68 hours" off this on dispute 127291 and
-  # invited a seller to assemble evidence that could never be filed (gumroad-private#1612).
-  #
-  # The two schedulers deciding WHEN we file with the card network must not read this: to them a
-  # spent slot must not look like an expired window. They call hours_left_in_window directly.
+  # Zero once the single submission slot is spent, even while hours_left_in_window is still
+  # positive. The filing schedulers must NOT read this — a spent slot is not an expired window.
   def hours_left_to_submit_evidence
     return 0 if self.class.evidence_submission_closed?(seller_submitted_at:, resolved_at:)
 
