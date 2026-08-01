@@ -81,7 +81,7 @@ const COUNTRY_EXAMPLES: {
   example: string;
   pattern: string;
 }[] = [
-  { code: "MA", label: "IBAN", example: "MA64011519000001205000534921", pattern: "MA[0-9]{20,26}" },
+  { code: "MA", label: "IBAN", example: "MA64011519000001205000534921", pattern: "MA[0-9]{26}" },
   { code: "SN", label: "IBAN", example: "SN08SN0100152000048500003035", pattern: "SN[0-9SN]{20,26}" },
   { code: "RS", label: "IBAN", example: "RS35260005601001611379", pattern: "RS[0-9]{18,20}" },
   { code: "MD", label: "IBAN", example: "MD24AG000225100013104168", pattern: "MD[0-9]{2}[A-Z0-9]{20}" },
