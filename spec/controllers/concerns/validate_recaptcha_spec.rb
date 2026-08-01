@@ -269,6 +269,102 @@ describe ValidateRecaptcha, type: :controller do
         expect(response).to have_http_status(:unprocessable_entity)
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
+
+      # Google reports the hostname as the browser sent it, so an absolute FQDN arrives with
+      # its trailing dot intact. gumroad-private#1634.
+      it "passes checkout on the apex written as an absolute FQDN" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "#{DOMAIN}.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "passes checkout on a seller subdomain written as an absolute FQDN" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "seller.#{ROOT_DOMAIN}.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "passes checkout on a registered custom domain written as an absolute FQDN" do
+        create(:custom_domain, domain: "shop.example.com")
+
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "shop.example.com.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      it "passes checkout when the hostname arrives uppercased" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "Seller.#{ROOT_DOMAIN.upcase}")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
+
+      # Normalizing must not widen the allowlist: a lookalike that merely ends with our domain
+      # text stays refused. This one would catch an end_with?(ROOT_DOMAIN) regression that drops
+      # the separating dot.
+      it "still fails checkout on a lookalike host that merely ends with our domain text" do
+        allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "evil-#{ROOT_DOMAIN}.")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      # A bare "." is not blank, so it reaches the comparisons as the empty string. None of the
+      # three match it.
+      it "still fails checkout when the hostname is only a dot" do
+        allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: ".")
+
+        post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      # Only the top level of Google's response is guaranteed to be an object, so the hostname can
+      # be any JSON scalar. Without the type guard these raise instead of failing verification.
+      [true, 123].each do |malformed_hostname|
+        it "fails checkout without raising when the hostname is #{malformed_hostname.inspect}" do
+          allow(CustomDomain).to receive(:find_by_host).and_return(nil)
+          stub_recaptcha_response(valid: true, score: 0.7, hostname: malformed_hostname)
+
+          post :checkout_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq("captcha_failed")
+        end
+      end
+    end
+
+    context "with the follow surface" do
+      before do
+        allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("production"))
+      end
+
+      # The surface the incident was reported on. Shares hostname_allowed? with checkout, so this
+      # pins no extra code — it ties the regression to where sellers saw it.
+      it "passes follow on a seller subdomain written as an absolute FQDN" do
+        stub_recaptcha_response(valid: true, score: 0.7, hostname: "seller.#{ROOT_DOMAIN}.")
+
+        post :follow_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+        expect(parsed_body["success"]).to be true
+      end
     end
   end
 

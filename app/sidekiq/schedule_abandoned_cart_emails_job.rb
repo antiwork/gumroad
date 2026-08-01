@@ -70,11 +70,22 @@ class ScheduleAbandonedCartEmailsJob
       cart_product_ids_with_cart_ids = {}
       cart_ids = abandoned_cart_ids(window)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
-        Cart.includes(:alive_cart_products).where(id: batch_ids).each do |cart|
-          next if cart.user_id.blank? && cart.email.blank?
+        carts = Cart.includes(:alive_cart_products, :user).where(id: batch_ids).reject do |cart|
+          cart.user_id.blank? && cart.email.blank?
+        end
+        purchased_product_ids_by_cart_id = Cart.purchased_product_ids_by_cart_id(carts)
+
+        carts.each do |cart|
+          purchased_product_ids = purchased_product_ids_by_cart_id[cart.id] || []
 
           cart.alive_cart_products.each do |cart_product|
             product_id = cart_product.product_id
+            # Reminding someone about a product they already bought reads as an unfinished
+            # order and brings them in asking whether they were charged twice
+            # (gumroad-private#1626). Filtered per product, not per cart, so a genuinely
+            # mixed cart still earns an email about the part that is unbought.
+            next if purchased_product_ids.include?(product_id)
+
             variant_id = cart_product.option_id
             cart_product_ids_with_cart_ids[product_id] ||= {}
             cart_product_ids_with_cart_ids[product_id][cart.id] ||= []
