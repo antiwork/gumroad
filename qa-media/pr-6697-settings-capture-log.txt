@@ -1,0 +1,17 @@
+# PR 6697 — Settings → Payments refusal capture, run against x-revision 6079665cc07f
+
+MARK reset payment_address="refused-qa6697@example.com"
+MARK terminal_for_refused=true
+MARK terminal_for_clean=false
+MARK standing_rejection payment=2 reason="PAYPAL 3148"
+
+## refusal capture (pr-6697-settings-refusal-capture.cjs)
+MARK desktop props={"modal":false,"paypal_address":"refused-qa6697@example.com"}
+MARK desktop typed=refused-qa6697@example.com
+MARK desktop alert="PayPal won't accept payouts to that account. Please use a different PayPal account." http=303
+MARK mobile375 alert="PayPal won't accept payouts to that account. Please use a different PayPal account." http=303
+
+## control capture (pr-6697-settings-control-capture.cjs)
+MARK control before=refused-qa6697@example.com
+MARK control alert="Thanks! You're all set."
+MARK control persisted=clean-qa6697@example.com
