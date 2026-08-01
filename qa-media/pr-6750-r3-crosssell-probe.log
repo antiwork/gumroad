@@ -1,0 +1,41 @@
+MARK6750R3 seller=1 revision=dce54b326d97
+MARK6750R3 SEED A=demo/1000 B=c/1000 X=of/3000
+MARK6750R3 SEED upsell=3 cross_sell=true target=of off=["demo"]
+MARK6750R3 SEED oc=QA6750FIXED/100c is_cents=true pct=QA6750PCT/10
+MARK6750R3 SEED cross_sells_of_A=["of"]
+MARK6750R3 ARM1-XFIRST line of cents=100 type=fixed
+MARK6750R3 ARM1-XFIRST line demo cents=0 type=fixed
+MARK6750R3 ARM1-XFIRST line c cents=0 type=fixed
+MARK6750R3 ARM1-XFIRST lines=3 positive=1 discount_sum=100
+MARK6750R3 ARM1-XFIRST error=nil partial=nil
+MARK6750R3 ARM2-AFIRST line demo cents=100 type=fixed
+MARK6750R3 ARM2-AFIRST line of cents=0 type=fixed
+MARK6750R3 ARM2-AFIRST line c cents=0 type=fixed
+MARK6750R3 ARM2-AFIRST lines=3 positive=1 discount_sum=100
+MARK6750R3 ARM2-AFIRST error=nil partial=nil
+MARK6750R3 ORDER-INDEPENDENT xfirst=100 afirst=100 agree=true
+MARK6750R3 ARM3-CROSSSELL-ONLY line demo cents=100 type=fixed
+MARK6750R3 ARM3-CROSSSELL-ONLY line of cents=0 type=fixed
+MARK6750R3 ARM3-CROSSSELL-ONLY line c cents=0 type=fixed
+MARK6750R3 ARM3-CROSSSELL-ONLY lines=3 positive=1 discount_sum=100
+MARK6750R3 ARM3-CROSSSELL-ONLY error=nil partial=nil
+MARK6750R3 ARM4-PCT line of cents= type=percent
+MARK6750R3 ARM4-PCT line demo cents= type=percent
+MARK6750R3 ARM4-PCT line c cents= type=percent
+MARK6750R3 ARM4-PCT lines=3 positive=0 discount_sum=0
+MARK6750R3 ARM4-PCT error=nil partial=nil
+MARK6750R3 GUARD present_in_head=true
+MARK6750R3 PREFIX-XFIRST line of cents=0 type=fixed
+MARK6750R3 PREFIX-XFIRST line demo cents=0 type=fixed
+MARK6750R3 PREFIX-XFIRST line c cents=0 type=fixed
+MARK6750R3 PREFIX-XFIRST lines=3 positive=0 discount_sum=0
+MARK6750R3 PREFIX-XFIRST error=nil partial=nil
+MARK6750R3 PREFIX-AFIRST line demo cents=100 type=fixed
+MARK6750R3 PREFIX-AFIRST line of cents=0 type=fixed
+MARK6750R3 PREFIX-AFIRST line c cents=0 type=fixed
+MARK6750R3 PREFIX-AFIRST lines=3 positive=1 discount_sum=100
+MARK6750R3 PREFIX-AFIRST error=nil partial=nil
+MARK6750R3 PREFIX xfirst=0 afirst=100 order_dependent=true
+MARK6750R3 POSTFIX xfirst=100 afirst=100 order_dependent=false
+MARK6750R3 CHARGE per_line=[100, 100, 100] sum=300 vs QUOTE=100
+MARK6750R3 DONE
