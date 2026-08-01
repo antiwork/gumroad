@@ -240,6 +240,8 @@ describe("formatCheckoutPrice", () => {
 });
 
 describe("getCheckoutListedCurrencyDisplay", () => {
+  type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+
   // A BRL product paid with Pix: the element mounts in BRL, the charge bills the listed
   // R$49.90 directly, and there is no FX quote anywhere in the flow.
   const listedCurrencyPayment = (
@@ -247,7 +249,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
       currency: "brl",
       subunit_to_unit: 100,
     },
-  ): CheckoutPaymentConfig => ({
+  ): ClientConfirmPayment => ({
     integration: "payment_element_client_confirm",
     fallback_reason: null,
     recurring_upi_registration: false,
@@ -276,7 +278,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     },
   ];
 
-  const recurringUpiPayment = (): CheckoutPaymentConfig => ({
+  const recurringUpiPayment = (): ClientConfirmPayment => ({
     ...listedCurrencyPayment({ currency: "inr", subunit_to_unit: 100 }),
     recurring_upi_registration: true,
     elements_options: {
