@@ -1,12 +1,14 @@
+# frozen_string_literal: true
+
 rows = [
-  ["Hi {{first_name}}, thanks!",        {purchase: nil, purchaser_name: "Jordi Bruin"}],
+  ["Hi {{first_name}}, thanks!",        { purchase: nil, purchaser_name: "Jordi Bruin" }],
   ["Hi {{first_name}}, thanks!",        {}],
   ["Hi {{first_name|friend}}, thanks!", {}],
-  ["Hi {{first_name|friend}}, thanks!", {purchaser_name: "Sahil Lavingia"}],
-  ["Thanks everyone!",                  {purchaser_name: "Jordi Bruin"}],
+  ["Hi {{first_name|friend}}, thanks!", { purchaser_name: "Sahil Lavingia" }],
+  ["Thanks everyone!",                  { purchaser_name: "Jordi Bruin" }],
 ]
 puts "recipient name                | template                            | rendered"
-puts "-"*110
+puts "-" * 110
 rows.each do |tpl, r|
   name = r[:purchaser_name] || "(none - e.g. follower or free buyer)"
   fn = PostEmailPersonalization.first_token(r[:purchaser_name])
