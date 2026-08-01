@@ -224,6 +224,19 @@ class Api::V2::LinksController < Api::V2::BaseController
       return render_response(false, message: "'#{params[:price_currency_type]}' is not a supported currency.")
     end
 
+    # Changing currency means re-denominating every alive Price row, and this
+    # endpoint can only carry the buy and rental amounts. A product whose prices
+    # live elsewhere (tier variants) or span several recurrences would migrate
+    # only partially and silently, so refuse rather than half-convert it.
+    if params.key?(:price_currency_type) && currency != @product.price_currency_type
+      if @product.is_tiered_membership
+        return render_response(false, message: "Currency cannot be updated for tiered membership products. Use the variant endpoints to manage tier pricing.")
+      end
+      if @product.has_multiple_recurrences?
+        return render_response(false, message: "Currency cannot be updated for products with multiple payment options. Update them in the product editor.")
+      end
+    end
+
     if params.key?(:custom_html) && !Feature.active?(:custom_html_pages, current_resource_owner)
       return render_response(false, message: "You do not have access to custom HTML pages.")
     end
@@ -334,17 +347,19 @@ class Api::V2::LinksController < Api::V2::BaseController
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)
         attrs[:custom_permalink] = params[:custom_permalink] if params.key?(:custom_permalink)
-        # Currency before price, and never one without the other. On a persisted
-        # product `price_cents=` writes a Price row scoped to whatever
-        # price_currency_type is set at that moment, so assigning price first
-        # lands the row in the OLD currency and the default_price_cents
-        # validation then finds nothing in the new one. A currency-only change
-        # has the same problem from the other side: nothing else creates a row
-        # in the target currency, so carry the current amount across.
+        # Currency before price: on a persisted product `price_cents=` writes a
+        # Price row scoped to the currency set at that moment. A currency change
+        # carries the current amounts across so rows exist in the target
+        # currency — rental included, or a buy_and_rent product silently loses
+        # its rental offer.
         if params.key?(:price_currency_type)
           attrs[:price_currency_type] = currency
-          current_price_cents = @product.default_price_cents
-          attrs[:price_cents] = current_price_cents if current_price_cents.present?
+          buy_price_cents = @product.default_price_cents
+          attrs[:price_cents] = buy_price_cents if buy_price_cents.present?
+          if @product.rentable?
+            rental_price_cents = @product.rental_price_cents
+            attrs[:rental_price_cents] = rental_price_cents if rental_price_cents.present?
+          end
         end
         attrs[:price_cents] = params[:price] if params.key?(:price)
         attrs[:customizable_price] = params[:customizable_price] if params.key?(:customizable_price)
