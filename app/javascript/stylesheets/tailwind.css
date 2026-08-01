@@ -159,11 +159,18 @@
 }
 
 /* Gap cursor: the caret you get when clicking beside an atom node (a file embed, upsell card,
-   video). `injectCSS: false` in baseEditorOptions drops Tiptap's stylesheet, which is the only
-   place these rules ship — without them the caret is `display: none` and a leading file block
-   looks like an uneditable page (gumroad-private#1652). Styled like the drop cursor rather than
-   upstream's 20px black hairline: black disappears in dark mode, and the accent bar is already
-   what this editor uses to mean "your content lands here". */
+   video). Without these rules the caret is upstream's 20px black hairline, which is invisible on
+   a dark background and reads as an uneditable page (gumroad-private#1652). The accent bar is
+   already what this editor uses to mean "your content lands here".
+
+   ⚠️ Every selector here carries a leading `.ProseMirror` for SPECIFICITY, not for scoping.
+   `baseEditorOptions` sets `injectCSS: false`, but sibling editors built with a bare `useEditor`
+   (the page-name field in ContentTab/PageTab, the tab-name field in Profile/EditPage) leave it at
+   its `true` default, and Tiptap's `createStyleTag` appends ONE shared `style[data-tiptap-style]`
+   carrying upstream's gapcursor rules to <head> at editor-construction time. A bare
+   `.ProseMirror-gapcursor` here ties that tag on specificity and loses on document order, so the
+   caret renders as the black hairline in the built app while every source-level test passes.
+   Verified on the hosted preview: 20px/1px black before, 816px/4px accent after. */
 
 /* The caret is absolutely positioned and needs the editor as its containing block, but
    `position: relative` unconditionally raises .ProseMirror above the empty-state overlay that
@@ -174,7 +181,7 @@
   position: relative;
 }
 
-.ProseMirror-gapcursor {
+.ProseMirror .ProseMirror-gapcursor {
   display: none;
   pointer-events: none;
   position: absolute;
@@ -185,7 +192,7 @@
   right: 0;
 }
 
-.ProseMirror-gapcursor::after {
+.ProseMirror .ProseMirror-gapcursor::after {
   content: "";
   display: block;
   position: absolute;
@@ -195,7 +202,7 @@
   animation: prosemirror-gapcursor-blink 1.1s steps(2, start) infinite;
 }
 
-.ProseMirror-focused .ProseMirror-gapcursor {
+.ProseMirror.ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
 
