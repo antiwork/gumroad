@@ -2112,25 +2112,18 @@ describe Ai::StoreAgentService do
     # webhook sends the creator to a screen that will never fire the event they asked for.
     let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
 
-    it "qualifies Ping as sales-only wherever it is offered" do
-      expect(prompt).to include("Settings > Advanced > Ping")
-      expect(prompt).to match(/Settings > Advanced > Ping[^.]*SALES ONLY/)
+    # Every mention, not just one: a single qualified sentence elsewhere in the prompt would let an
+    # unqualified "direct creators to Ping" be reintroduced with this spec still green.
+    it "qualifies Ping as sales-only at every mention" do
+      mentions = prompt.scan(/.{0,120}Settings > Advanced > Ping.{0,120}/)
+
+      expect(mentions.size).to eq(1)
+      mentions.each { expect(_1).to match(/SALES ONLY/) }
     end
 
-    it "does not present Ping as a replacement for the non-sale resource names" do
-      expect(prompt).to include("cancellation, refund, dispute, or subscription")
+    it "names the self-serve route that does cover the non-sale events" do
       expect(prompt).to include("cannot create webhooks")
-    end
-
-    it "matches what the delivery gate actually does with notification_endpoint" do
-      user = create(:user, notification_endpoint: "https://example.com/hook")
-
-      expect(user.urls_for_ping_notification(ResourceSubscription::SALE_RESOURCE_NAME))
-        .to eq([[user.notification_endpoint, user.notification_content_type]])
-
-      (ResourceSubscription::VALID_RESOURCE_NAMES - [ResourceSubscription::SALE_RESOURCE_NAME]).each do |resource_name|
-        expect(user.urls_for_ping_notification(resource_name)).to be_empty, "#{resource_name} unexpectedly reached the Ping endpoint"
-      end
+      expect(prompt).to match(/Settings > Advanced > Applications/)
     end
   end
 end

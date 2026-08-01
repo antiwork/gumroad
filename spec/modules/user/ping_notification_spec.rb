@@ -69,6 +69,17 @@ describe User::PingNotification do
       expect(post_urls).to match_array([[user.notification_endpoint, user.notification_content_type]])
     end
 
+    # Ai::StoreAgentService's system prompt tells creators Ping is sales-only and routes every other
+    # event type elsewhere. If notification_endpoint ever starts firing on another resource, that
+    # advice becomes wrong — redden here rather than in the prompt.
+    it "never sends notification_endpoint anything but 'sale'" do
+      user = create(:user, notification_endpoint: "http://notification.com")
+
+      (ResourceSubscription::VALID_RESOURCE_NAMES - [ResourceSubscription::SALE_RESOURCE_NAME]).each do |resource_name|
+        expect(user.urls_for_ping_notification(resource_name)).to be_empty, "#{resource_name} unexpectedly reached the Ping endpoint"
+      end
+    end
+
     it "contains the post_urls and content_type for the respective resources based on input parameter" do
       user = create(:user, notification_endpoint: "http://notification.com")
       oauth_app = create(:oauth_application, owner: user)

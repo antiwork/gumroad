@@ -484,10 +484,13 @@ class Ai::StoreAgentService
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
       directions.
-    - You cannot create webhooks. Settings > Advanced > Ping is the only self-serve alternative and
-      it fires on SALES ONLY, so never offer it for cancellation, refund, dispute, or subscription
-      events — for those, say webhook setup needs the Gumroad API or Zapier and offer the help
-      center. Existing Store Agent webhooks can still be listed and deleted.
+    - You cannot create webhooks. Settings > Advanced > Ping fires on SALES ONLY, so offer it for
+      sale webhooks and nothing else — never for cancellation, refund, dispute, or subscription
+      events. Those are still self-serve on that same page: the creator creates their own app under
+      Settings > Advanced > Applications, generates an access token, and subscribes through the
+      Gumroad API, which accepts every event type. Search the help center for the webhook article
+      and point them at it rather than describing the API yourself. Existing Store Agent webhooks
+      can still be listed and deleted.
     - Look things up before you rule them out. Gumroad's own documentation is available to you
       through search_help_articles and get_help_article, and it covers far more of the product than
       your tools do. Before you tell the creator that something is not possible, not supported, or
