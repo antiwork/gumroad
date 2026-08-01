@@ -2,7 +2,6 @@ import { CheckCircle, ChevronsDownUp, ChevronsUpDown, Circle, X } from "@boxicon
 import { Link } from "@inertiajs/react";
 import cx from "classnames";
 import * as React from "react";
-import typia from "typia";
 
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { request } from "$app/utils/request";
@@ -10,6 +9,7 @@ import { request } from "$app/utils/request";
 import { ActivityFeed, ActivityItem } from "$app/components/ActivityFeed";
 import { Button, NavigationButton } from "$app/components/Button";
 import { useAppDomain } from "$app/components/DomainSettings";
+import { type EmailConfirmation, EmailConfirmationBanner } from "$app/components/EmailConfirmationBanner";
 import { CliIcon } from "$app/components/icons/getting-started/CliIcon";
 import { CustomizeProfileIcon } from "$app/components/icons/getting-started/CustomizeProfileIcon";
 import { EmailBlastIcon } from "$app/components/icons/getting-started/EmailBlastIcon";
@@ -23,7 +23,6 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { PasskeySetupPrompt } from "$app/components/PasskeySetupPrompt";
 import { ProductIconCell } from "$app/components/ProductsPage/ProductIconCell";
-import { showAlert } from "$app/components/server-components/Alert";
 import { DownloadTaxFormsPopover } from "$app/components/server-components/DashboardPage/DownloadTaxFormsPopover";
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
@@ -70,10 +69,7 @@ export type DashboardPageProps = {
   };
   activity_items: ActivityItem[];
   stripe_verification_message?: string | null;
-  email_confirmation?: {
-    email: string;
-    can_resend: boolean;
-  } | null;
+  email_confirmation?: EmailConfirmation | null;
   tax_forms: Record<number, string>;
   show_1099_download_notice: boolean;
   tax_center_enabled: boolean;
@@ -308,71 +304,6 @@ const ProductsTable = ({ sales }: TableProps) => {
 
 const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 
-// Deliberately not dismissible: an unconfirmed email keeps blocking publishing,
-// payouts, and API access until it's fixed, so the reminder stays up until the
-// seller actually confirms.
-const EmailConfirmationBanner = ({
-  email_confirmation,
-}: {
-  email_confirmation: NonNullable<DashboardPageProps["email_confirmation"]>;
-}) => {
-  const [resendState, setResendState] = React.useState<"initial" | "sending" | "sent">("initial");
-
-  const resendConfirmationEmail = async () => {
-    setResendState("sending");
-    try {
-      const response = await request({
-        method: "POST",
-        url: Routes.resend_confirmation_email_settings_main_path(),
-        accept: "json",
-      });
-      if (!response.ok) throw new Error();
-      // The endpoint replies 200 with { success: false } when the resend was
-      // rejected — the only rejection case is that there is nothing left to
-      // confirm (e.g. the email was confirmed in another tab while the banner
-      // was still up), so tell the seller that instead of a generic error.
-      const responseData = typia.assert<{ success: boolean }>(await response.json());
-      if (!responseData.success) {
-        setResendState("initial");
-        showAlert("Your email address is already confirmed — refresh the page to update your dashboard.", "error");
-        return;
-      }
-      setResendState("sent");
-    } catch {
-      setResendState("initial");
-      showAlert("Sorry, something went wrong. Please try again.", "error");
-    }
-  };
-
-  return (
-    <Alert variant="warning">
-      <span>
-        Please confirm your email address (<b>{email_confirmation.email}</b>) — some features are unavailable until you
-        do.
-        {email_confirmation.can_resend ? (
-          <>
-            {" "}
-            {resendState === "sent" ? (
-              "Confirmation email sent!"
-            ) : (
-              <button
-                className="cursor-pointer underline all-unset"
-                disabled={resendState === "sending"}
-                onClick={(e) => {
-                  e.preventDefault();
-                  void resendConfirmationEmail();
-                }}
-              >
-                {resendState === "sending" ? "Resending..." : "Resend confirmation email"}
-              </button>
-            )}
-          </>
-        ) : null}
-      </span>
-    </Alert>
-  );
-};
-
 export const DashboardPage = ({
   getting_started_stats,
   getting_started_dismissed,
@@ -433,7 +364,7 @@ export const DashboardPage = ({
       <PasskeySetupPrompt />
       {email_confirmation || stripe_verification_message || show_1099_download_notice ? (
         <div className="grid gap-4 px-4 pt-4 md:px-8 md:pt-8">
-          {email_confirmation ? <EmailConfirmationBanner email_confirmation={email_confirmation} /> : null}
+          {email_confirmation ? <EmailConfirmationBanner {...email_confirmation} /> : null}
           {stripe_verification_message ? (
             <Alert variant="warning">
               {stripe_verification_message} <a href={Routes.settings_payments_path()}>Update</a>
