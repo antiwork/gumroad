@@ -3,6 +3,8 @@
 class ExecuteScheduledPayoutsJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low, lock: :until_executed
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   def perform
     Rails.logger.info("ExecuteScheduledPayoutsJob: Started")

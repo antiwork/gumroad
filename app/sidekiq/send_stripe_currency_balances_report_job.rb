@@ -4,6 +4,8 @@ class SendStripeCurrencyBalancesReportJob
   include Sidekiq::Job
   include FinanceReportFailureAlert
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 1.hour
 
   # The balances are read live from Stripe (point-in-time, no reporting-period args), so a
   # re-run is always safe and needs no arguments.

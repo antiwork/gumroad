@@ -6,6 +6,11 @@ class SendStripeBalanceSummariesReportJob
   include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  # Monthly, enqueued with no args, so the digest is constant. The attempt polls Stripe's Reporting
+  # API, which generates the report asynchronously on Stripe's side.
+  include RecurringLockTtl
+  recurring_lock_ttl max_attempt: 3.hours
+
   # The scheduler fires with no args; pin the resolved period in the exhaustion alert so a
   # late re-run reports the month the failed run was for (not whatever "last month" is then).
   def self.default_alert_args(reference_time = Time.current)
