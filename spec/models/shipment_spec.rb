@@ -3,6 +3,34 @@
 require "spec_helper"
 
 describe Shipment do
+  # gumroad-private#1665: an ungated shipment injects shipping evidence into a digital-product
+  # dispute and emails the buyer "Your order has shipped" for something never posted.
+  describe "create-time shipping requirement" do
+    it "rejects a shipment on a product that does not require shipping" do
+      shipment = Shipment.new(purchase: create(:purchase))
+
+      expect(shipment).not_to be_valid
+      expect(shipment.errors.full_messages).to include("Purchase does not require shipping")
+    end
+
+    it "allows a shipment on a physical product" do
+      expect(Shipment.new(purchase: create(:physical_purchase, link: create(:physical_product)))).to be_valid
+    end
+
+    it "allows a shipment on a digital product that requires shipping" do
+      product = create(:product, require_shipping: true)
+
+      expect(Shipment.new(purchase: create(:physical_purchase, link: product))).to be_valid
+    end
+
+    it "still allows updates to a pre-existing shipment on a non-shipping product" do
+      shipment = create(:shipment)
+      shipment.purchase.link.update_columns(flags: 0, require_shipping: false)
+
+      expect { shipment.mark_shipped! }.to change { shipment.reload.shipped? }.to(true)
+    end
+  end
+
   describe "#shipped?" do
     it "returns false is shipped_at is nil" do
       expect(create(:shipment).shipped?).to be(false)

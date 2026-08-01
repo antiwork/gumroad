@@ -14,28 +14,25 @@ class DisputeEvidence::CreateFromDisputeService
 
   def perform!
     product = purchase.link.paper_trail.version_at(purchase.created_at) || purchase.link
-    shipment = purchase.shipment
+    shipment = evidence_shipment
     refund_policy_fine_print_view_events = find_refund_policy_fine_print_view_events(purchase)
+    purchase_at_checkout = purchase_as_at_checkout
 
     dispute_evidence = dispute.build_dispute_evidence
     dispute_evidence.purchased_at = purchase.created_at
     dispute_evidence.customer_purchase_ip = purchase.ip_address
-    dispute_evidence.customer_email = purchase.email
-    dispute_evidence.customer_name = purchase.full_name&.strip
-    dispute_evidence.billing_address = build_billing_address(purchase)
+    dispute_evidence.customer_email = purchase_at_checkout.email
+    dispute_evidence.customer_name = purchase_at_checkout.full_name&.strip
+    # Left blank deliberately. The columns below are the buyer's SHIPPING address; the card's own
+    # billing address never reaches us as structured data (only `credit_card_zipcode`, which the
+    # uncategorized text carries). Sending a shipping address in this slot asserts to the network
+    # that we hold billing details we do not.
+    dispute_evidence.billing_address = nil
     if shipment.present?
-      dispute_evidence.shipping_address = dispute_evidence.billing_address
+      dispute_evidence.shipping_address = build_shipping_address(purchase_at_checkout)
       dispute_evidence.shipped_at = shipment.shipped_at
-      # Sellers only ever supply a tracking URL, so derive from it when the columns are blank —
-      # which in production they always are. Taken as a pair: falling back per-field would pair a
-      # legacy row's carrier with a number derived from a different carrier's URL.
-      if shipment.carrier.present? && shipment.tracking_number.present?
-        dispute_evidence.shipping_carrier = shipment.carrier
-        dispute_evidence.shipping_tracking_number = shipment.tracking_number
-      else
-        dispute_evidence.shipping_carrier, dispute_evidence.shipping_tracking_number =
-          shipment.carrier_and_tracking_number_from_url
-      end
+      dispute_evidence.shipping_carrier, dispute_evidence.shipping_tracking_number =
+        carrier_and_tracking_number(shipment)
     end
     dispute_evidence.product_description = generate_product_description(product:, purchase:)
     dispute_evidence.uncategorized_text = DisputeEvidence::GenerateUncategorizedTextService.perform(purchase)
@@ -60,9 +57,49 @@ class DisputeEvidence::CreateFromDisputeService
   private
     attr_reader :dispute, :purchase
 
-    def build_billing_address(purchase)
+    # The buyer identity and address we submit must be what the buyer entered at checkout, not
+    # what the seller can edit afterwards — three seller-facing writers mutate these columns
+    # (`PurchasesController#update`, `Api::Mobile::SalesController#update`,
+    # `Purchases::InvoicesController`) with no annotation, so a live read represents mutable
+    # operational data to a card network as platform-generated transaction evidence.
+    #
+    # Same mechanism already used one line up for the product. Falls back to the live record when
+    # no version covers the purchase (nothing has edited it, or it predates `has_paper_trail`),
+    # which is the overwhelmingly common case and is then identical to today's behaviour.
+    def purchase_as_at_checkout
+      @_purchase_as_at_checkout ||= purchase.paper_trail.version_at(purchase.created_at) || purchase
+    end
+
+    def build_shipping_address(source)
       fields = %w(street_address city state zip_code country)
-      fields.map { |field| purchase.send(field) }.compact.join(", ")
+      fields.map { |field| source.send(field) }.compact.join(", ")
+    end
+
+    # A shipment row alone does not mean the order needed delivery: `Shipment` validates only
+    # `purchase` presence, and the mark-as-shipped endpoints never check the product. Attaching
+    # one to a digital purchase would put shipping evidence into a digital-product dispute —
+    # an assertion the buyer can trivially disprove, on our single submission.
+    def shipment_for(purchase)
+      shipment = purchase.shipment
+      return if shipment.blank?
+      return unless purchase.link.is_physical? || purchase.link.require_shipping?
+
+      shipment
+    end
+
+    def evidence_shipment
+      @_evidence_shipment ||= shipment_for(purchase)
+    end
+
+    # Sellers only ever supply a tracking URL, so derive from it when the columns are blank —
+    # which in production they always are. Taken as a pair: falling back per-field would pair a
+    # legacy row's carrier with a number derived from a different carrier's URL.
+    def carrier_and_tracking_number(shipment)
+      if shipment.carrier.present? && shipment.tracking_number.present?
+        [shipment.carrier, shipment.tracking_number]
+      else
+        shipment.carrier_and_tracking_number_from_url
+      end
     end
 
     def generate_product_description(product:, purchase:)
@@ -76,7 +113,34 @@ class DisputeEvidence::CreateFromDisputeService
       rows << "Quantity purchased: #{purchase.quantity}" if purchase.quantity > 1
       rows << "Receipt: #{purchase.receipt_url}"
       rows << "Live product: #{purchase.link.long_url}"
+      rows.concat(other_disputed_items_rows)
       rows.join("\n")
+    end
+
+    # A combined charge is disputed as one amount, but the structured evidence fields above
+    # describe only the representative purchase `purchase_for_dispute_evidence` picked. Listing
+    # the rest keeps the description honest about what the disputed amount covers — otherwise the
+    # network sees one item argued against a larger charge, which reads as a partial answer.
+    # Their own shipping details cannot go in the structured slots: Stripe holds one carrier,
+    # one tracking number and one shipping date per dispute, and we submit once.
+    def other_disputed_items_rows
+      other_purchases = dispute.disputable.disputed_purchases.reject { _1.id == purchase.id }
+      return [] if other_purchases.empty?
+
+      rows = ["", "This charge also covers #{other_purchases.size} other #{"item".pluralize(other_purchases.size)}:"]
+      other_purchases.each do |other|
+        details = ["Product name: #{other.link.name}"]
+        details << "Quantity purchased: #{other.quantity}" if other.quantity > 1
+        shipment = shipment_for(other)
+        if shipment&.shipped_at.present?
+          carrier, tracking_number = carrier_and_tracking_number(shipment)
+          details << "Shipped on #{shipment.shipped_at.to_fs(:formatted_date_full_month)}"
+          details << "Carrier: #{carrier}" if carrier.present?
+          details << "Tracking number: #{tracking_number}" if tracking_number.present?
+        end
+        rows << details.join(", ")
+      end
+      rows
     end
 
     def attach_receipt_image(dispute_evidence, purchase)
