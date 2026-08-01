@@ -320,7 +320,8 @@ describe ContactingCreatorMailer do
           expect(mail.subject).to eq "🚨 Urgent: Action required for resolving disputed sale"
 
           expect(mail.body.encoded).to include "A customer of yours (#{purchase.email}) has disputed their purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
 
@@ -358,6 +359,36 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).not_to include "Submit additional information"
             expect(mail.subject).to eq "A sale has been disputed"
             expect(mail.body.encoded).to include "We fight every dispute."
+          end
+        end
+
+        describe "chargeback evidence due soon" do
+          it "reminds the seller while the submission window is still open" do
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.to).to eq [seller.email]
+            expect(mail.subject).to eq "Reminder: Submit dispute evidence within 24 hours"
+            expect(mail.body.encoded).to include "Please submit any additional information by"
+            expect(mail.body.encoded).to include "You have 23 hours left."
+            expect(mail.body.encoded).to include "Submit additional information"
+          end
+
+          it "does not send once the seller has already submitted" do
+            dispute_evidence.update!(seller_submitted_at: Time.current)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end
+
+          it "does not send once the evidence has been resolved" do
+            dispute_evidence.update!(resolved_at: Time.current, resolution: DisputeEvidence::RESOLUTION_SUBMITTED)
+
+            mail = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id)
+
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
           end
         end
 
@@ -445,7 +476,8 @@ describe ContactingCreatorMailer do
           charge.disputed_purchases.each do |purchase|
             expect(mail.body.encoded).to include purchase.link.name
           end
-          expect(mail.body.encoded).to include "Any additional information you can provide in the next 72 hours will help us win on your behalf."
+          expect(mail.body.encoded).to include "Any additional information you can provide by"
+          expect(mail.body.encoded).to include "(in the next 72 hours) will help us win on your behalf."
           expect(mail.body.encoded).to include "Submit additional information"
         end
       end

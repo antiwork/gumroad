@@ -899,7 +899,11 @@ describe Charge::Disputable, :vcr do
             expect { Purchase.handle_charge_event(event) }
               .to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice)
 
-            expect(purchase.reload.dispute.dispute_evidence.hours_left_to_submit_evidence).to be_positive
+            evidence = purchase.reload.dispute.dispute_evidence
+            expect(evidence.hours_left_to_submit_evidence).to be_positive
+            expect(DisputeEvidenceDueSoonReminderJob)
+              .to have_enqueued_sidekiq_job(purchase.dispute.id)
+              .at(evidence.seller_response_due_at - DisputeEvidence::EVIDENCE_REMINDER_LEAD_TIME)
           end
         end
 
