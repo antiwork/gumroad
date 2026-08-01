@@ -39,23 +39,56 @@ describe MoroccoBankAccount do
 
       expect(build(:morocco_bank_account)).to be_valid
       expect(build(:morocco_bank_account, account_number: "MA64011519000001205000534921")).to be_valid
-      expect(build(:morocco_bank_account, account_number: "MA62370400440532013001")).to be_valid
 
-      ma_bank_account = build(:morocco_bank_account, account_number: "MA12345")
-      expect(ma_bank_account).to_not be_valid
-      expect(ma_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      # Stripe accepts only the full 28-character MA IBAN, and it checks the mod-97 check digits
+      # too, so both a wrong length and a bad checksum must fail here rather than at bank-sync.
+      [
+        "MA99011519000001205000534921",   # 28 chars, check digits do not compute
+        "MA6401151900000120500053492",    # 27 chars
+        "MA640115190000012050005349211",  # 29 chars
+        "MA62370400440532013001",         # 22 chars, the RIB-with-MA shape sellers actually enter
+        "MA12345",
+        "DE61109010140000071219812874",
+        "8937040044053201300000",
+        "CRABCDE",
+        # Ibandit upcases and strips, so these are only rejected because we match the raw value.
+        # The web path strips spaces before the model sees them, so the spaced row is a
+        # model-level contract for other writers rather than a reachable form submission.
+        "ma64011519000001205000534921",
+        "MA64 0115 1900 0001 2050 0053 4921",
+      ].each do |account_number|
+        ma_bank_account = build(:morocco_bank_account, account_number:)
+        expect(ma_bank_account).to_not be_valid
+        expect(ma_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid. Enter your 28-character IBAN: MA followed by 26 digits, not your RIB.")
+      end
 
-      ma_bank_account = build(:morocco_bank_account, account_number: "DE61109010140000071219812874")
+      # A blank number never marks the attribute dirty, so the format check is skipped and the
+      # base class's presence validation is what rejects it.
+      ma_bank_account = build(:morocco_bank_account, account_number: "")
       expect(ma_bank_account).to_not be_valid
-      expect(ma_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect(ma_bank_account.errors.full_messages).to include("Account number We could not save your bank account information.")
+    end
 
-      ma_bank_account = build(:morocco_bank_account, account_number: "8937040044053201300000")
-      expect(ma_bank_account).to_not be_valid
-      expect(ma_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    it "leaves an already-persisted non-conforming account number alone on an unrelated save" do
+      ma_bank_account = build(:morocco_bank_account, account_number: "MA62370400440532013001", account_number_last_four: "3001")
+      ma_bank_account.save!(validate: false)
 
-      ma_bank_account = build(:morocco_bank_account, account_number: "CRABCDE")
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      # Soft-deleting happens when a seller switches to PayPal, after their balance is already
+      # forfeited, so re-validating the stored number here would raise mid-way through.
+      expect { ma_bank_account.reload.mark_deleted! }.to_not raise_error
+      expect(ma_bank_account.reload).to be_deleted
+    end
+
+    it "still rejects a non-conforming account number when one is being written to an existing record" do
+      ma_bank_account = create(:morocco_bank_account)
+
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      ma_bank_account.account_number = "MA62370400440532013001"
       expect(ma_bank_account).to_not be_valid
-      expect(ma_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect(ma_bank_account.errors.full_messages).to include("The account number is invalid. Enter your 28-character IBAN: MA followed by 26 digits, not your RIB.")
     end
   end
 end
