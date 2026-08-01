@@ -217,43 +217,18 @@ class Charge::MethodForcedPresentment
     # the currency) and convert the canonical USD totals through it.
     def quoted_result(decision)
       currency = decision.currency
-      # Minted on the account the intent is created on, which for a destination charge is
-      # the Gumroad platform account rather than the seller's — the same routing rule the
-      # card lane uses, and the same account this lane's settlement gate already checks
-      # (Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account). Minting here and
-      # creating the intent elsewhere would have Stripe reject the quote.
+      # Must be the account the intent is created on — Stripe honours a quote only in the
+      # context that minted it, which for a destination charge is the platform account.
       quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
       return nil if quote_merchant_account.blank?
 
-      # Kill switch for the destination-charge shape. Measured before this PR: destination
-      # charges have never minted an FX quote (0 of 463 charge_presentments in 14 days carry
-      # a stripe_fx_quote_id, against 3,577 of 4,328 overall), so the first time this lane
-      # quotes a destination charge is the first time the platform-minted-quote-plus-declared-
-      # destination pairing is exercised against real money.
-      #
-      # Be precise about what returning nil means HERE, because it is not the graceful
-      # canonical-USD fallback it is on the card lane. This method only runs for the QUOTED
-      # case — a USD-priced product bought with a currency-forcing method — and by the time
-      # a token for that shape exists the Payment Element was mounted in the forced currency,
-      # so Order::PreparePaymentIntentService#method_forced_presentment_required? turns a nil
-      # presentment into a clean synchronous failure rather than a USD intent the token could
-      # never confirm. So the flag being off does not silently downgrade such a checkout: it
-      # refuses it up front, before any Stripe call.
-      #
-      # That is still the safe direction, because the checkout it refuses cannot succeed today
-      # either: on main the quote for a destination charge is minted on the seller's Custom
-      # account while the intent is created on the platform account, and Stripe rejects that
-      # pairing at intent creation — the same buyer-visible failure, only later and after two
-      # network round trips. And no live traffic reaches here anyway: a cart has to be priced
-      # in USD to take the quoted branch, while a currency-forcing method is only ever offered
-      # on a cart already priced in that method's own currency (Checkout::PaymentMethodResolver
-      # #forced_currency_methods, mirrored by the presenter's #method_forced_shape?), and that
-      # cart takes the direct-listed-amount branch, which never quotes and is untouched by this
-      # flag. This branch is reachable only from a stale or hand-crafted token.
-      #
-      # The ROUTING above is deliberately not gated (see fx_quote_merchant_account) — gating
-      # which account a quote is minted on would preserve a cross-account pairing Stripe
-      # rejects; what is gated here is whether to attempt the quote at all.
+      # Ramp gate for quoting a destination charge, a pairing production has never minted.
+      # Unlike the card lane, nil here refuses the checkout rather than falling back to USD:
+      # the caller (Order::PreparePaymentIntentService#method_forced_presentment_required?)
+      # fails it, because the buyer's token was minted on a forced-currency element. Costs no
+      # live traffic — the quoted branch needs a USD-priced cart, and a currency-forcing method
+      # is only offered on a cart already priced in its own currency, which never quotes. The
+      # routing above stays ungated; only the decision to quote at all is gated here.
       if Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account).present? &&
          !Checkout::BuyerCurrencyEligibility.destination_charge_quotes_enabled?(seller)
         Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: destination charge quoting disabled")
