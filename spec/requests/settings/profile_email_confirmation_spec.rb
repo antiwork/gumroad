@@ -6,11 +6,17 @@ describe "Profile settings email confirmation", type: :system, js: true do
   let(:seller) { create(:user, email: "seller@example.com", username: "unconfirmedseller", confirmed_at: nil) }
 
   it "warns unconfirmed sellers before they edit an unsavable profile" do
+    section = SellerProfileRichTextSection.create!(seller:, json_data: { "text" => {} })
+    seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [section.id] }] })
+
     login_as(seller)
     visit "/profile"
 
     expect(page).to have_alert(text: "Confirm your email address (seller@example.com) before you can save changes to your profile.")
     expect(page).to have_field("Name", disabled: true)
+    find("[role=tab]", text: "Pages").click
+    expect(page).to have_css("[contenteditable=false]")
+    expect(page).not_to have_css("[contenteditable=true]")
     click_button "Resend confirmation email"
     expect(page).to have_text("Confirmation email sent!")
   end

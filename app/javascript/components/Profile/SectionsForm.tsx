@@ -191,12 +191,14 @@ const OptionRow = ({
 const SectionRow = ({
   section,
   state,
+  disabled,
   shouldFocusHeader,
   updateSection,
   onDelete,
 }: {
   section: Section;
   state: ProfileEditorProps;
+  disabled: boolean;
   shouldFocusHeader: boolean;
   updateSection: (section: Section) => void;
   onDelete: () => void;
@@ -268,7 +270,7 @@ const SectionRow = ({
             ) : section.type === "SellerProfilePostsSection" ? (
               <PostsSectionFields section={section} state={state} update={update} />
             ) : section.type === "SellerProfileRichTextSection" ? (
-              <RichTextSectionFields section={section} update={update} />
+              <RichTextSectionFields section={section} update={update} disabled={disabled} />
             ) : section.type === "SellerProfileSubscribeSection" ? (
               <SubscribeSectionFields section={section} update={update} />
             ) : section.type === "SellerProfileFeaturedProductSection" ? (
@@ -409,12 +411,14 @@ const PostsSectionFields = ({
 const RichTextSectionFields = ({
   section,
   update,
+  disabled,
 }: {
   section: Extract<Section, { type: "SellerProfileRichTextSection" }>;
   update: (section: Section) => void;
+  disabled: boolean;
 }) => {
   const [initialValue] = React.useState(section.text);
-  const editor = useRichTextEditor({ initialValue, placeholder: "Enter text here", editable: true });
+  const editor = useRichTextEditor({ initialValue, placeholder: "Enter text here", editable: !disabled });
   const sectionRef = React.useRef(section);
   React.useEffect(() => {
     sectionRef.current = section;
@@ -428,7 +432,7 @@ const RichTextSectionFields = ({
   React.useEffect(() => {
     if (!editor) return;
     const syncText = () => {
-      if (isUploadingRef.current) return;
+      if (disabled || isUploadingRef.current) return;
       update({ ...sectionRef.current, text: editor.getJSON() });
     };
     // Sync on content changes only (not on focus/blur), so the preview stays live and an
@@ -439,14 +443,14 @@ const RichTextSectionFields = ({
     return () => {
       editor.off("update", syncText);
     };
-  }, [editor]);
+  }, [disabled, editor]);
 
   return (
     <Fieldset>
       <FieldsetTitle>Text</FieldsetTitle>
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
         <div className="grid grid-rows-[max-content_1fr] rounded">
-          {editor ? (
+          {editor && !disabled ? (
             <RichTextEditorToolbar
               editor={editor}
               className="rounded-t rounded-b-none border border-b-0 border-border"
@@ -755,6 +759,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
               key={section.id}
               section={section}
               state={{ ...props, sections }}
+              disabled={disabled}
               shouldFocusHeader={section.id === lastAddedSectionId}
               updateSection={updateSection}
               onDelete={() => setDeletionModalSectionId(section.id)}
