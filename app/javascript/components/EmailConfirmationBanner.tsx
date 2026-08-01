@@ -7,7 +7,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 
 export type EmailConfirmation = {
-  email: string;
+  email: string | null;
   can_resend: boolean;
 };
 
@@ -49,12 +49,15 @@ export const EmailConfirmationBanner = ({ email, can_resend, children }: EmailCo
   return (
     <Alert variant="warning">
       <span>
-        {children ?? (
-          <>
-            Please confirm your email address (<b>{email}</b>) — some features are unavailable until you do.
-          </>
-        )}
-        {can_resend ? (
+        {children ??
+          (email ? (
+            <>
+              Please confirm your email address (<b>{email}</b>) — some features are unavailable until you do.
+            </>
+          ) : (
+            <>Please add and confirm an email address — some features are unavailable until you do.</>
+          ))}
+        {email && can_resend ? (
           <>
             {" "}
             {resendState === "sent" ? (

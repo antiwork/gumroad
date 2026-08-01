@@ -250,6 +250,17 @@ describe ProfilePresenter do
 
         expect(presenter.profile_settings_props(request:)[:email_confirmation][:email]).to eq("new-address@example.com")
       end
+
+      it "represents an unconfirmed seller with no email without offering a resend" do
+        seller.update_columns(confirmed_at: nil, email: nil, unconfirmed_email: nil)
+
+        expect(presenter.profile_settings_props(request:)[:email_confirmation]).to eq(
+          {
+            email: nil,
+            can_resend: false,
+          }
+        )
+      end
     end
 
     context "when the custom_html_pages feature is enabled and a custom profile page is live" do

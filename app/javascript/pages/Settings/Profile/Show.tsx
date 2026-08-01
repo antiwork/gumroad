@@ -396,8 +396,14 @@ export default function SettingsPage() {
           {email_confirmation ? (
             <div className="p-4 pb-0 md:p-8 md:pb-0">
               <EmailConfirmationBanner {...email_confirmation}>
-                Confirm your email address (<b>{email_confirmation.email}</b>) before you can save changes to your
-                profile.
+                {email_confirmation.email ? (
+                  <>
+                    Confirm your email address (<b>{email_confirmation.email}</b>) before you can save changes to your
+                    profile.
+                  </>
+                ) : (
+                  <>Add and confirm an email address before you can save changes to your profile.</>
+                )}
               </EmailConfirmationBanner>
             </div>
           ) : null}

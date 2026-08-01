@@ -49,9 +49,10 @@ class ProfilePresenter
     # this on `confirmed?` rather than `has_unconfirmed_email?` — the latter is also true for a
     # confirmed seller with a pending address change, who can still save.
     email_confirmation = unless seller.confirmed?
+      confirmation_email = seller.unconfirmed_email.presence || seller.email.presence
       {
-        email: seller.unconfirmed_email.presence || seller.email,
-        can_resend: Pundit.policy!(pundit_user, [:settings, :main, seller]).resend_confirmation_email?,
+        email: confirmation_email,
+        can_resend: confirmation_email.present? && Pundit.policy!(pundit_user, [:settings, :main, seller]).resend_confirmation_email?,
       }
     end
     shared_profile_props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.logged_out).merge(
