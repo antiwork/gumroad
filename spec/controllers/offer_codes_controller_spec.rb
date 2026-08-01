@@ -34,10 +34,7 @@ describe OfferCodesController do
 
     context "when the cart is wider than the code's remaining uses" do
       let(:seller) { create(:user) }
-      # Percentage, not fixed-amount: a fixed-amount code is applied once per cart
-      # (gumroad-private#1636), so it can never run out of uses part-way through one.
-      # The cap is only reachable line-by-line for a per-line discount.
-      let!(:capped_code) { create(:universal_offer_code, user: seller, amount_cents: nil, amount_percentage: 20, max_purchase_count: 2) }
+      let!(:capped_code) { create(:universal_offer_code, user: seller, amount_cents: 100, max_purchase_count: 2) }
       let(:cart_products) { create_list(:product, 3, user: seller, price_cents: 500) }
       let(:params) do
         {

@@ -44,8 +44,21 @@ describe OfferCodeDiscountComputingService do
 
   describe "fixed-amount codes apply once per cart" do
     let(:fixed_code) do
-      create(:universal_offer_code, user: seller, amount_percentage: nil,
+      create(:universal_offer_code, user: seller, amount_percentage: nil, once_per_cart: true,
                                     amount_cents: 500, currency_type: product.price_currency_type)
+    end
+
+    # The flag is the whole compatibility story: every fixed-amount code that exists today
+    # is off, so nothing an existing seller has configured changes behaviour on deploy.
+    it "leaves an opted-out fixed-amount code deducting on every line" do
+      opted_out = create(:universal_offer_code, user: seller, amount_percentage: nil,
+                                                amount_cents: 500, currency_type: product.price_currency_type)
+      expect(opted_out.once_per_cart?).to be(false)
+
+      result = OfferCodeDiscountComputingService.new(opted_out.code, products_data).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].values.count { _1[:discount][:cents].positive? }).to eq(2)
     end
 
     # products_data means two things at once: how much to take off a line, and which products

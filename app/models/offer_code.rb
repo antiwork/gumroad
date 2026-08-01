@@ -12,6 +12,10 @@ class OfferCode < ApplicationRecord
 
   has_flags 1 => :is_cancellation_discount,
             2 => :created_via_cli,
+            # Off by default: a fixed-amount code has always been deducted from every cart line,
+            # and sellers price around that. Opting in makes the amount an order-level discount
+            # that lands once. Only meaningful for is_cents? codes.
+            3 => :once_per_cart,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

@@ -104,7 +104,7 @@ class OfferCodeDiscountComputingService
     end
 
     def once_per_cart?(offer_code)
-      offer_code.is_cents?
+      offer_code.is_cents? && offer_code.once_per_cart?
     end
 
     def already_applied?(offer_code)
