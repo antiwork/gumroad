@@ -67,6 +67,29 @@ describe PlatformBlock do
           PlatformBlock.add!(object_type: :email, object_value: "symbol-type@example.com")
         end.to change { Radar::AddValueListItemJob.jobs.size }.by(1)
       end
+
+      # Charge#refund_for_fraud_and_block_buyer! reaches add! inside a with_lock; a job enqueued
+      # before the commit can run against the pre-commit row, see no block, and no-op.
+      it "enqueues only after a surrounding transaction commits" do
+        record = nil
+
+        ApplicationRecord.transaction do
+          record = PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "in-transaction@example.com")
+          expect(Radar::AddValueListItemJob.jobs).to be_empty
+        end
+
+        expect(Radar::AddValueListItemJob.jobs.size).to eq(1)
+        expect(Radar::AddValueListItemJob.jobs.last["args"]).to eq([record.id])
+      end
+
+      it "does not enqueue when the surrounding transaction rolls back" do
+        expect do
+          ApplicationRecord.transaction do
+            PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: "rolled-back@example.com")
+            raise ActiveRecord::Rollback
+          end
+        end.not_to change { Radar::AddValueListItemJob.jobs.size }
+      end
     end
   end
 
