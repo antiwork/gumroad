@@ -342,7 +342,10 @@ class Api::V2::LinksController < Api::V2::BaseController
         # reloads the row, which also swaps in a fresh (empty) association cache,
         # so the previous_custom_html read below reflects a concurrent writer's
         # committed page rather than one cached before the lock.
-        @product.lock! if params.key?(:custom_html)
+        # A currency change is also a read-copy-write: it reads the current buy and
+        # rental amounts and re-writes them under the new currency, so an overlapping
+        # price PUT would otherwise be copied over by a stale read.
+        @product.lock! if params.key?(:custom_html) || params.key?(:price_currency_type)
 
         attrs = {}
         attrs[:name] = params[:name] if params.key?(:name)

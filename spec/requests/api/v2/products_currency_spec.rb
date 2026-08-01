@@ -189,6 +189,29 @@ describe "Products API currency normalization", type: :request do
     expect(product.reload).to have_attributes(name: "Renamed tier", price_currency_type: "usd")
   end
 
+  it "locks the product row for the duration of a currency change" do
+    product = create(:product, user: seller, price_currency_type: "usd", price_cents: 9_900)
+
+    expect_any_instance_of(Link).to receive(:lock!).and_call_original
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, price_currency_type: "eur" }
+
+    expect(response.parsed_body).to include("success" => true)
+    expect(product.reload.price_currency_type).to eq("eur")
+  end
+
+  it "does not lock the row for an update that does not touch currency" do
+    product = create(:product, user: seller, price_currency_type: "usd", price_cents: 9_900)
+
+    expect_any_instance_of(Link).not_to receive(:lock!)
+
+    put "/api/v2/products/#{product.external_id}",
+        params: { access_token: token.token, name: "Renamed only" }
+
+    expect(response.parsed_body).to include("success" => true)
+  end
+
   it "names the currency the caller actually sent when rejecting it" do
     post "/api/v2/products",
          params: { access_token: token.token, name: "Bad currency", price: 21_999, price_currency_type: "ZZZ" }
