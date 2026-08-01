@@ -255,6 +255,10 @@ describe Purchase::LaterChargePresentmentService do
   end
 
   context "when the saved rail requires INR" do
+    let(:product) do
+      create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 83_000)
+    end
+
     def create_inr_fixing
       create(
         :later_charge_presentment,
@@ -344,15 +348,35 @@ describe Purchase::LaterChargePresentmentService do
       end.to raise_error(ChargeProcessorUnavailableError)
     end
 
-    it "still requests a payment-method update for a stale fixing" do
+    it "writes a successor fixing from current direct-INR renewal terms" do
+      create_inr_fixing
+      renewal_purchase.update!(
+        price_cents: 1500,
+        total_transaction_cents: 1500,
+        displayed_price_currency_type: Currency::INR,
+        displayed_price_cents: 124_500,
+        rate_converted_to_usd: BigDecimal("83")
+      )
+
+      expect { service(required_currency: Currency::INR, amount_cents: 1500).perform }
+        .to change(LaterChargePresentment, :count).by(1)
+
+      expect(subscription.current_later_charge_presentment).to have_attributes(
+        presentment_currency: Currency::INR,
+        presentment_price_cents: 124_500,
+        canonical_price_cents: 1500,
+        signup_currency_units_per_usd: BigDecimal("83")
+      )
+    end
+
+    it "requests a payment-method update when a stale fixing lacks direct-INR renewal terms" do
       create_inr_fixing
       renewal_purchase.update!(price_cents: 1500, total_transaction_cents: 1500)
 
-      expect do
-        service(required_currency: Currency::INR, amount_cents: 1500).perform
-      end.to raise_error(ChargeProcessorCardError) do |error|
-        expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
-      end
+      expect { service(required_currency: Currency::INR, amount_cents: 1500).perform }
+        .to raise_error(ChargeProcessorCardError) do |error|
+          expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+        end
     end
   end
 end

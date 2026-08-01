@@ -291,6 +291,10 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
     end
 
     context "with a saved UPI Autopay instrument" do
+      let(:product) do
+        create(:membership_product, user: seller, price_currency_type: Currency::INR, price_cents: 83_000)
+      end
+
       let!(:upi_fixing) do
         create(
           :later_charge_presentment,
@@ -371,6 +375,30 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
 
         expect(renewal.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
         expect(renewal).to be_has_payment_network_error
+      end
+
+      it "re-fixes a direct-INR renewal after its limited discount expires" do
+        renewal.update!(
+          price_cents: 1500,
+          total_transaction_cents: 1500,
+          displayed_price_currency_type: Currency::INR,
+          displayed_price_cents: 124_500,
+          rate_converted_to_usd: BigDecimal("83")
+        )
+
+        expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*_args, **kwargs|
+          expect(kwargs[:processor_currency]).to eq(Currency::INR)
+          expect(kwargs[:processor_amount_cents]).to eq(124_500)
+          double(id: "pi_upi_renewal", succeeded?: true, requires_action?: false, get_charge: nil)
+        end
+
+        expect { renewal.send(:create_charge_intent, double(get_chargeable_for: double)) }
+          .to change(LaterChargePresentment, :count).by(1)
+
+        expect(subscription.current_later_charge_presentment).to have_attributes(
+          presentment_price_cents: 124_500,
+          canonical_price_cents: 1500
+        )
       end
     end
   end
