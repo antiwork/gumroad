@@ -4,8 +4,16 @@ class Pages::ProfileData
   # Bumped when the shape of the cached payload changes (v5 added the *_total counts and
   # moved product/post URLs onto the seller's live custom domain), so already-cached entries
   # built by the previous shape are not served to pages that now expect the new keys.
-  CACHE_VERSION = "v5"
-  MAX_ITEMS = 100
+  #
+  # v6 is a cap change rather than a shape change, and it needs the same bump: the rest of the
+  # key is derived from the seller's own rows, so a seller who does not touch a product or post
+  # would keep being served the 100-item entry built before MAX_ITEMS was raised.
+  CACHE_VERSION = "v6"
+  # Raised from 100 (gumroad-private#1522). The population that matters is sellers who actually
+  # render a custom profile page, not all sellers: measured on production over the 2,791 with root
+  # custom HTML, 100 truncates 16 of them and 200 truncates 2. Pages::ProductPrices — the uncached
+  # per-request half — shares this cap, so the ceiling bounds that work too.
+  MAX_ITEMS = 200
   DESCRIPTION_LIMIT = 200
 
   def self.build(seller)
@@ -21,7 +29,7 @@ class Pages::ProfileData
         pages: pages(seller_profile),
         # A page has no way to discover what MAX_ITEMS dropped: CUSTOM_HTML_CSP sets
         # connect-src 'none', so this payload is its only product source. Emitting the
-        # true totals lets a page say "showing 100 of 114" instead of silently
+        # true totals lets a page say "showing 200 of 275" instead of silently
         # advertising an incomplete catalogue (gumroad-private#1522).
         products_total: products_total(seller),
         posts_total: posts_total(seller),

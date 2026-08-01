@@ -170,9 +170,9 @@ const ProfileCustomHtmlDocumentation = () => (
     <p>
       <code>posts</code> entries carry <code>name</code>, <code>url</code> (built on the same host as product URLs) and{" "}
       <code>published_at</code>, and <code>pages</code> entries carry a <code>name</code> — the pages of your profile,
-      the ones visitors switch between, not the sections inside them. At most 100 products and 100 posts are included;{" "}
-      <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 100 of
-      114" rather than implying the catalogue is complete.
+      the ones visitors switch between, not the sections inside them. At most 200 products and 200 posts are included;{" "}
+      <code>products_total</code> and <code>posts_total</code> give the true counts, so a page can say "showing 200 of
+      275" rather than implying the catalogue is complete.
     </p>
     <p>
       The blob is cached per seller and rebuilt when a product, a post or your page layout changes — including a price

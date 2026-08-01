@@ -550,8 +550,8 @@ class Ai::StoreAgentService
       capped at #{Pages::ProfileData::MAX_ITEMS} entries, so on a large
       catalogue products_total exceeds products.length, and on a long archive posts_total
       exceeds posts.length. Whenever either total exceeds the array the page renders, the page
-      MUST show a visible count for that section (for example "Showing 100 of 114 products",
-      "Showing 100 of 260 posts") — a grid or archive that quietly renders only part of what the
+      MUST show a visible count for that section (for example "Showing 200 of 275 products",
+      "Showing 200 of 340 posts") — a grid or archive that quietly renders only part of what the
       creator has reads to them as items having vanished. It does NOT contain the
       creator's name, bio, avatar, or any user object — a page that tries to read those from
       the JSON renders them blank. Build the page to READ that JSON and render the product grid

@@ -363,16 +363,28 @@ describe Pages::ProfileData do
       end
     end
 
-    it "does not serve a v4 payload without the totals" do
+    it "does not serve a payload cached under an older version" do
       seller_profile = SellerProfile.find_by(seller_id: seller.id)
       current_key = Pages::ProfileData.cache_key(seller, seller_profile)
-      v4_key = current_key.sub("profile_data/v5/", "profile_data/v4/")
-      Rails.cache.write(v4_key, { products: [], posts: [], pages: [] })
+      stale_key = current_key.sub("profile_data/#{Pages::ProfileData::CACHE_VERSION}/", "profile_data/v5/")
+      Rails.cache.write(stale_key, { products: [], posts: [], pages: [] })
 
       data = Pages::ProfileData.build(seller)
 
-      expect(current_key).to start_with("profile_data/v5/")
+      expect(current_key).to start_with("profile_data/#{Pages::ProfileData::CACHE_VERSION}/")
       expect(data).to include(products_total: 0, posts_total: 0)
+    end
+
+    # A cap raise only reaches a seller who has not edited a product or post since, because the
+    # rest of the key is derived from their own rows — so the version bump is what delivers it.
+    it "bumps the cache version past the one the previous cap was cached under" do
+      expect(Pages::ProfileData::CACHE_VERSION).not_to eq("v5")
+    end
+
+    # The value is a product decision (gumroad-private#1522), not an implementation detail:
+    # help-center and API-docs copy quote it, so a change here has to be a deliberate edit.
+    it "caps both arrays at 200" do
+      expect(Pages::ProfileData::MAX_ITEMS).to eq(200)
     end
 
     context "when the catalogue exceeds MAX_ITEMS" do

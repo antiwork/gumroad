@@ -372,7 +372,8 @@ module Product::Prices
     # Every cap is checked, however large: the aggregate ranges the offer_code_id index over
     # redemptions actually made, not over the cap, so a millions-high "unlimited" cap with a
     # handful of sales costs what a cap of ten does — and checkout pays this same read on every
-    # attempt. Pages::ProductPrices, which prices up to 100 products uncached, seeds this memo
+    # attempt. Pages::ProductPrices, which prices up to Pages::ProfileData::MAX_ITEMS products
+    # uncached, seeds this memo
     # in one grouped query (OfferCode.uses_left_by_id).
     def default_offer_code_uses_left?(offer_code)
       return true if offer_code.max_purchase_count.nil?

@@ -534,7 +534,10 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to include("posts_total")
         expect(captured[:system]).to match(/posts_total\s+exceeds posts\.length/)
         expect(captured[:system]).to match(/MUST show a visible count for that section/)
-        expect(captured[:system]).to match(/Showing 100 of 260 posts/)
+        expect(captured[:system]).to match(/Showing 200 of 340 posts/)
+        # The cap in the prompt is interpolated from the constant, so a raise cannot leave the
+        # instructions quoting the old ceiling.
+        expect(captured[:system]).to include("capped at #{Pages::ProfileData::MAX_ITEMS} entries")
       end
 
       # Regression for gumroad-private#1466: a seller asked about the `<h2>Albums</h2>` on his own
