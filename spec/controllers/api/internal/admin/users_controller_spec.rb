@@ -3647,6 +3647,19 @@ describe Api::Internal::Admin::UsersController do
       expect(membership.is_unpublished_by_admin?).to be(true)
     end
 
+    it "does not let a seller clear an admin takedown by unpublishing first" do
+      membership = create(:membership_product, user:)
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: membership.external_id }
+
+      membership.reload.unpublish!
+      expect(membership.reload.is_unpublished_by_admin?).to be(true)
+      expect do
+        membership.publish!
+      end.to raise_error(Link::LinkInvalid, "This product was unpublished by Gumroad and cannot be republished by the seller.")
+      expect(membership.reload.purchase_disabled_at).to be_present
+    end
+
     it "leaves the seller unflagged when the product takedown fails" do
       allow_any_instance_of(Link).to receive(:take_down_for_tos_violation!).and_raise(ActiveRecord::RecordInvalid)
 

@@ -532,7 +532,7 @@ class Link < ApplicationRecord
 
   def unpublish!(is_unpublished_by_admin: false)
     self.purchase_disabled_at ||= Time.current
-    self.is_unpublished_by_admin = is_unpublished_by_admin
+    self.is_unpublished_by_admin = true if is_unpublished_by_admin
     save!
   end
 
