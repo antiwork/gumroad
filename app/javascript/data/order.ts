@@ -43,7 +43,7 @@ type ConfirmOrderResponse = {
   can_buyer_sign_up: boolean;
   offer_codes: OfferCodes;
 };
-type OrderErrorResponse = { success: false; error_message: string };
+type OrderErrorResponse = { success: false; error_message: string; recaptcha_challenge_available?: boolean };
 
 // Initiates a request to create an order to purchase all the line items in the cart.
 // Handles SCA actions where appropriate.
@@ -132,6 +132,7 @@ const translateOrderFailureResponseIntoLineItemFailures = (
   ),
   canBuyerSignUp: false,
   offerCodes: [],
+  recaptchaChallengeAvailable: cartResponse.recaptcha_challenge_available === true,
 });
 
 // Initiates order creation, which may or may not require further action

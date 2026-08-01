@@ -53,6 +53,20 @@ describe CheckoutRecaptcha do
 
       expect(described_class.site_key(user)).to eq("money_site_key")
     end
+
+    it "returns the challenge key for a cohort buyer retrying after a score-only refusal" do
+      Feature.activate_user(:recaptcha_score_checkout, user)
+
+      expect(described_class.site_key(user, challenge_fallback: true)).to eq("money_site_key")
+    end
+  end
+
+  describe ".challenge_site_key" do
+    it "returns the challenge key regardless of the buyer's cohort" do
+      Feature.activate_user(:recaptcha_score_checkout, user)
+
+      expect(described_class.challenge_site_key).to eq("money_site_key")
+    end
   end
 
   describe ".surface" do
@@ -95,6 +109,15 @@ describe CheckoutRecaptcha do
 
         expect(described_class.surface(user)).to eq(:checkout_score)
       end
+    end
+
+    # The fallback's whole point: the challenge surface carries no score threshold, so a buyer the
+    # score bar refused can still get through by passing a challenge.
+    it "is :checkout for a cohort buyer retrying after a score-only refusal, even a trusted one" do
+      Feature.activate_user(:recaptcha_score_checkout, user)
+      user.update!(user_risk_state: "compliant")
+
+      expect(described_class.surface(user, challenge_fallback: true)).to eq(:checkout)
     end
 
     it "is :checkout for an anonymous buyer when the cohort is only enabled per-user" do

@@ -159,6 +159,7 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   recaptchaScoreBased: false,
+  recaptchaChallengeKey: null,
   paypalClientId: "",
   tip: { type: "percentage", percentage: 0 },
   emailTypoSuggestion: null,

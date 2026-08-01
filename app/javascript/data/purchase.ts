@@ -120,6 +120,9 @@ export type StartCartPurchaseRequestPayload = {
   };
   lineItems: PurchaseLineItemPayload[];
   recaptchaResponse: string | null;
+  // True when recaptchaResponse came from the challenge key because the score key refused this
+  // order, which tells the server to verify it against that key instead (gumroad-private#1590).
+  recaptchaChallengeFallback?: boolean;
   usedStripePaymentElement: boolean;
   buyerCurrencyQuote: string | null;
 };
@@ -151,6 +154,10 @@ export type CartPurchaseResult = {
   lineItems: Record<LineItemUid, LineItemResult>;
   canBuyerSignUp: boolean;
   offerCodes: OfferCodes;
+  // The order was refused by the CAPTCHA check on risk score alone, and the buyer can re-prove
+  // themselves against the challenge key. Set on the whole result rather than per line item
+  // because the refusal happens before any line item is looked at.
+  recaptchaChallengeAvailable?: boolean;
 };
 
 export type PurchaseErrorResponse = {
@@ -258,6 +265,7 @@ export const createPurchasesRequestData = (
     is_gift: payload.giftInfo != null,
     vat_id: payload.vatId || "",
     "g-recaptcha-response": payload.recaptchaResponse || "",
+    recaptcha_challenge_fallback: payload.recaptchaChallengeFallback ?? false,
     buyer_currency_quote: payload.buyerCurrencyQuote || "",
     purchase,
     line_items: payload.lineItems.map((lineItem) => ({

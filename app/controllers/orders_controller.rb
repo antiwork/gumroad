@@ -246,9 +246,34 @@ class OrdersController < ApplicationController
       return render_error("Cookies are not enabled on your browser. Please enable cookies and refresh this page before continuing.") if contains_paid_purchase && browser_guid.blank?
 
       # Verify reCAPTCHA response
-      if !skip_recaptcha? && !valid_recaptcha_response_and_hostname?(site_key: CheckoutRecaptcha.site_key(logged_in_user), surface: CheckoutRecaptcha.surface(logged_in_user))
-        render_error(recaptcha_failure_message)
+      if !skip_recaptcha? && !valid_checkout_recaptcha?
+        render_error(recaptcha_failure_message, recaptcha_challenge_available: offer_recaptcha_challenge_fallback?)
       end
+    end
+
+    def valid_checkout_recaptcha?
+      fallback = recaptcha_challenge_fallback?
+      valid_recaptcha_response_and_hostname?(
+        site_key: CheckoutRecaptcha.site_key(logged_in_user, challenge_fallback: fallback),
+        surface: CheckoutRecaptcha.surface(logged_in_user, challenge_fallback: fallback)
+      )
+    end
+
+    # The buyer is resubmitting with a token from the challenge key after being refused on score
+    # alone, so verify against that key instead (gumroad-private#1590). Ignored when the challenge
+    # key is unconfigured: verifying a token against a blank key errors out to the
+    # infrastructure-error path, and that path fails OPEN for :checkout — which would turn the
+    # marker into a way to skip the check entirely.
+    def recaptcha_challenge_fallback?
+      ActiveModel::Type::Boolean.new.cast(params[:recaptcha_challenge_fallback]).present? &&
+        CheckoutRecaptcha.challenge_site_key.present?
+    end
+
+    # Offered once per order attempt. A request that already carried a challenge token and still
+    # failed is terminal: without that condition the client and server could hand the same refusal
+    # back and forth if :checkout ever gets a score threshold of its own.
+    def offer_recaptcha_challenge_fallback?
+      recaptcha_failed_on_score_only? && !recaptcha_challenge_fallback?
     end
 
     def skip_recaptcha?
@@ -308,8 +333,12 @@ class OrdersController < ApplicationController
       end
     end
 
-    def render_error(error_message, purchase: nil)
-      render json: error_response(error_message, purchase:)
+    def render_error(error_message, purchase: nil, recaptcha_challenge_available: false)
+      response = error_response(error_message, purchase:)
+      # Only sent when the client actually has a next step, so an ordinary failure keeps today's
+      # response shape byte for byte.
+      response[:recaptcha_challenge_available] = true if recaptcha_challenge_available
+      render json: response
     end
 
     def can_buyer_sign_up
