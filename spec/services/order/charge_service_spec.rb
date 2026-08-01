@@ -230,7 +230,9 @@ describe Order::ChargeService, :vcr do
         original.call(purchases, *rest)
       end
 
+      # The notifier raising too must not stop the loop — seller_2's group still charges.
       expect(ErrorNotifier).to receive(:notify).with(boom, hash_including(order_id: order.id, seller_id: seller_1.id)).once
+        .and_raise(RuntimeError, "notification transport failed")
 
       Order::ChargeService.new(order:, params:).perform
 
