@@ -1,6 +1,5 @@
 /* eslint-disable no-console */
 import fs from "fs";
-
 import { chromium } from "playwright";
 
 const ROOT = "https://fix-gp1636-fixed-amount-once-per.apps.staging.gumroad.org";
