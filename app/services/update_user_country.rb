@@ -31,6 +31,9 @@ class UpdateUserCountry
     # Dropping the address also drops the record of one we removed for a permanent PayPal refusal
     # (Payment#invalidate_paypal_payout_address). The seller is choosing a new payout setup here, so
     # the old rejection stops being their live situation — leaving it would resurrect it later.
+    # Kept alongside the address in the other branch, on purpose: the marker only decides which
+    # explanation the seller reads, never whether a payout is refused, and PayPal is still their
+    # only rail here — saving an address clears it (UpdatePayoutMethod#process_payment_address_params).
     @user.update!(payment_address: "", invalidated_paypal_payout_address: nil) unless keep_payment_address
 
     @user.comments.create!(
