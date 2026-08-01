@@ -43,16 +43,17 @@ class Shipment < ApplicationRecord
   # `tracking_url` — so read them back out of the URL when it is one of the forms above.
   # A scheme is required: the column also holds bare tracking numbers and free-text notes, and
   # without it any text shaped like a carrier host would be promoted to structured evidence.
-  # Only the scheme and host are compared case-insensitively; the stored prefixes are http for
-  # carriers that now serve https, and hosts are case-insensitive by definition. Path and query
-  # keys are compared exactly, because their casing is significant to the carrier — `QTC_TLABELS1`
-  # is not the USPS tracking form and must not be promoted to structured evidence.
+  # Host is folded but the path and query keys are compared exactly, because their casing is
+  # significant to the carrier — `QTC_TLABELS1` is not a form USPS serves.
   # Returns nil rather than a guess: dispute evidence submits once, and a wrong number is worse
   # than an absent one.
   def carrier_and_tracking_number_from_url
-    return if tracking_url.blank?
+    # No writer strips this column, and the free-text evidence path strips before using it; without
+    # the same treatment here a trailing space would cost the structured pair but keep the URL row.
+    url = tracking_url&.strip
+    return if url.blank?
 
-    schemeless = tracking_url[%r{\Ahttps?://(.+)\z}im, 1]
+    schemeless = url[%r{\Ahttps?://(.+)\z}i, 1]
     return if schemeless.nil?
 
     url_host, slash, url_rest = schemeless.partition("/")
@@ -64,9 +65,9 @@ class Shipment < ApplicationRecord
       next unless url_rest.start_with?(prefix_rest)
 
       number = url_rest[prefix_rest.length..]
-      # Bounded because every mapped carrier's number falls well inside it, so a longer or shorter
-      # alphanumeric remainder is paste garbage rather than something to submit.
-      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{4,40}\z/)
+      # The shortest number any mapped carrier issues is DHL's 10 digits; a shorter remainder is a
+      # truncated paste, and submitting it as a real tracking number is the failure this guards.
+      return [carrier_name, number] if number.match?(/\A[A-Za-z0-9]{8,40}\z/)
     end
     nil
   end

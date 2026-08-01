@@ -8,7 +8,7 @@ class DisputeEvidence::GenerateUncategorizedTextService
   include ActionView::Helpers::NumberHelper
 
   # Comfortably past the longest URL any mapped carrier issues; past it the value is paste garbage
-  # and not worth the room in a field Stripe truncates as a whole.
+  # rather than a link, and this field is shared with every other row we send.
   MAX_TRACKING_URL_LENGTH = 500
 
   attr_reader :purchase
@@ -40,9 +40,9 @@ class DisputeEvidence::GenerateUncategorizedTextService
       "Billing postal code: #{purchase.credit_card_zipcode}"
     end
 
-    # Always include the URL: the structured shipping fields only carry it when a known carrier can
-    # be attributed, and we get one submission. Labelled as the seller's, because it is — every
-    # other row here is ours, and this block is the seam where their text enters that document.
+    # Always include the URL: the structured fields only carry it when a known carrier can be
+    # attributed, and we get one submission. Labelled as the seller's because every other row here
+    # is our own assertion.
     def shipping_tracking_text
       tracking_url = submission_safe_tracking_url
       return if tracking_url.nil?
@@ -51,9 +51,8 @@ class DisputeEvidence::GenerateUncategorizedTextService
     end
 
     # `shipments.tracking_url` is a free-text param no controller validates, so a value carrying a
-    # newline would put seller-written lines into evidence Stripe reads as Gumroad's own. Omit
-    # anything that is not a plain http(s) URL rather than transcribing it: the stored value stays
-    # untouched for auditing, and dropping one unusable row costs less than vouching for its text.
+    # newline would put seller-written lines into evidence Stripe reads as Gumroad's own. Dropping
+    # an unusable row costs less than vouching for its text.
     def submission_safe_tracking_url
       url = purchase.shipment&.tracking_url&.strip
       return if url.blank? || url.length > MAX_TRACKING_URL_LENGTH || url.match?(/[[:cntrl:]]/)

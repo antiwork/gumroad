@@ -101,13 +101,13 @@ describe Shipment do
     it "matches regardless of the URL's scheme" do
       # The stored prefixes are http for carriers that now redirect to https, and a seller pasting
       # from the carrier's own site gets the https form.
-      shipment.update!(tracking_url: "https://wwwapps.ups.com/WebTracking/processInputRequest?TypeOfInquiryNumber=T&InquiryNumber1=1Z999")
-      expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999"])
+      shipment.update!(tracking_url: "https://wwwapps.ups.com/WebTracking/processInputRequest?TypeOfInquiryNumber=T&InquiryNumber1=1Z999AA10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999AA10123456784"])
     end
 
     it "matches regardless of the host's case" do
-      shipment.update!(tracking_url: "https://WWWAPPS.UPS.COM/WebTracking/processInputRequest?TypeOfInquiryNumber=T&InquiryNumber1=1Z999aa")
-      expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1Z999aa"])
+      shipment.update!(tracking_url: "https://WWWAPPS.UPS.COM/WebTracking/processInputRequest?TypeOfInquiryNumber=T&InquiryNumber1=1z999aa10123456784")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["UPS", "1z999aa10123456784"])
     end
 
     it "returns nothing when the path or query keys differ in case from the carrier's form" do
@@ -126,8 +126,8 @@ describe Shipment do
     end
 
     it "returns nothing when the value has no scheme" do
-      # A quarter of the column is bare tracking numbers and free-text notes rather than URLs, so
-      # text that merely starts with a carrier's host is not a link the seller followed.
+      # The column also holds bare tracking numbers and free-text notes, so text that merely starts
+      # with a carrier's host is not a link the seller followed.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"].sub(%r{\Ahttps?://}, "")
       shipment.update!(tracking_url: "#{usps}1Z999AA10123456784")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
@@ -138,12 +138,20 @@ describe Shipment do
 
     it "returns nothing when the remainder is not a plausible tracking number" do
       # Extra query parameters mean we cannot tell where the number ends, and a wrong number
-      # submitted as evidence is worse than none. Lengths no mapped carrier issues are paste garbage.
+      # submitted as evidence is worse than none. Lengths no mapped carrier issues are paste garbage:
+      # DHL's 10 digits is the shortest real format, so a 7-character remainder is a truncated paste.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
-      ["#{usps}1Z999&tRef=fullpage", usps, "#{usps}12", "#{usps}#{'A' * 41}"].each do |url|
+      ["#{usps}1Z999AA10123456784&tRef=fullpage", usps, "#{usps}12", "#{usps}1Z999AA", "#{usps}#{'A' * 41}"].each do |url|
         shipment.update!(tracking_url: url)
         expect(shipment.carrier_and_tracking_number_from_url).to be_nil, "expected #{url} to be rejected"
       end
+    end
+
+    it "recovers the pair from a value stored with surrounding whitespace" do
+      # No writer strips this column, so a trailing newline must not cost the structured evidence.
+      usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"]
+      shipment.update!(tracking_url: "  #{usps}9400111899223197428490\n")
+      expect(shipment.carrier_and_tracking_number_from_url).to eq(["USPS", "9400111899223197428490"])
     end
 
     it "returns nothing when no tracking URL was supplied" do
