@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class AddRecurringPaymentMethodContextToCreditCards < ActiveRecord::Migration[7.1]
-  # Renumbered twice: off 20261206000015 (already in production's schema_migrations, like
+  # Renumbered three times: off 20261206000015 (already in production's schema_migrations, like
   # 20261206000017 and 20261206000019), then off 20261206000021 when main's
-  # add_notification_claim_to_subscription_plan_changes took that version. At a burned number
+  # add_notification_claim_to_subscription_plan_changes took that version, then off 20261206000023
+  # when main's create_product_permalink_redirects landed at 20261206000024. At a burned number
   # db:migrate skips this silently and deploys green with the columns absent, and recurring_upi?
   # reads payment_method_type on every saved-card charge, so the whole renewal fleet raises.
   COLUMNS = {
