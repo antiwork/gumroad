@@ -10,6 +10,18 @@ module ValidateRecaptcha
     "privacy extensions, or VPNs — try disabling them for this page or using a " \
     "private/incognito window, then try again."
 
+  # Score-based keys never render an interactive challenge, so a token that is genuine and
+  # from an allowed host can still be refused purely on Google's risk score. Naming ad
+  # blockers there is a lie the buyer will act on and get nowhere with: ~755 checkouts a day
+  # hit this branch with valid=true hostname_ok=true (gumroad-private#1590). Say what is
+  # actually true and point at the levers that can change the score, rather than ones that
+  # cannot.
+  CAPTCHA_LOW_SCORE_MESSAGE = "Sorry, we could not complete this purchase — our fraud check " \
+    "scored this browser session as risky. Nothing is wrong with your payment method. Try " \
+    "again on a different network (turn off a VPN or switch off Wi-Fi to mobile data), or " \
+    "from a different browser or device. If it keeps happening, contact support and we will " \
+    "complete the order for you."
+
   ENTERPRISE_VERIFICATION_URL =
     "https://recaptchaenterprise.googleapis.com/v1/projects/#{GOOGLE_CLOUD_PROJECT_ID}/" \
     "assessments?key=#{GlobalConfig.get("ENTERPRISE_RECAPTCHA_API_KEY")}"
@@ -87,6 +99,11 @@ module ValidateRecaptcha
       score_ok = threshold.nil? || (assessment[:score].present? && assessment[:score] >= threshold)
       decision = token_ok && score_ok
 
+      # Remembered so the caller can pick the right copy. Only a token that was genuine and
+      # correctly hosted, and failed on score alone, gets the low-score message — a bad token
+      # really can be an ad blocker.
+      @recaptcha_failed_on_score_only = !decision && token_ok && !score_ok
+
       log_recaptcha_score(
         surface:,
         assessment:,
@@ -96,6 +113,10 @@ module ValidateRecaptcha
       )
 
       decision
+    end
+
+    def recaptcha_failure_message
+      @recaptcha_failed_on_score_only ? CAPTCHA_LOW_SCORE_MESSAGE : CAPTCHA_FAILURE_MESSAGE
     end
 
     def recaptcha_assessment(site_key:)

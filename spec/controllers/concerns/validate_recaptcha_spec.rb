@@ -30,6 +30,15 @@ describe ValidateRecaptcha, type: :controller do
       render_recaptcha_result(valid_recaptcha_response_and_hostname?(site_key: "follow_site_key", surface: :follow))
     end
 
+    def checkout_score_message_action
+      passed = valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score)
+      if passed
+        render json: { success: true }
+      else
+        render json: { success: false, error: recaptcha_failure_message }, status: :unprocessable_entity
+      end
+    end
+
     private
       def render_recaptcha_result(success)
         if success
@@ -48,6 +57,7 @@ describe ValidateRecaptcha, type: :controller do
       post :checkout_score_action, to: "anonymous#checkout_score_action"
       post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
       post :follow_action, to: "anonymous#follow_action"
+      post :checkout_score_message_action, to: "anonymous#checkout_score_message_action"
     end
 
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
@@ -223,6 +233,38 @@ describe ValidateRecaptcha, type: :controller do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
+      describe "#recaptcha_failure_message" do
+        it "does not blame ad blockers when a genuine, correctly-hosted token failed on score alone" do
+          stub_recaptcha_response(valid: true, score: 0.4)
+
+          post :checkout_score_message_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_LOW_SCORE_MESSAGE)
+          expect(parsed_body["error"]).not_to include("ad blockers")
+          expect(parsed_body["error"]).not_to include("incognito")
+        end
+
+        it "keeps the ad-blocker copy when the token itself was not valid" do
+          stub_recaptcha_response(valid: false, score: 0.9)
+
+          post :checkout_score_message_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+        end
+
+        it "keeps the ad-blocker copy when a high-scoring token came from a disallowed host" do
+          allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("production"))
+          stub_recaptcha_response(valid: true, score: 0.9, hostname: "evil.example.com")
+
+          post :checkout_score_message_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+        end
       end
     end
 
