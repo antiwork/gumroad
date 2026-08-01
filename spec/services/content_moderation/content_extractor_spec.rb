@@ -271,6 +271,57 @@ RSpec.describe ContentModeration::ContentExtractor do
                                                                           ])
     end
 
+    it "extracts images painted by CSS, which render without any img tag" do
+      page = page_for(custom_html: <<~HTML)
+        <div style="background-image: url('https://cdn.example.com/inline.png')">Studio</div>
+        <style>
+          .hero { background: url(data:image/png;base64,AAAA) no-repeat }
+          @media screen { .promo { border-image: url("https://cdn.example.com/media.png") } }
+        </style>
+      HTML
+
+      # The sanitizer keeps the style attribute and tag, and the page CSP's
+      # style-src 'unsafe-inline' lets them apply, so a CSS background is as
+      # rendered as an img src.
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/inline.png",
+                                                                            "data:image/png;base64,AAAA",
+                                                                            "https://cdn.example.com/media.png",
+                                                                          ])
+    end
+
+    it "reads CSS as a browser tokenizes it, so escapes and custom properties cannot hide an image" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          .a { background-image: /* comment */ url(\\68ttps://cdn.example.com/escaped.png) }
+          .b { --bg: url("https://cdn.example.com/var.png") }
+          .c { background-image: var(--bg) }
+          .d { background-image: image-set(url("https://cdn.example.com/set.png") 1x) }
+        </style>
+      HTML
+
+      expect(extractor.extract_from_page(page).image_urls).to match_array([
+                                                                            "https://cdn.example.com/escaped.png",
+                                                                            "https://cdn.example.com/var.png",
+                                                                            "https://cdn.example.com/set.png",
+                                                                          ])
+    end
+
+    it "leaves font URLs out of the image set, so a custom font cannot block a page" do
+      page = page_for(custom_html: <<~HTML)
+        <style>
+          @font-face { font-family: brand; src: url("https://fonts.gstatic.com/f.woff2") }
+          h1 { font-family: brand; background: url("https://cdn.example.com/hero.png") }
+        </style>
+      HTML
+
+      # A font sent to the image endpoint fails moderation, and under full
+      # coverage an unmoderated "image" rejects the whole page. The background
+      # alongside it pins that fonts are excluded by choice, not by the
+      # stylesheet going unread.
+      expect(extractor.extract_from_page(page).image_urls).to eq(["https://cdn.example.com/hero.png"])
+    end
+
     it "excludes relative image sources, which have no absolute form to send" do
       page = page_for(custom_html: %(<img src="/local/asset.png"><img src="https://cdn.example.com/remote.png">))
 

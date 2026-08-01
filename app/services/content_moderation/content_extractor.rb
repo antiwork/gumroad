@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "crass"
+
 class ContentModeration::ContentExtractor
   include SignedUrlHelper
   include Rails.application.routes.url_helpers
@@ -23,6 +25,17 @@ class ContentModeration::ContentExtractor
   # approved on a subset. Sized so the worst case is a handful of batched requests
   # inside one save, far above what a real storefront page uses.
   MAX_PAGE_IMAGE_URLS = 25
+
+  # CSS properties that paint an image the visitor sees. An allowlist rather
+  # than every url() in the stylesheet, because url() also appears in values
+  # that are not images (fonts, SVG filter references) — sending one to the
+  # image moderation endpoint fails, and under full coverage an unmoderated
+  # "image" blocks the page. (@font-face is additionally skipped structurally:
+  # its declarations sit under an at-rule, not a style rule.)
+  IMAGE_CSS_PROPERTIES = %w[
+    background background-image border-image border-image-source content cursor
+    list-style list-style-image mask mask-border mask-border-source mask-image
+  ].freeze
 
   Result = Struct.new(:text, :image_urls, keyword_init: true)
 
@@ -99,7 +112,10 @@ class ContentModeration::ContentExtractor
       end
 
       document = Nokogiri::HTML(html.to_s)
-      document.css("script, style, noscript, template").each(&:remove)
+      # `style` stays, unlike in page_document: a <style> body is not TEXT a
+      # visitor reads, but the images it paints do render, and page_image_urls
+      # reads them from here.
+      document.css("script, noscript, template").each(&:remove)
       document
     end
 
@@ -127,8 +143,10 @@ class ContentModeration::ContentExtractor
 
     # Every image the page can DISPLAY, since that is what an approval covers.
     # `img src` is not enough: the sanitizer permits `srcset` (on `img` and
-    # `picture > source`) and `video poster`, so an image reachable only through
-    # one of those renders to every visitor while being reviewed by nothing.
+    # `picture > source`), `video poster`, and the `style` attribute and tag —
+    # so an image reachable only through one of those, including a CSS
+    # `background-image`, renders to every visitor while being reviewed by
+    # nothing.
     #
     # Remote URLs the classifier fetches itself; `data:` images are passed through
     # as the base64 payload, which the moderations endpoint accepts in place of a
@@ -144,6 +162,7 @@ class ContentModeration::ContentExtractor
       sources += document.css("img[srcset], source[srcset]").flat_map do |node|
         srcset_urls(node["srcset"])
       end
+      sources += css_image_urls(document)
 
       sources.filter_map do |value|
         src = value.to_s.strip
@@ -169,6 +188,72 @@ class ContentModeration::ContentExtractor
     def srcset_urls(value)
       value.to_s.split(/,(?=\s*(?:https?:|data:|[^\s,]*\/))/).filter_map do |candidate|
         candidate.strip.split(/\s+/, 2).first.presence
+      end
+    end
+
+    # Images painted by CSS: `background-image` and friends, in inline `style`
+    # attributes and <style> blocks — both survive the sanitizer, and the page
+    # CSP's style-src 'unsafe-inline' lets them apply. Parsed with Crass (the
+    # tokenizer Loofah itself uses) rather than a regex so comments, escaped
+    # identifiers (`\68ttps:`), and semicolons inside data: URLs read here
+    # exactly as a browser reads them when it decides what to render.
+    def css_image_urls(document)
+      document.css("[style]").flat_map { |node| css_declaration_image_urls(Crass.parse_properties(node["style"].to_s)) } +
+        document.css("style").flat_map { |node| css_rule_image_urls(Crass.parse(node.text.to_s)) }
+    end
+
+    def css_rule_image_urls(rules)
+      rules.flat_map do |node|
+        next [] unless node.is_a?(Hash)
+
+        case node[:node]
+        when :style_rule
+          css_declaration_image_urls(node[:children])
+        when :at_rule
+          # An at-rule's block comes back as raw tokens; re-parsing recovers the
+          # rules nested under @media/@supports. @font-face's declarations don't
+          # parse as rules and fall out as :error nodes — which is the point:
+          # its `src` URLs are fonts, not images.
+          node[:block] ? css_rule_image_urls(Crass::Parser.parse_rules(node[:block])) : []
+        else
+          []
+        end
+      end
+    end
+
+    def css_declaration_image_urls(nodes)
+      Array(nodes).flat_map do |node|
+        next [] unless node.is_a?(Hash) && node[:node] == :property
+
+        # Custom properties are collected too: `--bg: url(…)` painted via
+        # `background-image: var(--bg)` renders like any other background, and
+        # var() is not usable in @font-face `src`, so a font can't get in this way.
+        name = node[:name].to_s.downcase
+        next [] unless name.start_with?("--") || IMAGE_CSS_PROPERTIES.include?(name.sub(/\A-[a-z]+-/, ""))
+
+        css_url_values(node[:children])
+      end
+    end
+
+    # url() tokens anywhere in the value, including inside functions like
+    # image-set() and cross-fade(). Crass has already decoded escapes, so the
+    # values compare like the URLs a browser would fetch.
+    def css_url_values(nodes)
+      Array(nodes).flat_map do |node|
+        next [] unless node.is_a?(Hash)
+
+        case node[:node]
+        when :url
+          [node[:value].to_s]
+        when :function
+          if node[:name].to_s.downcase == "url"
+            Array(node[:value]).filter_map { |token| token[:value].to_s if token.is_a?(Hash) && token[:node] == :string }
+          else
+            css_url_values(node[:value])
+          end
+        else
+          []
+        end
       end
     end
 
