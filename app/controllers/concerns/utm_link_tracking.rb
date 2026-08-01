@@ -76,7 +76,7 @@ module UtmLinkTracking
         UpdateUtmLinkStatsJob.perform_async(utm_link.id)
       end
     rescue ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked => e
-      # Row contention on the utm_links row the timestamp update below writes — a concurrent
+      # Row contention on the utm_links row the timestamp update above writes — a concurrent
       # visit to the same link, or Onetime::DedupDuplicateUtmLinks, may already hold it. This
       # runs in a before_action on public GETs, so an uncaught timeout 500s the product page.
       #
