@@ -522,6 +522,23 @@ describe CustomerLowPriorityMailer do
         mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
         expect(mail.body.encoded).to include @shipment.tracking_url
       end
+
+      it "labels seller-provided tracking links with the destination host" do
+        @shipment.update!(tracking_url: "https://www.google.com/track")
+
+        mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
+        expect(mail.body.decoded).to include "Seller-provided tracking link"
+        expect(mail.body.decoded).to include "Destination: www.google.com"
+      end
+
+      it "does not render legacy invalid tracking links" do
+        @shipment.update_column(:tracking_url, "1Z999AA10123456784")
+
+        mail = CustomerLowPriorityMailer.order_shipped(@shipment.id)
+        expect(mail.body.decoded).to include "has been shipped and should arrive soon"
+        expect(mail.body.decoded).not_to include "Track your package"
+        expect(mail.body.decoded).not_to include "1Z999AA10123456784"
+      end
     end
   end
 

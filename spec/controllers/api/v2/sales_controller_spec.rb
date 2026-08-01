@@ -819,7 +819,7 @@ describe Api::V2::SalesController do
       end
 
       it "marks shipment as shipped and includes tracking url" do
-        tracking_url = "sample-tracking-url"
+        tracking_url = "https://example.com/track"
         @params.merge!(tracking_url:)
 
         # There is no shipment yet
@@ -841,6 +841,18 @@ describe Api::V2::SalesController do
           success: true,
           sale: @purchase.as_json(version: 2)
         }.as_json)
+      end
+
+      it "rejects tracking values that are not full URLs" do
+        @params.merge!(tracking_url: "1Z999AA10123456784")
+
+        put :mark_as_shipped, params: @params
+
+        expect(response.parsed_body).to eq({
+          success: false,
+          message: "Tracking URL #{Shipment::VALID_TRACKING_LINK_MESSAGE}"
+        }.as_json)
+        expect(@purchase.reload.shipment).to eq nil
       end
 
       it "does not allow you to mark someone else's sale as shipped" do

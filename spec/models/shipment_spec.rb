@@ -37,6 +37,47 @@ describe Shipment do
     end
   end
 
+  describe "validations" do
+    let(:purchase) do
+      user = create(:user)
+      product = create(:physical_product, user:)
+      create(:physical_purchase, link: product)
+    end
+
+    it "strips whitespace around tracking_url" do
+      shipment = build(:shipment, purchase:, tracking_url: " https://example.com/track ")
+
+      expect(shipment).to be_valid
+      shipment.save!
+      expect(shipment.tracking_url).to eq("https://example.com/track")
+    end
+
+    it "rejects tracking_url values that cannot render as safe links" do
+      invalid_tracking_links = [
+        "1Z999AA10123456784",
+        "ftp://example.com/track",
+        "https://seller:secret@example.com/track",
+        "https://example.com/track\t123",
+        "https://example.com/#{"a" * Shipment::TRACKING_LINK_MAX_LENGTH}",
+      ]
+
+      invalid_tracking_links.each do |tracking_link|
+        shipment = build(:shipment, purchase:, tracking_url: tracking_link)
+
+        expect(shipment).not_to be_valid
+        expect(shipment.errors[:tracking_url]).to include(Shipment::VALID_TRACKING_LINK_MESSAGE)
+      end
+    end
+
+    it "allows legacy invalid tracking_url rows to be updated without rewriting tracking_url" do
+      shipment = create(:shipment, purchase:)
+      shipment.update_column(:tracking_url, "1Z999AA10123456784")
+      shipment.shipped_at = Time.current
+
+      expect { shipment.save! }.not_to raise_error
+    end
+  end
+
   describe "#calculated_tracking_url" do
     before do
       user = create(:user)
@@ -48,6 +89,12 @@ describe Shipment do
     it "returns the tracking_url if present" do
       @shipment.update(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
       expect(@shipment.calculated_tracking_url).to eq("https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
+    end
+
+    it "does not return a legacy invalid tracking_url" do
+      @shipment.update_column(:tracking_url, "1Z999AA10123456784")
+
+      expect(@shipment.calculated_tracking_url).to eq(nil)
     end
 
     it "returns the right url based on carrier and tracking_number when tracking_url is not present" do
@@ -239,6 +286,39 @@ describe Shipment do
     it "returns nothing when no tracking URL was supplied" do
       expect(create(:shipment, carrier: nil, tracking_number: nil, tracking_url: nil)
                .carrier_and_tracking_number_from_url).to be_nil
+    end
+  end
+
+  describe "#tracking_link_for_display" do
+    before do
+      user = create(:user)
+      link = create(:physical_product, user:)
+      purchase = create(:physical_purchase, link:)
+      @shipment = create(:shipment, purchase:, tracking_number: "1234567890", carrier: "USPS")
+    end
+
+    it "uses the package tracking label for known carrier hosts" do
+      @shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
+
+      expect(@shipment.tracking_link_for_display).to eq(
+        {
+          url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890",
+          label: "Track your package",
+          host: nil,
+        }
+      )
+    end
+
+    it "labels arbitrary valid HTTPS hosts as seller-provided" do
+      @shipment.update!(tracking_url: "https://www.google.com/track")
+
+      expect(@shipment.tracking_link_for_display).to eq(
+        {
+          url: "https://www.google.com/track",
+          label: "Seller-provided tracking link",
+          host: "www.google.com",
+        }
+      )
     end
   end
 end

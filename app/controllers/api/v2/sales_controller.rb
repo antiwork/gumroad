@@ -137,13 +137,13 @@ class Api::V2::SalesController < Api::V2::BaseController
 
     return error_with_sale if purchase.nil?
 
-    shipment = Shipment.create(purchase:) if purchase.shipment.blank?
-    shipment ||= purchase.shipment
+    shipment = purchase.shipment || Shipment.new(purchase:)
 
-    if params[:tracking_url]
+    if params.key?(:tracking_url)
       shipment.tracking_url = params[:tracking_url]
-      shipment.save!
     end
+
+    return error_with_sale(shipment) unless shipment.save
 
     shipment.mark_shipped
     success_with_sale(purchase.as_json(version: 2, include_buyer_presentment: true))

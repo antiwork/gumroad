@@ -50,6 +50,14 @@ describe ShipmentsController, :vcr do
         expect(shipment.reload.shipped?).to be(true)
         expect(shipment.tracking_url).to eq(tracking_url)
       end
+
+      it "rejects tracking values that are not full URLs" do
+        expect { post :mark_as_shipped, params: { purchase_id: purchase.external_id, tracking_url: "1Z999AA10123456784" } }.not_to change { Shipment.count }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["message"]).to eq("Tracking URL #{Shipment::VALID_TRACKING_LINK_MESSAGE}")
+        expect(purchase.reload.shipment).to eq(nil)
+      end
     end
   end
 end

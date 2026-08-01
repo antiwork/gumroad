@@ -274,7 +274,7 @@ export const MarkSaleAsShipped = () => (
     description="Marks a sale as shipped. Available with the 'mark_sales_as_shipped' scope."
   >
     <ApiParameters>
-      <ApiParameter name="tracking_url" description="(optional)" />
+      <ApiParameter name="tracking_url" description="(optional) Full http:// or https:// URL" />
     </ApiParameters>
     <SaleResponseFields />
     <CodeSnippet caption="cURL example">

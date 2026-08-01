@@ -35,7 +35,15 @@ class Shipment < ApplicationRecord
   # number never matches its carrier's format and the strongest evidence we hold is dropped.
   PERCENT_ENCODED_WHITESPACE = /\A(?:%(?:20|09|0[AaDd]))+|(?:%(?:20|09|0[AaDd]))+\z/
 
+  TRACKING_LINK_MAX_LENGTH = 2_083
+  TRACKING_LINK_SCHEMES = %w[http https].freeze
+  TRACKING_LINK_CONTROL_CHARACTER_REGEX = /[[:cntrl:]]/
+  CARRIER_TRACKING_HOSTS = CARRIER_TRACKING_URL_MAPPING.values.map { |tracking_link| URI.parse(tracking_link).host.downcase }.freeze
+  VALID_TRACKING_LINK_MESSAGE = "must be a full URL beginning with http:// or https://"
+
   validates :purchase, presence: true
+  before_validation :strip_tracking_url
+  validate :tracking_url_must_be_display_safe
 
   # The purchase's updated_at should reflect changes to its shipment.
   after_update :touch_purchase
@@ -54,11 +62,37 @@ class Shipment < ApplicationRecord
   end
 
   def calculated_tracking_url
-    return tracking_url if tracking_url.present?
-    return nil if tracking_number.nil? || carrier.nil?
-    return nil unless CARRIER_TRACKING_URL_MAPPING.key?(carrier)
+    tracking_link_for_display&.fetch(:url)
+  end
 
-    CARRIER_TRACKING_URL_MAPPING[carrier] + tracking_number
+  def tracking_link_for_display
+    display_safe_tracking_link = self.class.display_safe_tracking_link(raw_tracking_link)
+    return if display_safe_tracking_link.blank?
+
+    host = URI.parse(display_safe_tracking_link).host.downcase
+    known_carrier_host = CARRIER_TRACKING_HOSTS.include?(host)
+
+    {
+      url: display_safe_tracking_link,
+      label: known_carrier_host ? "Track your package" : "Seller-provided tracking link",
+      host: known_carrier_host ? nil : host,
+    }
+  end
+
+  def self.display_safe_tracking_link(value)
+    normalized_value = value.to_s.strip
+    return if normalized_value.blank?
+    return if normalized_value.length > TRACKING_LINK_MAX_LENGTH
+    return if normalized_value.match?(TRACKING_LINK_CONTROL_CHARACTER_REGEX)
+
+    uri = URI.parse(normalized_value)
+    return unless TRACKING_LINK_SCHEMES.include?(uri.scheme&.downcase)
+    return if uri.host.blank?
+    return if uri.userinfo.present?
+
+    normalized_value
+  rescue URI::InvalidURIError
+    nil
   end
 
   # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
@@ -99,6 +133,26 @@ class Shipment < ApplicationRecord
   end
 
   private
+    def raw_tracking_link
+      return tracking_url if tracking_url.present?
+      return if tracking_number.blank? || carrier.blank?
+      return unless CARRIER_TRACKING_URL_MAPPING.key?(carrier)
+
+      CARRIER_TRACKING_URL_MAPPING[carrier] + tracking_number
+    end
+
+    def strip_tracking_url
+      self.tracking_url = tracking_url.strip if will_save_change_to_tracking_url? && tracking_url.present?
+    end
+
+    def tracking_url_must_be_display_safe
+      # Existing shipments have free-text values; reject only new writes so those rows stay editable.
+      return unless will_save_change_to_tracking_url? && tracking_url.present?
+      return if self.class.display_safe_tracking_link(tracking_url).present?
+
+      errors.add(:tracking_url, VALID_TRACKING_LINK_MESSAGE)
+    end
+
     def marked_as_shipped!
       update!(shipped_at: Time.current)
     end

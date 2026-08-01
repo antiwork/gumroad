@@ -50,7 +50,7 @@ class CustomerPresenter
           tracking: purchase.shipment.present? ?
             {
               shipped: purchase.shipment.shipped?,
-              url: purchase.shipment.tracking_url,
+              url: purchase.shipment.calculated_tracking_url,
             } : { shipped: false },
         } : nil,
       is_bundle_purchase: purchase.is_bundle_purchase,
