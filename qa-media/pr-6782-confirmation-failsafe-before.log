@@ -1,0 +1,16 @@
+status=200 inside_failsafe_window=true -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=200 inside_failsafe_window=false -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=404 inside_failsafe_window=true -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=404 inside_failsafe_window=false -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=000 inside_failsafe_window=true -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=000 inside_failsafe_window=false -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=502 inside_failsafe_window=true -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=502 inside_failsafe_window=false -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED

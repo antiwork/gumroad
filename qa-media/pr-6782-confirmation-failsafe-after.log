@@ -1,0 +1,19 @@
+status=200 inside_failsafe_window=true -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=200 inside_failsafe_window=false -> DEPLOYS
+    DEPLOYMENT_GATE_REACHED
+status=404 inside_failsafe_window=true -> SKIPS
+    LOG Long-running job confirmation unreadable (HTTP 404) inside the fail-safe window — skipping deployment
+status=404 inside_failsafe_window=false -> DEPLOYS
+    LOG Long-running job confirmation unreadable (HTTP 404) outside the fail-safe window — proceeding
+    DEPLOYMENT_GATE_REACHED
+status=000 inside_failsafe_window=true -> SKIPS
+    LOG Long-running job confirmation unreadable (HTTP 000) inside the fail-safe window — skipping deployment
+status=000 inside_failsafe_window=false -> DEPLOYS
+    LOG Long-running job confirmation unreadable (HTTP 000) outside the fail-safe window — proceeding
+    DEPLOYMENT_GATE_REACHED
+status=502 inside_failsafe_window=true -> SKIPS
+    LOG Long-running job confirmation unreadable (HTTP 502) inside the fail-safe window — skipping deployment
+status=502 inside_failsafe_window=false -> DEPLOYS
+    LOG Long-running job confirmation unreadable (HTTP 502) outside the fail-safe window — proceeding
+    DEPLOYMENT_GATE_REACHED

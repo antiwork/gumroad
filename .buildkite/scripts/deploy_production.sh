@@ -78,6 +78,10 @@ wait_for_healthcheck() {
   return 0
 }
 
+# The clock window the long-running check falls back to when it cannot read the endpoint.
+# Named because both the wait and the final confirmation have to agree on it.
+LONG_RUNNING_FAILSAFE_WINDOW_TEST='[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
+
 run_healthcheck_waits() {
   local tmpdir payout_pid long_pid remaining rc
   tmpdir=$(mktemp -d)
@@ -96,7 +100,7 @@ run_healthcheck_waits() {
   (
     set +e
     wait_for_healthcheck "Long-running job" "$LONG_RUNNING_JOBS_HEALTHCHECK_URL" 40 skip \
-      '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
+      "$LONG_RUNNING_FAILSAFE_WINDOW_TEST"
     rc=$?
     printf '%s\n' "$rc" > "$tmpdir/long.rc.tmp"
     mv "$tmpdir/long.rc.tmp" "$tmpdir/long.rc"
@@ -139,14 +143,24 @@ run_healthcheck_waits() {
 # again. Only the long-running blocker gets this treatment: payout staleness is accepted by
 # design (an interrupted slice is re-run by Sidekiq, hence proceed-on-timeout), and looping
 # on it would break its promise of never holding a deploy more than its own wait budget.
-# Only 503 loops — for unreachable/absent endpoints the waits above already applied the
-# fail-safe-window semantics, and re-looping would apply them twice.
+# 503 loops. A confirmation poll that cannot be read (404, LB 5xx, curl's 000) is NOT
+# clearance: this is a fresh read taken after the waits cleared, so it gets the same
+# fail-safe-window semantics the waits use — skip inside the window, proceed outside it.
+# Only 200 proceeds unconditionally.
 CONFIRMATION_ROUNDS=5
 confirmation_round=1
 while true; do
   run_healthcheck_waits
   long_status=$(poll_healthcheck "$LONG_RUNNING_JOBS_HEALTHCHECK_URL")
+  if [ "$long_status" = "200" ]; then
+    break
+  fi
   if [ "$long_status" != "503" ]; then
+    if eval "$LONG_RUNNING_FAILSAFE_WINDOW_TEST"; then
+      logger "Long-running job confirmation unreadable (HTTP $long_status) inside the fail-safe window — skipping deployment"
+      exit 0
+    fi
+    logger "Long-running job confirmation unreadable (HTTP $long_status) outside the fail-safe window — proceeding"
     break
   fi
   if [ "$confirmation_round" -ge "$CONFIRMATION_ROUNDS" ]; then
