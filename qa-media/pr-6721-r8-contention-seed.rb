@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Renames real rows, so refuse to run anywhere but a preview pod.
+abort("staging only — this script renames products and writes legacy_permalinks") unless Rails.env.staging?
+
 # Pick a contention pair the concurrent sibling session is NOT touching (it owns products 1 and 3).
 RUN = "r126656"
 busy = [1, 3]

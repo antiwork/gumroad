@@ -1,8 +1,13 @@
 # frozen_string_literal: true
 
-# Rename hops on product 5 (seller 9) — a product the concurrent sibling session is not touching.
+# Renames real rows, so refuse to run anywhere but a preview pod.
+abort("staging only — this script renames products and writes legacy_permalinks") unless Rails.env.staging?
+
+# Product 5 is the one the concurrent sibling session is not touching; assert before mutating,
+# since a reseed can renumber the fixtures out from under this id.
 RUN = "r126656"
 l = Link.find(5)
+abort("unexpected seed state: product 5 is user #{l.user_id}, expected 9") unless l.user_id == 9
 puts "MARK product=#{l.id} user=#{l.user_id} host=#{l.user.subdomain_with_protocol} custom_before=#{l.custom_permalink.inspect}"
 
 a = "yhop-a-#{RUN}"; b = "yhop-b-#{RUN}"; c = "yhop-c-#{RUN}"
