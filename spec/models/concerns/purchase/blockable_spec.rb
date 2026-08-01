@@ -597,6 +597,78 @@ describe Purchase::Blockable do
       purchase.unblock_buyer!
       expect(purchase.is_buyer_blocked_by_admin).to eq(false)
     end
+
+    context "when the block was written from a different purchase of the same buyer" do
+      it "clears a browser_guid block belonging to another purchase" do
+        other_purchase = create(:purchase, link: product, email: purchase.email, purchaser: buyer, browser_guid: "other-device-guid")
+        other_purchase.block_buyer!
+
+        expect(other_purchase.reload.buyer_blocked?).to eq(true)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "other-device-guid")).to be_nil
+        expect(other_purchase.reload.buyer_blocked?).to eq(false)
+      end
+
+      it "clears a card fingerprint block belonging to another purchase" do
+        other_purchase = create(:purchase, link: product, email: purchase.email, purchaser: buyer, stripe_fingerprint: "other-card-fingerprint")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:charge_processor_fingerprint], object_value: other_purchase.charge_processor_fingerprint)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "other-card-fingerprint")).to be_nil
+      end
+
+      it "finds the sibling purchase by email when the acting purchase has no purchaser" do
+        guest_purchase = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-acting-guid")
+        sibling = create(:purchase, link: product, email: "guest@example.com", purchaser: nil, browser_guid: "guest-other-guid")
+        sibling.block_buyer!
+
+        guest_purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "guest-other-guid")).to be_nil
+      end
+
+      it "does not touch another buyer's blocks" do
+        stranger = create(:purchase, link: product, email: "stranger@example.com", browser_guid: "stranger-guid")
+        stranger.block_buyer!
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "stranger-guid")).to be_present
+      end
+
+      it "leaves IP blocks on the buyer's other purchases alone" do
+        other_purchase = create(:purchase, link: product, email: purchase.email, purchaser: buyer, ip_address: "203.0.113.9")
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "203.0.113.9", expires_in: 1.day)
+
+        purchase.unblock_buyer!
+
+        expect(PlatformBlock.active.find_by(object_value: "203.0.113.9")).to be_present
+        expect(other_purchase).to be_present
+      end
+    end
+
+    describe "the return value" do
+      it "is empty when nothing is left holding the buyer" do
+        purchase.block_buyer!
+
+        expect(purchase.unblock_buyer!).to be_empty
+      end
+
+      it "reports a block that survives because it is not one of the buyer's own identifiers" do
+        purchase.block_buyer!
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: purchase.ip_address, expires_in: 1.day)
+        # unblock_by_ip_address! clears the acting row's IP, so re-block it from elsewhere to stand
+        # in for a shared-IP block the buyer did not earn.
+        allow(purchase).to receive(:unblock_by_ip_address!)
+
+        surviving = purchase.unblock_buyer!
+
+        expect(surviving.map(&:object_value)).to eq([purchase.ip_address])
+      end
+    end
   end
 
   describe "#mark_failed" do

@@ -47,6 +47,12 @@ module Purchase::Blockable
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
+  # How many of the buyer's other purchases #unblock_buyer! collects identifiers from. An admin
+  # click has to stay bounded, and past a few hundred rows a buyer stops contributing new browser
+  # guids, addresses or cards — the largest stranded buyer in gumroad-private#1648 had 231
+  # purchases and 85 distinct guids.
+  MAX_SIBLING_PURCHASES_FOR_UNBLOCK = 500
+
   # How many settled purchases a buyer needs behind them before a fraud-flavoured decline from
   # their card issuer stops being treated as a fraud signal about the person. Three is well above
   # what a card tester accumulates and well below what an ordinary repeat customer or a membership
@@ -89,17 +95,85 @@ module Purchase::Blockable
     create_blocked_buyer_comments!(blocking_user:, comment_content:)
   end
 
+  # Unblocking is scoped to the BUYER, not to this one purchase row. The purchase an agent opens
+  # to press Unblock is almost never the purchase the block was written from — a buyer browses
+  # from several devices over the years, so unblocking from purchase A cleared guid A while the
+  # block sat on guid B and kept rejecting them. #block_buyer! is symmetric with the old
+  # single-row unblock, so the round trip looked fine on the acting row and nothing anywhere said
+  # a row had been left behind: `buyer_blocked?` is an OR, the controller still wrote "Buyer
+  # unblocked", and the response was still `success: true`. Browser-guid blocks are the worst ones
+  # to strand, because PlatformBlock.add! only accepts an `expires_in` for ip_address and so a guid
+  # block never lapses (gumroad-private#1648: 71% of hand-unblocked buyers were still blocked, one
+  # of them for 2.5 years).
+  #
+  # IP addresses are deliberately NOT widened across rows. An IP is not buyer-bound — it is shared
+  # by everyone behind a NAT or a carrier pool and gets reallocated — so clearing every IP this
+  # buyer has ever checked out from would lift blocks earned by other people. It also expires on
+  # its own. The identifiers widened here are the ones that identify this buyer specifically:
+  # their browser, their email addresses and their cards.
+  #
+  # Returns the PlatformBlocks that are STILL active afterwards, so a caller can tell the agent the
+  # truth instead of reporting an unqualified success. Non-empty means something outside this
+  # buyer's identifiers is holding them (an email-domain block, a shared IP).
   def unblock_buyer!
-    unblock_by_browser_guid!
-    unblock_by_email!
-    unblock_by_paypal_email!
-    unblock_by_gifter_email!
-    unblock_by_purchaser_email!
     unblock_by_ip_address!
-    unblock_by_charge_processor_fingerprint!
-    unblock_by_recent_stripe_fingerprint!
+
+    buyer_blockable_values.each do |object_type, values|
+      PlatformBlock.where(object_type:, object_value: values).find_each(&:unblock!)
+    end
+    @blocked_by_attributes = nil
 
     update!(is_buyer_blocked_by_admin: false) if is_buyer_blocked_by_admin?
+
+    surviving_buyer_blocks
+  end
+
+  # Every active block that still holds this buyer after an unblock. Same identifier set
+  # `buyer_blocked?` asks about, but resolved across the buyer's purchases and returning the rows
+  # rather than a boolean, so the caller can name what survived.
+  def surviving_buyer_blocks
+    scopes = buyer_blockable_values.map { |object_type, values| PlatformBlock.active.where(object_type:, object_value: values) }
+    scopes << PlatformBlock.active.ip_address.where(object_value: ip_address) if ip_address.present?
+    return PlatformBlock.none if scopes.empty?
+
+    scopes.reduce { |combined, scope| combined.or(scope) }
+  end
+
+  private def buyer_blockable_values
+    @_buyer_blockable_values ||= begin
+      guids = Set.new
+      emails = Set.new
+      fingerprints = Set.new
+
+      [self, *sibling_buyer_purchases].each do |purchase|
+        guids << purchase.browser_guid
+        emails.merge([purchase.email, purchase.paypal_email, purchase.gifter_email, purchase.purchaser_email])
+        fingerprints << purchase.charge_processor_fingerprint
+      end
+      fingerprints << recent_stripe_fingerprint
+
+      {
+        PlatformBlock::TYPES[:browser_guid] => guids.compact_blank.to_a,
+        PlatformBlock::TYPES[:email] => emails.compact_blank.to_a,
+        PlatformBlock::TYPES[:charge_processor_fingerprint] => fingerprints.compact_blank.to_a,
+      }.reject { |_, values| values.empty? }
+    end
+  end
+
+  # The buyer's other purchases, found by the two identities a purchase carries: the email it was
+  # made under and the account it resolved to. Newest first and capped — a buyer with thousands of
+  # rows contributes no new identifiers past the first few hundred, and an admin click must not
+  # turn into an unbounded scan.
+  private def sibling_buyer_purchases
+    scope = if purchaser_id.present?
+      Purchase.where("purchaser_id = ? OR email = ?", purchaser_id, email)
+    elsif email.present?
+      Purchase.where(email:)
+    else
+      return Purchase.none
+    end
+
+    scope.where.not(id:).order(id: :desc).limit(MAX_SIBLING_PURCHASES_FOR_UNBLOCK)
   end
 
   def charge_processor_fingerprint
