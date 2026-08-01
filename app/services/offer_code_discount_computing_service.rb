@@ -37,9 +37,12 @@ class OfferCodeDiscountComputingService
       # charge in Order::CreateService / ConfirmService) must still see this line, so it is
       # emitted with a zero amount rather than omitted.
       #
-      # Skipping eligibility here is deliberate: the cart-level amount was already spent, so
-      # re-checking times-of-use would report :sold_out for a line nobody is charging.
-      if once_per_cart?(offer_code) && already_applied?(offer_code)
+      # Only the times-of-use check is skipped here: the cart-level amount was already spent,
+      # so re-checking it would report :sold_out for a line nobody is charging. Line-level
+      # requirements still hold — an under-minimum-quantity line falls through and reports
+      # :unmet_minimum_purchase_quantity instead of being covered.
+      if once_per_cart?(offer_code) && already_applied?(offer_code) &&
+         meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         if resolved_discount
           products_data[link.unique_permalink] = { discount: resolved_discount.merge(cents: 0) }
           optimistically_apply_to_applicable_cross_sells(products_data, link)

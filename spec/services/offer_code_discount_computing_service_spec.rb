@@ -99,6 +99,22 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data]).to include(cross_sell_product1.unique_permalink, cross_sell_product2.unique_permalink)
     end
 
+    # Coverage at zero is not a free pass on line-level eligibility: a later line that
+    # doesn't meet minimum_quantity must error as it would if the code weren't spent yet.
+    it "enforces minimum quantity on lines covered at zero" do
+      fixed_code.update!(minimum_quantity: 2)
+      products = {
+        product.unique_permalink => { quantity: "2", permalink: product.unique_permalink },
+        product2.unique_permalink => { quantity: "1", permalink: product2.unique_permalink },
+      }
+
+      result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
+
+      expect(result[:error_code]).to eq(:unmet_minimum_purchase_quantity)
+      expect(result[:products_data].size).to eq(1)
+      expect(result[:products_data][product.unique_permalink][:discount][:cents]).to eq(500)
+    end
+
     # Pins the limit documented in #process (gumroad-private#1650): the code lands whole on one
     # line and the remainder is dropped rather than spilling onto the next. The second line is
     # still covered, at zero. Spilling is a deliberate change and should redden here.
