@@ -32,19 +32,37 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     def usage_activity
       if consumption_events.any?
         generate_from_consumption_events
-      elsif url_redirect.present? && url_redirect.uses.to_i.positive?
+      elsif total_url_redirect_uses.positive?
         generate_from_url_redirect
       else
         nil
       end
     end
 
+    # A bundle sale's disputed row is the wrapper purchase, but buyers download the member
+    # products, so every access row is written against the members and the wrapper is always
+    # silent. Aggregating both is what puts the download log back in the dispute packet
+    # (gumroad-private#1690).
+    def access_purchases
+      @_access_purchases ||= bundle? ? [purchase, *purchase.product_purchases] : [purchase]
+    end
+
+    def bundle?
+      purchase.is_bundle_purchase?
+    end
+
     def consumption_events
-      @_consumption_events ||= purchase.consumption_events.order(:consumed_at, :id)
+      @_consumption_events ||= ConsumptionEvent
+        .where(purchase_id: access_purchases.map(&:id))
+        .order(:consumed_at, :id)
+    end
+
+    def total_url_redirect_uses
+      @_total_url_redirect_uses ||= access_purchases.sum { _1.url_redirect&.uses.to_i }
     end
 
     def generate_from_url_redirect
-      "The customer accessed the product #{url_redirect.uses} #{"time".pluralize(url_redirect.uses)}."
+      "The customer accessed the product #{total_url_redirect_uses} #{"time".pluralize(total_url_redirect_uses)}."
     end
 
     LOG_RECORDS_LIMIT = 10
@@ -58,13 +76,29 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     end
 
     def consumption_event_row_attributes
-      %w(consumed_at event_type platform ip_address)
+      BASE_ROW_ATTRIBUTES + (bundle? ? ["product"] : [])
     end
 
+    BASE_ROW_ATTRIBUTES = %w(consumed_at event_type platform ip_address).freeze
+    private_constant :BASE_ROW_ATTRIBUTES
+
     def consumption_event_rows
-      consumption_events.first(LOG_RECORDS_LIMIT).map do
-        _1.slice(*consumption_event_row_attributes).values.join(",")
+      consumption_events.first(LOG_RECORDS_LIMIT).map do |event|
+        row = event.slice(*BASE_ROW_ATTRIBUTES).values
+        row += [product_name_for(event)] if bundle?
+        row.join(",")
       end
+    end
+
+    # Names the member a row belongs to, so a reviewer can tell which item of the bundle was
+    # downloaded. Quoted because product names routinely contain commas.
+    def product_name_for(event)
+      name = purchase_names_by_id[event.purchase_id]
+      name.present? ? "\"#{name.tr('"', "'")}\"" : ""
+    end
+
+    def purchase_names_by_id
+      @_purchase_names_by_id ||= access_purchases.index_by(&:id).transform_values { _1.link&.name }
     end
 
     def consumption_events_intro
