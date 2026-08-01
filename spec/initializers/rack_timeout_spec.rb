@@ -76,6 +76,8 @@ describe BudgetedRequestTimeout do
         "/discover",
         "/l/some-product",
         "/orders_history",
+        # Recorded before any charge exists, so it has nothing to leave half-finalized.
+        "/orders/abc123/confirm_error",
         "/checkout",
         "/purchases/abc123/receipt",
         "/purchases/abc123/subscribe",
@@ -115,6 +117,7 @@ describe BudgetedRequestTimeout do
       expect(applied_budget("/orders/abc123/confirm")).to eq described_class::Budget.checkout
       expect(applied_budget("/checkout/returns/abc123")).to eq described_class::Budget.checkout
       expect(applied_budget("/l/some-product")).to eq 15
+      expect(applied_budget("/orders/abc123/confirm_error")).to eq 15
       expect(applied_budget("/orders/abc123/confirm")).to be > applied_budget("/l/some-product")
     end
   end

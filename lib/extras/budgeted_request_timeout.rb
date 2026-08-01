@@ -14,7 +14,11 @@ class BudgetedRequestTimeout < Rack::Timeout
   # Paths that reach charge creation or its finalization. Custom domains and the api/discover
   # hosts mount these route sets at the same paths, so matching PATH_INFO covers every host.
   EXTENDED_BUDGET_PATHS = [
-    %r{\A/orders(/|\z)},
+    # Not every /orders action reaches the processor: `confirm_error` only records a browser-side
+    # confirm rejection that happens before any charge exists, so it stays on the general budget.
+    %r{\A/orders\z},
+    %r{\A/orders/prepare\z},
+    %r{\A/orders/[^/]+/(confirm|finalize)\z},
     # Stripe's 3DS return_url. Finalizes the confirmed charge in-request, same as /orders/:id/finalize.
     %r{\A/checkout/returns/[^/]+\z},
     %r{\A/purchases/[^/]+/confirm\z},
