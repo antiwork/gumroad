@@ -1721,9 +1721,10 @@ class Link < ApplicationRecord
     def record_product_permalink_redirect(outgoing)
       existing = ProductPermalinkRedirect.find_by(seller_id: user_id, permalink: outgoing)
       if existing
-        # Both rows are this seller's, so the latest release wins: the URL keeps
-        # serving what it served just before the rename, not an earlier holder.
-        existing.update(product_id: id) unless existing.product_id == id
+        # Both rows are this seller's, so the latest release wins. Repointing at a
+        # product the reader skips would retire a URL that still resolves, so a
+        # deleted product leaves the previous target in place.
+        existing.update(product_id: id) unless existing.product_id == id || deleted_at.present?
         return
       end
       return if LegacyPermalink.joins(:product).where(permalink: outgoing, links: { user_id: }).exists?

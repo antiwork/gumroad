@@ -1619,6 +1619,23 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal second, Link.fetch_leniently("slug", user: seller)
   end
 
+  test "a rename that deletes the product leaves the seller's redirect on the target that still resolves" do
+    create_product(unique_permalink: "zzz", custom_permalink: "slug")
+    seller = create_user
+    first = create_product(user: seller, unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-new")
+    assert_equal first.id, ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug").product_id
+
+    second = create_product(user: seller, unique_permalink: "bbb", custom_permalink: "slug")
+    second.update!(deleted_at: Time.current)
+    second.update!(custom_permalink: "second-new")
+
+    # fetch_leniently skips deleted products, so repointing here would retire a
+    # URL that still resolves.
+    assert_equal first.id, ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug").product_id
+    assert_equal first, Link.fetch_leniently("slug", user: seller)
+  end
+
   test "the first writer keeps a legacy mapping when a second product claims and releases the same slug" do
     first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
     first.update!(custom_permalink: "first-new")
