@@ -346,11 +346,9 @@ class Payment < ApplicationRecord
   # but the hundreds of sellers who were already stuck before that stopped are still holding one,
   # as is anyone paused for an unrelated reason, so the paused wording still has to exist.
   def terminal_paypal_failure_seller_solution
-    if paypal_failure_without_available_payout_rail?
-      return FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL
-    end
-
-    fix = if repairable_in_place_paypal_failure?
+    fix = if paypal_failure_without_available_payout_rail?
+      FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL
+    elsif repairable_in_place_paypal_failure?
       # The seller can clear this on the account they already use, so lead with that — see
       # Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
       if user.can_setup_bank_payouts?

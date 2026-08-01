@@ -220,13 +220,12 @@ module Payment::FailureReason
   # bank transfer is not offered in the seller's. We cannot tell which half of that cohort holds a
   # usable PayPal account elsewhere, so the remaining option is stated as a condition rather than
   # as an instruction, and the seller who has no such account is told so plainly instead of being
-  # sent after one. Claims only that the balance stays — closing the account still forfeits it
-  # (ForfeitBalanceService#balances_to_forfeit_on_account_closure).
+  # sent after one. The balance claim is left to the next-step sentence appended after this, which
+  # is the one that knows about holds.
   TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL =
     "PayPal will not send payments to accounts registered in that country, and bank transfer is not " \
     "available in yours. If you have a PayPal account registered in a country PayPal does pay to, you " \
-    "can add it in your payout settings. If you do not, we have no way to pay you right now, and your " \
-    "balance stays on your account until we do."
+    "can add it in your payout settings. If you do not, we have no way to pay you right now."
 
   # For a rejection the seller can clear without leaving the account they already use (14159), the
   # in-place repair is offered first, because it is the only fix that costs them nothing: no new

@@ -49,6 +49,8 @@ describe Onetime::ResolveTerminalPaypalPayoutFailures do
       expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
     end
 
+    # Ukraine + a country-level refusal is the no-rail cohort: PayPal will not pay to an account
+    # registered there and we do not offer bank transfer, so neither instruction is followable.
     it "does not tell a seller in a PayPal-only country to add a bank account" do
       create(:user_compliance_info, user: seller, country: "Ukraine")
       terminal_failure_for(seller)
@@ -56,7 +58,7 @@ describe Onetime::ResolveTerminalPaypalPayoutFailures do
       described_class.process(dry_run: false)
 
       note = latest_seller_visible_note(seller)
-      expect(note.content).to include("PayPal is the only payout method we can offer in your country")
+      expect(note.content).to include("we have no way to pay you right now")
       expect(note.content).to_not include("Add a bank account")
     end
 

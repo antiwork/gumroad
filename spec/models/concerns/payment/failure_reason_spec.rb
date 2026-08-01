@@ -165,8 +165,7 @@ describe Payment::FailureReason do
             let(:no_payout_rail_solution) do
               "PayPal will not send payments to accounts registered in that country, and bank transfer is not " \
               "available in yours. If you have a PayPal account registered in a country PayPal does pay to, you " \
-              "can add it in your payout settings. If you do not, we have no way to pay you right now, and your " \
-              "balance stays on your account until we do."
+              "can add it in your payout settings. If you do not, we have no way to pay you right now."
             end
 
             it "tells a seller with no available payout rail that we may have no way to pay them" do
@@ -175,8 +174,7 @@ describe Payment::FailureReason do
               payment.mark_failed!("PAYPAL 3148")
 
               solution = payment.reload.terminal_paypal_failure_seller_solution
-              expect(solution).to eq(no_payout_rail_solution)
-              expect(solution).to_not include("next payout date")
+              expect(solution).to start_with(no_payout_rail_solution)
               expect(solution).to_not include("is not forfeited")
             end
 
@@ -205,13 +203,18 @@ describe Payment::FailureReason do
               )
             end
 
-            it "does not append pause-specific next steps for a seller with no available payout rail" do
+            # The no-rail wording replaces the fix, not the pause disclosure: a hold is a separate
+            # fact and stays true whether or not the seller has a rail to switch to.
+            it "still names a hold for a seller with no available payout rail" do
               switch_to_paypal_only_country
               payment.user.update!(payouts_paused_internally: true)
 
               payment.mark_failed!("PAYPAL 3148")
 
-              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(no_payout_rail_solution)
+              solution = payment.reload.terminal_paypal_failure_seller_solution
+              expect(solution).to start_with(no_payout_rail_solution)
+              expect(solution).to include("Payouts on your account are also on hold")
+              expect(solution).to_not include("Add a bank account")
             end
           end
 
