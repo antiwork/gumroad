@@ -1,0 +1,68 @@
+PR #6694 — web request timeout 15s / checkout 120s
+revision 0b6572b5bc635e0db7b370a6a5013da95b065b3b  (Keep format-suffixed and commission-completion charges on the checkout)
+
+=== GREEN: the shipped tree ===
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb
+Finished in 4.54 seconds (files took 3.03 seconds to load)
+16 examples, 0 failures
+
+$ bundle exec rspec spec/controllers/api/v2/sales_controller_spec.rb -e 'timeout' -e 'clamps'
+Finished in 5.45 seconds (files took 2.75 seconds to load)
+3 examples, 0 failures
+
+=== Each invariant, proven load-bearing by removing it ===
+--- 1. delete the checkout dispatch line ---
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb -e gives checkout the longer budget
+  1) BudgetedRequestTimeout routing a request to the right budget gives checkout the longer budget and everything else the short one
+     Failure/Error: expect(applied_budget("/orders/abc123/confirm")).to eq described_class::Budget.checkout
+Finished in 4.97 seconds (files took 2.88 seconds to load)
+1 example, 1 failure
+
+--- 2. widen the order matchers back to /orders(/|\z) ---
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb -e does not match ordinary web paths
+  1) BudgetedRequestTimeout.extended_budget_path? does not match ordinary web paths
+     Failure/Error: expect(described_class.extended_budget_path?(path)).to be(false), "#{path.inspect} must get the general budget"
+       "/orders/abc123/confirm_error" must get the general budget
+Finished in 4.82 seconds (files took 2.74 seconds to load)
+1 example, 1 failure
+
+--- 3. drop the (.:format) suffix from the matchers ---
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb -e matches the same actions with a format suffix
+  1) BudgetedRequestTimeout.extended_budget_path? matches the same actions with a format suffix
+     Failure/Error: expect(described_class.extended_budget_path?(path)).to be(true), "#{path} must get the checkout budget"
+       /orders.json must get the checkout budget
+Finished in 6.61 seconds (files took 2.82 seconds to load)
+1 example, 1 failure
+
+--- 4. narrow the suffix to word characters ---
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb -e matches a format Rails would accept
+  1) BudgetedRequestTimeout.extended_budget_path? matches a format Rails would accept but a word-character suffix would not
+     Failure/Error: expect(described_class.extended_budget_path?("/orders/abc123/finalize.v2-1")).to be true
+Finished in 3.15 seconds (files took 3.03 seconds to load)
+1 example, 1 failure
+
+--- 5. delete the commissions matcher ---
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb -e matches the paths that create or finalize a charge
+  1) BudgetedRequestTimeout.extended_budget_path? matches the paths that create or finalize a charge
+     Failure/Error: expect(described_class.extended_budget_path?(path)).to be(true), "#{path} must get the checkout budget"
+       /commissions/abc123/complete must get the checkout budget
+Finished in 3.87 seconds (files took 3.1 seconds to load)
+1 example, 1 failure
+
+--- 6. relax the 2s minimum to 1s ---
+$ bundle exec rspec spec/initializers/rack_timeout_spec.rb -e rejects a budget below the in-request guard headroom
+  1) BudgetedRequestTimeout budgets rejects a budget below the in-request guard headroom
+     Failure/Error: expect(described_class::Budget.general).to eq 15
+Finished in 4.41 seconds (files took 2.64 seconds to load)
+1 example, 1 failure
+
+--- 7. delete the query-guard clamp ---
+$ bundle exec rspec spec/controllers/api/v2/sales_controller_spec.rb -e clamps a Redis-configured timeout
+  1) Api::V2::SalesController GET 'index' when logged in with sales scope clamps a Redis-configured timeout that would outlive the request budget
+     Failure/Error: 
+       WithMaxExecutionTime received :timeout_queries with unexpected arguments
+         expected: ({ seconds: 119 })
+              got: ({ seconds: 150 })
+Finished in 4.82 seconds (files took 2.98 seconds to load)
+1 example, 1 failure
+
