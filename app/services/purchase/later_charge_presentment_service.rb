@@ -52,7 +52,7 @@ class Purchase::LaterChargePresentmentService
     return fallback(:settlement_currency_mismatch) unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: currency)
 
     quote = mint_quote(currency)
-    return fallback(:quote_unavailable) if quote.blank?
+    return fallback(:quote_unavailable, transient: true) if quote.blank?
 
     # The stored price is charged as-is. Tax and shipping ride on today's rate.
     fixed_price_cents = presentment.presentment_price_cents
@@ -120,12 +120,11 @@ class Purchase::LaterChargePresentmentService
       processor_gumroad_amount_cents: presentment_gumroad_amount_cents,
       stripe_fx_quote_id: quote.id
     )
-  rescue ChargeProcessorCardError
+  rescue ChargeProcessorCardError, ChargeProcessorUnavailableError
     raise
   rescue StandardError => e
-    # An unexpected failure must not cost the seller a delayed charge.
     ErrorNotifier.notify(e, context: { charge_id: charge&.id, purchase_id: purchases.first&.id })
-    fallback(:"#{e.class}")
+    fallback(:"#{e.class}", transient: true)
   end
 
   private
@@ -192,17 +191,22 @@ class Purchase::LaterChargePresentmentService
       ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
     end
 
-    def fallback(reason)
+    def fallback(reason, transient: false)
       @fallback_reason = reason
       Rails.logger.info("Later-charge presentment fallback for #{charge.present? ? "charge #{charge.external_id}" : "purchase #{purchases.first&.id}"}: #{reason}")
       if required_currency.present?
+        notification = transient ? "Required-currency renewal deferred before processor submit" : "Required-currency renewal rejected before processor submit"
         ErrorNotifier.notify(
-          "Required-currency renewal rejected before processor submit",
+          notification,
           reason:,
           required_currency:,
           purchase_id: purchases.first&.id,
           charge_id: charge&.id
         )
+        if transient
+          raise ChargeProcessorUnavailableError, "The required-currency quote is temporarily unavailable"
+        end
+
         raise ChargeProcessorCardError.new(
           PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED,
           StripeChargeProcessor::UPI_REAUTHORIZATION_MESSAGE

@@ -255,7 +255,7 @@ describe Purchase::LaterChargePresentmentService do
   end
 
   context "when the saved rail requires INR" do
-    it "charges a valid INR fixing" do
+    def create_inr_fixing
       create(
         :later_charge_presentment,
         owner: subscription,
@@ -264,6 +264,10 @@ describe Purchase::LaterChargePresentmentService do
         signup_currency_units_per_usd: BigDecimal("1.111111111111111"),
         effective_from: 1.day.ago
       )
+    end
+
+    it "charges a valid INR fixing" do
+      create_inr_fixing
 
       result = service(required_currency: Currency::INR).perform
 
@@ -298,6 +302,54 @@ describe Purchase::LaterChargePresentmentService do
 
       expect do
         service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorCardError) do |error|
+        expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
+      end
+    end
+
+    it "reports a temporary processor failure when the quote is unavailable" do
+      create_inr_fixing
+      allow(StripeFxQuote).to receive(:create).and_return(nil)
+      renewal = service(required_currency: Currency::INR)
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal deferred before processor submit",
+        reason: :quote_unavailable,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      )
+
+      expect { renewal.perform }.to raise_error(ChargeProcessorUnavailableError)
+      expect(renewal.fallback_reason).to eq(:quote_unavailable)
+    end
+
+    it "reports an unexpected quote failure as temporary" do
+      create_inr_fixing
+      error = StandardError.new("stripe down")
+      allow(StripeFxQuote).to receive(:create).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(
+        error,
+        context: { charge_id: charge.id, purchase_id: renewal_purchase.id }
+      ).ordered
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Required-currency renewal deferred before processor submit",
+        reason: :StandardError,
+        required_currency: Currency::INR,
+        purchase_id: renewal_purchase.id,
+        charge_id: charge.id
+      ).ordered
+
+      expect do
+        service(required_currency: Currency::INR).perform
+      end.to raise_error(ChargeProcessorUnavailableError)
+    end
+
+    it "still requests a payment-method update for a stale fixing" do
+      create_inr_fixing
+      renewal_purchase.update!(price_cents: 1500, total_transaction_cents: 1500)
+
+      expect do
+        service(required_currency: Currency::INR, amount_cents: 1500).perform
       end.to raise_error(ChargeProcessorCardError) do |error|
         expect(error.error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
       end

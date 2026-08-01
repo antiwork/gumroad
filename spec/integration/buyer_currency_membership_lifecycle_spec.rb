@@ -357,6 +357,21 @@ describe "Buyer-currency memberships, signup through renewal", :vcr do
         expect(result).to be_nil
         expect(renewal.stripe_error_code).to eq(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED)
       end
+
+      it "schedules a retry when the INR quote is temporarily unavailable" do
+        allow(StripeFxQuote).to receive(:create).and_return(nil)
+        allow(renewal).to receive(:process!) do
+          renewal.send(:create_charge_intent, double(get_chargeable_for: double))
+        end
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+        expect(subscription).to receive(:schedule_charge).with(be_within(2.seconds).of(1.hour.from_now))
+        expect(CustomerLowPriorityMailer).not_to receive(:subscription_card_declined)
+
+        subscription.process_purchase!(renewal)
+
+        expect(renewal.error_code).to eq(PurchaseErrorCode::STRIPE_UNAVAILABLE)
+        expect(renewal).to be_has_payment_network_error
+      end
     end
   end
 end
