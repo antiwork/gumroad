@@ -292,6 +292,10 @@ export const ProductEditContext = React.createContext<{
   // The landing-page preview only follows a navigation request from the
   // sandboxed seller HTML when the destination is one of these.
   customHtmlStoreHostnames: string[];
+  // Gumroad's own global nav destinations (My Downloads, cart) that the preview
+  // will follow on an exact-path match, and the hosts they may appear on.
+  customHtmlGlobalNavHosts: string[];
+  customHtmlGlobalNavPaths: string[];
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
   filesById: Map<string, FileEntry>;

@@ -97,6 +97,8 @@ type Props = {
   price_checker_enabled: boolean;
   custom_html_pages_enabled: boolean;
   custom_html_store_hostnames: string[];
+  custom_html_global_nav_hosts: string[];
+  custom_html_global_nav_paths: string[];
   ai_generated: boolean;
 };
 
@@ -140,6 +142,8 @@ const createContextValue = (props: Props) => ({
   priceCheckerEnabled: props.price_checker_enabled,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
   customHtmlStoreHostnames: props.custom_html_store_hostnames,
+  customHtmlGlobalNavHosts: props.custom_html_global_nav_hosts,
+  customHtmlGlobalNavPaths: props.custom_html_global_nav_paths,
   contentUpdates: null,
   setContentUpdates: () => {},
   aiGenerated: props.ai_generated,
