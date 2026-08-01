@@ -158,6 +158,29 @@ describe AlertSellersOfUndeliveredReceiptsJob do
       .with(seller.id, [purchase.id])
   end
 
+  # The retry set is the buyer's only route back once the cursor has passed their row, so a run that
+  # could not park them must not move it. Otherwise a rejected write costs the seller the notice.
+  it "holds the cursor when a buyer could not be parked for retry" do
+    undelivered_purchase
+    allow(UndeliveredReceiptNotifier).to receive(:track_for_retry).and_return(false)
+
+    described_class.new.perform
+
+    expect($redis.get(RedisKey.undelivered_receipt_sweep_cursor).to_i).to eq(0)
+  end
+
+  it "reports the buyer on a later run once the retry set can be written again" do
+    purchase = undelivered_purchase
+    allow(UndeliveredReceiptNotifier).to receive(:track_for_retry).and_return(false)
+    described_class.new.perform
+
+    allow(UndeliveredReceiptNotifier).to receive(:track_for_retry).and_call_original
+
+    expect { described_class.new.perform }
+      .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+      .with(seller.id, [purchase.id])
+  end
+
   # A missing cursor means no safe start: resuming from zero would walk the whole table and re-report
   # every seller in it.
   it "does nothing when the cursor cannot be read" do
@@ -169,13 +192,46 @@ describe AlertSellersOfUndeliveredReceiptsJob do
       .not_to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
   end
 
+  # A fixed rows-per-day offset put the first run's start wherever the guess landed, and any night
+  # busier than the guess left in-window failures below it — never scanned, never reported. The start
+  # is now found from the rows themselves.
+  describe "where a first run starts" do
+    before { $redis.del(RedisKey.undelivered_receipt_sweep_cursor) }
+
+    it "reports a buyer inside the lookback whatever the volume ahead of them" do
+      purchase = undelivered_purchase(sent_at: described_class::INITIAL_LOOKBACK.ago + 1.day)
+
+      expect { described_class.new.perform }
+        .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+        .with(seller.id, [purchase.id])
+    end
+
+    it "leaves a buyer older than the lookback alone" do
+      undelivered_purchase(sent_at: described_class::INITIAL_LOOKBACK.ago - 1.day)
+
+      expect { described_class.new.perform }
+        .not_to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+    end
+
+    # The boundary sits between the two, so the search has to place the cursor there rather than at
+    # either end of the table.
+    it "reports only the buyer inside the lookback when both exist" do
+      undelivered_purchase(sent_at: described_class::INITIAL_LOOKBACK.ago - 1.day)
+      recent = undelivered_purchase(sent_at: described_class::INITIAL_LOOKBACK.ago + 1.day)
+
+      expect { described_class.new.perform }
+        .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+        .with(seller.id, [recent.id])
+    end
+  end
+
   describe "buyers whose notice was claimed and never sent" do
     # The cursor advanced past this buyer's row in the run that enqueued the digest, and the scan only
     # ever queries forward — the retry set is the only thing that brings them back.
     it "reports a buyer the mailer gave the claim back for" do
       purchase = undelivered_purchase
       described_class.new.perform
-      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      UndeliveredReceiptNotifier.track_for_retry([purchase.id])
 
       expect { described_class.new.perform }
         .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
@@ -184,7 +240,7 @@ describe AlertSellersOfUndeliveredReceiptsJob do
 
     it "names the buyer once when the retry set and the scan both find them" do
       purchase = undelivered_purchase
-      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      UndeliveredReceiptNotifier.track_for_retry([purchase.id])
 
       expect { described_class.new.perform }
         .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
@@ -194,7 +250,7 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     it "stops tracking a buyer who has since recovered" do
       purchase = undelivered_purchase
       described_class.new.perform
-      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      UndeliveredReceiptNotifier.track_for_retry([purchase.id])
       create(:url_redirect, purchase:, link: product, uses: 1)
 
       expect { described_class.new.perform }
@@ -207,7 +263,7 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     it "stops tracking a buyer the seller has already been told about" do
       purchase = undelivered_purchase
       described_class.new.perform
-      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      UndeliveredReceiptNotifier.track_for_retry([purchase.id])
       $redis.set(RedisKey.undelivered_receipt_notified(purchase.id), Time.current.to_i)
 
       described_class.new.perform
@@ -220,7 +276,7 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     it "keeps tracking a buyer when the send-once store cannot be read" do
       purchase = undelivered_purchase
       described_class.new.perform
-      UndeliveredReceiptNotifier.release_claim([purchase.id])
+      UndeliveredReceiptNotifier.track_for_retry([purchase.id])
       allow(UndeliveredReceiptNotifier).to receive(:notified?).and_return(nil)
 
       described_class.new.perform
@@ -232,7 +288,7 @@ describe AlertSellersOfUndeliveredReceiptsJob do
       first = undelivered_purchase
       second = undelivered_purchase
       described_class.new.perform
-      UndeliveredReceiptNotifier.release_claim([first.id, second.id])
+      UndeliveredReceiptNotifier.track_for_retry([first.id, second.id])
       stub_const("#{described_class}::MAX_RETRIES_PER_RUN", 1)
 
       expect { described_class.new.perform }

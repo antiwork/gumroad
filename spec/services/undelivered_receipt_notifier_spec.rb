@@ -119,7 +119,7 @@ describe UndeliveredReceiptNotifier do
     end
 
     it "stops tracking a buyer for retry once the notice is recorded" do
-      described_class.release_claim([purchase.id])
+      described_class.track_for_retry([purchase.id])
 
       described_class.record_sent([purchase.id])
 
@@ -127,10 +127,11 @@ describe UndeliveredReceiptNotifier do
     end
   end
 
-  describe ".release_claim and the pending retry set" do
+  describe ".track_for_retry and the pending retry set" do
     # The sweep advanced its cursor past this buyer's row in the run that enqueued the digest, and it
     # only ever queries forward. Handing the claim back without this set drops the notice for good.
     it "keeps a buyer whose notice was claimed and never sent" do
+      described_class.track_for_retry([purchase.id])
       described_class.claim_send([purchase.id])
 
       described_class.release_claim([purchase.id])
@@ -140,30 +141,44 @@ describe UndeliveredReceiptNotifier do
     end
 
     it "holds one entry per buyer across repeated failures" do
-      described_class.release_claim([purchase.id])
-      described_class.release_claim([purchase.id])
+      described_class.track_for_retry([purchase.id])
+      described_class.track_for_retry([purchase.id])
 
       expect(described_class.pending_retry_purchase_ids(10)).to eq([purchase.id])
     end
 
     it "returns no more than the requested number" do
       other = create(:purchase)
-      described_class.release_claim([purchase.id, other.id])
+      described_class.track_for_retry([purchase.id, other.id])
 
       expect(described_class.pending_retry_purchase_ids(1).size).to eq(1)
     end
 
     it "drops a buyer that is cleared" do
-      described_class.release_claim([purchase.id])
+      described_class.track_for_retry([purchase.id])
 
       described_class.clear_pending_retry([purchase.id])
 
       expect(described_class.pending_retry_purchase_ids(10)).to be_empty
     end
 
-    # Adding to the set before deleting the claim: a failure between the two leaves a buyer who is
-    # tracked and whose claim expires on its own, rather than one nothing is holding onto.
-    it "still tracks the buyer when giving the claim key back fails" do
+    # The caller advances a cursor on this answer. Reporting success for a write that did not happen
+    # would move it past a buyer with nothing holding them.
+    it "reports failure when the buyer could not be tracked" do
+      allow($redis).to receive(:sadd).and_raise(StandardError)
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect(described_class.track_for_retry([purchase.id])).to eq(false)
+    end
+
+    it "reports success when the buyer is tracked" do
+      expect(described_class.track_for_retry([purchase.id])).to eq(true)
+    end
+
+    # The buyer is already in the set by the time a claim is given back, so this path writes nothing
+    # that could fail and strand them.
+    it "keeps the buyer tracked when giving the claim key back fails" do
+      described_class.track_for_retry([purchase.id])
       described_class.claim_send([purchase.id])
       allow($redis).to receive(:del).and_raise(StandardError)
       expect(ErrorNotifier).to receive(:notify)

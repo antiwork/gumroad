@@ -29,6 +29,11 @@ class AlertSellersOfUndeliveredReceiptsJob
   # the bound is there so a bad night for the mail transport cannot make the next run unbounded.
   MAX_RETRIES_PER_RUN = 1_000
 
+  # How far past the lookback the boundary search reaches. `sent_at` tracks id order only
+  # approximately — a queued send can be stamped after a later-numbered row — and this covers that
+  # skew without reintroducing a rows-per-day assumption.
+  BOUNDARY_SKEW = 1.hour
+
   def perform
     cursor = current_cursor
     return if cursor.nil?
@@ -58,8 +63,9 @@ class AlertSellersOfUndeliveredReceiptsJob
       end
     end
 
-    notify(by_seller)
-    save_cursor(last_judged)
+    # The cursor only moves over rows whose buyers are either enqueued or parked in the retry set.
+    # Advancing past a buyer nothing is holding would end their notice: the scan never looks back.
+    save_cursor(last_judged) if notify(by_seller)
   end
 
   private
@@ -132,22 +138,34 @@ class AlertSellersOfUndeliveredReceiptsJob
       Charge.find_by(id: charge_id)&.purchase_as_orderable
     end
 
+    # Enqueues one digest per seller. Answers whether every buyer in this run is accounted for —
+    # `perform` holds the cursor when any of them is not, since a buyer the cursor has passed with
+    # nothing holding them is a buyer no later run can reach.
     def notify(by_seller)
+      complete = true
+
       by_seller.each do |seller_id, purchase_ids|
+        purchase_ids = purchase_ids.uniq
+
+        # Parked BEFORE the enqueue, not after a failure: this is the only write that survives the
+        # cursor moving, and every path that loses the notice from here on — a raise below, a render
+        # that suppresses, a delivery that never happens — leaves the buyer needing it. `record_sent`
+        # takes them back out once the seller has actually been told.
+        complete = false unless UndeliveredReceiptNotifier.track_for_retry(purchase_ids)
+
         # The full set, untruncated: the mailer re-judges every buyer, and only then cuts the list
         # down. Truncating here would let ten recovered buyers suppress a digest an eleventh needed.
         # The mailer also claims and settles the send-once record, so nothing is marked notified for a
         # message that never left. Deduplicated because a buyer carried over from the retry set can
         # also be reached by this run's scan.
-        ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids.uniq).deliver_later(queue: "low")
+        ContactingCreatorMailer.undelivered_receipts(seller_id, purchase_ids).deliver_later(queue: "low")
       rescue => e
-        # One seller's failure must not cost the rest their notice. Nothing claimed these buyers —
-        # the mailer never rendered — so the delivery callback will not hand them back, and this run
-        # still advances its cursor past their rows. Tracking them here is the only thing that keeps
-        # them reachable.
-        UndeliveredReceiptNotifier.track_for_retry(purchase_ids.uniq)
+        # One seller's failure must not cost the rest their notice. The buyers are already parked, so
+        # a later run picks them back up.
         ErrorNotifier.notify(e)
       end
+
+      complete
     end
 
     def current_cursor
@@ -162,18 +180,38 @@ class AlertSellersOfUndeliveredReceiptsJob
       nil
     end
 
-    # Lowest receipt row id at least INITIAL_LOOKBACK old, found by walking back from the newest id
-    # rather than filtering on the unindexed `sent_at`.
+    # Highest receipt row id that is older than INITIAL_LOOKBACK, found by binary search on the
+    # primary key. `sent_at` has no index, so the boundary is located by probing rows rather than
+    # filtered for — about thirty primary-key lookups against a billion-row table.
+    #
+    # A fixed rows-per-day offset was the previous answer and it under-covers the window the moment
+    # real volume runs above the guess, silently excluding the newest failures — the ones a seller
+    # can still act on. The search has no such rate assumption.
     def initial_cursor
       newest = EmailInfo.order(id: :desc).limit(1).pick(:id)
       return 0 if newest.nil?
 
-      [newest - INITIAL_LOOKBACK.in_days.to_i * daily_row_estimate, 0].max
+      boundary = INITIAL_LOOKBACK.ago - BOUNDARY_SKEW
+      return 0 if in_window?(0, boundary)
+      # Nothing inside the window: start at the end rather than re-reporting the whole table.
+      return newest unless in_window?(newest, boundary)
+
+      low = 0
+      high = newest
+      while high - low > 1
+        mid = (low + high) / 2
+        in_window?(mid, boundary) ? high = mid : low = mid
+      end
+
+      high - 1
     end
 
-    # Deliberately an estimate: it only decides where a first run starts, and the notified-once record
-    # bounds what a too-generous guess can send.
-    def daily_row_estimate = 400_000
+    # Whether the first row at or after `id` that has a `sent_at` falls inside the window. Reading
+    # forward rather than at `id` exactly, since the probe can land on a row that never sent.
+    def in_window?(id, boundary)
+      sent_at = EmailInfo.where("email_infos.id >= ?", id).where.not(sent_at: nil).order(:id).limit(1).pick(:sent_at)
+      sent_at.present? && sent_at >= boundary
+    end
 
     def save_cursor(cursor_id)
       $redis.set(RedisKey.undelivered_receipt_sweep_cursor, cursor_id)
