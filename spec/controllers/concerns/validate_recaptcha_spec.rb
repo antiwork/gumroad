@@ -39,6 +39,17 @@ describe ValidateRecaptcha, type: :controller do
       end
     end
 
+    # Two checks in one request: the message must describe the LAST one.
+    def checkout_score_twice_action
+      valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score)
+      passed = valid_recaptcha_response_and_hostname?(site_key: "checkout_score_site_key", surface: :checkout_score)
+      if passed
+        render json: { success: true }
+      else
+        render json: { success: false, error: recaptcha_failure_message }, status: :unprocessable_entity
+      end
+    end
+
     private
       def render_recaptcha_result(success)
         if success
@@ -58,6 +69,7 @@ describe ValidateRecaptcha, type: :controller do
       post :checkout_score_trusted_action, to: "anonymous#checkout_score_trusted_action"
       post :follow_action, to: "anonymous#follow_action"
       post :checkout_score_message_action, to: "anonymous#checkout_score_message_action"
+      post :checkout_score_twice_action, to: "anonymous#checkout_score_twice_action"
     end
 
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
@@ -268,12 +280,34 @@ describe ValidateRecaptcha, type: :controller do
 
         it "keeps the ad-blocker copy when a high-scoring token came from a disallowed host" do
           allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("production"))
+          allow(CustomDomain).to receive(:find_by_host).and_return(nil)
           stub_recaptcha_response(valid: true, score: 0.9, hostname: "evil.example.com")
 
           post :checkout_score_message_action, params: { "g-recaptcha-response" => "test_token" }
 
           expect(response).to have_http_status(:unprocessable_entity)
           expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+        end
+
+        it "does not carry a score failure over to a later check that ended on an infrastructure error" do
+          allow(GlobalConfig).to receive(:get).with("RECAPTCHA_FAIL_OPEN_CHECKOUT_SCORE").and_return("false")
+          low_score = instance_double(
+            HTTParty::Response,
+            parsed_response: { "tokenProperties" => { "valid" => true, "hostname" => DOMAIN }, "riskAnalysis" => { "score" => 0.4 } },
+            code: 200
+          )
+          call = 0
+          allow(HTTParty).to receive(:post) do
+            call += 1
+            raise Net::OpenTimeout, "execution expired" if call > 1
+            low_score
+          end
+
+          post :checkout_score_twice_action, params: { "g-recaptcha-response" => "test_token" }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(parsed_body["error"]).to eq(ValidateRecaptcha::CAPTCHA_FAILURE_MESSAGE)
+          expect(parsed_body["error"]).not_to include("scored this browser session as risky")
         end
       end
     end

@@ -10,17 +10,14 @@ module ValidateRecaptcha
     "privacy extensions, or VPNs — try disabling them for this page or using a " \
     "private/incognito window, then try again."
 
-  # Score-based keys never render an interactive challenge, so a token that is genuine and
-  # from an allowed host can still be refused purely on Google's risk score. Naming ad
-  # blockers there is a lie the buyer will act on and get nowhere with: ~755 checkouts a day
-  # hit this branch with valid=true hostname_ok=true (gumroad-private#1590). Say what is
-  # actually true and point at the levers that can change the score, rather than ones that
-  # cannot.
+  # Score-based keys never show a challenge, so a genuine, correctly-hosted token can be refused
+  # purely on risk score — ~755 checkouts a day hit that with the message above, which is false
+  # there (gumroad-private#1590).
   CAPTCHA_LOW_SCORE_MESSAGE = "Sorry, we could not complete this purchase — our fraud check " \
     "scored this browser session as risky. Nothing is wrong with your payment method. Try " \
     "again on a different network (turn off a VPN or switch off Wi-Fi to mobile data), or " \
     "from a different browser or device. If it keeps happening, contact support and we will " \
-    "complete the order for you."
+    "help you finish your purchase."
 
   ENTERPRISE_VERIFICATION_URL =
     "https://recaptchaenterprise.googleapis.com/v1/projects/#{GOOGLE_CLOUD_PROJECT_ID}/" \
@@ -80,6 +77,7 @@ module ValidateRecaptcha
       surface = surface.to_sym
       assessment = recaptcha_assessment(site_key:)
       threshold = recaptcha_score_threshold(surface)
+      @recaptcha_failed_on_score_only = false
 
       if assessment[:infra_error]
         fail_open = recaptcha_fail_open?(surface)
@@ -100,12 +98,9 @@ module ValidateRecaptcha
       score_ok = threshold.nil? || (scored && assessment[:score] >= threshold)
       decision = token_ok && score_ok
 
-      # Remembered so the caller can pick the right copy. Only a token that was genuine,
-      # correctly hosted, and carrying a score Google actually returned that fell under the
-      # bar gets the low-score message. An absent score also fails `score_ok`, but claiming
-      # the session "scored as risky" when Google scored nothing is the same kind of lie this
-      # message exists to stop, so that case keeps the generic copy.
-      @recaptcha_failed_on_score_only = !decision && token_ok && scored && !score_ok
+      # An absent score also fails `score_ok`, but "scored as risky" would be equally false
+      # there, so nil-score failures keep the generic copy.
+      @recaptcha_failed_on_score_only = token_ok && scored && !score_ok
 
       log_recaptcha_score(
         surface:,
