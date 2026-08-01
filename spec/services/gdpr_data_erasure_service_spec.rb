@@ -694,14 +694,17 @@ describe GdprDataErasureService do
       historical_cart.mark_deleted!
       alive_cart = create(:cart, user:, email: user.email, ip_address: "127.0.0.1", browser_guid: "browser-guid")
       credit_card = CreditCard.create!(
-        visual: "**** **** **** 4242",
-        card_type: "visa",
-        expiry_month: 12,
-        expiry_year: 2030,
+        visual: "UPI",
+        card_type: CardType::UPI,
         stripe_customer_id: "cus_123",
         stripe_fingerprint: "fp_123",
         processor_payment_method_id: "pm_123",
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        payment_method_type: "upi",
+        stripe_account_id: "acct_123",
+        recurring_authorization_verified_at: Time.current,
+        recurring_authorization_currency: Currency::INR,
+        recurring_authorization_max_amount_cents: 100_000,
       )
       user.update!(credit_card:)
 
@@ -719,6 +722,11 @@ describe GdprDataErasureService do
       expect(credit_card.expiry_year).to be_nil
       expect(credit_card.stripe_customer_id).to be_nil
       expect(credit_card.processor_payment_method_id).to be_nil
+      expect(credit_card).not_to be_recurring_upi
+      expect(credit_card.stripe_account_id).to be_nil
+      expect(credit_card.recurring_authorization_verified_at).to be_nil
+      expect(credit_card.recurring_authorization_currency).to be_nil
+      expect(credit_card.recurring_authorization_max_amount_cents).to be_nil
     end
 
     it "deletes the user's device records" do

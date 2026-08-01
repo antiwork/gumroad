@@ -449,8 +449,19 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
   end
 
   test "anonymizes guest credit cards but leaves user-owned cards untouched" do
-    guest_card = CreditCard.new(visual: "**** 1111", card_type: "visa", stripe_fingerprint: "fp_guest")
-    guest_card.save!(validate: false)
+    guest_card = CreditCard.create!(
+      visual: "UPI",
+      card_type: CardType::UPI,
+      stripe_fingerprint: "fp_guest",
+      stripe_customer_id: "cus_guest",
+      processor_payment_method_id: "pm_guest",
+      charge_processor_id: StripeChargeProcessor.charge_processor_id,
+      payment_method_type: "upi",
+      stripe_account_id: "acct_guest",
+      recurring_authorization_verified_at: Time.current,
+      recurring_authorization_currency: Currency::INR,
+      recurring_authorization_max_amount_cents: 100_000,
+    )
     owned_card = CreditCard.new(visual: "**** 2222", card_type: "visa", stripe_fingerprint: "fp_owned")
     owned_card.save!(validate: false)
     User.find(create_user.id).update_columns(credit_card_id: owned_card.id)
@@ -460,7 +471,13 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
 
     GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
 
-    assert_equal "[redacted]", guest_card.reload.visual
+    guest_card.reload
+    assert_equal "[redacted]", guest_card.visual
+    assert_not guest_card.recurring_upi?
+    assert_nil guest_card.stripe_account_id
+    assert_nil guest_card.recurring_authorization_verified_at
+    assert_nil guest_card.recurring_authorization_currency
+    assert_nil guest_card.recurring_authorization_max_amount_cents
     assert_equal "**** 2222", owned_card.reload.visual
   end
 

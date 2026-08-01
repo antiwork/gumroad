@@ -324,6 +324,11 @@ class GdprBuyerErasureService
         braintree_customer_id: nil,
         paypal_billing_agreement_id: nil,
         processor_payment_method_id: nil,
+        payment_method_type: nil,
+        stripe_account_id: nil,
+        recurring_authorization_verified_at: nil,
+        recurring_authorization_currency: nil,
+        recurring_authorization_max_amount_cents: nil,
         funding_type: nil,
         json_data: nil,
       )
