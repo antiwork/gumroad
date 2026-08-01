@@ -223,6 +223,20 @@ describe AlertSellersOfUndeliveredReceiptsJob do
         .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
         .with(seller.id, [recent.id])
     end
+
+    # `sent_at` follows id order only approximately, so the newest row can be an old send. Reading
+    # that one row as proof the window was empty started the run above the in-window buyer beneath
+    # it, and the scan only ever queries forward. Probing a block instead means the start is pulled
+    # below both: the older-stamped row is rescanned, which costs nothing, rather than the recent
+    # buyer being skipped, which costs their seller the notice.
+    it "reports a buyer inside the lookback sitting below an older-stamped newer row" do
+      purchase = undelivered_purchase(sent_at: described_class::INITIAL_LOOKBACK.ago + 1.day)
+      older_stamped = undelivered_purchase(sent_at: described_class::INITIAL_LOOKBACK.ago - 30.days)
+
+      expect { described_class.new.perform }
+        .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+        .with(seller.id, [purchase.id, older_stamped.id])
+    end
   end
 
   describe "buyers whose notice was claimed and never sent" do

@@ -34,6 +34,11 @@ class AlertSellersOfUndeliveredReceiptsJob
   # skew without reintroducing a rows-per-day assumption.
   BOUNDARY_SKEW = 1.hour
 
+  # Rows read per probe while locating that boundary. A block rather than a row, so one send stamped
+  # out of id order cannot decide where the first run starts; also the width the search narrows to
+  # before reading the span exactly.
+  PROBE_ROWS = 1_000
+
   def perform
     cursor = current_cursor
     return if cursor.nil?
@@ -180,37 +185,64 @@ class AlertSellersOfUndeliveredReceiptsJob
       nil
     end
 
-    # Highest receipt row id that is older than INITIAL_LOOKBACK, found by binary search on the
-    # primary key. `sent_at` has no index, so the boundary is located by probing rows rather than
-    # filtered for — about thirty primary-key lookups against a billion-row table.
+    # Where a first run starts: below every row sent inside INITIAL_LOOKBACK, located by binary
+    # search on the primary key. `sent_at` has no index on a billion-row table, so the boundary is
+    # probed for rather than filtered for — roughly thirty bounded primary-key range reads.
     #
-    # A fixed rows-per-day offset was the previous answer and it under-covers the window the moment
+    # A fixed rows-per-day offset was the previous answer, and it under-covers the window the moment
     # real volume runs above the guess, silently excluding the newest failures — the ones a seller
-    # can still act on. The search has no such rate assumption.
+    # can still act on. The search carries no rate assumption.
+    #
+    # It does still lean on `sent_at` broadly following id order, which holds only approximately: a
+    # queued send can be stamped after a later-numbered row. Two things stop one such row deciding
+    # anything. The window is widened by BOUNDARY_SKEW, and each probe asks whether ANY row in a
+    # block of PROBE_ROWS is in window rather than reading a single row — so a misordered row can
+    # only ever pull the start lower. The cost of divergence is rows rescanned, never a buyer
+    # skipped.
     def initial_cursor
       newest = EmailInfo.order(id: :desc).limit(1).pick(:id)
       return 0 if newest.nil?
 
       boundary = INITIAL_LOOKBACK.ago - BOUNDARY_SKEW
-      return 0 if in_window?(0, boundary)
-      # Nothing inside the window: start at the end rather than re-reporting the whole table.
-      return newest unless in_window?(newest, boundary)
+      # Not one of the newest PROBE_ROWS rows is in window, so none are: start at the end rather
+      # than re-reporting the whole table.
+      return newest unless in_window?(newest_block, boundary)
 
+      # Invariant: nothing in the block above `low` is in window, something in the block above
+      # `high` is. Narrowed to a span the exact scan below can read in one go, since a block probe
+      # is only ever as precise as its block.
       low = 0
       high = newest
-      while high - low > 1
-        mid = (low + high) / 2
-        in_window?(mid, boundary) ? high = mid : low = mid
+      if in_window?(block_from(0), boundary)
+        high = block_end(0) || newest
+      else
+        while high - low > PROBE_ROWS
+          mid = (low + high) / 2
+          in_window?(block_from(mid), boundary) ? high = mid : low = mid
+        end
       end
 
-      high - 1
+      first = EmailInfo.where(id: low..high).where("email_infos.sent_at >= ?", boundary).order(:id).limit(1).pick(:id)
+      first ? first - 1 : low
     end
 
-    # Whether the first row at or after `id` that has a `sent_at` falls inside the window. Reading
-    # forward rather than at `id` exactly, since the probe can land on a row that never sent.
-    def in_window?(id, boundary)
-      sent_at = EmailInfo.where("email_infos.id >= ?", id).where.not(sent_at: nil).order(:id).limit(1).pick(:sent_at)
-      sent_at.present? && sent_at >= boundary
+    def block_from(id)
+      EmailInfo.where("email_infos.id >= ?", id).order(:id).limit(PROBE_ROWS)
+    end
+
+    def block_end(id)
+      EmailInfo.from(block_from(id), :email_infos).maximum(:id)
+    end
+
+    def newest_block
+      EmailInfo.order(id: :desc).limit(PROBE_ROWS)
+    end
+
+    # Whether any row in the block was sent inside the window — any, not the first one carrying a
+    # `sent_at`. A block whose earliest send is old can still hold a recent one, and a single row
+    # cannot tell the two apart.
+    def in_window?(block, boundary)
+      EmailInfo.from(block, :email_infos).where("email_infos.sent_at >= ?", boundary).exists?
     end
 
     def save_cursor(cursor_id)
