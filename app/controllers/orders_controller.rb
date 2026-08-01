@@ -292,6 +292,9 @@ class OrdersController < ApplicationController
     # to. Recorded server-side because the marker on the next request is only trustworthy if we
     # issued it. A request that already spent an offer and still failed is terminal.
     def offer_recaptcha_challenge_fallback?
+      # Without a challenge key the client would be told a challenge is available but handed no
+      # key to render it with — advertising the offer would be a dead end all over again.
+      return false if CheckoutRecaptcha.challenge_site_key.blank?
       return false unless CheckoutRecaptcha.score_based?(logged_in_user)
       return false unless recaptcha_failed_on_score_only? && !recaptcha_challenge_fallback?
 

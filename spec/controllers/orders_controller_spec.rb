@@ -1145,6 +1145,20 @@ describe OrdersController, :vcr do
             post :create, params: multiple_purchase_params.merge(recaptcha_challenge_fallback: true)
           end
 
+          # Advertising the fallback without a key to render the challenge with would hand the
+          # client `recaptcha_challenge_available: true` and a null challenge key — a dead end
+          # dressed up as recourse.
+          it "does not offer the fallback when the challenge key is not configured" do
+            allow(GlobalConfig).to receive(:get).with("RECAPTCHA_MONEY_SITE_KEY").and_return(nil)
+            refuse_on_score_only
+
+            post :create, params: multiple_purchase_params
+
+            expect(response.parsed_body["success"]).to eq false
+            expect(response.parsed_body["recaptcha_challenge_available"]).to be_nil
+            expect($redis.exists?(RedisKey.recaptcha_challenge_offer(cookies[:_gumroad_guid]))).to eq false
+          end
+
           # :checkout carries no score threshold, so an unearned marker is a way to opt out of the
           # score gate entirely on the first attempt.
           it "ignores a marker the server never offered and still verifies against the score key" do
