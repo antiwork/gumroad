@@ -71,10 +71,11 @@ describe Ai::StoreAgentApiCatalog do
       expect(described_class.manifest(:write)).not_to include("Create a webhook resource subscription")
     end
 
-    it "lets listing pass the resource_name the v2 index requires" do
+    it "limits listing to Store Agent-owned subscriptions for the requested resource" do
       endpoint = described_class.find("list_resource_subscriptions")
 
       expect(endpoint.unknown_param_keys_error("resource_name" => "sale")).to be_nil
+      expect(endpoint.forced_params).to eq("current_oauth_application_only" => true)
       expect(ResourceSubscription.valid_resource_name?("sale")).to be(true)
     end
   end

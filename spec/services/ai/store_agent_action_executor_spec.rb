@@ -92,6 +92,29 @@ describe Ai::StoreAgentActionExecutor do
       end
     end
 
+    context "delete_resource_subscription" do
+      let!(:agent_application) do
+        create(
+          :oauth_application,
+          owner: seller,
+          name: Ai::StoreAgentApiClient::AGENT_APP_NAME,
+          redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
+          scopes: Ai::StoreAgentApiClient::AGENT_APP_SCOPES,
+        )
+      end
+      let!(:resource_subscription) { create(:resource_subscription, user: seller, oauth_application: agent_application) }
+
+      it "deletes a webhook owned by the Store Agent application" do
+        result = executor.execute(
+          type: "api_write",
+          params: api_write(endpoint: "delete_resource_subscription", path_params: { "id" => resource_subscription.external_id }),
+        )
+
+        expect(result[:success]).to be(true)
+        expect(resource_subscription.reload.deleted_at).to be_present
+      end
+    end
+
     context "unsupported / tampered actions" do
       it "rejects a non-api_write type without raising" do
         result = executor.execute(type: "delete_account", params: {})

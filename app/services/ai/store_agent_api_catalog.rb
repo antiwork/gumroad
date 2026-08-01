@@ -261,14 +261,11 @@ module Ai::StoreAgentApiCatalog
     ep("get_payout", :get, "/payouts/:id", "Get one payout by id.", read: true, scope: "view_payouts", path_params: %w[id]),
 
     # ---- Resource subscriptions (webhooks) ----
-    # Listing/deletion stay available so the agent can explain and clean up existing webhooks.
-    # Creation is deliberately absent until agent-created subscriptions have durable authorization.
-    # admin_only on all of these: the v2 endpoints only need view_sales, but these are OAuth-app
-    # management (and listing exposes configured callback URLs), which the dashboard restricts to
-    # admins/owner. resource_name is required by the controller's index, which renders
-    # success:false without it — omit it here and listing can never succeed.
-    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the creator's webhook resource subscriptions for one event type (resource_name: #{ResourceSubscription::VALID_RESOURCE_NAMES.join(', ')}).", read: true, scope: "view_sales", admin_only: true, params: %w[resource_name]),
-    ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a webhook resource subscription.", scope: "view_sales", admin_only: true, path_params: %w[id]),
+    # Limit listing to this OAuth application so every returned webhook can be deleted with the same
+    # token. Creation stays absent until agent-created subscriptions have durable authorization.
+    # Keep both endpoints admin-only because they expose or change configured callback URLs.
+    ep("list_resource_subscriptions", :get, "/resource_subscriptions", "List the Store Agent's existing webhook resource subscriptions for one event type (resource_name: #{ResourceSubscription::VALID_RESOURCE_NAMES.join(', ')}).", read: true, scope: "view_sales", admin_only: true, params: %w[resource_name], forced_params: { current_oauth_application_only: true }),
+    ep("delete_resource_subscription", :delete, "/resource_subscriptions/:id", "Delete a Store Agent-owned webhook resource subscription.", scope: "view_sales", admin_only: true, path_params: %w[id]),
 
     # ---- Tax forms & earnings ----
     ep("list_tax_forms", :get, "/tax_forms", "List the creator's available tax forms.", read: true, scope: "view_tax_data"),
