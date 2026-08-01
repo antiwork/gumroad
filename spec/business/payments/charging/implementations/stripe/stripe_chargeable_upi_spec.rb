@@ -56,7 +56,7 @@ describe StripeChargeableUpi do
 
     it "requests a payment-method update when the seller moved to destination charges" do
       seller = create(:user)
-      destination_account = create(:merchant_account, user: seller)
+      destination_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_upi_destination")
       changed_model = described_class.new(
         merchant_account: destination_account,
         customer_id: "cus_upi",

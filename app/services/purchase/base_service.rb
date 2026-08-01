@@ -39,8 +39,6 @@ class Purchase::BaseService
     end
 
     def ensure_upi_later_charge_presentment!
-      return unless purchase.credit_card&.recurring_upi?
-
       fixing = purchase.subscription&.current_later_charge_presentment
       return if fixing&.presentment_currency == Currency::INR
 

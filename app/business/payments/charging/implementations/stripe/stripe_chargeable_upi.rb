@@ -8,6 +8,10 @@ class StripeChargeableUpi
   attr_reader :payment_method_id, :fingerprint, :stripe_payment_intent_id,
               :recurring_authorization_currency, :recurring_authorization_max_amount_cents
 
+  def self.stripe_object_id(object)
+    object.respond_to?(:id) ? object.id : object
+  end
+
   def initialize(merchant_account:, customer_id:, payment_method_id:, fingerprint:,
                  stripe_payment_intent_id:, stripe_account_id:,
                  recurring_authorization_verified_at:, recurring_authorization_currency:,
@@ -55,7 +59,7 @@ class StripeChargeableUpi
     end
 
     fail_payment_method_update!("payment method is not UPI") unless @payment_method[:type] == payment_method_type
-    attached_customer_id = stripe_object_id(@payment_method[:customer])
+    attached_customer_id = self.class.stripe_object_id(@payment_method[:customer])
     fail_payment_method_update!("payment method is attached to a different customer") unless attached_customer_id == @customer_id
 
     true
@@ -76,10 +80,6 @@ class StripeChargeableUpi
       return unless StripeIntentChargeRouting.direct_charge_account?(@merchant_account)
 
       @merchant_account.charge_processor_merchant_id
-    end
-
-    def stripe_object_id(object)
-      object.respond_to?(:id) ? object.id : object
     end
 
     def fail_payment_method_update!(reason)

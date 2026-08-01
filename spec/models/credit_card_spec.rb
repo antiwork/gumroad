@@ -168,9 +168,6 @@ describe CreditCard do
         currency: Currency::INR,
         metadata: {
           StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY => "125000"
-        },
-        payment_method_options: {
-          upi: { flow: nil }
         }
       )
     end

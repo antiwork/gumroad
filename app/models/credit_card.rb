@@ -115,8 +115,8 @@ class CreditCard < ApplicationRecord
       raise ArgumentError, "PaymentIntent #{payment_intent.id} did not succeed"
     end
 
-    customer_id = stripe_object_id(payment_intent[:customer])
-    payment_method_id = stripe_object_id(payment_intent[:payment_method]) || processor_charge.card_instance_id
+    customer_id = StripeChargeableUpi.stripe_object_id(payment_intent[:customer])
+    payment_method_id = StripeChargeableUpi.stripe_object_id(payment_intent[:payment_method]) || processor_charge.card_instance_id
     raise ArgumentError, "PaymentIntent #{payment_intent.id} has no customer" if customer_id.blank?
     raise ArgumentError, "PaymentIntent #{payment_intent.id} has no payment method" if payment_method_id.blank?
 
@@ -126,7 +126,6 @@ class CreditCard < ApplicationRecord
     end
     maximum_amount_cents = if upi
       metadata_value = payment_intent[:metadata]&.[](StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY.to_sym)
-      metadata_value ||= payment_intent[:metadata]&.[](StripeChargeProcessor::UPI_RECURRING_MAX_AMOUNT_METADATA_KEY)
       Integer(metadata_value, exception: false)
     end
     if upi && !(1..Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS).cover?(maximum_amount_cents)
@@ -220,9 +219,4 @@ class CreditCard < ApplicationRecord
   def stripe_payment_intent_id
     json_data && json_data.deep_symbolize_keys[:stripe_payment_intent_id]
   end
-
-  def self.stripe_object_id(object)
-    object.respond_to?(:id) ? object.id : object
-  end
-  private_class_method :stripe_object_id
 end
