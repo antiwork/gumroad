@@ -46,7 +46,12 @@ module DashboardNav
 
   # Paths that render the dashboard sidebar but promote nothing, either because the destination is
   # always in the core list or because it is reached from the pinned footer.
-  CORE_PATH_PREFIXES = %w[/dashboard /products /bundles /customers /payouts /settings /discover /help].freeze
+  CORE_PATH_PREFIXES = %w[/products /bundles /customers /payouts /settings /discover /help].freeze
+
+  # Matched exactly, never as a prefix: everything under /dashboard is either an analytics page
+  # already named in PATH_PREFIXES or a JSON stat endpoint that renders no sidebar and must not
+  # count as a dashboard visit.
+  CORE_PATHS = %w[/dashboard].freeze
 
   # Matched longest-prefix first, so adding a prefix nested under an existing one (a bare
   # "/checkout" alongside "/checkout/form") resolves to the more specific entry rather than to
@@ -66,6 +71,7 @@ module DashboardNav
   def dashboard_path?(path)
     normalized = normalize_path(path)
     return false if normalized.blank?
+    return true if CORE_PATHS.include?(normalized)
 
     (CORE_PATH_PREFIXES + PATH_PREFIXES.keys).any? { |prefix| path_matches?(normalized, prefix) }
   end

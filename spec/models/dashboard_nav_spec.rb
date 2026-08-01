@@ -82,11 +82,24 @@ describe DashboardNav do
     it "recognizes every core surface, since dropping one silently stops seeding there" do
       # /customers is the Sales page and /settings the pinned footer destination — both render the
       # nav for sellers who may never touch a promotable path.
-      expect(described_class::CORE_PATH_PREFIXES).to match_array %w[/dashboard /products /bundles /customers /payouts /settings /discover /help]
-      described_class::CORE_PATH_PREFIXES.each do |prefix|
+      expect(described_class::CORE_PATH_PREFIXES).to match_array %w[/products /bundles /customers /payouts /settings /discover /help]
+      expect(described_class::CORE_PATHS).to match_array %w[/dashboard]
+      (described_class::CORE_PATH_PREFIXES + described_class::CORE_PATHS).each do |prefix|
         expect(described_class.dashboard_path?(prefix)).to be true
         expect(described_class.item_for_path(prefix)).to be_nil
       end
+    end
+
+    it "matches /dashboard exactly, so its JSON stat endpoints do not count as dashboard visits" do
+      # /dashboard/customers_count and friends render no sidebar; a prefix match would run the seed
+      # scan on them. The analytics pages under /dashboard stay matched through PATH_PREFIXES.
+      expect(described_class.dashboard_path?("/dashboard/customers_count")).to be false
+      expect(described_class.dashboard_path?("/dashboard/total_revenue")).to be false
+      expect(described_class.dashboard_path?("/dashboard/active_members_count")).to be false
+      expect(described_class.dashboard_path?("/dashboard/monthly_recurring_revenue")).to be false
+      expect(described_class.dashboard_path?("/dashboard/download_tax_form")).to be false
+      expect(described_class.dashboard_path?("/dashboard/sales")).to be true
+      expect(described_class.dashboard_path?("/dashboard/utm_links/new")).to be true
     end
 
     it "rejects paths that do not render the dashboard nav" do

@@ -125,6 +125,16 @@ describe PromotesDashboardNavItems, type: :request do
     expect(seller.reload.dashboard_nav_items_seeded?).to be false
   end
 
+  it "does not seed from the dashboard's JSON stat endpoints" do
+    # These live under /dashboard but render no sidebar, and an HTML-format GET to one (a browser
+    # hitting the URL directly) passes every header gate — only the path check keeps it out.
+    create(:workflow, seller:)
+
+    get dashboard_customers_count_path
+
+    expect(seller.reload.dashboard_nav_items_seeded?).to be false
+  end
+
   it "does not promote on a non-GET request" do
     post dashboard_dismiss_getting_started_checklist_path
 
