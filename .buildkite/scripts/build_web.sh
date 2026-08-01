@@ -11,7 +11,6 @@ source .buildkite/scripts/buildkit_cache.sh
 
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
 WEB_BASE_REPO=${ECR_REGISTRY}/gumroad/web_base
-AWS_NGINX_REPO=${ECR_REGISTRY}/gumroad/web_nginx
 REVISION=${BUILDKITE_COMMIT}
 RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bullseye
 
@@ -74,54 +73,3 @@ else
     fi
   done
 fi
-
-function generate_nginx_tag() {
-  local paths=()
-  local app_dir
-  app_dir=$(git rev-parse --show-toplevel)
-
-  # Change relative paths to absolute paths
-  for arg in "$@"; do
-    paths+=("${app_dir}/${arg}")
-  done
-
-  # Get short SHA of the latest commit affecting the paths
-  git rev-list --abbrev-commit --abbrev=12 HEAD -1 -- "${paths[@]}"
-}
-
-# Build and push nginx image
-NGINX_TAG=$(generate_nginx_tag "public" "docker/nginx")
-
-build_nginx_image() {
-  NGINX_TAG=$NGINX_TAG \
-    NGINX_REPO=$AWS_NGINX_REPO \
-    make build_nginx "$@"
-}
-
-logger "Building $AWS_NGINX_REPO:$NGINX_TAG"
-if buildkit_cache_available; then
-  logger "Using BuildKit registry cache ($AWS_NGINX_REPO:buildcache)"
-  if ! build_nginx_image \
-    DOCKER_BUILD="$(buildkit_docker_build)" \
-    NGINX_CACHE_OPTS="$(buildkit_cache_opts $AWS_NGINX_REPO:buildcache)"; then
-    buildkit_fallback_notice "web_nginx" "buildx build failed"
-    build_nginx_image
-  fi
-else
-  buildkit_fallback_notice "web_nginx" "buildx unavailable"
-  build_nginx_image
-fi
-
-logger "Pushing $AWS_NGINX_REPO:$NGINX_TAG"
-for i in {1..3}; do
-  logger "Push attempt $i"
-  if docker push --quiet $AWS_NGINX_REPO:$NGINX_TAG; then
-    logger "Pushed $AWS_NGINX_REPO:$NGINX_TAG"
-    break
-  elif [ $i -eq 3 ]; then
-    logger "Failed to push $AWS_NGINX_REPO:$NGINX_TAG after 3 attempts"
-    exit 1
-  else
-    sleep 5
-  fi
-done

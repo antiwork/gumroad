@@ -61,9 +61,10 @@ if [[ ! $(docker images -q --filter "reference=$WEB_REPO:web-$WEB_TAG") ]]; then
   pull_web_image || exit 1
 fi
 
-# BUILDKITE_PARALLEL_JOB is unset when the step has no parallelism configured
-# (preview.yml runs a single asset job); default to 0 so the staging build runs.
-if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
+# BUILDKITE_PARALLEL_JOB is unset when the step has no parallelism configured.
+# Default to the preview/staging half for ordinary branches, but not for main or
+# comp-assets-* branches whose single asset job builds production assets.
+if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" && $BUILDKITE_BRANCH != comp-assets-* ]]; then
   # Preview branches first check the content-addressed asset cache. On a hit
   # we skip the entire compile (npm install, js:export, Vite) and build the
   # staging image by extracting the previously compiled artifacts into a
@@ -186,7 +187,7 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
   push_image staging || exit 1
 fi
 
-if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then
+if [[ ${BUILDKITE_PARALLEL_JOB:-1} = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE_BRANCH == comp-assets-* ) ]]; then
   logger "Building production assets"
   docker rm production-assets || :
   COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}_production \

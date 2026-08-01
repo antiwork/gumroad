@@ -7,6 +7,8 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") deploy_production.sh: $1${NC}"
 }
 
+SKIP_DEPLOY=10
+
 # Deploys wait while work a deploy would destroy is ACTUALLY running, by asking the app
 # rather than guessing from the clock. Jobs a deploy must not interrupt register a token in
 # Redis while they run (see DeployBlockingJobTracking) and the matching healthcheck answers
@@ -46,14 +48,14 @@ wait_for_healthcheck() {
     elif [ "$hc_status" = "404" ]; then
       if eval "$failsafe_window_test"; then
         logger "$label healthcheck absent (HTTP 404) inside the fail-safe window — skipping deployment"
-        exit 0
+        return "$SKIP_DEPLOY"
       fi
       logger "$label healthcheck absent (HTTP 404) outside the fail-safe window — proceeding"
       return 0
     else
       if eval "$failsafe_window_test"; then
         logger "$label healthcheck unreachable (HTTP $hc_status) inside the fail-safe window — skipping deployment"
-        exit 0
+        return "$SKIP_DEPLOY"
       fi
       logger "$label healthcheck unreachable (HTTP $hc_status) outside the fail-safe window — proceeding"
       return 0
@@ -62,48 +64,64 @@ wait_for_healthcheck() {
 
   if [ "$on_timeout" = "skip" ]; then
     logger "$label still in flight after $((max_attempts * 3)) minutes — skipping deployment (the change ships with the next push, or click require-approval to force it)"
-    exit 0
+    return "$SKIP_DEPLOY"
   fi
   logger "WARNING: $label still in flight after $((max_attempts * 3)) minutes — proceeding with deploy anyway (this means it is unusually slow and worth a look)"
   return 0
 }
 
-# Payout batches. Tracking is per RUNNING job, not per batch, so a deploy can land in a gap
-# between slices. That is safe: scheduled slices sit in Redis and survive a deploy, and a
-# slice killed mid-run is re-run by Sidekiq (sellers already paid are skipped). Because of
-# that, proceeding after the wait is acceptable — worst case a slice gets re-run. The Friday
-# batch dispatches its slices over roughly half an hour, so 45 minutes of patience.
-# Fail-safe window: Tue-Fri UTC 10:00-10:59, when the weekly batches are enqueued.
-wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15 proceed \
-  '[ "$(date -u +%u)" -ge 2 ] && [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H)" -eq 10 ]'
+run_healthcheck_waits() {
+  local tmpdir payout_pid long_pid remaining rc
+  tmpdir=$(mktemp -d)
 
-# Long-running non-payout jobs — the monthly/quarterly finance and tax reports, sitemap
-# rebuilds, the daily instant payouts (see LongRunningJobTracking). These are NOT safe to
-# interrupt: they hold no checkpoint, so a recycled worker means the run starts over, and
-# killed runs of these are how finance reports have silently gone missing. So we wait longer
-# (up to 2 hours, the slowest of them is the Canada sales report at well over an hour) and,
-# if one is still running at the end of that, skip this deploy rather than kill the report.
-#
-# Note this check runs on EVERY deploy, not only overnight ones, and it skips rather than
-# proceeds — so a manual mid-day re-run of one of these reports will make that deploy wait
-# and then drop. That is the intended trade (never kill a report), and the skipped change
-# ships with the next push or via require-approval; the bound on how long a hung job can keep
-# skipping deploys is LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL.
-#
-# Fail-safe window (used ONLY when the healthcheck cannot be reached): the UTC hours these
-# jobs are actually SCHEDULED for, plus ~2h of runtime headroom. Read straight off
-# config/sidekiq_schedule.yml, which is written in UTC — the schedule is not an ET
-# midnight-6am block, so testing ET hours here would leave most of it uncovered:
-#   UTC 00:00 sitemap refresh, outstanding balances CSV
-#   UTC 01:00 monthly financial reports (fans out the Canada sales report, 1-2h)
-#   UTC 02:00 YTD sales report   UTC 03:00 TaxJar upload, India sales report
-#   UTC 08:00 daily instant payouts
-#   UTC 10:00 quarterly financial reports (VAT + per-country sales reports)
-#   UTC 11:00 finances / deferred refunds / Stripe balance summaries reports
-# => hours 00-05 and 08-13. Outside those we proceed, because nothing that registers here
-# is scheduled to be running.
-wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
-  '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
+  (
+    set +e
+    wait_for_healthcheck "Payout batch" "https://gumroad.com/healthcheck/payouts" 15 proceed \
+      '[ "$(date -u +%u)" -ge 2 ] && [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H)" -eq 10 ]'
+    rc=$?
+    echo "$rc" > "$tmpdir/payout.rc"
+    exit 0
+  ) &
+  payout_pid=$!
+
+  (
+    set +e
+    wait_for_healthcheck "Long-running job" "https://gumroad.com/healthcheck/long_running_jobs" 40 skip \
+      '[ "$(date -u +%-H)" -le 5 ] || { [ "$(date -u +%-H)" -ge 8 ] && [ "$(date -u +%-H)" -le 13 ]; }'
+    rc=$?
+    echo "$rc" > "$tmpdir/long.rc"
+    exit 0
+  ) &
+  long_pid=$!
+
+  remaining=2
+  while [ "$remaining" -gt 0 ]; do
+    for name in payout long; do
+      [ -f "$tmpdir/$name.seen" ] && continue
+      [ -f "$tmpdir/$name.rc" ] || continue
+      rc=$(cat "$tmpdir/$name.rc")
+      touch "$tmpdir/$name.seen"
+      remaining=$((remaining - 1))
+      if [ "$rc" -eq "$SKIP_DEPLOY" ]; then
+        kill "$payout_pid" "$long_pid" 2>/dev/null || true
+        wait "$payout_pid" "$long_pid" 2>/dev/null || true
+        rm -rf "$tmpdir"
+        exit 0
+      elif [ "$rc" -ne 0 ]; then
+        kill "$payout_pid" "$long_pid" 2>/dev/null || true
+        wait "$payout_pid" "$long_pid" 2>/dev/null || true
+        rm -rf "$tmpdir"
+        exit "$rc"
+      fi
+    done
+    [ "$remaining" -gt 0 ] && sleep 1
+  done
+
+  wait "$payout_pid" "$long_pid" 2>/dev/null || true
+  rm -rf "$tmpdir"
+}
+
+run_healthcheck_waits
 
 ECR_REGISTRY=${ECR_REGISTRY}
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
