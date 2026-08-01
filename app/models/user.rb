@@ -1151,10 +1151,11 @@ class User < ApplicationRecord
   # Every account a payout could land on has to season: the destination is picked at payout time,
   # so seasoning only the managed account leaves a fresh connected account as a hole.
   #
-  # An account inherits seasoning from the retired account of the same kind it replaced. A country
-  # change or payout-method switch retires one row and creates another, and reading only the live
-  # row restarts the clock on a seller who has been processing with us for years. A newly connected
-  # rail has no predecessor to inherit from, so it still seasons on its own.
+  # An account inherits seasoning from any earlier account of the same kind, alive or retired. A
+  # country change or payout-method switch retires one row and creates another, and reading only
+  # the live row restarts the clock on a seller who has been processing with us for years. A newly
+  # connected rail has no earlier account of its kind to inherit from, so it still seasons on its
+  # own.
   def stripe_accounts_seasoned_for_instant_payouts?
     managed_account = stripe_account
     return false if managed_account.nil?
@@ -1171,7 +1172,8 @@ class User < ApplicationRecord
 
     same_kind = merchant_accounts.stripe.select do |candidate|
       candidate.id != account.id &&
-        candidate.is_a_stripe_connect_account? == account.is_a_stripe_connect_account?
+        candidate.is_a_stripe_connect_account? == account.is_a_stripe_connect_account? &&
+        !candidate.stripe_rejected?
     end
 
     same_kind.any? { |predecessor| predecessor.created_at <= cutoff }

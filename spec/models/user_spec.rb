@@ -3614,7 +3614,7 @@ describe User, :vcr do
     # long-standing seller does not re-season from zero.
     it "stays eligible when a seller's account was recreated but an older retired one exists" do
       create_list(:payment_completed, 4, user:)
-      merchant_account.mark_deleted!
+      merchant_account.delete_charge_processor_account!
       create(:merchant_account, user:, created_at: 10.days.ago)
 
       expect(user.reload.eligible_for_instant_payouts?).to eq(true)
@@ -3664,11 +3664,22 @@ describe User, :vcr do
       end
 
       it "returns true when a fresh connected account replaced an older retired connected one" do
-        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago).mark_deleted!
+        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+          .delete_charge_processor_account!
         create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
 
         expect(user.reload.eligible_for_instant_payouts?).to eq(true)
       end
+    end
+
+    # Stripe rejected the earlier account outright, so its age is not history we want to
+    # lend to the replacement.
+    it "returns false when the only older account of that kind was rejected by Stripe" do
+      merchant_account.update!(stripe_disabled_reason: "rejected.fraud")
+      merchant_account.delete_charge_processor_account!
+      create(:merchant_account, user:, created_at: 10.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
     it "returns false when user is not from the US" do
