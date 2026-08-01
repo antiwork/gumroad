@@ -2276,7 +2276,7 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
 
       it "rejects a seller-owned Stripe account before creating the recurring intent" do
-        create(:merchant_account, user: seller)
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_upi_autopay_destination")
         seller.merchant_accounts.reset
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "India") }
