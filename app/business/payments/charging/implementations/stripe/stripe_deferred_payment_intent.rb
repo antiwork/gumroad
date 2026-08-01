@@ -15,7 +15,7 @@ class StripeDeferredPaymentIntent
   def initialize(merchant_account:, amount_cents:, amount_for_gumroad_cents:, reference:, description:,
                  idempotency_key:, payment_method_types:, currency:, statement_description: nil,
                  transfer_group: nil, metadata: nil, stripe_fx_quote_id: nil, payment_method_options: nil,
-                 setup_future_usage: nil, customer_params: nil)
+                 setup_future_usage: nil, customer_params: nil, customer_idempotency_key: nil)
     @merchant_account = merchant_account
     @amount_cents = amount_cents
     @amount_for_gumroad_cents = amount_for_gumroad_cents
@@ -33,6 +33,7 @@ class StripeDeferredPaymentIntent
     # setup_future_usage attaches the selected method to this Customer during browser confirmation.
     @setup_future_usage = setup_future_usage
     @customer_params = customer_params
+    @customer_idempotency_key = customer_idempotency_key
   end
 
   def create
@@ -45,7 +46,8 @@ class StripeDeferredPaymentIntent
   private
     attr_reader :merchant_account, :amount_cents, :amount_for_gumroad_cents, :reference, :description,
                 :idempotency_key, :payment_method_types, :currency, :statement_description, :transfer_group, :metadata,
-                :stripe_fx_quote_id, :payment_method_options, :setup_future_usage, :customer_params
+                :stripe_fx_quote_id, :payment_method_options, :setup_future_usage, :customer_params,
+                :customer_idempotency_key
 
     def intent_params
       params = {
@@ -72,11 +74,13 @@ class StripeDeferredPaymentIntent
     end
 
     def customer_id
+      raise ArgumentError, "customer_idempotency_key is required with customer_params" if customer_idempotency_key.blank?
+
       @customer_id ||= Stripe::Customer.create(
         customer_params,
         StripeIntentChargeRouting.request_options(
           merchant_account:,
-          idempotency_key: "#{idempotency_key}_customer"
+          idempotency_key: customer_idempotency_key
         )
       ).id
     end

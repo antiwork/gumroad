@@ -778,7 +778,8 @@ class Order::PreparePaymentIntentService
         metadata: deferred_intent_metadata(charge, presentment),
         payment_method_options: deferred_payment_method_options(presentment),
         setup_future_usage: ("off_session" if recurring_upi_registration?),
-        customer_params: recurring_upi_customer_params
+        customer_params: recurring_upi_customer_params,
+        customer_idempotency_key: recurring_upi_customer_idempotency_key
       )
     rescue ChargeProcessorCardError => e
       # The seller-proceeds guard is an expected buyer-facing rejection, not a generic prepare
@@ -821,6 +822,12 @@ class Order::PreparePaymentIntentService
         description: "UPI Autopay for order #{order.external_id}",
         metadata: { order: order.external_id, purchase: purchase.external_id },
       }.compact
+    end
+
+    def recurring_upi_customer_idempotency_key
+      return unless recurring_upi_registration?
+
+      "upi_autopay_customer_#{order.external_id}_#{order.created_at.to_i}_#{order.created_at.usec}"
     end
 
     def deferred_intent_metadata(charge, presentment)

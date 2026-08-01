@@ -2192,6 +2192,9 @@ describe Order::PreparePaymentIntentService, :vcr do
           setup_future_usage: "off_session"
         )
         expect(create_args[:customer_params]).to include(email: "buyer@example.com")
+        expect(create_args[:customer_idempotency_key])
+          .to eq("upi_autopay_customer_#{order.external_id}_#{order.created_at.to_i}_#{order.created_at.usec}")
+        expect(create_args[:customer_idempotency_key]).not_to include("ctoken_upi_autopay")
         mandate_options = create_args.dig(:payment_method_options, :upi, :mandate_options)
         expect(mandate_options).to include(
           amount_type: "maximum",
