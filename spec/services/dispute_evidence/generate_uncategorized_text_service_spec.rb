@@ -14,8 +14,14 @@ describe DisputeEvidence::GenerateUncategorizedTextService, :vcr do
     create(
       :disputed_purchase,
       # Shipments only exist for orders that needed delivery (gumroad-private#1665), and the
-      # shipping-tracking rows below are the point of this spec.
+      # shipping-tracking rows below are the point of this spec. A physical product also makes
+      # the address fields required on the purchase.
       link: product,
+      street_address: "123 Sample St",
+      city: "San Francisco",
+      state: "CA",
+      country: "United States",
+      zip_code: "12343",
       email: "customer@example.com",
       full_name: "Joe Doe",
       ip_state: "California",
