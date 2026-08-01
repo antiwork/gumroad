@@ -1619,7 +1619,7 @@ describe SettingsPresenter do
     # asking them to. Telling them payouts start at 18 would be wrong the moment they choose US.
     it "neither asks nor writes off a seller aged 13-17 with no country on file yet" do
       compliance_info = create(:user_compliance_info, user: seller, birthday: minor_birthday)
-      compliance_info.update_columns(country: nil, country_code: nil)
+      compliance_info.update_columns(country: nil)
 
       props = presenter.payments_props[:legal_guardian]
 
