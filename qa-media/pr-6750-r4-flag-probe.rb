@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 ActiveRecord::Base.logger = nil
 Rails.logger.level = Logger::FATAL
 
@@ -19,7 +21,9 @@ def qq(code, pairs)
   products = pairs.to_h { |l, q| [l.unique_permalink, { permalink: l.unique_permalink, quantity: q }] }
   OfferCodeDiscountComputingService.new(code, products).process
 end
+
 def cents(r) = r[:products_data].transform_values { |v| v[:discount][:cents] || "#{v[:discount][:percents]}%" }
+
 def sum(r)   = r[:products_data].values.sum { |v| v[:discount][:cents].to_i }
 
 def flag!(oc, on)
