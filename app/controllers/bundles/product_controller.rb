@@ -18,9 +18,20 @@ class Bundles::ProductController < Bundles::BaseController
     ActiveRecord::Base.transaction do
       @bundle.is_bundle = true
       @bundle.native_type = Link::NATIVE_TYPE_BUNDLE
+      # Currency before price, with the amount re-sent explicitly. `price_cents=`
+      # writes a Price row scoped to price_currency_type as it stands at that
+      # moment, and assign_attributes skips the setter when the submitted amount
+      # equals the current one — so re-denominating alone would leave the bundle
+      # with no Price row in the new currency and fail validation on a blank
+      # default price. Mirrors Api::V2::LinksController#update.
+      if product_permitted_params.key?(:price_currency_type)
+        carried_price_cents = product_permitted_params[:price_cents].presence || @bundle.price_cents
+        @bundle.price_currency_type = product_permitted_params[:price_currency_type]
+        @bundle.price_cents = carried_price_cents if carried_price_cents.present?
+      end
       @bundle.assign_attributes(product_permitted_params.except(
         :custom_button_text_option, :custom_summary, :custom_attributes, :covers, :refund_policy, :product_refund_policy_enabled,
-        :seller_refund_policy_enabled, :installment_plan, :default_offer_code_id)
+        :seller_refund_policy_enabled, :installment_plan, :default_offer_code_id, :price_currency_type)
       )
       @bundle.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
       @bundle.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
@@ -63,6 +74,7 @@ class Bundles::ProductController < Bundles::BaseController
         :description,
         :custom_permalink,
         :price_cents,
+        :price_currency_type,
         :customizable_price,
         :suggested_price_cents,
         :max_purchase_count,

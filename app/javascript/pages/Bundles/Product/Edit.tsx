@@ -10,7 +10,7 @@ import {
   CUSTOM_BUTTON_TEXT_OPTIONS,
   RatingsWithPercentages,
 } from "$app/parsers/product";
-import { CurrencyCode } from "$app/utils/currency";
+import { CurrencyCode, currencyCodeList } from "$app/utils/currency";
 
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
@@ -93,6 +93,7 @@ type ProductFormData = {
   installment_plan: { number_of_installments: number } | null;
   default_offer_code_id: string | null;
   default_offer_code: OfferCode | null;
+  price_currency_type: CurrencyCode;
   unpublish?: boolean;
   redirect_to?: string;
 };
@@ -153,6 +154,7 @@ export default function BundlesProductEdit() {
     installment_plan: bundle.installment_plan,
     default_offer_code_id: bundle.default_offer_code?.id ?? null,
     default_offer_code: bundle.default_offer_code,
+    price_currency_type: currency_type,
   });
 
   if (!currentSeller) return null;
@@ -177,6 +179,7 @@ export default function BundlesProductEdit() {
     refund_policy: form.data.refund_policy,
     installment_plan: form.data.allow_installment_plan ? form.data.installment_plan : undefined,
     default_offer_code_id: form.data.default_offer_code_id,
+    price_currency_type: form.data.price_currency_type,
   });
 
   const submitForm = (additionalData: Record<string, unknown> = {}, options?: { onSuccess?: () => void }) => {
@@ -293,7 +296,11 @@ export default function BundlesProductEdit() {
             }
             setSuggestedPriceCents={(suggestedPriceCents) => form.setData("suggested_price_cents", suggestedPriceCents)}
             setIsPWYW={(isPWYW) => form.setData("customizable_price", isPWYW)}
-            currencyType={currency_type}
+            currencyType={form.data.price_currency_type}
+            currencyCodeSelector={{
+              options: currencyCodeList,
+              onChange: (currencyCode) => form.setData("price_currency_type", currencyCode),
+            }}
             eligibleForInstallmentPlans={bundle.eligible_for_installment_plans}
             allowInstallmentPlan={form.data.allow_installment_plan}
             numberOfInstallments={form.data.installment_plan?.number_of_installments ?? null}
