@@ -719,10 +719,10 @@ class Order::PreparePaymentIntentService
 
       submitted = params[:payment_method_list_token].presence
       issued = Checkout::PaymentMethodListToken.verify(submitted, sellers: [seller])
-      # A token the buyer sent that does not verify means the seam broke — a tampered token, or the
-      # presenter and this service disagreeing about the seller set. Falling back is correct, but
-      # silently is how #1528 stayed invisible for 45 hours, so say something.
-      Rails.logger.info("[prepare] unverifiable payment_method_list_token for seller #{seller.id}") if submitted.present? && issued.nil?
+      # Expiry (a long-open tab) is routine here; a tampered token or a presenter/service
+      # disagreement about the seller set is not. Warn rather than error because the bucket mixes
+      # both, and log at all because a silent fallback is what made #1528 invisible.
+      Rails.logger.warn("Unverifiable payment_method_list_token for order #{order.id}") if submitted.present? && issued.nil?
       # The token proves the list came from us, not that every method on it may still be offered:
       # it was signed before a flag could roll back or a connected account could lose a capability.
       # So each method still passes the same policy allowlist a client-supplied ConfirmationToken

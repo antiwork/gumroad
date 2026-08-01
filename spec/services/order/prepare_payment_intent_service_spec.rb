@@ -593,7 +593,6 @@ describe Order::PreparePaymentIntentService, :vcr do
       it "drops a method from the issued list that this seller may no longer offer" do
         order, params = build_order
         order.purchases.each { _1.update!(ip_country: "United States") }
-        allow(Stripe).to receive(:api_key).and_return("sk_live_issued_list")
         params[:payment_method_list_token] = Checkout::PaymentMethodListToken.issue(
           payment_method_types: %w[card link cashapp klarna], sellers: [seller]
         )
@@ -638,10 +637,9 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:payment_method_types]).to eq(%w[card link])
       end
 
-      # The amount and currency strips run over the issued list exactly as they do over a
-      # re-resolved one: a token minted inside Klarna's window and replayed onto a cart whose
-      # charged total sits outside it must still lose klarna, or Stripe rejects the intent CREATE
-      # and the whole cart fails — including the buyer who picked card.
+      # The final-amount strip runs over a verified issued list exactly as it does over a
+      # re-resolved one: klarna on an out-of-window cart fails the intent CREATE, taking down the
+      # whole cart including the buyer who picked card.
       it "strips klarna from a verified issued list when the final amount is outside Stripe's Klarna window" do
         Feature.activate_user(:checkout_local_method_klarna, seller)
         expensive_product = create(:product, user: seller, price_cents: 5_000_00)

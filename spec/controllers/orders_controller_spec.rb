@@ -2492,9 +2492,9 @@ describe OrdersController, :vcr do
     end
 
     # Both halves of the token's threading are pinned here: the controller has to merge it into the
-    # order params, and Order::CreateService has to keep it OUT of the Purchase attributes, or a
-    # tokened checkout raises UnknownAttributeError in build_purchase. and_call_original is what
-    # makes the second half load-bearing — the purchases really get created.
+    # order params, and Order::CreateService has to keep it OUT of the Purchase attributes. The POST
+    # runs the real Order::CreateService, so letting the token through would raise
+    # UnknownAttributeError in build_purchase before this expectation could even be reached.
     it "passes the signed payment-method list token to the prepare service without treating it as a Purchase attribute" do
       token = Checkout::PaymentMethodListToken.issue(payment_method_types: %w[card link], sellers: [seller])
 
@@ -2504,7 +2504,7 @@ describe OrdersController, :vcr do
 
       post :prepare, params: { line_items:, confirmation_token: confirmation_token_id, payment_method_list_token: token }.merge(common_params)
 
-      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["line_items"]["unique-id-0"]["requires_payment_confirmation"]).to be(true)
     end
 
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do

@@ -167,9 +167,8 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     expect(data.payment_details_source).toBe("payment_element");
   });
 
-  // The token is the whole point of the client-confirm lane's method-list pin: if it never leaves
-  // the browser the server silently re-resolves and gumroad-private#1528 is back, so the presence
-  // and the absence branches are both pinned here.
+  // The token never leaving the browser silently re-enables gumroad-private#1528, so both the
+  // presence and the absence branch are pinned.
   it("sends the mounted method-list token on the client-confirm lane", () => {
     const data = createPurchasesRequestData(
       payloadWith({
