@@ -541,8 +541,7 @@ class Link < ApplicationRecord
   # cannot infer it afterwards — `alive?` is false for both.
   def take_down_for_tos_violation!
     if is_tiered_membership?
-      # Every other admin-initiated unpublish sets this (User::Risk), and it is what
-      # distinguishes a takedown from the seller unpublishing their own listing.
+      # Seller publish flows must not be able to reverse an admin takedown.
       unpublish!(is_unpublished_by_admin: true)
       "unpublished"
     else
