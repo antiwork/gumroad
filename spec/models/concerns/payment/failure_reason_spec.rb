@@ -154,27 +154,35 @@ describe Payment::FailureReason do
           end
 
           describe "#terminal_paypal_failure_seller_solution" do
+            # The cohort is defined by can_setup_bank_payouts?, not by the country name, so assert
+            # the country actually produces it rather than trusting the list not to move.
             def switch_to_paypal_only_country
               payment.user.alive_user_compliance_info.mark_deleted!
               create(:user_compliance_info, user: payment.user, country: "Ukraine")
+              expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
             end
 
-            it "tells a seller with no available payout rail that there is no current payout method" do
+            let(:no_payout_rail_solution) do
+              "PayPal will not send payments to accounts registered in that country, and bank transfer is not " \
+              "available in yours. If you have a PayPal account registered in a country PayPal does pay to, you " \
+              "can add it in your payout settings. If you do not, we have no way to pay you right now, and your " \
+              "balance stays on your account until we do."
+            end
+
+            it "tells a seller with no available payout rail that we may have no way to pay them" do
               switch_to_paypal_only_country
 
               payment.mark_failed!("PAYPAL 3148")
 
               solution = payment.reload.terminal_paypal_failure_seller_solution
-              expect(solution).to eq(
-                "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
-                "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
-                "and we hope to be able to pay it out in the future."
-              )
-              expect(solution).to_not include("different PayPal account")
+              expect(solution).to eq(no_payout_rail_solution)
               expect(solution).to_not include("next payout date")
+              expect(solution).to_not include("is not forfeited")
             end
 
             it "keeps the existing bank account path for country-level PayPal rejections where bank payouts are available" do
+              expect(payment.user.can_setup_bank_payouts?).to be(true)
+
               payment.mark_failed!("PAYPAL 3148")
 
               expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
@@ -203,11 +211,7 @@ describe Payment::FailureReason do
 
               payment.mark_failed!("PAYPAL 3148")
 
-              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(
-                "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
-                "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
-                "and we hope to be able to pay it out in the future."
-              )
+              expect(payment.reload.terminal_paypal_failure_seller_solution).to eq(no_payout_rail_solution)
             end
           end
 
@@ -287,7 +291,7 @@ describe Payment::FailureReason do
             payment.mark_failed!("PAYPAL 3148")
 
             note = payment.user.comments.last
-            expect(note.content).to include("PayPal is the only payout method we can offer in your country")
+            expect(note.content).to include("we have no way to pay you right now")
             expect(note.content).to_not include("Add a bank account")
             expect(PayoutNoteVisibility.seller_visible?(note)).to eq(true)
           end

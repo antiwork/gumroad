@@ -316,10 +316,9 @@ class Payment < ApplicationRecord
   end
 
   # True when there is no payout method left to point the seller at: PayPal refuses the country on
-  # the account's address (3148, which no other PayPal account in that country escapes), and bank
-  # transfer is not offered there either. Every other terminal-rejection copy names an alternative,
-  # so this cohort has to be answered differently or we are giving an instruction with no action
-  # behind it.
+  # the account's address, and bank transfer is not offered in the seller's. Read off the terminal
+  # list rather than naming 3148, but the copy it selects only holds while that list stays
+  # country-scoped — see the guard beside NO_OTHER_PAYPAL_ACCOUNT_HELPS_REASONS.
   def paypal_failure_without_available_payout_rail?
     terminal_paypal_failure? &&
       !repairable_in_place_paypal_failure? &&

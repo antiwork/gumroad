@@ -4,7 +4,8 @@
   <% if @retries_stopped %>
     <p>
       <% if @no_payout_rail_available %>
-        We've stopped retrying this payout because the attempts cannot succeed right now. Your balance is safe and stays on your account.
+        <%# Same rejection, but "until you change how you get paid" presumes a change they can make. %>
+        We've stopped retrying this payout, because every attempt to that account will be refused. Your balance is safe and stays on your account.
       <% else %>
         This will keep happening until you change how you get paid, so we've stopped retrying it. Your balance is safe and stays on your account.
       <% end %>
@@ -20,7 +21,13 @@
   <% end %>
   <% if @no_payout_rail_available %>
     <p>
-      PayPal is the only payout method we can offer in your country, and PayPal will not send payments to accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, and we hope to be able to pay it out in the future.
+      <%# The cohort splits and we cannot tell the halves apart: some hold a usable PayPal account
+          elsewhere, some cannot get one. Offer the first as a condition, answer the second plainly.
+          Claims only that the balance stays — closing the account still forfeits it. %>
+      PayPal will not send payments to accounts registered in that country, and bank transfer is not available in yours.
+      If you have a PayPal account registered in a country PayPal does pay to, you can
+      <a href='<%= settings_payments_url %>'>add it in your payout settings</a>.
+      If you do not, we have no way to pay you right now, and your balance stays on your account until we do.
     </p>
   <% elsif @can_receive_us_dollars_on_same_account %>
     <p>

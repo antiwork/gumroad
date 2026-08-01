@@ -211,15 +211,12 @@ describe ContactingCreatorMailer do
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)
 
-      expect(mail.body.encoded).to include("We've stopped retrying this payout because the attempts cannot succeed right now")
-      expect(mail.body.encoded).to include(
-        "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
-        "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
-        "and we hope to be able to pay it out in the future."
-      )
+      expect(mail.body.encoded).to include("We've stopped retrying this payout, because every attempt to that account will be refused")
+      expect(mail.body.encoded).to include("PayPal will not send payments to accounts registered in that country, and bank transfer is not available in yours")
+      expect(mail.body.encoded).to include("If you do not, we have no way to pay you right now, and your balance stays on your account until we do")
       expect(mail.body.encoded).to_not include("until you change how you get paid")
       expect(mail.body.encoded).to_not include("add a bank account")
-      expect(mail.body.encoded).to_not include("registered in a country that can receive PayPal payments")
+      expect(mail.body.encoded).to_not include("is not forfeited")
       expect(mail.body.encoded).to_not include("next payout date")
       expect(mail.body.encoded).to_not include("reply to this email so we can review the hold")
     end
@@ -227,6 +224,7 @@ describe ContactingCreatorMailer do
     it "does not add hold next steps for a PayPal-only seller whose account is on hold" do
       payment.user.alive_user_compliance_info.mark_deleted!
       create(:user_compliance_info, user: payment.user, country: "Ukraine")
+      expect(payment.user.reload.can_setup_bank_payouts?).to be(false)
       payment.user.update!(payouts_paused_internally: true)
 
       mail = ContactingCreatorMailer.paypal_payout_permanently_failed(payment.id)

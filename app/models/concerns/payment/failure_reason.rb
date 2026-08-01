@@ -78,6 +78,19 @@ module Payment::FailureReason
   # who does fix it is not stuck behind a permanent block.
   RETRY_BLOCKING_PAYPAL_FAILURE_REASONS = ["PAYPAL 3148"].freeze
 
+  # The retry-blocking rejections that are properties of the ACCOUNT'S COUNTRY, so no other PayPal
+  # account registered there escapes them. Payment#paypal_failure_without_available_payout_rail?
+  # selects copy that assumes this, and derives its cohort from the terminal list — so a
+  # retry-blocking code that is NOT country-scoped (an account-level block another account escapes)
+  # would silently inherit "we have no way to pay you". The guard below forces that reckoning.
+  NO_OTHER_PAYPAL_ACCOUNT_HELPS_REASONS = ["PAYPAL 3148"].freeze
+
+  # Keeping the two in lockstep is what lets the no-rail copy be chosen off the terminal list. Adding
+  # a retry-blocking code that another PayPal account CAN escape means that copy no longer applies to
+  # it, and the cohort has to be narrowed to this list instead of merely widened to match.
+  raise "a retry-blocking PayPal rejection must be country-scoped, or the no-rail copy needs narrowing" unless
+    RETRY_BLOCKING_PAYPAL_FAILURE_REASONS.sort == NO_OTHER_PAYPAL_ACCOUNT_HELPS_REASONS.sort
+
   # Rejections the seller can clear on the PayPal account they already use, by adding US dollars to
   # the currencies that account accepts. Only 14159 qualifies: 3148 is about the country on the
   # account's address, which adding a currency does not change. Kept next to the retry lists because
@@ -203,10 +216,17 @@ module Payment::FailureReason
     "PayPal is the only payout method we can offer in your country, so to get paid you'll need to connect a " \
     "PayPal account registered in a country that can receive PayPal payments. You can change it in your " \
     "payout settings."
+  # Said only where both rails are closed: PayPal refuses the country on the account's address and
+  # bank transfer is not offered in the seller's. We cannot tell which half of that cohort holds a
+  # usable PayPal account elsewhere, so the remaining option is stated as a condition rather than
+  # as an instruction, and the seller who has no such account is told so plainly instead of being
+  # sent after one. Claims only that the balance stays — closing the account still forfeits it
+  # (ForfeitBalanceService#balances_to_forfeit_on_account_closure).
   TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL =
-    "PayPal is the only payout method we can offer in your country, and PayPal will not send payments to " \
-    "accounts there, so we have no way to pay you right now. Your balance is safe and is not forfeited, " \
-    "and we hope to be able to pay it out in the future."
+    "PayPal will not send payments to accounts registered in that country, and bank transfer is not " \
+    "available in yours. If you have a PayPal account registered in a country PayPal does pay to, you " \
+    "can add it in your payout settings. If you do not, we have no way to pay you right now, and your " \
+    "balance stays on your account until we do."
 
   # For a rejection the seller can clear without leaving the account they already use (14159), the
   # in-place repair is offered first, because it is the only fix that costs them nothing: no new
