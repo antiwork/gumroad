@@ -10,7 +10,9 @@
       knowing to ask.
     <% end %>
   </p>
-  <table>
+  <%# The email layout collapses a bare table to display:block, which stacks every cell into its own
+      box. `list` is the class that keeps real columns. %>
+  <table class="list">
     <thead>
       <tr>
         <th>Buyer</th>
