@@ -809,6 +809,8 @@ class Link < ApplicationRecord
     # A live product always outranks a redirect for the slug it currently answers
     # on, including bare `gumroad.com/l/:slug` where `by_user(nil)` is unscoped —
     # otherwise one seller's mapping serves over another seller's live listing.
+    # The fallback exists because `long_url` builds seller-scoped URLs, so without
+    # it a renamed slug 404s on the host sellers actually share.
     Link.by_user(user).visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
   end
 

@@ -1410,12 +1410,13 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil Link.fetch_leniently("retired")
   end
 
-  test "a live product outranks a legacy mapping for the same slug on every branch" do
+  test "a live product outranks a legacy mapping for the same slug on the bare domain" do
     ctx = fetch_leniently_context
     LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
 
     # product_2 is the oldest live holder of "custom", so it answers the bare
-    # domain even though the mapping points elsewhere.
+    # domain even though the mapping points elsewhere. The scoped assertions
+    # were already live-first before this change and pin that they stay so.
     assert_equal ctx[:product_2], Link.fetch_leniently("custom")
     assert_equal ctx[:product_2], Link.fetch_leniently("custom", user: ctx[:user_1])
     assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
@@ -1539,6 +1540,7 @@ class LinkTest < ActiveSupport::TestCase
     # moment the claim lapses.
     assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
     claimant.update!(custom_permalink: "claimant-moved")
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
     assert_equal first, Link.fetch_leniently("slug")
   end
 
