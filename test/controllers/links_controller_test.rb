@@ -8213,4 +8213,38 @@ class LinksControllerSaveContractTest < ActionController::TestCase
     assert_not removed.reload.alive?
     assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
   end
+
+  # --- the happy path leaves an audit row (gumroad-private#1508, criterion 4)
+  #
+  # The reported save returned 200, left all three versions alive, and wrote
+  # zero ProductVariantDeletionAudit rows. The absent audit row is what made it
+  # indistinguishable from success, so asserting `deleted_at` alone would still
+  # pass against that bug: a save that deletes nothing and audits nothing looks
+  # the same as one that never named a deletion. Assert both halves.
+
+  test "flag on: a confirmed version removal deletes the row AND writes an audit row" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(
+        variants: [{ id: kept.external_id, name: "Kept" }],
+        editor_revision: current_revision,
+        confirmed_removed_variant_ids: [removed.external_id],
+        deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+      ), format: :json
+      assert_response :success
+    end
+
+    assert_not removed.reload.alive?, "the confirmed version must actually be gone"
+    assert kept.reload.alive?, "the version the payload kept must survive"
+
+    audit = ProductVariantDeletionAudit.where(product_id: @product.id).last
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal @product.id, audit.product_id
+    # Confirmed in the payload, so the audit must not read as an omission — that
+    # is the distinction the table exists to make.
+    assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
+  end
 end
