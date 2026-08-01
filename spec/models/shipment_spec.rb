@@ -69,6 +69,13 @@ describe Shipment do
       end
     end
 
+    it "accepts a tracking_url with multibyte characters" do
+      # URI.parse alone rejects non-ASCII, and international carrier pages carry it.
+      shipment = build(:shipment, purchase:, tracking_url: "https://example.com/track?ref=café")
+
+      expect(shipment).to be_valid
+    end
+
     it "allows legacy invalid tracking_url rows to be updated without rewriting tracking_url" do
       shipment = create(:shipment, purchase:)
       shipment.update_column(:tracking_url, "1Z999AA10123456784")
@@ -218,11 +225,12 @@ describe Shipment do
       # The column also holds bare tracking numbers and free-text notes, so text that merely starts
       # with a carrier's host is not a link the seller followed. The number is a real USPS one, so
       # only the missing scheme can be what rejects these.
+      # update_column: these are legacy shapes the write validation now rejects.
       usps = Shipment::CARRIER_TRACKING_URL_MAPPING["USPS"].sub(%r{\Ahttps?://}, "")
-      shipment.update!(tracking_url: "#{usps}9400111899223197428490")
+      shipment.update_column(:tracking_url, "#{usps}9400111899223197428490")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
 
-      shipment.update!(tracking_url: "see tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490")
+      shipment.update_column(:tracking_url, "see tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490")
       expect(shipment.carrier_and_tracking_number_from_url).to be_nil
     end
 
@@ -297,8 +305,20 @@ describe Shipment do
       @shipment = create(:shipment, purchase:, tracking_number: "1234567890", carrier: "USPS")
     end
 
-    it "uses the package tracking label for known carrier hosts" do
-      @shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
+    it "uses the package tracking label for a verified carrier tracking link" do
+      @shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490")
+
+      expect(@shipment.tracking_link_for_display).to eq(
+        {
+          url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=9400111899223197428490",
+          label: "Track your package",
+          host: nil,
+        }
+      )
+    end
+
+    it "uses the package tracking label for a link derived from carrier and tracking number" do
+      @shipment.update!(tracking_url: nil)
 
       expect(@shipment.tracking_link_for_display).to eq(
         {
@@ -317,6 +337,32 @@ describe Shipment do
           url: "https://www.google.com/track",
           label: "Seller-provided tracking link",
           host: "www.google.com",
+        }
+      )
+    end
+
+    it "labels a carrier host that is not the carrier's tracking form as seller-provided" do
+      # The host alone must not earn the trusted label — this is a seller-chosen USPS page.
+      @shipment.update!(tracking_url: "https://tools.usps.com/not-a-tracking-form")
+
+      expect(@shipment.tracking_link_for_display).to eq(
+        {
+          url: "https://tools.usps.com/not-a-tracking-form",
+          label: "Seller-provided tracking link",
+          host: "tools.usps.com",
+        }
+      )
+    end
+
+    it "labels a carrier form carrying a number that carrier does not issue as seller-provided" do
+      # Ten digits on the USPS form is not a USPS number, so the link is not verified tracking.
+      @shipment.update!(tracking_url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890")
+
+      expect(@shipment.tracking_link_for_display).to eq(
+        {
+          url: "https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=1234567890",
+          label: "Seller-provided tracking link",
+          host: "tools.usps.com",
         }
       )
     end

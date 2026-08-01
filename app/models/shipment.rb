@@ -38,7 +38,7 @@ class Shipment < ApplicationRecord
   TRACKING_LINK_MAX_LENGTH = 2_083
   TRACKING_LINK_SCHEMES = %w[http https].freeze
   TRACKING_LINK_CONTROL_CHARACTER_REGEX = /[[:cntrl:]]/
-  CARRIER_TRACKING_HOSTS = CARRIER_TRACKING_URL_MAPPING.values.map { |tracking_link| URI.parse(tracking_link).host.downcase }.freeze
+  TRACKING_LINK_NON_ASCII_REGEX = /[^\x00-\x7F]/
   VALID_TRACKING_LINK_MESSAGE = "must be a full URL beginning with http:// or https://"
 
   # Rails humanizes this to "Tracking url", which reads as a typo in a message we show sellers.
@@ -77,13 +77,15 @@ class Shipment < ApplicationRecord
     display_safe_tracking_link = self.class.display_safe_tracking_link(raw_tracking_link)
     return if display_safe_tracking_link.blank?
 
-    host = URI.parse(display_safe_tracking_link).host.downcase
-    known_carrier_host = CARRIER_TRACKING_HOSTS.include?(host)
+    # A carrier hostname alone must not earn the trusted label — https://tools.usps.com/anything is
+    # still a seller-chosen destination. Trust only a link we derived ourselves (tracking_url blank)
+    # or a stored URL whose carrier form and tracking number both verify.
+    verified_carrier_link = tracking_url.blank? || carrier_and_tracking_number_from_url.present?
 
     {
       url: display_safe_tracking_link,
-      label: known_carrier_host ? "Track your package" : "Seller-provided tracking link",
-      host: known_carrier_host ? nil : host,
+      label: verified_carrier_link ? "Track your package" : "Seller-provided tracking link",
+      host: verified_carrier_link ? nil : self.class.parsed_tracking_uri(display_safe_tracking_link).host.downcase,
     }
   end
 
@@ -93,7 +95,7 @@ class Shipment < ApplicationRecord
     return if normalized_value.length > TRACKING_LINK_MAX_LENGTH
     return if normalized_value.match?(TRACKING_LINK_CONTROL_CHARACTER_REGEX)
 
-    uri = URI.parse(normalized_value)
+    uri = parsed_tracking_uri(normalized_value)
     return unless TRACKING_LINK_SCHEMES.include?(uri.scheme&.downcase)
     return if uri.host.blank?
     return if uri.userinfo.present?
@@ -101,6 +103,12 @@ class Shipment < ApplicationRecord
     normalized_value
   rescue URI::InvalidURIError
     nil
+  end
+
+  # URI.parse rejects the multibyte URLs sellers paste from international carrier pages, so
+  # non-ASCII is escaped for parsing only — the stored and rendered value stays as typed.
+  def self.parsed_tracking_uri(value)
+    URI.parse(value.gsub(TRACKING_LINK_NON_ASCII_REGEX) { |character| URI::DEFAULT_PARSER.escape(character) })
   end
 
   # `carrier` and `tracking_number` have no seller-facing writer — every such path sets only
