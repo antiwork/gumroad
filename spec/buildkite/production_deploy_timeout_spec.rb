@@ -20,15 +20,28 @@ RSpec.describe "Production deploy step timeout" do
       .find { _1.is_a?(Hash) && _1["key"] == "production-deployment" }
   end
 
-  # Each wait_for_healthcheck call polls every 3 minutes, so its budget is attempts * 3.
+  # Read the polling interval out of the script rather than restating it: hard-coding 3 minutes
+  # here would let someone widen `sleep` in wait_for_healthcheck and leave this spec green while
+  # the real wait budget silently outgrew the step timeout again — the exact drift this file exists
+  # to catch, one level up.
+  let(:poll_interval_minutes) do
+    sleeps = DEPLOY_SCRIPT.read[/wait_for_healthcheck\(\).*?\n}/m].to_s.scan(/^\s*sleep\s+(\d+)\s*$/).flatten.map(&:to_i).uniq
+    expect(sleeps.size).to eq(1), "expected one polling sleep inside wait_for_healthcheck, found #{sleeps.inspect}"
+    sleeps.first / 60.0
+  end
+
   let(:wait_budget_minutes) do
     DEPLOY_SCRIPT.read.scan(/wait_for_healthcheck\s+"[^"]+"\s+\S+\s+(\d+)\s+\w+/)
-      .sum { |(attempts)| attempts.to_i * 3 }
+      .sum { |(attempts)| attempts.to_i * poll_interval_minutes }
   end
 
   it "parses the deploy step out of the pipeline" do
     expect(step).to be_present
     expect(step["command"]).to eq(".buildkite/scripts/deploy_production.sh")
+  end
+
+  it "reads the polling interval from the script instead of assuming it" do
+    expect(poll_interval_minutes).to eq(3)
   end
 
   it "finds every healthcheck wait in the deploy script" do
