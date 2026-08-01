@@ -437,6 +437,7 @@ const CheckoutIndexPage = () => {
         hasTippingEnabled: item.product.has_tipping_enabled,
         isPreorder: item.product.is_preorder,
         price: convertToUSD(item, price),
+        listedPriceCents: price,
         renewalPriceCents: item.recurrence ? Math.round(convertToUSD(item, renewalPrice)) : null,
         payInInstallments: item.pay_in_installments,
         installmentPlan: item.product.installment_plan

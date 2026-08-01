@@ -417,7 +417,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
       canUseStripePaymentElementClientConfirm(
         clientConfirmState({
           checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
-          products: [product({ recurrence: "monthly" })],
+          products: [product({ recurrence: "monthly", listedPriceCents: 73_000 })],
         }),
       ),
     ).toBe(true);
@@ -465,7 +465,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
   });
 
   it("fails closed when recurring UPI configuration or the live cart no longer matches", () => {
-    const recurringProduct = product({ recurrence: "monthly" });
+    const recurringProduct = product({ recurrence: "monthly", listedPriceCents: 73_000 });
     const recurringUpiState = (overrides: Partial<State> = {}) =>
       clientConfirmState({
         checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
@@ -499,6 +499,16 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(
       canUseStripePaymentElementClientConfirm(
         recurringUpiState({ products: [product({ recurrence: "monthly", quantity: 2 })] }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({ products: [product({ recurrence: "monthly", listedPriceCents: 74_000 })] }),
+      ),
+    ).toBe(false);
+    expect(
+      canUseStripePaymentElementClientConfirm(
+        recurringUpiState({ products: [product({ recurrence: null, listedPriceCents: 73_000 })] }),
       ),
     ).toBe(false);
     expect(

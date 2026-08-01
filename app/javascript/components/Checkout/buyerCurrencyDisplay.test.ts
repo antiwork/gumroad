@@ -276,6 +276,18 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     },
   ];
 
+  const recurringUpiPayment = (): CheckoutPaymentConfig => ({
+    ...listedCurrencyPayment({ currency: "inr", subunit_to_unit: 100 }),
+    recurring_upi_registration: true,
+    elements_options: {
+      ...listedCurrencyPayment().elements_options,
+      currency: "inr",
+      presentment_amount_cents: 73_000,
+      listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+      payment_method_types: ["card", "upi"],
+    },
+  });
+
   it("renders the listed currency for a method-forced cart priced in that currency", () => {
     const listed = getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), brlCartItems());
 
@@ -321,9 +333,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     ).toBeNull();
   });
 
-  it("stays in canonical USD for installment and subscription carts", () => {
-    // Both are shapes the client-confirm Element rejects, and both are toggleable after render
-    // while `checkoutPayment` stays frozen — so the client has to re-check them itself.
+  it("stays in canonical USD for installment and ordinary subscription carts", () => {
     const brlItem = { product: { currency_code: "brl" as const, exchange_rate: 5.45 } };
     expect(
       getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, pay_in_installments: true }]),
@@ -331,6 +341,14 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     expect(
       getCheckoutListedCurrencyDisplay(listedCurrencyPayment(), [{ ...brlItem, recurrence: "monthly" }]),
     ).toBeNull();
+  });
+
+  it("renders INR for the server-selected recurring UPI registration lane", () => {
+    expect(
+      getCheckoutListedCurrencyDisplay(recurringUpiPayment(), [
+        { product: { currency_code: "inr", exchange_rate: 85.4 }, recurrence: "monthly" },
+      ]),
+    ).toEqual({ currencyCode: "inr", rate: 85.4, subunitToUnit: 100 });
   });
 });
 

@@ -15,7 +15,10 @@ import { RecurrenceId } from "$app/utils/recurringPricing";
 import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
-import { getCheckoutBuyerCurrencyDisplay } from "$app/components/Checkout/buyerCurrencyDisplay";
+import {
+  getCheckoutBuyerCurrencyDisplay,
+  isRecurringUpiPaymentConfig,
+} from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
@@ -137,6 +140,9 @@ export type Product = {
   creator: Creator;
   quantity: number;
   price: number;
+  // The discounted cart total in the product's listed currency. Recurring UPI uses it to
+  // detect edits that no longer match the server-rendered INR Element amount.
+  listedPriceCents?: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
   // page where `price` is today's charge — often zero — rather than the plan price). For
@@ -404,21 +410,11 @@ function isRecurringUpiRegistrationCheckout(
   const options = config.elements_options;
 
   return (
-    config.recurring_upi_registration &&
-    config.disable_wallets &&
-    !config.payment_element_wallets &&
-    options.currency === "inr" &&
-    options.presentment_amount_cents !== null &&
-    options.presentment_amount_cents > 0 &&
-    options.listed_currency_display?.currency === "inr" &&
-    options.listed_currency_display.subunit_to_unit === 100 &&
-    options.payment_method_types.length === 2 &&
-    options.payment_method_types.includes("card") &&
-    options.payment_method_types.includes("upi") &&
-    !options.stripe_link_enabled &&
-    options.stripe_connect_account_id === null &&
+    isRecurringUpiPaymentConfig(config) &&
     state.products.length === 1 &&
     product?.quantity === 1 &&
+    !!product.recurrence &&
+    product.listedPriceCents === options.presentment_amount_cents &&
     product.installmentPlan == null &&
     !product.requireShipping &&
     state.gift === null
@@ -440,6 +436,7 @@ export function canUseStripePaymentElementClientConfirm(
   }
 
   const recurringUpiRegistration = isRecurringUpiRegistrationCheckout(state, state.checkoutPayment);
+  if (state.checkoutPayment.recurring_upi_registration && !recurringUpiRegistration) return false;
 
   return !state.products.some(
     (product) =>
