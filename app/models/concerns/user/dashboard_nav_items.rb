@@ -27,7 +27,7 @@ module User::DashboardNavItems
   end
 
   def dashboard_nav_items_seeded?
-    loaded_nav_items.any?
+    loaded_nav_items.include?(SEEDED_MARKER)
   end
 
   # Read once per request. Every nav render asks for this several times, and `pluck` would go to

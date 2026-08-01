@@ -132,6 +132,18 @@ describe User::DashboardNavItems do
       expect(user.reload.promoted_nav_item_keys).to eq %w[workflows]
     end
 
+    it "still seeds a user who earned a row before ever being seeded" do
+      # A team member switched into another seller is promoted but not seeded, so promotions can
+      # predate the seed. Only the marker means "scanned"; a bare promotion must not stand in for
+      # one, or their own store's rows stay collapsed forever.
+      create(:product, user:)
+      user.promote_nav_item!("emails")
+
+      user.seed_promoted_nav_items!(seller: user)
+
+      expect(user.reload.promoted_nav_item_keys).to match_array %w[emails profile]
+    end
+
     it "seeds a legacy row whose json_data is NULL" do
       user.update_column(:json_data, nil)
       legacy = User.find(user.id)
