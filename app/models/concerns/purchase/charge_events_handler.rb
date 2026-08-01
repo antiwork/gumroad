@@ -120,10 +120,15 @@ module Purchase::ChargeEventsHandler
     return finalize_client_confirmed_charge! if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
 
     charged_purchases.each do |purchase|
-      if purchase.in_progress? && purchase.is_an_off_session_charge_on_indian_card?
-        stripe_charge = ChargeProcessor.get_charge(StripeChargeProcessor.charge_processor_id,
-                                                   event.charge_id,
-                                                   merchant_account: purchase.merchant_account)
+      next unless purchase.in_progress? && purchase.is_an_off_session_charge_on_indian_card?
+
+      stripe_charge = ChargeProcessor.get_charge(StripeChargeProcessor.charge_processor_id,
+                                                 event.charge_id,
+                                                 merchant_account: purchase.merchant_account)
+      purchase.with_lock do
+        # The recovery pass can finalize this row while the processor lookup is in flight.
+        next unless purchase.in_progress?
+
         purchase.save_charge_data(stripe_charge)
         # Recurring charges on Indian cards remain in processing for 26 hours after which we receive this charge.succeeded webhook.
         # Setting purchase.succeeded_at to be same as purchase.created_at here, instead of setting it as current timestamp,
