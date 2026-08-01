@@ -110,7 +110,9 @@ describe OfferCodeDiscountComputingService do
 
       result = OfferCodeDiscountComputingService.new(fixed_code.code, products).process
 
-      expect(result[:error_code]).to eq(:unmet_minimum_purchase_quantity)
+      # A surviving line makes this a partial application, not a fatal error — see #6751.
+      expect(result[:error_code]).to be_nil
+      expect(result[:partial_ineligibility_code]).to eq(:unmet_minimum_purchase_quantity)
       expect(result[:products_data].size).to eq(1)
       expect(result[:products_data][product.unique_permalink][:discount][:cents]).to eq(500)
     end
