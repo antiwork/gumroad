@@ -51,6 +51,8 @@ const PING_PARAMETERS: PingParameter[] = [
   { name: "referrer", description: "-" },
   { name: "gumroad_fee", description: "Gumroad's fee, in USD cents" },
   { name: "card", description: "Payment instrument details" },
+  { name: "resource_name", description: <>What the ping is about. <Code>sale</Code> for a purchase, <Code>refund</Code> when the same purchase is later refunded</> },
+  { name: "retry_count", description: "Only present on a retried delivery: 1, 2 or 3" },
 ];
 
 const PublicPing = () => (
@@ -76,7 +78,30 @@ const PublicPing = () => (
             <p>
               The ping comes in the form of an HTTP POST request to the URL that you specify in your{" "}
               <Link href={Routes.settings_advanced_path()}>account settings</Link>.
-              The payload is x-www-form-urlencoded. If your endpoint does not return a 200 HTTP status code, the POST is retried once an hour for up to 3 hours.
+              The payload is x-www-form-urlencoded. Return any 2xx status to acknowledge it; nothing in your response body is read.
+            </p>
+
+            <div>
+              <p>Delivery works like this, and it is worth building against rather than inferring:</p>
+              <ul className="ml-6 mt-2 list-disc space-y-1">
+                <li>Delivery is at least once. The same ping can arrive more than once, so deduplicate.</li>
+                <li>Ordering is not guaranteed. A refund ping can reach you before the sale ping it refers to.</li>
+                <li>
+                  Deduplicate on <Code>sale_id</Code> together with <Code>resource_name</Code>, not on <Code>sale_id</Code> alone.
+                  A refund carries the same <Code>sale_id</Code> as the sale it reverses.
+                </li>
+                <li>
+                  A failed delivery is retried after 1 minute, 3 minutes, 10 minutes and 1 hour, then stops. Only 499, 500, 502,
+                  503 and 504 are retried. Any other non-2xx response is not, and neither is a connection error or a timeout.
+                </li>
+                <li>Your endpoint has 5 seconds to respond. Acknowledge first and do your work afterwards.</li>
+              </ul>
+            </div>
+
+            <p>
+              Because the payload is unsigned and deliveries can be dropped once the retries run out, treat a ping as a trigger
+              rather than as data: take <Code>sale_id</Code>, read the sale back through the API, and reconcile periodically
+              against your own records.
             </p>
 
             <p>In each request, Gumroad sends the parameters in the table below.</p>

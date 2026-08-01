@@ -14,10 +14,10 @@ describe("Dashboard - Nav - Mobile", :js, :mobile_view, type: :system) do
 
     click_on "Toggle navigation"
     expect(page).to have_link("Products")
-    expect(page).to have_link("Analytics")
+    expect(page).to have_link("Sales")
 
     click_on "Products"
     expect(page).to_not have_link("Products")
-    expect(page).to_not have_link("Analytics")
+    expect(page).to_not have_link("Sales")
   end
 end

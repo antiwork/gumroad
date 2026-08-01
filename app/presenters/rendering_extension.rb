@@ -56,6 +56,7 @@ module RenderingExtension
           (user.active_bank_account.present? && !user.active_bank_account.is_a?(CardBankAccount)) ||
           user.payment_address.present?,
         policies: policies_props(pundit_user),
+        promoted_nav_items: user.promoted_nav_item_keys,
         is_gumroad_admin: user.is_team_member?,
         is_impersonating:,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),

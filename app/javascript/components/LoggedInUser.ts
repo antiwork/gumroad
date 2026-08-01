@@ -89,6 +89,11 @@ export type LoggedInUser = {
   canCreateBrandAccount: boolean;
   hasPayoutSetupToPort: boolean;
   policies: Policies;
+  /**
+   * Dashboard nav destinations this user has earned (see DashboardNav). Anything not listed here and
+   * not in the core set renders under "Everything else" until they use it.
+   */
+  promotedNavItems: string[];
   isGumroadAdmin: boolean;
   isImpersonating: boolean;
   /**
@@ -110,6 +115,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     can_create_brand_account: boolean;
     has_payout_setup_to_port: boolean;
     policies: Policies;
+    promoted_nav_items: string[];
     confirmed: boolean;
     is_gumroad_admin: boolean;
     is_impersonating: boolean;
@@ -126,6 +132,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     canCreateBrandAccount: parsed.can_create_brand_account,
     hasPayoutSetupToPort: parsed.has_payout_setup_to_port,
     policies: parsed.policies,
+    promotedNavItems: parsed.promoted_nav_items,
     isGumroadAdmin: parsed.is_gumroad_admin,
     isImpersonating: parsed.is_impersonating,
     lazyLoadOffscreenDiscoverImages: parsed.lazy_load_offscreen_discover_images,
