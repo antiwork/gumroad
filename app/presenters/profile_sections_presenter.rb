@@ -125,12 +125,12 @@ class ProfileSectionsPresenter
 
     # Visitor-settable search filters. This reads the RAW query string, which never went through
     # format_search_params!, so anything not listed here reaches Link.search_options unsanitised —
-    # including internal-only keys (`section`, `curated_product_ids`) and `search`, whose nested
-    # form is an arbitrary ES clause that can range-probe indexed revenue fields.
+    # including `search`, whose nested form is an arbitrary ES clause that can range-probe indexed
+    # revenue fields, and `curated_product_ids`, which the controller decrypts before use.
     VISITOR_SEARCH_PARAMS = %i[query tags filetypes min_price max_price rating sort from size recommended_by].freeze
 
     def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:)
-      params = request.query_parameters.slice(*VISITOR_SEARCH_PARAMS)
+      params = normalize_search_param_values!(request.query_parameters.slice(*VISITOR_SEARCH_PARAMS))
       # `editing` selects the owner/editing payload shape. Product visibility (hiding sold-out
       # products) instead follows the real viewer, so the seller still sees every product on their
       # own public profile even though it renders the visitor shape.

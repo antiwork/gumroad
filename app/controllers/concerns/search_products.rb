@@ -19,32 +19,53 @@ module SearchProducts
       }
     end
 
+    # Value-shape coercions only. Split out from format_search_params! so callers that build
+    # their own params hash (ProfileSectionsPresenter reads the raw query string) get the same
+    # normalization — search_options coerces these unconditionally (`.to_i`, `.to_f`,
+    # `each_with_index`), so an unexpected shape 400s Elasticsearch or raises.
+    def normalize_search_param_values!(search_params)
+      if search_params[:tags].is_a?(String)
+        search_params[:tags] = search_params[:tags].split(",").map { |t| t.tr("-", " ").squish.downcase }
+      elsif search_params[:tags].is_a?(ActionController::Parameters) || search_params[:tags].is_a?(Hash)
+        search_params[:tags] = search_params[:tags].values.map { |t| t.to_s.tr("-", " ").squish.downcase }
+      end
+
+      if search_params[:filetypes].is_a?(String)
+        search_params[:filetypes] = search_params[:filetypes].split(",").map { |f| f.squish.downcase }
+      end
+
+      if search_params[:ids].is_a?(String)
+        search_params[:ids] = search_params[:ids].split(",").map(&:strip)
+      end
+
+      search_params[:from] = Array.wrap(search_params[:from]).first.to_i if search_params[:from].present?
+
+      if search_params[:size].is_a?(String)
+        search_params[:size] = search_params[:size].to_i
+      elsif search_params[:size].is_a?(Array)
+        search_params[:size] = search_params[:size].first.to_i
+      end
+
+      # search_options builds `simple_query_string` and numeric clauses from these; none accepts
+      # a nested structure, and it coerces unconditionally (`.to_i`, `.to_f`). Take the first
+      # element of an array (matching how :from and :size already collapse) and drop a hash,
+      # whose values have no scalar reading.
+      %i[query rating min_price max_price sort recommended_by].each do |key|
+        value = search_params[key]
+        next unless value.is_a?(Array) || value.is_a?(Hash) || value.is_a?(ActionController::Parameters)
+
+        search_params[key] = value.is_a?(Array) ? value.first : nil
+      end
+
+      search_params.delete(:search) unless search_params[:search].is_a?(Hash)
+
+      search_params
+    end
+
     def format_search_params!
-      if params[:tags].is_a?(String)
-        params[:tags] = params[:tags].split(",").map { |t| t.tr("-", " ").squish.downcase }
-      elsif params[:tags].is_a?(ActionController::Parameters) || params[:tags].is_a?(Hash)
-        params[:tags] = params[:tags].values.map { |t| t.to_s.tr("-", " ").squish.downcase }
-      end
-
-      if params[:filetypes].is_a?(String)
-        params[:filetypes] = params[:filetypes].split(",").map { |f| f.squish.downcase }
-      end
-
-      if params[:ids].is_a?(String)
-        params[:ids] = params[:ids].split(",").map(&:strip)
-      end
+      normalize_search_param_values!(params)
 
       params[:offer_code] = "__no_match__" if params[:offer_code].present? && !offer_codes_search_feature_active?(params)
-
-      params[:from] = Array.wrap(params[:from]).first.to_i if params[:from].present?
-
-      if params[:size].is_a?(String)
-        params[:size] = params[:size].to_i
-      elsif params[:size].is_a?(Array)
-        params[:size] = params[:size].first.to_i
-      end
-
-      params.delete(:search) unless params[:search].is_a?(Hash)
     end
 
     def offer_codes_search_feature_active?(params)
