@@ -241,6 +241,36 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("skips a visibility-hidden invalid control, which only the named visibility check catches", () => {
+    // happy-dom lacks checkVisibility, so mimic the spec: a `visibility: hidden` element reports
+    // invisible only when the check is requested by option — an argless call still returns true.
+    const original = Element.prototype.checkVisibility;
+    Element.prototype.checkVisibility = function (this: Element, options?: CheckVisibilityOptions) {
+      const hiddenByVisibility = this instanceof HTMLElement && this.style.visibility === "hidden";
+      return !(hiddenByVisibility && (options?.visibilityProperty === true || options?.checkVisibilityCSS === true));
+    };
+    try {
+      renderCheckoutPage({
+        siblings: (
+          <input
+            aria-label="Hidden tip"
+            aria-invalid="true"
+            style={{ visibility: "hidden" }}
+            data-testid="hidden-field"
+          />
+        ),
+        value: failedState(1),
+      });
+
+      const field = screen.getByLabelText("Nickname");
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.instances[0]).toBe(field);
+      expect(document.activeElement).toBe(field);
+    } finally {
+      Element.prototype.checkVisibility = original;
+    }
+  });
+
   it("lands on the State select when it is the unmet field, not only on invalid inputs", () => {
     // The US/CA State field renders as a native select — an input-only scan finds nothing and
     // the refused Pay is silent again.

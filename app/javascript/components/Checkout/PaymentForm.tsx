@@ -1796,11 +1796,16 @@ const PaymentMethodsSection = ({
   );
 };
 
-// `hidden`/`display: none` controls cannot take focus, so scrolling to one would leave the buyer
-// staring at a page with nothing visibly wrong. `checkVisibility` is unimplemented in the test DOM;
-// treating that as visible keeps the scan honest there — the tests assert placement, not layout.
+// Hidden controls (`display: none`, `visibility: hidden`) cannot take focus, so scrolling to one
+// would leave the buyer staring at a page with nothing visibly wrong. The visibility check must be
+// asked for by name — an argless checkVisibility() accepts `visibility: hidden` elements — and the
+// older engines only know the legacy `checkVisibilityCSS` spelling. `checkVisibility` is
+// unimplemented in the test DOM; treating that as visible keeps the scan honest there.
 const isFocusable = (input: HTMLInputElement | HTMLSelectElement) =>
-  !input.disabled && (typeof input.checkVisibility === "function" ? input.checkVisibility() : true);
+  !input.disabled &&
+  (typeof input.checkVisibility === "function"
+    ? input.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true })
+    : true);
 
 export const PaymentForm = ({
   className,
