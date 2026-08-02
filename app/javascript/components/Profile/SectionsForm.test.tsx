@@ -10,11 +10,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { assertDefined } from "$app/utils/assert";
 
+import { type Section } from "$app/components/Profile/EditSections";
 import { ProfileSectionsForm, type ProfileSectionsFormProps } from "$app/components/Profile/SectionsForm";
 
 type FormState = Parameters<NonNullable<ProfileSectionsFormProps["onChange"]>>[0];
 
 vi.stubGlobal("Routes", { root_url: () => "https://creator.gumroad.com/" });
+// `SSR` is a vite `define`, so it does not exist under vitest; RichTextEditor reads it at render.
+vi.stubGlobal("SSR", false);
 
 const props = (): ProfileSectionsFormProps => ({
   bio: null,
@@ -112,6 +115,46 @@ describe("ProfileSectionsForm", () => {
 
     expect(within(firstRow()).getByRole("heading", { level: 3 }).textContent).toBe("Posts");
     expect(firstRow().querySelector("h3 + small")).toBeNull();
+  });
+
+  it("gives a duplicated rich text section its own upsell cards", () => {
+    const withUpsell = props();
+    withUpsell.sections = [
+      {
+        id: "section-1",
+        type: "SellerProfileRichTextSection",
+        header: "Pitch",
+        hide_header: false,
+        text: {
+          content: [
+            { type: "upsellCard", attrs: { id: "upsell-1", productId: "prod-1" } },
+            { type: "paragraph", attrs: { id: "keep-me" } },
+          ],
+        },
+      },
+    ];
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...withUpsell} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate section" }));
+
+    const nodes = (section: Section): unknown[] => {
+      if (section.type !== "SellerProfileRichTextSection") throw new Error("expected a rich text section");
+      const content: unknown = section.text.content;
+      if (!Array.isArray(content)) throw new Error("expected rich text content");
+      return content;
+    };
+
+    const state = tracked.latest();
+    // The card keeps everything the server needs to mint a replacement upsell; only the id of the
+    // original's Upsell row is dropped, and only on the copy.
+    const copied = nodes(assertDefined(state.sections.find(({ id }) => id !== "section-1")));
+    expect(copied[0]).toEqual({ type: "upsellCard", attrs: { productId: "prod-1" } });
+    expect(copied[1]).toEqual({ type: "paragraph", attrs: { id: "keep-me" } });
+    expect(nodes(assertDefined(state.sections.find(({ id }) => id === "section-1")))[0]).toEqual({
+      type: "upsellCard",
+      attrs: { id: "upsell-1", productId: "prod-1" },
+    });
   });
 
   it("creates a subscribe section with an empty heading like every other section type", () => {

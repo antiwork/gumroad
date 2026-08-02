@@ -206,6 +206,36 @@ const OptionRow = ({
   </Row>
 );
 
+const withFreshUpsellCards = (section: Section): Section => {
+  if (section.type !== "SellerProfileRichTextSection") return section;
+  // An upsellCard's `attrs.id` is a persisted Upsell row. SaveContentUpsellsService only mints a
+  // new one for a card that arrives without an id, so a copy keeping the original's id makes both
+  // sections share one Upsell — and removing the card from either then soft-deletes it (and its
+  // offer code) out from under the other.
+  const content = section.text.content;
+  if (!Array.isArray(content)) return section;
+  return {
+    ...section,
+    text: {
+      ...section.text,
+      content: content.map((node: unknown) => {
+        if (!isUpsellCard(node)) return node;
+        const { id: _id, ...attrs } = node.attrs;
+        return { ...node, attrs };
+      }),
+    },
+  };
+};
+
+const isUpsellCard = (node: unknown): node is { type: string; attrs: Record<string, unknown> } =>
+  typeof node === "object" &&
+  node !== null &&
+  "type" in node &&
+  node.type === "upsellCard" &&
+  "attrs" in node &&
+  typeof node.attrs === "object" &&
+  node.attrs !== null;
+
 const SectionRow = ({
   section,
   state,
@@ -751,7 +781,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     const original = sections.find((section) => section.id === sectionId);
     if (!original) return;
 
-    const copy = { ...original, id: GuidGenerator.generate() };
+    const copy = withFreshUpsellCards({ ...original, id: GuidGenerator.generate() });
     const nextTabs = tabs.map((tab) => {
       if (tab.id !== selectedTab.id) return tab;
       const index = tab.sections.indexOf(sectionId);
