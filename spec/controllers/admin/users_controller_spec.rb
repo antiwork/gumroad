@@ -301,6 +301,31 @@ describe Admin::UsersController, type: :controller, inertia: true do
     end
   end
 
+  describe "POST #toggle_content_moderation_disabled" do
+    let(:user) { create(:user, all_adult_products: false) }
+
+    it "disables moderation for the account and marks it adult" do
+      post :toggle_content_moderation_disabled, params: { external_id: user.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(user.reload.content_moderation_disabled?).to be(true)
+      expect(user.all_adult_products?).to be(true)
+      expect(user.comments.last.content).to include("Disabled content moderation")
+    end
+
+    it "re-enables moderation without unmarking the account as adult" do
+      user.update!(content_moderation_disabled: true, all_adult_products: true)
+
+      post :toggle_content_moderation_disabled, params: { external_id: user.external_id }
+
+      expect(response).to be_successful
+      expect(user.reload.content_moderation_disabled?).to be(false)
+      expect(user.all_adult_products?).to be(true)
+      expect(user.comments.last.content).to include("Re-enabled content moderation")
+    end
+  end
+
   describe "POST #toggle_adult_products" do
     let(:user) { create(:user) }
 

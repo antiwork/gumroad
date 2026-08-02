@@ -220,6 +220,11 @@ class ContentModeration::ModerateRecordService
     end
 
     def record_moderation_disabled?
+      # An account-level exemption is a decision about the seller and their genre, so it
+      # has to cover products that don't exist yet -- the per-record flag below only ever
+      # covers the catalogue as it stood when support granted it.
+      return true if user&.content_moderation_disabled?
+
       case entity_type
       when :product then record.content_moderation_disabled?
       # A page inherits the escape hatch from the product it takes over, so

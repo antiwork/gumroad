@@ -224,6 +224,28 @@ class Admin::UsersController < Admin::BaseController
     render json: { success: false, message: e.message }
   end
 
+  # Granting the exemption also marks the account adult: the sellers this is for work in a
+  # category we allow but rate adult, and leaving that half-done puts their listings in
+  # Discover unrated. Revoking it does not unmark them -- that is a separate call.
+  def toggle_content_moderation_disabled
+    enabling = !@user.content_moderation_disabled?
+
+    @user.content_moderation_disabled = enabling
+    @user.all_adult_products = true if enabling
+    @user.save!
+
+    @user.comments.create!(
+      author_id: current_user.id,
+      author_name: current_user.name,
+      comment_type: Comment::COMMENT_TYPE_NOTE,
+      content: enabling ? "Disabled content moderation for this account (all products, including future ones) and marked it adult" : "Re-enabled content moderation for this account"
+    )
+
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, message: e.message }
+  end
+
   private
     def create_scheduled_payout_if_requested
       sp_params = params.dig(:scheduled_payout)
