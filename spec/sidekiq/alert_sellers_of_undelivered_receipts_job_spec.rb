@@ -61,6 +61,21 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     expect($redis.get(RedisKey.undelivered_receipt_sweep_cursor).to_i).to eq(EmailInfo.maximum(:id))
   end
 
+  # Charge-keyed rows carry no purchase_id, and they are the majority of real receipts. Reaching the
+  # seller through the charge is what makes the sweep see them at all.
+  it "emails the seller about a charge-keyed receipt that carries no purchase_id" do
+    charge = create(:charge, seller:)
+    purchase = create(:purchase, seller:, link: product)
+    charge.purchases << purchase
+    charge.update!(order: create(:order))
+    create(:customer_email_info, purchase: nil, state: "sent", sent_at: 3.days.ago,
+                                 email_info_charge_attributes: { charge_id: charge.id })
+
+    expect { described_class.new.perform }
+      .to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
+      .with(seller.id, [purchase.id], 1)
+  end
+
   # Advancing past a row too young to judge would decide its case by never looking at it again.
   it "leaves the cursor behind a row still inside the settle grace" do
     undelivered_purchase(sent_at: 1.hour.ago)
@@ -68,6 +83,30 @@ describe AlertSellersOfUndeliveredReceiptsJob do
     described_class.new.perform
 
     expect($redis.get(RedisKey.undelivered_receipt_sweep_cursor).to_i).to eq(0)
+  end
+
+  # `sent_at` is not monotonic in id, so a young row can sit between two settled ones. Taking the
+  # batch's last settled id would step over it and it would never be judged.
+  it "stops at a young row even when a settled row follows it in the same batch" do
+    undelivered_purchase
+    young = create(:purchase, seller:, link: product)
+    young_row = create(:customer_email_info, purchase: young, state: "sent", sent_at: 1.hour.ago)
+    undelivered_purchase
+
+    described_class.new.perform
+
+    expect($redis.get(RedisKey.undelivered_receipt_sweep_cursor).to_i).to be < young_row.id
+  end
+
+  # The row after the young one must not be reported either — it is behind the cursor and belongs to
+  # a later run, so reporting it now would email the seller about a buyer the sweep has not reached.
+  it "does not report a seller found only after a young row" do
+    young = create(:purchase, seller:, link: product)
+    create(:customer_email_info, purchase: young, state: "sent", sent_at: 1.hour.ago)
+    undelivered_purchase
+
+    expect { described_class.new.perform }
+      .not_to have_enqueued_mail(ContactingCreatorMailer, :undelivered_receipts)
   end
 
   it "skips a suspended seller" do

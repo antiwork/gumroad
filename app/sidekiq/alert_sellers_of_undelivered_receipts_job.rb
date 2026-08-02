@@ -37,17 +37,23 @@ class AlertSellersOfUndeliveredReceiptsJob
     scanned = 0
     by_seller = {}
 
-    while scanned < MAX_ROWS_PER_RUN
-      rows = candidate_rows(last_judged)
-      break if rows.empty?
+    catch(:unsettled) do
+      while scanned < MAX_ROWS_PER_RUN
+        rows = candidate_rows(last_judged)
+        break if rows.empty?
 
-      settled, unsettled = rows.partition { |row| row.sent_at.present? && row.sent_at <= UndeliveredReceiptNotifier::SETTLE_GRACE.ago }
-      # Stop at the first row too young to judge rather than skipping it: advancing past it would
-      # decide its case by never looking at it again.
-      settled.each { |row| collect(row, by_seller) }
-      scanned += settled.size
-      last_judged = settled.last.id if settled.any?
-      break if unsettled.any?
+        rows.each do |row|
+          # Stop AT the first row too young to judge, without advancing past it. Rows arrive in id
+          # order but `sent_at` is not monotonic in id, so a young row can sit between two settled
+          # ones — taking the batch's last settled id would advance the cursor past the young row
+          # and it would never be judged at all.
+          throw :unsettled if row.sent_at.blank? || row.sent_at > UndeliveredReceiptNotifier::SETTLE_GRACE.ago
+
+          collect(row, by_seller)
+          scanned += 1
+          last_judged = row.id
+        end
+      end
     end
 
     notify(by_seller)
@@ -79,13 +85,16 @@ class AlertSellersOfUndeliveredReceiptsJob
       (by_seller[seller.id] ||= []) << purchase.id
     end
 
+    # A charge receipt covers the whole order, so any of its purchases identifies the seller and
+    # carries the buyer's email. `Charge#purchase_as_orderable` does not exist — that method is
+    # private on `Order` — so read the charge's own successful purchases.
     def purchase_for(row)
       return Purchase.find_by(id: row.purchase_id) if row.purchase_id.present?
 
       charge_id = EmailInfoCharge.where(email_info_id: row.id).pick(:charge_id)
       return nil if charge_id.nil?
 
-      Charge.find_by(id: charge_id)&.purchase_as_orderable
+      Charge.find_by(id: charge_id)&.purchases&.all_success_states_including_test&.first
     end
 
     def notify(by_seller)
