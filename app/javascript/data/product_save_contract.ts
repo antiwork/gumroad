@@ -176,6 +176,28 @@ export const buildDeletionOperations = (
   return operations;
 };
 
+// A reorder must never change WHICH rows exist. `newOrder` comes from the DOM,
+// so a row missing from it (a drag that lands mid-render, a nested sortable
+// swallowing an id) silently drops that version from state — and dropping it
+// without a confirmed-removal id produces the save contract's silent no-op:
+// the row is gone from the editor, unnamed in `deletion_operations`, and the
+// save reports success having deleted nothing (gumroad-private#1508).
+//
+// So reorder by moving what the order names and appending whatever it omitted,
+// preserving the previous relative order of the leftovers. Deletion has exactly
+// one route: the confirmation modal.
+export const reorderPreservingMembership = <T extends { id: string }>(items: T[], newOrder: string[]): T[] => {
+  const seen = new Set<string>();
+  const reordered = newOrder.flatMap((id) => {
+    if (seen.has(id)) return [];
+    const item = items.find((candidate) => candidate.id === id);
+    if (!item) return [];
+    seen.add(id);
+    return [item];
+  });
+  return [...reordered, ...items.filter((item) => !seen.has(item.id))];
+};
+
 // True when this save asks the server to remove anything at all. Used to decide
 // whether the revision token is required: a save that deletes nothing does not
 // need to prove which snapshot it came from, so a stale tab can still fix a

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Clock, Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
-import { confirmRichContentMoveSourceDeletions } from "$app/data/product_save_contract";
+import { confirmRichContentMoveSourceDeletions, reorderPreservingMembership } from "$app/data/product_save_contract";
 
 import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
@@ -106,9 +106,7 @@ export const DurationsEditor = ({
       ) : null}
       <SortableList
         currentOrder={durations.map(({ id }) => id)}
-        onReorder={(newOrder) =>
-          onChange(newOrder.flatMap((id) => durations.find((version) => version.id === id) ?? []))
-        }
+        onReorder={(newOrder) => onChange(reorderPreservingMembership(durations, newOrder))}
         tag={SortableDurationEditors}
       >
         {durations.map((duration) => (
