@@ -383,13 +383,6 @@ module Product::Searchable
           end
         end
 
-        aggregation "taxonomy_attribute_filters" do
-          terms do
-            field "taxonomy_attribute_filters"
-            size MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS
-          end
-        end
-
         if params[:include_top_creators]
           aggregation "top_creators" do
             terms do
