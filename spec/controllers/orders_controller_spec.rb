@@ -740,7 +740,7 @@ describe OrdersController, :vcr do
           order_purchases = double("order_purchases", successful: [])
           allow(order_purchases).to receive(:each).and_return([])
           order = double("order", persisted?: false, purchases: order_purchases, send_charge_receipts: nil)
-          create_service = instance_double(Order::CreateService, perform: [order, {}, {}])
+          create_service = instance_double(Order::CreateService, perform: [order, {}, []])
           charge_service = instance_double(Order::ChargeService, perform: {})
 
           expect(Order::CreateService).to receive(:new).with(

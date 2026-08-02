@@ -77,14 +77,14 @@ class OfferCode < ApplicationRecord
     where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
   }
 
-  def is_valid_for_purchase?(purchase_quantity: 1)
+  def is_valid_for_purchase?(purchase_quantity: 1, excluding_purchase: nil)
     return true if max_purchase_count.nil?
 
-    quantity_left >= (is_cents? && once_per_cart? ? 1 : purchase_quantity)
+    quantity_left(excluding_purchase:) >= (is_cents? && once_per_cart? ? 1 : purchase_quantity)
   end
 
-  def quantity_left
-    max_purchase_count - times_used
+  def quantity_left(excluding_purchase: nil)
+    max_purchase_count - times_used - active_once_per_cart_reservations(excluding_purchase:)
   end
 
   def is_percent?
@@ -182,7 +182,11 @@ class OfferCode < ApplicationRecord
     per_cart = purchases.joins(:purchase_offer_code_discount)
                         .where(purchase_offer_code_discounts: { once_per_cart: true })
                         .group(:offer_code_id).count
+    reservations = Purchase.active_once_per_cart_offer_code_reservations
+                           .where(offer_code_id: codes.map(&:id))
+                           .group(:offer_code_id).count
     used = per_item.merge(per_cart) { |_id, item_uses, cart_uses| item_uses + cart_uses }
+                   .merge(reservations) { |_id, completed_uses, reserved_uses| completed_uses + reserved_uses }
     codes.to_h { |code| [code.id, (code.max_purchase_count - used.fetch(code.id, 0)) >= 1] }
   end
 
@@ -193,6 +197,12 @@ class OfferCode < ApplicationRecord
     per_cart = uses.joins(:purchase_offer_code_discount)
                    .where(purchase_offer_code_discounts: { once_per_cart: true }).count
     per_item + per_cart
+  end
+
+  def active_once_per_cart_reservations(excluding_purchase: nil)
+    reservations = purchases.merge(Purchase.active_once_per_cart_offer_code_reservations)
+    reservations = reservations.where.not(id: excluding_purchase.id) if excluding_purchase&.persisted?
+    reservations.count
   end
 
   def auto_delete_if_single_use_exhausted!

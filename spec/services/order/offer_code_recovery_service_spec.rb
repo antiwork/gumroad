@@ -34,6 +34,29 @@ describe Order::OfferCodeRecoveryService do
     expect(result.first[:products].keys).to contain_exactly(product_1.unique_permalink, product_2.unique_permalink)
   end
 
+  it "preserves eligible duplicate-product lines during recovery" do
+    offer_code.update!(minimum_quantity: 2)
+    eligible_purchase = create(:failed_purchase, link: product_1, seller:, offer_code:, quantity: 2,
+                                                 price_cents: product_1.price_cents * 2)
+    eligible_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: offer_code.amount_cents,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      pre_discount_minimum_price_cents: product_1.price_cents
+    )
+    ineligible_purchase = create(:failed_purchase, link: product_1, seller:, quantity: 1)
+    order = create(:order)
+    order.purchases << [eligible_purchase, ineligible_purchase]
+
+    result = described_class.new(order:, failed_purchases: [eligible_purchase]).perform
+
+    expect(result).to contain_exactly(
+      code: offer_code.code,
+      products: { product_1.unique_permalink => include(once_per_cart: true, cents: offer_code.amount_cents) }
+    )
+  end
+
   it "merges product maps for responses that share a normalized code" do
     merged = described_class.merge_responses(
       [{ code: "SAVE", products: { product_1.unique_permalink => { cents: 100 } } }],

@@ -642,6 +642,26 @@ class Purchase < ApplicationRecord
   # a buyer could pay again by another method and end up paying twice, which is what the
   # double-charge guards built on this scope exist to prevent.
   scope :payment_settling, -> { in_progress.where.not(stripe_status: nil) }
+  # Unconfirmed attempts hold a short lease; a processor status means the payment can still settle
+  # after that lease expires.
+  scope :active_once_per_cart_offer_code_reservations, lambda {
+    in_progress
+      .not_recurring_charge
+      .not_is_additional_contribution
+      .not_is_gift_receiver_purchase
+      .not_is_archived_original_subscription_purchase
+      .not_is_commission_completion_purchase
+      .joins(:purchase_offer_code_discount)
+      .left_joins(:processor_payment_intent)
+      .where(purchase_offer_code_discounts: { once_per_cart: true })
+      .where("purchases.purchaser_id IS NULL OR purchases.purchaser_id != purchases.seller_id")
+      .where("purchases.preorder_id IS NULL OR purchases.flags & ? != 0", flag_mapping["flags"][:is_preorder_authorization])
+      .where(
+        "purchases.created_at >= :cutoff OR purchases.stripe_status IS NOT NULL OR " \
+        "purchases.processor_setup_intent_id IS NOT NULL OR processor_payment_intents.id IS NOT NULL",
+        cutoff: ChargeProcessor::TIME_TO_COMPLETE_SCA.ago
+      )
+  }
   scope :in_progress_or_successful_including_test, -> { where(purchase_state: %w(in_progress successful test_successful)) }
   scope :not_in_progress, -> { where.not(purchase_state: "in_progress") }
   scope :not_successful, -> { without_purchase_state(:successful) }
@@ -2388,7 +2408,10 @@ class Purchase < ApplicationRecord
   end
 
   def prepare_for_charge!
-    self.chargeable = process_without_charging!
+    reservable_offer_code = offer_code if offer_code&.is_cents? && offer_code.once_per_cart? &&
+      offer_code.max_purchase_count.present? && !does_not_count_towards_max_purchases && !is_test_purchase?
+
+    self.chargeable = process_without_charging!(reservable_offer_code:)
   end
 
   def update_balance_and_mark_successful!
@@ -4056,10 +4079,15 @@ class Purchase < ApplicationRecord
       link.save!
     end
 
-    def process_without_charging!
+    def process_without_charging!(reservable_offer_code: nil)
       set_price_and_rate
       calculate_fees
-      save
+      if reservable_offer_code
+        # Keep the lock to the validation and reservation write; tax and processor calls run after commit.
+        reservable_offer_code.with_lock { save }
+      else
+        save
+      end
 
       return if is_gift_receiver_purchase
 
@@ -4853,9 +4881,9 @@ class Purchase < ApplicationRecord
         return
       end
 
-      return if offer_code.is_valid_for_purchase?(purchase_quantity: quantity)
+      return if offer_code.is_valid_for_purchase?(purchase_quantity: quantity, excluding_purchase: self)
 
-      if offer_code.quantity_left > 0
+      if offer_code.quantity_left(excluding_purchase: self) > 0
         self.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
         errors.add :base, "Sorry, the discount code you are using is invalid for the quantity you have selected."
       else

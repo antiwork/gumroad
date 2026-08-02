@@ -842,6 +842,72 @@ describe OfferCode do
         expect(offer_code.quantity_left).to eq offer_code.max_purchase_count - 1
       end
 
+      it "reserves a use while a cart-level purchase is in progress" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        purchase = create(:purchase, link: @product, offer_code:, seller: @product.user,
+                                     purchase_state: "in_progress", purchaser: nil)
+        purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                      once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+        expect(offer_code.is_valid_for_purchase?(excluding_purchase: purchase)).to be(true)
+
+        travel ChargeProcessor::TIME_TO_COMPLETE_SCA + 1.minute
+
+        expect(offer_code.quantity_left).to eq 1
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+
+        purchase.create_processor_payment_intent!(intent_id: "pi_live_offer_code_reservation")
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+
+        purchase.processor_payment_intent.destroy!
+        purchase.update!(processor_setup_intent_id: "seti_live_offer_code_reservation")
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+
+        purchase.update!(processor_setup_intent_id: nil)
+        purchase.update!(stripe_status: StripeIntentStatus::REQUIRES_ACTION)
+
+        expect(offer_code.quantity_left).to eq 0
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
+
+        purchase.update!(purchase_state: "failed")
+
+        expect(offer_code.quantity_left).to eq 1
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+      end
+
+      it "does not reserve another use for a preorder charge" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 2)
+        preorder = create(:preorder, preorder_link: create(:preorder_link, link: @product), seller: @product.user)
+        authorization = create(
+          :preorder_authorization_purchase,
+          link: @product,
+          offer_code:,
+          seller: @product.user,
+          preorder:,
+          is_preorder_authorization: true
+        )
+        authorization.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_minimum_price_cents: @product.price_cents
+        )
+        charge = create(:purchase, link: @product, offer_code:, seller: @product.user, preorder:,
+                                   purchase_state: "in_progress", purchaser: nil)
+        charge.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: false,
+                                                    once_per_cart: true, pre_discount_minimum_price_cents: @product.price_cents)
+
+        expect(offer_code.quantity_left).to eq 1
+        expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => true)
+      end
+
       it "keeps each purchase's recorded usage mode when the code changes" do
         offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: false)
         legacy_purchase = create(:purchase, link: @product, offer_code:, seller: @product.user, price_cents: @product.price_cents * 2, quantity: 2)

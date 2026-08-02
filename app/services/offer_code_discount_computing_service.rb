@@ -84,10 +84,12 @@ class OfferCodeDiscountComputingService
 
     def product_entries
       links_by_permalink = links.index_by(&:unique_permalink)
-      products.filter_map do |input_key, product|
+      entries = []
+      products.each_pair do |input_key, product|
         link = links_by_permalink[product[:permalink]]
-        [input_key, product, link] if link
+        entries << [input_key, product, link] if link
       end
+      entries
     end
 
     def offer_codes

@@ -30,6 +30,15 @@ describe OfferCodeDiscountComputingService do
     expect(result[:error_code]).to eq(:invalid_offer)
   end
 
+  it "accepts controller parameters from the discount endpoint" do
+    products = ActionController::Parameters.new(products_data)
+
+    result = OfferCodeDiscountComputingService.new(offer_code.code, products).process
+
+    expect(result[:products_data]).to have_key(product.unique_permalink)
+    expect(result[:error_code]).to be_nil
+  end
+
   it "does not return an invalid error_code in result when offer code amount is 0 cents" do
     result = OfferCodeDiscountComputingService.new(zero_cents_discount_code.code, products_data).process
 

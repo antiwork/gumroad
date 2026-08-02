@@ -83,13 +83,21 @@ class Order::OfferCodeRecoveryService
     return [] if failed_purchases.empty?
 
     once_per_cart_codes.filter_map do |offer_code|
-      result = OfferCodeDiscountComputingService.new(offer_code.code, products, buyer: order.purchaser).process
+      result = OfferCodeDiscountComputingService.new(
+        offer_code.code,
+        products,
+        buyer: order.purchaser,
+        key_by_input: true
+      ).process
       next if result[:error_code].present?
-      next if (result[:products_data].keys & failed_purchases.map { _1.link.unique_permalink }).empty?
+      next if (result[:products_data].keys & failed_purchases.map { _1.id.to_s }).empty?
 
       {
         code: offer_code.code,
-        products: result[:products_data].transform_values { _1[:discount] },
+        products: result[:products_data].each_with_object({}) do |(purchase_id, data), discounts|
+          purchase = purchases_by_id.fetch(purchase_id)
+          discounts[purchase.link.unique_permalink] ||= data[:discount]
+        end,
       }
     end
   end
@@ -105,7 +113,11 @@ class Order::OfferCodeRecoveryService
 
     def products
       @products ||= order.purchases.to_h do |purchase|
-        [purchase.link.unique_permalink, { permalink: purchase.link.unique_permalink, quantity: purchase.quantity }]
+        [purchase.id.to_s, { permalink: purchase.link.unique_permalink, quantity: purchase.quantity }]
       end
+    end
+
+    def purchases_by_id
+      @purchases_by_id ||= order.purchases.index_by { _1.id.to_s }
     end
 end
