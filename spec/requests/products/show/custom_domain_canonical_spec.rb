@@ -26,6 +26,18 @@ describe "Product page canonical URL on a custom domain", type: :request do
     expect(response.body).not_to include("seller.example.com")
   end
 
+  # /l/:permalink resolves globally, so another seller's product is reachable over this domain.
+  # Canonicalizing it here would hand this domain Google's copy of someone else's page.
+  it "keeps the subdomain canonical for a product whose seller does not own this domain" do
+    other_product = create(:product, user: create(:user, username: "otherseller"), name: "Someone Else's")
+
+    get "http://seller.example.com/l/#{other_product.unique_permalink}"
+
+    expect(response).to be_successful
+    expect(response.body).to include(%(href="#{other_product.long_url}"))
+    expect(response.body).not_to include(%(href="http://seller.example.com/l/))
+  end
+
   context "with a product that emits JSON-LD" do
     let(:product) { create(:product, user: seller, name: "Canonical Ebook", native_type: Link::NATIVE_TYPE_EBOOK) }
 
