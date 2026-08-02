@@ -2360,6 +2360,30 @@ class SubscriptionTest < ActiveSupport::TestCase
     end
   end
 
+  test "#update_current_plan! snapshots an exact-zero once-per-cart PWYW price" do
+    VCR.use_cassette(UPDATE_PLAN_SHARED_CASSETTE) do
+      setup_subscription
+      chosen_price = 25_00
+      @new_tier.update!(customizable_price: true)
+      offer_code = create_offer_code(
+        products: [@product],
+        amount_cents: chosen_price,
+        once_per_cart: true
+      )
+
+      new_purchase = @subscription.update_current_plan!(
+        new_variants: [@new_tier],
+        new_price: @yearly_product_price,
+        perceived_price_cents: 0,
+        offer_code:,
+        submitted_pre_discount_price_cents: chosen_price
+      )
+
+      assert_equal chosen_price, new_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents
+      assert_equal chosen_price, new_purchase.displayed_price_cents_before_offer_code
+    end
+  end
+
   test "#update_current_plan! copies correct attributes from the original purchase" do
     VCR.use_cassette("Subscription/_update_current_plan_/copies_correct_attributes_from_the_original_purchase") do
       setup_subscription(free_trial: true, was_product_recommended: true)

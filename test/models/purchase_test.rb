@@ -5098,6 +5098,22 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal 1800, purchase.displayed_price_cents_before_offer_code
   end
 
+  test "#displayed_price_cents_before_offer_code excludes a tip from a cached once-per-cart discount" do
+    product = create_product(price_cents: 1000)
+    offer_code = create_offer_code(products: [product], amount_cents: 100, once_per_cart: true)
+    purchase = create_purchase(link: product, offer_code:, price_cents: 1100)
+    purchase.create_tip!(value_cents: 200)
+    purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      pre_discount_minimum_price_cents: 1000
+    )
+
+    assert_equal 1000, purchase.displayed_price_cents_before_offer_code
+  end
+
   test "#displayed_price_cents_before_offer_code with an offer code uses the offer code if the purchase is missing cached offer code details" do
     product = create_product(price_cents: 500)
     offer_code = create_offer_code(products: [product], amount_cents: 300)

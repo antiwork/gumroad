@@ -306,6 +306,7 @@ class Subscription < ApplicationRecord
         offer_code_is_percent: original_discount.offer_code_is_percent,
         once_per_cart: original_discount.once_per_cart,
         pre_discount_minimum_price_cents: original_discount.pre_discount_minimum_price_cents,
+        pre_discount_displayed_price_cents: original_discount.pre_discount_displayed_price_cents,
         duration_in_months: original_discount.duration_in_months
       )
     elsif reuse_original_discount && original_purchase.offer_code.present?
@@ -520,7 +521,7 @@ class Subscription < ApplicationRecord
 
   # creates a new original subscription purchase & archives the existing one.
   # Any changes to the subscription made here must be reverted in `Subscription::UpdaterService#restore_original_purchase`
-  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+  def update_current_plan!(new_variants:, new_price:, new_quantity: nil, perceived_price_cents: nil, is_applying_plan_change: false, skip_preparing_for_charge: false, offer_code: nil, clear_discount: false, clear_deleted_discount: false, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, submitted_pre_discount_price_cents: nil)
     raise Subscription::UpdateFailed, "Installment plans cannot be updated." if is_installment_plan?
     raise Subscription::UpdateFailed, "Changing plans for fixed-length subscriptions is not currently supported." if has_fixed_length?
 
@@ -545,6 +546,7 @@ class Subscription < ApplicationRecord
       new_purchase.variant_attributes = link.is_tiered_membership? ? new_variants : original_purchase.variant_attributes
       new_purchase.is_original_subscription_purchase = true
       new_purchase.perceived_price_cents = perceived_price_cents
+      new_purchase.submitted_pre_discount_price_cents = submitted_pre_discount_price_cents
       new_purchase.price_range = perceived_price_cents.present? ? perceived_price_cents / (link.single_unit_currency? ? 1 : 100.0) : nil
       new_purchase.business_vat_id = business_vat_id.presence || original_purchase.purchase_sales_tax_info&.business_vat_id
       new_purchase.quantity = new_quantity if new_quantity.present?
@@ -579,18 +581,22 @@ class Subscription < ApplicationRecord
           duration_in_months: nil
         )
       elsif new_purchase.offer_code.present? && (copied_discount = new_purchase.purchase_offer_code_discount)
+        pre_discount_displayed_price_cents = new_purchase.verified_pre_discount_displayed_price_cents
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          pre_discount_displayed_price_cents:,
           offer_code_amount: copied_discount.offer_code_amount,
           offer_code_is_percent: copied_discount.offer_code_is_percent,
           once_per_cart: copied_discount.once_per_cart,
           duration_in_months: copied_discount.duration_in_months
         )
       elsif new_purchase.offer_code.present? && new_purchase.offer_code == original_purchase.offer_code && (original_discount = original_purchase.purchase_offer_code_discount)
+        pre_discount_displayed_price_cents = new_purchase.verified_pre_discount_displayed_price_cents
         new_purchase.build_purchase_offer_code_discount(
           offer_code: new_purchase.offer_code,
           pre_discount_minimum_price_cents: new_purchase.minimum_paid_price_cents_per_unit_before_discount,
+          pre_discount_displayed_price_cents:,
           offer_code_amount: original_discount.offer_code_amount,
           offer_code_is_percent: original_discount.offer_code_is_percent,
           once_per_cart: original_discount.once_per_cart,

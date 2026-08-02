@@ -3042,6 +3042,48 @@ describe Subscription::UpdaterService, :vcr do
         expect(new_purchase.purchase_offer_code_discount.once_per_cart).to be(true)
       end
 
+      it "retains the chosen PWYW price with an existing exact-zero once-per-cart discount" do
+        chosen_price = @original_tier_yearly_price.price_cents + 2_00
+        @original_tier.update!(customizable_price: true)
+        @offer_code.update!(amount_cents: chosen_price, amount_percentage: nil, once_per_cart: true)
+        original_purchase = @subscription.original_purchase
+        original_purchase.update!(
+          displayed_price_cents: 0,
+          price_cents: 0,
+          total_transaction_cents: 0,
+          stripe_transaction_id: nil,
+          stripe_fingerprint: nil,
+          charge_processor_id: nil,
+          merchant_account: nil
+        )
+        original_purchase.purchase_offer_code_discount.update!(
+          offer_code_amount: chosen_price,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          pre_discount_displayed_price_cents: chosen_price
+        )
+
+        expect(@subscription).to receive(:send_restart_notifications!)
+        result = described_class.new(
+          subscription: @subscription,
+          gumroad_guid: @gumroad_guid,
+          params: restart_params.merge(
+            price_id: @yearly_product_price.external_id,
+            price_range: chosen_price,
+            perceived_price_cents: 0,
+            perceived_upgrade_price_cents: 0,
+          ),
+          logged_in_user: @user,
+          remote_ip: @remote_ip,
+        ).perform
+
+        expect(result[:success]).to eq(true)
+        new_purchase = @subscription.reload.original_purchase
+        expect(new_purchase.id).not_to eq(original_purchase.id)
+        expect(new_purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(chosen_price)
+        expect(new_purchase.displayed_price_cents_before_offer_code).to eq(chosen_price)
+      end
+
       it "applies a different offer code when provided" do
         new_offer_code = create(:offer_code, code: "newcode", amount_cents: nil, amount_percentage: 15, products: [@product], user: @product.user)
         new_perceived = @original_tier_quarterly_price.price_cents - new_offer_code.amount_off(@original_tier_quarterly_price.price_cents)

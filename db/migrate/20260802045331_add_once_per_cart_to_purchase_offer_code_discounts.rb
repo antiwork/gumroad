@@ -2,6 +2,9 @@
 
 class AddOncePerCartToPurchaseOfferCodeDiscounts < ActiveRecord::Migration[7.1]
   def change
-    add_column :purchase_offer_code_discounts, :once_per_cart, :boolean, default: false, null: false
+    change_table :purchase_offer_code_discounts, bulk: true do |table|
+      table.boolean :once_per_cart, default: false, null: false
+      table.integer :pre_discount_displayed_price_cents
+    end
   end
 end

@@ -822,6 +822,45 @@ describe OrdersController, :vcr do
         expect(response.parsed_body["offer_codes"]).to eq([])
       end
 
+      it "keeps a once-per-cart retry code until SCA resolves its active reservation" do
+        offer_code = create(
+          :offer_code,
+          user: product_1.user,
+          products: [product_1, product_2],
+          amount_cents: 100,
+          max_purchase_count: 1,
+          once_per_cart: true
+        )
+        product_2.update!(max_purchase_count: 1)
+        request_params = multiple_purchase_params.deep_dup
+        request_params[:line_items].first.merge!(
+          discount_code: offer_code.code,
+          price_cents: product_1.price_cents,
+          perceived_price_cents: product_1.price_cents - offer_code.amount_cents
+        )
+        request_params[:line_items].second.merge!(
+          discount_code: offer_code.code,
+          price_cents: product_2.price_cents * 2,
+          perceived_price_cents: product_2.price_cents * 2,
+          quantity: 2
+        )
+        charge_service = instance_double(
+          Order::ChargeService,
+          perform: { "unique-id-0" => { success: true, requires_card_action: true } }
+        )
+
+        allow(Order::ChargeService).to receive(:new).and_return(charge_service)
+
+        post :create, params: request_params
+
+        expect(response.parsed_body["offer_codes"]).to contain_exactly(
+          hash_including(
+            "code" => offer_code.code,
+            "products" => hash_including(product_2.unique_permalink)
+          )
+        )
+      end
+
       describe "single item purchases that require SCA" do
         let(:price) { 10_00 }
         let(:multiple_purchase_params_with_sca) do
@@ -2537,6 +2576,62 @@ describe OrdersController, :vcr do
       post :prepare, params: { line_items:, confirmation_token: "ctoken-test" }.merge(common_params)
 
       expect(response.parsed_body["offer_codes"]).to eq(JSON.parse(recovered.to_json))
+    end
+
+    it "keeps a once-per-cart retry code until client confirmation resolves its active reservation" do
+      purchases = double("order_purchases")
+      allow(purchases).to receive(:each).and_return([])
+      order = double("order", persisted?: true, purchases:)
+      retry_discount = {
+        type: "fixed",
+        cents: 100,
+        once_per_cart: true,
+        once_per_cart_id: "offer-code-1",
+      }
+      create_service = instance_double(
+        Order::CreateService,
+        perform: [order, { "unique-id-1" => { success: false } }, [{
+          code: "SAVE",
+          products: { product.unique_permalink => retry_discount },
+        }]]
+      )
+      prepare_service = instance_double(
+        Order::PreparePaymentIntentService,
+        perform: { "unique-id-0" => { success: true, requires_payment_confirmation: true } }
+      )
+      discount_service = instance_double(
+        OfferCodeDiscountComputingService,
+        process: {
+          products_data: { "unique-id-1" => { discount: retry_discount } },
+          error_code: nil,
+        }
+      )
+
+      allow(Order::CreateService).to receive(:new).and_return(create_service)
+      allow(Order::PreparePaymentIntentService).to receive(:new).and_return(prepare_service)
+      allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+      expect(OfferCodeDiscountComputingService).to receive(:new).with(
+        "SAVE",
+        { "unique-id-1" => hash_including("permalink" => product.unique_permalink, "quantity" => "1") },
+        buyer: nil,
+        key_by_input: true,
+        excluding_order: order
+      ).and_return(discount_service)
+
+      post :prepare, params: {
+        line_items: [
+          *line_items,
+          { uid: "unique-id-1", permalink: product.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+        ],
+        confirmation_token: "ctoken-test",
+      }.merge(common_params)
+
+      expect(response.parsed_body["offer_codes"]).to eq(
+        [{
+          "code" => "SAVE",
+          "products" => { product.unique_permalink => JSON.parse(retry_discount.to_json) },
+        }]
+      )
     end
 
     it "records the client-confirm lane in the purchase's payment-flow analytics row" do

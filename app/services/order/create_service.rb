@@ -82,6 +82,8 @@ class Order::CreateService
             )
             .merge(line_item_params.except(:uid, :permalink))
             .merge({ cart_items: })
+        ).merge(
+          submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount)
         )
 
         # Card params are excluded from build_purchase_params (charging is handled by
@@ -189,7 +191,8 @@ class Order::CreateService
         normalize_discount_code(offer_code),
         products,
         buyer:,
-        key_by_input: true
+        key_by_input: true,
+        excluding_order: order
       )
       { code: offer_code, products:, result: service.process }
     end.filter_map do |response|
@@ -242,6 +245,16 @@ class Order::CreateService
           discount_code: submitted_discount_code,
         }
       end
+    end
+
+    def submitted_pre_discount_price_cents(line_item, discount)
+      return unless discount&.[](:once_per_cart) && discount[:type] == "fixed"
+
+      submitted_total = Integer(line_item[:price_cents], exception: false)
+      tip_cents = Integer(line_item[:tip_cents], exception: false) || 0
+      return if submitted_total.nil? || submitted_total < tip_cents
+
+      submitted_total - tip_cents
     end
 
     def normalize_discount_code(code)

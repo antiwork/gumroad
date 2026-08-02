@@ -52,6 +52,7 @@ class Subscription::RestartAtCheckoutService
         stripe_setup_intent_id: params[:stripe_setup_intent_id],
         offer_code: new_offer_code,
         clear_discount: original_discount.present? && new_offer_code.blank?,
+        submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents],
       }.compact
     end
 

@@ -616,7 +616,8 @@ class Purchase < ApplicationRecord
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
-                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited
+                :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
+                :submitted_pre_discount_price_cents
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -2385,6 +2386,7 @@ class Purchase < ApplicationRecord
         self.build_purchase_offer_code_discount(offer_code:, offer_code_amount:, offer_code_is_percent:,
                                                 once_per_cart: !offer_code_is_percent && offer_code.once_per_cart?,
                                                 pre_discount_minimum_price_cents: minimum_paid_price_cents_per_unit_before_discount,
+                                                pre_discount_displayed_price_cents: verified_pre_discount_displayed_price_cents,
                                                 duration_in_months: link.is_recurring_billing? ? offer_code.duration_in_months : nil)
       else
         @offer_code_invalid_for_buyer = true
@@ -2418,6 +2420,7 @@ class Purchase < ApplicationRecord
       offer_code_is_percent: discount.offer_code_is_percent,
       once_per_cart: discount.once_per_cart,
       pre_discount_minimum_price_cents: discount.pre_discount_minimum_price_cents,
+      pre_discount_displayed_price_cents: discount.pre_discount_displayed_price_cents,
       duration_in_months: discount.duration_in_months
     )
   end
@@ -3452,10 +3455,35 @@ class Purchase < ApplicationRecord
     offer_code_to_use = original_offer_code(include_deleted:)
     return displayed_price_cents unless offer_code_to_use.present?
 
-    price = has_cached_offer_code? ?
-      purchase_offer_code_discount.pre_discount_minimum_price_cents :
-      offer_code_to_use.original_price(displayed_price_cents)
+    if has_cached_offer_code?
+      discount = purchase_offer_code_discount
+      if discount.once_per_cart? && !discount.offer_code_is_percent
+        return discount.pre_discount_displayed_price_cents if discount.pre_discount_displayed_price_cents.present?
+
+        discounted_product_price = displayed_price_cents - tip&.value_cents.to_i
+        return discount.pre_discount_minimum_price_cents * quantity if discounted_product_price.zero?
+        return discounted_product_price + discount.offer_code_amount
+      end
+
+      return discount.pre_discount_minimum_price_cents * quantity
+    end
+
+    price = offer_code_to_use.original_price(displayed_price_cents)
     price * quantity if price.present?
+  end
+
+  def verified_pre_discount_displayed_price_cents
+    return unless once_per_cart_fixed_offer_code?
+    return if submitted_pre_discount_price_cents.blank?
+
+    minimum_total = minimum_paid_price_cents_per_unit_before_discount * quantity
+    return if submitted_pre_discount_price_cents < minimum_total
+
+    perceived_product_price = perceived_price_cents.to_i - tip&.value_cents.to_i
+    return if perceived_product_price.negative?
+    return unless perceived_product_price == transformed_once_per_cart_price_cents(submitted_pre_discount_price_cents)
+
+    submitted_pre_discount_price_cents
   end
 
   def displayed_price_per_unit_cents
@@ -4078,6 +4106,23 @@ class Purchase < ApplicationRecord
     def once_per_cart_fixed_offer_code?
       pricing_offer_code = offer_code_for_pricing
       pricing_offer_code&.is_cents? && pricing_offer_code.once_per_cart?
+    end
+
+    def transformed_once_per_cart_price_cents(pre_discount_price_cents)
+      price = [pre_discount_price_cents - offer_amount_off(pre_discount_price_cents), 0].max
+      price = if is_free_trial_purchase
+        0
+      elsif is_commission_completion_purchase
+        price * (1 - Commission::COMMISSION_DEPOSIT_PROPORTION)
+      elsif link.native_type == Link::NATIVE_TYPE_COMMISSION
+        price * Commission::COMMISSION_DEPOSIT_PROPORTION
+      elsif is_installment_payment
+        calculate_installment_payment_price_cents(price)
+      else
+        price
+      end
+      price -= prorated_discount_price_cents if is_upgrade_purchase && prorated_discount_price_cents
+      price.round
     end
 
     def displayed_price_usd_cents

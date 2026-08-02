@@ -1128,6 +1128,59 @@ describe CheckoutPresenter do
           expect(displayed_tier_price).to eq @original_price_cents
         end
 
+        it "keeps the buyer's chosen price before a fixed once-per-cart discount" do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: 100, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: @pwyw_price_cents - offer_code.amount_cents)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents,
+            pre_discount_displayed_price_cents: @pwyw_price_cents
+          )
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(
+            price: @pwyw_price_cents - offer_code.amount_cents,
+            pre_discount_price: @pwyw_price_cents
+          )
+        end
+
+        it "keeps the chosen PWYW price when a fixed once-per-cart discount reaches exactly zero" do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: @pwyw_price_cents, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: 0)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents,
+            pre_discount_displayed_price_cents: @pwyw_price_cents
+          )
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(price: 0, pre_discount_price: @pwyw_price_cents)
+        end
+
+        it "falls back to the snapshotted floor when a fixed once-per-cart discount was clamped" do
+          offer_code = create(:offer_code, user: @product.user, products: [@product], amount_cents: @pwyw_price_cents + 100, once_per_cart: true)
+          @purchase.update!(offer_code:, displayed_price_cents: 0)
+          @purchase.create_purchase_offer_code_discount!(
+            offer_code:,
+            offer_code_amount: offer_code.amount_cents,
+            offer_code_is_percent: false,
+            once_per_cart: true,
+            pre_discount_minimum_price_cents: @original_price_cents
+          )
+
+          result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+          expect(result[:subscription]).to include(price: 0, pre_discount_price: @original_price_cents)
+        end
+
         it "returns the tier price when the tier price is lower than the current plan price" do
           new_price = @pwyw_price_cents - 100
           @tier_price.update!(price_cents: new_price)

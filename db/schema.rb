@@ -1939,6 +1939,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000024) do
     t.datetime "updated_at", null: false
     t.integer "duration_in_months"
     t.boolean "once_per_cart", default: false, null: false
+    t.integer "pre_discount_displayed_price_cents"
     t.index ["offer_code_id"], name: "index_purchase_offer_code_discounts_on_offer_code_id"
     t.index ["purchase_id"], name: "index_purchase_offer_code_discounts_on_purchase_id", unique: true
   end

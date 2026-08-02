@@ -83,8 +83,8 @@ class OfferCode < ApplicationRecord
     quantity_left(excluding_purchase:) >= (is_cents? && once_per_cart? ? 1 : purchase_quantity)
   end
 
-  def quantity_left(excluding_purchase: nil)
-    max_purchase_count - times_used - active_once_per_cart_reservations(excluding_purchase:)
+  def quantity_left(excluding_purchase: nil, excluding_order: nil)
+    max_purchase_count - times_used - active_once_per_cart_reservations(excluding_purchase:, excluding_order:)
   end
 
   def is_percent?
@@ -199,9 +199,12 @@ class OfferCode < ApplicationRecord
     per_item + per_cart
   end
 
-  def active_once_per_cart_reservations(excluding_purchase: nil)
+  def active_once_per_cart_reservations(excluding_purchase: nil, excluding_order: nil)
     reservations = purchases.merge(Purchase.active_once_per_cart_offer_code_reservations)
     reservations = reservations.where.not(id: excluding_purchase.id) if excluding_purchase&.persisted?
+    if excluding_order&.persisted?
+      reservations = reservations.where.not(id: excluding_order.order_purchases.select(:purchase_id))
+    end
     reservations.count
   end
 

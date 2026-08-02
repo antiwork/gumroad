@@ -149,6 +149,9 @@ class OrdersController < ApplicationController
         Order::OfferCodeRecoveryService.for_order(order)
       )
       retry_line_items = line_items.select { purchase_responses.dig(_1[:uid], :success) != true }
+      payment_confirmation_pending = purchase_responses.any? do |_uid, response|
+        response[:requires_card_action] || response[:requires_card_setup] || response[:requires_payment_confirmation]
+      end
 
       preserved = candidates.filter_map do |response|
         products = response[:products].reject { |_permalink, discount| discount[:once_per_cart] }
@@ -168,7 +171,8 @@ class OrdersController < ApplicationController
           response[:code],
           products,
           buyer: logged_in_user,
-          key_by_input: true
+          key_by_input: true,
+          excluding_order: payment_confirmation_pending ? order : nil
         )
         result = service.process
         next if result[:error_code].present?

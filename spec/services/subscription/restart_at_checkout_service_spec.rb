@@ -74,10 +74,12 @@ describe Subscription::RestartAtCheckoutService do
       end
 
       it "transforms checkout params to UpdaterService format" do
+        submitted_price = product.price_cents + 2_00
+        checkout_params = base_params.merge(submitted_pre_discount_price_cents: submitted_price)
         service = described_class.new(
           subscription: subscription,
           product: product,
-          params: base_params,
+          params: checkout_params,
           buyer: buyer
         )
 
@@ -89,6 +91,7 @@ describe Subscription::RestartAtCheckoutService do
         expect(transformed_params[:price_range]).to eq(product.price_cents)
         expect(transformed_params[:price_id]).to eq(product.prices.alive.first.external_id)
         expect(transformed_params[:use_existing_card]).to be true
+        expect(transformed_params[:submitted_pre_discount_price_cents]).to eq(submitted_price)
       end
 
       it "uses the buyer identity when defaulting the perceived restart price" do

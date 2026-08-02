@@ -87,7 +87,8 @@ class Order::OfferCodeRecoveryService
         offer_code.code,
         products,
         buyer: order.purchaser,
-        key_by_input: true
+        key_by_input: true,
+        excluding_order: order
       ).process
       next if result[:error_code].present?
       next if (result[:products_data].keys & failed_purchases.map { _1.id.to_s }).empty?

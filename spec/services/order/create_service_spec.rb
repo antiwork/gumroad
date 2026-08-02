@@ -89,6 +89,7 @@ describe Order::CreateService, :vcr do
           {
             uid: "unique-id-0",
             permalink: product_1.unique_permalink,
+            price_cents: price_1,
             perceived_price_cents: price_1 - 1_00,
             quantity: 1,
             discount_code: offer_code.code,
@@ -96,6 +97,7 @@ describe Order::CreateService, :vcr do
           {
             uid: "unique-id-1",
             permalink: product_2.unique_permalink,
+            price_cents: price_2,
             perceived_price_cents: price_2,
             quantity: 1,
             discount_code: offer_code.code,
@@ -110,6 +112,74 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.order(:id).map(&:displayed_price_cents)).to eq([price_1 - 1_00, price_2])
         expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([offer_code.id, nil])
         expect(order.purchases.order(:id).first.purchase_offer_code_discount.once_per_cart).to be(true)
+        expect(order.purchases.order(:id).first.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(price_1)
+      end
+
+      it "snapshots the chosen PWYW price when the discount reaches exactly zero" do
+        chosen_price = price_1 + 2_00
+        product_1.update!(customizable_price: true)
+        offer_code.update!(amount_cents: chosen_price)
+        params[:line_items] = [{
+          uid: "unique-id-0",
+          permalink: product_1.unique_permalink,
+          price_cents: chosen_price,
+          perceived_price_cents: 0,
+          quantity: 1,
+          discount_code: offer_code.code,
+        }]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchase = order.purchases.first
+
+        expect(purchase_responses).to be_empty
+        expect(purchase.displayed_price_cents).to eq(0)
+        expect(purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(chosen_price)
+        expect(purchase.displayed_price_cents_before_offer_code).to eq(chosen_price)
+      end
+
+      it "snapshots the full price for an installment payment" do
+        installment_product = create(:product, user: seller_1, price_cents: 20_00)
+        installment_plan = create(:product_installment_plan, link: installment_product, number_of_installments: 3)
+        offer_code.update!(amount_cents: 5_00)
+        discounted_total = installment_product.price_cents - offer_code.amount_cents
+        params[:line_items] = [{
+          uid: "unique-id-0",
+          permalink: installment_product.unique_permalink,
+          price_cents: installment_product.price_cents,
+          perceived_price_cents: installment_plan.calculate_installment_payment_price_cents(discounted_total).first,
+          quantity: 1,
+          discount_code: offer_code.code,
+          pay_in_installments: true,
+        }]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchase = order.purchases.first
+
+        expect(purchase_responses).to be_empty
+        expect(purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(installment_product.price_cents)
+        expect(purchase.displayed_price_cents_before_offer_code).to eq(installment_product.price_cents)
+      end
+
+      it "snapshots the full price for a commission deposit" do
+        seller_1.update!(created_at: 31.days.ago)
+        commission_product = create(:commission_product, user: seller_1, price_cents: 20_00)
+        offer_code.update!(amount_cents: 10_00)
+        discounted_deposit = ((commission_product.price_cents - offer_code.amount_cents) * Commission::COMMISSION_DEPOSIT_PROPORTION).round
+        params[:line_items] = [{
+          uid: "unique-id-0",
+          permalink: commission_product.unique_permalink,
+          price_cents: commission_product.price_cents,
+          perceived_price_cents: discounted_deposit,
+          quantity: 1,
+          discount_code: offer_code.code,
+        }]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchase = order.purchases.first
+
+        expect(purchase_responses).to be_empty
+        expect(purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(commission_product.price_cents)
+        expect(purchase.displayed_price_cents_before_offer_code).to eq(commission_product.price_cents)
       end
 
       it "reserves one capped use for the whole cart" do
@@ -216,6 +286,7 @@ describe Order::CreateService, :vcr do
       end
 
       it "restores the code when only an unallocated line fails" do
+        offer_code.update!(max_purchase_count: 1)
         product_2.update!(max_purchase_count: 1)
         params[:line_items].second.merge!(quantity: 2, perceived_price_cents: price_2 * 2)
 

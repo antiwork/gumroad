@@ -38,6 +38,7 @@ class Purchase::CreateService < Purchase::BaseService
 
       # build primary (non-gift) purchase
       self.purchase = build_purchase(purchase_params.merge(gift_given: gift))
+      purchase.submitted_pre_discount_price_cents = params[:submitted_pre_discount_price_cents]
       purchase.is_part_of_combined_charge = params[:is_part_of_combined_charge]
 
       # run post-build validations (to ensure a purchase is present along with the
