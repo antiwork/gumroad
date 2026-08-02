@@ -1272,7 +1272,10 @@ const BankAccountSection = ({
                     type="text"
                     id={`${uid}-bank-code`}
                     placeholder="000"
-                    maxLength={4}
+                    maxLength={3}
+                    inputMode="numeric"
+                    pattern="[0-9]{3}"
+                    title="Your bank's 3-digit Indonesian bank code (Sandi Bank), e.g. 014 for BCA"
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}
