@@ -186,8 +186,12 @@ class Rack::Attack
   throttle_by_ip path: "/purchases",                      requests: 40, period: 60.seconds # Initial: 40rpm,  Max: 200 requests/9 hours
   throttle_by_ip path: "/stripe/setup_intents",           requests: 40, period: 60.seconds # Initial: 40rpm,  Max: 200 requests/9 hours
   throttle_by_ip path: "/settings/credit_card",           requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
-  throttle_with_exponential_backoff(name: "mobile_url_redirect_download/token", requests: 30, period: 60.seconds) do |req|
-    req.path.match(%r{\A/(?:api/)?mobile/url_redirects/download/(?<token>[^/]+)/[^/]+})&.[](:token)
+  # Keyed per (token, file), not per token: one purchase legitimately fans out across every
+  # file in a bundle or course, so a per-token counter would 429 a buyer part-way through a
+  # large product. max_level: 1 keeps a stuck client from earning the multi-hour backoff tiers.
+  throttle_with_exponential_backoff(name: "mobile_url_redirect_download/token", requests: 60, period: 60.seconds, max_level: 1) do |req|
+    m = req.path.match(%r{\A/(?:api/)?mobile/url_redirects/download/(?<token>[^/]+)/(?<file>[^/]+)})
+    "#{m[:token]}/#{m[:file]}" if m
   end
 
   throttle_by_ip_for_period path: "/purchases", requests: 50, period: 1.hour

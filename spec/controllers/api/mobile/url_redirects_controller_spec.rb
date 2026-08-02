@@ -186,8 +186,8 @@ describe Api::Mobile::UrlRedirectsController do
 
     it "does not stream content for an inactive membership" do
       purchase = create(:membership_purchase)
+      purchase.subscription.update!(cancelled_at: 1.day.ago)
       blocked_url_redirect = create(:url_redirect, link: purchase.link, purchase:)
-      allow_any_instance_of(Subscription).to receive(:grant_access_to_product?).and_return(false)
 
       expect do
         get :stream, params: {
@@ -431,10 +431,10 @@ describe Api::Mobile::UrlRedirectsController do
 
     it "does not download content for a terminated purchase" do
       [
-        ->(purchase) { purchase.update!(stripe_refunded: true) },
-        ->(purchase) { purchase.update!(chargeback_date: Time.current) },
-        ->(purchase) { purchase.update!(is_access_revoked: true) },
-      ].each do |terminate_purchase|
+        [:refunded, ->(purchase) { purchase.update!(stripe_refunded: true) }],
+        [:charged_back, ->(purchase) { purchase.update!(chargeback_date: Time.current) }],
+        [:access_revoked, ->(purchase) { purchase.update!(is_access_revoked: true) }],
+      ].each do |label, terminate_purchase|
         purchase = create(:purchase, link: @product)
         blocked_url_redirect = create(:url_redirect, link: @product, purchase:)
         terminate_purchase.call(purchase)
@@ -443,11 +443,51 @@ describe Api::Mobile::UrlRedirectsController do
           get :download, params: { token: blocked_url_redirect.token,
                                    product_file_id: @product.product_files.first.external_id,
                                    mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
-        end.to_not change(ConsumptionEvent, :count)
+        end.to_not change(ConsumptionEvent, :count), "#{label} was not blocked"
 
-        expect(response).to have_http_status(:not_found)
+        expect(response).to have_http_status(:not_found), "#{label} was not blocked"
         expect(response.parsed_body).to eq({ success: false, message: "Could not find url redirect" }.as_json)
       end
+    end
+
+    it "downloads content when a chargeback was reversed" do
+      purchase = create(:purchase, link: @product, chargeback_date: Time.current)
+      purchase.update!(chargeback_reversed: true)
+      allowed_url_redirect = create(:url_redirect, link: @product, purchase:)
+
+      get :download, params: { token: allowed_url_redirect.token,
+                               product_file_id: @product.product_files.first.external_id,
+                               mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+      expect(response).to have_http_status(:redirect)
+    end
+
+    it "does not download a stream-only file" do
+      @product.product_files.first.update!(stream_only: true)
+
+      expect do
+        get :download, params: { token: @url_redirect.token,
+                                 product_file_id: @product.product_files.first.external_id,
+                                 mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+      end.to_not change(ConsumptionEvent, :count)
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "does not download content for an expired rental" do
+      @url_redirect.purchase = create(:purchase, is_rental: true)
+      @url_redirect.purchase.save!
+      @url_redirect.update!(is_rental: true, rental_first_viewed_at: 10.days.ago)
+      ExpireRentalPurchasesWorker.new.perform
+
+      expect do
+        get :download, params: { token: @url_redirect.token,
+                                 product_file_id: @product.product_files.first.external_id,
+                                 mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+      end.to_not change(ConsumptionEvent, :count)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body).to eq({ success: false, message: "Your rental has expired." }.as_json)
     end
 
     it "never displays a confirmation page for download urls" do

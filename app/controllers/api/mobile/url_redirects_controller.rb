@@ -5,7 +5,7 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
   before_action :fetch_url_redirect_by_token, only: %i[stream hls_playlist download]
   before_action :check_permissions, only: %i[stream hls_playlist download]
   before_action :mark_rental_as_viewed, only: :hls_playlist
-  before_action :check_for_expired_rentals, only: %i[stream hls_playlist]
+  before_action :check_for_expired_rentals, only: %i[stream hls_playlist download]
   after_action :increment_product_uses_count, only: %i[stream download]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_WATCH) }, only: [:stream, :hls_playlist]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:download]
@@ -50,6 +50,10 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
         @url_redirect.product_file(permitted_params[:product_file_id])
       end
       e404 if @product_file.nil?
+
+      # Stream-only files, external links and streamable rentals are viewable but never
+      # fetchable as originals. The web path enforces this on its own download action.
+      e404 if action_name == "download" && !@url_redirect.is_file_downloadable?(@product_file)
     end
 
     def mark_rental_as_viewed
