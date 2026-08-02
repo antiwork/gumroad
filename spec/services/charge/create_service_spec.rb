@@ -450,8 +450,9 @@ describe Charge::CreateService, :vcr do
                         price_cents: 18_75,
                         total_transaction_cents: 18_75)
 
-      expect(Charge::DirectListedPresentment).not_to receive(:new)
-      expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+      called = []
+      allow(Charge::DirectListedPresentment).to receive(:new) { called << :presentment; raise "should not be called" }
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) { called << :charge; nil }
 
       Charge::CreateService.new(order:,
                                 seller:,
@@ -465,6 +466,7 @@ describe Charge::CreateService, :vcr do
                                 statement_description: seller.name_or_username,
                                 params: { buyer_currency_quote: "stale-token" }).perform
 
+      expect(called).to be_empty
       expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
       expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
     ensure
