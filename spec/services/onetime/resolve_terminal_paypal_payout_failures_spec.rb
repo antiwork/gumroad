@@ -288,12 +288,33 @@ describe Onetime::ResolveTerminalPaypalPayoutFailures do
       end.to_not change { seller_visible_note_count(seller) }
     end
 
-    it "ignores retryable rejections" do
-      terminal_failure_for(seller, reason: "PAYPAL 3015")
+    # A code with no seller-facing wording is still support-only, so this task must stay silent on
+    # it — a note it cannot explain would be worse than no note.
+    it "ignores rejections that have no seller-facing explanation" do
+      terminal_failure_for(seller, reason: "PAYPAL 9302")
 
       expect do
         described_class.process(dry_run: false)
       end.to_not change { seller_visible_note_count(seller) }
+    end
+
+    # 3015 became seller-visible in gumroad-private#1661 and is the dominant code in the Russia-KYC
+    # cohort, so this task is the path that finally explains it to sellers who were already stuck.
+    # It stays retryable, so the copy must name the account state without claiming a stop.
+    it "explains a locked-account rejection without claiming the retries stopped" do
+      allow_bank_payouts_for(seller)
+      terminal_failure_for(seller, reason: "PAYPAL 3015")
+
+      expect do
+        described_class.process(dry_run: false)
+      end.to change { seller_visible_note_count(seller) }.from(0).to(1)
+
+      content = latest_seller_visible_note(seller).content
+      expect(content).to include("your PayPal account is locked or inactive")
+      expect(content).to_not include("stopped retrying")
+      expect(content).to_not include("we have stopped")
+      # Only PayPal can lift the lock, so the country-based wording would be the wrong diagnosis.
+      expect(content).to_not include("registered in a country")
     end
 
     # A currency rejection is explained but still retried, so nothing this task writes may claim
