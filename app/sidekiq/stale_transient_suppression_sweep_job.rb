@@ -20,10 +20,9 @@ class StaleTransientSuppressionSweepJob
   MIN_SUPPRESSION_AGE = 3.days
   LOOKBACK_WINDOW = 60.days
 
-  # Reputation guardrail: the absolute ceiling of clears per nightly run.
-  # The cap is split evenly across subusers (see #perform) so that on a
-  # heavy night the first subuser in the fixed sweep order can't consume
-  # the whole cap and starve the later ones night after night.
+  # Reputation guardrail: the absolute ceiling of clears per nightly run. Split evenly across
+  # subusers, so on a heavy night the first subuser in the fixed sweep order can't consume the
+  # whole cap and starve the later ones night after night.
   MAX_CLEARS_PER_RUN = 200
 
   # SendGrid paginates the bounce/block list endpoints via limit/offset
@@ -37,13 +36,17 @@ class StaleTransientSuppressionSweepJob
 
   def perform
     cleared = 0
+    # This job has never run against production SendGrid, so a "cleared 0" night must be
+    # readable: scanned/transient/active distinguish an empty window from entries that were
+    # all permanent from entries whose owners never signed in. Those imply different follow-ups.
+    scanned = 0
+    transient = 0
+    active = 0
     subuser_api_keys = EmailSuppressionManager.subuser_api_keys
 
-    # Split the run cap evenly so a night where one subuser has a large
-    # backlog can't starve the subusers swept after it (the iteration order
-    # is fixed, so without a split the same accounts would be skipped every
-    # night until the first one drained).
-    per_subuser_budget = [MAX_CLEARS_PER_RUN / [subuser_api_keys.size, 1].max, 1].max
+    # Split the run cap evenly (see MAX_CLEARS_PER_RUN); the outer max keeps
+    # the budget at 1 even if subusers ever outnumber the cap.
+    per_subuser_budget = [MAX_CLEARS_PER_RUN / subuser_api_keys.size, 1].max
 
     subuser_api_keys.each do |subuser, api_key|
       next if api_key.blank?
@@ -59,6 +62,9 @@ class StaleTransientSuppressionSweepJob
             break
           end
 
+          scanned += 1
+          transient += 1 if transient_reason?(entry)
+          active += 1 if signed_in_since_suppression?(entry)
           next unless clearable?(entry)
 
           status_code = sendgrid(api_key).client.suppression.public_send(list)._(entry[:email]).delete.status_code
@@ -78,7 +84,7 @@ class StaleTransientSuppressionSweepJob
       end
     end
 
-    log("sweep complete: cleared #{cleared} stale transient suppression(s)")
+    log("sweep complete: scanned #{scanned} in-window suppression(s), #{transient} transient, #{active} with an owner who signed in since, cleared #{cleared}")
   end
 
   private
@@ -103,10 +109,10 @@ class StaleTransientSuppressionSweepJob
         offset += PAGE_SIZE
       end
       if exhausted_page_bound
-        # Every allowed page came back full, so the list likely extends
-        # beyond the bound. Log it so a persistently huge list can't be
-        # silently truncated night after night without anyone noticing.
-        log("page bound (#{MAX_PAGES_PER_LIST} pages) reached for #{list} (subuser: #{subuser}); entries beyond it will be considered on later runs")
+        # Every allowed page came back full, so the list extends beyond the bound. Whether the
+        # unscanned tail is ever reached depends on SendGrid's return order, which this job has
+        # not yet observed against the real API — so log it loudly rather than assume it drains.
+        log("page bound (#{MAX_PAGES_PER_LIST} pages) reached for #{list} (subuser: #{subuser}); the remainder of the list was NOT scanned this run")
       end
       entries
     end
@@ -135,14 +141,23 @@ class StaleTransientSuppressionSweepJob
     end
 
     def clearable?(entry)
-      return false unless TransientEmailFailureClassifier.new(event_type: nil, reason: entry[:reason]).transient?
+      transient_reason?(entry) && signed_in_since_suppression?(entry)
+    end
 
-      # Login activity after the suppression was created is the "user is
-      # since active" signal from the issue: the person behind the address
-      # demonstrably uses the account, so the one-time delivery failure is
-      # almost certainly resolved. Users who never came back stay suppressed.
+    def transient_reason?(entry)
+      TransientEmailFailureClassifier.new(reason: entry[:reason]).transient?
+    end
+
+    # Login activity after the suppression was created is the "user is
+    # since active" signal from the issue: the person behind the address
+    # demonstrably uses the account, so the one-time delivery failure is
+    # almost certainly resolved. Users who never came back stay suppressed.
+    def signed_in_since_suppression?(entry)
       suppressed_at = entry[:created] ? Time.zone.at(entry[:created]) : nil
       return false if suppressed_at.nil?
+      # MIN_SUPPRESSION_AGE is also the end_time query param; re-check it here so a
+      # mishandled param can't clear a suppression that is still fresh enough to recur.
+      return false if suppressed_at > MIN_SUPPRESSION_AGE.ago
 
       user = User.alive.by_email(entry[:email]).last
       return false if user.nil?

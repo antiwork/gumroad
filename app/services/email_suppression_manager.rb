@@ -5,11 +5,8 @@ class EmailSuppressionManager
   ALL_SUPPRESSION_LISTS = [:bounces, :blocks, :spam_reports, :invalid_emails].freeze
   private_constant :SUPPRESSION_LISTS
 
-  # All SendGrid subusers we send through. Suppression lists are per-subuser,
-  # so anything scanning or clearing suppressions must check every one of
-  # these. Exposed at class level so batch jobs (e.g.
-  # StaleTransientSuppressionSweepJob) can iterate the accounts without
-  # instantiating a manager per address.
+  # All SendGrid subusers we send through. Suppression lists are per-subuser, so anything
+  # scanning or clearing suppressions must check every one of these.
   def self.subuser_api_keys
     {
       gumroad: GlobalConfig.get("SENDGRID_GUMROAD_TRANSACTIONS_API_KEY"),

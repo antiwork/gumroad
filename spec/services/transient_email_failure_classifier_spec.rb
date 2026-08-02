@@ -3,15 +3,15 @@
 require "spec_helper"
 
 describe TransientEmailFailureClassifier do
-  def classify(reason, event_type: EmailEventInfo::EVENT_BOUNCED)
-    described_class.new(event_type:, reason:).classify
+  def classify(reason)
+    described_class.new(reason:).classify
   end
 
   describe "#classify" do
     # Representative reason strings observed on our SendGrid suppression
     # lists (see the deliverability ops runbook taxonomy), plus common RFC
     # 5321/3463 wordings.
-    TRANSIENT_REASONS = [
+    transient_reasons = [
       "421 4.7.0 Try again later, closing connection",
       "450 4.2.1 The user you are trying to contact is receiving mail too quickly. Please resend your message at a later time.",
       "451 4.7.1 Greylisting in action, please come back later",
@@ -27,7 +27,7 @@ describe TransientEmailFailureClassifier do
       "Temporarily deferred due to unexpected volume or user complaints",
     ].freeze
 
-    HARD_REASONS = [
+    hard_reasons = [
       "550 5.1.1 The email account that you tried to reach does not exist",
       "550 5.1.1 <someone@gmail.com>: Recipient address rejected: User unknown in virtual mailbox table",
       "550 No such user here",
@@ -40,26 +40,26 @@ describe TransientEmailFailureClassifier do
       "Invalid Recipient - https://community.mimecast.com/docs/DOC-1369#550",
     ].freeze
 
-    UNKNOWN_REASONS = [
+    unknown_reasons = [
       "Bounced Address",             # SendGrid "dropped" event shorthand — no SMTP detail to classify on
       "some entirely novel refusal wording",
       "",
       nil,
     ].freeze
 
-    TRANSIENT_REASONS.each do |reason|
+    transient_reasons.each do |reason|
       it "classifies #{reason.inspect} as :transient" do
         expect(classify(reason)).to eq(:transient)
       end
     end
 
-    HARD_REASONS.each do |reason|
+    hard_reasons.each do |reason|
       it "classifies #{reason.inspect} as :hard" do
         expect(classify(reason)).to eq(:hard)
       end
     end
 
-    UNKNOWN_REASONS.each do |reason|
+    unknown_reasons.each do |reason|
       it "classifies #{reason.inspect} as :unknown (fail-closed, no retry)" do
         expect(classify(reason)).to eq(:unknown)
       end
@@ -70,13 +70,27 @@ describe TransientEmailFailureClassifier do
       # retrying a dead address by a "try again later" suffix.
       expect(classify("550 5.1.1 user unknown, try again later")).to eq(:hard)
     end
+
+    # The 4xx pattern is anchored to the leading status code. Unanchored, a 4xx-looking number
+    # anywhere in a permanent 5xx reason — Microsoft's AS() diagnostic, a URL, a policy ref —
+    # promoted it to :transient, which is the one direction this classifier must never err in:
+    # the address gets un-suppressed and we resend into a permanent block.
+    [
+      "550 5.7.606 Access denied, banned sending IP; AS(425)",
+      "550 blocked: see https://help.example.com/errors/404",
+      "550 5.7.1 Message rejected due to content policy (ref 451)",
+    ].each do |reason|
+      it "does not treat #{reason.inspect} as transient on an incidental 4xx-shaped token" do
+        expect(classify(reason)).to_not eq(:transient)
+      end
+    end
   end
 
   describe "#transient?" do
     it "returns true only for transient classifications" do
-      expect(described_class.new(event_type: EmailEventInfo::EVENT_BOUNCED, reason: "452 4.2.2 Mailbox full").transient?).to eq(true)
-      expect(described_class.new(event_type: EmailEventInfo::EVENT_BOUNCED, reason: "550 user unknown").transient?).to eq(false)
-      expect(described_class.new(event_type: EmailEventInfo::EVENT_BOUNCED, reason: nil).transient?).to eq(false)
+      expect(described_class.new(reason: "452 4.2.2 Mailbox full").transient?).to eq(true)
+      expect(described_class.new(reason: "550 user unknown").transient?).to eq(false)
+      expect(described_class.new(reason: nil).transient?).to eq(false)
     end
   end
 end

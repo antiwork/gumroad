@@ -1,26 +1,19 @@
 # frozen_string_literal: true
 
-# Classifies the SMTP failure reason attached to an email provider's
-# bounce/blocked/dropped webhook event as either a temporary delivery problem
-# (safe to retry) or a permanent one (retrying would only hurt our sender
-# reputation).
+# Classifies the SMTP failure reason on a bounce/blocked/dropped event as a temporary delivery
+# problem (safe to retry) or a permanent one (retrying only hurts sender reputation).
 #
-# Context: when a send fails, SendGrid adds the address to its suppression
-# list and silently drops all future mail to it. For a transient failure
-# (receiving server timed out, mailbox full, greylisting, a brand-new domain
-# whose MX records were still propagating) that turns a one-off hiccup into a
-# permanent, invisible block — the exact failure mode that locked a brand-new
-# seller out of confirming their account (gumroad-private#1210).
-#
-# The decision is fail-closed: anything we can't confidently match is
-# :unknown, and callers must treat :unknown the same as :hard (no retry).
+# The decision is fail-closed: anything we can't confidently match is :unknown, and callers must
+# treat :unknown the same as :hard.
 class TransientEmailFailureClassifier
   # Signatures of temporary failures, drawn from reason strings observed on
   # our SendGrid suppression lists. 4xx SMTP codes are temporary by
   # definition; the rest are wordings different receiving servers use for
   # "try again later" conditions.
   TRANSIENT_PATTERNS = [
-    /\b4\d\d\b/,                          # any 4xx SMTP status code (421, 450, 451, 452, ...)
+    # Anchored to the leading status code: an unanchored /\b4\d\d\b/ also matched a 4xx-looking
+    # number anywhere in the reason, so "550 5.7.606 ... AS(425)" classified transient.
+    /\A4\d\d[\s.-]/,                      # leading 4xx SMTP status code (421, 450, 451, 452, ...)
     /\b4\.\d+\.\d+\b/,                    # enhanced status codes in the 4.X.X class
     /timed?[ -]?out/i,                    # "connection timed out", "i/o timeout"
     /timeout/i,                           # "error dialing remote address: dial tcp ... i/o timeout"
@@ -50,8 +43,7 @@ class TransientEmailFailureClassifier
     /invalid recipient/i,
   ].freeze
 
-  def initialize(event_type:, reason:)
-    @event_type = event_type
+  def initialize(reason:)
     @reason = reason.to_s
   end
 
