@@ -104,15 +104,7 @@ class Admin::PurchasesController < Admin::BaseController
       end
 
       refusal = @purchase.processor_rule_refusal
-      refusal_note =
-        if refusal.nil?
-          ""
-        elsif refusal[:error]
-          " Could not check whether Stripe is still refusing this buyer — verify the latest charge before promising a retry."
-        else
-          " Stripe is still refusing this buyer on one of our risk rules (charge #{refusal[:charge_id]}); " \
-            "it clears on its own about a day after their first attempt, so do not promise an immediate retry."
-        end
+      refusal_note = refusal.present? ? " #{@purchase.processor_rule_refusal_note(refusal)}" : ""
 
       if surviving.any? || refusal.present?
         # Same disclosure the internal API makes: the alert this message feeds is the only thing

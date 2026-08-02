@@ -1549,7 +1549,7 @@ describe Api::Internal::Admin::PurchasesController do
     it "warns that Stripe still refuses the buyer when a Radar rule blocked the latest charge" do
       purchase.block_buyer!(blocking_user_id: admin_user.id)
       allow_any_instance_of(Purchase).to receive(:processor_rule_refusal)
-        .and_return({ charge_id: "ch_blocked", network_status: "not_sent_to_network" })
+        .and_return({ kind: :velocity_rule, charge_id: "ch_blocked", network_status: "not_sent_to_network" })
 
       post :unblock_buyer, params: params
 

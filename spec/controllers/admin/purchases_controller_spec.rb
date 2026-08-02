@@ -135,7 +135,7 @@ describe Admin::PurchasesController, :vcr, inertia: true do
 
     it "warns that Stripe is still refusing the buyer even when every block cleared" do
       allow_any_instance_of(Purchase).to receive(:processor_rule_refusal)
-        .and_return({ charge_id: "ch_blocked", network_status: "not_sent_to_network" })
+        .and_return({ kind: :velocity_rule, charge_id: "ch_blocked", network_status: "not_sent_to_network" })
 
       post :unblock_buyer, params: { external_id: @purchase.external_id }
 

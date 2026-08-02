@@ -320,18 +320,10 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       # Stripe can keep refusing this buyer on one of our own Radar rules after every block we hold
       # is gone, and the block we just cleared is what made them cycle cards into it. Read it from
       # Stripe and say so, rather than reporting a clean unblock and inviting a retry Stripe will
-      # refuse (gumroad-private#1739).
+      # refuse (gumroad-private#1739). The note distinguishes a velocity predicate (genuinely a
+      # ~24h wait) from the value-list rule backing the block just cleared (retry shortly).
       refusal = purchase.processor_rule_refusal
-      refusal_note =
-        if refusal.nil?
-          ""
-        elsif refusal[:error]
-          " Could not check whether Stripe is still refusing this buyer — verify the latest charge before promising a retry."
-        else
-          " Stripe is still refusing this buyer on one of our risk rules (charge #{refusal[:charge_id]}, " \
-            "#{refusal[:network_status]}). That is a time-based rule with nothing for us to lift; it clears on its " \
-            "own about a day after their first attempt, so do not promise an immediate retry."
-        end
+      refusal_note = refusal.present? ? " #{purchase.processor_rule_refusal_note(refusal)}" : ""
 
       if surviving.any? || refusal.present?
         # Say so rather than reporting a bare success. Three years of "Buyer unblocked" notes were

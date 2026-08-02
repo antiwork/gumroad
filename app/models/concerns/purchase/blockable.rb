@@ -233,14 +233,32 @@ module Purchase::Blockable
   # run over 24h, so an older charge says nothing about whether a rule is holding them now.
   PROCESSOR_REFUSAL_WINDOW = 24.hours
 
+  # Radar value lists that back our own PlatformBlocks. A refusal on a rule whose predicate reads
+  # one of these is the block support just cleared, not an independent limit.
+  PLATFORM_BLOCK_VALUE_LISTS = %w[gumroad_blocked_emails gumroad_blocked_cards].freeze
+
+  # An informational read on an admin request that has already committed its unblock, so it gets a
+  # tight budget and never retries: a slow processor must not turn a done unblock into a timeout.
+  PROCESSOR_REFUSAL_READ_OPTS = { read_timeout: 5, open_timeout: 2, max_network_retries: 0 }.freeze
+
   # Whether the PROCESSOR is still refusing this buyer on one of our own risk rules, read from the
   # processor rather than inferred from our rows.
   #
-  # This has to come from Stripe. A refusal on a Radar rule is a predicate over Stripe's own view of
-  # the last 24h, so there is no value-list item to delete and clearing every PlatformBlock leaves
-  # it standing. Our purchase rows cannot stand in for it: an attempt that dies before the card is
-  # authorised stores no `stripe_fingerprint` at all, so a buyer who cycled four payment methods can
-  # look like one card to us (gumroad-private#1739 — 14 of 16 attempts had a NULL fingerprint).
+  # This has to come from Stripe. A refusal on a Radar VELOCITY predicate is computed over Stripe's
+  # own view of the last 24h, so there is no value-list item to delete and clearing every
+  # PlatformBlock leaves it standing. Our purchase rows cannot stand in for it: an attempt that dies
+  # before the card is authorised stores no `stripe_fingerprint` at all, so a buyer who cycled four
+  # payment methods can look like one card to us (gumroad-private#1739 — 14 of 16 attempts had a
+  # NULL fingerprint).
+  #
+  # `reason == "rule"` alone cannot carry the message, because our email/card PlatformBlocks are
+  # ALSO enforced at Stripe as user-defined value-list rules and refuse with the identical
+  # type/reason pair. Verified live on the #1739 buyer: the refusing rule was
+  # `:email: IN @gumroad_blocked_emails`, the very block being cleared. So the rule's predicate
+  # decides which of the two stories the agent is told — see `:kind` below.
+  #
+  # Only platform-account charges are considered: a refusal on a creator's own Connect account came
+  # from THEIR Radar rules, which we neither set nor can lift.
   #
   # Returns nil when nothing on the processor side is holding them.
   def processor_rule_refusal
@@ -249,26 +267,57 @@ module Purchase::Blockable
                      .where(charge_processor_id: StripeChargeProcessor.charge_processor_id)
                      .where.not(stripe_transaction_id: nil)
                      .order(created_at: :desc)
+                     .reject { |purchase| purchase.merchant_account&.is_a_stripe_connect_account? }
                      .first
     return if latest.nil?
 
-    charge = ChargeProcessor.get_charge(latest.charge_processor_id, latest.stripe_transaction_id,
-                                        merchant_account: latest.merchant_account)
-    return unless charge&.outcome_type == "blocked" && charge.outcome_reason == "rule"
+    charge = Stripe::Charge.retrieve({ id: latest.stripe_transaction_id, expand: %w[outcome.rule] },
+                                     PROCESSOR_REFUSAL_READ_OPTS)
+    outcome = charge["outcome"] || {}
+    return unless outcome["type"] == "blocked" && outcome["reason"] == "rule"
+
+    rule = outcome["rule"]
+    predicate = rule.is_a?(String) ? nil : rule&.[]("predicate")
 
     {
+      kind: value_list_predicate?(predicate) ? :platform_block : :velocity_rule,
       charge_id: latest.stripe_transaction_id,
-      network_status: charge.network_status,
-      risk_level: charge.risk_level,
-      seller_message: charge.seller_message,
+      network_status: outcome["network_status"],
+      risk_level: outcome["risk_level"],
+      seller_message: outcome["seller_message"],
+      predicate:,
       attempted_at: latest.created_at,
     }
-  rescue ChargeProcessorError => e
-    # A failed read must not make an unblock look clean, so report that the check could not run
-    # rather than swallowing it into a nil that reads as "not blocked".
+  rescue StandardError => e
+    # The unblock has already committed, so this read must never raise: report that the check could
+    # not run rather than either failing the unblock or returning a nil that reads as "not blocked".
     Rails.logger.info("processor_rule_refusal: could not read charge for purchase #{id}: #{e.message}")
     { error: "could not read the processor outcome" }
   end
+
+  # Copy for the two admin surfaces, kept here so they cannot drift apart.
+  def processor_rule_refusal_note(refusal)
+    return if refusal.blank?
+    return "Could not check whether Stripe is still refusing this buyer — retry the check before promising anything." if refusal[:error].present?
+
+    case refusal[:kind]
+    when :platform_block
+      "Stripe's latest refusal was the block just cleared, not a separate limit. Radar picks the " \
+        "removal up within a few minutes — have the buyer retry shortly."
+    else
+      "Stripe is still refusing this buyer on one of our risk rules (#{refusal[:network_status]}), " \
+        "and there is nothing left for us to lift: it clears on its own about a day after their " \
+        "first attempt. Do not promise an immediate retry."
+    end
+  end
+
+  private def value_list_predicate?(predicate)
+    return false if predicate.blank?
+
+    PLATFORM_BLOCK_VALUE_LISTS.any? { |list| predicate.include?(list) }
+  end
+
+
 
   private def buyer_blockable_values
     @_buyer_blockable_values ||= blockable_values_for([self, *sibling_buyer_purchases], extra_fingerprints: [recent_stripe_fingerprint], widened_emails: false)

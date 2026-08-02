@@ -545,26 +545,46 @@ describe Purchase::Blockable do
     let(:buyer_email) { "velocity-buyer@example.com" }
     let(:purchase) { create(:purchase, email: buyer_email, stripe_transaction_id: "ch_latest") }
 
-    def stripe_charge_double(outcome_type:, outcome_reason:)
-      instance_double(StripeCharge, outcome_type:, outcome_reason:,
-                                    network_status: "not_sent_to_network",
-                                    risk_level: "normal",
-                                    seller_message: "Payment was blocked by one of your Radar rules.")
+    def stub_charge(outcome_type:, outcome_reason:, predicate: nil)
+      outcome = {
+        "type" => outcome_type,
+        "reason" => outcome_reason,
+        "network_status" => "not_sent_to_network",
+        "risk_level" => "normal",
+        "seller_message" => "One of your rules blocked this payment.",
+      }
+      outcome["rule"] = { "id" => "ssr_test", "predicate" => predicate } if predicate
+      allow(Stripe::Charge).to receive(:retrieve).and_return({ "outcome" => outcome })
     end
 
-    it "reports the refusal when Stripe blocked the latest charge on one of our rules" do
-      allow(ChargeProcessor).to receive(:get_charge)
-        .and_return(stripe_charge_double(outcome_type: "blocked", outcome_reason: "rule"))
+    it "reports a velocity refusal when the blocking rule is a predicate we cannot lift" do
+      stub_charge(outcome_type: "blocked", outcome_reason: "rule",
+                  predicate: ":card_count_for_email_daily: > 3")
 
       refusal = purchase.processor_rule_refusal
 
+      expect(refusal[:kind]).to eq(:velocity_rule)
       expect(refusal[:charge_id]).to eq("ch_latest")
       expect(refusal[:network_status]).to eq("not_sent_to_network")
+      expect(purchase.processor_rule_refusal_note(refusal)).to include("about a day")
+    end
+
+    # The block we enforce at Stripe refuses with the SAME type/reason as a velocity rule, so
+    # without reading the predicate this case would tell the agent to wait a day for a block that
+    # was just lifted (verified live on the gumroad-private#1739 buyer).
+    it "reports the just-cleared block, not a day-long wait, when the rule reads our value list" do
+      stub_charge(outcome_type: "blocked", outcome_reason: "rule",
+                  predicate: ":email: IN @gumroad_blocked_emails")
+
+      refusal = purchase.processor_rule_refusal
+
+      expect(refusal[:kind]).to eq(:platform_block)
+      expect(purchase.processor_rule_refusal_note(refusal)).to include("retry shortly")
+      expect(purchase.processor_rule_refusal_note(refusal)).not_to include("about a day")
     end
 
     it "returns nil when the issuer declined rather than one of our rules" do
-      allow(ChargeProcessor).to receive(:get_charge)
-        .and_return(stripe_charge_double(outcome_type: "issuer_declined", outcome_reason: "generic_decline"))
+      stub_charge(outcome_type: "issuer_declined", outcome_reason: "generic_decline")
 
       expect(purchase.processor_rule_refusal).to be_nil
     end
@@ -576,8 +596,24 @@ describe Purchase::Blockable do
       expect(purchase.processor_rule_refusal).to be_nil
     end
 
+    it "ignores charges made on a creator's own Connect account, whose rules are not ours" do
+      connect_account = create(:merchant_account, user: create(:user), charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      connect_account.update!(json_data: { "meta" => { "stripe_connect" => "true" } })
+      purchase.update_column(:merchant_account_id, connect_account.id)
+      expect(Stripe::Charge).not_to receive(:retrieve)
+
+      expect(purchase.processor_rule_refusal).to be_nil
+    end
+
     it "says the check could not run rather than reading as clean when Stripe is unreachable" do
-      allow(ChargeProcessor).to receive(:get_charge).and_raise(ChargeProcessorUnavailableError.new("boom"))
+      allow(Stripe::Charge).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("boom"))
+
+      expect(purchase.processor_rule_refusal).to eq({ error: "could not read the processor outcome" })
+    end
+
+    # The unblock has already committed by the time this runs, so nothing here may raise.
+    it "does not let an unexpected error escape and fail the unblock that already committed" do
+      allow(Stripe::Charge).to receive(:retrieve).and_raise(NoMethodError.new("unexpected"))
 
       expect(purchase.processor_rule_refusal).to eq({ error: "could not read the processor outcome" })
     end
