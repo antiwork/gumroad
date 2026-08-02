@@ -5,7 +5,10 @@ require "spec_helper"
 describe AlertOnNegativeDestinationBalancesJob do
   let(:seller) { create(:user) }
   let(:merchant_account) do
+    # A unique processor id: the factory default collides with the Gumroad fixture rows through a
+    # uniqueness validation, and the collision moves between examples with the id sequence.
     create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                              charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
                               currency: Currency::PHP, country: "PH")
   end
 
@@ -43,15 +46,33 @@ describe AlertOnNegativeDestinationBalancesJob do
     end
   end
 
-  it "does not report a seller under their payout minimum, but counts them so the reader knows they exist" do
+  it "stays silent when negative rows exist but nobody is payable, because nothing is firing yet" do
     residue_row(-728_50)
     seller.reload
 
     described_class.new.perform
 
+    expect(InternalNotificationWorker).not_to have_received(:perform_async)
+  end
+
+  it "counts the not-yet-payable sellers alongside a payable one, so the reader sees what is queued behind it" do
+    residue_row(-728_50)
+    make_payable
+
+    other = create(:user)
+    other_account = create(:merchant_account, user: other, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                              charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                              currency: Currency::PHP, country: "PH")
+    create(:balance, user: other, merchant_account: other_account, date: Date.today - 1,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -100_00)
+
+    described_class.new.perform
+
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
-      expect(message).to include("No payable seller")
+      expect(message).to include("1 payable seller has")
       expect(message).to include("1 more carry a negative destination ledger but are under their payout minimum")
+      expect(message).to include(seller.email)
+      expect(message).not_to include(other.email)
     end
   end
 
