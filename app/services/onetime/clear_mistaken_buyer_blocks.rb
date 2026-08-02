@@ -129,11 +129,11 @@ class Onetime::ClearMistakenBuyerBlocks
       return blocked_pairs_for(purchase) if velocity_threshold_met?(recent_email_or_browser_failures)
 
       # Purchase::Blockable#ban_fraudulent_buyer_browser_guid! blocks the browser only, and counts
-      # over all time rather than a window, and — unlike the two rules above — over every failed
-      # purchase carrying a card fingerprint, whatever charge processor it went through.
+      # over all time rather than a window. Same countable scope as the live rule: counting rows
+      # it ignores would retain exactly the outage-manufactured blocks this cleanup exists to
+      # clear.
       if purchase.browser_guid.present?
-        browser_failures = Purchase.failed.with_stripe_fingerprint
-                                   .select("distinct stripe_fingerprint")
+        browser_failures = Purchase.countable_card_testing_failures
                                    .where(created_at: ..window.end)
                                    .where(browser_guid: purchase.browser_guid)
         protected_pairs << [PlatformBlock::TYPES[:browser_guid], purchase.browser_guid] if velocity_threshold_met?(browser_failures)
@@ -153,13 +153,12 @@ class Onetime::ClearMistakenBuyerBlocks
     # period runs back from the START of the window, not its end, so the range covers every period
     # the live rule could have used; from the end it would undercount and expose a wanted row.
     def distinct_failed_stripe_fingerprints(window, watch_period)
-      Purchase.failed.stripe.with_stripe_fingerprint
-              .select("distinct stripe_fingerprint")
+      Purchase.countable_card_testing_failures
               .where(created_at: (window.begin - watch_period)..window.end)
     end
 
     def velocity_threshold_met?(scope)
-      scope.count >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      Purchase.distinct_card_count(scope) >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
     end
 
     # When the failure could have happened: creation at the earliest, the SCA deadline at the
