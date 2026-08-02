@@ -78,6 +78,15 @@ describe Commission, :vcr do
         expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
       end
 
+      it "refuses to charge when the deposit was refunded through a different instance after this one was loaded" do
+        deposit_purchase # memoize the association before the refund lands elsewhere
+        Purchase.find(deposit_purchase.id).update!(stripe_refunded: true)
+
+        expect { commission.create_completion_purchase! }
+          .to raise_error(ActiveRecord::RecordInvalid, /deposit is no longer in a completable state/)
+          .and not_change { Purchase.count }
+      end
+
       it "refuses to charge when the deposit was partially refunded" do
         deposit_purchase.update!(stripe_partially_refunded: true)
 

@@ -95,13 +95,18 @@ class Commission < ApplicationRecord
 
     def deposit_is_chargeable?
       return false unless is_in_progress?
+
+      # A fresh read, not the memoized association — a refund can land through another instance
+      # after this commission was loaded. `find` rather than `reload` because the completion
+      # purchase prices variants from the memoized deposit's loaded association objects.
+      deposit = Purchase.find(deposit_purchase_id)
       # Including test: a seller buying their own commission product gets a `test_successful`
       # deposit, and completing it is a supported flow that skips charging entirely.
-      return false unless Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST.include?(deposit_purchase.purchase_state)
+      return false unless Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST.include?(deposit.purchase_state)
 
-      !deposit_purchase.refunded? &&
-        !deposit_purchase.stripe_partially_refunded? &&
-        !deposit_purchase.chargedback_not_reversed?
+      !deposit.refunded? &&
+        !deposit.stripe_partially_refunded? &&
+        !deposit.chargedback_not_reversed?
     end
 
     def purchases_must_be_different
