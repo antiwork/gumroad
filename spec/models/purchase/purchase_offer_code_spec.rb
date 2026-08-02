@@ -1,0 +1,48 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe Purchase, "offer-code capacity" do
+  it "rechecks a capped cart discount without relying on discount_code" do
+    product = create(:product)
+    offer_code = create(
+      :offer_code,
+      products: [product],
+      amount_cents: 100,
+      once_per_cart: true,
+      max_purchase_count: 1
+    )
+    allocation_id = SecureRandom.uuid
+    reserved_purchase = create(
+      :purchase_in_progress,
+      link: product,
+      seller: product.user,
+      offer_code:,
+      purchaser: nil
+    )
+    reserved_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: allocation_id,
+      pre_discount_minimum_price_cents: product.price_cents
+    )
+
+    purchase = build(:purchase_in_progress, link: product, seller: product.user, offer_code:)
+    purchase.build_purchase_offer_code_discount(
+      offer_code:,
+      offer_code_amount: 100,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: SecureRandom.uuid,
+      pre_discount_minimum_price_cents: product.price_cents
+    )
+    purchase.skip_preparing_for_charge = true
+
+    expect(purchase.discount_code).to be_nil
+    expect { purchase.prepare_for_charge! }.not_to raise_error
+    expect(purchase).not_to be_persisted
+    expect(purchase.error_code).to eq(PurchaseErrorCode::OFFER_CODE_SOLD_OUT)
+  end
+end

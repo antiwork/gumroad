@@ -104,6 +104,44 @@ describe("checkout offer modals", () => {
     });
   });
 
+  it("keeps a positive cart-level discounted total at the currency minimum", () => {
+    const selection = {
+      rent: false,
+      optionId: null,
+      price: { error: false, value: null },
+      quantity: 1,
+      recurrence: null,
+      callStartTime: null,
+      payInInstallments: false,
+    };
+    const nearFreeDiscount = { ...discount, cents: 950, once_per_cart_amount_cents: 950 };
+
+    expect(applySelection(product(), nearFreeDiscount, selection)).toMatchObject({
+      discountedPriceCents: 99,
+      discountedTotalCents: 99,
+      pppDiscounted: false,
+    });
+  });
+
+  it("keeps a fully discounted cart-level total free", () => {
+    const selection = {
+      rent: false,
+      optionId: null,
+      price: { error: false, value: null },
+      quantity: 1,
+      recurrence: null,
+      callStartTime: null,
+      payInInstallments: false,
+    };
+    const freeDiscount = { ...discount, cents: 1_000, once_per_cart_amount_cents: 1_000 };
+
+    expect(applySelection(product(), freeDiscount, selection)).toMatchObject({
+      discountedPriceCents: 0,
+      discountedTotalCents: 0,
+      pppDiscounted: false,
+    });
+  });
+
   it("still chooses PPP when it beats the cart-level fixed discount", () => {
     const selection = {
       rent: false,

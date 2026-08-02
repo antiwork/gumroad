@@ -2455,6 +2455,48 @@ describe Order::ChargeService, :vcr do
       expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["in_progress"])
     end
 
+    it "does not count a completed fragment twice when validating the rest of its allocation" do
+      seller = create(:user)
+      product = create(:product, user: seller, price_cents: 1_000)
+      offer_code = create(
+        :offer_code,
+        products: [product],
+        code: "once",
+        amount_cents: 100,
+        max_purchase_count: 1,
+        once_per_cart: true
+      )
+      allocation_id = SecureRandom.uuid
+      completed_fragment = create(:purchase, link: product, seller:, offer_code:)
+      completed_fragment.create_purchase_offer_code_discount!(
+        offer_code:,
+        offer_code_amount: 100,
+        offer_code_is_percent: false,
+        once_per_cart: true,
+        once_per_cart_allocation_id: allocation_id,
+        pre_discount_minimum_price_cents: product.price_cents
+      )
+
+      order = create(:order)
+      2.times do
+        purchase = create(:purchase_in_progress, link: product, seller:, offer_code:)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 50,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: product.price_cents
+        )
+        order.purchases << purchase
+      end
+
+      rejected = Purchase.validate_offer_code_usage_across_line_items(order.purchases.to_a)
+
+      expect(rejected).to be_empty
+      expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["in_progress"])
+    end
+
     it "uses the snapshotted per-item mode if the seller changes the code before charging" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1_000)

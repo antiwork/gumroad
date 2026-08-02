@@ -879,6 +879,24 @@ describe OfferCode do
         expect(described_class.uses_left_by_id([offer_code])).to eq(offer_code.id => false)
       end
 
+      it "can exclude a completed allocation when validating another fragment" do
+        offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
+        allocation_id = SecureRandom.uuid
+        purchase = create(:purchase, link: @product, offer_code:, seller: offer_code.user)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: true,
+          once_per_cart_allocation_id: allocation_id,
+          pre_discount_minimum_price_cents: @product.price_cents
+        )
+
+        expect(offer_code.quantity_left).to eq(0)
+        expect(offer_code.quantity_left(excluding_once_per_cart_allocation_ids: [allocation_id])).to eq(1)
+        expect(offer_code.quantity_left(excluding_once_per_cart_allocation_ids: [SecureRandom.uuid])).to eq(0)
+      end
+
       it "does not count an archived subscription restart allocation" do
         offer_code.update!(amount_percentage: nil, amount_cents: 100, once_per_cart: true, max_purchase_count: 1)
         subscription = create(:subscription, link: membership)

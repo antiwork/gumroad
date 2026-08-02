@@ -204,21 +204,28 @@ export const computeDiscountedPrice = (
   return discountedPrice;
 };
 
+const applyOncePerCartDiscountToTotal = (priceCents: number, discount: Discount, currencyCode: CurrencyCode) => {
+  const discountedTotal = applyOfferCodeToCents(discount, priceCents);
+  return discountedTotal > 0 ? Math.max(discountedTotal, getMinPriceCents(currencyCode)) : 0;
+};
+
 export const computeSelectionDiscountedPrice = (
   priceCents: number,
   discount: Discount | null,
   product: Product,
   quantity: number,
 ) => {
-  if (discount?.type !== "fixed" || !discount.once_per_cart || quantity <= 1) {
+  if (discount?.type !== "fixed" || !discount.once_per_cart) {
     return computeDiscountedPrice(priceCents, discount, product);
   }
 
   const pppDiscountedPrice = computeDiscountedPrice(priceCents, null, product);
-  const discountTotal = applyOfferCodeToCents(discount, priceCents * quantity);
+  const discountTotal = applyOncePerCartDiscountToTotal(priceCents * quantity, discount, product.currency_code);
   if (pppDiscountedPrice.ppp && pppDiscountedPrice.value * quantity < discountTotal) {
     return pppDiscountedPrice;
   }
+
+  if (quantity === 1) return { value: discountTotal, ppp: false };
 
   // The product page quotes one unit, while this discount applies to the cart total.
   return { value: priceCents, ppp: false };
@@ -245,7 +252,7 @@ export const applySelection = (product: Product, discount: Discount | null, sele
   const discountedPrice = computeSelectionDiscountedPrice(priceCents, applicableDiscount, product, selection.quantity);
   const discountedTotalCents =
     applicableDiscount?.type === "fixed" && applicableDiscount.once_per_cart && !discountedPrice.ppp
-      ? applyOfferCodeToCents(applicableDiscount, priceCents * selection.quantity)
+      ? applyOncePerCartDiscountToTotal(priceCents * selection.quantity, applicableDiscount, product.currency_code)
       : discountedPrice.value * selection.quantity;
   return {
     selectedOption,

@@ -1312,18 +1312,26 @@ class Purchase < ApplicationRecord
         next if code_purchases.size < 2
         offer_code = code_purchases.first.offer_code
         next if offer_code&.max_purchase_count.nil?
-        once_per_cart_allocations = Set.new
+        once_per_cart_allocation_ids = Set.new
         units_spent = code_purchases.sum do |purchase|
           discount = purchase.purchase_offer_code_discount
           if discount&.once_per_cart? && !discount.offer_code_is_percent
-            once_per_cart_allocations << (discount.once_per_cart_allocation_id || "purchase:#{purchase.id}")
-            0
+            if discount.once_per_cart_allocation_id.present?
+              once_per_cart_allocation_ids << discount.once_per_cart_allocation_id
+              0
+            else
+              1
+            end
           else
             purchase.quantity
           end
         end
-        units_spent += once_per_cart_allocations.size
-        next if units_spent <= offer_code.quantity_left(excluding_order: code_purchases.first.order)
+        units_spent += once_per_cart_allocation_ids.size
+        quantity_left = offer_code.quantity_left(
+          excluding_order: code_purchases.first.order,
+          excluding_once_per_cart_allocation_ids: once_per_cart_allocation_ids.to_a
+        )
+        next if units_spent <= quantity_left
 
         code_purchases.each do |purchase|
           purchase.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
@@ -4219,15 +4227,16 @@ class Purchase < ApplicationRecord
       calculate_fees
       if reservable_offer_code
         # Keep the lock to the validation and reservation write; tax and processor calls run after commit.
-        reservable_offer_code.with_lock { save }
+        reservable_offer_code.with_lock do
+          save if reservable_offer_code_available?(reservable_offer_code)
+        end
       else
         save
       end
 
-      return if is_gift_receiver_purchase
+      return if errors.present? || is_gift_receiver_purchase
 
       create_sales_tax_info!
-      return if errors.present?
 
       calculate_shipping
       save
@@ -5016,17 +5025,42 @@ class Purchase < ApplicationRecord
         return
       end
 
-      return if offer_code.is_valid_for_purchase?(purchase_quantity: quantity, excluding_purchase: self)
+      return if offer_code_usage_available?(offer_code)
 
-      if offer_code.quantity_left(excluding_purchase: self) > 0
+      add_offer_code_usage_error(offer_code)
+
+      true
+    end
+
+    def reservable_offer_code_available?(reservable_offer_code)
+      return false if errors.present?
+      return true if offer_code_usage_available?(reservable_offer_code)
+
+      add_offer_code_usage_error(reservable_offer_code)
+      false
+    end
+
+    def offer_code_usage_available?(offer_code)
+      return true if offer_code.max_purchase_count.nil?
+
+      discount = purchase_offer_code_discount
+      once_per_cart = discount.present? ? discount.once_per_cart? && !discount.offer_code_is_percent : offer_code.is_cents? && offer_code.once_per_cart?
+      allocation_ids = [discount&.once_per_cart_allocation_id].compact if once_per_cart
+      units = once_per_cart ? 1 : quantity
+      offer_code.quantity_left(
+        excluding_purchase: self,
+        excluding_once_per_cart_allocation_ids: allocation_ids
+      ) >= units
+    end
+
+    def add_offer_code_usage_error(offer_code)
+      if offer_code.quantity_left(excluding_purchase: self).positive?
         self.error_code = PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY
         errors.add :base, "Sorry, the discount code you are using is invalid for the quantity you have selected."
       else
         self.error_code = PurchaseErrorCode::OFFER_CODE_SOLD_OUT
         errors.add :base, "Sorry, the discount code you wish to use has reached its usage limit."
       end
-
-      true
     end
 
     def reject_existing_customer_offer_code
