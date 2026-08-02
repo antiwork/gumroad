@@ -14,6 +14,7 @@ import { AbortError } from "$app/utils/request";
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
 import { LazySalesChart, warmSalesChart } from "$app/components/Analytics/loadChart";
+import { AnalyticsTableSkeleton, SalesChartSkeleton } from "$app/components/Analytics/LoadingSkeleton";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
 import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
 import { ReferrersTable } from "$app/components/Analytics/ReferrersTable";
@@ -21,9 +22,7 @@ import { SalesChartBoundary } from "$app/components/Analytics/SalesChartBoundary
 import { SalesQuickStats } from "$app/components/Analytics/SalesQuickStats";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { DateRangePicker } from "$app/components/DateRangePicker";
-import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
-import { InputGroup } from "$app/components/ui/InputGroup";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Select } from "$app/components/ui/Select";
 
@@ -32,15 +31,6 @@ import placeholder from "$assets/images/placeholders/sales.png";
 const MAX_DATE_RANGE_DAYS = 366;
 // Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
-
-// Shown both while the data is in flight and, on a cold cache, while the chart's own code arrives.
-// Identical markup in both places makes that handoff invisible: one continuous spinner.
-const ChartLoadingPlaceholder = () => (
-  <InputGroup>
-    <LoadingSpinner />
-    Loading charts...
-  </InputGroup>
-);
 
 export type Product = {
   name: string;
@@ -224,7 +214,7 @@ const Analytics = ({
           {mainData ? (
             <>
               <SalesChartBoundary>
-                <React.Suspense fallback={<ChartLoadingPlaceholder />}>
+                <React.Suspense fallback={<SalesChartSkeleton />}>
                   <LazySalesChart
                     data={mainData.dailyTotal}
                     startDate={mainData.startDate}
@@ -239,11 +229,8 @@ const Analytics = ({
             </>
           ) : (
             <>
-              <ChartLoadingPlaceholder />
-              <InputGroup>
-                <LoadingSpinner />
-                Loading referrers...
-              </InputGroup>
+              <SalesChartSkeleton />
+              <AnalyticsTableSkeleton label="referrers" columns={5} />
             </>
           )}
           {data?.byState ? (
@@ -254,10 +241,7 @@ const Analytics = ({
               stateNames={state_names}
             />
           ) : (
-            <InputGroup>
-              <LoadingSpinner />
-              Loading locations...
-            </InputGroup>
+            <AnalyticsTableSkeleton label="locations" columns={4} />
           )}
         </div>
       ) : (
