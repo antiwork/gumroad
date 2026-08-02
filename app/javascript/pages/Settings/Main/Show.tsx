@@ -332,11 +332,14 @@ export default function MainPage() {
               type="email"
               id={`${uid}-support-email`}
               value={form.data.user.support_email}
-              placeholder={props.user.email ?? ""}
+              placeholder="you@example.com"
               disabled={isFormDisabled}
               onChange={(e) => updateUserSettings({ support_email: e.target.value })}
             />
-            <FieldsetDescription>This email is listed on the receipt of every sale.</FieldsetDescription>
+            <FieldsetDescription>
+              This email is listed on the receipt of every sale.
+              {props.user.email ? ` Leave blank to use your account email (${props.user.email}).` : null}
+            </FieldsetDescription>
           </Fieldset>
           <ProductLevelSupportEmailsForm
             productLevelSupportEmails={form.data.user.product_level_support_emails}

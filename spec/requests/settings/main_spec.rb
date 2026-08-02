@@ -285,6 +285,33 @@ describe("Main Settings Scenario", type: :system, js: true) do
     end
   end
 
+  context "Support email fallback" do
+    # An unset support_email used to render the account email as the input's
+    # placeholder, so "empty, falling back" looked identical to "explicitly set".
+    it "names the account email in the description and leaves the field visibly empty" do
+      visit settings_main_path
+
+      within_section "Support", section_element: :section do
+        field = find_field("Email")
+        expect(field.value).to eq("")
+        expect(field["placeholder"]).to eq("you@example.com")
+        expect(field["placeholder"]).to_not eq(user.email)
+        expect(page).to have_text("Leave blank to use your account email (#{user.email}).")
+      end
+    end
+
+    it "does not offer the fallback copy once a support email is set" do
+      user.update!(support_email: "support@example.com")
+
+      visit settings_main_path
+
+      within_section "Support", section_element: :section do
+        expect(find_field("Email").value).to eq("support@example.com")
+        expect(page).to have_text("This email is listed on the receipt of every sale.")
+      end
+    end
+  end
+
   context "Product level support email" do
     let!(:product_1) { create(:product, user:, name: "Product 1", support_email: email_1) }
     let!(:product_2) { create(:product, user:, name: "Product 2", support_email: nil) }
