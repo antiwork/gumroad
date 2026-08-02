@@ -891,6 +891,24 @@ describe UrlRedirectsController, inertia: true do
         expect(response).to redirect_to "#{url_redirect_check_purchaser_path(url_redirect.token)}?next=#{CGI.escape request.path}"
       end
 
+      # send_to_kindle does not run check_permissions — it carries its own copy of the purchaser
+      # gate, so the owner cleared above would still be refused here. The file itself does not
+      # resolve for this fixture; what is pinned is that the request gets past that gate.
+      it "lets the subscription owner past the purchaser gate on a renewal's Send to Kindle" do
+        product = create(:membership_product, price_cents: 100)
+        create(:readable_document, link: product)
+        subscription_owner = create(:user)
+        subscription = create(:subscription, link: product, user: subscription_owner)
+        create(:purchase, price_cents: 100, purchaser: subscription_owner, link: product, subscription:, is_original_subscription_purchase: true)
+        renewal = create(:purchase, price_cents: 100, purchaser: create(:user), link: product, subscription:)
+        url_redirect = create(:url_redirect, link: product, purchase: renewal, has_been_seen: true)
+
+        sign_in subscription_owner
+        post :send_to_kindle, params: { id: url_redirect.token, email: "reader@kindle.com", file_external_id: product.product_files.first.external_id }
+
+        expect(response.parsed_body["error"]).to_not eq("Not found")
+      end
+
       it "redirects to the expiration page if the membership inactive" do
         product = create(:membership_product, price_cents: 100)
         subscription = create(:subscription, link: product, user: create(:user), failed_at: Time.current)

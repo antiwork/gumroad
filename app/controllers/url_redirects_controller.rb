@@ -297,11 +297,12 @@ class UrlRedirectsController < ApplicationController
     end
     return e404_json if @url_redirect.rental_expired?
     return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
-    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription?(purchase) && !logged_in_user.is_team_member?
       return e404_json
     end
     if purchase.present? && @url_redirect.has_been_seen && @url_redirect.imported_customer.blank?
       identity_verified = cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+                          viewer_owns_subscription?(purchase) ||
                           (purchase.purchaser.present? && purchase.purchaser == logged_in_user) ||
                           purchase.ip_address == request.remote_ip
       return e404_json if !identity_verified
@@ -458,6 +459,17 @@ class UrlRedirectsController < ApplicationController
       withdrawn_content_response if !has_files && !can_view_product_download_page_without_files
     end
 
+    # The subscription owner can read any purchase in it; transferred memberships can leave
+    # individual renewals attributed to the previous purchaser. The gift receiver leg is excluded:
+    # Gift::ConvertToNonGiftService re-points subscription.user at the payer to move BILLING
+    # ownership and says explicitly that the giftee keeps the seat.
+    def viewer_owns_subscription?(purchase)
+      return false if purchase.nil? || purchase.is_gift_receiver_purchase
+
+      owner = purchase.subscription&.user
+      user_signed_in? && owner.present? && logged_in_user == owner
+    end
+
     def check_permissions
       fetch_url_redirect
 
@@ -471,12 +483,7 @@ class UrlRedirectsController < ApplicationController
         return withdrawn_content_response
       end
 
-      subscription_owner = purchase && !purchase.is_gift_receiver_purchase ? purchase.subscription&.user : nil
-      # The subscription owner can read any purchase in it; transferred memberships can leave
-      # individual renewals attributed to the previous purchaser. The gift receiver leg is excluded:
-      # Gift::ConvertToNonGiftService re-points subscription.user at the payer to move BILLING
-      # ownership and says explicitly that the giftee keeps the seat.
-      viewer_owns_subscription = user_signed_in? && subscription_owner.present? && logged_in_user == subscription_owner
+      viewer_owns_subscription = viewer_owns_subscription?(purchase)
 
       return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription && !logged_in_user.is_team_member?
 
