@@ -576,7 +576,10 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_includes errors.first, "Destination ledger is negative"
     assert_includes errors.first, "-72850 eur cents"
     assert_equal "failed", @payment.reload.state
-    assert_equal Payment::FailureReason::INSUFFICIENT_FUNDS, @payment.failure_reason
+    # A dedicated reason, not INSUFFICIENT_FUNDS: this is our own bookkeeping, so it must not count
+    # toward the consecutive-failure pause that blames the seller's bank account.
+    assert_equal Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE, @payment.failure_reason
+    assert_includes Payment::FailureReason::INTERNAL_RECONCILIATION_REASONS, @payment.failure_reason
   end
 
   test "destination_balance_drift_error when the held-at-Stripe balances sum negative names the offending balance rows so the reader does not have to find them by hand" do
@@ -593,7 +596,11 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     @eur_balance.update!(holding_amount_cents: -728_50, amount_cents: 0)
     Stripe::Balance.expects(:retrieve).never
 
-    StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [@eur_balance])
+
+    # Anchors the example: without this, deleting the negative guard entirely still satisfies the
+    # never-expectation via the `expected_destination_cents <= 0` early return.
+    assert_includes errors.first, "Destination ledger is negative"
   end
 
   test "destination_balance_drift_error when a negative row is outweighed by healthy rows so the set still sums positive falls through to the ordinary Stripe comparison" do
@@ -620,7 +627,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [krw_balance])
 
     assert_includes errors.first, "Destination ledger is negative"
-    assert_equal Payment::FailureReason::INSUFFICIENT_FUNDS, @payment.reload.failure_reason
+    assert_equal Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE, @payment.reload.failure_reason
   end
 
   test "destination_balance_drift_error when the held-at-Stripe balances sum to exactly zero skips the drift check because there is nothing to settle either way" do

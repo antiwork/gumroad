@@ -153,4 +153,71 @@ describe AlertOnNegativeDestinationBalancesJob do
       expect(message).to include("top up the Connect account first, then zero the row")
     end
   end
+
+  describe "when the candidate scan is truncated" do
+    # The bound is the only thing standing between this job and a statement timeout, so the report
+    # has to say when it stopped early. A truncated scan that found nothing is NOT evidence that
+    # nothing is there, and these are the examples that keep that distinction honest.
+    before { stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1) }
+
+    it "still reports when the truncated page found nobody payable, because the bound decided that, not the platform" do
+      # Two candidate pairs, neither payable: without truncation this is silence.
+      residue_row(-728_50)
+      other = create(:user)
+      other_account = create(:merchant_account, user: other, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                                currency: Currency::PHP, country: "PH")
+      create(:balance, user: other, merchant_account: other_account, date: Date.today - 1,
+                       amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -100_00)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to include("the scan was truncated, so this is not evidence that none do")
+        expect(message).to include("The scan stopped at 1 negative rows")
+      end
+    end
+
+    it "marks the count as a floor rather than a total" do
+      residue_row(-728_50)
+      make_payable
+      other = create(:user)
+      other_account = create(:merchant_account, user: other, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                                currency: Currency::PHP, country: "PH")
+      create(:balance, user: other, merchant_account: other_account, date: Date.today - 1,
+                       amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -100_00)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+        expect(message).to include("At least 1 payable seller")
+      end
+    end
+  end
+
+  it "caps the lines it prints and says how many it left out, so the alert stays readable" do
+    stub_const("#{described_class}::MAX_REPORTED", 1)
+    residue_row(-728_50)
+    make_payable
+
+    other = create(:user)
+    other_account = create(:merchant_account, user: other, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                              charge_processor_merchant_id: "acct_negdest_#{SecureRandom.hex(6)}",
+                                              currency: Currency::PHP, country: "PH")
+    create(:balance, user: other, merchant_account: other_account, date: Date.today - 1,
+                     amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -900_00)
+    create(:balance, user: other, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                     date: Date.today - 1, amount_cents: 200_00, holding_amount_cents: 200_00)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("2 payable sellers")
+      expect(message).to include("…and 1 more.")
+      # Most negative first, so the capped line is the smaller one.
+      expect(message).to include(other.email)
+      expect(message).not_to include(seller.email)
+    end
+  end
 end

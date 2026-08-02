@@ -208,9 +208,10 @@ class StripePayoutProcessor
     payment.currency = merchant_account.currency
     payment.amount_cents = 0
 
-    if (drift_error = destination_balance_drift_error(merchant_account, balances_held_by_stripe))
+    drift_error, drift_failure_reason = destination_balance_drift_error(merchant_account, balances_held_by_stripe)
+    if drift_error
       payment.error_message = drift_error.truncate(1000)
-      payment.mark_failed!(Payment::FailureReason::INSUFFICIENT_FUNDS)
+      payment.mark_failed!(drift_failure_reason)
       payment.errors.add(:base, drift_error)
       return [drift_error]
     end
@@ -322,37 +323,31 @@ class StripePayoutProcessor
   # any internal transfer fires, preventing the transfer/payout-fail/reverse/FX-residual-Credit loop
   # that otherwise compounds the gap each cycle. Pending is included so settling funds (the typical
   # 2-7 day post-charge window) are not flagged as drift — only truly missing funds are.
+  # Returns `[message, failure_reason]`, or nil when the destination is coherent.
   def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe)
     return nil unless merchant_account.is_a_gumroad_managed_stripe_account?
     return nil if balances_held_by_stripe.empty?
 
     expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
 
-    # A negative destination total is only drift when the USD ledger DISAGREES with it. Two classes
-    # produce one:
-    #
-    #   FX residue      holding < 0, `amount_cents: 0` — the seller's USD balance reads whole while
-    #                   the local-currency wire is short. Nothing fails; they are just paid less
-    #                   than they were told, which is why nobody finds it until they write in.
-    #   refund netting  holding < 0 AND amount_cents < 0 — both sides carry the debit, Stripe has
-    #                   already debited the destination, and the payout nets coherently. Measured 973
-    #                   such sets in production against 262 residue ones, so failing on the sign
-    #                   alone would block sellers who are paid correctly today, and three cycles of
-    #                   that auto-pauses them with a misattributed reason.
-    #
-    # So the trip condition is the sign disagreement, not the sign. Checked ahead of the currency
-    # skips below because it compares two of our own numbers and needs nothing from Stripe.
+    # A negative destination total is drift only when the USD ledger DISAGREES with it: FX residue
+    # leaves `amount_cents: 0` against a negative holding, so the seller's USD balance reads whole
+    # while the wire is short. Refund netting carries the debit on both sides and pays out
+    # coherently — measured ~4x more common than residue, so tripping on the sign alone would block
+    # sellers who are paid correctly today. Checked ahead of the currency skips below because it
+    # compares two of our own numbers and needs nothing from Stripe.
     usd_ledger_cents = balances_held_by_stripe.sum(&:amount_cents)
     if expected_destination_cents.negative? && !usd_ledger_cents.negative?
-      return "Destination ledger is negative on #{merchant_account.charge_processor_merchant_id}: " \
-             "balances held at Stripe sum to #{expected_destination_cents} " \
-             "#{merchant_account.currency} cents while their USD ledger reads #{usd_ledger_cents} " \
-             "cents, across #{balances_held_by_stripe.size} " \
-             "balance#{"s" if balances_held_by_stripe.size != 1} " \
-             "(#{negative_balance_ids(balances_held_by_stripe).join(", ")}). Paying out would subtract " \
-             "the difference from the wire amount without it appearing in the seller's balance. " \
-             "Reconcile the destination balance before retry." \
-             "#{retired_account_balances_hint(merchant_account)}"
+      message = "Destination ledger is negative on #{merchant_account.charge_processor_merchant_id}: " \
+                "balances held at Stripe sum to #{expected_destination_cents} " \
+                "#{merchant_account.currency} cents while their USD ledger reads #{usd_ledger_cents} " \
+                "cents, across #{balances_held_by_stripe.size} " \
+                "balance#{"s" if balances_held_by_stripe.size != 1} " \
+                "(#{negative_balance_ids(balances_held_by_stripe).join(", ")}). Paying out would subtract " \
+                "the difference from the wire amount without it appearing in the seller's balance. " \
+                "Reconcile the destination balance before retry." \
+                "#{retired_account_balances_hint(merchant_account)}"
+      return [message, Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE]
     end
 
     return nil if expected_destination_cents <= 0
@@ -374,16 +369,16 @@ class StripePayoutProcessor
     return nil if reachable_cents >= expected_destination_cents
 
     gap_cents = expected_destination_cents - reachable_cents
-    "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
-      "expected #{expected_destination_cents} #{destination_currency} cents, " \
-      "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
-      "Reconcile destination balance before retry." \
-      "#{retired_account_balances_hint(merchant_account)}"
+    message = "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
+              "expected #{expected_destination_cents} #{destination_currency} cents, " \
+              "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
+              "Reconcile destination balance before retry." \
+              "#{retired_account_balances_hint(merchant_account)}"
+    [message, Payment::FailureReason::INSUFFICIENT_FUNDS]
   end
   private_class_method :destination_balance_drift_error
 
-  # Names the rows a human has to correct. Whoever reads the negative-ledger error has to find the
-  # offending balances by hand otherwise, and the set is usually one row among many healthy ones.
+  # Names the rows a human has to correct; the offending set is usually one row among many healthy ones.
   def self.negative_balance_ids(balances)
     negative = balances.select { |balance| balance.holding_amount_cents.negative? }
     return ["no single balance is negative; the set nets negative"] if negative.empty?

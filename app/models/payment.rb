@@ -536,7 +536,8 @@ class Payment < ApplicationRecord
       # push them toward the pause threshold. The IS NULL arm is load-bearing — `NOT IN` alone
       # drops NULL rows, which is most failures, silently disabling this check.
       failed_payouts = failed_payouts.where(
-        "failure_reason IS NULL OR failure_reason NOT IN (?)", TRANSIENT_REASONS
+        "failure_reason IS NULL OR failure_reason NOT IN (?)",
+        TRANSIENT_REASONS + INTERNAL_RECONCILIATION_REASONS
       )
       failed_count = failed_payouts.count
       return if failed_count < MAX_CONSECUTIVE_FAILED_PAYOUTS

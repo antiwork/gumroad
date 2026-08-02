@@ -3,16 +3,10 @@
 # Reports sellers carrying a negative `holding_amount_cents` balance on a Gumroad-managed Stripe
 # Connect account, where the destination ledger says the account owes us (gumroad-private#1717).
 #
-# The rows are dug by FX: a payout goes out, the bank returns it, `payout_failure` credits back the
-# payout amount, and the reversal of the original internal transfer debits a LARGER local-currency
-# amount because the USD rate moved between the two legs. The difference stays behind as a balance
-# with `amount_cents: 0` and a negative `holding_amount_cents`, so the seller's USD balance reads
-# whole while `prepare_payment_and_set_amount` subtracts the residue from the local-currency wire.
-#
-# StripePayoutProcessor now refuses a payout whose held-at-Stripe balances sum negative, so a seller
-# in that state fails loudly rather than being paid short. This job is the other half: it finds the
-# rows before a payout reaches them, since the fix converts a silent shortfall into a blocked payout
-# and nobody wants to learn about either from the seller.
+# Such a row is FX residue: a returned payout is credited back at one rate while the reversal of the
+# original transfer debits a larger local-currency amount at another. `StripePayoutProcessor` now
+# refuses these payouts rather than paying short, so this job finds the rows before a payout cycle
+# reaches them — otherwise the first sign is a seller whose payout stopped.
 #
 # Reports; correcting a row moves real money and stays a human decision.
 class AlertOnNegativeDestinationBalancesJob
@@ -55,11 +49,9 @@ class AlertOnNegativeDestinationBalancesJob
         next if merchant_account.nil?
         next unless merchant_account.is_a_gumroad_managed_stripe_account?
 
-        # Dead accounts are reported, not skipped. `mark_balances_processing` takes a seller's unpaid
-        # balances regardless of their merchant account's liveness, so a residue row parked on a
-        # RETIRED account — the country-change case `retired_account_balances_hint` exists for — will
-        # fail the real payout. Skipping it here would hide exactly the shape the guard most often
-        # trips on. The line says which, so a reader knows the row is on an account nobody watches.
+        # Dead accounts are reported, not skipped: `mark_balances_processing` takes a seller's unpaid
+        # balances regardless of their merchant account's liveness, so residue parked on a RETIRED
+        # account still fails the real payout. The report line says which.
         set = Balance.unpaid.where(user_id:, merchant_account_id:)
         set_total = set.sum(:holding_amount_cents)
         next unless set_total.negative?
@@ -95,8 +87,7 @@ class AlertOnNegativeDestinationBalancesJob
     # index on `holding_amount_cents`, so filtering on it first scans every unpaid row; and
     # `Payouts.holding_balance_user_ids` carries the note that a whole-table aggregate over unpaid
     # balances kept blowing MySQL's statement cap. Grouping by user_id never splits a user's SUM, so
-    # batching cannot change the answer. With `retry: 2`, a job that times out is a detector that
-    # silently never reports — the shape this one exists to prevent.
+    # batching cannot change the answer.
     def candidate_pairs
       pairs = []
       last_user_id = 0
