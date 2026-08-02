@@ -260,6 +260,20 @@ describe PaypalChargeProcessor, :vcr do
   end
 
   describe ".handle_order_events" do
+    def paypal_dispute_event(event_type, dispute_outcome: :none)
+      resource = {
+        "dispute_id" => "PP-D-4805",
+        "create_time" => "2017-10-10T14:07:23.000Z",
+        "update_time" => "2017-10-17T01:25:10.000Z",
+        "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814" }],
+        "reason" => "CREDIT_NOT_PROCESSED",
+        "status" => event_type == "CUSTOMER.DISPUTE.RESOLVED" ? "RESOLVED" : "UNDER_REVIEW",
+        "dispute_amount" => { "currency_code" => "USD", "value" => "6.43" }
+      }
+      resource["dispute_outcome"] = dispute_outcome unless dispute_outcome == :none
+      { "event_type" => event_type, "resource_type" => "dispute", "resource" => resource }
+    end
+
     context "when event type is CUSTOMER.DISPUTE.CREATED" do
       it "sets chargeback details on purchase" do
         event_info = { "id" => "WH-3TW20315YE525782H-3BD552601T418134F", "event_version" => "1.0", "create_time" => "2017-10-10T14:09:01.129Z", "resource_type" => "dispute", "event_type" => "CUSTOMER.DISPUTE.CREATED", "summary" => "A new dispute opened with Case # PP-D-4805PP-D-4805", "resource" => { "dispute_id" => "PP-D-4805", "create_time" => "2017-10-10T14:07:23.000Z", "update_time" => "2017-10-10T14:08:06.000Z", "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814", "seller" => { "name" => "facilitator account's Test Store" }, "items" => [{ "item_id" => "uF" }], "seller_protection_eligible" => true }], "reason" => "CREDIT_NOT_PROCESSED", "status" => "UNDER_REVIEW", "dispute_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" }, "offer" => { "buyer_requested_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" } }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/customer/disputes/PP-D-4805", "rel" => "self", "method" => "GET" }] }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F", "rel" => "self", "method" => "GET" }, { "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F/resend", "rel" => "resend", "method" => "POST" }], "foreign_webhook" => { "id" => "WH-3TW20315YE525782H-3BD552601T418134F", "event_version" => "1.0", "create_time" => "2017-10-10T14:09:01.129Z", "resource_type" => "dispute", "event_type" => "CUSTOMER.DISPUTE.CREATED", "summary" => "A new dispute opened with Case # PP-D-4805PP-D-4805", "resource" => { "dispute_id" => "PP-D-4805", "create_time" => "2017-10-10T14:07:23.000Z", "update_time" => "2017-10-10T14:08:06.000Z", "disputed_transactions" => [{ "seller_transaction_id" => "6Y199803HH2987814", "seller" => { "name" => "facilitator account's Test Store" }, "items" => [{ "item_id" => "uF" }], "seller_protection_eligible" => true }], "reason" => "CREDIT_NOT_PROCESSED", "status" => "UNDER_REVIEW", "dispute_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" }, "offer" => { "buyer_requested_amount" => { "currency_code" => "[FILTERED]", "value" => "6.43" } }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/customer/disputes/PP-D-4805", "rel" => "self", "method" => "GET" }] }, "links" => [{ "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F", "rel" => "self", "method" => "GET" }, { "href" => "https://api.sandbox.paypal.com/v1/notifications/webhooks-events/WH-3TW20315YE525782H-3BD552601T418134F/resend", "rel" => "resend", "method" => "POST" }] } }
@@ -317,6 +331,45 @@ describe PaypalChargeProcessor, :vcr do
         expect do
           described_class.handle_order_events(event_info)
         end.to raise_error(ChargeProcessorError)
+      end
+
+      # PayPal sends an empty outcome for an undecided case. Without the blank guard this fell
+      # through determine_resolved_dispute_event_type's else branch and marked the dispute LOST.
+      [nil, "", { "outcome_code" => nil }, { "outcome_code" => "" }].each do |outcome|
+        it "leaves the dispute unresolved when dispute_outcome is #{outcome.inspect}" do
+          purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
+          purchase.update_attribute(:chargeback_date, Time.current)
+          described_class.handle_order_events(paypal_dispute_event("CUSTOMER.DISPUTE.CREATED"))
+          expect(purchase.reload.dispute.formalized?).to be(true)
+
+          event_info = paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: outcome)
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            "PayPal CUSTOMER.DISPUTE.RESOLVED with no outcome_code; dispute left unresolved",
+            paypal_dispute_id: "PP-D-4805"
+          )
+
+          expect do
+            described_class.handle_order_events(event_info)
+          end.to_not raise_error
+
+          dispute = purchase.reload.dispute
+          expect(dispute.formalized?).to be(true)
+          expect(dispute.lost?).to be(false)
+          expect(dispute.won?).to be(false)
+          expect(purchase.chargeback_reversed).to be_falsey
+        end
+      end
+
+      it "still resolves the dispute when dispute_outcome is present" do
+        purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
+        purchase.update_attribute(:chargeback_date, Time.current)
+
+        described_class.handle_order_events(
+          paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: { "outcome_code" => "CANCELED_BY_BUYER" })
+        )
+
+        expect(purchase.reload.dispute.won?).to be(true)
       end
     end
 

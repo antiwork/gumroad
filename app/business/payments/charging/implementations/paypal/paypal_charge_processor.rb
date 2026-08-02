@@ -87,7 +87,22 @@ class PaypalChargeProcessor
   private_class_method :handle_dispute_created_event
 
   def self.handle_dispute_resolved_event(event_info)
-    dispute_outcome = event_info["resource"]["dispute_outcome"]["outcome_code"]
+    resource = event_info.fetch("resource")
+    outcome = resource["dispute_outcome"]
+    dispute_outcome = outcome.is_a?(Hash) ? outcome["outcome_code"] : nil
+
+    # An absent outcome_code means PayPal has not decided the case (see the outcome list on
+    # determine_resolved_dispute_event_type). Falling through would classify it LOST and debit
+    # the seller for a dispute nobody lost, so leave the dispute untouched and surface it — a
+    # row left `formalized` is recoverable, a wrong debit is not.
+    if dispute_outcome.blank?
+      ErrorNotifier.notify(
+        "PayPal CUSTOMER.DISPUTE.RESOLVED with no outcome_code; dispute left unresolved",
+        paypal_dispute_id: resource["dispute_id"]
+      )
+      return
+    end
+
     event_type = determine_resolved_dispute_event_type(dispute_outcome)
     handle_dispute_event(event_info, event_type)
   rescue StandardError => e
