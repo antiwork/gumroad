@@ -9,13 +9,16 @@ class ShipmentsController < ApplicationController
     authorize [:audience, @purchase]
 
     # For old products, before we started creating shipments for any products with shipping addresses.
-    shipment = Shipment.create(purchase: @purchase) if @purchase.shipment.blank?
-    shipment ||= @purchase.shipment
+    shipment = @purchase.shipment || Shipment.new(purchase: @purchase)
 
-    if params[:tracking_url]
+    if params.key?(:tracking_url)
       shipment.tracking_url = params[:tracking_url]
-      shipment.save!
     end
+
+    unless shipment.save
+      return render json: { success: false, message: shipment.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    end
+
     shipment.mark_shipped!
 
     head :no_content

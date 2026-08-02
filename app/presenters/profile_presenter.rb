@@ -45,6 +45,16 @@ class ProfilePresenter
     # between, the payload may be newer than this token — which makes the next save a harmless
     # false-stale rejection rather than letting a stale token wave a lost update through.
     profile_version = seller.seller_profile.layout_version
+    # Settings::ProfileController#update rejects every save until the seller is confirmed, so gate
+    # this on `confirmed?` rather than `has_unconfirmed_email?` — the latter is also true for a
+    # confirmed seller with a pending address change, who can still save.
+    email_confirmation = unless seller.confirmed?
+      confirmation_email = seller.unconfirmed_email.presence || seller.email.presence
+      {
+        email: confirmation_email,
+        can_resend: confirmation_email.present? && Pundit.policy!(pundit_user, [:settings, :main, seller]).resend_confirmation_email?,
+      }
+    end
     shared_profile_props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.logged_out).merge(
       {
         profile_settings: {
@@ -62,6 +72,7 @@ class ProfilePresenter
         profile_version:,
         memberships: memberships.map { |product| ProductPresenter.card_for_web(product:, show_seller: false) },
         seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
+        email_confirmation:,
         # Custom-HTML profile landing page (#5553). Authored solely via the seller's agent + the
         # `gumroad user page` CLI (no inline editor) - these props drive the "Build with your agent"
         # affordance: the live-status banner, the copy-prompt block, and the reset button. The

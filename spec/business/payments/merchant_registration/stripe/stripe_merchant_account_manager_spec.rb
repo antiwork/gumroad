@@ -5125,7 +5125,7 @@ describe StripeMerchantAccountManager, :vcr do
           bank_account: {
             country: "PH",
             currency: "php",
-            routing_number: "BCDEFGHI123",
+            routing_number: "BCDEPHM1123",
             account_number: "01567890123456789",
           },
           settings: {

@@ -1397,19 +1397,256 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil Link.fetch_leniently("no-longer-alive") # deleted
   end
 
-  test "fetch_leniently uses a legacy permalink mapping when present" do
+  test "fetch_leniently falls back to a legacy permalink mapping when nothing live answers" do
     ctx = fetch_leniently_context
-    # no mapping yet
-    assert_equal ctx[:product_2], Link.fetch_leniently("custom")
-    assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
+    assert_nil Link.fetch_leniently("retired")
 
-    LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
-    assert_equal ctx[:product_6], Link.fetch_leniently("custom")
+    LegacyPermalink.create!(permalink: "retired", product: ctx[:product_6])
+    assert_equal ctx[:product_6], Link.fetch_leniently("retired")
+    assert_equal ctx[:product_6], Link.fetch_leniently("retired", user: ctx[:user_2])
+    assert_nil Link.fetch_leniently("retired", user: ctx[:user_1])
 
     ctx[:product_6].mark_deleted!
-    assert_equal ctx[:product_2], Link.fetch_leniently("custom") # falls back past the deleted mapped product
+    assert_nil Link.fetch_leniently("retired")
+  end
 
+  test "a live product outranks a legacy mapping for the same slug on the bare domain" do
+    ctx = fetch_leniently_context
+    LegacyPermalink.create!(permalink: "custom", product: ctx[:product_6])
+
+    # product_2 is the oldest live holder of "custom", so it answers the bare
+    # domain even though the mapping points elsewhere. The scoped assertions are
+    # order-insensitive here; the scoped pin is the seller's-own-host test below.
+    assert_equal ctx[:product_2], Link.fetch_leniently("custom")
     assert_equal ctx[:product_2], Link.fetch_leniently("custom", user: ctx[:user_1])
+    assert_equal ctx[:product_6], Link.fetch_leniently("custom", user: ctx[:user_2])
+  end
+
+  # --- custom permalink rename redirects -------------------------------------
+
+  test "renaming a custom permalink records a legacy mapping so the old URL still resolves" do
+    user = create_user
+    product = create_product(user:, unique_permalink: "aaa", custom_permalink: "old-slug")
+
+    product.update!(custom_permalink: "new-slug")
+
+    assert_equal product.id, LegacyPermalink.find_by(permalink: "old-slug")&.product_id
+    assert_equal product, Link.fetch_leniently("old-slug")
+    assert_equal product, Link.fetch_leniently("new-slug", user:)
+  end
+
+  test "a renamed slug resolves on the seller's own subdomain, not just the bare domain" do
+    user = create_user
+    product = create_product(user:, unique_permalink: "aaa", custom_permalink: "old-slug")
+
+    product.update!(custom_permalink: "new-slug")
+
+    # The seller-scoped host is the URL `long_url` builds and sellers share.
+    assert_equal product, Link.fetch_leniently("old-slug", user:)
+  end
+
+  test "a seller's live product beats a legacy mapping on that seller's own host" do
+    user = create_user
+    renamed = create_product(user:, unique_permalink: "aaa", custom_permalink: "slug")
+    renamed.update!(custom_permalink: "moved")
+    assert_equal renamed.id, LegacyPermalink.find_by(permalink: "slug").product_id
+
+    reclaimed = create_product(user:, unique_permalink: "bbb", custom_permalink: "slug")
+
+    assert_equal reclaimed, Link.fetch_leniently("slug", user:)
+  end
+
+  test "a legacy mapping to a deleted product does not resurrect it on the seller's host" do
+    user = create_user
+    product = create_product(user:, unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+    assert_equal product, Link.fetch_leniently("old-slug", user:)
+
+    product.mark_deleted!
+
+    assert_nil Link.fetch_leniently("old-slug", user:)
+  end
+
+  test "a legacy mapping never leaks across sellers on a scoped host" do
+    owner = create_user
+    other = create_user
+    product = create_product(user: owner, unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+
+    # Without this the assertion below would also pass if no mapping were written.
+    assert LegacyPermalink.exists?(permalink: "old-slug")
+    assert_nil Link.fetch_leniently("old-slug", user: other)
+  end
+
+  test "a soft-deleted product keeps its legacy mapping while another seller keeps a scoped redirect" do
+    gone = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    gone.update!(custom_permalink: "gone-moved")
+    assert_equal gone.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    gone.update!(deleted_at: Time.current)
+
+    renamer = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+    renamer.update!(custom_permalink: "renamer-moved")
+
+    assert_equal gone.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    assert_equal renamer.id, ProductPermalinkRedirect.find_by(seller_id: renamer.user_id, permalink: "slug").product_id
+    assert_equal renamer, Link.fetch_leniently("slug", user: renamer.user)
+  end
+
+  test "a restored product still serves the slug its mapping was recorded for" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+    product.update!(deleted_at: Time.current)
+
+    other = create_product(unique_permalink: "bbb", custom_permalink: "old-slug")
+    other.update!(custom_permalink: "other-new")
+
+    product.update!(deleted_at: nil)
+
+    assert_equal product, Link.fetch_leniently("old-slug", user: product.user)
+  end
+
+  test "a mapping pointing at a live product is left alone" do
+    first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-moved")
+
+    second = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+    second.update!(custom_permalink: "second-moved")
+
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+  end
+
+  test "an existing same-seller legacy mapping remains authoritative" do
+    seller = create_user
+    mapped = create_product(user: seller, unique_permalink: "aaa", custom_permalink: "mapped-new")
+    LegacyPermalink.create!(permalink: "slug", product: mapped)
+    renamed = create_product(user: seller, unique_permalink: "bbb", custom_permalink: "slug")
+
+    renamed.update!(custom_permalink: "renamed-new")
+
+    assert_nil ProductPermalinkRedirect.find_by(seller_id: seller.id, permalink: "slug")
+    assert_equal mapped, Link.fetch_leniently("slug", user: seller)
+
+    ProductPermalinkRedirect.create!(seller:, product: renamed, permalink: "slug")
+    assert_equal mapped, Link.fetch_leniently("slug", user: seller)
+
+    mapped.update!(deleted_at: Time.current)
+    assert_equal renamed, Link.fetch_leniently("slug", user: seller)
+
+    mapped.update!(deleted_at: nil)
+    assert_equal mapped, Link.fetch_leniently("slug", user: seller)
+  end
+
+  test "a mapping to a gone product does not resolve on the scoped host" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: "new-slug")
+    product.update!(deleted_at: Time.current)
+
+    assert LegacyPermalink.exists?(permalink: "old-slug")
+    assert_nil Link.fetch_leniently("old-slug", user: product.user)
+  end
+
+  test "a later live claim wins the claimant's own host while the earlier mapping survives" do
+    first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-new")
+
+    claimant = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+
+    # The claimant's shared URL is seller-scoped, so their live product answers it.
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
+    # The bare domain is live-first too, so the mapping cannot override the claimant.
+    assert_equal claimant, Link.fetch_leniently("slug")
+    # The mapping is not destroyed to achieve that — it resumes forwarding the
+    # moment the claim lapses.
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    claimant.update!(custom_permalink: "claimant-moved")
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    assert_equal first, Link.fetch_leniently("slug")
+  end
+
+  test "renaming twice keeps every earlier slug pointing at the product" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "one")
+    product.update!(custom_permalink: "two")
+    product.update!(custom_permalink: "three")
+
+    assert_equal product, Link.fetch_leniently("one")
+    assert_equal product, Link.fetch_leniently("two")
+  end
+
+  test "clearing a custom permalink still records the outgoing slug" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "old-slug")
+    product.update!(custom_permalink: nil)
+
+    assert_equal product, Link.fetch_leniently("old-slug")
+  end
+
+  test "a renamed product keeps its scoped redirect while another seller holds the slug live" do
+    claimant = create_product(unique_permalink: "bbb", custom_permalink: "shared")
+    product = create_product(unique_permalink: "aaa", custom_permalink: "shared")
+
+    product.update!(custom_permalink: "mine")
+
+    assert_nil LegacyPermalink.find_by(permalink: "shared")
+    assert_equal product.id, ProductPermalinkRedirect.find_by(seller_id: product.user_id, permalink: "shared").product_id
+    assert_equal product, Link.fetch_leniently("shared", user: product.user)
+    assert_equal claimant, Link.fetch_leniently("shared", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("shared")
+
+    claimant.update!(custom_permalink: "claimant-moved")
+
+    assert_equal claimant.id, ProductPermalinkRedirect.find_by(seller_id: claimant.user_id, permalink: "shared").product_id
+    assert_equal product, Link.fetch_leniently("shared", user: product.user)
+    assert_equal claimant, Link.fetch_leniently("shared", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("shared")
+  end
+
+  test "the first writer keeps a legacy mapping when a second product claims and releases the same slug" do
+    first = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    first.update!(custom_permalink: "first-new")
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+
+    second = create_product(unique_permalink: "bbb", custom_permalink: "slug")
+    second.update!(custom_permalink: "second-new")
+
+    # The second seller's rename must not take over the mapping — the old URL
+    # belongs to whoever shared it first.
+    assert_equal first.id, LegacyPermalink.find_by(permalink: "slug").product_id
+    assert_equal first, Link.fetch_leniently("slug")
+  end
+
+  test "scoped redirects survive when a live claim lands during the global insert" do
+    releasing = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    claimant = create_product(unique_permalink: "bbb")
+
+    original = LegacyPermalink.method(:create)
+    LegacyPermalink.stub(:create, ->(attrs) {
+      claimant.update!(custom_permalink: "slug")
+      original.call(attrs)
+    }) do
+      releasing.update!(custom_permalink: "moved")
+    end
+
+    assert_nil LegacyPermalink.find_by(permalink: "slug")
+    assert_equal releasing.id, ProductPermalinkRedirect.find_by(seller_id: releasing.user_id, permalink: "slug").product_id
+    assert_equal releasing, Link.fetch_leniently("slug", user: releasing.user)
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("slug")
+
+    claimant.update!(custom_permalink: "claimant-moved")
+
+    assert_equal claimant.id, ProductPermalinkRedirect.find_by(seller_id: claimant.user_id, permalink: "slug").product_id
+    assert_equal releasing, Link.fetch_leniently("slug", user: releasing.user)
+    assert_equal claimant, Link.fetch_leniently("slug", user: claimant.user)
+    assert_equal claimant, Link.fetch_leniently("slug")
+  end
+
+  test "saving a product without touching the custom permalink writes no mapping" do
+    product = create_product(unique_permalink: "aaa", custom_permalink: "slug")
+    assert_no_difference -> { LegacyPermalink.count } do
+      assert_no_difference -> { ProductPermalinkRedirect.count } do
+        product.update!(name: "Renamed product")
+      end
+    end
   end
 
   # --- .fetch ----------------------------------------------------------------

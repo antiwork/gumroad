@@ -3610,8 +3610,27 @@ describe User, :vcr do
     end
 
     # A payout-method switch, country change or admin recreation makes a fresh
-    # MerchantAccount row, so a long-standing seller re-seasons from zero.
-    it "returns false when a seller with many payouts has a freshly recreated account" do
+    # MerchantAccount row. Seasoning is inherited from the account it replaced, so a
+    # long-standing seller does not re-season from zero.
+    it "stays eligible when a seller's account was recreated but an older retired one exists" do
+      create_list(:payment_completed, 4, user:)
+      merchant_account.delete_charge_processor_account!
+      create(:merchant_account, user:, created_at: 10.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+    end
+
+    it "returns false when the only older account is a rejected setup that never went live" do
+      create_list(:payment_completed, 4, user:)
+      merchant_account.update!(created_at: 10.days.ago)
+      # cleanup_failed_merchant_account's shape: mark_deleted! only, both charge-processor
+      # timestamps still NULL, so the row never carried a charge.
+      create(:merchant_account, user:, created_at: 90.days.ago, charge_processor_alive_at: nil).mark_deleted!
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+    end
+
+    it "returns false when the only account ever held is younger than 60 days" do
       create_list(:payment_completed, 4, user:)
       merchant_account.update!(created_at: 10.days.ago)
 
@@ -3645,6 +3664,32 @@ describe User, :vcr do
 
         expect(user.reload.eligible_for_instant_payouts?).to eq(true)
       end
+
+      # The seasoned managed account must not lend its age to a different rail: a fresh
+      # connected account is a new destination, not a replacement for the managed one.
+      it "returns false for a fresh connected account even though the managed one is seasoned" do
+        create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
+
+      it "returns true when a fresh connected account replaced an older retired connected one" do
+        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+          .delete_charge_processor_account!
+        create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+      end
+    end
+
+    # Stripe rejected the earlier account outright, so its age is not history we want to
+    # lend to the replacement.
+    it "returns false when the only older account of that kind was rejected by Stripe" do
+      merchant_account.update!(stripe_disabled_reason: "rejected.fraud")
+      merchant_account.delete_charge_processor_account!
+      create(:merchant_account, user:, created_at: 10.days.ago)
+
+      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
     it "returns false when user is not from the US" do

@@ -1012,6 +1012,33 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_collaborator_can_access(:put, :update, product: @product, params: @params, status: 200)
   end
 
+  test "PUT update records redirects when the seller renames the product URL" do
+    @product.update!(custom_permalink: "old-slug")
+
+    put :update, params: @params.merge(custom_permalink: "new-slug"), as: :json
+
+    assert_response :success
+    assert_equal "new-slug", @product.reload.custom_permalink
+    # The editor saves the product twice per request, so a commit-time
+    # `saved_change_to_custom_permalink?` gate never fires here.
+    assert_equal @product.id, ProductPermalinkRedirect.find_by(seller_id: @seller.id, permalink: "old-slug")&.product_id
+    assert_equal @product.id, LegacyPermalink.find_by(permalink: "old-slug")&.product_id
+    assert_equal @product, Link.fetch_leniently("old-slug", user: @seller)
+  end
+
+  test "PUT update writes no redirects when the product URL is untouched" do
+    @product.update!(custom_permalink: "kept-slug")
+
+    assert_no_difference -> { LegacyPermalink.count } do
+      assert_no_difference -> { ProductPermalinkRedirect.count } do
+        put :update, params: @params, as: :json
+      end
+    end
+
+    assert_response :success
+    assert_equal "kept-slug", @product.reload.custom_permalink
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)
@@ -5486,23 +5513,38 @@ class LinksControllerShowTest < ActionController::TestCase
     @legacy_product = create_product(user: @legacy_user, custom_permalink: "custom")
   end
 
-  test "GET show redirects to a product defined by legacy permalink" do
+  test "GET show serves the oldest live product over a legacy mapping on the bare domain" do
     setup_legacy_products
     @request.host = DOMAIN
+
+    get :show, params: { id: "custom" }
+
+    # @other_product is the oldest live holder, so the mapping must not override it.
+    assert_redirected_to @other_product.long_url
+  end
+
+  test "GET show redirects via a legacy mapping on the bare domain when no live product holds the slug" do
+    setup_legacy_products
+    @request.host = DOMAIN
+    [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
+    @product_with_legacy_mapping.update!(custom_permalink: "mapped-moved")
 
     get :show, params: { id: "custom" }
 
     assert_redirected_to @product_with_legacy_mapping.long_url
   end
 
-  test "GET show redirects to an earlier product matched by permalink when legacy permalink points to a deleted product" do
+  test "GET show 404s on the bare domain when the only mapping points at a deleted product" do
     setup_legacy_products
     @request.host = DOMAIN
+    # Clear the live holders first, or the live-first read answers before the
+    # mapping is ever consulted and the deleted target is never exercised.
+    [@other_product, @legacy_product].each { _1.update!(custom_permalink: "moved-#{_1.id}") }
     @product_with_legacy_mapping.mark_deleted!
 
-    get :show, params: { id: "custom" }
-
-    assert_redirected_to @other_product.long_url
+    # `e404` raises rather than rendering, so this is the file's convention for a
+    # missed `GET show` lookup (see the "NOT real" case above).
+    assert_raises(ActionController::RoutingError) { get :show, params: { id: "custom" } }
   end
 
   test "GET show renders the user's product when request comes from a custom domain (legacy lookup)" do
@@ -8212,5 +8254,39 @@ class LinksControllerSaveContractTest < ActionController::TestCase
 
     assert_not removed.reload.alive?
     assert_empty notified.select { |message, _| message == "Product save applied fewer deletions than it named" }
+  end
+
+  # --- the happy path leaves an audit row (gumroad-private#1508, criterion 4)
+  #
+  # The reported save returned 200, left all three versions alive, and wrote
+  # zero ProductVariantDeletionAudit rows. The absent audit row is what made it
+  # indistinguishable from success, so asserting `deleted_at` alone would still
+  # pass against that bug: a save that deletes nothing and audits nothing looks
+  # the same as one that never named a deletion. Assert both halves.
+
+  test "flag on: a confirmed version removal deletes the row AND writes an audit row" do
+    enable_contract!
+    kept = create_variant(variant_category: @category, name: "Kept")
+    removed = create_variant(variant_category: @category, name: "Removed")
+
+    assert_difference -> { ProductVariantDeletionAudit.count }, 1 do
+      post :update, params: @params.merge(
+        variants: [{ id: kept.external_id, name: "Kept" }],
+        editor_revision: current_revision,
+        confirmed_removed_variant_ids: [removed.external_id],
+        deletion_operations: { deleted_ids: { variants: [removed.external_id] } },
+      ), format: :json
+      assert_response :success
+    end
+
+    assert_not removed.reload.alive?, "the confirmed version must actually be gone"
+    assert kept.reload.alive?, "the version the payload kept must survive"
+
+    audit = ProductVariantDeletionAudit.where(product_id: @product.id).last
+    assert_equal [removed.external_id], audit.deleted_variant_external_ids
+    assert_equal @product.id, audit.product_id
+    # Confirmed in the payload, so the audit must not read as an omission — that
+    # is the distinction the table exists to make.
+    assert_equal ProductVariantDeletionAudit::CONFIRMED_IDS, audit.intent_source
   end
 end

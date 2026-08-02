@@ -224,6 +224,17 @@ describe CustomerPresenter do
       )
     end
 
+    context "when a shipment has a legacy invalid tracking_url" do
+      it "does not expose the raw tracking_url" do
+        shipment = create(:shipment, purchase: purchase1, shipped_at: Time.current)
+        shipment.update_column(:tracking_url, "1Z999AA10123456784")
+
+        props = described_class.new(purchase: purchase1.reload).customer(pundit_user:)
+
+        expect(props[:shipping][:tracking]).to eq(shipped: true, url: nil)
+      end
+    end
+
     context "with a license" do
       it "mints a management token that stops working after the TTL" do
         token = described_class.new(purchase: purchase2).customer(pundit_user:)[:license][:id]

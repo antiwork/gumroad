@@ -52,6 +52,15 @@ describe CreateMissingDisputeEvidenceJob do
         end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_notice).with(dispute.id)
       end
 
+      it "schedules the due-soon reminder for the opened window" do
+        described_class.new.perform
+
+        dispute_evidence = dispute.reload.dispute_evidence
+        expect(DisputeEvidenceDueSoonReminderJob)
+          .to have_enqueued_sidekiq_job(dispute.id)
+          .at(dispute_evidence.seller_response_due_at - DisputeEvidence::EVIDENCE_REMINDER_LEAD_TIME)
+      end
+
       it "reports that the dispute was left without evidence at formalization time" do
         expect(ErrorNotifier).to receive(:notify).with(/dispute #{dispute.id} was never asked for evidence/)
 
@@ -232,6 +241,7 @@ describe CreateMissingDisputeEvidenceJob do
         # notice would otherwise promise.
         expect(dispute_evidence.hours_left_to_submit_evidence).to eq(6)
         expect(dispute_evidence.seller_contacted_at).to be < Time.current
+        expect(DisputeEvidenceDueSoonReminderJob).not_to have_enqueued_sidekiq_job(dispute.id)
       end
     end
 

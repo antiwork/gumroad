@@ -63,6 +63,7 @@ const pageProps = {
     customer_email: "buyer@example.com",
     purchased_at: "2026-07-01T00:00:00Z",
     duration_left_to_submit_evidence_formatted: "15 days",
+    seller_response_due_at: "2026-07-16T00:00:00Z",
     customer_communication_file_max_size: 5 * 1024 * 1024,
     customer_communication_files_max_count: 10,
     blobs: { receipt_image: null, policy_image: null, customer_communication_file: null },

@@ -109,9 +109,10 @@ class ContactingCreatorMailer < ApplicationMailer
     asking_for_evidence = dispute_evidence&.accepting_evidence? && hours_left&.positive?
     @dispute_evidence_content = \
       if asking_for_evidence
+        due_at = format_dispute_evidence_due_at(dispute_evidence.seller_response_due_at)
         safe_join(
           [
-            tag.p(tag.b("Any additional information you can provide in the next #{pluralize(hours_left, "hour")} will help us win on your behalf.")),
+            tag.p(tag.b("Any additional information you can provide by #{due_at} (in the next #{pluralize(hours_left, "hour")}) will help us win on your behalf.")),
             tag.p(
               link_to(
                 "Submit additional information",
@@ -131,6 +132,20 @@ class ContactingCreatorMailer < ApplicationMailer
       else
         "A sale has been disputed"
       end
+  end
+
+  def chargeback_evidence_due_soon(dispute_id)
+    dispute = Dispute.find(dispute_id)
+    @disputable = dispute.disputable
+    @seller = @disputable.seller
+    @dispute_evidence = dispute.dispute_evidence
+    return do_not_send unless @dispute_evidence&.accepting_evidence?
+
+    @hours_left = @dispute_evidence.hours_left_to_submit_evidence
+    return do_not_send unless @hours_left.positive?
+
+    @seller_response_due_at_formatted = format_dispute_evidence_due_at(@dispute_evidence.seller_response_due_at)
+    @subject = "Reminder: Submit dispute evidence within 24 hours"
   end
 
   def remind(user_id)
@@ -229,6 +244,7 @@ class ContactingCreatorMailer < ApplicationMailer
     # keeps being paid on schedule, and telling them otherwise would be false and would push them
     # to change accounts when they do not have to.
     @retries_stopped = @payment.terminal_paypal_failure?
+    @no_payout_rail_available = @payment.paypal_failure_without_available_payout_rail?
     # ...and never promise a retry that a pause is already stopping. Payouts.is_user_payable exits
     # on the broader payouts_paused? long before any processor runs, so for a paused seller "we'll
     # keep trying on your usual payout schedule" is false and contradicts the pause this same email
@@ -761,6 +777,10 @@ class ContactingCreatorMailer < ApplicationMailer
 
     def do_not_send
       @do_not_send = true
+    end
+
+    def format_dispute_evidence_due_at(due_at)
+      due_at.in_time_zone(@seller.timezone.presence || Time.zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
     end
 
     def should_send_email?
