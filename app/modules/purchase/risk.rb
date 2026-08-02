@@ -100,7 +100,6 @@ module Purchase::Risk
     def check_for_past_fraudulent_ips
       return if is_recurring_subscription_charge
       return if free_purchase?
-      return if Feature.inactive?(:purchase_check_for_fraudulent_ips)
 
       buyer_ip_addresses = User.where(email: blockable_emails_if_fraudulent_transaction).pluck(:current_sign_in_ip, :last_sign_in_ip, :account_created_ip).flatten.compact.uniq
       seller_ip_addresses = [seller.current_sign_in_ip, seller.last_sign_in_ip, seller.account_created_ip].compact
