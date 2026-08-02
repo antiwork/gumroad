@@ -59,7 +59,11 @@ fonts = Taxonomy.find_or_create_by!(slug: "fonts", parent: design)
   { name: "license", label: "License", value_type: "enum", values: ["Personal", "Commercial", "App embedding"], position: 1 },
   { name: "variable_font", label: "Variable font", value_type: "boolean", values: [], position: 2 },
   { name: "styles", label: "Styles", value_type: "number", values: [], position: 3 },
-].each { TaxonomyAttribute.find_or_create_by!(taxonomy: fonts, name: _1[:name]) { |attribute| attribute.assign_attributes(_1) } }
+].each do |definition|
+  TaxonomyAttribute.find_or_create_by!(taxonomy: fonts, name: definition[:name]) do |attribute|
+    attribute.assign_attributes(definition)
+  end
+end
 branding = Taxonomy.find_or_create_by!(slug: "branding", parent: design)
 Taxonomy.find_or_create_by!(slug: "logos", parent: branding)
 Taxonomy.find_or_create_by!(slug: "business-cards", parent: branding)

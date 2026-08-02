@@ -258,9 +258,13 @@ module Product::Searchable
             end
 
             if params[:taxonomy_attribute_filters]
-              must do
-                terms taxonomy_attribute_filters: Array.wrap(params[:taxonomy_attribute_filters])
-              end
+              Array.wrap(params[:taxonomy_attribute_filters])
+                .group_by { |token| token.to_s.split(":", 2).first }
+                .each_value do |tokens|
+                  must do
+                    terms taxonomy_attribute_filters: tokens
+                  end
+                end
             end
 
             if params[:min_price].present? || params[:max_price].present?
