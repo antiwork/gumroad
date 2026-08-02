@@ -22,12 +22,16 @@ describe Checkout::BuyerCurrencyEligibility do
   let(:setup_future_charges) { false }
   let(:off_session) { false }
 
-  # Re-point a purchase at a differently-priced product the way a real checkout would build
-  # it: the currency snapshot on the row is taken from the product at creation
-  # (Purchase#prepare_for_charge), so a spec that swaps only `link` leaves a stale snapshot
-  # behind and no longer models the case it is named for.
+  # Re-point a purchase at a differently-priced product the way a real checkout builds the row.
+  # The whole monetary snapshot — amount, currency, USD conversion rate, canonical price, total —
+  # is written together by Purchase#set_price_and_rate, so a spec that swaps only `link` (or only
+  # `link` and the currency label) leaves the previous product's figures behind and models a row
+  # production never creates.
   def relist_purchase(purchase, product, **attrs)
-    purchase.update!(link: product, displayed_price_currency_type: product.price_currency_type, **attrs)
+    purchase.assign_attributes(link: product, **attrs)
+    purchase.set_price_and_rate
+    purchase.save!
+    purchase
   end
 
   subject(:decision) do
@@ -548,10 +552,11 @@ describe Checkout::BuyerCurrencyEligibility do
 
     # gumroad-private#1743. displayed_price_cents is denominated in the currency snapshotted
     # on the purchase, so a product repriced after the row was built would otherwise have its
-    # old-currency cents charged as the new currency.
+    # old-currency cents charged as the new currency. Repricing the product is how production
+    # reaches this state: the row is never rewritten, so its whole snapshot stays USD-consistent.
     it "withholds the direct listed-amount path when the purchase's snapshotted currency disagrees with the repriced product" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR),
-                       displayed_price_currency_type: Currency::USD)
+      purchase
+      product.update!(price_currency_type: Currency::EUR)
 
       expect(forced_decision).to be_eligible
       expect(forced_decision.currency).to eq(Currency::EUR)
@@ -559,14 +564,14 @@ describe Checkout::BuyerCurrencyEligibility do
     end
 
     it "withholds the direct listed-amount path when one line of a multi-item cart carries a stale snapshot" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
-                       displayed_price_currency_type: Currency::INR)
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
+      repriced_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 7300)
       purchases << create(:purchase,
-                          link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
+                          link: repriced_product,
                           seller:,
                           merchant_account:,
-                          displayed_price_currency_type: Currency::USD,
                           purchase_state: "in_progress")
+      repriced_product.update!(price_currency_type: Currency::INR)
 
       upi_decision = described_class.new(order:,
                                          seller:,
@@ -920,12 +925,13 @@ describe Checkout::BuyerCurrencyEligibility do
 
     it "allows the direct listed-amount path for multi-item carts uniformly priced in the forced currency" do
       relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
-      purchases << create(:purchase,
-                          link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
-                          displayed_price_currency_type: Currency::INR,
-                          seller:,
-                          merchant_account:,
-                          purchase_state: "in_progress")
+      second_product = create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300)
+      purchases << relist_purchase(create(:purchase,
+                                          link: second_product,
+                                          seller:,
+                                          merchant_account:,
+                                          purchase_state: "in_progress"),
+                                   second_product)
 
       upi_decision = described_class.new(order:,
                                          seller:,
