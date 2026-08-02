@@ -438,6 +438,25 @@ RSpec.describe ContentModeration::ContentExtractor do
       expect(result.text).to include("safeharbor")
     end
 
+    it "keeps an SVG past the aggregate text budget on the image list instead of truncating it out of review" do
+      # Each fits the budget alone but not together. The overflow SVG must fail
+      # closed as an image: truncating it out of the joined text would leave it
+      # absent from both review channels.
+      first = %(<svg xmlns="http://www.w3.org/2000/svg"><text>firstmarker #{"padding " * 400}</text></svg>)
+      second = %(<svg xmlns="http://www.w3.org/2000/svg"><text>overflowmarker #{"padding " * 400}</text></svg>)
+      second_url = "data:image/svg+xml;base64,#{Base64.strict_encode64(second)}"
+      page = page_for(custom_html: <<~HTML)
+        <img src="data:image/svg+xml;base64,#{Base64.strict_encode64(first)}">
+        <img src="#{second_url}">
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([second_url])
+      expect(result.text).to include("firstmarker")
+      expect(result.text).not_to include("overflowmarker")
+    end
+
     it "re-encodes a raster data URL whose scheme is uppercase, which browsers render all the same" do
       # A case-sensitive scheme strip left `DATA:` payloads with a content type
       # of "data:image/png" — never re-encoded, permanently unreviewable.

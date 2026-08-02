@@ -22,7 +22,10 @@ class ContentModeration::ContentExtractor
 
   # Budget for the source of inline SVG images reviewed as text (see
   # `partition_page_images`). Its own slice, like links, so SVG markup can
-  # neither starve the prose nor be starved by it.
+  # neither starve the prose nor be starved by it. Aggregate across the page's
+  # SVGs and enforced at partition time: an SVG the remaining budget can't fit
+  # stays on the image list and fails closed, where truncating it out of the
+  # joined text would leave it reviewed by nothing.
   MAX_PAGE_SVG_TEXT_LENGTH = 5_000
 
   # How many remote images one page may carry and still be moderated. Every image
@@ -198,6 +201,7 @@ class ContentModeration::ContentExtractor
     def partition_page_images(urls)
       image_urls = []
       svg_sources = []
+      svg_budget = MAX_PAGE_SVG_TEXT_LENGTH
 
       urls.each do |url|
         parsed = url.downcase.start_with?("data:") ? parse_data_url(url) : nil
@@ -205,10 +209,17 @@ class ContentModeration::ContentExtractor
           image_urls << url
         elsif parsed[:content_type] == "image/svg+xml"
           source = decode_data_url_payload(parsed).force_encoding(Encoding::UTF_8).scrub
-          # The byte cap sits BEFORE the parse so an attacker-sized payload never
-          # reaches Nokogiri/Crass; over-cap SVGs fail closed as images.
-          if source.bytesize <= MAX_PAGE_SVG_TEXT_LENGTH && self_contained_svg?(source)
+          next if svg_sources.include?(source)
+
+          # The budget is spent per SVG (plus the join separator) rather than
+          # truncating the joined text: a truncated-out SVG would be absent from
+          # BOTH review channels. The byte cap also sits BEFORE the parse so an
+          # attacker-sized payload never reaches Nokogiri/Crass; whatever the
+          # budget can't fit fails closed as an image.
+          cost = source.bytesize + (svg_sources.empty? ? 0 : 1)
+          if cost <= svg_budget && self_contained_svg?(source)
             svg_sources << source
+            svg_budget -= cost
           else
             image_urls << url
           end
@@ -219,7 +230,7 @@ class ContentModeration::ContentExtractor
         end
       end
 
-      [image_urls.uniq, svg_sources.uniq]
+      [image_urls.uniq, svg_sources]
     end
 
     # `;base64` is a positional flag — the last parameter before the comma —
