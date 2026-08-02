@@ -480,7 +480,14 @@ class Checkout::BuyerCurrencyEligibility
       end
     end
 
-    priced_in_forced_currency = product_currencies.all? { _1 == forced_currency }
+    # The direct lane charges `displayed_price_cents`, denominated in the currency snapshotted
+    # on the purchase at creation (Purchase#assign_price_currency), not the product's current
+    # one. A seller who repriced between the row being built and the charge would otherwise
+    # get the old currency's cents sent as the new one. Requiring both to agree degrades a
+    # repriced-mid-flight checkout to the quoted lane, which converts canonical USD and is
+    # unaffected by the snapshot.
+    priced_in_forced_currency = product_currencies.all? { _1 == forced_currency } &&
+                                purchases.all? { _1.displayed_price_currency_type.to_s.downcase == forced_currency }
 
     # The USD-priced case converts through a Stripe FX quote (forced currency -> USD),
     # which is exactly the call a fresh mismatch marker predicts Stripe will reject —

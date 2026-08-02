@@ -22,6 +22,14 @@ describe Checkout::BuyerCurrencyEligibility do
   let(:setup_future_charges) { false }
   let(:off_session) { false }
 
+  # Re-point a purchase at a differently-priced product the way a real checkout would build
+  # it: the currency snapshot on the row is taken from the product at creation
+  # (Purchase#prepare_for_charge), so a spec that swaps only `link` leaves a stale snapshot
+  # behind and no longer models the case it is named for.
+  def relist_purchase(purchase, product, **attrs)
+    purchase.update!(link: product, displayed_price_currency_type: product.price_currency_type, **attrs)
+  end
+
   subject(:decision) do
     described_class.new(order:,
                         seller:,
@@ -538,6 +546,40 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(forced_decision.direct_listed_amount?).to eq(true)
     end
 
+    # gumroad-private#1743. displayed_price_cents is denominated in the currency snapshotted
+    # on the purchase, so a product repriced after the row was built would otherwise have its
+    # old-currency cents charged as the new currency.
+    it "withholds the direct listed-amount path when the purchase's snapshotted currency disagrees with the repriced product" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR),
+                       displayed_price_currency_type: Currency::USD)
+
+      expect(forced_decision).to be_eligible
+      expect(forced_decision.currency).to eq(Currency::EUR)
+      expect(forced_decision.direct_listed_amount?).to eq(false)
+    end
+
+    it "withholds the direct listed-amount path when one line of a multi-item cart carries a stale snapshot" do
+      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
+                       displayed_price_currency_type: Currency::INR)
+      purchases << create(:purchase,
+                          link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
+                          seller:,
+                          merchant_account:,
+                          displayed_price_currency_type: Currency::USD,
+                          purchase_state: "in_progress")
+
+      upi_decision = described_class.new(order:,
+                                         seller:,
+                                         merchant_account:,
+                                         chargeable:,
+                                         purchases:,
+                                         params:,
+                                         setup_future_charges:,
+                                         off_session:).method_forced_decision(payment_method: "upi")
+
+      expect(upi_decision.direct_listed_amount?).to eq(false)
+    end
+
     it "allows Bancontact in EUR" do
       bancontact_decision = described_class.new(order:,
                                                 seller:,
@@ -591,7 +633,7 @@ describe Checkout::BuyerCurrencyEligibility do
     # Payment Element can only confirm an EUR intent, so the prepare service passes the
     # element's mount currency explicitly for methods with no registry entry of their own.
     it "allows card with an explicit forced currency (EUR-mounted element) and flags the direct listed-amount case" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
 
       card_decision = described_class.new(order:,
                                           seller:,
@@ -673,7 +715,7 @@ describe Checkout::BuyerCurrencyEligibility do
     it "allows a card token from a forced-currency element in live mode when a method forcing that currency is launched" do
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
       Feature.activate_user(:checkout_local_method_ideal, seller)
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
 
       card_decision = described_class.new(order:,
                                           seller:,
@@ -690,7 +732,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
     it "withholds a card token from a forced-currency element in live mode when no method forcing that currency is launched" do
       allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
 
       card_decision = described_class.new(order:,
                                           seller:,
@@ -739,7 +781,7 @@ describe Checkout::BuyerCurrencyEligibility do
     it "allows the method for a seller-managed destination-charge model" do
       platform_merchant_account
       merchant_account.update!(json_data: {}, currency: Currency::USD)
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
 
       expect(forced_decision).to be_eligible
       expect(forced_decision.currency).to eq(Currency::EUR)
@@ -751,7 +793,7 @@ describe Checkout::BuyerCurrencyEligibility do
     # EUR-settling Belgian account is the most natural shape there is. Requiring US
     # dollars here withheld iDEAL and Bancontact from most eurozone sellers.
     it "allows the method for merchant accounts that settle in a non-USD currency when the product is priced in the forced currency" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
       merchant_account.update!(currency: Currency::EUR)
 
       expect(forced_decision).to be_eligible
@@ -760,7 +802,7 @@ describe Checkout::BuyerCurrencyEligibility do
     end
 
     it "allows the method for a merchant account settling in a third currency, unrelated to the forced one" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
       merchant_account.update!(currency: Currency::CAD)
 
       expect(forced_decision).to be_eligible
@@ -774,7 +816,7 @@ describe Checkout::BuyerCurrencyEligibility do
     it "keeps the method available for a destination-charge seller whose own account settles in a non-USD currency" do
       platform_merchant_account.update!(currency: Currency::USD)
       destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::GBP, country: "GB")
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 81_800_00), merchant_account: destination_merchant_account)
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 81_800_00), merchant_account: destination_merchant_account)
 
       upi_decision = described_class.new(order:,
                                          seller:,
@@ -793,7 +835,7 @@ describe Checkout::BuyerCurrencyEligibility do
     it "keeps the method available when the Gumroad platform account the destination charge is created on holds a non-USD balance" do
       platform_merchant_account.update!(currency: Currency::CAD)
       destination_merchant_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::USD)
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR), merchant_account: destination_merchant_account)
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR), merchant_account: destination_merchant_account)
 
       destination_decision = described_class.new(order:,
                                                  seller:,
@@ -814,7 +856,7 @@ describe Checkout::BuyerCurrencyEligibility do
     # take iDEAL. The direct-listed-amount lane charges the listed EUR price without an
     # FX quote, so the marker must not withhold the method there.
     it "keeps the method available for a product priced in the forced currency when the mismatch marker is set for that currency" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::EUR))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::EUR))
       merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
 
       expect(forced_decision).to be_eligible
@@ -877,9 +919,10 @@ describe Checkout::BuyerCurrencyEligibility do
     end
 
     it "allows the direct listed-amount path for multi-item carts uniformly priced in the forced currency" do
-      purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
+      relist_purchase(purchase, create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300))
       purchases << create(:purchase,
                           link: create(:product, user: seller, price_currency_type: Currency::INR, price_cents: 7300),
+                          displayed_price_currency_type: Currency::INR,
                           seller:,
                           merchant_account:,
                           purchase_state: "in_progress")
