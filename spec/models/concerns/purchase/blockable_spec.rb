@@ -632,9 +632,11 @@ describe Purchase::Blockable do
       end
 
       before do
-        # Newest first, since the scan walks created_at DESC.
-        create(:purchase, email: buyer_email, stripe_transaction_id: "ch_newer", created_at: 1.hour.ago)
-        purchase.update_column(:created_at, 3.hours.ago)
+        # Newest first, since the scan walks created_at DESC. The charge id is written after create
+        # for the same reason as the shared let: setting it up front runs the charge validations.
+        create(:purchase, link: product, email: buyer_email, purchaser: buyer, created_at: 1.hour.ago)
+          .update_column(:stripe_transaction_id, "ch_newer")
+        refused_purchase.update_column(:created_at, 3.hours.ago)
       end
 
       # The refusal that stranded the #1739 buyer sat behind later attempts that died for unrelated
@@ -645,7 +647,7 @@ describe Purchase::Blockable do
                                     : outcome_for(type: "blocked", reason: "rule", predicate: ":card_count_for_email_daily: > 3")
         end
 
-        refusal = purchase.processor_rule_refusal
+        refusal = refused_purchase.processor_rule_refusal
 
         expect(refusal[:kind]).to eq(:velocity_rule)
         expect(refusal[:charge_id]).to eq("ch_latest")
@@ -657,14 +659,15 @@ describe Purchase::Blockable do
                                     : outcome_for(type: "blocked", reason: "rule", predicate: ":card_count_for_email_daily: > 3")
         end
 
-        expect(purchase.processor_rule_refusal).to be_nil
+        expect(refused_purchase.processor_rule_refusal).to be_nil
       end
 
       it "reads at most PROCESSOR_REFUSAL_MAX_READS charges" do
-        create_list(:purchase, 5, email: buyer_email, stripe_transaction_id: "ch_extra", created_at: 2.hours.ago)
+        create_list(:purchase, 5, link: product, email: buyer_email, purchaser: buyer, created_at: 2.hours.ago)
+          .each { |record| record.update_column(:stripe_transaction_id, "ch_extra") }
         allow(Stripe::Charge).to receive(:retrieve).and_return(outcome_for(type: "issuer_declined", reason: "generic_decline"))
 
-        purchase.processor_rule_refusal
+        refused_purchase.processor_rule_refusal
 
         expect(Stripe::Charge).to have_received(:retrieve).exactly(Purchase::Blockable::PROCESSOR_REFUSAL_MAX_READS).times
       end
