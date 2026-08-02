@@ -1892,6 +1892,7 @@ class Purchase < ApplicationRecord
       # at 0 here, before splitting into installments, so a snapshot-backed installment price stays
       # authoritative rather than being overwritten when the live product price later drops.
       minimum_price_cents = 0 if offer_code_for_pricing.present? && minimum_price_cents < 0
+      minimum_price_cents = currency_minimum_or_zero(minimum_price_cents) if once_per_cart_fixed_offer_code?
 
       minimum_price_cents *= purchasing_power_parity_factor if is_purchasing_power_parity_discounted? && link.purchasing_power_parity_enabled? && offer_code_for_pricing.blank?
 
@@ -1914,8 +1915,6 @@ class Purchase < ApplicationRecord
     if is_upgrade_purchase && prorated_discount_price_cents
       minimum_price -= prorated_discount_price_cents
     end
-
-    return currency_minimum_or_zero(minimum_price) if once_per_cart_fixed_offer_code?
 
     minimum_price.round
   end
@@ -4183,6 +4182,7 @@ class Purchase < ApplicationRecord
 
     def transformed_once_per_cart_price_cents(pre_discount_price_cents)
       price = [pre_discount_price_cents - offer_amount_off(pre_discount_price_cents), 0].max
+      price = currency_minimum_or_zero(price)
       price = if is_free_trial_purchase
         0
       elsif is_commission_completion_purchase
@@ -4195,7 +4195,7 @@ class Purchase < ApplicationRecord
         price
       end
       price -= prorated_discount_price_cents if is_upgrade_purchase && prorated_discount_price_cents
-      currency_minimum_or_zero(price)
+      price.round
     end
 
     def displayed_price_usd_cents

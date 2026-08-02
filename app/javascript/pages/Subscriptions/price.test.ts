@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { initialSubscriptionUnitPrice, selectedSubscriptionTotal } from "$app/pages/Subscriptions/price";
+import {
+  initialSubscriptionUnitPrice,
+  selectedSubscriptionTotal,
+  withOncePerCartMinimum,
+} from "$app/pages/Subscriptions/price";
 import type { Discount } from "$app/parsers/checkout";
 
 const oncePerCartDiscount: Discount = {
@@ -24,7 +28,9 @@ describe("subscription pricing", () => {
     });
 
     expect(unitPrice).toBe(1_000);
-    expect(selectedSubscriptionTotal({ unitPrice, quantity: 3, discount: oncePerCartDiscount })).toBe(2_900);
+    expect(selectedSubscriptionTotal({ unitPrice, quantity: 3, discount: oncePerCartDiscount, minimumPrice: 99 })).toBe(
+      2_900,
+    );
   });
 
   it("keeps legacy per-item pricing unchanged", () => {
@@ -37,6 +43,14 @@ describe("subscription pricing", () => {
     });
 
     expect(unitPrice).toBe(900);
-    expect(selectedSubscriptionTotal({ unitPrice, quantity: 3, discount })).toBe(2_700);
+    expect(selectedSubscriptionTotal({ unitPrice, quantity: 3, discount, minimumPrice: 99 })).toBe(2_700);
+    expect(withOncePerCartMinimum(50, discount, 99)).toBe(50);
+  });
+
+  it("keeps a positive cart-discount total at the currency minimum", () => {
+    expect(
+      selectedSubscriptionTotal({ unitPrice: 75, quantity: 2, discount: oncePerCartDiscount, minimumPrice: 99 }),
+    ).toBe(99);
+    expect(withOncePerCartMinimum(50, oncePerCartDiscount, 99)).toBe(99);
   });
 });

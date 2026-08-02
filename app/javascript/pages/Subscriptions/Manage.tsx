@@ -5,7 +5,11 @@ import typia from "typia";
 
 import { confirmLineItem } from "$app/data/purchase";
 import { updateSubscription } from "$app/data/subscription";
-import { initialSubscriptionUnitPrice, selectedSubscriptionTotal } from "$app/pages/Subscriptions/price";
+import {
+  initialSubscriptionUnitPrice,
+  selectedSubscriptionTotal,
+  withOncePerCartMinimum,
+} from "$app/pages/Subscriptions/price";
 import { SavedCreditCard } from "$app/parsers/card";
 import { Discount } from "$app/parsers/checkout";
 import { CustomFieldDescriptor, ProductNativeType } from "$app/parsers/product";
@@ -181,8 +185,13 @@ export default function SubscriptionsManage() {
           unitPrice: selection.price.value,
           quantity: selection.quantity,
           discount: subscription.discount,
+          minimumPrice: getMinPriceCents(product.currency_code),
         });
-  const price = isPWYW || noChangesToNonPriceOptions ? selectedTotalPrice : discountedTotalCents;
+  const price = withOncePerCartMinimum(
+    isPWYW || noChangesToNonPriceOptions ? selectedTotalPrice : discountedTotalCents,
+    subscription.discount,
+    getMinPriceCents(product.currency_code),
+  );
   const requirePayment = price > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
   let amountDueToday =

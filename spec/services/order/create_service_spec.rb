@@ -370,15 +370,16 @@ describe Order::CreateService, :vcr do
       end
 
       it "snapshots the full price for an installment payment" do
-        installment_product = create(:product, user: seller_1, price_cents: 20_00)
-        installment_plan = create(:product_installment_plan, link: installment_product, number_of_installments: 3)
-        offer_code.update!(amount_cents: 5_00)
+        installment_product = create(:product, user: seller_1, price_cents: 1_98)
+        installment_plan = create(:product_installment_plan, link: installment_product, number_of_installments: 2)
+        offer_code.update!(amount_cents: 99)
         discounted_total = installment_product.price_cents - offer_code.amount_cents
+        installment_price = installment_plan.calculate_installment_payment_price_cents(discounted_total).first
         params[:line_items] = [{
           uid: "unique-id-0",
           permalink: installment_product.unique_permalink,
           price_cents: installment_product.price_cents,
-          perceived_price_cents: installment_plan.calculate_installment_payment_price_cents(discounted_total).first,
+          perceived_price_cents: installment_price,
           quantity: 1,
           discount_code: offer_code.code,
           pay_in_installments: true,
@@ -388,14 +389,15 @@ describe Order::CreateService, :vcr do
         purchase = order.purchases.first
 
         expect(purchase_responses).to be_empty
+        expect(purchase.displayed_price_cents).to eq(installment_price)
         expect(purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(installment_product.price_cents)
         expect(purchase.displayed_price_cents_before_offer_code).to eq(installment_product.price_cents)
       end
 
       it "snapshots the full price for a commission deposit" do
         seller_1.update!(created_at: 31.days.ago)
-        commission_product = create(:commission_product, user: seller_1, price_cents: 20_00)
-        offer_code.update!(amount_cents: 10_00)
+        commission_product = create(:commission_product, user: seller_1, price_cents: 1_98)
+        offer_code.update!(amount_cents: 99)
         discounted_deposit = ((commission_product.price_cents - offer_code.amount_cents) * Commission::COMMISSION_DEPOSIT_PROPORTION).round
         params[:line_items] = [{
           uid: "unique-id-0",
@@ -410,6 +412,7 @@ describe Order::CreateService, :vcr do
         purchase = order.purchases.first
 
         expect(purchase_responses).to be_empty
+        expect(purchase.displayed_price_cents).to eq(discounted_deposit)
         expect(purchase.purchase_offer_code_discount.pre_discount_displayed_price_cents).to eq(commission_product.price_cents)
         expect(purchase.displayed_price_cents_before_offer_code).to eq(commission_product.price_cents)
       end
