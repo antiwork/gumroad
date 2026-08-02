@@ -832,24 +832,20 @@ describe("Product Edit Scenario", type: :system, js: true) do
       expect(product.tags[1].name).to eq "test2"
     end
 
-    it "allows to add no more than five tags" do
+    it "allows to add no more than ten tags" do
       visit edit_link_path(product.unique_permalink) + "/share"
 
       expect(page).to have_combo_box "Tags"
 
-      select_combo_box_option search: "Test1", from: "Tags"
-      select_combo_box_option search: "Test2", from: "Tags"
-      select_combo_box_option search: "Test3", from: "Tags"
-      select_combo_box_option search: "Test4", from: "Tags"
-      select_combo_box_option search: "Test5", from: "Tags"
+      (1..10).each { select_combo_box_option search: "Test#{_1}", from: "Tags" }
 
-      %w[test1 test2 test3 test4 test5].each do |tag|
+      (1..10).each do |index|
         within :fieldset, "Tags" do
-          expect(page).to have_button(tag)
+          expect(page).to have_button("test#{index}")
         end
       end
 
-      fill_in "Tags", with: "Test6"
+      fill_in "Tags", with: "Test11"
       expect(page).to_not have_combo_box "Tags", expanded: true
     end
 
