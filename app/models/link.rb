@@ -187,6 +187,9 @@ class Link < ApplicationRecord
   before_validation :associate_price, on: :create
   before_validation :set_unique_permalink
   before_validation :release_custom_permalink_if_possible, if: :custom_permalink_changed?
+  after_save :stage_renamed_custom_permalink, if: :saved_change_to_custom_permalink?
+  after_commit :redirect_renamed_custom_permalinks
+  after_rollback :discard_renamed_custom_permalinks
   validates :user, presence: true
   validates :name, presence: true, length: { maximum: 255 }
   # Keep in sync with Product::BulkUpdateSupportEmailService.
@@ -861,9 +864,17 @@ class Link < ApplicationRecord
   #                         NOTE: a custom permalink can match different products by different sellers,
   #                         this option should only be used to support legacy URLs.
   def self.fetch_leniently(general_permalink, user: nil)
-    product_via_legacy_permalink = Link.visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink)) if user.blank?
+    live_match = Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    return live_match if live_match.present?
 
-    product_via_legacy_permalink || Link.by_user(user).visible.by_general_permalink(general_permalink).order(created_at: :asc, id: :asc).first
+    legacy_redirect = Link.by_user(user).visible.find_by(id: LegacyPermalink.select(:product_id).where(permalink: general_permalink))
+    return legacy_redirect if legacy_redirect.present? || user.blank?
+
+    # A seller-scoped row fills collisions the global legacy table cannot
+    # represent without taking precedence from its established mappings.
+    Link.by_user(user).visible.find_by(
+      id: ProductPermalinkRedirect.select(:product_id).where(seller_id: user.id, permalink: general_permalink)
+    )
   end
 
   def self.fetch(unique_permalink, user: nil)
@@ -1677,6 +1688,67 @@ class Link < ApplicationRecord
     def release_custom_permalink_if_possible
       deleted_product = user.links.deleted.find_by(custom_permalink:)
       deleted_product&.update(custom_permalink: nil)
+    end
+
+    # Stage per save because the product editor saves twice, and its second save
+    # clears the permalink change from dirty tracking before commit.
+    def stage_renamed_custom_permalink
+      outgoing = custom_permalink_previously_was.presence
+      return if outgoing.blank?
+
+      @staged_renamed_custom_permalinks ||= []
+      @staged_renamed_custom_permalinks << outgoing
+    end
+
+    def discard_renamed_custom_permalinks
+      @staged_renamed_custom_permalinks = nil
+    end
+
+    def redirect_renamed_custom_permalinks
+      outgoing_slugs = @staged_renamed_custom_permalinks
+      discard_renamed_custom_permalinks
+      return if outgoing_slugs.blank?
+
+      # Map every hop, including a slug that only existed inside this transaction.
+      outgoing_slugs.uniq.each { redirect_renamed_custom_permalink(_1) }
+    end
+
+    def redirect_renamed_custom_permalink(outgoing)
+      record_product_permalink_redirect(outgoing)
+      record_legacy_permalink(outgoing)
+    end
+
+    def record_product_permalink_redirect(outgoing)
+      return if ProductPermalinkRedirect.exists?(seller_id: user_id, permalink: outgoing)
+      return if LegacyPermalink.joins(:product).where(permalink: outgoing, links: { user_id: }).exists?
+
+      redirect = ProductPermalinkRedirect.create(permalink: outgoing, product_id: id, seller_id: user_id)
+      Rails.logger.warn("ProductPermalinkRedirect not recorded for #{outgoing.inspect}: #{redirect.errors.full_messages.to_sentence}") unless redirect.persisted?
+    rescue ActiveRecord::RecordNotUnique
+      # A concurrent rename by this seller won the row; first writer keeps it.
+      nil
+    end
+
+    def record_legacy_permalink(outgoing)
+      return if live_product_answers_on?(outgoing)
+      return if LegacyPermalink.exists?(permalink: outgoing)
+
+      mapping = LegacyPermalink.create(permalink: outgoing, product_id: id)
+      Rails.logger.warn("LegacyPermalink not recorded for #{outgoing.inspect}: #{mapping.errors.full_messages.to_sentence}") unless mapping.persisted?
+      withdraw_legacy_permalink(mapping.id) if mapping.persisted? && live_product_answers_on?(outgoing)
+    rescue ActiveRecord::RecordNotUnique
+      # A concurrent rename won the row; first writer keeps it.
+      nil
+    end
+
+    # Uncached: the second call has to see a claim committed since the first.
+    def live_product_answers_on?(permalink)
+      Link.uncached { Link.visible.by_general_permalink(permalink).exists? }
+    end
+
+    # Scoped to `id` so this only ever removes a row this call owns.
+    def withdraw_legacy_permalink(mapping_id)
+      LegacyPermalink.where(id: mapping_id, product_id: id).delete_all
     end
 
     def create_licenses_for_existing_customers
