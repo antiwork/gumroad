@@ -14,10 +14,17 @@ describe HandleEmailEventInfo::ForReceiptEmail do
   describe ".perform" do
     RSpec.shared_examples "handles bounced event type" do |email_provider|
       context "when CustomerEmailInfo doesn't exist" do
-        it "creates a new email info and mark it as bounced" do
-          travel_to(Time.current) do
-            handler_class_for(email_provider).new.perform(params)
-          end
+        it "creates a new email info and marks it as bounced without changing contact consent" do
+          another_product = create(:product, user: purchase.seller)
+          another_purchase = create(:purchase, link: another_product, email: purchase.email)
+
+          expect do
+            travel_to(Time.current) do
+              handler_class_for(email_provider).new.perform(params)
+            end
+          end.not_to change {
+            [purchase.reload.can_contact, another_purchase.reload.can_contact, follower.reload.alive?]
+          }
 
           expect(CustomerEmailInfo.count).to eq 1
           expect(CustomerEmailInfo.last.state).to eq "bounced"
@@ -28,14 +35,20 @@ describe HandleEmailEventInfo::ForReceiptEmail do
       context "when CustomerEmailInfo exists" do
         let!(:email_info) { create(:customer_email_info, email_name: mailer_method, purchase:) }
 
-        it "marks it as bounced and deletes the follower" do
-          travel_to(Time.current) do
-            handler_class_for(email_provider).new.perform(params)
-          end
+        it "marks it as bounced without changing contact consent" do
+          another_product = create(:product, user: purchase.seller)
+          another_purchase = create(:purchase, link: another_product, email: purchase.email)
+
+          expect do
+            travel_to(Time.current) do
+              handler_class_for(email_provider).new.perform(params)
+            end
+          end.not_to change {
+            [purchase.reload.can_contact, another_purchase.reload.can_contact, follower.reload.alive?]
+          }
 
           expect(CustomerEmailInfo.count).to eq 1
           expect(email_info.reload.state).to eq "bounced"
-          expect(follower.reload).to be_deleted
         end
       end
     end
@@ -351,14 +364,15 @@ describe HandleEmailEventInfo::ForReceiptEmail do
             )
           end
 
-          it "marks it as bounced and deletes the follower" do
-            travel_to(Time.current) do
-              HandleSendgridEventJob.new.perform(params)
-            end
+          it "marks it as bounced without changing contact consent" do
+            expect do
+              travel_to(Time.current) do
+                HandleSendgridEventJob.new.perform(params)
+              end
+            end.not_to change { [purchase.reload.can_contact, follower.reload.alive?] }
 
             expect(CustomerEmailInfo.count).to eq 1
             expect(email_info.reload.state).to eq "bounced"
-            expect(follower.reload).to be_deleted
           end
         end
       end
@@ -416,14 +430,15 @@ describe HandleEmailEventInfo::ForReceiptEmail do
             )
           end
 
-          it "marks it as bounced and deletes the follower" do
-            travel_to(Time.current) do
-              HandleResendEventJob.new.perform(params)
-            end
+          it "marks it as bounced without changing contact consent" do
+            expect do
+              travel_to(Time.current) do
+                HandleResendEventJob.new.perform(params)
+              end
+            end.not_to change { [purchase.reload.can_contact, follower.reload.alive?] }
 
             expect(CustomerEmailInfo.count).to eq 1
             expect(email_info.reload.state).to eq "bounced"
-            expect(follower.reload).to be_deleted
           end
         end
       end
