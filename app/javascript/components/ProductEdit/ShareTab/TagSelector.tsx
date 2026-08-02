@@ -5,7 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
 import { TagInput } from "$app/components/TagInput";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOnChange } from "$app/components/useOnChange";
@@ -70,6 +70,9 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
         maxLength={MAX_TAG_LENGTH}
         maxTags={MAX_ALLOWED_TAGS}
       />
+      <FieldsetDescription>
+        Add up to {MAX_ALLOWED_TAGS} tags. Tags must be {MIN_TAG_LENGTH}-{MAX_TAG_LENGTH} characters each.
+      </FieldsetDescription>
     </Fieldset>
   );
 };

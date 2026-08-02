@@ -2126,6 +2126,12 @@ describe Ai::StoreAgentService do
       expect(prompt).to match(/Settings > Advanced > Applications/)
     end
 
+    it "states the product tag limits instead of leaving the model to guess" do
+      expect(prompt).to include("Product tags are limited to 5 tags per product")
+      expect(prompt).to include("each tag must be 2-20 characters")
+      expect(prompt).to include("Never state a different tag limit")
+    end
+
     # The corpus has no webhook article, so the bullet cites this one by title for the app/token
     # steps. Redden if the prompt drops the citation or the article is renamed out from under it.
     it "cites a help article that exists in the shipped corpus" do
