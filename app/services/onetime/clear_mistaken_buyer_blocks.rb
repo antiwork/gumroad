@@ -129,11 +129,11 @@ class Onetime::ClearMistakenBuyerBlocks
       return blocked_pairs_for(purchase) if velocity_threshold_met?(recent_email_or_browser_failures)
 
       # Purchase::Blockable#ban_fraudulent_buyer_browser_guid! blocks the browser only, and counts
-      # over all time rather than a window, and — unlike the two rules above — over every failed
-      # purchase carrying a card fingerprint, whatever charge processor it went through.
+      # over all time rather than a window. Same countable scope as the live rule: counting rows
+      # it ignores would retain exactly the outage-manufactured blocks this cleanup exists to
+      # clear.
       if purchase.browser_guid.present?
-        browser_failures = Purchase.failed.with_stripe_fingerprint
-                                   .select("distinct stripe_fingerprint")
+        browser_failures = Purchase.countable_card_testing_failures
                                    .where(created_at: ..window.end)
                                    .where(browser_guid: purchase.browser_guid)
         protected_pairs << [PlatformBlock::TYPES[:browser_guid], purchase.browser_guid] if velocity_threshold_met?(browser_failures)

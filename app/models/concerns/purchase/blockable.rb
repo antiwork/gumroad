@@ -81,11 +81,6 @@ module Purchase::Blockable
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
-  # How many recent failures the velocity counter inspects. Generous next to the threshold of 4,
-  # bounded so an old browser_guid cannot make the counter scan its whole history mid-checkout.
-  CARD_TESTING_COUNT_SCAN_LIMIT = 200
-  private_constant :CARD_TESTING_COUNT_SCAN_LIMIT
-
   class_methods do
     # Shared with Onetime::ClearMistakenBuyerBlocks, which must reproduce these rules exactly: if
     # it counts differently it clears a block a live rule still wants, switching enforcement off
@@ -106,21 +101,24 @@ module Purchase::Blockable
     #
     # Keyed on card_visual, which holds the payer email PayPal attested for the order, NOT
     # purchases.email: the buyer types that one, so keying on it would let an attacker cycle any
-    # number of stolen wallets under a single checkout email and count as one forever.
+    # number of stolen wallets under a single checkout email and count as one forever. A wallet
+    # with no attested payer is not provably the same wallet as any other, so it counts on its
+    # own token rather than merging into one free unit.
+    #
+    # Returns at most MAX_NUMBER_OF_FAILED_FINGERPRINTS — every caller only compares against
+    # that threshold. Deduplicating in SQL and stopping at the threshold is what bounds the scan
+    # (the guid rule has no time window, and this runs inside the purchase state-machine
+    # transition): a newest-N row cap before the dedup made the count depend on retry order, so
+    # a tester could flush an older card out of the window by retrying fewer cards more often.
     def distinct_card_count(relation)
-      # Capped: the guid rule has no time window, so a long-lived guid can match a lot of rows and
-      # this runs inside the purchase state-machine transition. Any window wide enough to hold the
-      # threshold answers the question — we only ever compare against a count of 4.
-      rows = relation.order(created_at: :desc)
-                     .limit(CARD_TESTING_COUNT_SCAN_LIMIT)
-                     .pluck(:charge_processor_id, :stripe_fingerprint, :card_visual)
-      paypal_id = PaypalChargeProcessor.charge_processor_id
-      stripe_cards, paypal_rows = rows.partition { |processor, _, _| processor != paypal_id }
-
-      # A wallet with no attested payer is not provably the same wallet as any other, so count
-      # each such row on its own token rather than merging them into one free unit.
-      wallets = paypal_rows.map { |_, fingerprint, payer| payer.presence || "token:#{fingerprint}" }
-      stripe_cards.map { |_, fingerprint, _| fingerprint }.uniq.size + wallets.uniq.size
+      paypal_id = ActiveRecord::Base.connection.quote(PaypalChargeProcessor.charge_processor_id)
+      identity = <<~SQL.squish
+        CASE WHEN charge_processor_id = #{paypal_id}
+             THEN CONCAT('wallet:', COALESCE(NULLIF(card_visual, ''), CONCAT('token:', stripe_fingerprint)))
+             ELSE CONCAT('card:', stripe_fingerprint)
+        END
+      SQL
+      relation.distinct.limit(MAX_NUMBER_OF_FAILED_FINGERPRINTS).pluck(Arel.sql(identity)).size
     end
   end
 

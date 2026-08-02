@@ -11,11 +11,12 @@ RSpec.describe Purchase::Blockable do
     # Card declines land in stripe_error_code and leave error_code NULL, which is the row shape
     # production actually writes (see Purchase#handle_charge_processor_card_error). Setting
     # error_code instead would test a row that never exists and hide a wrong-column filter.
-    def declined(code, fingerprint:, processor: "stripe")
+    def declined(code, fingerprint:, processor: "stripe", created_at: Time.current)
       create(:failed_purchase, email:, browser_guid: guid, ip_address: ip,
                                charge_processor_id: processor,
                                stripe_fingerprint: fingerprint,
-                               stripe_error_code: code)
+                               stripe_error_code: code,
+                               created_at:)
     end
 
     def outage(code, fingerprint:, processor: "stripe")
@@ -107,6 +108,33 @@ RSpec.describe Purchase::Blockable do
         live_attempt.send(:block_ip_address_based_on_recent_failures!)
 
         expect(PlatformBlock.active.find_by(object_value: ip)).to be_nil
+      end
+    end
+
+    context "when a flood of newer retries outnumbers any bounded scan" do
+      # Bulk-copies the row: hundreds of factory purchases would dominate the suite's runtime,
+      # and the flood only has to exist, not to be individually distinct.
+      def flood_with_copies_of(purchase, count:)
+        columns = (Purchase.column_names - ["id"]).map { |column| "`#{column}`" }.join(", ")
+        count.times do
+          ActiveRecord::Base.connection.execute(
+            "INSERT INTO purchases (#{columns}) SELECT #{columns} FROM purchases WHERE id = #{purchase.id}"
+          )
+        end
+      end
+
+      # A newest-N row cap taken before deduplication made the count depend on retry order: a
+      # tester could hold to three cards, retry them past the cap, and the fourth card fell out
+      # of the window before it was ever counted.
+      it "still counts a card that only appears past the flood" do
+        declined(PurchaseErrorCode::CARD_DECLINED_FRAUDULENT, fingerprint: "older-card", created_at: 2.hours.ago)
+        declined(PurchaseErrorCode::CARD_DECLINED_FRAUDULENT, fingerprint: "flood-a", created_at: 1.hour.ago)
+        flood_source = declined(PurchaseErrorCode::CARD_DECLINED_FRAUDULENT, fingerprint: "flood-b", created_at: 1.hour.ago)
+        flood_with_copies_of(flood_source, count: 201)
+
+        live_attempt.send(:ban_fraudulent_buyer_browser_guid!)
+
+        expect(PlatformBlock.active.find_by(object_value: guid)).to be_present
       end
     end
 
