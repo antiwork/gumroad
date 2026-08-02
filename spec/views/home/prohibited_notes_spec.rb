@@ -58,19 +58,16 @@ describe "app/views/home/prohibited.html.erb clarifying notes" do
   describe "the rendered Discover link" do
     # A bare slug is NOT a Discover URL — DiscoverTaxonomyConstraint matches the full ancestry path
     # only, so gumroad.com/tarot falls through to the username route and lands on whichever creator
-    # owns that handle. Building the path from the tree keeps the page honest on a reparent.
+    # owns that handle. Reading (never creating) tarot from the seeded canonical tree means a
+    # seed-only rename or reparent changes the derived path here and reddens the assertion below;
+    # `sole` keeps that loud rather than picking an arbitrary row if a duplicate ever appears.
     let(:tarot_path) do
-      self_improvement = Taxonomy.find_or_create_by!(slug: "self-improvement")
-      spirituality = Taxonomy.find_or_create_by!(slug: "spirituality", parent: self_improvement)
-      mysticism = Taxonomy.find_or_create_by!(slug: "mysticism", parent: spirituality)
-      tarot = Taxonomy.find_or_create_by!(slug: "tarot", parent: mysticism)
-      tarot.self_and_ancestors.reverse.map(&:slug).join("/")
+      Taxonomy.where(slug: "tarot").sole.self_and_ancestors.reverse.map(&:slug).join("/")
     end
 
     let(:rendered) { ApplicationController.render(template: "home/prohibited", layout: false) }
 
-    it "points at the tarot category's full ancestry path" do
-      expect(tarot_path).to eq("self-improvement/spirituality/mysticism/tarot")
+    it "points at the tarot category's canonical ancestry path" do
       expect(rendered).to include(%(href="#{UrlService.discover_domain_with_protocol}/#{tarot_path}"))
     end
   end
