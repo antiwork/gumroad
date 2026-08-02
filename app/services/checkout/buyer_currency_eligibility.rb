@@ -32,6 +32,12 @@ class Checkout::BuyerCurrencyEligibility
   # buyer-currency charging away from the sellers who already have it.
   DESTINATION_CHARGE_FEATURE_NAME = :buyer_currency_destination_charges
 
+  # Per-seller ramp for charging a product's listed currency directly when it is already
+  # the buyer's currency. This lane mints no FX quote: the product price is already in the
+  # currency the buyer saw, and only USD-stored tax/shipping components are converted back
+  # with the purchase's stored rate.
+  LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME = :checkout_listed_currency_direct_charge
+
   # This lane's own ramp for memberships. Separate from FEATURE_NAME because a membership is
   # the first shape where a buyer-currency amount outlives the checkout that agreed it, and
   # because turning it on starts a recurring obligation rather than a single charge — so it
@@ -74,12 +80,9 @@ class Checkout::BuyerCurrencyEligibility
     "pix" => :checkout_local_method_pix,
   }.freeze
 
-  # `direct_listed_amount` is only set by the method-forced mode: true means the
-  # product is already priced in the forced currency, so the charge path can use
-  # the listed price as-is and skip fetching an FX quote. For the card mode
-  # (#decision) it is always nil: that mode always charges through the locked FX
-  # quote, and the one cart that could use a listed price as-is (a product priced
-  # in the buyer's own currency) is rejected by that mode instead of charged directly.
+  # `direct_listed_amount` is set when every product is already priced in the charge
+  # currency, so the charge path can use the listed price as-is and skip fetching an FX
+  # quote.
   Decision = Struct.new(:eligible, :currency, :fallback_reason, :direct_listed_amount, keyword_init: true) do
     def eligible?
       eligible
@@ -100,6 +103,10 @@ class Checkout::BuyerCurrencyEligibility
   def self.local_method_launched?(payment_method, seller)
     feature = LOCAL_METHOD_LAUNCH_FEATURES[payment_method.to_s.downcase]
     feature.present? && seller.present? && Feature.active?(feature, seller)
+  end
+
+  def self.listed_currency_direct_charge_enabled?(seller)
+    seller.present? && Feature.active?(LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
   end
 
   # Whether a method-forced surface for `currency` is available to card or Link in this
@@ -383,16 +390,25 @@ class Checkout::BuyerCurrencyEligibility
     # binds only seller, currency, and total (not product ids), so a stale token issued
     # for a supported cart could otherwise be replayed against an unsupported product
     # whose charged amount differs from the locked total.
+    listed_in_buyer_currency = []
     purchases.each do |purchase|
       return fallback(:unsupported_product_type) if unsupported_product_type?(purchase) && !later_charge_purchase_in_ramp?(purchase)
       return fallback(:unsupported_product_type) if unquotable_purchase?(purchase)
-      # A product already priced in the buyer's currency is withheld from the quote
-      # lane so an FX round trip can never misprice it — see the comment on
-      # BuyerCurrencyQuote#quotable_product?. (It only pays its listed price directly
-      # on the method-forced local-method lane; a card checkout for it charges
-      # canonical USD.) Any product currency other than the buyer's own is quotable,
-      # including non-USD ones.
-      return fallback(:listed_currency_is_buyer_currency) if purchase.link.price_currency_type.to_s.downcase == buyer_currency
+
+      listed_in_buyer_currency << (purchase.link.price_currency_type.to_s.downcase == buyer_currency)
+    end
+
+    # A product already priced in the buyer's currency is withheld from the QUOTE lane so an
+    # FX round trip can never misprice it (see BuyerCurrencyQuote#quotable_product?). It does
+    # not need one: the listed price is already the amount the buyer was shown, so charge it
+    # directly. A mixed cart still falls back — one direct line beside one quoted line needs
+    # the per-line basis tracked in gumroad-private#1298.
+    if listed_in_buyer_currency.any?
+      return fallback(:listed_currency_is_buyer_currency) unless listed_in_buyer_currency.all? && self.class.listed_currency_direct_charge_enabled?(seller)
+
+      # No settlement gate applies: the marker only predicts FX quote failures, and this
+      # lane mints no quote because the listed price is already in the buyer's currency.
+      return eligible(currency: buyer_currency, direct_listed_amount: true)
     end
 
     # Checked here (not up top with the other account gates) because the settlement

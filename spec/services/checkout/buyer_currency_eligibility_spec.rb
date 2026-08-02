@@ -43,6 +43,7 @@ describe Checkout::BuyerCurrencyEligibility do
   after do
     Feature.deactivate_user(:buyer_local_currency, seller)
     Feature.deactivate_user(described_class::FEATURE_NAME, seller)
+    Feature.deactivate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
   end
 
   it "allows the PR1 Stripe test-mode direct-charge path" do
@@ -360,9 +361,27 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::CAD)
   end
 
-  it "falls back when a purchase is priced in the buyer's own currency" do
+  it "falls back when a purchase is priced in the buyer's own currency while direct listed charging is off" do
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
+  it "allows direct listed charging when every purchase is priced in the buyer's own currency" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.direct_listed_amount?).to eq(true)
+  end
+
+  it "falls back for a mixed cart with a buyer-currency product and a quoted product" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
     purchases << create(:purchase,
-                        link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                        link: create(:product, user: seller, price_currency_type: Currency::USD),
                         seller:,
                         merchant_account:,
                         purchase_state: "in_progress",
@@ -370,6 +389,32 @@ describe Checkout::BuyerCurrencyEligibility do
 
     expect(decision).not_to be_eligible
     expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
+  it "keeps earlier fallbacks ahead of direct listed charging" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+
+    off_session_decision = described_class.new(order:,
+                                               seller:,
+                                               merchant_account:,
+                                               chargeable:,
+                                               purchases:,
+                                               params:,
+                                               setup_future_charges: false,
+                                               off_session: true).decision
+
+    expect(off_session_decision).not_to be_eligible
+    expect(off_session_decision.fallback_reason).to eq(:off_session)
+  end
+
+  it "does not apply the FX-quote settlement gate to direct listed charging" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    merchant_account.record_settlement_currency_mismatch!(Currency::CAD)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+
+    expect(decision).to be_eligible
+    expect(decision.direct_listed_amount?).to eq(true)
   end
 
   it "falls back when any purchase on the charge is an installment payment" do

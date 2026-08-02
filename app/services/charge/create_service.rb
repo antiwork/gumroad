@@ -298,6 +298,8 @@ class Charge::CreateService
       raise BuyerCurrencyQuoteInvalid, "charge-time eligibility fallback (#{eligibility_decision.fallback_reason}) with a quote token present"
     end
 
+    return direct_listed_presentment_processor_args(eligibility_decision) if eligibility_decision.direct_listed_amount?
+
     if quote_token.blank?
       Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")
       return {}
@@ -334,6 +336,38 @@ class Charge::CreateService
       processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
       stripe_fx_quote_id: presentment_result.stripe_fx_quote_id,
     }
+  end
+
+  def direct_listed_presentment_processor_args(eligibility_decision)
+    presentment_result = Charge::DirectListedPresentment.new(
+      charge:,
+      purchases:,
+      gumroad_amount_cents:,
+      currency: eligibility_decision.currency
+    ).perform
+    if presentment_result.blank?
+      Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: direct_listed_presentment_failed")
+      return {}
+    end
+
+    @presentment_currency_attempted = presentment_result.processor_currency
+
+    {
+      processor_amount_cents: presentment_result.processor_amount_cents,
+      processor_currency: presentment_result.processor_currency,
+      processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
+      stripe_fx_quote_id: nil,
+    }
+  rescue StandardError => e
+    ErrorNotifier.notify(e, context: {
+                           charge_id: charge.id,
+                           charge_external_id: charge.external_id,
+                           merchant_account_id: merchant_account.id,
+                           presentment_currency: eligibility_decision.currency,
+                         })
+    Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: #{e.class} #{e.message}")
+    # No quote token exists here; canonical USD is today's live behavior, not a mismatch against a confirmed quoted total.
+    {}
   end
 
   # Processor args for a membership renewal presented in the currency stored at signup, or {}
