@@ -361,6 +361,47 @@ describe PaypalChargeProcessor, :vcr do
         end
       end
 
+      # A non-blank code outside PayPal's documented set — a malformed value like an integer,
+      # or an outcome type PayPal adds later — must not fall through to LOST either.
+      [{ "outcome_code" => 7 }, { "outcome_code" => "SOMETHING_UNDOCUMENTED" }].each do |outcome|
+        it "leaves the dispute unresolved when dispute_outcome is #{outcome.inspect}" do
+          purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
+          purchase.update_attribute(:chargeback_date, Time.current)
+          described_class.handle_order_events(paypal_dispute_event("CUSTOMER.DISPUTE.CREATED"))
+          expect(purchase.reload.dispute.formalized?).to be(true)
+
+          event_info = paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: outcome)
+
+          expect(ErrorNotifier).to receive(:notify).with(
+            /unrecognized outcome_code/,
+            hash_including(paypal_dispute_id: "PP-D-4805", outcome_code: outcome["outcome_code"])
+          )
+
+          expect do
+            described_class.handle_order_events(event_info)
+          end.to_not raise_error
+
+          dispute = purchase.reload.dispute
+          expect(dispute.formalized?).to be(true)
+          expect(dispute.lost?).to be(false)
+          expect(dispute.won?).to be(false)
+          expect(purchase.chargeback_reversed).to be_falsey
+        end
+      end
+
+      it "marks dispute as LOST for the other documented buyer-favour outcome codes" do
+        %w[RESOLVED_WITH_PAYOUT ACCEPTED].each do |outcome_code|
+          purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
+          purchase.update_attribute(:chargeback_date, Time.current)
+
+          described_class.handle_order_events(
+            paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: { "outcome_code" => outcome_code })
+          )
+
+          expect(purchase.reload.dispute.lost?).to be(true)
+        end
+      end
+
       it "still resolves the dispute when dispute_outcome is present" do
         purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
         purchase.update_attribute(:chargeback_date, Time.current)

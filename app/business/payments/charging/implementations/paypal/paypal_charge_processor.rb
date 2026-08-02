@@ -16,6 +16,9 @@ class PaypalChargeProcessor
   DISPUTE_OUTCOME_SELLER_FAVOUR = %w[RESOLVED_SELLER_FAVOUR CANCELED_BY_BUYER DENIED].freeze
   private_constant :DISPUTE_OUTCOME_SELLER_FAVOUR
 
+  DISPUTE_OUTCOME_BUYER_FAVOUR = %w[RESOLVED_BUYER_FAVOUR RESOLVED_WITH_PAYOUT ACCEPTED].freeze
+  private_constant :DISPUTE_OUTCOME_BUYER_FAVOUR
+
   # https://developer.paypal.com/docs/api/orders/v1/
   VALID_TRANSACTION_STATUSES = %w(created approved completed)
 
@@ -89,16 +92,19 @@ class PaypalChargeProcessor
   def self.handle_dispute_resolved_event(event_info)
     resource = event_info.fetch("resource")
     outcome = resource["dispute_outcome"]
-    dispute_outcome = outcome.is_a?(Hash) ? outcome["outcome_code"] : nil
+    raw_outcome_code = outcome.is_a?(Hash) ? outcome["outcome_code"] : nil
+    outcome_code = raw_outcome_code.to_s.upcase
 
-    # An absent outcome_code means PayPal did not report a decision (see the outcome list on
-    # determine_resolved_dispute_event_type). Falling through classifies it LOST, which
-    # permanently withholds the dispute-won credit reversing the debit taken at formalization,
-    # and emails the seller that they lost — PayPal does not re-send, so no later webhook
-    # undoes either. A dispute left `formalized` can still resolve either way.
-    if dispute_outcome.blank?
+    # An absent outcome_code means PayPal did not report a decision, and a code outside the
+    # documented set (see determine_resolved_dispute_event_type) is one we cannot classify.
+    # Falling through classifies either as LOST, which permanently withholds the dispute-won
+    # credit reversing the debit taken at formalization, and emails the seller that they
+    # lost — PayPal does not re-send, so no later webhook undoes either. A dispute left
+    # `formalized` can still resolve either way.
+    unless DISPUTE_OUTCOME_SELLER_FAVOUR.include?(outcome_code) || DISPUTE_OUTCOME_BUYER_FAVOUR.include?(outcome_code)
       ErrorNotifier.notify(
-        "PayPal CUSTOMER.DISPUTE.RESOLVED with no outcome_code; dispute left unresolved",
+        "PayPal CUSTOMER.DISPUTE.RESOLVED with #{outcome_code.blank? ? "no" : "unrecognized"} outcome_code; dispute left unresolved",
+        outcome_code: raw_outcome_code,
         paypal_dispute_id: resource["dispute_id"],
         dispute_status: resource["status"],
         seller_transaction_id: resource.dig("disputed_transactions", 0, "seller_transaction_id"),
@@ -107,7 +113,7 @@ class PaypalChargeProcessor
       return
     end
 
-    event_type = determine_resolved_dispute_event_type(dispute_outcome.to_s)
+    event_type = determine_resolved_dispute_event_type(outcome_code)
     handle_dispute_event(event_info, event_type)
   rescue StandardError => e
     raise ChargeProcessorError, build_error_message(e.message, event_info)
