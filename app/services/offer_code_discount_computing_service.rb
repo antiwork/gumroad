@@ -64,9 +64,11 @@ class OfferCodeDiscountComputingService
     # Callers key `products` however they like — by permalink, or by cart index.
     # Only the permalink inside each entry is authoritative, so never index
     # `products` by permalink: doing so 500s on any index-keyed payload.
+    # Index-keyed carts can also repeat a permalink across lines, so quantities
+    # sum — keeping only one line's would let a capped code over-apply.
     def quantities_by_permalink
-      @_quantities_by_permalink ||= products.values.each_with_object({}) do |entry, acc|
-        acc[entry[:permalink]] = entry[:quantity]
+      @_quantities_by_permalink ||= products.values.each_with_object(Hash.new(0)) do |entry, acc|
+        acc[entry[:permalink]] += entry[:quantity].to_i
       end
     end
 

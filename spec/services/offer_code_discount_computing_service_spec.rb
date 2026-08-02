@@ -29,6 +29,32 @@ describe OfferCodeDiscountComputingService do
     expect(result[:products_data].keys).to match_array([product.unique_permalink, product2.unique_permalink])
   end
 
+  it "sums duplicate lines of one product, so a capped code cannot over-apply" do
+    universal_offer_code.update!(max_purchase_count: 2)
+    duplicate_lines = {
+      "0" => { quantity: "2", permalink: product.unique_permalink },
+      "1" => { quantity: "1", permalink: product.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(universal_offer_code.code, duplicate_lines).process
+
+    expect(result[:products_data]).to eq({})
+    expect(result[:error_code]).to eq(:insufficient_times_of_use)
+  end
+
+  it "sums duplicate lines of one product toward the code's minimum quantity" do
+    offer_code.update!(minimum_quantity: 3)
+    duplicate_lines = {
+      "0" => { quantity: "2", permalink: product.unique_permalink },
+      "1" => { quantity: "1", permalink: product.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(offer_code.code, duplicate_lines).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data].keys).to eq([product.unique_permalink])
+  end
+
   it "returns invalid error_code in result when offer code is invalid" do
     result = OfferCodeDiscountComputingService.new("invalid_offer_code", products_data).process
 
