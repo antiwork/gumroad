@@ -252,6 +252,9 @@ class ContactingCreatorMailer < ApplicationMailer
     @retries_paused_by_pause = !@retries_stopped && @seller.payouts_paused?
     # And when they can clear it on the account they already have, lead with that fix.
     @can_receive_us_dollars_on_same_account = @payment.repairable_in_place_paypal_failure?
+    # A locked or inactive receiving account needs its own fix copy: only PayPal can lift it, and
+    # the country-based alternatives below are the wrong diagnosis for it (gumroad-private#1661).
+    @locked_paypal_account = @payment.locked_account_paypal_failure?
     # Ask the seller to reply rather than promising the next payout date, because an admin or
     # system hold outlives the payout-method fix this email prescribes and only support can lift
     # it. A hold Stripe placed is lifted automatically when the seller changes their payout details
