@@ -386,9 +386,8 @@ module Product::Searchable
       end
 
       search_options = search_options.to_hash
-      # Only a Hash is a well-formed ES clause. Callers that read raw query parameters (the
-      # profile presenter uses request.query_parameters, bypassing format_search_params!) can
-      # pass a bare `?search=foo` string, which ES rejects with a 400 and 500s the page.
+      # Only a Hash is a well-formed ES clause; a bare `?search=foo` from a caller that reads raw
+      # query parameters would 400 the whole query. Matches format_search_params!'s own predicate.
       search_options[:query][:bool][:must] << params[:search] if params[:search].is_a?(Hash)
 
       if (params[:ids].present? || params[:section].is_a?(SellerProfileSection)) && params[:sort] == ProductSortKey::PAGE_LAYOUT
