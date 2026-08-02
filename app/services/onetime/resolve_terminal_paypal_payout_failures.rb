@@ -2,7 +2,7 @@
 
 # Explain the stopped payouts to the sellers who were already stuck when we shipped the fix.
 #
-# PayPal rejections 3148 and 14159 describe the receiving PayPal account, so re-sending the same
+# PayPal rejections 3148, 14159 and 3015 describe the receiving PayPal account, so re-sending the same
 # payout can never succeed until the seller changes something. The payout pipeline retried them
 # every week anyway — sellers here have a median of 22 identical failures each, worst case 37 — and
 # told the seller nothing beyond a generic "payouts were paused by the system" note
