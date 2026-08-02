@@ -199,15 +199,18 @@ describe Charge::Disputable, :vcr do
           charge.purchases << @first
         end
 
-        it "resolves deterministically to the lowest id rather than whichever row came back first" do
-          expect(charge.purchase_for_dispute_evidence).to eq [@first, @second].min_by(&:id)
-        end
+        # Both orders are asserted against the SAME expected row, because that is the property:
+        # `disputed_purchases` comes off an unordered `purchases.to_a`, so whichever order MySQL
+        # happens to return must not change which purchase's facts go to the card network.
+        [:as_inserted, :reversed].each do |ordering|
+          it "resolves to the lowest id at the maximum (#{ordering})" do
+            constituents = [@second, @first]
+            constituents = constituents.reverse if ordering == :reversed
+            subject_charge = Charge.find(charge.id)
+            allow(subject_charge).to receive(:disputed_purchases).and_return(constituents)
 
-        it "returns the same purchase however the constituents are ordered" do
-          reversed = Charge.find(charge.id)
-          allow(reversed).to receive(:disputed_purchases).and_return([@second, @first])
-
-          expect(reversed.purchase_for_dispute_evidence).to eq charge.purchase_for_dispute_evidence
+            expect(subject_charge.purchase_for_dispute_evidence).to eq [@first, @second].min_by(&:id)
+          end
         end
       end
     end
