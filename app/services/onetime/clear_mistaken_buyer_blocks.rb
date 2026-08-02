@@ -153,13 +153,12 @@ class Onetime::ClearMistakenBuyerBlocks
     # period runs back from the START of the window, not its end, so the range covers every period
     # the live rule could have used; from the end it would undercount and expose a wanted row.
     def distinct_failed_stripe_fingerprints(window, watch_period)
-      Purchase.failed.stripe.with_stripe_fingerprint
-              .select("distinct stripe_fingerprint")
+      Purchase.countable_card_testing_failures
               .where(created_at: (window.begin - watch_period)..window.end)
     end
 
     def velocity_threshold_met?(scope)
-      scope.count >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      Purchase.distinct_card_count(scope) >= Purchase::Blockable::MAX_NUMBER_OF_FAILED_FINGERPRINTS
     end
 
     # When the failure could have happened: creation at the earliest, the SCA deadline at the

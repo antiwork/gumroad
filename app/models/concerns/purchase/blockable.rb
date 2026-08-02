@@ -62,14 +62,20 @@ module Purchase::Blockable
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_ERROR_CODES
 
-  # Issuer declines that describe the buyer's balance rather than the card's standing. "No money
-  # on this card" is what a real wallet looks like when somebody hunts for one with room on it.
-  # Deliberately narrow: generic_decline is the issuer's catch-all and is common in genuine
-  # card-testing traffic, so excluding it would blunt the rule against the people it exists for.
-  # Spelled the way StripeErrorHandler composes them: "card_declined" + "_" + decline_code.
+  # Card errors carrying no signal about the card, spelled the way StripeErrorHandler composes
+  # them ("card_declined" + "_" + decline_code) plus Braintree's own network code.
+  #
+  # Only failures the processor could not answer about belong here. A decline the ISSUER answered
+  # stays counted, insufficient_funds included: the issuer accepted the number, expiry and CVC and
+  # refused only on balance, which is the positive validity signal a tester is buying — and since
+  # the attacker picks the amount, they can push live stolen cards into it at will. Exempting it
+  # would turn the rule's blind spot into a card-validation oracle, while doing nothing for the
+  # stranded buyer this exists for: one person retrying one card is one fingerprint and can never
+  # reach a four-card threshold.
   CARD_TESTING_UNCOUNTED_DECLINE_CODES = [
-    PurchaseErrorCode::STRIPE_INSUFFICIENT_FUNDS,
-    "card_declined_transaction_not_allowed",
+    "card_declined_processing_error",
+    "processing_error",
+    "3000", # Braintree: Processor Network Unavailable - Try Again
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_DECLINE_CODES
 
@@ -80,7 +86,43 @@ module Purchase::Blockable
   CARD_TESTING_COUNT_SCAN_LIMIT = 200
   private_constant :CARD_TESTING_COUNT_SCAN_LIMIT
 
+  class_methods do
+    # Shared with Onetime::ClearMistakenBuyerBlocks, which must reproduce these rules exactly: if
+    # it counts differently it clears a block a live rule still wants, switching enforcement off
+    # for that identifier.
+    def countable_card_testing_failures
+      Purchase.failed.with_stripe_fingerprint
+              .where(charge_processor_id: [StripeChargeProcessor.charge_processor_id,
+                                           PaypalChargeProcessor.charge_processor_id])
+              .where("(stripe_error_code NOT IN (?) OR stripe_error_code IS NULL)", CARD_TESTING_UNCOUNTED_DECLINE_CODES)
+              .where("(error_code NOT IN (?) OR error_code IS NULL)", CARD_TESTING_UNCOUNTED_ERROR_CODES)
+    end
 
+    # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
+    # wallet mints a fresh "card" on every attempt and four retries on a single funding source
+    # trip a four-card rule. Collapse each PayPal wallet to one unit of evidence — somebody
+    # cycling several stolen wallets still accumulates one per wallet — while every Stripe
+    # fingerprint stays its own card.
+    #
+    # Keyed on card_visual, which holds the payer email PayPal attested for the order, NOT
+    # purchases.email: the buyer types that one, so keying on it would let an attacker cycle any
+    # number of stolen wallets under a single checkout email and count as one forever.
+    def distinct_card_count(relation)
+      # Capped: the guid rule has no time window, so a long-lived guid can match a lot of rows and
+      # this runs inside the purchase state-machine transition. Any window wide enough to hold the
+      # threshold answers the question — we only ever compare against a count of 4.
+      rows = relation.order(created_at: :desc)
+                     .limit(CARD_TESTING_COUNT_SCAN_LIMIT)
+                     .pluck(:charge_processor_id, :stripe_fingerprint, :card_visual)
+      paypal_id = PaypalChargeProcessor.charge_processor_id
+      stripe_cards, paypal_rows = rows.partition { |processor, _, _| processor != paypal_id }
+
+      # A wallet with no attested payer is not provably the same wallet as any other, so count
+      # each such row on its own token rather than merging them into one free unit.
+      wallets = paypal_rows.map { |_, fingerprint, payer| payer.presence || "token:#{fingerprint}" }
+      stripe_cards.map { |_, fingerprint, _| fingerprint }.uniq.size + wallets.uniq.size
+    end
+  end
 
   # How many of the buyer's other purchases #unblock_buyer! collects identifiers from. An admin
   # click has to stay bounded, and past a few hundred rows a buyer stops contributing new browser
@@ -616,36 +658,11 @@ module Purchase::Blockable
     # charge_processor_id is not evidence about any card, and counting it made ordinary test and
     # legacy rows trip the rule.
     def countable_card_testing_failures
-      Purchase.failed.with_stripe_fingerprint
-              .where(charge_processor_id: [StripeChargeProcessor.charge_processor_id,
-                                           PaypalChargeProcessor.charge_processor_id])
-              .where("(stripe_error_code NOT IN (?) OR stripe_error_code IS NULL)", CARD_TESTING_UNCOUNTED_DECLINE_CODES)
-              .where("(error_code NOT IN (?) OR error_code IS NULL)", CARD_TESTING_UNCOUNTED_ERROR_CODES)
+      Purchase.countable_card_testing_failures
     end
 
-    # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
-    # wallet mints a fresh "card" on every attempt and four retries on a single funding source
-    # trip a four-card rule. Collapse each PayPal wallet to one unit of evidence — somebody
-    # cycling several stolen wallets still accumulates one per wallet — while every Stripe
-    # fingerprint stays its own card.
-    #
-    # Keyed on card_visual, which holds the payer email PayPal attested for the order, NOT
-    # purchases.email: the buyer types that one, so keying on it would let an attacker cycle any
-    # number of stolen wallets under a single checkout email and count as one forever.
     def distinct_card_count(relation)
-      # Capped: the guid rule has no time window, so a long-lived guid can match a lot of rows and
-      # this runs inside the purchase state-machine transition. Any window wide enough to hold the
-      # threshold answers the question — we only ever compare against a count of 4.
-      rows = relation.order(created_at: :desc)
-                     .limit(CARD_TESTING_COUNT_SCAN_LIMIT)
-                     .pluck(:charge_processor_id, :stripe_fingerprint, :card_visual)
-      paypal_id = PaypalChargeProcessor.charge_processor_id
-      stripe_cards, paypal_rows = rows.partition { |processor, _, _| processor != paypal_id }
-
-      # A wallet with no attested payer is not provably the same wallet as any other, so count
-      # each such row on its own token rather than merging them into one free unit.
-      wallets = paypal_rows.map { |_, fingerprint, payer| payer.presence || "token:#{fingerprint}" }
-      stripe_cards.map { |_, fingerprint, _| fingerprint }.uniq.size + wallets.uniq.size
+      Purchase.distinct_card_count(relation)
     end
 
     # The velocity rules' version of #buyer_has_clean_payment_history?, which cannot be reused here:

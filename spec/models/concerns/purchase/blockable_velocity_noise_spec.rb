@@ -56,17 +56,27 @@ RSpec.describe Purchase::Blockable do
       end
     end
 
-    context "when the declines describe the buyer's balance" do
-      it "does not block on insufficient funds" do
+    context "when the issuer answered about the card" do
+      # The attacker picks the amount and the card, so exempting an issuer-answered decline hands
+      # them a velocity-free oracle for validating a stolen list.
+      it "still blocks on insufficient funds" do
         4.times { |i| declined(PurchaseErrorCode::STRIPE_INSUFFICIENT_FUNDS, fingerprint: "nsf#{i}") }
 
         live_attempt.send(:block_buyer_based_on_recent_failures!)
 
-        expect(PlatformBlock.active.find_by(object_value: email)).to be_nil
+        expect(PlatformBlock.active.find_by(object_value: email)).to be_present
       end
 
-      it "does not block on transaction_not_allowed" do
+      it "still blocks on transaction_not_allowed" do
         4.times { |i| declined("card_declined_transaction_not_allowed", fingerprint: "tna#{i}") }
+
+        live_attempt.send(:block_buyer_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: email)).to be_present
+      end
+
+      it "does not block when our own call never reached the processor" do
+        4.times { |i| declined("card_declined_processing_error", fingerprint: "pe#{i}") }
 
         live_attempt.send(:block_buyer_based_on_recent_failures!)
 
