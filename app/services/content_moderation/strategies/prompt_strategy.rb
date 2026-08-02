@@ -26,10 +26,15 @@ class ContentModeration::Strategies::PromptStrategy
   CORROBORATION_RESAMPLES = 2
 
   # Which presets are judgment calls that need corroboration before they may
-  # block a publish. Adult-content flags are NOT resampled: they key off
-  # concrete depicted content rather than an inference about the seller's
-  # intent, so a single sample is reliable enough to act on.
+  # block a publish. Adult-content flags are corroborated only when the sample
+  # carried no images (see #corroborated_preset?): with a picture in front of it
+  # the model is reading concrete depicted content, but on text alone the flag is
+  # the same kind of intent inference as spam, and one noisy sample should not
+  # block a publish.
   CORROBORATED_PRESETS = %w[spam off_platform_fulfillment].freeze
+
+  # Presets that graduate into CORROBORATED_PRESETS when no image reached the model.
+  TEXT_ONLY_CORROBORATED_PRESETS = %w[adult_content].freeze
 
   ADULT_CONTENT_RULES = <<~RULES
     You are a content moderator. Evaluate the following content for adult/sexual content policy violations.
@@ -234,7 +239,7 @@ class ContentModeration::Strategies::PromptStrategy
       next if result[:status] == "compliant"
       next unless passes_uncertainty_check?(result[:reasoning])
 
-      if CORROBORATED_PRESETS.include?(preset[:name]) && @corroborate_judgment_flags
+      if corroborated_preset?(preset) && @corroborate_judgment_flags
         flagged_resamples, resamples_run = run_resamples(preset)
         corroborated = flagged_resamples == CORROBORATION_RESAMPLES
         Rails.logger.info(
@@ -279,6 +284,20 @@ class ContentModeration::Strategies::PromptStrategy
         list << { name: "off_platform_fulfillment", rules: OFF_PLATFORM_FULFILLMENT_RULES, skip_images: true }
       end
       list
+    end
+
+    # An adult-content flag on a record that sent no image is an inference about
+    # words, not a reading of a picture, so it earns the same resampling as spam.
+    # `skip_images` covers presets that never send images; `sampled_image_urls`
+    # being empty covers a record that simply has none to send (a profile page's
+    # prose, a text-only listing) — and, because it is memoized per instance, a
+    # preset that fell back to text-only after OpenAI could not fetch an image
+    # still counts as having had images available.
+    def corroborated_preset?(preset)
+      return true if CORROBORATED_PRESETS.include?(preset[:name])
+      return false unless TEXT_ONLY_CORROBORATED_PRESETS.include?(preset[:name])
+
+      preset[:skip_images] || sampled_image_urls.empty?
     end
 
     # Re-runs a preset to see whether the initial flag reproduces, and
