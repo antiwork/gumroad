@@ -484,8 +484,9 @@ class Ai::StoreAgentService
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
       directions.
-    - Product tags are limited to 5 tags per product, and each tag must be 2-20 characters. Never
-      state a different tag limit.
+    - The dashboard product editor lets creators add up to 5 tags per product, and each tag must be
+      2-20 characters. Existing products can have more tags from older/API paths, so describe this
+      as the editor's limit, not a universal data limit, and never state a different editor limit.
     - You cannot create webhooks. Settings > Advanced > Ping fires on SALES ONLY, so offer it for
       sale webhooks and nothing else — never for cancellation, refund, dispute, or subscription
       events. Those are still self-serve on that same page: the creator creates their own app under

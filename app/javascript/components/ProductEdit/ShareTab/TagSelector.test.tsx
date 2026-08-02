@@ -14,6 +14,6 @@ describe("TagSelector", () => {
   it("shows the product tag count and length limits next to the input", () => {
     render(<TagSelector tags={[]} onChange={vi.fn()} />);
 
-    expect(screen.getByText("Add up to 5 tags. Tags must be 2-20 characters each.")).toBeDefined();
+    expect(screen.getByText("The editor supports up to 5 tags. Tags must be 2-20 characters each.")).toBeDefined();
   });
 });

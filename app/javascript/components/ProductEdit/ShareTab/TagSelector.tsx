@@ -71,7 +71,8 @@ export const TagSelector = ({ tags, onChange }: { tags: string[]; onChange: (tag
         maxTags={MAX_ALLOWED_TAGS}
       />
       <FieldsetDescription>
-        Add up to {MAX_ALLOWED_TAGS} tags. Tags must be {MIN_TAG_LENGTH}-{MAX_TAG_LENGTH} characters each.
+        The editor supports up to {MAX_ALLOWED_TAGS} tags. Tags must be {MIN_TAG_LENGTH}-{MAX_TAG_LENGTH} characters
+        each.
       </FieldsetDescription>
     </Fieldset>
   );
