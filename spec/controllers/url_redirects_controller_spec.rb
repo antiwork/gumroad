@@ -266,7 +266,9 @@ describe UrlRedirectsController, inertia: true do
       end
 
       context "with a bundle purchase" do
-        let(:purchase) { create(:purchase, link: create(:product, :bundle), is_bundle_purchase: true) }
+        # A buyer with an account, which is what makes the /library redirect a real destination.
+        # The guest (purchaser_id nil) case is its own context below.
+        let(:purchase) { create(:purchase, link: create(:product, :bundle), is_bundle_purchase: true, purchaser: create(:user)) }
 
         before do
           purchase.create_url_redirect!
@@ -311,6 +313,30 @@ describe UrlRedirectsController, inertia: true do
           it "includes the purchase_id parameter when redirecting" do
             get :download_page, params: { id: purchase.url_redirect.token, receipt: true }
             expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, purchase_id: purchase.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when the buyer checked out as a guest" do
+          let(:purchase) { create(:purchase, link: create(:product, :bundle), is_bundle_purchase: true) }
+
+          # Guest checkout mints no User row, so purchaser_id stays nil and /library — which
+          # requires an account — would offer a login for an account that never existed.
+          it "renders the download page instead of redirecting to a login the buyer cannot pass" do
+            expect(purchase.purchaser_id).to be_nil
+
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to have_http_status(:ok)
+            expect(response).to_not be_redirect
+          end
+
+          it "lists every member purchase's own download page" do
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            bundle_products = inertia.props.dig(:content, :bundle_products)
+            expect(bundle_products.map { _1[:name] }).to match_array(purchase.product_purchases.map { _1.link.name })
+            expect(bundle_products.map { _1[:url] })
+              .to match_array(purchase.product_purchases.map { _1.url_redirect.download_page_url })
           end
         end
 
