@@ -107,5 +107,11 @@ A migration PR is mergeable when all of:
   infrastructure) — out of scope unless the class is relocated.
 - Capybara feature/system specs — those move to the Playwright system-test
   suite (`test/system/`, separate track), not to plain Minitest.
-- VCR-heavy external-API specs — keep in RSpec until the cassette strategy
-  for Minitest is decided.
+
+VCR-heavy external-API specs are now in scope. The cassettes are
+framework-agnostic and `test/support/vcr.rb` points at the same directory, so a
+port replays the existing recordings unchanged — see
+`test/business/sales_tax/sales_tax_calculator_test.rb` for a whole context
+driven that way. The cassette name is the path RSpec's metadata derived from the
+describe/context/it chain; insert it unconditionally so a stale name fails with
+VCR's own error rather than a WebMock connection refusal.
