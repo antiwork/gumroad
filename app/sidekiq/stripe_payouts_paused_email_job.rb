@@ -27,7 +27,19 @@ class StripePayoutsPausedEmailJob
       next unless merchant_account.stripe_payouts_pause_email_claim_token == claim_token
 
       if user.payouts_paused_internally? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-        email_to_send = email_type
+        if email_type == "under_review" && nothing_at_stake?(user)
+          # "Payouts paused, under review" tells a seller with no balance and no
+          # sales that something alarming happened to money they do not have and
+          # asks nothing of them — Stripe is only re-checking what it already
+          # has. Drop the claim rather than keeping it so a later webhook for
+          # this same sustained pause re-schedules: once the seller does have a
+          # sale or a balance, the notice becomes true and gets sent.
+          # "action_required" is deliberately still sent to this cohort — it is
+          # actionable and unblocks their first payout.
+          merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil)
+        else
+          email_to_send = email_type
+        end
       else
         # The pause resolved before the debounce window elapsed (a verification
         # blip, or an admin resumed the account) — skip the email entirely, and
@@ -45,4 +57,12 @@ class StripePayoutsPausedEmailJob
       MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
     end
   end
+
+  private
+    # No money is being withheld: nothing has ever been earned and nothing is
+    # waiting to be paid out. A pause over an empty account changes nothing the
+    # seller can see or act on.
+    def nothing_at_stake?(user)
+      user.unpaid_balance_cents.zero? && !user.sales.all_success_states.exists?
+    end
 end
