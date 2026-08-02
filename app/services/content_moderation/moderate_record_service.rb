@@ -108,8 +108,14 @@ class ContentModeration::ModerateRecordService
       # Unlike the transient branch above, retrying can never fix this: the
       # image itself is something our review can’t read, so the seller has to
       # change it and the copy has to say so.
-      "This #{noun} includes an image in a format we can’t review (such as an SVG data URL or a very large inline image), " \
-      "so we can’t publish it as is. Re-encode that image as a regular PNG, JPEG, GIF, or WebP file and try again."
+      #
+      # Format and size are both named, and no byte figure is quoted: the two
+      # ceilings differ (MAX_DATA_IMAGE_BYTES for an inline payload, OpenAI's
+      # own limit for a URL it downloads), so one number here would be wrong for
+      # whichever case the seller is actually in. "Smaller" is what they can act
+      # on either way.
+      "This #{noun} includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
+      "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
     elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
       "This #{noun} has more images than we can review, so we can’t publish it as is. " \
       "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \

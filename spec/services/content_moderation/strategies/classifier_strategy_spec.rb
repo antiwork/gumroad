@@ -161,13 +161,23 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
   end
 
   it "tells the seller an oversized remote asset cannot be reviewed rather than to retry" do
-    image_urls = ["https://public-files.gumroad.com/tce9t60y8ecmiqx1b81v1gnzj28r"]
+    # The gumroad-private#1728 shape: one oversized asset among many, so the
+    # whole batch 400s and every image is re-asked individually. The reason has
+    # to survive that fallback — the good images come back moderated, and the
+    # only unreviewed one is a rejection no retry can change.
+    oversized = "https://public-files.gumroad.com/tce9t60y8ecmiqx1b81v1gnzj28r"
+    image_urls = ["https://cdn.example.com/ok.png", oversized]
     bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
     bad_error = Faraday::BadRequestError.new(
       { status: 400, body: { "error" => { "code" => "file_too_large", "message" => "File size exceeds the limit." } } },
       bad_response
     )
-    allow(client).to receive(:moderations).and_raise(bad_error)
+    allow(client).to receive(:moderations) do |parameters:|
+      urls = parameters[:input].map { |part| part.dig(:image_url, :url) }
+      raise bad_error if urls.include?(oversized)
+
+      { "results" => [{ "category_scores" => {} }] }
+    end
 
     result = described_class.new(text: "", image_urls:, max_images: :all).perform
 
