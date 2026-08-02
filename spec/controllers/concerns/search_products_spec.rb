@@ -90,8 +90,6 @@ describe SearchProducts do
       end
     end
 
-
-
     context "with taxonomy attribute filter parameters" do
       before do
         routes.draw { get "index" => "anonymous#index" }

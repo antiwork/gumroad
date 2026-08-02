@@ -43,4 +43,10 @@ class TaxonomyAttribute < ApplicationRecord
   def filter_options
     value_type == "boolean" ? %w[true false] : normalized_options
   end
+
+  def filter_label_for(value)
+    return value == "true" ? "Yes" : "No" if value_type == "boolean"
+
+    value
+  end
 end

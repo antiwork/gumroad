@@ -8,6 +8,7 @@ module SearchProducts
     def search_products(params)
       filetype_options = Link.filetype_options(params)
       filetype_response = Link.search(filetype_options)
+      taxonomy_attribute_response = Link.search(Link.taxonomy_attribute_options(params))
       product_options = Link.search_options(params.merge(track_total_hits: true))
 
       product_response = Link.search(product_options)
@@ -15,7 +16,7 @@ module SearchProducts
         total: product_response.results.total,
         tags_data: product_response.aggregations["tags.keyword"]["buckets"].to_a.map(&:to_h),
         filetypes_data: filetype_response.aggregations["filetypes.keyword"]["buckets"].to_a.map(&:to_h),
-        taxonomy_attributes_data: taxonomy_attributes_data(params, product_response),
+        taxonomy_attributes_data: taxonomy_attributes_data(params, taxonomy_attribute_response),
         products: product_response.records
       }
     end
@@ -31,7 +32,7 @@ module SearchProducts
         filters = attribute.filter_options.filter_map do |option|
           token = attribute.filter_token_for(option)
           bucket = buckets_by_key[token]
-          { key: token, label: option, doc_count: bucket ? bucket["doc_count"] : 0 } if token
+          { key: token, label: attribute.filter_label_for(option), doc_count: bucket ? bucket["doc_count"] : 0 } if token
         end
         next if filters.empty?
 

@@ -13,6 +13,8 @@ describe TaxonomyAttribute do
       expect(format.filter_token_for("App embedding")).to eq("format:app_embedding")
       expect(variable_font.filter_token_for(true)).to eq("variable_font:true")
       expect(variable_font.filter_options).to eq(%w[true false])
+      expect(variable_font.filter_label_for("true")).to eq("Yes")
+      expect(variable_font.filter_label_for("false")).to eq("No")
       expect(styles.filter_token_for(12)).to be_nil
     end
   end

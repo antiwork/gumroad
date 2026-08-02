@@ -34,4 +34,12 @@ describe "Product::Searchable - Taxonomy attribute filters" do
 
     expect(records).to include(@otf_commercial, @otf_personal, @ttf_commercial)
   end
+
+  it "counts sibling facet values without the current taxonomy attribute filters" do
+    response = Link.search(Link.taxonomy_attribute_options(user_id: creator.id, taxonomy_id: taxonomy.id, taxonomy_attribute_filters: ["format:otf"]))
+    buckets = response.aggregations["taxonomy_attribute_filters"]["buckets"].index_by { _1["key"] }
+
+    expect(buckets["format:ttf"]["doc_count"]).to eq(1)
+    expect(buckets["license:commercial"]["doc_count"]).to eq(2)
+  end
 end

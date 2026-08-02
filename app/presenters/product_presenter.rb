@@ -303,7 +303,7 @@ class ProductPresenter
         }
       end,
       taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
-      taxonomy_attributes: TaxonomyAttribute.active_ordered.includes(:taxonomy).map do |attribute|
+      taxonomy_attributes: TaxonomyAttribute.active_ordered.map do |attribute|
         {
           taxonomy_id: attribute.taxonomy_id.to_s,
           name: attribute.name,

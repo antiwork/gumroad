@@ -10,7 +10,7 @@ module Product::Searchable
   MAX_NUMBER_OF_PROFILE_TAGS = 200
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
-  MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS = 20
+  MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS = 100
   MAX_OFFER_CODES_IN_INDEX = 300
   MAX_PRICE_FILTER_CENTS = 10_000_000_000 # $100,000,000 — upper bound for ES long-typed price range filters
 
@@ -437,6 +437,20 @@ module Product::Searchable
           terms do
             field "filetypes.keyword"
             size MAX_NUMBER_OF_FILETYPES
+          end
+        end
+      end
+    end
+
+    def taxonomy_attribute_options(params)
+      taxonomy_attribute_search_options = search_options(params.except(:taxonomy_attribute_filters))
+      Elasticsearch::DSL::Search.search do
+        query taxonomy_attribute_search_options[:query]
+
+        aggregation "taxonomy_attribute_filters" do
+          terms do
+            field "taxonomy_attribute_filters"
+            size MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS
           end
         end
       end
