@@ -345,8 +345,8 @@ describe PaypalChargeProcessor, :vcr do
           event_info = paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: outcome)
 
           expect(ErrorNotifier).to receive(:notify).with(
-            "PayPal CUSTOMER.DISPUTE.RESOLVED with no outcome_code; dispute left unresolved",
-            paypal_dispute_id: "PP-D-4805"
+            /no outcome_code/,
+            hash_including(paypal_dispute_id: "PP-D-4805", dispute_status: "RESOLVED")
           )
 
           expect do
@@ -366,10 +366,28 @@ describe PaypalChargeProcessor, :vcr do
         purchase.update_attribute(:chargeback_date, Time.current)
 
         described_class.handle_order_events(
-          paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: { "outcome_code" => "CANCELED_BY_BUYER" })
+          paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: { "outcome_code" => "RESOLVED_BUYER_FAVOUR" })
         )
 
-        expect(purchase.reload.dispute.won?).to be(true)
+        expect(purchase.reload.dispute.lost?).to be(true)
+      end
+
+      # The guard's justification is that a skipped dispute stays resolvable. Pin that, or
+      # "leave it formalized" is an assertion no test defends.
+      it "can still resolve a dispute a blank outcome left formalized" do
+        purchase = create(:purchase_with_balance, stripe_transaction_id: "6Y199803HH2987814")
+        purchase.update_attribute(:chargeback_date, Time.current)
+        described_class.handle_order_events(paypal_dispute_event("CUSTOMER.DISPUTE.CREATED"))
+
+        allow(ErrorNotifier).to receive(:notify)
+        described_class.handle_order_events(paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED"))
+        expect(purchase.reload.dispute.formalized?).to be(true)
+
+        described_class.handle_order_events(
+          paypal_dispute_event("CUSTOMER.DISPUTE.RESOLVED", dispute_outcome: { "outcome_code" => "RESOLVED_BUYER_FAVOUR" })
+        )
+
+        expect(purchase.reload.dispute.lost?).to be(true)
       end
     end
 

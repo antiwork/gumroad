@@ -91,19 +91,23 @@ class PaypalChargeProcessor
     outcome = resource["dispute_outcome"]
     dispute_outcome = outcome.is_a?(Hash) ? outcome["outcome_code"] : nil
 
-    # An absent outcome_code means PayPal has not decided the case (see the outcome list on
-    # determine_resolved_dispute_event_type). Falling through would classify it LOST and debit
-    # the seller for a dispute nobody lost, so leave the dispute untouched and surface it — a
-    # row left `formalized` is recoverable, a wrong debit is not.
+    # An absent outcome_code means PayPal did not report a decision (see the outcome list on
+    # determine_resolved_dispute_event_type). Falling through classifies it LOST, which
+    # permanently withholds the dispute-won credit reversing the debit taken at formalization,
+    # and emails the seller that they lost — PayPal does not re-send, so no later webhook
+    # undoes either. A dispute left `formalized` can still resolve either way.
     if dispute_outcome.blank?
       ErrorNotifier.notify(
         "PayPal CUSTOMER.DISPUTE.RESOLVED with no outcome_code; dispute left unresolved",
-        paypal_dispute_id: resource["dispute_id"]
+        paypal_dispute_id: resource["dispute_id"],
+        dispute_status: resource["status"],
+        seller_transaction_id: resource.dig("disputed_transactions", 0, "seller_transaction_id"),
+        webhook_event_id: event_info["id"]
       )
       return
     end
 
-    event_type = determine_resolved_dispute_event_type(dispute_outcome)
+    event_type = determine_resolved_dispute_event_type(dispute_outcome.to_s)
     handle_dispute_event(event_info, event_type)
   rescue StandardError => e
     raise ChargeProcessorError, build_error_message(e.message, event_info)
