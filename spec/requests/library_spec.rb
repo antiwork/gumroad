@@ -584,6 +584,43 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
   end
 
+  it "carries the page in the URL and serves each purchase on exactly one page" do
+    16.times do |n|
+      create(:purchase, link: create(:product, name: "Paged Product #{n}", price_cents: 0), purchaser: @user)
+    end
+
+    Link.import(refresh: true, force: true)
+    visit library_path
+
+    expect(page).to have_text("Showing 1-15 of 16 products")
+    first_page = all("article h3[itemprop='name']").map(&:text)
+    expect(first_page.length).to eq(15)
+
+    within find("[role='navigation'][aria-label='Pagination']") do
+      click_on "2"
+    end
+
+    expect(page).to have_text("Showing 16-16 of 16 products")
+    expect(page).to have_current_path(/page=2/)
+    second_page = all("article h3[itemprop='name']").map(&:text)
+
+    # 16 slots against 16 unique names: a row duplicated or dropped across the page boundary fails this
+    expect(first_page + second_page).to match_array(16.times.map { "Paged Product #{_1}" })
+
+    visit library_path(page: 2)
+    expect(page).to have_text("Showing 16-16 of 16 products")
+    expect(page).to have_product_card(count: 1)
+  end
+
+  it "ignores array-valued page and query params" do
+    purchase = create(:purchase, purchaser: @user)
+    Link.import(refresh: true, force: true)
+
+    visit "/library?page[]=2&query[]=x"
+
+    expect(page).to have_product_card(purchase.link)
+  end
+
   describe "bundle purchases" do
     let(:purchase) { create(:purchase, purchaser: @user, link: create(:product, :bundle)) }
     before do
