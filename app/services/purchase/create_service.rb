@@ -123,7 +123,8 @@ class Purchase::CreateService < Purchase::BaseService
           # discount. The client can't automatically set the upsell discount
           # because it doesn't have a "code". Thus, upsell discount should only
           # be applied when the purchase does not already have a discount code.
-          if !params[:is_purchasing_power_parity_discounted] && purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present?
+          if purchase.offer_code.blank? && upsell.offer_code&.evaluate_for_buyer(buyer, product: purchase.link).present? &&
+             (!params[:is_purchasing_power_parity_discounted] || perceived_price_matches_accepted_offer?(upsell.offer_code))
             purchase.offer_code = upsell.offer_code
           end
         end
@@ -330,6 +331,18 @@ class Purchase::CreateService < Purchase::BaseService
         Rails.logger.info("Zip code #{purchase_params[:zip_code]} is invalid, customer email #{purchase_params[:email]}")
         raise Purchase::PurchaseInvalid, "You entered a ZIP Code that doesn't exist within your country."
       end
+    end
+
+    def perceived_price_matches_accepted_offer?(offer_code)
+      return false unless offer_code
+
+      quantity = params[:quantity].to_i.positive? ? params[:quantity].to_i : 1
+      full_price_cents = product.price_cents * quantity
+      discount_cents = offer_code.is_cents? ? offer_code.amount_cents : (full_price_cents * offer_code.amount_percentage / 100.0).round
+      price_after_discount = [full_price_cents - discount_cents, 0].max
+      minimum_price_cents = product.currency["min_price"]
+      price_after_discount = minimum_price_cents if price_after_discount.positive? && price_after_discount < minimum_price_cents
+      price_after_discount == purchase_params[:perceived_price_cents].to_i
     end
 
     def validate_perceived_free_trial_params

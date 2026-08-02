@@ -25,8 +25,8 @@ class BestOfferCodeService
     return url_code_result if !default_code_valid
     return default_code_result if !url_code_valid
 
-    url_code_amount = amount_off_from_discount(url_code_result[:discount])
-    default_code_amount = amount_off_from_discount(default_code_result[:discount])
+    url_code_amount = amount_off_from_offer_code(url_code_result[:offer_code])
+    default_code_amount = amount_off_from_offer_code(default_code_result[:offer_code])
 
     url_code_amount > default_code_amount ? url_code_result : default_code_result
   end
@@ -55,19 +55,18 @@ class BestOfferCodeService
 
       {
         valid: true,
+        offer_code:,
         code: code,
         discount: response[:products_data][@product.unique_permalink][:discount]
       }
     end
 
-    def amount_off_from_discount(discount)
-      return 0 unless discount
-      total_price_cents = @product.price_cents * @quantity
-      amount_off = if discount[:type] == "fixed"
-        discount[:cents] * (discount[:once_per_cart] ? 1 : @quantity)
+    def amount_off_from_offer_code(offer_code)
+      return 0 unless offer_code
+      if offer_code.is_cents?
+        offer_code.amount_cents * (offer_code.once_per_cart? ? 1 : @quantity)
       else
-        (@product.price_cents * discount[:percents] / 100.0).round * @quantity
+        (@product.price_cents * offer_code.amount_percentage / 100.0).round * @quantity
       end
-      [amount_off, total_price_cents].min
     end
 end
