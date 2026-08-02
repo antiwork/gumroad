@@ -221,11 +221,7 @@ class Subscription < ApplicationRecord
     auto = auto_renewal_offer_code(authenticated_offer_code_buyer:)
     return pre_discount unless auto
 
-    discounted_price = [pre_discount - auto_renewal_discount_amount_off_cents(auto, pre_discount), 0].max
-    if auto.offer_code.is_cents? && auto.offer_code.once_per_cart? && discounted_price.positive?
-      discounted_price = [discounted_price, link.currency["min_price"]].max
-    end
-    discounted_price
+    auto_renewal_discounted_total_cents(auto, pre_discount)
   end
 
   def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
@@ -1161,7 +1157,8 @@ class Subscription < ApplicationRecord
           resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase)
           auto_discount = auto_renewal_discount_for(offer_code, resolved)
           next if auto_discount.nil?
-          [auto_discount, auto_renewal_discount_amount_off_cents(auto_discount, renewal_pre_discount_total_cents)]
+          discounted_total = auto_renewal_discounted_total_cents(auto_discount, renewal_pre_discount_total_cents)
+          [auto_discount, renewal_pre_discount_total_cents - discounted_total]
         end
         .max_by(&:last)
         &.first
@@ -1201,6 +1198,14 @@ class Subscription < ApplicationRecord
       else
         OfferCode.new(amount_cents: auto_discount.offer_code_amount).amount_off(renewal_pre_discount_price_cents) * renewal_purchase_quantity
       end
+    end
+
+    def auto_renewal_discounted_total_cents(auto_discount, pre_discount_total_cents)
+      discounted_total = [pre_discount_total_cents - auto_renewal_discount_amount_off_cents(auto_discount, pre_discount_total_cents), 0].max
+      if auto_discount.offer_code.is_cents? && auto_discount.offer_code.once_per_cart? && discounted_total.positive?
+        discounted_total = [discounted_total, link.currency["min_price"]].max
+      end
+      discounted_total
     end
 
     def renewal_pre_discount_total_cents

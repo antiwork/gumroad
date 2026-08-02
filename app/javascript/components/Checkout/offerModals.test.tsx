@@ -222,6 +222,25 @@ describe("checkout offer modals", () => {
     });
   });
 
+  it("preserves an already allocated cart discount fragment", () => {
+    const selection = {
+      rent: false,
+      optionId: null,
+      price: { error: false, value: null },
+      quantity: 1,
+      recurrence: null,
+      callStartTime: null,
+      payInInstallments: false,
+    };
+    const allocatedFragment = { ...discount, cents: 500, once_per_cart_amount_cents: 1_500 };
+
+    expect(
+      applySelection(product({ price_cents: 2_000 }), allocatedFragment, selection, {
+        preserveOncePerCartAllocation: true,
+      }),
+    ).toMatchObject({ discountedPriceCents: 1_500, discountedTotalCents: 1_500 });
+  });
+
   it("shows the line total for a multi-quantity once-per-cart upsell", () => {
     const itemProduct = product();
     const item = cartItem(itemProduct, { quantity: 2 });

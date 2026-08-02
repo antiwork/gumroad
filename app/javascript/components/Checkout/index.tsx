@@ -746,6 +746,7 @@ const CartItemComponent = ({
     item.product,
     discount.discount && discount.discount.type !== "ppp" ? discount.discount.value : null,
     selection,
+    { preserveOncePerCartAllocation: true },
   );
 
   const saveChanges = () => {

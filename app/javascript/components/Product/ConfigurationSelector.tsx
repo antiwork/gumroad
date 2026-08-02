@@ -236,7 +236,12 @@ export const withConfiguredOncePerCartAmount = (discount: Discount): Discount =>
     ? { ...discount, cents: discount.once_per_cart_amount_cents ?? discount.cents }
     : discount;
 
-export const applySelection = (product: Product, discount: Discount | null, selection: PriceSelection) => {
+export const applySelection = (
+  product: Product,
+  discount: Discount | null,
+  selection: PriceSelection,
+  { preserveOncePerCartAllocation = false }: { preserveOncePerCartAllocation?: boolean } = {},
+) => {
   const basePriceCents = !product.is_legacy_subscription
     ? selection.rent && product.rental
       ? product.rental.price_cents
@@ -247,7 +252,9 @@ export const applySelection = (product: Product, discount: Discount | null, sele
   const priceCents = basePriceCents + (selectedOption ? computeOptionPrice(selectedOption, selection.recurrence) : 0);
   const applicableDiscount =
     discount && hasMetDiscountConditions(discount, selection.quantity)
-      ? withConfiguredOncePerCartAmount(discount)
+      ? preserveOncePerCartAllocation
+        ? discount
+        : withConfiguredOncePerCartAmount(discount)
       : null;
   const discountedPrice = computeSelectionDiscountedPrice(priceCents, applicableDiscount, product, selection.quantity);
   const discountedTotalCents =
