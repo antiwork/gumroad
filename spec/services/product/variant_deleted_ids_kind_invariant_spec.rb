@@ -224,6 +224,25 @@ describe "deleted_ids[:variants] kind invariant" do
       expect(serializer_source).to match(/deletion_operations:\s*buildDeletionOperations\(product\),/)
     end
 
+    # A row leaving `variants` without a confirmed-removal id is the silent
+    # no-op of gumroad-private#1508. Reorder was that route: it rebuilt the list
+    # from the DOM's id order, so an id missing from that order dropped the row.
+    # Pin the call sites, not just the helper — reverting them is invisible to a
+    # unit test of the helper alone.
+    it "reorders the version editors without letting a row leave the list" do
+      %w[VersionsEditor DurationsEditor TiersEditor].each do |editor|
+        source = File.read(javascript_root.join("components", "ProductEdit", "ProductTab", "#{editor}.tsx"))
+
+        expect(source).to match(/onReorder=\{\(newOrder\) => onChange\(reorderPreservingMembership\(\w+, newOrder\)\)\}/),
+                          "#{editor} must reorder through reorderPreservingMembership. Rebuilding the list from " \
+                          "newOrder drops any row the order omits, with no confirmed-removal id — see " \
+                          "gumroad-private#1508."
+        expect(source).not_to match(/onReorder=\{[^}]*newOrder\.(?:flatMap|map|filter)/m),
+                              "#{editor} derives its new list from newOrder directly, which cannot preserve a row " \
+                              "the order omitted."
+      end
+    end
+
     it "exposes no grouping as a deletable object in the product editor" do
       editor_sources = (Dir.glob(javascript_root.join("components", "ProductEdit", "**", "*.{ts,tsx}")) +
                         permitted_readers.map { javascript_root.join(_1).to_s }).uniq
