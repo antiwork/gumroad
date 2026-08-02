@@ -3725,17 +3725,30 @@ describe Api::Internal::Admin::UsersController do
       expect(user.reload).to be_compliant
     end
 
-    it "reads the seller's flag state under the row lock so a concurrent report cannot leave a listing live" do
-      # The race: both requests read `flagged_for_tos_violation?` as false, both take the
-      # flag branch, and the loser's state transition raises before reaching its own
-      # takedown. Locking first makes the second request see the flag and take the
-      # already_flagged branch, which still takes its product down.
-      expect_any_instance_of(User).to receive(:lock!).and_call_original
+    it "takes down both listings when two reports race on an initially unflagged seller" do
+      second_product = create(:product, user:)
 
-      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: product.external_id }
+      # Replays the race deterministically: the winning report commits while this request
+      # waits on the row lock, so the stub plays the winner at exactly that boundary.
+      # Reading the flag before the lock again would send this request down the flag
+      # branch, raise InvalidTransition, and leave second_product live behind a 422.
+      winner_done = false
+      expect_any_instance_of(User).to receive(:lock!) do |seller|
+        unless winner_done
+          winner_done = true
+          User.find(seller.id).flag_for_tos_violation!(author_id: admin_user.id, product_id: product.id)
+          product.reload.take_down_for_tos_violation!
+        end
+        seller.reload
+      end
+
+      post :flag_for_tos_violation, params: { user_id: user.external_id, product_id: second_product.external_id }
 
       expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["status"]).to eq("already_flagged")
+      expect(user.reload).to be_flagged_for_tos_violation
       expect(product.reload.deleted_at).to be_present
+      expect(second_product.reload.deleted_at).to be_present
     end
 
     it "returns 422 when the state machine rejects the flag, without the lock swallowing it" do
