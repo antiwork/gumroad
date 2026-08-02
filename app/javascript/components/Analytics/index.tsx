@@ -13,10 +13,11 @@ import { AbortError } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
+import { LazySalesChart, warmSalesChart } from "$app/components/Analytics/loadChart";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
 import { ProductsPopover } from "$app/components/Analytics/ProductsPopover";
 import { ReferrersTable } from "$app/components/Analytics/ReferrersTable";
-import { SalesChart } from "$app/components/Analytics/SalesChart";
+import { SalesChartBoundary } from "$app/components/Analytics/SalesChartBoundary";
 import { SalesQuickStats } from "$app/components/Analytics/SalesQuickStats";
 import { useAnalyticsDateRange } from "$app/components/Analytics/useAnalyticsDateRange";
 import { DateRangePicker } from "$app/components/DateRangePicker";
@@ -170,6 +171,10 @@ const Analytics = ({
 
   const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
 
+  // The chart's code is fetched while the analytics data requests above are still in flight, so it
+  // is normally ready by the time there is anything to draw.
+  React.useEffect(warmSalesChart, []);
+
   const mainData = React.useMemo(
     () => (data?.byReferral ? formatData(data.byReferral, selectedProducts) : null),
     [data?.byReferral, products],
@@ -209,14 +214,25 @@ const Analytics = ({
           <SalesQuickStats total={mainData?.total} />
           {mainData ? (
             <>
-              <SalesChart
-                data={mainData.dailyTotal}
-                startDate={mainData.startDate}
-                endDate={mainData.endDate}
-                aggregateBy={aggregateBy}
-                sellerTimeZone={seller_time_zone}
-                expectedSalesFraction={expected_sales_fraction_of_day}
-              />
+              <SalesChartBoundary>
+                <React.Suspense
+                  fallback={
+                    <InputGroup>
+                      <LoadingSpinner />
+                      Loading charts...
+                    </InputGroup>
+                  }
+                >
+                  <LazySalesChart
+                    data={mainData.dailyTotal}
+                    startDate={mainData.startDate}
+                    endDate={mainData.endDate}
+                    aggregateBy={aggregateBy}
+                    sellerTimeZone={seller_time_zone}
+                    expectedSalesFraction={expected_sales_fraction_of_day}
+                  />
+                </React.Suspense>
+              </SalesChartBoundary>
               <ReferrersTable data={mainData.referrerTotal} />
             </>
           ) : (
