@@ -87,11 +87,14 @@ SortableSectionRows.displayName = "SortableSectionRows";
 
 // A page-specific drag handle. Pages and the sections nested inside an open page are both sortable,
 // so the page list grabs `[data-page-grabbed]` while sections keep the default `[aria-grabbed]`.
-const PageDragHandle = () => <RowDragHandle data-page-grabbed draggable />;
+const PageDragHandle = ({ disabled }: { disabled: boolean }) => (
+  <RowDragHandle data-page-grabbed draggable={!disabled} />
+);
 
 const PageRow = ({
   tab,
   isOpen,
+  disabled,
   shouldFocusName,
   onToggle,
   updateName,
@@ -100,6 +103,7 @@ const PageRow = ({
 }: {
   tab: { id: string; name: string };
   isOpen: boolean;
+  disabled: boolean;
   shouldFocusName: boolean;
   onToggle: () => void;
   updateName: (name: string) => void;
@@ -116,7 +120,7 @@ const PageRow = ({
   return (
     <Row role="listitem" aria-label={`${tab.name || "Untitled"} page settings`}>
       <RowContent className="grow">
-        <PageDragHandle />
+        <PageDragHandle disabled={disabled} />
         <Input
           ref={nameInputRef}
           type="text"
@@ -168,17 +172,19 @@ const OptionRow = ({
   name,
   checked,
   draggable = false,
+  disabled = false,
   onToggle,
 }: {
   name: string;
   checked: boolean;
   draggable?: boolean;
+  disabled?: boolean;
   onToggle: () => void;
 }) => (
   <Row asChild>
     <Label role="listitem">
       <RowContent>
-        {draggable ? <ReorderingHandle /> : null}
+        {draggable ? <ReorderingHandle disabled={disabled} /> : null}
         <span className="truncate">{name}</span>
       </RowContent>
       <RowActions>
@@ -191,12 +197,14 @@ const OptionRow = ({
 const SectionRow = ({
   section,
   state,
+  disabled,
   shouldFocusHeader,
   updateSection,
   onDelete,
 }: {
   section: Section;
   state: ProfileEditorProps;
+  disabled: boolean;
   shouldFocusHeader: boolean;
   updateSection: (section: Section) => void;
   onDelete: () => void;
@@ -228,7 +236,7 @@ const SectionRow = ({
   return (
     <Row role="listitem" aria-label={`${sectionTitle} section settings`}>
       <RowContent>
-        <ReorderingHandle />
+        <ReorderingHandle disabled={disabled} />
         {SECTION_TYPE_ICONS[section.type]}
         <h3>{sectionTitle}</h3>
       </RowContent>
@@ -264,17 +272,17 @@ const SectionRow = ({
               <small>Leave blank to hide the section name.</small>
             </Fieldset>
             {section.type === "SellerProfileProductsSection" ? (
-              <ProductsSectionFields section={section} state={state} update={update} />
+              <ProductsSectionFields section={section} state={state} update={update} disabled={disabled} />
             ) : section.type === "SellerProfilePostsSection" ? (
               <PostsSectionFields section={section} state={state} update={update} />
             ) : section.type === "SellerProfileRichTextSection" ? (
-              <RichTextSectionFields section={section} update={update} />
+              <RichTextSectionFields section={section} update={update} disabled={disabled} />
             ) : section.type === "SellerProfileSubscribeSection" ? (
               <SubscribeSectionFields section={section} update={update} />
             ) : section.type === "SellerProfileFeaturedProductSection" ? (
               <FeaturedProductSectionFields section={section} state={state} update={update} />
             ) : (
-              <WishlistsSectionFields section={section} state={state} update={update} />
+              <WishlistsSectionFields section={section} state={state} update={update} disabled={disabled} />
             )}
           </Drawer>
         </RowDetails>
@@ -287,10 +295,12 @@ const ProductsSectionFields = ({
   section,
   state,
   update,
+  disabled,
 }: {
   section: Extract<Section, { type: "SellerProfileProductsSection" }>;
   state: ProfileEditorProps;
   update: (section: Section) => void;
+  disabled: boolean;
 }) => {
   const uid = React.useId();
   const [orderedProductIds, setOrderedProductIds] = React.useState(() =>
@@ -311,7 +321,7 @@ const ProductsSectionFields = ({
     });
 
   const reorderProducts = (newOrder: string[]) => {
-    if (isEqual(newOrder, orderedProductIds)) return;
+    if (disabled || isEqual(newOrder, orderedProductIds)) return;
     setOrderedProductIds(newOrder);
     const reordered = reorderShownIds(section.shown_products, newOrder);
     if (!isEqual(reordered, section.shown_products)) update({ ...section, shown_products: reordered });
@@ -349,13 +359,19 @@ const ProductsSectionFields = ({
       <Fieldset>
         <FieldsetTitle>Products</FieldsetTitle>
         {orderedProducts.length ? (
-          <SortableList currentOrder={orderedProductIds} onReorder={reorderProducts} tag={SortableProductRows}>
+          <SortableList
+            currentOrder={orderedProductIds}
+            onReorder={reorderProducts}
+            tag={SortableProductRows}
+            disabled={disabled}
+          >
             {orderedProducts.map((product) => (
               <OptionRow
                 key={product.id}
                 name={product.name}
                 checked={section.shown_products.includes(product.id)}
                 draggable={canReorder}
+                disabled={disabled}
                 onToggle={() => toggleProduct(product.id)}
               />
             ))}
@@ -409,12 +425,14 @@ const PostsSectionFields = ({
 const RichTextSectionFields = ({
   section,
   update,
+  disabled,
 }: {
   section: Extract<Section, { type: "SellerProfileRichTextSection" }>;
   update: (section: Section) => void;
+  disabled: boolean;
 }) => {
   const [initialValue] = React.useState(section.text);
-  const editor = useRichTextEditor({ initialValue, placeholder: "Enter text here", editable: true });
+  const editor = useRichTextEditor({ initialValue, placeholder: "Enter text here", editable: !disabled });
   const sectionRef = React.useRef(section);
   React.useEffect(() => {
     sectionRef.current = section;
@@ -428,7 +446,7 @@ const RichTextSectionFields = ({
   React.useEffect(() => {
     if (!editor) return;
     const syncText = () => {
-      if (isUploadingRef.current) return;
+      if (disabled || isUploadingRef.current) return;
       update({ ...sectionRef.current, text: editor.getJSON() });
     };
     // Sync on content changes only (not on focus/blur), so the preview stays live and an
@@ -439,14 +457,14 @@ const RichTextSectionFields = ({
     return () => {
       editor.off("update", syncText);
     };
-  }, [editor]);
+  }, [disabled, editor]);
 
   return (
     <Fieldset>
       <FieldsetTitle>Text</FieldsetTitle>
       <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
         <div className="grid grid-rows-[max-content_1fr] rounded">
-          {editor ? (
+          {editor && !disabled ? (
             <RichTextEditorToolbar
               editor={editor}
               className="rounded-t rounded-b-none border border-b-0 border-border"
@@ -507,10 +525,12 @@ const WishlistsSectionFields = ({
   section,
   state,
   update,
+  disabled,
 }: {
   section: Extract<Section, { type: "SellerProfileWishlistsSection" }>;
   state: ProfileEditorProps;
   update: (section: Section) => void;
+  disabled: boolean;
 }) => {
   const [orderedWishlistIds, setOrderedWishlistIds] = React.useState(() =>
     optionOrder(
@@ -531,7 +551,7 @@ const WishlistsSectionFields = ({
     });
 
   const reorderWishlists = (newOrder: string[]) => {
-    if (isEqual(newOrder, orderedWishlistIds)) return;
+    if (disabled || isEqual(newOrder, orderedWishlistIds)) return;
     setOrderedWishlistIds(newOrder);
     const reordered = reorderShownIds(section.shown_wishlists, newOrder);
     if (!isEqual(reordered, section.shown_wishlists)) update({ ...section, shown_wishlists: reordered });
@@ -541,13 +561,19 @@ const WishlistsSectionFields = ({
     <Fieldset>
       <FieldsetTitle>Wishlists</FieldsetTitle>
       {orderedWishlists.length ? (
-        <SortableList currentOrder={orderedWishlistIds} onReorder={reorderWishlists} tag={SortableWishlistRows}>
+        <SortableList
+          currentOrder={orderedWishlistIds}
+          onReorder={reorderWishlists}
+          tag={SortableWishlistRows}
+          disabled={disabled}
+        >
           {orderedWishlists.map((wishlist) => (
             <OptionRow
               key={wishlist.id}
               name={wishlist.name}
               checked={section.shown_wishlists.includes(wishlist.id)}
               draggable
+              disabled={disabled}
               onToggle={() => toggleWishlist(wishlist.id)}
             />
           ))}
@@ -591,6 +617,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
   );
 
   const updateSection = (updated: Section) => {
+    if (disabled) return;
     setSections((currentSections) => currentSections.map((section) => (section.id === updated.id ? updated : section)));
   };
 
@@ -749,12 +776,14 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
           currentOrder={visibleSections.map(({ id }) => id)}
           onReorder={reorderSections}
           tag={SortableSectionRows}
+          disabled={disabled}
         >
           {visibleSections.map((section) => (
             <SectionRow
               key={section.id}
               section={section}
               state={{ ...props, sections }}
+              disabled={disabled}
               shouldFocusHeader={section.id === lastAddedSectionId}
               updateSection={updateSection}
               onDelete={() => setDeletionModalSectionId(section.id)}
@@ -834,6 +863,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
                 onReorder={reorderPages}
                 tag={SortablePageRows}
                 handle="[data-page-grabbed]"
+                disabled={disabled}
               >
                 {tabs.map((tab) => {
                   const isOpen = tab.id === selectedTab?.id && !collapsed;
@@ -842,6 +872,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
                       key={tab.id}
                       tab={tab}
                       isOpen={isOpen}
+                      disabled={disabled}
                       shouldFocusName={tab.id === lastAddedPageId}
                       onToggle={() => togglePage(tab)}
                       updateName={(name) => updatePageName(tab.id, name)}

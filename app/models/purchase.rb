@@ -2085,8 +2085,14 @@ class Purchase < ApplicationRecord
   # evidence, most of all — must read the product as it stood at purchase time. Falls back to the
   # live product when no version covers the purchase, or when the purchase is mid-checkout and
   # has no created_at yet — the live product IS its checkout state.
+  #
+  # `purchases.created_at` has no sub-second precision, so the real checkout instant is somewhere
+  # in [created_at, created_at + 1s). Resolve at the END of that window: a product saved a few
+  # milliseconds after its own creation row otherwise reifies at its pre-save state and reads as
+  # digital. The widened window cannot admit a seller flipping shipping post-checkout — that never
+  # lands inside the same second as the sale.
   def required_delivery_at_checkout?
-    product = (link.paper_trail.version_at(created_at) if created_at) || link
+    product = (link.paper_trail.version_at(created_at + 1.second) if created_at) || link
     product.is_physical? || product.require_shipping?
   end
 

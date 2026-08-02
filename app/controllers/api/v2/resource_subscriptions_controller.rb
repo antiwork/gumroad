@@ -7,7 +7,12 @@ class Api::V2::ResourceSubscriptionsController < Api::V2::BaseController
     resource_name = params[:resource_name]
 
     if ResourceSubscription.valid_resource_name?(resource_name)
-      success_with_object(:resource_subscriptions, current_resource_owner.resource_subscriptions.alive.where(resource_name: params[:resource_name]))
+      resource_subscriptions = current_resource_owner.resource_subscriptions.alive.where(resource_name:)
+      if ActiveModel::Type::Boolean.new.cast(params[:current_oauth_application_only])
+        resource_subscriptions = resource_subscriptions.where(oauth_application_id: doorkeeper_token.application_id)
+      end
+
+      success_with_object(:resource_subscriptions, resource_subscriptions)
     else
       render_response(false, message: "Valid resource_name parameter required")
     end

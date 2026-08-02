@@ -95,6 +95,9 @@ describe Ai::StoreAgentService do
 
       expect(captured[:system]).to include("Gumroad's store assistant")
       expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "complete_turn")
+      expect(captured[:system]).to include("existing Store Agent webhooks can be")
+      expect(captured[:system]).to include("the Store Agent cannot create webhooks")
+      expect(captured[:system]).to match(/Settings >\s+Advanced > Ping/)
       # System prompt is NOT echoed into the messages array (it's Anthropic's top-level param).
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
     end
@@ -323,6 +326,21 @@ describe Ai::StoreAgentService do
         )
 
         service.respond(messages: [{ role: "user", content: "show product abc123" }])
+      end
+
+      it "lists only Store Agent-owned webhooks" do
+        expect(api_client).to receive(:get).with(
+          "/resource_subscriptions",
+          { "resource_name" => "sale", "current_oauth_application_only" => true },
+        ).and_return({ "success" => true, "resource_subscriptions" => [], "http_status" => 200 })
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_read", { "endpoint" => "list_resource_subscriptions", "params" => { "resource_name" => "sale" } }),
+          text_result("You have no Store Agent webhooks for sales."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "List my Store Agent sale webhooks" }])
+
+        expect(result[:reply]).to eq("You have no Store Agent webhooks for sales.")
       end
 
       # Regression: gumroad-private#1168. list_products is paginated (10 per page) but the agent
@@ -2085,6 +2103,34 @@ describe Ai::StoreAgentService do
       expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:proposed_action]).to include(type: "api_write")
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
+    end
+  end
+
+  describe "SYSTEM_PROMPT_HEADER webhook guidance" do
+    # Ping is not a general webhook replacement: User#ping_notification_targets only appends
+    # notification_endpoint for the "sale" resource, so offering it for a cancellation or refund
+    # webhook sends the creator to a screen that will never fire the event they asked for.
+    let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
+
+    # Every mention, not just one: a single qualified sentence elsewhere in the prompt would let an
+    # unqualified "direct creators to Ping" be reintroduced with this spec still green.
+    it "qualifies Ping as sales-only at every mention" do
+      mentions = prompt.scan(/.{0,120}Settings > Advanced > Ping.{0,120}/)
+
+      expect(mentions.size).to eq(1)
+      mentions.each { expect(_1).to match(/SALES ONLY/) }
+    end
+
+    it "names the self-serve route that does cover the non-sale events" do
+      expect(prompt).to include("cannot create webhooks")
+      expect(prompt).to match(/Settings > Advanced > Applications/)
+    end
+
+    # The corpus has no webhook article, so the bullet cites this one by title for the app/token
+    # steps. Redden if the prompt drops the citation or the article is renamed out from under it.
+    it "cites a help article that exists in the shipped corpus" do
+      expect(prompt).to include('"Create an application for the API"')
+      expect(HelpCenter::Article.find_by(title: "Create an application for the API")).to be_present
     end
   end
 end
