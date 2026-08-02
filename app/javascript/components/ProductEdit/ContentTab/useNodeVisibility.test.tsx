@@ -5,42 +5,67 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NodeVisibilityProvider, useNodeVisibility } from "$app/components/ProductEdit/ContentTab/useNodeVisibility";
 
-type Instance = { root: Element | null; observed: Element[]; disconnected: boolean };
+// The harness sets overflow-y inline, so the computed value never comes from a media query the way
+// it does in the app. What is under test is the branch on that value, not Tailwind's breakpoints.
+
+type Instance = {
+  root: Element | null;
+  rootMargin: string | undefined;
+  observed: Element[];
+  unobserved: Element[];
+  disconnected: boolean;
+  emit: (entries: { target: Element; isIntersecting: boolean }[]) => void;
+};
 
 let instances: Instance[] = [];
+
+// The hook reads only `target` and `isIntersecting` off each entry, so the fake hands the callback
+// those two fields rather than building whole IntersectionObserverEntry objects.
+type PartialEntry = { target: Element; isIntersecting: boolean };
 
 class FakeIntersectionObserver {
   instance: Instance;
 
-  constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+  constructor(callback: (entries: PartialEntry[]) => void, options?: IntersectionObserverInit) {
     const root = options?.root;
-    this.instance = { root: root instanceof Element ? root : null, observed: [], disconnected: false };
+    this.instance = {
+      root: root instanceof Element ? root : null,
+      rootMargin: options?.rootMargin,
+      observed: [],
+      unobserved: [],
+      disconnected: false,
+      emit: (entries) => callback(entries),
+    };
     instances.push(this.instance);
   }
   observe(element: Element) {
     this.instance.observed.push(element);
   }
-  unobserve() {}
+  unobserve(element: Element) {
+    this.instance.unobserved.push(element);
+  }
   disconnect() {
     this.instance.disconnected = true;
   }
 }
 
 // The editor scrolls the layout element only at `lg`; below it the document scrolls.
-const Harness = ({ overflowY }: { overflowY: React.CSSProperties["overflowY"] }) => {
+const Harness = ({ overflowY, nodeCount = 1 }: { overflowY: React.CSSProperties["overflowY"]; nodeCount?: number }) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   return (
     <div ref={scrollRef} style={{ overflowY }}>
       <NodeVisibilityProvider scrollRef={scrollRef}>
-        <FileNode />
+        {Array.from({ length: nodeCount }, (_, i) => (
+          <FileNode key={i} index={i} />
+        ))}
       </NodeVisibilityProvider>
     </div>
   );
 };
 
-const FileNode = () => {
-  const { ref } = useNodeVisibility(82);
-  return <div ref={ref} data-testid="file-node" />;
+const FileNode = ({ index }: { index: number }) => {
+  const { ref, visible } = useNodeVisibility(82);
+  return <div ref={ref} data-testid={`file-node-${index}`} data-visible={visible} />;
 };
 
 const latest = () => {
@@ -48,6 +73,8 @@ const latest = () => {
   if (!instance) throw new Error("expected an IntersectionObserver to have been constructed");
   return instance;
 };
+
+const nodes = (container: HTMLElement) => [...container.querySelectorAll("[data-testid^='file-node-']")];
 
 beforeEach(() => {
   instances = [];
@@ -64,7 +91,7 @@ describe("NodeVisibilityProvider", () => {
     const { container } = render(<Harness overflowY="auto" />);
 
     expect(latest().root).toBe(container.firstElementChild);
-    expect(latest().observed).toContain(container.querySelector("[data-testid='file-node']"));
+    expect(latest().observed).toContain(nodes(container)[0]);
   });
 
   it("observes against the viewport when the layout element does not scroll", () => {
@@ -75,9 +102,38 @@ describe("NodeVisibilityProvider", () => {
     expect(latest().root).toBeNull();
   });
 
+  it("keeps the prefetch window that makes virtualization invisible to the user", () => {
+    render(<Harness overflowY="auto" />);
+
+    expect(latest().rootMargin).toBe("1000px");
+  });
+
+  it("observes nodes that mount after the observer exists", () => {
+    // The editor renders no node views on the provider's first commit, so this — not the
+    // re-observe loop — is the path every real file embed registers through.
+    const { container, rerender } = render(<Harness overflowY="auto" nodeCount={1} />);
+    rerender(<Harness overflowY="auto" nodeCount={2} />);
+
+    expect(latest().observed).toEqual(nodes(container));
+  });
+
+  it("renders a node once it intersects, and stops observing it when it unmounts", () => {
+    const { container, rerender } = render(<Harness overflowY="auto" />);
+    const node = nodes(container)[0];
+    if (!node) throw new Error("expected a file node");
+    expect(node.getAttribute("data-visible")).toBe("false");
+
+    act(() => latest().emit([{ target: node, isIntersecting: true }]));
+    expect(node.getAttribute("data-visible")).toBe("true");
+
+    const observer = latest();
+    rerender(<Harness overflowY="auto" nodeCount={0} />);
+    expect(observer.unobserved).toContain(node);
+  });
+
   it("rebuilds the observer and re-observes existing nodes when the layout starts scrolling", () => {
     const { container, rerender } = render(<Harness overflowY="visible" />);
-    const node = container.querySelector("[data-testid='file-node']");
+    const node = nodes(container)[0];
     expect(latest().root).toBeNull();
     const before = latest();
 
