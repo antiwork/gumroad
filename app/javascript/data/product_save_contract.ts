@@ -180,7 +180,7 @@ export const buildDeletionOperations = (
 // so a row missing from it (a drag that lands mid-render, a nested sortable
 // swallowing an id) silently drops that version from state — and dropping it
 // without a confirmed-removal id produces the save contract's silent no-op:
-// the row is gone from the editor, unnamed in `deletion_operations`, and the
+// the row is gone from the editor, named in no deletion operation, and the
 // save reports success having deleted nothing (gumroad-private#1508).
 //
 // So reorder by moving what the order names and appending whatever it omitted,

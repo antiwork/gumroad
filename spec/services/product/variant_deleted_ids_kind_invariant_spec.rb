@@ -197,29 +197,31 @@ describe "deleted_ids[:variants] kind invariant" do
       expect(contract_source).to match(/#{variants_key}\s*=\s*\[\.\.\.new Set\(removedVariants\)\]/)
       expect(contract_source).to include("const removedVariants = product.confirmed_removed_variant_ids ?? [];")
 
-      # The save serializer prefers a prebuilt product.deletion_operations over
-      # the built one, so a second producer does not need this file at all — it
-      # can hand the payload a ready-made object whose ids never passed through
-      # confirmed_removed_variant_ids at all. Limiting WHICH files may name the
-      # property is not enough: the property must have no writer anywhere.
+      # A second producer does not need this file at all if it can hand the save
+      # a ready-made operations object whose ids never passed through
+      # confirmed_removed_variant_ids. That fallback used to exist
+      # (`product.deletion_operations ?? buildDeletionOperations(product)`) and
+      # is gone: the property is no longer a field on Product, so nothing can
+      # set it and the serializer always derives. Limiting WHICH files may name
+      # the property is not enough — it must have no writer and no declaration.
       expect(files_matching.call(/deletion_operations/)).to eq(%w[components/ProductEdit/state.ts data/product_edit.ts])
 
       deletion_ops_write = /deletion_operations["'\]\s!?]*(?:#{bracket_mutator_call}|(?:\[[^\[\]]*\]\s*)*(?:\|\|=|&&=|\?\?=|=(?![=>])))/
       expect(files_matching.call(deletion_ops_write)).to be_empty,
-                                                         "Something now assigns product.deletion_operations. The save serializer prefers a " \
-                                                         "prebuilt payload over buildDeletionOperations, so those ids bypass " \
-                                                         "confirmed_removed_variant_ids entirely and a grouping id can reach " \
-                                                         "deleted_ids[:variants] — see gumroad-private#1503."
+                                                         "Something now assigns product.deletion_operations. The save serializer must " \
+                                                         "always derive the payload from buildDeletionOperations, because any prebuilt " \
+                                                         "object bypasses confirmed_removed_variant_ids entirely and a grouping id can " \
+                                                         "reach deleted_ids[:variants] — see gumroad-private#1503."
 
-      # state.ts may only DECLARE the optional property; a declaration cannot
-      # produce a payload, which is why the fallback read below is the only path.
+      # state.ts must not even DECLARE the property: an optional field is what
+      # made a prebuilt payload expressible in the first place (#1508).
       state_source = File.read(javascript_root.join("components", "ProductEdit", "state.ts"))
-      expect(state_source.scan(/^\s*deletion_operations\?:\s*DeletionOperations;$/).size).to eq(1)
-      expect(state_source.scan(/deletion_operations/).size).to eq(2) # the declaration, plus the comment above it
+      expect(state_source).not_to match(/^\s*deletion_operations\??:/)
+      expect(state_source.scan(/deletion_operations/).size).to eq(1) # the comment only
 
       serializer_source = File.read(javascript_root.join("data", "product_edit.ts"))
-      expect(serializer_source.scan(/deletion_operations/).size).to eq(2)
-      expect(serializer_source).to match(/deletion_operations:\s*product\.deletion_operations \?\? buildDeletionOperations\(product\)/)
+      expect(serializer_source.scan(/deletion_operations/).size).to eq(1)
+      expect(serializer_source).to match(/deletion_operations:\s*buildDeletionOperations\(product\),/)
     end
 
     it "exposes no grouping as a deletable object in the product editor" do
