@@ -17,7 +17,7 @@ describe("Analytics loading skeletons", () => {
     render(<SalesChartSkeleton />);
 
     const section = screen.getByText("Loading sales chart…").closest("section");
-    expect(section).toHaveAttribute("aria-busy", "true");
+    expect(section?.getAttribute("aria-busy")).toBe("true");
     expect(section?.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
   });
 
@@ -25,8 +25,8 @@ describe("Analytics loading skeletons", () => {
     render(<AnalyticsTableSkeleton label="referrers" columns={5} />);
 
     const section = screen.getByText("Loading referrers…").closest("section");
-    expect(section).toHaveAttribute("aria-busy", "true");
-    expect(section?.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(5 * 6);
+    expect(section?.getAttribute("aria-busy")).toBe("true");
+    expect(section?.querySelectorAll(String.raw`[data-slot="skeleton"]`).length).toBe(5 * 6);
   });
 
   it("leaves no spinner text on the Analytics route", async () => {
