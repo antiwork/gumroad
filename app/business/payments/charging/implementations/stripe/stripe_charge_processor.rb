@@ -822,11 +822,12 @@ class StripeChargeProcessor
 
       # A dispute accepts evidence once, and FightDisputeJob has five Sidekiq retries: a network
       # failure on a call that actually landed would otherwise spend the submission a second time.
-      # Keyed on the payload as well as the row so a retry carrying different evidence (the seller
-      # writing a statement between attempts) gets its own key instead of Stripe rejecting the
-      # parameter mismatch.
-      idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}_" \
-                        "#{Digest::SHA256.hexdigest(evidence.sort.to_s)[0, 16]}"
+      # Keyed on the row's `updated_at` rather than the payload, because the payload is not stable
+      # across attempts — `create_dispute_evidence_stripe_file` re-uploads and returns a fresh
+      # Stripe file id every call, so a payload digest would change on every retry and defeat the
+      # guard. `updated_at` moves exactly when the seller writes into the row, which is the one
+      # case a retry legitimately carries different evidence and needs its own key.
+      idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}_#{dispute_evidence.updated_at.to_i}"
 
       Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
     end

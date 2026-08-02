@@ -4391,39 +4391,37 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
   describe "idempotency key" do
     # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob retries five
     # times, so the key is what stops a retry after a landed call spending the submission again.
-    def submit_and_capture_options
-      DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
+    def capture_options(evidence_row = nil)
       captured = nil
       allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| captured = opts }
-      described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+      described_class.new.fight_chargeback("ch_test", evidence_row || disputed_purchase.dispute.reload.dispute_evidence)
       captured
     end
 
+    before { DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload) }
+
     it "sends one derived from the evidence row" do
-      options = submit_and_capture_options
-
-      expect(options[:idempotency_key]).to include(disputed_purchase.dispute.reload.dispute_evidence.external_id)
+      expect(capture_options[:idempotency_key]).to include(disputed_purchase.dispute.reload.dispute_evidence.external_id)
     end
 
-    it "is stable across two submissions of the same payload" do
-      first = submit_and_capture_options
-      second = nil
-      allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| second = opts }
-      described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+    it "is stable across a retry that re-reads the same unchanged row" do
+      # The payload is NOT stable across attempts — create_dispute_evidence_stripe_file uploads a
+      # fresh Stripe file each call — so anything digesting it would change here and let the retry
+      # spend the one-shot submission.
+      first = capture_options
 
-      expect(second[:idempotency_key]).to eq(first[:idempotency_key])
+      expect(capture_options[:idempotency_key]).to eq(first[:idempotency_key])
     end
 
-    it "changes when the seller's statement changes between attempts" do
-      first = submit_and_capture_options
+    it "changes when the seller writes a statement between attempts" do
+      first = capture_options
 
       evidence_row = disputed_purchase.dispute.reload.dispute_evidence
-      evidence_row.update!(reason_for_winning: "The buyer signed for the parcel.")
-      second = nil
-      allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| second = opts }
-      described_class.new.fight_chargeback("ch_test", evidence_row)
+      travel_to 1.hour.from_now do
+        evidence_row.update!(reason_for_winning: "The buyer signed for the parcel.")
+      end
 
-      expect(second[:idempotency_key]).to_not eq(first[:idempotency_key])
+      expect(capture_options(evidence_row.reload)[:idempotency_key]).to_not eq(first[:idempotency_key])
     end
   end
 end

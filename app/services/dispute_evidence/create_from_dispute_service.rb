@@ -14,7 +14,7 @@ class DisputeEvidence::CreateFromDisputeService
 
   def perform!
     product = purchase.link.paper_trail.version_at(purchase.created_at) || purchase.link
-    shipment = evidence_shipment
+    shipment, shipped_purchase = evidence_shipment_and_purchase
     refund_policy_fine_print_view_events = find_refund_policy_fine_print_view_events(purchase)
     purchase_at_checkout = purchase_as_at_checkout
 
@@ -29,7 +29,7 @@ class DisputeEvidence::CreateFromDisputeService
     # that we hold billing details we do not.
     dispute_evidence.billing_address = nil
     if shipment.present?
-      dispute_evidence.shipping_address = build_shipping_address(as_at_checkout(shipment.purchase))
+      dispute_evidence.shipping_address = build_shipping_address(as_at_checkout(shipped_purchase))
       dispute_evidence.shipped_at = shipment.shipped_at
       dispute_evidence.shipping_carrier, dispute_evidence.shipping_tracking_number =
         carrier_and_tracking_number(shipment)
@@ -98,11 +98,19 @@ class DisputeEvidence::CreateFromDisputeService
     # sibling does, all four structured slots went out empty while the sibling's tracking sat in free
     # text. Stripe reads the structured fields, and we submit once. Representative first so the
     # single-purchase and already-correct cases are unchanged; ties among siblings break on id.
-    def evidence_shipment
-      return @_evidence_shipment if defined?(@_evidence_shipment)
+    #
+    # Returns the pair, because the address slot must come from the purchase that shipped and
+    # re-deriving it from `shipment.purchase` would ask the database for a row we already hold.
+    def evidence_shipment_and_purchase
+      return @_evidence_shipment_and_purchase if defined?(@_evidence_shipment_and_purchase)
 
-      @_evidence_shipment = shipment_for(purchase) ||
-        other_disputed_purchases.sort_by(&:id).lazy.filter_map { shipment_for(_1) }.first
+      candidates = [purchase, *other_disputed_purchases.sort_by(&:id)]
+      @_evidence_shipment_and_purchase =
+        candidates.lazy.map { [shipment_for(_1), _1] }.find { _1.first.present? } || [nil, nil]
+    end
+
+    def evidence_shipment
+      evidence_shipment_and_purchase.first
     end
 
     # Sellers only ever supply a tracking URL, so derive from it when the columns are blank —
