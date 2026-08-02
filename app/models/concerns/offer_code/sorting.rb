@@ -28,7 +28,7 @@ module OfferCode::Sorting
       when NAME
         order(name: direction)
       when REVENUE
-        left_outer_joins(:purchases_that_count_towards_offer_code_uses)
+        left_outer_joins(:purchases_that_count_towards_offer_code_revenue)
           .group(:id)
           .order("SUM(purchases.price_cents) #{direction}")
       when USES

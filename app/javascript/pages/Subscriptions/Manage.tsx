@@ -133,8 +133,9 @@ export default function SubscriptionsManage() {
   };
   const [selection, setSelection] = React.useState<PriceSelection>(() => initialSelection);
   const currentOption = product.options.find(({ id }) => id === subscription.option_id);
+  const currentSubscriptionUnitPrice = initialSubscriptionUnitPrice(subscription);
   const hasPriceChanged =
-    Math.round(subscription.price / subscription.quantity) !==
+    Math.round(currentSubscriptionUnitPrice) !==
     currentOption?.recurrence_price_values?.[subscription.recurrence]?.price_cents;
   const configurationSelectorProduct: ConfigurationSelectorProduct = {
     ...product,
@@ -146,7 +147,7 @@ export default function SubscriptionsManage() {
               hasPriceChanged && !isResubscribing
                 ? `Your current plan is ${formatPriceCentsWithCurrencySymbol(
                     product.currency_code,
-                    Math.round(subscription.price / subscription.quantity),
+                    Math.round(currentSubscriptionUnitPrice),
                     { symbolFormat: "long" },
                   )} ${recurrenceLabels[subscription.recurrence]}, based on previous pricing. This price will remain the same when updating your payment method.`
                 : undefined,

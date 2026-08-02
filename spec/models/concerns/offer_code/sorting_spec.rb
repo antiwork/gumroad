@@ -51,8 +51,17 @@ describe OfferCode::Sorting do
     end
 
     it "returns offer codes sorted by revenue" do
-      expect(seller.offer_codes.sorted_by(key: "uses", direction: "asc")).to eq([offer_code3, offer_code2, offer_code1])
-      expect(seller.offer_codes.sorted_by(key: "uses", direction: "desc")).to eq([offer_code1, offer_code2, offer_code3])
+      commission_code = create(:offer_code, code: "commission", user: seller, products: [product1])
+      regular_code = create(:offer_code, code: "regular-revenue", user: seller, products: [product1])
+      create(:purchase, link: product1, offer_code: commission_code, price_cents: 30_00)
+      create(:purchase, link: product1, offer_code: commission_code, price_cents: 70_00,
+                        is_commission_completion_purchase: true)
+      create(:purchase, link: product1, offer_code: regular_code, price_cents: 75_00)
+
+      sorted_codes = seller.offer_codes.where(id: [commission_code.id, regular_code.id])
+
+      expect(sorted_codes.sorted_by(key: "revenue", direction: "asc")).to eq([regular_code, commission_code])
+      expect(sorted_codes.sorted_by(key: "revenue", direction: "desc")).to eq([commission_code, regular_code])
     end
 
     it "returns offer codes sorted by term" do

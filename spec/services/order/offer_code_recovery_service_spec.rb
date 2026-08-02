@@ -57,6 +57,37 @@ describe Order::OfferCodeRecoveryService do
     )
   end
 
+  it "does not recover a capped code after another line in the order succeeds" do
+    offer_code.update!(max_purchase_count: 2)
+    prior_purchase = create(:purchase, link: product_1, seller:, offer_code:)
+    prior_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: offer_code.amount_cents,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: SecureRandom.uuid,
+      pre_discount_minimum_price_cents: product_1.price_cents
+    )
+
+    allocation_id = SecureRandom.uuid
+    successful_purchase = create(:purchase, link: product_1, seller:, offer_code:)
+    successful_purchase.create_purchase_offer_code_discount!(
+      offer_code:,
+      offer_code_amount: offer_code.amount_cents,
+      offer_code_is_percent: false,
+      once_per_cart: true,
+      once_per_cart_allocation_id: allocation_id,
+      pre_discount_minimum_price_cents: product_1.price_cents
+    )
+    failed_purchase = create(:failed_purchase, link: product_2, seller:)
+    order = create(:order)
+    order.purchases << [successful_purchase, failed_purchase]
+
+    result = described_class.new(order:, failed_purchases: [failed_purchase]).perform
+
+    expect(result).to be_empty
+  end
+
   it "merges product maps for responses that share a normalized code" do
     merged = described_class.merge_responses(
       [{ code: "SAVE", products: { product_1.unique_permalink => { cents: 100 } } }],

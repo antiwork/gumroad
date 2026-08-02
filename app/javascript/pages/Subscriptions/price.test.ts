@@ -15,7 +15,7 @@ const oncePerCartDiscount: Discount = {
 };
 
 describe("subscription pricing", () => {
-  it("does not scale a cart-level discount when quantity changes", () => {
+  it("uses the pre-discount unit price for a cart-level discount", () => {
     const unitPrice = initialSubscriptionUnitPrice({
       price: 1_900,
       pre_discount_price: 2_000,

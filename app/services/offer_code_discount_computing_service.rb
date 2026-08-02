@@ -13,12 +13,13 @@ class OfferCodeDiscountComputingService
   #   => A[2], B[3], C[2] --> A[2], C[2]
   #   => A[2], C[3]       --> A[2]
 
-  def initialize(code, products, buyer: nil, key_by_input: false, excluding_order: nil, offer_code_id: nil)
+  def initialize(code, products, buyer: nil, key_by_input: false, excluding_order: nil, excluding_purchases: nil, offer_code_id: nil)
     @code = code
     @products = products || {}
     @buyer = buyer
     @key_by_input = key_by_input
     @excluding_order = excluding_order
+    @excluding_purchases = excluding_purchases
     @offer_code_id = offer_code_id
     @offer_code_ids_by_permalink = {}
   end
@@ -73,7 +74,7 @@ class OfferCodeDiscountComputingService
   end
 
   private
-    attr_reader :code, :products, :buyer, :key_by_input, :excluding_order, :offer_code_id
+    attr_reader :code, :products, :buyer, :key_by_input, :excluding_order, :excluding_purchases, :offer_code_id
 
     # Ordered by the buyer's cart, not the DB's plan: a capped code is consumed
     # greedily, so iteration order decides which lines win a scarce discount.
@@ -217,7 +218,7 @@ class OfferCodeDiscountComputingService
 
     def remaining_times_of_use(offer_code)
       @remaining_times_of_use ||= {}
-      @remaining_times_of_use[offer_code.id] ||= offer_code.quantity_left(excluding_order:)
+      @remaining_times_of_use[offer_code.id] ||= offer_code.quantity_left(excluding_order:, excluding_purchases:)
     end
 
     def track_applicable_offer_code(offer_code)

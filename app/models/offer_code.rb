@@ -26,6 +26,7 @@ class OfferCode < ApplicationRecord
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
+  has_many :purchases_that_count_towards_offer_code_revenue, -> { offer_code_statistics }, class_name: "Purchase"
   has_one :upsell
 
   alias_attribute :duration_in_billing_cycles, :duration_in_months
@@ -83,8 +84,8 @@ class OfferCode < ApplicationRecord
     quantity_left(excluding_purchase:) >= (is_cents? && once_per_cart? ? 1 : purchase_quantity)
   end
 
-  def quantity_left(excluding_purchase: nil, excluding_order: nil)
-    max_purchase_count - times_used - active_once_per_cart_reservations(excluding_purchase:, excluding_order:)
+  def quantity_left(excluding_purchase: nil, excluding_purchases: nil, excluding_order: nil)
+    max_purchase_count - times_used - active_once_per_cart_reservations(excluding_purchase:, excluding_purchases:, excluding_order:)
   end
 
   def is_percent?
@@ -215,14 +216,16 @@ class OfferCode < ApplicationRecord
     per_item + legacy_per_cart + allocation_uses
   end
 
-  def active_once_per_cart_reservations(excluding_purchase: nil, excluding_order: nil)
+  def active_once_per_cart_reservations(excluding_purchase: nil, excluding_purchases: nil, excluding_order: nil)
     reservations = purchases.merge(Purchase.active_once_per_cart_offer_code_reservations)
     completed_allocations = purchases.merge(Purchase.completed_once_per_cart_allocation_uses)
     active_allocations = purchases.merge(Purchase.active_once_per_cart_allocation_uses)
-    if excluding_purchase&.persisted?
-      reservations = reservations.where.not(id: excluding_purchase.id)
-      completed_allocations = completed_allocations.where.not(id: excluding_purchase.id)
-      active_allocations = active_allocations.where.not(id: excluding_purchase.id)
+    excluded_purchase_ids = Array(excluding_purchases).filter_map { _1.id if _1.persisted? }
+    excluded_purchase_ids << excluding_purchase.id if excluding_purchase&.persisted?
+    if excluded_purchase_ids.any?
+      reservations = reservations.where.not(id: excluded_purchase_ids)
+      completed_allocations = completed_allocations.where.not(id: excluded_purchase_ids)
+      active_allocations = active_allocations.where.not(id: excluded_purchase_ids)
     end
     if excluding_order&.persisted?
       excluded_purchase_ids = excluding_order.order_purchases.select(:purchase_id)

@@ -88,7 +88,7 @@ class Order::OfferCodeRecoveryService
         products,
         buyer: order.purchaser,
         key_by_input: true,
-        excluding_order: order
+        excluding_purchases: unresolved_purchases
       ).process
       next if result[:error_code].present?
       next if (result[:products_data].keys & failed_purchases.map { _1.id.to_s }).empty?
@@ -113,8 +113,14 @@ class Order::OfferCodeRecoveryService
     end
 
     def products
-      @products ||= order.purchases.to_h do |purchase|
+      @products ||= unresolved_purchases.to_h do |purchase|
         [purchase.id.to_s, { permalink: purchase.link.unique_permalink, quantity: purchase.quantity }]
+      end
+    end
+
+    def unresolved_purchases
+      @unresolved_purchases ||= order.purchases.reject do |purchase|
+        Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST.include?(purchase.purchase_state)
       end
     end
 
