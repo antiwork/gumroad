@@ -30,9 +30,11 @@ describe SubscribePreviewGeneratorService, type: :system, js: true do
         gate_values << result if script == described_class::AVATAR_READY_SCRIPT
         result
       end
-      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:screenshot_as).and_wrap_original do |original, *args|
-        ready_at_screenshot = gate_values.last
-        original.call(*args)
+      # screenshot_as takes a `full_page:` keyword and recurses into itself, so the wrapper has to
+      # forward keywords separately — splatting them as a positional hash raises ArgumentError.
+      allow_any_instance_of(Selenium::WebDriver::Driver).to receive(:screenshot_as).and_wrap_original do |original, *args, **kwargs|
+        ready_at_screenshot = gate_values.last if ready_at_screenshot.nil?
+        original.call(*args, **kwargs)
       end
 
       described_class.generate_pngs([@user1])
