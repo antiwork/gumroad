@@ -360,7 +360,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::CAD)
   end
 
-  it "falls back when a purchase is priced in the buyer's own currency" do
+  it "falls back when only some purchases on the charge are priced in the buyer's own currency" do
     purchases << create(:purchase,
                         link: create(:product, user: seller, price_currency_type: Currency::CAD),
                         seller:,
@@ -369,7 +369,30 @@ describe Checkout::BuyerCurrencyEligibility do
                         ip_address: "203.0.113.1")
 
     expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+    expect(decision.fallback_reason).to eq(:mixed_listed_and_quoted_cart)
+  end
+
+  it "charges the listed amount directly when every purchase is priced in the buyer's own currency" do
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision).to be_direct_listed_amount
+  end
+
+  it "does not require the merchant account to settle in USD for a direct listed amount" do
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD))
+    allow_any_instance_of(described_class).to receive(:usd_settling_merchant_account?).and_return(false)
+
+    expect(decision).to be_eligible
+    expect(decision).to be_direct_listed_amount
+  end
+
+  it "still requires a USD-settling account for a quoted (non-listed) cart" do
+    allow_any_instance_of(described_class).to receive(:usd_settling_merchant_account?).and_return(false)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
   end
 
   it "falls back when any purchase on the charge is an installment payment" do

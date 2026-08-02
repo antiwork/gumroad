@@ -298,6 +298,11 @@ class Charge::CreateService
       raise BuyerCurrencyQuoteInvalid, "charge-time eligibility fallback (#{eligibility_decision.fallback_reason}) with a quote token present"
     end
 
+    # Ordered above the missing-token return on purpose: a direct-listed-amount checkout
+    # has nothing to quote, so it legitimately arrives with no token. Reaching that return
+    # would silently charge canonical USD — the bug this lane exists to fix.
+    return direct_listed_amount_processor_args(eligibility_decision) if eligibility_decision.direct_listed_amount?
+
     if quote_token.blank?
       Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: missing_buyer_currency_quote")
       return {}
@@ -334,6 +339,46 @@ class Charge::CreateService
       processor_gumroad_amount_cents: presentment_result.processor_gumroad_amount_cents,
       stripe_fx_quote_id: presentment_result.stripe_fx_quote_id,
     }
+  end
+
+  # Processor args for a checkout whose products are already listed in the buyer's own
+  # currency: the buyer pays the listed price and no FX quote exists anywhere in the flow.
+  #
+  # What binds the charged amount to the amount on the page is the listed price itself.
+  # The quoted lane needs a signed token because it derives a number the buyer could not
+  # have computed; here the number IS the seller's listed price, read from the same column
+  # the product page rendered, so there is nothing for a token to add.
+  #
+  # Failing closed rather than falling back to USD: reaching this point means the checkout
+  # displayed the listed local price, so charging canonical USD instead would charge an
+  # amount different from the one the buyer agreed to — the invariant this feature exists
+  # to protect.
+  def direct_listed_amount_processor_args(eligibility_decision)
+    currency = eligibility_decision.currency
+
+    priced = Charge::DirectListedAmountPresentment.new(
+      purchases:, currency:, gumroad_amount_cents:
+    ).perform
+
+    Charge::PresentmentOrchestrator.persist!(
+      charge:,
+      presentment_currency: currency,
+      presentment_total_cents: priced.presentment_total_cents,
+      presentment_gumroad_amount_cents: priced.presentment_gumroad_amount_cents,
+      allocations: priced.allocations
+    )
+
+    @presentment_currency_attempted = currency
+
+    {
+      processor_amount_cents: priced.presentment_total_cents,
+      processor_currency: currency,
+      processor_gumroad_amount_cents: priced.presentment_gumroad_amount_cents,
+      stripe_fx_quote_id: nil,
+    }
+  rescue StandardError => e
+    ErrorNotifier.notify(e, context: { charge_id: charge.id, presentment_currency: currency })
+    raise BuyerCurrencyQuoteInvalid, "direct-listed-amount presentment failed (#{e.class})"
   end
 
   # Processor args for a membership renewal presented in the currency stored at signup, or {}

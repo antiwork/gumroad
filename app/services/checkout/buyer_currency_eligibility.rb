@@ -383,16 +383,30 @@ class Checkout::BuyerCurrencyEligibility
     # binds only seller, currency, and total (not product ids), so a stale token issued
     # for a supported cart could otherwise be replayed against an unsupported product
     # whose charged amount differs from the locked total.
+    listed_in_buyer_currency = []
     purchases.each do |purchase|
       return fallback(:unsupported_product_type) if unsupported_product_type?(purchase) && !later_charge_purchase_in_ramp?(purchase)
       return fallback(:unsupported_product_type) if unquotable_purchase?(purchase)
-      # A product already priced in the buyer's currency is withheld from the quote
-      # lane so an FX round trip can never misprice it — see the comment on
-      # BuyerCurrencyQuote#quotable_product?. (It only pays its listed price directly
-      # on the method-forced local-method lane; a card checkout for it charges
-      # canonical USD.) Any product currency other than the buyer's own is quotable,
-      # including non-USD ones.
-      return fallback(:listed_currency_is_buyer_currency) if purchase.link.price_currency_type.to_s.downcase == buyer_currency
+      listed_in_buyer_currency << (purchase.link.price_currency_type.to_s.downcase == buyer_currency)
+    end
+
+    # A product already priced in the buyer's currency must never go through the quote
+    # lane: converting it to USD and back returns something near but not equal to the
+    # listed price (two rates, two roundings), so the buyer would be charged an amount
+    # that differs from the page. It does not need a quote either — the listed price is
+    # already in the currency we want to charge, so we charge exactly it, the same
+    # direct-listed-amount mechanism the method-forced lane has used since #1442.
+    if listed_in_buyer_currency.any?
+      # Mixed carts are the one shape this cannot serve: some lines would need a quote
+      # and some would not, and the per-line quote basis for that does not exist yet
+      # (gumroad-private#1298). Falling back keeps them on canonical USD as today.
+      return fallback(:mixed_listed_and_quoted_cart) unless listed_in_buyer_currency.all?
+
+      # Deliberately skips the settlement-currency gate below. That gate exists because
+      # an FX quote against an account not holding USD is rejected by Stripe; with no
+      # quote in this flow there is nothing for the balance currency to break. Same
+      # reasoning, and same conclusion, as the method-forced lane's #method_forced_decision.
+      return eligible(currency: buyer_currency, direct_listed_amount: true)
     end
 
     # Checked here (not up top with the other account gates) because the settlement

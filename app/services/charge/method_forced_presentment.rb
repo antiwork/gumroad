@@ -130,85 +130,29 @@ class Charge::MethodForcedPresentment
     end
 
     # Case 1: every product is priced in the forced currency, so the buyer pays the listed
-    # amounts directly — no USD round-trip for the prices themselves. Each purchase's canonical
-    # composition is total = displayed price (which already contains any tip, and seller
-    # tax when it is included in the price) + excluded seller tax + Gumroad tax +
-    # shipping; the last three are stored in USD, so convert each back with the same
-    # stored rate that produced them.
+    # amounts directly — no USD round-trip for the prices themselves. The per-purchase
+    # arithmetic is shared with the card lane in Charge::DirectListedAmountPresentment.
     def direct_listed_amount_result(decision)
       currency = decision.currency
-      allocations = purchases.map { direct_listed_amount_allocation(_1, currency) }
-
-      presentment_total_cents = allocations.sum(&:presentment_total_cents)
-      presentment_gumroad_amount_cents = allocations.sum(&:presentment_gumroad_amount_cents)
+      priced = Charge::DirectListedAmountPresentment.new(
+        purchases:, currency:, gumroad_amount_cents:
+      ).perform
 
       Charge::PresentmentOrchestrator.persist!(
         charge:,
         presentment_currency: currency,
-        presentment_total_cents:,
-        presentment_gumroad_amount_cents:,
-        allocations:
+        presentment_total_cents: priced.presentment_total_cents,
+        presentment_gumroad_amount_cents: priced.presentment_gumroad_amount_cents,
+        allocations: priced.allocations
       )
 
       Result.new(
-        presentment_total_cents:,
+        presentment_total_cents: priced.presentment_total_cents,
         presentment_currency: currency,
-        presentment_gumroad_amount_cents:,
+        presentment_gumroad_amount_cents: priced.presentment_gumroad_amount_cents,
         stripe_fx_quote_id: nil,
         idempotency_key: self.class.idempotency_key_for(charge:, presentment_currency: currency)
       )
-    end
-
-    def direct_listed_amount_allocation(purchase, currency)
-      rate = purchase.rate_converted_to_usd
-      # Without an explicit rate, usd_cents_to_currency silently falls back to the LIVE
-      # exchange rate, which would convert tax/shipping with a different rate than the
-      # one that produced those USD figures (the whole point of reusing the stored rate).
-      # Fail fast instead — the service-level rescue reports it and falls back to the
-      # canonical USD path.
-      raise "rate_converted_to_usd must be set for method-forced direct-listed-amount presentment (purchase #{purchase.id})" if rate.blank?
-
-      tip_cents = purchase.tip&.value_cents.to_i
-      seller_tax_cents = usd_cents_to_currency(currency, purchase.tax_cents.to_i, rate)
-      gumroad_tax_cents = usd_cents_to_currency(currency, purchase.gumroad_tax_cents.to_i, rate)
-      shipping_cents = usd_cents_to_currency(currency, purchase.shipping_cents.to_i, rate)
-
-      # displayed_price_cents already includes the tip (the buyer's chosen add-on is
-      # folded into the display total at purchase-creation time), which is why tip is
-      # subtracted below without ever having been added. If that invariant breaks (e.g.
-      # a future purchase type stores the tip separately), the subtraction would
-      # silently clamp price to 0 — raise early instead so the service-level rescue
-      # surfaces it and falls back to the canonical USD path.
-      raise "displayed_price_cents must include tip (purchase #{purchase.id}: tip #{tip_cents} > displayed #{purchase.displayed_price_cents})" if tip_cents > purchase.displayed_price_cents
-
-      presentment_total_cents = purchase.displayed_price_cents +
-                                (purchase.was_tax_excluded_from_price ? seller_tax_cents : 0) +
-                                gumroad_tax_cents + shipping_cents
-      # Mirror Charge::PresentmentAllocator's canonical decomposition: price is what
-      # remains of the total after the separately-tracked components.
-      price_cents = [presentment_total_cents - tip_cents - seller_tax_cents - gumroad_tax_cents - shipping_cents, 0].max
-      # The Gumroad share is converted independently of the listed-price-based total, so
-      # adverse double-rounding (e.g. a ~100% Gumroad cut) could put it a cent above the
-      # purchase total and fail PurchasePresentment's gumroad-amount validation — which
-      # would degrade this lane to an unconfirmable USD intent. Cap it at the total.
-      presentment_gumroad_amount_cents = [usd_cents_to_currency(currency, canonical_gumroad_amount_cents_for(purchase), rate), presentment_total_cents].min
-
-      Charge::PresentmentAllocator::Allocation.new(
-        purchase:,
-        presentment_price_cents: price_cents,
-        presentment_tip_cents: tip_cents,
-        presentment_seller_tax_cents: seller_tax_cents,
-        presentment_gumroad_tax_cents: gumroad_tax_cents,
-        presentment_shipping_cents: shipping_cents,
-        presentment_total_cents:,
-        presentment_gumroad_amount_cents:
-      )
-    end
-
-    def canonical_gumroad_amount_cents_for(purchase)
-      return gumroad_amount_cents if purchases.one?
-
-      purchase.total_transaction_amount_for_gumroad_cents
     end
 
     # Case 2: USD-priced product — mint a Stripe FX quote (the same underlying machinery
