@@ -24,8 +24,6 @@ class EmailInfo < ApplicationRecord
     before_transition any => :sent, :do => :clear_event_time_fields
     before_transition any => :delivered, do: ->(email_info, transition) { email_info.delivered_at = transition.args.first || Time.current }
     before_transition any => :opened, do: ->(email_info, transition) { email_info.opened_at = transition.args.first || Time.current }
-    after_transition any => :bounced, :do => :unsubscribe_buyer
-
     event :mark_bounced do
       transition any => :bounced
     end
