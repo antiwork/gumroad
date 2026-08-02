@@ -2,7 +2,7 @@
 
 class Order::OfferCodeRecoveryService
   FAILED_PURCHASE_STATES = %w[failed preorder_authorization_failed gift_receiver_purchase_failed].freeze
-  MAX_RETRY_OFFER_CODES = 10
+  MAX_RETRY_OFFER_CODES = Cart::MAX_ALLOWED_CART_PRODUCTS
   MAX_RETRY_OFFER_CODE_PRODUCTS = 100
   MAX_RETRY_OFFER_CODE_FIELD_BYTES = 255
 

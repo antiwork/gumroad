@@ -188,6 +188,20 @@ describe Order::ConfirmService, :vcr do
       expect(product_responses).to be_empty
     end
 
+    it "accepts one retry code for every product allowed in the cart" do
+      candidates = Array.new(Cart::MAX_ALLOWED_CART_PRODUCTS) do |index|
+        {
+          code: "SAVE#{index}",
+          products: {
+            index.to_s => { permalink: "product-#{index}", quantity: 1 },
+          },
+        }
+      end
+
+      expect(Order::OfferCodeRecoveryService.sanitize_retry_candidates(candidates).size)
+        .to eq(Cart::MAX_ALLOWED_CART_PRODUCTS)
+    end
+
     it "discards malformed retry-code payloads before confirming purchases" do
       order = create(:order)
 

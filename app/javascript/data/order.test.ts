@@ -242,6 +242,7 @@ describe("startOrderCreation", () => {
     if (!firstLine) throw new Error("Missing test line item");
     const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b", quantity: 2 };
     const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    const activeOfferCodes = [{ code: "SAVE", products: { "product-a": fixedDiscount(100) } }];
     requestMock
       .mockResolvedValueOnce(
         jsonResponse({
@@ -274,10 +275,11 @@ describe("startOrderCreation", () => {
         jsonResponse({
           success: true,
           line_items: {
-            purchase: {
+            purchaseA: confirmedPurchase("product-a"),
+            purchaseB: {
               success: false,
-              permalink: "product-a",
-              error_message: "Card failed.",
+              permalink: "product-b",
+              error_message: "Invalid variant.",
               name: null,
               formatted_price: "$10",
               error_code: null,
@@ -288,18 +290,26 @@ describe("startOrderCreation", () => {
             },
           },
           can_buyer_sign_up: false,
-          offer_codes: [{ code: "save", products: { "product-b": oncePerCartDiscount(100) } }],
+          offer_codes: [
+            {
+              code: "save",
+              products: { "product-a": fixedDiscount(100), "product-b": oncePerCartDiscount(100) },
+            },
+          ],
         }),
       );
 
-    const result = await startOrderCreation(mixedRequestData);
+    const result = await startOrderCreation(mixedRequestData, activeOfferCodes);
 
     expect(requestMock.mock.calls[1]?.[0]).toMatchObject({
       data: {
         retry_offer_codes: [
           {
             code: "SAVE",
-            products: { "product-b ": { permalink: "product-b", quantity: 2 } },
+            products: {
+              "product-a ": { permalink: "product-a", quantity: 1 },
+              "product-b ": { permalink: "product-b", quantity: 2 },
+            },
           },
         ],
       },

@@ -151,14 +151,15 @@ export const startOrderCreation = async (
         retryOfferCodeCandidates(requestData, retryOfferCodes),
       );
       const lineItemResults = Object.values(orderConfirmResponse.line_items);
+      const lineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
+        const resultItem = lineItemResults.find((item) => item.permalink === lineItem.permalink);
+        if (resultItem) lineItems[lineItem.uid] = resultItem;
+        return lineItems;
+      }, {});
       const result = {
-        lineItems: requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
-          const resultItem = lineItemResults.find((item) => item.permalink === lineItem.permalink);
-          if (resultItem) lineItems[lineItem.uid] = resultItem;
-          return lineItems;
-        }, {}),
+        lineItems,
         canBuyerSignUp: response.can_buyer_sign_up,
-        offerCodes: orderConfirmResponse.offer_codes,
+        offerCodes: offerCodesForFailedLineItems(requestData, lineItems, orderConfirmResponse.offer_codes),
       };
       return ensureValidCartResult(requestData, result);
     }
