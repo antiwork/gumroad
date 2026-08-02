@@ -240,7 +240,7 @@ class ContentModeration::Strategies::PromptStrategy
       next unless passes_uncertainty_check?(result[:reasoning])
 
       if @corroborate_judgment_flags && corroborated_preset?(preset, images_sent: result[:images_sent])
-        flagged_resamples, resamples_run = run_resamples(preset)
+        flagged_resamples, resamples_run = run_resamples(preset, skip_images: !result[:images_sent])
         corroborated = flagged_resamples == CORROBORATION_RESAMPLES
         Rails.logger.info(
           "ContentModeration::PromptStrategy #{preset[:name]} corroboration: #{flagged_resamples}/#{resamples_run} resamples flagged; " \
@@ -314,12 +314,18 @@ class ContentModeration::Strategies::PromptStrategy
     # not flagging (evaluate_preset already maps those to compliant), so
     # transient API trouble fails open — toward publishing — like the rest of
     # this class.
-    def run_resamples(preset)
+    #
+    # `skip_images` is the flagging sample's effective payload, not the
+    # preset's default: a flag that came from the text-only retry (OpenAI
+    # rejected the image URL) must be corroborated text-only, or each resample
+    # re-sends the URL that just failed — and, if the fetch transiently
+    # succeeds, corroborates a text verdict with image-bearing samples.
+    def run_resamples(preset, skip_images:)
       flagged = 0
       run = 0
       CORROBORATION_RESAMPLES.times do
         run += 1
-        break unless evaluate_preset(preset)[:status] == "flagged"
+        break unless evaluate_preset(preset, skip_images:)[:status] == "flagged"
         flagged += 1
       end
       [flagged, run]

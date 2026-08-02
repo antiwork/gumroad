@@ -112,6 +112,9 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     # text-only. That retry's verdict rests on prose, so it is resampled like any
     # other text-only flag — keying on the record's images instead would leave this
     # path hard-blocking on one sample, which is the same bug in a second place.
+    # The resamples must also be text-only: they corroborate the prose verdict,
+    # and re-sending the URL OpenAI just rejected would either fail again or
+    # answer a different question.
     it "corroborates a flag from the text-only retry after OpenAI could not fetch the image" do
       bad_request = Faraday::BadRequestError.new(
         { status: 400, body: { "error" => { "code" => "invalid_image_url", "message" => "could not fetch" } } }
@@ -123,8 +126,11 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
         json_chat_response(flagged: false, reasoning: "")             # spam preset
       ]
       call = 0
-      allow(client).to receive(:chat) do
+      image_counts_per_call = []
+      allow(client).to receive(:chat) do |parameters:|
         call += 1
+        content = parameters[:messages].last[:content]
+        image_counts_per_call << (content.is_a?(Array) ? content.count { |part| part[:type] == "image_url" } : 0)
         raise bad_request if call == 1
 
         responses[call - 2]
@@ -138,6 +144,8 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
 
       expect(result.status).to eq("compliant")
       expect(result.audit_reasoning).to eq(["adult_content (uncorroborated, 1/2 samples flagged): adult prose"])
+      # rejected image attempt, text-only retry, uncertainty check, resample, spam
+      expect(image_counts_per_call).to eq([1, 0, 0, 0, 0])
     end
 
     it "leaves a text-only adult_content flag blocking when corroboration is not requested" do
