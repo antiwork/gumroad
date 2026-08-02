@@ -74,11 +74,11 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
 
     it "blocks a text-only adult_content flag when every resample reproduces it" do
       allow(client).to receive(:chat).and_return(
-        json_chat_response(flagged: true, reasoning: "adult prose"),
-        json_chat_response(uncertain: false),
-        json_chat_response(flagged: true, reasoning: "adult prose"),
-        json_chat_response(flagged: true, reasoning: "adult prose"),
-        json_chat_response(flagged: false, reasoning: "")
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # adult_content preset
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # resample 1
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # resample 2 agrees
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
       )
 
       result = described_class.new(text: "profile copy", corroborate_judgment_flags: true).perform
@@ -92,10 +92,10 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     # even though the caller passed a URL.
     it "corroborates when the only image URL is an unsupported format" do
       allow(client).to receive(:chat).and_return(
-        json_chat_response(flagged: true, reasoning: "adult prose"),
-        json_chat_response(uncertain: false),
-        json_chat_response(flagged: false, reasoning: ""),
-        json_chat_response(flagged: false, reasoning: "")
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # adult_content preset
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: false, reasoning: ""),            # resample 1 decides
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
       )
 
       result = described_class.new(
