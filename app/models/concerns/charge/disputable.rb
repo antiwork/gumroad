@@ -256,13 +256,56 @@ module Charge::Disputable
     ContactingCreatorMailer.chargeback_lost_no_refund_policy(dispute.id).deliver_later
   end
 
+  # Resolve the dispute for this event by the PROCESSOR's case identity first, falling back to
+  # this disputable's has_one only when no such row exists.
+  #
+  # The has_one alone is not a stable identity. Charge::Chargeable.find_by_stripe_event resolves
+  # a combined charge's processor transaction id to the Charge before the Purchase, so a case
+  # formalized when the resolver returned the Purchase and closed after it returned the Charge
+  # would find a nil has_one on the Charge and build a SECOND row for one processor case — the
+  # original staying `formalized` forever while its twin went terminal. Anything keyed on the
+  # local row (the formalized side-effect marker, the mailers, the evidence uniqueness index)
+  # is bypassed the same way. Keying on the case makes the record an event updates independent
+  # of which object the resolver happened to return.
+  #
+  # The found row is attached to the in-memory association only; its purchase_id / charge_id are
+  # left alone, so this never reparents a historical dispute — it only makes `dispute` in this
+  # request point at the row the event is actually about.
   def find_or_build_dispute(event)
-    self.dispute ||= build_dispute(
+    return dispute if dispute.present?
+
+    existing = find_dispute_by_processor_case(event)
+    if existing.present?
+      association(:dispute).target = existing
+      return existing
+    end
+
+    self.dispute = build_dispute(
       charge_processor_id: charge_processor,
       charge_processor_dispute_id: event.extras.try(:[], :charge_processor_dispute_id),
       reason: event.extras.try(:[], :reason),
       event_created_at: event.created_at,
     )
+  end
+
+  # Blank processor dispute ids cannot form a case key — every Braintree row and a block of
+  # legacy PayPal rows have none — so they always fall through to the has_one.
+  def find_dispute_by_processor_case(event)
+    processor_dispute_id = event.extras.try(:[], :charge_processor_dispute_id)
+    return if processor_dispute_id.blank?
+
+    Dispute.where(charge_processor_id: charge_processor, charge_processor_dispute_id: processor_dispute_id)
+           .where(purchase_id: disputed_purchase_ids)
+           .order(:id)
+           .first
+  end
+
+  # The purchases this disputable covers, plus — when it is a Charge — nothing else: a case's
+  # older twin is always purchase-grain, hanging off one of the charge's own purchases. Scoping
+  # to them keeps the lookup from matching an unrelated seller's row should a processor ever
+  # reuse a dispute id.
+  def disputed_purchase_ids
+    disputed_purchases.map(&:id)
   end
 
   def create_dispute_evidence_if_needed!
