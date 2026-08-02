@@ -158,7 +158,7 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("falls back to a document-wide scan for fields flagged outside the payment form (tip, gift)", () => {
+  it("scans the whole document so fields flagged outside the payment form (tip, gift) are found", () => {
     // The tip and gift inputs render as siblings of PaymentForm in Checkout/index.tsx.
     const tipField = <input aria-label="Custom tip" aria-invalid="true" data-testid="tip-outside-payment-form" />;
     render(
@@ -172,6 +172,34 @@ describe("PaymentForm validation-failure feedback", () => {
       </LoggedInUserProvider>,
     );
 
+    const field = screen.getByTestId("tip-outside-payment-form");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(field);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("sends the buyer to the first unmet field in page order, not the first one inside the form", () => {
+    // Tip and gift render before PaymentForm in Checkout/index.tsx. When both a tip and a custom
+    // field are flagged, the earlier tip field must win — a form-subtree-first scan would skip it.
+    const tipField = <input aria-label="Custom tip" aria-invalid="true" data-testid="tip-outside-payment-form" />;
+    render(
+      <LoggedInUserProvider value={null}>
+        {tipField}
+        <StateContext.Provider
+          value={[
+            state({
+              status: { type: "input", errors: new Set(["tip", "customFields.field-1"]) },
+              validationFailedCount: 1,
+            }),
+            vi.fn(),
+          ]}
+        >
+          <PaymentForm />
+        </StateContext.Provider>
+      </LoggedInUserProvider>,
+    );
+
+    expect(screen.getByLabelText("Nickname").getAttribute("aria-invalid")).toBe("true");
     const field = screen.getByTestId("tip-outside-payment-form");
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView.mock.instances[0]).toBe(field);

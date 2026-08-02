@@ -1810,7 +1810,6 @@ export const PaymentForm = ({
   const isTestPurchase = loggedInUser && state.products.find((product) => product.testPurchase);
   const isFreePurchase = isTestPurchase || !requiresPayment(state);
 
-  const paymentFormRef = React.useRef<HTMLDivElement | null>(null);
   const recaptcha = useRecaptcha({
     siteKey: state.recaptchaKey,
     scoreBased: state.recaptchaScoreBased,
@@ -1823,10 +1822,9 @@ export const PaymentForm = ({
     if (state.status.type !== "input") return;
     // Stripe nests the input inside aria-invalid, hence the second query selector.
     const selector = "input[aria-invalid=true], [aria-invalid=true] input";
-    // Tip and gift errors flag inputs outside the payment form, hence the document fallback.
-    const invalidInput =
-      paymentFormRef.current?.querySelector<HTMLInputElement>(selector) ??
-      document.querySelector<HTMLInputElement>(selector);
+    // Document-wide, not scoped to this form: tip and gift errors flag inputs that render before
+    // it, and the buyer must land on the first unmet field in page order.
+    const invalidInput = document.querySelector<HTMLInputElement>(selector);
     if (!invalidInput) return;
     invalidInput.scrollIntoView({ behavior: "smooth", block: "center" });
     invalidInput.focus({ preventScroll: true });
@@ -1862,7 +1860,7 @@ export const PaymentForm = ({
   const isPayPalAvailable = useIsPayPalAvailable();
 
   return (
-    <div ref={paymentFormRef} className={`flex flex-col gap-6 ${className}`} aria-label="Payment form">
+    <div className={`flex flex-col gap-6 ${className}`} aria-label="Payment form">
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!isFreePurchase ? (
