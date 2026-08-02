@@ -327,7 +327,7 @@ module Purchase::Blockable
     else
       "Stripe is still refusing this buyer on one of our risk rules (charge #{refusal[:charge_id]}, " \
         "#{refusal[:network_status]}), and there is nothing left for us to lift: it clears on its " \
-        "own about a day after their first attempt. Do not promise an immediate retry."
+        "own about a day after their first attempt, so do not promise an immediate retry."
     end
   end
 
