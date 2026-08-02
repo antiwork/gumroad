@@ -332,6 +332,27 @@ describe("getDiscountedPrice", () => {
     expect(getDiscountedPrice(cart, secondItem).price).toBe(1_900);
   });
 
+  it("allocates the cart discount where it saves more than PPP", () => {
+    const firstProduct = { ...product, ppp_details: { country: "US", factor: 0.8, minimum_price: 0 } };
+    const secondProduct = { ...product, id: "second-id", permalink: "second" };
+    const firstItem = { ...item, price: 1_000, quantity: 1, product: firstProduct };
+    const secondItem = { ...item, price: 1_000, quantity: 1, product: secondProduct };
+    const discount = {
+      type: "fixed" as const,
+      cents: 500,
+      once_per_cart: true,
+      once_per_cart_amount_cents: 500,
+      ...discountConditions,
+    };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [{ code: "SAVE", products: { product: discount, second: discount }, fromUrl: false }],
+    };
+
+    expect(getDiscountedPrice(cart, firstItem)).toEqual({ discount: { type: "ppp" }, price: 800 });
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(500);
+  });
+
   it("moves the allocation when another code wins on the first covered line", () => {
     const secondProduct = { ...product, id: "second-id", permalink: "second" };
     const firstItem = { ...item, quantity: 1 };

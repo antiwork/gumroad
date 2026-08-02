@@ -203,6 +203,21 @@ const getNonCodeDiscountedPrice = (cart: CartState, item: CartItem): DiscountedP
   return applicable;
 };
 
+const getDiscountedPriceWithoutOncePerCartCodes = (cart: CartState, item: CartItem): DiscountedPrice => {
+  let applicable = getNonCodeDiscountedPrice(cart, item);
+  for (const discountCode of cart.discountCodes) {
+    const discount = discountCode.products[item.product.permalink];
+    if (!discount || !hasMetCartDiscountConditions(cart, item, discount)) continue;
+    if (discount.type === "fixed" && discount.once_per_cart) continue;
+
+    const discounted = applyOfferCodeToCents(discount, item.price) * item.quantity;
+    if (discounted <= applicable.price) {
+      applicable = { discount: { type: "code", value: discount, code: discountCode.code }, price: discounted };
+    }
+  }
+  return applicable;
+};
+
 const getDiscountedPriceForItem = (
   cart: CartState,
   item: CartItem,
@@ -247,14 +262,33 @@ const getDiscountedPriceForItem = (
 };
 
 export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: CartItem = item): DiscountedPrice {
+  const alternativeSavingsCents = (candidate: CartItem) =>
+    candidate.price * candidate.quantity - getDiscountedPriceWithoutOncePerCartCodes(cart, candidate).price;
+  const candidates = cart.items.map((candidate, index) => ({
+    item: candidate === sourceItem ? item : candidate,
+    isTarget: candidate === sourceItem,
+    index,
+    alternativeSavingsCents: alternativeSavingsCents(candidate === sourceItem ? item : candidate),
+  }));
+  if (!candidates.some(({ isTarget }) => isTarget)) {
+    candidates.push({
+      item,
+      isTarget: true,
+      index: candidates.length,
+      alternativeSavingsCents: alternativeSavingsCents(item),
+    });
+  }
+  candidates.sort(
+    (left, right) => left.alternativeSavingsCents - right.alternativeSavingsCents || left.index - right.index,
+  );
+
   const remainingOncePerCartDiscounts = new Map<string, number>();
-  for (const candidate of cart.items) {
-    const pricedCandidate = candidate === sourceItem ? item : candidate;
-    const discountedPrice = getDiscountedPriceForItem(cart, pricedCandidate, remainingOncePerCartDiscounts);
-    if (candidate === sourceItem) return discountedPrice;
+  for (const candidate of candidates) {
+    const discountedPrice = getDiscountedPriceForItem(cart, candidate.item, remainingOncePerCartDiscounts);
+    if (candidate.isTarget) return discountedPrice;
   }
 
-  return getDiscountedPriceForItem(cart, item, remainingOncePerCartDiscounts);
+  return getDiscountedPriceForItem(cart, item, new Map());
 }
 
 export function newCartState(): CartState {
