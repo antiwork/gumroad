@@ -2032,16 +2032,23 @@ class Purchase < ApplicationRecord
 
   def create_license!
     return if is_gift_sender_purchase
-    # The license canonically lives on the original purchase, and #license reads
-    # it from there for a charge row — so minting here would write an orphan the
-    # guard below can never see again.
-    return if is_recurring_subscription_charge
     return unless uses_license_key?
-    return if license.present?
 
-    license = create_license
-    link.licenses << license
-    license
+    # The license canonically lives on the original purchase — #license reads it
+    # from there for a charge row — so a charge-triggered mint must write there
+    # too, or it creates an orphan the getter can never see again.
+    holder = is_recurring_subscription_charge ? subscription.original_purchase : self
+    return if holder.license.present?
+
+    # Concurrent swaps can both observe the license as missing; the row lock
+    # reloads and re-checks so only one of them mints.
+    holder.with_lock do
+      next if holder.license.present?
+
+      license = holder.create_license
+      link.licenses << license
+      license
+    end
   end
 
   def license

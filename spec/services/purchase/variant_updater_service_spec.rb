@@ -341,10 +341,10 @@ describe Purchase::VariantUpdaterService do
         expect(purchase.license).to be_nil
       end
 
-      it "does not mint an orphan license on a recurring subscription charge" do
+      it "backfills the license onto the original purchase when a recurring charge is swapped" do
         subscription = create(:subscription, link: product)
-        create(:purchase, link: product, subscription:, is_original_subscription_purchase: true,
-                          variant_attributes: [free_variant])
+        original = create(:purchase, link: product, subscription:, is_original_subscription_purchase: true,
+                                     variant_attributes: [free_variant])
         charge = create(:purchase, link: product, subscription:, is_original_subscription_purchase: false,
                                    variant_attributes: [free_variant])
         expect(charge.is_recurring_subscription_charge).to be true
@@ -355,7 +355,23 @@ describe Purchase::VariantUpdaterService do
             variant_id: full_variant.external_id,
             quantity: charge.quantity,
           ).perform
-        end.not_to change { License.count }
+        end.to change { License.count }.by(1)
+
+        expect(License.where(purchase_id: charge.id)).to be_empty
+        expect(original.reload.license).to be_present
+        expect(charge.reload.license).to eq(original.license)
+
+        license_pushes = ElasticsearchIndexerWorker.jobs.map { |job| job["args"] }
+          .select { |action, params| action == "update" && params["fields"] == ["license_serial", "license_uses"] }
+        expect(license_pushes.map { |_, params| params["record_id"] }).to match_array([charge.id, original.id])
+      end
+
+      it "does not mint a duplicate when another request minted the license after the stale check" do
+        purchase = create(:purchase, link: product, variant_attributes: [full_variant])
+        purchase.license # cache the association as absent
+        Purchase.find(purchase.id).create_license!
+
+        expect { purchase.create_license! }.not_to change { License.count }
       end
     end
   end
