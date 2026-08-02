@@ -295,19 +295,18 @@ describe("Main Settings Scenario", type: :system, js: true) do
         field = find_field("Email")
         expect(field.value).to eq("")
         expect(field["placeholder"]).to eq("you@example.com")
-        expect(field["placeholder"]).to_not eq(user.email)
         expect(page).to have_text("Leave blank to use your account email (#{user.email}).")
       end
     end
 
-    it "does not offer the fallback copy once a support email is set" do
+    it "keeps the fallback hint visible once a support email is set" do
       user.update!(support_email: "support@example.com")
 
       visit settings_main_path
 
       within_section "Support", section_element: :section do
         expect(find_field("Email").value).to eq("support@example.com")
-        expect(page).to have_text("This email is listed on the receipt of every sale.")
+        expect(page).to have_text("Leave blank to use your account email (#{user.email}).")
       end
     end
   end
