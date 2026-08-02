@@ -30,13 +30,10 @@ class DisputeEvidence::GenerateAccessActivityLogsService
     end
 
     def usage_activity
-      if consumption_events.any?
-        generate_from_consumption_events
-      elsif total_url_redirect_uses.positive?
-        generate_from_url_redirect
-      else
-        nil
-      end
+      [
+        (generate_from_consumption_events if consumption_events.any?),
+        (generate_from_url_redirect if unlogged_url_redirect_uses.positive?),
+      ].compact.join("\n\n").presence
     end
 
     # The disputed row on a bundle sale is the wrapper, but access rows are written against the
@@ -60,12 +57,22 @@ class DisputeEvidence::GenerateAccessActivityLogsService
         .order(:consumed_at, :id)
     end
 
-    def total_url_redirect_uses
-      @_total_url_redirect_uses ||= access_purchases.sum { _1.url_redirect&.uses.to_i }
+    # A purchase's uses counter and its consumption events describe overlapping accesses, so only
+    # event-less purchases contribute here — the old fallback, applied per purchase.
+    def unlogged_url_redirect_uses
+      @_unlogged_url_redirect_uses ||= begin
+        event_logged_ids = consumption_events.map(&:purchase_id).to_set
+        access_purchases.reject { event_logged_ids.include?(_1.id) }.sum { _1.url_redirect&.uses.to_i }
+      end
     end
 
     def generate_from_url_redirect
-      "The customer accessed the product #{total_url_redirect_uses} #{"time".pluralize(total_url_redirect_uses)}."
+      uses = unlogged_url_redirect_uses
+      if consumption_events.any?
+        "The customer accessed the product #{uses} more #{"time".pluralize(uses)}."
+      else
+        "The customer accessed the product #{uses} #{"time".pluralize(uses)}."
+      end
     end
 
     LOG_RECORDS_LIMIT = 10

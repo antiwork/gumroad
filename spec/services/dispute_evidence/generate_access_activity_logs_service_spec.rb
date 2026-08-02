@@ -313,6 +313,30 @@ describe DisputeEvidence::GenerateAccessActivityLogsService do
       expect(described_class.perform(bundle_purchase)).to include("The customer accessed the product 7 times.")
     end
 
+    it "reports a redirect-only member's uses alongside another member's consumption events" do
+      second_member = create(:purchase, link: create(:product, user: seller, name: "Member Two"), seller:, email: bundle_purchase.email, is_bundle_product_purchase: true)
+      create(:bundle_product_purchase, bundle_purchase:, product_purchase: second_member)
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+      second_member.create_url_redirect!
+      second_member.url_redirect.update!(uses: 5)
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to include("The customer accessed the product 5 more times.")
+    end
+
+    it "does not recount uses on a member whose accesses are already event-logged" do
+      create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "1.2.3.4")
+      member_purchase.create_url_redirect!
+      member_purchase.url_redirect.update!(uses: 3)
+
+      content = described_class.perform(bundle_purchase)
+
+      expect(content).to include("The customer accessed the product 1 time.")
+      expect(content).to_not include("more time")
+    end
+
     it "orders the merged wrapper and member events by time" do
       create(:consumption_event, purchase_id: member_purchase.id, consumed_at: DateTime.parse("2024-05-09"), ip_address: "9.9.9.9")
       create(:consumption_event, purchase_id: bundle_purchase.id, consumed_at: DateTime.parse("2024-05-08"), ip_address: "8.8.8.8")
