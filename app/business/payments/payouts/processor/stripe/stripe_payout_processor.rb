@@ -208,9 +208,10 @@ class StripePayoutProcessor
     payment.currency = merchant_account.currency
     payment.amount_cents = 0
 
-    if (drift_error = destination_balance_drift_error(merchant_account, balances_held_by_stripe))
+    drift_error, drift_failure_reason = destination_balance_drift_error(merchant_account, balances_held_by_stripe)
+    if drift_error
       payment.error_message = drift_error.truncate(1000)
-      payment.mark_failed!(Payment::FailureReason::INSUFFICIENT_FUNDS)
+      payment.mark_failed!(drift_failure_reason)
       payment.errors.add(:base, drift_error)
       return [drift_error]
     end
@@ -322,16 +323,39 @@ class StripePayoutProcessor
   # any internal transfer fires, preventing the transfer/payout-fail/reverse/FX-residual-Credit loop
   # that otherwise compounds the gap each cycle. Pending is included so settling funds (the typical
   # 2-7 day post-charge window) are not flagged as drift — only truly missing funds are.
+  # Returns `[message, failure_reason]`, or nil when the destination is coherent.
   def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe)
     return nil unless merchant_account.is_a_gumroad_managed_stripe_account?
     return nil if balances_held_by_stripe.empty?
+
+    expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
+
+    # A negative destination total is drift only when the USD ledger DISAGREES with it: FX residue
+    # leaves `amount_cents: 0` against a negative holding, so the seller's USD balance reads whole
+    # while the wire is short. Refund netting carries the debit on both sides and pays out
+    # coherently — measured ~4x more common than residue, so tripping on the sign alone would block
+    # sellers who are paid correctly today. Checked ahead of the currency skips below because it
+    # compares two of our own numbers and needs nothing from Stripe.
+    usd_ledger_cents = balances_held_by_stripe.sum(&:amount_cents)
+    if expected_destination_cents.negative? && !usd_ledger_cents.negative?
+      message = "Destination ledger is negative on #{merchant_account.charge_processor_merchant_id}: " \
+                "balances held at Stripe sum to #{expected_destination_cents} " \
+                "#{merchant_account.currency} cents while their USD ledger reads #{usd_ledger_cents} " \
+                "cents, across #{balances_held_by_stripe.size} " \
+                "balance#{"s" if balances_held_by_stripe.size != 1} " \
+                "(#{negative_balance_ids(balances_held_by_stripe).join(", ")}). Paying out would subtract " \
+                "the difference from the wire amount without it appearing in the seller's balance. " \
+                "Reconcile the destination balance before retry." \
+                "#{retired_account_balances_hint(merchant_account)}"
+      return [message, Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE]
+    end
+
+    return nil if expected_destination_cents <= 0
+
     # KRW: Gumroad stores 100 subunits while Stripe reports single-unit, so the raw cents comparison
     # is off by 100x and would always flag drift for healthy accounts. Skipping is safer than
     # encoding the divergence here; revisit if KRW sellers report stuck payouts.
     return nil if merchant_account.currency.to_s == Currency::KRW
-
-    expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
-    return nil if expected_destination_cents <= 0
 
     stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: merchant_account.charge_processor_merchant_id })
     destination_currency = merchant_account.currency.to_s
@@ -345,13 +369,23 @@ class StripePayoutProcessor
     return nil if reachable_cents >= expected_destination_cents
 
     gap_cents = expected_destination_cents - reachable_cents
-    "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
-      "expected #{expected_destination_cents} #{destination_currency} cents, " \
-      "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
-      "Reconcile destination balance before retry." \
-      "#{retired_account_balances_hint(merchant_account)}"
+    message = "Destination Stripe balance mismatch on #{merchant_account.charge_processor_merchant_id}: " \
+              "expected #{expected_destination_cents} #{destination_currency} cents, " \
+              "Stripe has #{available_cents} cents available + #{pending_cents} cents pending (gap: #{gap_cents} cents). " \
+              "Reconcile destination balance before retry." \
+              "#{retired_account_balances_hint(merchant_account)}"
+    [message, Payment::FailureReason::INSUFFICIENT_FUNDS]
   end
   private_class_method :destination_balance_drift_error
+
+  # Names the rows a human has to correct; the offending set is usually one row among many healthy ones.
+  def self.negative_balance_ids(balances)
+    negative = balances.select { |balance| balance.holding_amount_cents.negative? }
+    return ["no single balance is negative; the set nets negative"] if negative.empty?
+
+    negative.map { |balance| "Balance #{balance.id}: #{balance.holding_amount_cents}" }
+  end
+  private_class_method :negative_balance_ids
 
   # Every drift-guard case investigated so far had the same root cause: the seller changed
   # country (or otherwise got a new Stripe account), and a returned payout or leftover funds

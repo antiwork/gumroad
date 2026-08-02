@@ -115,8 +115,15 @@ class ContentModeration::ModerateRecordService
   def self.seller_message(reasons, noun, title: nil)
     rs = Array(reasons)
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
+    unsupported = ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    elsif rs.any? && rs.all? { |r| r.to_s.include?(unsupported) }
+      # Unlike the transient branch above, retrying can never fix this: the
+      # image itself is something our review can’t read, so the seller has to
+      # change it and the copy has to say so.
+      "This #{noun} includes an image in a format we can’t review (such as an SVG data URL or a very large inline image), " \
+      "so we can’t publish it as is. Re-encode that image as a regular PNG, JPEG, GIF, or WebP file and try again."
     elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
       "This #{noun} has more images than we can review, so we can’t publish it as is. " \
       "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \
@@ -182,10 +189,11 @@ class ContentModeration::ModerateRecordService
     ai_results = run_ai_strategies(content)
     flagged = ai_results.select { |r| r.status == "flagged" }
 
-    # Judgment-preset flags (spam, off-platform fulfillment) that didn't
-    # reproduce when PromptStrategy resampled them. They don't block the
-    # publish, but we still leave a note so the flag rate and false-positive
-    # rate can be measured against blocked publishes.
+    # Judgment-preset flags (spam, off-platform fulfillment, and adult content the
+    # model judged on text alone) that didn't reproduce when PromptStrategy
+    # resampled them. They don't block the publish, but we still leave a note so
+    # the flag rate and false-positive rate can be measured against blocked
+    # publishes.
     audit_reasons = ai_results.flat_map { |r| r.respond_to?(:audit_reasoning) ? Array(r.audit_reasoning) : [] }
 
     reasons = flagged.flat_map(&:reasoning)
@@ -515,10 +523,10 @@ class ContentModeration::ModerateRecordService
           # images come from our own uploads and their galleries are unbounded.
           max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
         ),
-        # `corroborate_judgment_flags` makes a spam or off-platform-fulfillment
-        # flag block only when it reproduces on resampling; a lone flag is
-        # returned as audit_reasoning and recorded as a non-blocking note
-        # instead (see `check` above).
+        # `corroborate_judgment_flags` makes a spam, off-platform-fulfillment, or
+        # text-only adult-content flag block only when it reproduces on resampling;
+        # a lone flag is returned as audit_reasoning and recorded as a non-blocking
+        # note instead (see `check` above).
         ContentModeration::Strategies::PromptStrategy.new(
           text: content.text,
           image_urls: content.image_urls,

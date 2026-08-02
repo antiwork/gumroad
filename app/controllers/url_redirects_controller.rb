@@ -297,11 +297,12 @@ class UrlRedirectsController < ApplicationController
     end
     return e404_json if @url_redirect.rental_expired?
     return e404_json if purchase&.subscription && !purchase.subscription.grant_access_to_product?
-    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+    if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription?(purchase) && !logged_in_user.is_team_member?
       return e404_json
     end
     if purchase.present? && @url_redirect.has_been_seen && @url_redirect.imported_customer.blank?
       identity_verified = cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+                          viewer_owns_subscription?(purchase) ||
                           (purchase.purchaser.present? && purchase.purchaser == logged_in_user) ||
                           purchase.ip_address == request.remote_ip
       return e404_json if !identity_verified
@@ -458,6 +459,21 @@ class UrlRedirectsController < ApplicationController
       withdrawn_content_response if !has_files && !can_view_product_download_page_without_files
     end
 
+    # The subscription owner can read any purchase in it; transferred memberships can leave
+    # individual renewals attributed to the previous purchaser. Gift-origin subscriptions get no
+    # bypass at all: Gift::ConvertToNonGiftService re-points subscription.user at the payer to
+    # move BILLING ownership while the giftee keeps the seat, and a renewal charged before the
+    # conversion carries the giftee as purchaser with no gift flag — only the surviving Gift row
+    # on the true original purchase marks it. The gift lookup runs last so its extra queries
+    # only fire for a viewer who actually owns the subscription.
+    def viewer_owns_subscription?(purchase)
+      return false if purchase.nil? || purchase.is_gift_receiver_purchase
+
+      subscription = purchase.subscription
+      user_signed_in? && subscription&.user.present? && logged_in_user == subscription.user &&
+        subscription.true_original_purchase&.gift_given.nil?
+    end
+
     def check_permissions
       fetch_url_redirect
 
@@ -471,7 +487,9 @@ class UrlRedirectsController < ApplicationController
         return withdrawn_content_response
       end
 
-      return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !logged_in_user.is_team_member?
+      viewer_owns_subscription = viewer_owns_subscription?(purchase)
+
+      return redirect_to url_redirect_check_purchaser_path(@url_redirect.token, next: request.path) if purchase && user_signed_in? && purchase.purchaser.present? && logged_in_user != purchase.purchaser && !viewer_owns_subscription && !logged_in_user.is_team_member?
 
       return redirect_to url_redirect_rental_expired_page_path(@url_redirect.token) if @url_redirect.rental_expired?
 
@@ -489,7 +507,10 @@ class UrlRedirectsController < ApplicationController
         end
       end
 
-      if cookies.encrypted[:confirmed_redirect] == @url_redirect.token ||
+      # Confirmation asks for the purchase's own email, which a transferred membership's new owner
+      # does not have — so clearing the gate above without clearing this one would only move them
+      # from one dead end to another on any renewal the previous owner had already opened.
+      if cookies.encrypted[:confirmed_redirect] == @url_redirect.token || viewer_owns_subscription ||
          (purchase && ((purchase.purchaser && purchase.purchaser == logged_in_user) || purchase.ip_address == request.remote_ip))
         return
       end

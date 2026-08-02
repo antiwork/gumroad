@@ -2091,11 +2091,22 @@ class Purchase < ApplicationRecord
   def create_license!
     return if is_gift_sender_purchase
     return unless uses_license_key?
-    return if license.present?
 
-    license = create_license
-    link.licenses << license
-    license
+    # The license canonically lives on the original purchase — #license reads it
+    # from there for a charge row — so a charge-triggered mint must write there
+    # too, or it creates an orphan the getter can never see again.
+    holder = is_recurring_subscription_charge ? subscription.original_purchase : self
+    return if holder.license.present?
+
+    # Concurrent swaps can both observe the license as missing; the row lock
+    # reloads and re-checks so only one of them mints.
+    holder.with_lock do
+      next if holder.license.present?
+
+      license = holder.create_license
+      link.licenses << license
+      license
+    end
   end
 
   def license
@@ -2280,6 +2291,21 @@ class Purchase < ApplicationRecord
     return unless is_bundle_purchase?
     product_purchases.each do |product_purchase|
       product_purchase.update!(chargeback_reversed: true)
+    end
+  end
+
+  def mark_giftee_purchase_as_not_chargeback_reversed
+    giftee_purchase = gift_given.present? ? gift_given.giftee_purchase : nil
+    return if giftee_purchase.nil?
+
+    giftee_purchase.chargeback_reversed = false
+    giftee_purchase.save!
+  end
+
+  def mark_product_purchases_as_not_chargeback_reversed!
+    return unless is_bundle_purchase?
+    product_purchases.each do |product_purchase|
+      product_purchase.update!(chargeback_reversed: false)
     end
   end
 

@@ -1546,6 +1546,86 @@ describe Charge::Disputable, :vcr do
         end
       end
 
+      # gumroad-private#1705: the chargeable resolver returns the Charge before the Purchase for a
+      # shared processor transaction id, so a case formalized at purchase grain and closed at
+      # charge grain used to build a SECOND dispute row and leave the original `formalized`
+      # forever. The close must land on the row the case already owns.
+      context "when a close event resolves to the charge but the case is already recorded on a purchase" do
+        let(:seller) { create(:user) }
+        let(:product) { create(:product, user: seller) }
+        let(:transaction_id) { "ch_mixed_grain_1705" }
+        let(:processor_dispute_id) { "PP-D-1705" }
+        let!(:purchase) do
+          create(:purchase, link: product, seller:, stripe_transaction_id: transaction_id,
+                            price_cents: 100, total_transaction_cents: 100, fee_cents: 30,
+                            chargeback_date: 10.days.ago)
+        end
+        let!(:charge) do
+          create(:charge, processor_transaction_id: transaction_id, amount_cents: 100,
+                          disputed_at: 10.days.ago, purchases: [purchase],
+                          merchant_account: create(:merchant_account, user: create(:user), charge_processor_merchant_id: "acct_1705_#{SecureRandom.hex(6)}"))
+        end
+        let!(:existing_dispute) do
+          create(:dispute_formalized, purchase:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                      charge_processor_dispute_id: processor_dispute_id)
+        end
+        let(:event) do
+          build(:charge_event_dispute_lost, charge_id: transaction_id,
+                                            extras: { charge_processor_dispute_id: processor_dispute_id })
+        end
+
+        it "closes the existing purchase-grain dispute instead of building a second row" do
+          expect { charge.handle_event(event) }.not_to change { Dispute.count }
+
+          expect(existing_dispute.reload.state).to eq("lost")
+          expect(Dispute.where(charge_processor_dispute_id: processor_dispute_id).count).to eq(1)
+        end
+
+        it "does not reparent the dispute onto the charge" do
+          charge.handle_event(event)
+          expect(existing_dispute.reload.purchase_id).to eq(purchase.id)
+          expect(existing_dispute.charge_id).to be_nil
+        end
+
+        context "when the close is a win" do
+          let(:event) do
+            build(:charge_event_dispute_won, charge_id: transaction_id,
+                                             extras: { charge_processor_dispute_id: processor_dispute_id })
+          end
+
+          it "closes the existing row and reverses the chargeback on the purchase" do
+            expect { charge.handle_event(event) }.not_to change { Dispute.count }
+            expect(existing_dispute.reload.state).to eq("won")
+            expect(purchase.reload.chargeback_reversed).to be(true)
+          end
+        end
+
+        context "when a formalization replays at the other grain" do
+          let(:event) do
+            build(:charge_event_dispute_formalized, charge_id: transaction_id,
+                                                    extras: { reason: "fraud", charge_processor_dispute_id: processor_dispute_id })
+          end
+
+          it "is a no-op rather than a second formalization with its own side-effect marker" do
+            expect { charge.handle_event(event) }.not_to change { Dispute.count }
+            expect(existing_dispute.reload.state).to eq("formalized")
+          end
+        end
+
+        context "when the processor dispute id is blank" do
+          let!(:existing_dispute) do
+            create(:dispute_formalized, purchase:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                        charge_processor_dispute_id: nil)
+          end
+          let(:event) { build(:charge_event_dispute_lost, charge_id: transaction_id) }
+
+          it "cannot form a case key and falls back to the has_one, as before" do
+            charge.handle_event(event)
+            expect(charge.reload.dispute).to be_present
+          end
+        end
+      end
+
       describe "dispute lost" do
         let(:initial_balance) { 200 }
         let(:seller) { create(:user, unpaid_balance_cents: initial_balance) }
@@ -1801,6 +1881,140 @@ describe Charge::Disputable, :vcr do
             expect do
               Purchase.handle_charge_event(stripe_event)
             end.not_to change { stripe_partially_refunded_purchase.reload.chargeback_reversed }
+          end
+        end
+
+        context "when the dispute was previously won (won => lost flip)" do
+          let!(:flipped_purchase) do
+            create(
+              :purchase,
+              link: product,
+              seller:,
+              stripe_transaction_id: "ch_won_then_lost",
+              price_cents: 100,
+              total_transaction_cents: 100,
+              fee_cents: 30,
+              chargeback_date: 2.days.ago,
+              chargeback_reversed: true,
+              charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            )
+          end
+          let(:flip_event) { build(:charge_event_dispute_lost, charge_id: "ch_won_then_lost") }
+
+          before do
+            create(:dispute_formalized, purchase: flipped_purchase, state: "won", won_at: 1.day.ago)
+          end
+
+          it "clears chargeback_reversed so the buyer loses access again" do
+            expect do
+              Purchase.handle_charge_event(flip_event)
+            end.to change { flipped_purchase.reload.chargeback_reversed }.from(true).to(false)
+          end
+
+          it "marks the dispute lost" do
+            Purchase.handle_charge_event(flip_event)
+            expect(flipped_purchase.reload.dispute.reload.state).to eq("lost")
+          end
+
+          it "restores the seller's payout chargeback gate" do
+            payout = ScheduledPayout.new(user: seller)
+            expect(payout.user_has_active_chargebacks?).to be(false)
+
+            Purchase.handle_charge_event(flip_event)
+
+            expect(payout.user_has_active_chargebacks?).to be(true)
+          end
+
+          it "keeps the buyer out of their library" do
+            Purchase.handle_charge_event(flip_event)
+            expect(Purchase.for_library.where(id: flipped_purchase.id)).to be_empty
+          end
+        end
+
+        context "when a won => lost flip involves a gift" do
+          let!(:gifter_purchase) do
+            create(
+              :purchase,
+              link: product,
+              seller:,
+              stripe_transaction_id: "ch_gift_won_then_lost",
+              price_cents: 100,
+              total_transaction_cents: 100,
+              fee_cents: 30,
+              chargeback_date: 2.days.ago,
+              chargeback_reversed: true,
+              is_gift_sender_purchase: true,
+              charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            )
+          end
+          let!(:giftee_purchase) do
+            create(:purchase, link: product, seller:, is_gift_receiver_purchase: true, chargeback_reversed: true)
+          end
+          let(:gift_event) { build(:charge_event_dispute_lost, charge_id: "ch_gift_won_then_lost") }
+
+          before do
+            create(:gift, gifter_purchase:, giftee_purchase:, link: product)
+            create(:dispute_formalized, purchase: gifter_purchase, state: "won", won_at: 1.day.ago)
+          end
+
+          it "clears the flag on the giftee purchase too" do
+            expect do
+              Purchase.handle_charge_event(gift_event)
+            end.to change { giftee_purchase.reload.chargeback_reversed }.from(true).to(false)
+          end
+        end
+
+        context "when a won => lost flip arrives at charge grain" do
+          let(:charge_transaction_id) { "ch_charge_won_then_lost" }
+          let!(:first_purchase) do
+            create(:purchase, link: product, seller:, stripe_transaction_id: charge_transaction_id,
+                              chargeback_date: 10.days.ago, chargeback_reversed: true)
+          end
+          let!(:second_purchase) do
+            create(:purchase, link: product, seller:, stripe_transaction_id: charge_transaction_id,
+                              chargeback_date: 10.days.ago, chargeback_reversed: true)
+          end
+          let!(:charge) do
+            create(:charge, processor_transaction_id: charge_transaction_id, amount_cents: 222,
+                            disputed_at: 10.days.ago, dispute_reversed_at: 1.day.ago,
+                            merchant_account: create(:merchant_account, charge_processor_merchant_id: "acct_flip_#{SecureRandom.hex(6)}"),
+                            purchases: [first_purchase, second_purchase])
+          end
+          let(:charge_flip_event) { build(:charge_event_dispute_lost, charge_id: charge_transaction_id) }
+
+          before { create(:dispute, charge:, purchase: nil, state: "won", won_at: 1.day.ago) }
+
+          it "clears dispute_reversed_at on the charge" do
+            expect do
+              charge.handle_event(charge_flip_event)
+            end.to change { charge.reload.dispute_reversed_at }.from(be_present).to(nil)
+          end
+
+          it "clears the flag on every purchase in the charge" do
+            charge.handle_event(charge_flip_event)
+
+            expect(first_purchase.reload.chargeback_reversed).to be(false)
+            expect(second_purchase.reload.chargeback_reversed).to be(false)
+          end
+
+          it "rolls back the lost transition when a purchase write raises, so a redelivery can retry it" do
+            allow_any_instance_of(Purchase).to receive(:mark_product_purchases_as_not_chargeback_reversed!) do |purchase|
+              raise ActiveRecord::RecordInvalid.new(purchase) if purchase.id == second_purchase.id
+            end
+
+            expect { charge.handle_event(charge_flip_event) }.to raise_error(ActiveRecord::RecordInvalid)
+
+            expect(charge.reload.dispute.state).to eq("won")
+            expect(first_purchase.reload.chargeback_reversed).to be(true)
+            expect(charge.dispute_reversed_at).to be_present
+
+            allow_any_instance_of(Purchase).to receive(:mark_product_purchases_as_not_chargeback_reversed!).and_call_original
+            charge.handle_event(charge_flip_event)
+
+            expect(charge.reload.dispute.state).to eq("lost")
+            expect(first_purchase.reload.chargeback_reversed).to be(false)
+            expect(second_purchase.reload.chargeback_reversed).to be(false)
+            expect(charge.dispute_reversed_at).to be_nil
           end
         end
       end

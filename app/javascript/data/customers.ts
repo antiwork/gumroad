@@ -51,6 +51,7 @@ export type Commission = {
   id: string;
   files: File[];
   status: "in_progress" | "completed" | "cancelled";
+  files_are_editable: boolean;
 };
 
 export type Customer = {
@@ -479,8 +480,10 @@ export const updateCommission = (commissionId: string, fileSignedIds: string[]) 
     accept: "json",
     url: Routes.commission_path(commissionId),
     data: { file_signed_ids: fileSignedIds },
-  }).then((response) => {
-    if (!response.ok) throw new ResponseError();
+  }).then(async (response) => {
+    if (!response.ok) {
+      throw new ResponseError(typia.assert<{ errors: string[] }>(await response.json()).errors[0]);
+    }
   });
 
 export const completeCommission = async (commissionId: string) => {

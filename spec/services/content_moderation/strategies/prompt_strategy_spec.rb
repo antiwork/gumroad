@@ -51,6 +51,118 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     expect(result.reasoning).to eq(["spam: clear spam"])
   end
 
+  # An adult-content flag reads a picture when there is one, but on text alone it
+  # is the same intent inference as spam — so it earns the same resampling. This
+  # is what let a compliant NSFW seller's profile-page prose be hard-blocked on a
+  # single nondeterministic sample (gumroad-private#1684).
+  describe "adult_content corroboration when no image was sent" do
+    it "downgrades a text-only adult_content flag to audit-only when a resample disagrees" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # adult_content preset
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # resample 1
+        json_chat_response(flagged: false, reasoning: ""),            # resample 2 disagrees
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
+      )
+
+      result = described_class.new(text: "profile copy", corroborate_judgment_flags: true).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.reasoning).to eq([])
+      expect(result.audit_reasoning).to eq(["adult_content (uncorroborated, 2/3 samples flagged): adult prose"])
+    end
+
+    it "blocks a text-only adult_content flag when every resample reproduces it" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # adult_content preset
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # resample 1
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # resample 2 agrees
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
+      )
+
+      result = described_class.new(text: "profile copy", corroborate_judgment_flags: true).perform
+
+      expect(result.status).to eq("flagged")
+      expect(result.reasoning).to eq(["adult_content: adult prose"])
+      expect(result.audit_reasoning).to eq([])
+    end
+
+    # An unsupported extension never reaches the model, so the flag was text-only
+    # even though the caller passed a URL.
+    it "corroborates when the only image URL is an unsupported format" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # adult_content preset
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: false, reasoning: ""),            # resample 1 decides
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
+      )
+
+      result = described_class.new(
+        text: "profile copy",
+        image_urls: ["https://example.com/design.svg"],
+        corroborate_judgment_flags: true
+      ).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.audit_reasoning).to eq(["adult_content (uncorroborated, 1/2 samples flagged): adult prose"])
+    end
+
+    # OpenAI regularly cannot fetch our signed image URLs and the preset retries
+    # text-only. That retry's verdict rests on prose, so it is resampled like any
+    # other text-only flag — keying on the record's images instead would leave this
+    # path hard-blocking on one sample, which is the same bug in a second place.
+    # The resamples must also be text-only: they corroborate the prose verdict,
+    # and re-sending the URL OpenAI just rejected would either fail again or
+    # answer a different question.
+    it "corroborates a flag from the text-only retry after OpenAI could not fetch the image" do
+      bad_request = Faraday::BadRequestError.new(
+        { status: 400, body: { "error" => { "code" => "invalid_image_url", "message" => "could not fetch" } } }
+      )
+      responses = [
+        json_chat_response(flagged: true, reasoning: "adult prose"),  # text-only retry flags
+        json_chat_response(uncertain: false),                         # uncertainty check
+        json_chat_response(flagged: false, reasoning: ""),            # resample 1 decides
+        json_chat_response(flagged: false, reasoning: "")             # spam preset
+      ]
+      call = 0
+      image_counts_per_call = []
+      allow(client).to receive(:chat) do |parameters:|
+        call += 1
+        content = parameters[:messages].last[:content]
+        image_counts_per_call << (content.is_a?(Array) ? content.count { |part| part[:type] == "image_url" } : 0)
+        raise bad_request if call == 1
+
+        responses[call - 2]
+      end
+
+      result = described_class.new(
+        text: "profile copy",
+        image_urls: ["https://files.gumroad.com/signed/cover.png"],
+        corroborate_judgment_flags: true
+      ).perform
+
+      expect(result.status).to eq("compliant")
+      expect(result.audit_reasoning).to eq(["adult_content (uncorroborated, 1/2 samples flagged): adult prose"])
+      # rejected image attempt, text-only retry, uncertainty check, resample, spam
+      expect(image_counts_per_call).to eq([1, 0, 0, 0, 0])
+    end
+
+    it "leaves a text-only adult_content flag blocking when corroboration is not requested" do
+      allow(client).to receive(:chat).and_return(
+        json_chat_response(flagged: true, reasoning: "adult prose"),
+        json_chat_response(uncertain: false),
+        json_chat_response(flagged: false, reasoning: "")
+      )
+
+      result = described_class.new(text: "profile copy").perform
+
+      expect(result.status).to eq("flagged")
+      expect(result.reasoning).to eq(["adult_content: adult prose"])
+      expect(client).to have_received(:chat).exactly(3).times
+    end
+  end
+
   # A single language-model sample is nondeterministic, so a lone spam flag
   # must not block a publish. These specs pin the corroboration gate: the flag
   # only blocks when every resample reproduces it.
@@ -121,14 +233,22 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(result.audit_reasoning).to eq(["spam (uncorroborated, 1/2 samples flagged): clear spam"])
     end
 
-    it "does not resample adult content flags" do
+    # Superseded by the "adult_content corroboration when no image was sent" group
+    # above: a flag the model reached on text alone IS now resampled. This example
+    # keeps the original no-resample rule pinned for the case it was written for —
+    # a flag that actually saw an image.
+    it "does not resample adult content flags that saw an image" do
       allow(client).to receive(:chat).and_return(
         json_chat_response(flagged: true, reasoning: "clear adult content"),  # adult_content preset
         json_chat_response(uncertain: false),                                 # uncertainty check
         json_chat_response(flagged: false, reasoning: "")                     # spam preset
       )
 
-      result = described_class.new(text: "moderate me", corroborate_judgment_flags: true).perform
+      result = described_class.new(
+        text: "moderate me",
+        image_urls: ["https://example.com/cover.jpg"],
+        corroborate_judgment_flags: true
+      ).perform
 
       expect(result.status).to eq("flagged")
       expect(result.reasoning).to eq(["adult_content: clear adult content"])

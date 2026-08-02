@@ -17,6 +17,61 @@ describe OfferCodeDiscountComputingService do
     }
   end
 
+  it "reads quantities from each entry, not from the caller's choice of hash key" do
+    index_keyed = {
+      "0" => { quantity: "3", permalink: product.unique_permalink },
+      "1" => { quantity: "2", permalink: product2.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(universal_offer_code.code, index_keyed).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data].keys).to match_array([product.unique_permalink, product2.unique_permalink])
+  end
+
+  it "sums duplicate lines of one product, so a capped code cannot over-apply" do
+    universal_offer_code.update!(max_purchase_count: 2)
+    duplicate_lines = {
+      "0" => { quantity: "2", permalink: product.unique_permalink },
+      "1" => { quantity: "1", permalink: product.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(universal_offer_code.code, duplicate_lines).process
+
+    expect(result[:products_data]).to eq({})
+    expect(result[:error_code]).to eq(:insufficient_times_of_use)
+  end
+
+  it "keeps duplicate checkout lines separate after applying the aggregate cap" do
+    universal_offer_code.update!(max_purchase_count: 3)
+    duplicate_lines = {
+      "first" => { quantity: "2", permalink: product.unique_permalink },
+      "second" => { quantity: "1", permalink: product.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(
+      universal_offer_code.code,
+      duplicate_lines,
+      key_by_input: true
+    ).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data].keys).to eq(["first", "second"])
+  end
+
+  it "sums duplicate lines of one product toward the code's minimum quantity" do
+    offer_code.update!(minimum_quantity: 3)
+    duplicate_lines = {
+      "0" => { quantity: "2", permalink: product.unique_permalink },
+      "1" => { quantity: "1", permalink: product.unique_permalink }
+    }
+
+    result = OfferCodeDiscountComputingService.new(offer_code.code, duplicate_lines).process
+
+    expect(result[:error_code]).to be_nil
+    expect(result[:products_data].keys).to eq([product.unique_permalink])
+  end
+
   it "returns invalid error_code in result when offer code is invalid" do
     result = OfferCodeDiscountComputingService.new("invalid_offer_code", products_data).process
 
@@ -186,6 +241,22 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data].size).to eq(2)
       expect(result[:products_data].values.map { _1[:discount][:cents] }).to eq([300, 200])
       expect(result[:products_data].values).to all(satisfy { _1[:discount][:once_per_cart_amount_cents] == 500 })
+    end
+
+    it "splits the amount across duplicate checkout lines after aggregate eligibility" do
+      duplicate_lines = {
+        "first" => { quantity: "1", permalink: product.unique_permalink, price_cents: 300 },
+        "second" => { quantity: "1", permalink: product.unique_permalink, price_cents: 400 }
+      }
+
+      result = OfferCodeDiscountComputingService.new(
+        fixed_code.code,
+        duplicate_lines,
+        key_by_input: true
+      ).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data].transform_values { _1[:discount][:cents] }).to eq("first" => 300, "second" => 200)
     end
   end
 

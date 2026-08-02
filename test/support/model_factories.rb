@@ -925,6 +925,10 @@ module ModelFactories
     bundle
   end
 
+  def create_bundle_product(bundle:, product:, **attrs)
+    BundleProduct.create!({ bundle:, product: }.merge(attrs))
+  end
+
   def create_community(resource: nil, seller: nil, **attrs)
     resource ||= create_product
     Community.create!({ seller: seller || resource.user, resource: }.merge(attrs))

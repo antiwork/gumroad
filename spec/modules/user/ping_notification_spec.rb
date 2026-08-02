@@ -135,6 +135,12 @@ describe User::PingNotification do
       expect(user.ping_notification_deliverable?(subscription)).to be false
     end
 
+    it "is false for a flagged application without a live token" do
+      oauth_app.update!(is_first_party_agent_app: true)
+
+      expect(user.ping_notification_deliverable?(subscription)).to be false
+    end
+
     it "is false without a post URL" do
       create("doorkeeper/access_token", application: oauth_app, resource_owner_id: user.id, scopes: "view_sales")
       subscription.update_column(:post_url, nil)
@@ -212,8 +218,19 @@ describe User::PingNotification do
       expect(targets.undeliverable_subscriptions).to be_empty
     end
 
-    it "does not report a Store Agent subscription as undeliverable" do
+    it "reports a same-name unflagged Store Agent subscription as undeliverable" do
       agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      subscription = create(:resource_subscription, oauth_application: agent_app, user:)
+
+      targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
+
+      expect(targets.deliverable_subscriptions).to be_empty
+      expect(targets.undeliverable_subscriptions).to eq([subscription])
+      expect(targets.post_urls).to be_empty
+    end
+
+    it "does not report a flagged Store Agent subscription as undeliverable" do
+      agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME, is_first_party_agent_app: true)
       create(:resource_subscription, oauth_application: agent_app, user:)
 
       targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)

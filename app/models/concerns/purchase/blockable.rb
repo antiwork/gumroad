@@ -421,6 +421,7 @@ module Purchase::Blockable
         "browser_guid = ? and stripe_fingerprint is not null", browser_guid
       )
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      return if buyer_has_clean_checkout_history?
 
       PlatformBlock.add!(object_type: PlatformBlock::TYPES[:browser_guid], object_value: browser_guid)
     end
@@ -463,7 +464,8 @@ module Purchase::Blockable
     # stop the actual human from paying with a card that is fine. Somebody spraying many stolen
     # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
     # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
-    # distinct cards have failed.
+    # distinct cards have failed — unless the sprayer has clean checkout history
+    # (#buyer_has_clean_checkout_history?), where only the per-card, IP and per-product limits apply.
     #
     # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
     # record one — so for a recurring charge we also block the card that renewal was charged on,
@@ -560,8 +562,25 @@ module Purchase::Blockable
                                            .where(created_at: CARD_TESTING_WATCH_PERIOD.ago..)
 
       return if unique_failed_fingerprints.count < MAX_NUMBER_OF_FAILED_FINGERPRINTS
+      return if buyer_has_clean_checkout_history?
 
       block_buyer!
+    end
+
+    # The velocity rules' version of #buyer_has_clean_payment_history?, which cannot be reused here:
+    # the trigger IS several never-seen cards failing, so card-keyed history is empty by
+    # construction. Provenance comes from the browser and the email together — either alone is
+    # claimable, since an unauthenticated checkout types whatever address it likes and a guid is a
+    # cookie a shared or reset device hands to the next person.
+    def buyer_has_clean_checkout_history?
+      return false if email.blank? || browser_guid.blank?
+
+      Purchase.successful.non_free.not_fully_refunded.not_chargedback_or_chargedback_reversed
+              .where(created_at: ..MIN_PURCHASE_AGE_FOR_CLEAN_HISTORY.ago)
+              .where.not(id:)
+              .where(email:, browser_guid:)
+              .limit(MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY)
+              .count >= MIN_SUCCESSFUL_PURCHASES_FOR_CLEAN_HISTORY
     end
 
     def flag_seller_based_on_recent_failures!

@@ -1472,7 +1472,7 @@ export default function PaymentsPage() {
               />
             ) : selectedPayoutMethod === "paypal" ? (
               <PayPalEmailSection
-                countrySupportsNativePayouts={props.user.country_supports_native_payouts}
+                canSetupBankPayouts={props.bank_account_details.show_bank_account}
                 showPayPalPayoutsFeeNote={props.user.is_charged_paypal_payout_fee}
                 isFormDisabled={props.is_form_disabled}
                 paypalEmailAddress={form.data.payment_address}

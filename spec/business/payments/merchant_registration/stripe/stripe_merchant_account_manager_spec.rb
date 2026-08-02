@@ -11642,6 +11642,33 @@ describe StripeMerchantAccountManager, :vcr do
                 .and(not_have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review))
             end
 
+            it "suppresses the under-review email for a seller with nothing at stake, then sends it once they have a balance" do
+              # The shared `user` is built with a 10c balance, so clear it to reach the
+              # zero-stakes cohort this suppression exists for (gumroad-private#1721).
+              Balance.where(user_id: user.id).delete_all
+              stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.pending_verification"
+              stripe_event["data"]["object"]["requirements"]["currently_due"] = []
+              stripe_event["data"]["object"]["requirements"]["past_due"] = []
+
+              described_class.handle_stripe_event(stripe_event)
+              expect do
+                StripePayoutsPausedEmailJob.drain
+              end.to not_have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review)
+
+              # The claim is released, not marked sent, so the same sustained pause can re-claim.
+              expect(merchant_account.reload.stripe_payouts_pause_email_claim_token).to be_nil
+              expect(user.reload.payouts_paused_internally?).to be true
+
+              create(:balance, user:, amount_cents: 500)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to change { StripePayoutsPausedEmailJob.jobs.size }.by(1)
+              expect do
+                StripePayoutsPausedEmailJob.drain
+              end.to have_enqueued_mail(MerchantRegistrationMailer, :stripe_payouts_under_review).with(user.id)
+            end
+
             it "sends the under-review email instead when requirements are satisfied but payouts stay paused before the action-required email sends" do
               stripe_event["data"]["object"]["requirements"]["disabled_reason"] = "requirements.past_due"
 

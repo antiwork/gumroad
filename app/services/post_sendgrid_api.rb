@@ -186,6 +186,11 @@ class PostSendgridApi
       end
       personalization.add_substitution SendGrid::Substitution.new(key: "{{unsubscribe_url}}", value: unsubscribe_url)
 
+      first_name = PostEmailPersonalization.resolve(recipient)
+      PostEmailPersonalization.substitutions(@cache[@post][:template][:html], first_name).each do |key, value|
+        personalization.add_substitution SendGrid::Substitution.new(key:, value:)
+      end
+
       %i[purchase subscription follower affiliate].each do |record_name|
         personalization.add_custom_arg(SendGrid::CustomArg.new(key: "#{record_name}_id", value: recipient[record_name].id)) if recipient[record_name]
       end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class AddOncePerCartAllocationIdToPurchaseOfferCodeDiscounts < ActiveRecord::Migration[7.1]
+  # The original version ran on earlier branch databases, so both directions must be idempotent.
   SUPERSEDED_VERSION = "20260802135200"
 
   def up

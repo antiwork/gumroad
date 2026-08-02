@@ -167,6 +167,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   checkoutPayment: paymentElementConfig,
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
+  validationFailedCount: 0,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   recaptchaScoreBased: false,
@@ -1894,5 +1895,64 @@ describe("computeTipsForLines", () => {
   it("returns zero tips when the fixed tip amount is not positive", () => {
     const s = state({ products: tippableProducts([1_000, 2_000]), tip: { type: "fixed", amount: 0 } });
     expect(computeTipsForLines(s, linesFor(s))).toEqual([0, 0]);
+  });
+});
+
+describe("counting submits refused by client-side validation", () => {
+  const requiredFieldProduct = product({
+    customFields: [{ id: "field-1", type: "text", name: "Nickname", required: true, collect_per_product: false }],
+  });
+
+  it("flags the unmet required custom field and counts the refused Pay click", () => {
+    const refused = reduceCheckoutState(state({ products: [requiredFieldProduct] }), { type: "offer" });
+
+    expect(refused.status).toEqual({ type: "input", errors: new Set(["customFields.field-1"]) });
+    expect(refused.validationFailedCount).toBe(1);
+  });
+
+  it("counts every refused Pay click, so a repeat click re-triggers the feedback", () => {
+    const first = reduceCheckoutState(state({ products: [requiredFieldProduct] }), { type: "offer" });
+    const second = reduceCheckoutState(first, { type: "offer" });
+
+    expect(second.validationFailedCount).toBe(2);
+  });
+
+  it("does not count a submit that passes validation", () => {
+    const accepted = reduceCheckoutState(
+      state({ products: [requiredFieldProduct], customFieldValues: { "field-1": "gum" } }),
+      { type: "offer" },
+    );
+
+    expect(accepted.status).toEqual({ type: "offering" });
+    expect(accepted.validationFailedCount).toBe(0);
+  });
+
+  it("does not count fixing a flagged field", () => {
+    const refused = reduceCheckoutState(state({ products: [requiredFieldProduct] }), { type: "offer" });
+    const fixed = reduceCheckoutState(refused, { type: "set-custom-field", key: "field-1", value: "gum" });
+
+    expect(fixed.status).toEqual({ type: "input", errors: new Set() });
+    expect(fixed.validationFailedCount).toBe(1);
+  });
+
+  it("counts a refused offer-pipeline validate, whose errors flag the cross-sold product's fields", () => {
+    const stale = reduceCheckoutState(state({ products: [requiredFieldProduct], status: { type: "offering" } }), {
+      type: "invalidate-checkout-payment",
+    });
+
+    const refused = reduceCheckoutState(stale, { type: "validate" });
+
+    expect(refused.status).toEqual({ type: "input", errors: new Set(["customFields.field-1"]) });
+    expect(refused.validationFailedCount).toBe(1);
+  });
+
+  it("counts a validation failure at the set-payment-method stage", () => {
+    const refused = reduceCheckoutState(state({ email: "", status: { type: "starting" } }), {
+      type: "set-payment-method",
+      paymentMethod: { type: "not-applicable" },
+    });
+
+    expect(refused.status).toEqual({ type: "input", errors: new Set(["email"]) });
+    expect(refused.validationFailedCount).toBe(1);
   });
 });

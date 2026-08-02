@@ -1331,6 +1331,8 @@ describe "Sales page", type: :system, js: true do
       end
 
       it "allows completing a commission" do
+        commission.files.attach(file_fixture("test.pdf"))
+
         visit customer_sale_path(commission.deposit_purchase.external_id)
         expect(page).to have_text("In progress")
         click_on "Submit and mark as complete"
@@ -1352,6 +1354,7 @@ describe "Sales page", type: :system, js: true do
           deposit_purchase.update!(purchase_state: "in_progress", credit_card: create(:credit_card))
           deposit_purchase.process!
           deposit_purchase.mark_successful!
+          commission.files.attach(file_fixture("test.pdf"))
           commission.create_completion_purchase!
           allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
         end

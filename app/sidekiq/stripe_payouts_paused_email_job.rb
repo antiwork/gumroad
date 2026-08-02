@@ -26,8 +26,19 @@ class StripePayoutsPausedEmailJob
       # email now, so this stale job must not send (or we'd double-email).
       next unless merchant_account.stripe_payouts_pause_email_claim_token == claim_token
 
-      if user.payouts_paused_internally? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-        email_to_send = email_type
+      if user.payouts_paused_internally? && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE && user.account_active?
+        if email_type == "under_review" && nothing_at_stake?(user)
+          # Stripe is only re-checking data it already has, so a pause over an account with
+          # no balance and no sales withholds nothing and asks nothing. Clearing the claim
+          # (rather than marking it sent) is what lets a later account.updated for this same
+          # pause re-claim once the seller has stakes — no Gumroad-side event re-triggers it,
+          # so a seller who earns during a quiet pause learns from the payments settings page.
+          # Re-claim churn on each webhook is the accepted cost of that.
+          # action_required is exempt: it is actionable and unblocks their first payout.
+          merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil)
+        else
+          email_to_send = email_type
+        end
       else
         # The pause resolved before the debounce window elapsed (a verification
         # blip, or an admin resumed the account) — skip the email entirely, and
@@ -45,4 +56,9 @@ class StripePayoutsPausedEmailJob
       MerchantRegistrationMailer.stripe_payouts_under_review(user.id).deliver_later
     end
   end
+
+  private
+    def nothing_at_stake?(user)
+      user.unpaid_balance_cents.zero? && !user.sales.all_success_states.exists?
+    end
 end

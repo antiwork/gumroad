@@ -34,7 +34,13 @@ class ContentModeration::Strategies::ClassifierStrategy
   # "we asked and OpenAI would not answer" (nil). Both leave the image
   # unmoderated and both block a full-coverage caller; only the logs differ.
   UNREACHED = :unreached
+  # A payload the endpoint deterministically refuses. Blocks a full-coverage
+  # caller like nil/UNREACHED, but must not read as transient: the input is
+  # static, so "try again later" can never come true.
+  UNSUPPORTED = :unsupported
+  PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format].freeze
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
+  UNSUPPORTED_IMAGE_REASON = "The content contains an inline image the moderation endpoint cannot review (unsupported format or too large)."
 
   DEFAULT_THRESHOLDS = {
     "harassment" => 0.8,
@@ -88,6 +94,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     moderated_count = 0
     skipped_urls = []
     unreached_urls = []
+    unsupported_urls = []
     # See ContentModeration::ImageSelection for why this order, not a shuffle.
     # Walking it (rather than taking the first MAX) means an image OpenAI refuses
     # to fetch falls through to the next instead of costing a slot.
@@ -107,6 +114,11 @@ class ContentModeration::Strategies::ClassifierStrategy
       moderate_images(selected).each do |url, scores|
         if scores == UNREACHED
           unreached_urls << url
+          next
+        end
+
+        if scores == UNSUPPORTED
+          unsupported_urls << url
           next
         end
 
@@ -135,13 +147,18 @@ class ContentModeration::Strategies::ClassifierStrategy
     # not moderate blocks rather than degrading to a text-only pass — otherwise a
     # single image on a host that serves browsers and refuses OpenAI publishes
     # unreviewed, which is the bypass the budget rejection exists to close.
-    if @max_images == :all && (skipped_urls.any? || unreached_urls.any?)
+    if @max_images == :all && (skipped_urls.any? || unreached_urls.any? || unsupported_urls.any?)
       Rails.logger.warn(
         "ContentModeration::ClassifierStrategy blocking full-coverage content: " \
-        "#{skipped_urls.size} image(s) rejected by OpenAI, #{unreached_urls.size} not reached " \
-        "within #{IMAGE_PHASE_DEADLINE_IN_SECONDS}s, of #{@image_urls.size}"
+        "#{skipped_urls.size} image(s) rejected by OpenAI, #{unsupported_urls.size} with an unreviewable payload, " \
+        "#{unreached_urls.size} not reached within #{IMAGE_PHASE_DEADLINE_IN_SECONDS}s, of #{@image_urls.size}"
       )
-      return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
+      # "Try again later" only when a retry could plausibly change the outcome.
+      # When every unmoderated image was a deterministic payload rejection, the
+      # block is permanent and the reason has to send the seller at the image,
+      # not at the clock.
+      reason = skipped_urls.none? && unreached_urls.none? ? UNSUPPORTED_IMAGE_REASON : UNAVAILABLE_REASON
+      return Result.new(status: "flagged", reasoning: [reason])
     end
 
     if @image_urls.any? && moderated_count == 0
@@ -154,18 +171,19 @@ class ContentModeration::Strategies::ClassifierStrategy
         # producing hundreds of noise events a month with no action to take.
         Rails.logger.warn(
           "ContentModeration::ClassifierStrategy could not moderate any image " \
-          "(#{skipped_urls.size}/#{@image_urls.size} rejected by OpenAI); text was moderated, continuing with text-only result"
+          "(#{skipped_urls.size + unsupported_urls.size}/#{@image_urls.size} rejected by OpenAI); text was moderated, continuing with text-only result"
         )
       else
         # No text and no image could be moderated — the content got zero
-        # evaluation and the seller is blocked with a "try again later" message.
-        # That is worth a Sentry report so we notice if it spikes.
+        # evaluation and the seller is blocked. That is worth a Sentry report
+        # so we notice if it spikes.
         ErrorNotifier.notify(
           "ContentModeration::ClassifierStrategy could not moderate any image",
           image_url_count: @image_urls.size,
-          skipped_urls: skipped_urls.map { |url| loggable_url(url) },
+          skipped_urls: (skipped_urls + unsupported_urls).map { |url| loggable_url(url) },
         )
-        return Result.new(status: "flagged", reasoning: [UNAVAILABLE_REASON])
+        reason = skipped_urls.none? && unreached_urls.none? && unsupported_urls.any? ? UNSUPPORTED_IMAGE_REASON : UNAVAILABLE_REASON
+        return Result.new(status: "flagged", reasoning: [reason])
       end
     end
 
@@ -187,7 +205,9 @@ class ContentModeration::Strategies::ClassifierStrategy
     # to avoid.
     def moderate_images(urls)
       # An inline payload we will not send is unmoderated, not clean: reported as
-      # nil so a full-coverage caller blocks on it.
+      # UNSUPPORTED so a full-coverage caller still blocks on it, with copy that
+      # names the image rather than a passing outage — the payload is static, so
+      # no retry can shrink it.
       oversized, sendable = urls.partition { |url| oversized_data_image?(url) }
       if oversized.any?
         Rails.logger.warn(
@@ -195,7 +215,7 @@ class ContentModeration::Strategies::ClassifierStrategy
           "#{MAX_DATA_IMAGE_BYTES} bytes"
         )
       end
-      refused = oversized.map { |url| [url, nil] }
+      refused = oversized.map { |url| [url, UNSUPPORTED] }
 
       return refused if sendable.empty?
       return refused + individually(sendable) if sendable.size == 1
@@ -295,9 +315,13 @@ class ContentModeration::Strategies::ClassifierStrategy
         nil
       rescue Faraday::BadRequestError => e
         raise if skip_url.nil?
-        body = e.response&.dig(:body).to_s
-        Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{loggable_url(skip_url)} error=#{body[0..500]}")
-        nil
+        body = e.response&.dig(:body)
+        Rails.logger.warn("ContentModeration::ClassifierStrategy skipping unmoderatable image URL=#{loggable_url(skip_url)} error=#{body.to_s[0..500]}")
+        # A rejection of the payload itself (vs. a fetch OpenAI could not
+        # perform) reproduces on every save of the same content, so it must not
+        # be reported as a passing failure.
+        code = body.is_a?(Hash) ? body.dig("error", "code") : nil
+        PERMANENT_REJECTION_CODES.include?(code) ? UNSUPPORTED : nil
       end
     end
 

@@ -26,9 +26,8 @@ class OfferCodeDiscountComputingService
   def process
     products_data = {}
 
-    product_entries.each do |input_key, product, link|
-      purchase_quantity = product[:quantity].to_i
-      output_key = key_by_input ? input_key : link.unique_permalink
+    product_entry_groups.each do |link, entries|
+      purchase_quantity = quantities_by_permalink[link.unique_permalink].to_i
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
@@ -41,10 +40,7 @@ class OfferCodeDiscountComputingService
       if once_per_cart?(offer_code) && already_applied?(offer_code) &&
          meets_minimum_purchase_quantity?(offer_code, purchase_quantity)
         if resolved_discount
-          products_data[output_key] = {
-            discount: allocate_once_per_cart_discount(resolved_discount, offer_code, product, link, purchase_quantity)
-          }
-          offer_code_ids_by_permalink[output_key] = offer_code.id
+          apply_discount_to_entries(products_data, entries, link, offer_code, resolved_discount, split_once_per_cart: true)
           optimistically_apply_to_applicable_cross_sells(products_data, link)
         end
         next
@@ -55,11 +51,14 @@ class OfferCodeDiscountComputingService
       if resolved_discount && eligible?(offer_code, purchase_quantity, units)
         track_usage(offer_code, units)
         mark_applied(offer_code)
-        if once_per_cart?(offer_code)
-          resolved_discount = allocate_once_per_cart_discount(resolved_discount, offer_code, product, link, purchase_quantity)
-        end
-        products_data[output_key] = { discount: resolved_discount }
-        offer_code_ids_by_permalink[output_key] = offer_code.id
+        apply_discount_to_entries(
+          products_data,
+          entries,
+          link,
+          offer_code,
+          resolved_discount,
+          split_once_per_cart: once_per_cart?(offer_code)
+        )
         optimistically_apply_to_applicable_cross_sells(products_data, link)
       else
         track_ineligibility(offer_code, purchase_quantity, units, resolved_discount)
@@ -89,14 +88,54 @@ class OfferCodeDiscountComputingService
       end
     end
 
-    def product_entries
-      links_by_permalink = links.index_by(&:unique_permalink)
-      entries = []
-      products.each_pair do |input_key, product|
-        link = links_by_permalink[product[:permalink]]
-        entries << [input_key, product, link] if link
+    def product_entry_groups
+      entries_by_permalink = products.each_pair.group_by { |_input_key, product| product[:permalink] }
+      links.filter_map do |link|
+        entries = entries_by_permalink[link.unique_permalink]
+        next if entries.blank?
+
+        entries = [[link.unique_permalink, aggregate_products(entries.map(&:last))]] unless key_by_input
+        [link, entries]
       end
-      entries
+    end
+
+    def aggregate_products(grouped_products)
+      aggregate = grouped_products.first.dup
+      aggregate[:quantity] = grouped_products.sum { _1[:quantity].to_i }
+
+      submitted_prices = grouped_products.map { Integer(_1[:price_cents], exception: false) }
+      if submitted_prices.all?
+        aggregate[:price_cents] = submitted_prices.sum
+        aggregate[:tip_cents] = grouped_products.sum { Integer(_1[:tip_cents], exception: false) || 0 }
+      else
+        aggregate.delete(:price_cents)
+        aggregate.delete(:tip_cents)
+      end
+      aggregate
+    end
+
+    # Callers key `products` however they like — by permalink, or by cart index.
+    # Only the permalink inside each entry is authoritative, so never index
+    # `products` by permalink: doing so 500s on any index-keyed payload.
+    # Index-keyed carts can also repeat a permalink across lines, so quantities
+    # sum — keeping only one line's would let a capped code over-apply.
+    def quantities_by_permalink
+      @_quantities_by_permalink ||= products.values.each_with_object(Hash.new(0)) do |entry, acc|
+        acc[entry[:permalink]] += entry[:quantity].to_i
+      end
+    end
+
+    def apply_discount_to_entries(products_data, entries, link, offer_code, resolved_discount, split_once_per_cart:)
+      entries.each do |input_key, product|
+        output_key = key_by_input ? input_key : link.unique_permalink
+        discount = if split_once_per_cart
+          allocate_once_per_cart_discount(resolved_discount, offer_code, product, link, product[:quantity].to_i)
+        else
+          resolved_discount
+        end
+        products_data[output_key] = { discount: }
+        offer_code_ids_by_permalink[output_key] = offer_code.id
+      end
     end
 
     def offer_codes

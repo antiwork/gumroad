@@ -7875,10 +7875,6 @@ class PurchaseTest < ActiveSupport::TestCase
       Shipment.create!({ purchase: purchase || create_purchase(link: create_physical_product) }.merge(attrs))
     end
 
-    def create_bundle_product(bundle:, product:, **attrs)
-      BundleProduct.create!({ bundle:, product: }.merge(attrs))
-    end
-
     def create_product_with_files(user: nil, files_count: 2, **attrs)
       product = create_product(user:, **attrs)
       files_count.times do |n|

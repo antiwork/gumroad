@@ -936,6 +936,22 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to_not have_field("PayPal Email")
     end
 
+    it "does not offer direct deposit to an India creator, who cannot complete bank setup" do
+      @user.update!(payment_address: "barny@paypal.com")
+      old_user_compliance_info = @user.alive_user_compliance_info
+      new_user_compliance_info = old_user_compliance_info.dup
+      new_user_compliance_info.country = "India"
+      ActiveRecord::Base.transaction do
+        old_user_compliance_info.mark_deleted!
+        new_user_compliance_info.save!
+      end
+
+      visit settings_payments_path
+
+      expect(page).to have_field("PayPal Email")
+      expect(page).to_not have_button("Switch to direct deposit")
+    end
+
     it "keeps the creator on PayPal payouts if the bank account info is not entered" do
       @user.update!(payment_address: "paypal-gr-integspecs@gumroad.com")
 
