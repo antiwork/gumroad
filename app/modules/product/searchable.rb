@@ -11,6 +11,10 @@ module Product::Searchable
   RECOMMENDED_PRODUCTS_PER_PAGE = 9
   MAX_NUMBER_OF_FILETYPES = 8
   MAX_NUMBER_OF_TAXONOMY_ATTRIBUTE_FILTERS = 100
+  # Unlike tags/filetypes, which collapse into one `terms` clause however many values arrive, each
+  # distinct attribute prefix here emits its own `must`. Cap the request side or an anonymous
+  # Discover URL can name thousands of prefixes and build a bool query per request.
+  MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS = 20
   MAX_OFFER_CODES_IN_INDEX = 300
   MAX_PRICE_FILTER_CENTS = 10_000_000_000 # $100,000,000 — upper bound for ES long-typed price range filters
 

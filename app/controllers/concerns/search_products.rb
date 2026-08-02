@@ -72,6 +72,11 @@ module SearchProducts
         search_params[key] = search_params[key].filter_map { |element| scalar_search_value(element)&.to_s }
       end
 
+      if search_params[:taxonomy_attribute_filters].is_a?(Array)
+        search_params[:taxonomy_attribute_filters] =
+          search_params[:taxonomy_attribute_filters].uniq.first(Product::Searchable::MAX_TAXONOMY_ATTRIBUTE_FILTER_TOKENS)
+      end
+
       # search_options coerces each of these unconditionally (`.to_i`, `.to_f`) or hands it to ES
       # as a scalar; a crafted `?query[][]=x` would otherwise 500 a public profile URL.
       %i[query rating min_price max_price sort recommended_by from size].each do |key|
