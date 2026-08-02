@@ -33,7 +33,8 @@ export const NodeVisibilityProvider = ({
   }, [scrollRef]);
 
   React.useEffect(() => {
-    if (root === undefined) return;
+    // Without the API, skip observing entirely: nodes stay in the hook's visible-by-default fallback.
+    if (root === undefined || typeof IntersectionObserver === "undefined") return;
 
     const observer = new IntersectionObserver(
       (entries) => {

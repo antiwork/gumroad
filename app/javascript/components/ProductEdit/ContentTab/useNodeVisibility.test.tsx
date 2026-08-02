@@ -135,6 +135,14 @@ describe("NodeVisibilityProvider", () => {
     expect(observer.unobserved).toContain(node);
   });
 
+  it("renders nodes visible instead of crashing when the browser lacks IntersectionObserver", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const { container } = render(<Harness overflowY="auto" />);
+
+    expect(instances).toEqual([]);
+    expect(nodes(container)[0]?.getAttribute("data-visible")).toBe("true");
+  });
+
   it("rebuilds the observer and re-observes existing nodes when the layout starts scrolling", () => {
     const { container, rerender } = render(<Harness overflowY="visible" />);
     const node = nodes(container)[0];
