@@ -51,6 +51,7 @@ export type Commission = {
   id: string;
   files: File[];
   status: "in_progress" | "completed" | "cancelled";
+  files_are_editable: boolean;
 };
 
 export type Customer = {

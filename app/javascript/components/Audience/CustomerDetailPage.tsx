@@ -2224,9 +2224,9 @@ const CommissionSection = ({
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
-  // The server refuses file changes once a completion purchase exists, so a commission that is
-  // completed (or whose completion is still settling) must not offer upload/delete affordances.
-  const filesAreEditable = commission.status === "in_progress";
+  // Server-provided rather than derived from status: a completion charge that is still settling
+  // leaves the commission in_progress, but the server already refuses file changes.
+  const filesAreEditable = commission.files_are_editable;
 
   const handleFileChange = asyncVoid(async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files?.length) return;
@@ -2302,7 +2302,7 @@ const CommissionSection = ({
     try {
       setIsLoading(true);
       await completeCommission(commission.id);
-      onChange({ ...commission, status: "completed" });
+      onChange({ ...commission, status: "completed", files_are_editable: false });
       showAlert("Commission completed!", "success");
     } catch (e) {
       assertResponseError(e);

@@ -51,6 +51,34 @@ describe Commission, :vcr do
       end
     end
 
+    context "when a completion purchase already exists" do
+      let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+
+      before { attach_commission_file(commission) }
+
+      # `create_completion_purchase!` leaves the commission in_progress while the charge settles
+      # in the buyer's presentment currency, so a second complete request lands on a commission
+      # whose buyer has already been charged.
+      it "does not charge the buyer again while the completion charge is still settling" do
+        settling_purchase = create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true)
+        commission.update!(completion_purchase: settling_purchase)
+
+        expect { commission.create_completion_purchase! }.not_to change { Purchase.count }
+
+        expect(commission.reload.completion_purchase).to eq(settling_purchase)
+        expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
+      end
+
+      it "retries the charge when the previous completion attempt failed" do
+        commission.update!(completion_purchase: create(:failed_purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true))
+        expect_any_instance_of(Purchase).to receive(:process!) do |purchase|
+          purchase.errors.add(:base, "Stop before charging")
+        end
+
+        expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
+
     context "when no deliverable files are attached" do
       let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
 
@@ -400,6 +428,26 @@ describe Commission, :vcr do
 
     it "returns the correct completion price" do
       expect(commission.completion_price_cents).to eq(5000)
+    end
+  end
+
+  describe "#files_are_editable?" do
+    let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+
+    it "returns true while the commission is in progress with no completion charge" do
+      expect(commission.files_are_editable?).to be true
+    end
+
+    it "returns false once the commission is completed" do
+      commission.status = Commission::STATUS_COMPLETED
+      expect(commission.files_are_editable?).to be false
+    end
+
+    it "returns false while the completion charge is still settling" do
+      commission.update!(completion_purchase: create(:purchase, link: commission.deposit_purchase.link, seller: commission.deposit_purchase.seller, is_commission_completion_purchase: true))
+
+      expect(commission.files_are_editable?).to be false
+      expect(commission.status).to eq(Commission::STATUS_IN_PROGRESS)
     end
   end
 

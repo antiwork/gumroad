@@ -123,6 +123,7 @@ class CustomerPresenter
         id: commission.external_id,
         files: commission.files.map { file_details(_1) },
         status: commission.status,
+        files_are_editable: commission.files_are_editable?,
       } : nil,
       custom_fields: purchase.purchase_custom_fields.map do |field|
         if field[:type] == CustomField::TYPE_FILE
