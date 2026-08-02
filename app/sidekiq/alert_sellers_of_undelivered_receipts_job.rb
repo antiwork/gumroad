@@ -134,13 +134,16 @@ class AlertSellersOfUndeliveredReceiptsJob
       :collected
     end
 
+    # A charge receipt covers the whole order, so any of its purchases identifies the seller and
+    # carries the buyer's email. `Charge#purchase_as_orderable` does not exist — that method is
+    # private on `Order` — so read the charge's own successful purchases.
     def purchase_for(row)
       return Purchase.find_by(id: row.purchase_id) if row.purchase_id.present?
 
       charge_id = EmailInfoCharge.where(email_info_id: row.id).pick(:charge_id)
       return nil if charge_id.nil?
 
-      Charge.find_by(id: charge_id)&.purchase_as_orderable
+      Charge.find_by(id: charge_id)&.purchases&.all_success_states_including_test&.first
     end
 
     # Enqueues one digest per seller. Answers whether every buyer in this run is accounted for —
