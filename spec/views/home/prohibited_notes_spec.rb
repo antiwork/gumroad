@@ -2,47 +2,33 @@
 
 require "spec_helper"
 
-# The prohibited list carries bare category names, so a category we actually operate a Discover
-# section for (tarot/astrology under item 28) reads as a flat ban. The fix is a clarifying note, and
-# a note is only reachable if the list item points at it — so this asserts the pointer and the note
-# stay paired in both directions rather than pinning either one's wording. gumroad-private#1713.
-#
-# [[:space:]] rather than \s throughout: \s does not match U+00A0, so an nbsp creeping into this
-# hand-maintained markup would make a \s gap silently skip the row and pass.
+# A clarifying note is only reachable if its list item points at it, so this pairs pointers and
+# notes in both directions rather than pinning either one's wording. gumroad-private#1713.
 describe "app/views/home/prohibited.html.erb clarifying notes" do
-  def sp
-    "[[:space:]]"
-  end
-
   let(:source) { Rails.root.join("app/views/home/prohibited.html.erb").read }
 
   # "<li>gambling (...). See the note on gambling below.</li>" => "gambling"
-  let(:pointers) do
-    source.scan(/See#{sp}+the#{sp}+note#{sp}+on#{sp}+([^<.]+?)#{sp}+below\./o).flatten.map(&:strip)
-  end
+  let(:pointers) { source.scan(/See\s+the\s+note\s+on\s+([^<.]+?)\s+below\./).flatten.map(&:strip) }
 
   # "<p><strong>A note on gambling.</strong>" => "gambling"
-  let(:notes) do
-    source.scan(/<strong>#{sp}*A#{sp}+note#{sp}+on#{sp}+([^<.]+?)\.#{sp}*<\/strong>/o).flatten.map(&:strip)
-  end
+  let(:notes) { source.scan(/<strong>\s*A\s+note\s+on\s+([^<.]+?)\.\s*<\/strong>/).flatten.map(&:strip) }
 
   it "pairs every pointer with a note and every note with a pointer" do
     expect(pointers).to match_array(notes)
   end
 
-  # Guards the two scans above against a regex that stops matching: with both scanning zero, the
-  # pairing assertion is [] == [] and passes over a page with no notes at all.
+  # Without this, both scans returning [] makes the pairing assertion [] == [] on a page with no
+  # notes at all.
   it "finds both maintained notes" do
     expect(notes).to match_array(["fortune tellers", "gambling"])
   end
 
   describe "the fortune teller note" do
     let(:note) do
-      source[/<strong>#{sp}*A#{sp}+note#{sp}+on#{sp}+fortune#{sp}+tellers\.#{sp}*<\/strong>.*?(?=<p>#{sp}*<strong>|<\/div>)/om]
+      source[/<strong>\s*A\s+note\s+on\s+fortune\s+tellers\.\s*<\/strong>.*?(?=<p>\s*<strong>|<\/div>)/m]
     end
 
-    # Without this the two include examples below would fail on nil rather than on their subject,
-    # which reads as a broken spec instead of a missing note.
+    # Otherwise the include examples below fail on nil rather than on their subject.
     it "slices a note out of the page" do
       expect(note).to_not be_nil
     end
@@ -51,15 +37,13 @@ describe "app/views/home/prohibited.html.erb clarifying notes" do
       expect(source).to include("<li>fortune tellers. See the note on fortune tellers below.</li>")
     end
 
-    # The seller-visible point of the note: the categories we ship in Discover are named as allowed.
     # "tarot" alone would also be satisfied by the Discover URL inside the slice, so this asserts
     # prose-only words too.
     it "names the allowed traditions" do
       expect(note).to include("astrology", "tarot", "divination", "numerology", "birth-chart")
     end
 
-    # Guards the slice's lookahead: a widened slice would swallow the next note and every include
-    # above would still pass, so "in the fortune-teller note" would stop meaning anything.
+    # A widened slice would swallow the next note and every include above would still pass.
     it "stops before the gambling note" do
       expect(note).to_not include("A note on gambling")
     end
@@ -69,13 +53,12 @@ describe "app/views/home/prohibited.html.erb clarifying notes" do
     end
   end
 
-  # The source scans above cannot see the link: they would stay green if the route helper were
-  # renamed away (page 500s), if `<%=` became `<%` (link silently vanishes), or if DISCOVER_DOMAIN
-  # left view scope. Only rendered output settles whether a reader can click through.
+  # The source scans above stay green if the route helper is renamed away (page 500s) or if `<%=`
+  # becomes `<%`. Only rendered output settles whether a reader can click through.
   describe "the rendered Discover link" do
     # A bare slug is NOT a Discover URL — DiscoverTaxonomyConstraint matches the full ancestry path
     # only, so gumroad.com/tarot falls through to the username route and lands on whichever creator
-    # owns that handle. Building the path from the tree keeps the page honest if tarot is reparented.
+    # owns that handle. Building the path from the tree keeps the page honest on a reparent.
     let(:tarot_path) do
       self_improvement = Taxonomy.find_or_create_by!(slug: "self-improvement")
       spirituality = Taxonomy.find_or_create_by!(slug: "spirituality", parent: self_improvement)
