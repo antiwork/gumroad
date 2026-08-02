@@ -661,8 +661,17 @@ const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: string | 
                         <Button
                           color="primary"
                           onClick={() => {
-                            updateProduct({ files: [...product.files, ...selectingExistingFiles.selected] });
-                            onSelectFiles(selectingExistingFiles.selected.map((file) => file.id));
+                            // A picked file already attached to this product is a deliberate
+                            // re-attach (e.g. embedding it on another version), so submit it
+                            // under a fresh client id: resending the row's canonical id would
+                            // resolve to the existing row on the server and no second row —
+                            // and no second embed target — would ever be created.
+                            const existingIds = new Set(product.files.map((file) => file.id));
+                            const selected = selectingExistingFiles.selected.map((file) =>
+                              existingIds.has(file.id) ? { ...file, id: FileUtils.generateGuid() } : file,
+                            );
+                            updateProduct({ files: [...product.files, ...selected] });
+                            onSelectFiles(selected.map((file) => file.id));
                             setSelectingExistingFiles(null);
                           }}
                         >
