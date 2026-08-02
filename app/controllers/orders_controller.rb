@@ -337,7 +337,7 @@ class OrdersController < ApplicationController
         :url_parameters, :is_gift, :giftee_email, :giftee_id, :gift_note, :referrer, :buyer_currency_quote,
         purchase: [:full_name, :street_address, :city, :state, :zip_code, :country],
         # Individual purchase params
-        line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :discount_code, :once_per_cart_discount_cents, :is_preorder, :quantity, :call_start_time,
+        line_items: [:uid, :permalink, :perceived_price_cents, :price_range, :discount_code, :once_per_cart_discount_cents, :once_per_cart_discount_rank, :is_preorder, :quantity, :call_start_time,
                      :was_product_recommended, :recommended_by, :referrer, :is_rental, :is_multi_buy,
                      :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted,
                      :recommender_model_name, :tip_cents, :pay_in_installments, :force_new_subscription,

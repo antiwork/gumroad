@@ -37,6 +37,7 @@ import {
   CrossSell,
   findCartItem,
   getDiscountedPrice,
+  getOncePerCartDiscountRank,
   type ProductToAdd,
   type Result,
 } from "$app/components/Checkout/cartState";
@@ -580,6 +581,12 @@ const CheckoutIndexPage = () => {
 
           return linePricing.map(({ item, discounted, discountedPriceToChargeNow }, index) => {
             const tipCents = lineTips[index] ?? null;
+            const oncePerCartDiscount =
+              discounted.discount?.type === "code" &&
+              discounted.discount.value.type === "fixed" &&
+              discounted.discount.value.once_per_cart
+                ? discounted.discount.value
+                : null;
 
             return {
               permalink: item.product.permalink,
@@ -599,12 +606,10 @@ const CheckoutIndexPage = () => {
               callStartTime: item.call_start_time,
               payInInstallments: item.pay_in_installments,
               discountCode: discounted.discount?.type === "code" ? discounted.discount.code : null,
-              oncePerCartDiscountCents:
-                discounted.discount?.type === "code" &&
-                discounted.discount.value.type === "fixed" &&
-                discounted.discount.value.once_per_cart
-                  ? discounted.discount.value.cents
-                  : null,
+              oncePerCartDiscountCents: oncePerCartDiscount?.cents ?? null,
+              oncePerCartDiscountRank: oncePerCartDiscount
+                ? getOncePerCartDiscountRank(cartForm.data.cart, item)
+                : null,
               isPppDiscounted:
                 !!item.product.ppp_details &&
                 !cartForm.data.cart.rejectPppDiscount &&

@@ -99,6 +99,7 @@ const requestData: StartCartPurchaseRequestPayload = {
       callStartTime: null,
       discountCode: null,
       oncePerCartDiscountCents: null,
+      oncePerCartDiscountRank: null,
       recommendedBy: null,
       recommenderModelName: null,
       affiliateId: null,
@@ -215,7 +216,7 @@ describe("startOrderCreation", () => {
     if (!lineItem) throw new Error("Missing test line item");
     const requestWithAllocation = {
       ...requestData,
-      lineItems: [{ ...lineItem, discountCode: "SAVE", oncePerCartDiscountCents: 500 }],
+      lineItems: [{ ...lineItem, discountCode: "SAVE", oncePerCartDiscountCents: 500, oncePerCartDiscountRank: 1 }],
     };
     requestMock.mockResolvedValueOnce(
       jsonResponse({
@@ -229,7 +230,7 @@ describe("startOrderCreation", () => {
     await startOrderCreation(requestWithAllocation);
 
     expect(requestMock.mock.calls[0]?.[0]).toMatchObject({
-      data: { line_items: [{ once_per_cart_discount_cents: 500 }] },
+      data: { line_items: [{ once_per_cart_discount_cents: 500, once_per_cart_discount_rank: 1 }] },
     });
   });
 

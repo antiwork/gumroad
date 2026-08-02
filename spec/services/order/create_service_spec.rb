@@ -160,6 +160,7 @@ describe Order::CreateService, :vcr do
             quantity: 1,
             discount_code: offer_code.code,
             once_per_cart_discount_cents: 5_00,
+            once_per_cart_discount_rank: 1,
           },
           {
             uid: "unique-id-1",
@@ -169,6 +170,7 @@ describe Order::CreateService, :vcr do
             quantity: 1,
             discount_code: offer_code.code,
             once_per_cart_discount_cents: 10_00,
+            once_per_cart_discount_rank: 0,
           },
         ]
 
@@ -177,6 +179,41 @@ describe Order::CreateService, :vcr do
 
         expect(purchase_responses).to be_empty
         expect(purchases.map(&:displayed_price_cents)).to eq([5_00, 0])
+        expect(purchases.map { _1.purchase_offer_code_discount.offer_code_amount }).to eq([5_00, 10_00])
+      end
+
+      it "preserves cart order when later lines receive a larger allocation" do
+        product_1.update!(price_cents: 5_00)
+        product_2.update!(price_cents: 20_00)
+        offer_code.update!(amount_cents: 15_00)
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: product_1.unique_permalink,
+            price_cents: 5_00,
+            perceived_price_cents: 0,
+            quantity: 1,
+            discount_code: offer_code.code,
+            once_per_cart_discount_cents: 5_00,
+            once_per_cart_discount_rank: 0,
+          },
+          {
+            uid: "unique-id-1",
+            permalink: product_2.unique_permalink,
+            price_cents: 20_00,
+            perceived_price_cents: 10_00,
+            quantity: 1,
+            discount_code: offer_code.code,
+            once_per_cart_discount_cents: 10_00,
+            once_per_cart_discount_rank: 1,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+        purchases = order.purchases.order(:id)
+
+        expect(purchase_responses).to be_empty
+        expect(purchases.map(&:displayed_price_cents)).to eq([0, 10_00])
         expect(purchases.map { _1.purchase_offer_code_discount.offer_code_amount }).to eq([5_00, 10_00])
       end
 

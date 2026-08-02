@@ -262,6 +262,21 @@ const getDiscountedPriceForItem = (
 };
 
 export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: CartItem = item): DiscountedPrice {
+  const candidates = getDiscountCandidates(cart, item, sourceItem);
+
+  const remainingOncePerCartDiscounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const discountedPrice = getDiscountedPriceForItem(cart, candidate.item, remainingOncePerCartDiscounts);
+    if (candidate.isTarget) return discountedPrice;
+  }
+
+  return getDiscountedPriceForItem(cart, item, new Map());
+}
+
+export const getOncePerCartDiscountRank = (cart: CartState, item: CartItem) =>
+  getDiscountCandidates(cart, item, item).findIndex(({ isTarget }) => isTarget);
+
+const getDiscountCandidates = (cart: CartState, item: CartItem, sourceItem: CartItem) => {
   const alternativeSavingsCents = (candidate: CartItem) =>
     candidate.price * candidate.quantity - getDiscountedPriceWithoutOncePerCartCodes(cart, candidate).price;
   const candidates = cart.items.map((candidate, index) => ({
@@ -281,15 +296,8 @@ export function getDiscountedPrice(cart: CartState, item: CartItem, sourceItem: 
   candidates.sort(
     (left, right) => left.alternativeSavingsCents - right.alternativeSavingsCents || left.index - right.index,
   );
-
-  const remainingOncePerCartDiscounts = new Map<string, number>();
-  for (const candidate of candidates) {
-    const discountedPrice = getDiscountedPriceForItem(cart, candidate.item, remainingOncePerCartDiscounts);
-    if (candidate.isTarget) return discountedPrice;
-  }
-
-  return getDiscountedPriceForItem(cart, item, new Map());
-}
+  return candidates;
+};
 
 export function newCartState(): CartState {
   return { items: [], discountCodes: [] };

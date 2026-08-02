@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Discount } from "$app/parsers/checkout";
 
-import { getDiscountedPrice } from "$app/components/Checkout/cartState";
+import { getDiscountedPrice, getOncePerCartDiscountRank } from "$app/components/Checkout/cartState";
 import type { CartItem, CartState, Product } from "$app/components/Checkout/cartState";
 
 const product: Product = {
@@ -75,6 +75,28 @@ const cartWith = (discount: Discount): CartState => ({
 });
 
 describe("getDiscountedPrice", () => {
+  it("reports the order used to allocate a cart discount", () => {
+    const firstItem = { ...item, price: 500, quantity: 1 };
+    const secondProduct = { ...product, id: "second-product-id", permalink: "second-product" };
+    const secondItem = { ...item, product: secondProduct, price: 2_000, quantity: 1 };
+    const oncePerCartDiscount = { type: "fixed" as const, cents: 1_500, once_per_cart: true, ...discountConditions };
+    const cart: CartState = {
+      items: [firstItem, secondItem],
+      discountCodes: [
+        {
+          code: "SAVE",
+          products: { product: oncePerCartDiscount, "second-product": oncePerCartDiscount },
+          fromUrl: false,
+        },
+      ],
+    };
+
+    expect(getOncePerCartDiscountRank(cart, firstItem)).toBe(0);
+    expect(getOncePerCartDiscountRank(cart, secondItem)).toBe(1);
+    expect(getDiscountedPrice(cart, firstItem).price).toBe(0);
+    expect(getDiscountedPrice(cart, secondItem).price).toBe(1_000);
+  });
+
   it("deducts an order-level fixed discount once across the line quantity", () => {
     const cart = cartWith({ type: "fixed", cents: 100, once_per_cart: true, ...discountConditions });
 
