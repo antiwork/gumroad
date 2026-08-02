@@ -2418,7 +2418,7 @@ describe Order::ChargeService, :vcr do
       end
     end
 
-    it "charges a once-per-cart code that the quote accepted, instead of rejecting it after payment details" do
+    it "uses the snapshotted once-per-cart allocation if the seller changes the code before charging" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1_000)
       category = create(:variant_category, title: "Tier", link: product)
@@ -2446,6 +2446,8 @@ describe Order::ChargeService, :vcr do
         )
         order.purchases << purchase
       end
+      offer_code.once_per_cart = false
+      offer_code.save!(validate: false)
 
       rejected = Purchase.validate_offer_code_usage_across_line_items(order.purchases.to_a)
 
@@ -2453,7 +2455,7 @@ describe Order::ChargeService, :vcr do
       expect(order.purchases.reload.map(&:purchase_state).uniq).to eq(["in_progress"])
     end
 
-    it "still counts per unit for an ordinary fixed-amount code, so the cap is not silently widened" do
+    it "uses the snapshotted per-item mode if the seller changes the code before charging" do
       seller = create(:user)
       product = create(:product, user: seller, price_cents: 1_000)
       category = create(:variant_category, title: "Tier", link: product)
@@ -2466,8 +2468,17 @@ describe Order::ChargeService, :vcr do
         purchase = build(:purchase_in_progress, link: product, seller:, offer_code:, quantity: 1)
         purchase.variant_attributes << variant
         purchase.save(validate: false)
+        purchase.create_purchase_offer_code_discount!(
+          offer_code:,
+          offer_code_amount: 100,
+          offer_code_is_percent: false,
+          once_per_cart: false,
+          pre_discount_minimum_price_cents: product.price_cents
+        )
         order.purchases << purchase
       end
+      offer_code.once_per_cart = true
+      offer_code.save!(validate: false)
 
       rejected = Purchase.validate_offer_code_usage_across_line_items(order.purchases.to_a)
 

@@ -71,6 +71,14 @@ export const replaceOncePerCartOfferCodes = (offerCodes: OfferCodes, replacement
     replacements,
   );
 
+const offerCodesForPermalinks = (offerCodes: OfferCodes, permalinks: Set<string>): OfferCodes =>
+  offerCodes.flatMap((offerCode) => {
+    const products = Object.fromEntries(
+      Object.entries(offerCode.products).filter(([permalink]) => permalinks.has(permalink)),
+    );
+    return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
+  });
+
 export const offerCodesForFailedLineItems = (
   requestData: StartCartPurchaseRequestPayload,
   lineItems: Partial<Record<LineItemUid, { success: boolean }>>,
@@ -79,12 +87,20 @@ export const offerCodesForFailedLineItems = (
   const failedPermalinks = new Set(
     requestData.lineItems.filter((lineItem) => !lineItems[lineItem.uid]?.success).map((lineItem) => lineItem.permalink),
   );
-  return offerCodes.flatMap((offerCode) => {
-    const products = Object.fromEntries(
-      Object.entries(offerCode.products).filter(([permalink]) => failedPermalinks.has(permalink)),
-    );
-    return Object.keys(products).length > 0 ? [{ ...offerCode, products }] : [];
-  });
+  return offerCodesForPermalinks(offerCodes, failedPermalinks);
+};
+
+const offerCodesForPaymentConfirmationLineItems = (
+  requestData: StartCartPurchaseRequestPayload,
+  lineItems: Partial<Record<LineItemUid, { success: boolean; requires_payment_confirmation?: boolean }>>,
+  offerCodes: OfferCodes,
+) => {
+  const pendingPermalinks = new Set(
+    requestData.lineItems
+      .filter((lineItem) => lineItems[lineItem.uid]?.requires_payment_confirmation)
+      .map((lineItem) => lineItem.permalink),
+  );
+  return offerCodesForPermalinks(offerCodes, pendingPermalinks);
 };
 
 const retryOfferCodeCandidates = (requestData: StartCartPurchaseRequestPayload, offerCodes: OfferCodes) =>
@@ -343,7 +359,10 @@ export const startClientConfirmOrderCreation = async (
       );
     }
 
-    retryOfferCodes = prepareResponse.offer_codes;
+    retryOfferCodes = mergeOfferCodes(
+      offerCodesForPaymentConfirmationLineItems(requestData, prepareResponse.line_items, activeOfferCodes),
+      prepareResponse.offer_codes,
+    );
     const { client_secret: clientSecret, order } = confirmationLineItem;
     const stripe = order.stripe_connect_account_id
       ? await getConnectedAccountStripeInstance(order.stripe_connect_account_id)

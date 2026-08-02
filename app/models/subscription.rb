@@ -221,7 +221,11 @@ class Subscription < ApplicationRecord
     auto = auto_renewal_offer_code(authenticated_offer_code_buyer:)
     return pre_discount unless auto
 
-    [pre_discount - auto_renewal_discount_amount_off_cents(auto, pre_discount), 0].max
+    discounted_price = [pre_discount - auto_renewal_discount_amount_off_cents(auto, pre_discount), 0].max
+    if auto.offer_code.is_cents? && auto.offer_code.once_per_cart? && discounted_price.positive?
+      discounted_price = [discounted_price, link.currency["min_price"]].max
+    end
+    discounted_price
   end
 
   def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)

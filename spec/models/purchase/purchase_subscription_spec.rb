@@ -10,6 +10,19 @@ describe "PurchaseSubscription", :vcr do
     expect(user.unpaid_balance_cents).to eq expected_balance
   end
 
+  describe "Subscription#current_subscription_price_cents" do
+    it "keeps a positive once-per-cart renewal total at the currency minimum" do
+      subscription = build(:subscription, link: build(:product, price_currency_type: "usd"))
+      auto_discount = double(offer_code: instance_double(OfferCode, is_cents?: true, once_per_cart?: true))
+      allow(subscription).to receive(:reuse_original_discount_on_next_charge?).and_return(false)
+      allow(subscription).to receive(:renewal_pre_discount_total_cents).and_return(2_00)
+      allow(subscription).to receive(:auto_renewal_offer_code).and_return(auto_discount)
+      allow(subscription).to receive(:auto_renewal_discount_amount_off_cents).and_return(1_50)
+
+      expect(subscription.current_subscription_price_cents).to eq(99)
+    end
+  end
+
   describe "subscriptions" do
     describe "original subscription purchase" do
       before do
