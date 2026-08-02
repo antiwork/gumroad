@@ -584,6 +584,36 @@ describe("Library Scenario", type: :system, js: true) do
     expect(page).to_not have_selector("[role='navigation'][aria-label='Pagination']")
   end
 
+  it "restores a paged, sorted view from a deep link and pins overflowing pages to the last page" do
+    # content_updated_at runs opposite to purchase order, so the two sorts disagree on every page.
+    products = Array.new(17) do |n|
+      create(:product, name: format("Paged Product %02d", n + 1), price_cents: 0, content_updated_at: (n + 1).minutes.ago)
+    end
+    products.each { |product| create(:purchase, link: product, purchaser: @user) }
+
+    Link.import(refresh: true, force: true)
+
+    visit library_path(sort: "purchase_date", page: 2)
+
+    expect(page).to have_text("Showing 16-17 of 17 products")
+    expect(page).to have_field("Sort by", text: "Purchase Date")
+    expect(page).to have_product_card(products[1], exact_text: true)
+    expect(page).to have_product_card(products[0], exact_text: true)
+    expect(page).to_not have_product_card(products[16], exact_text: true)
+    within find("[role='navigation'][aria-label='Pagination']") do
+      expect(page).to have_selector("[aria-current='page']", text: "2")
+    end
+
+    select "Recently Updated", from: "Sort by"
+    expect(page).to have_text("Showing 1-15 of 17 products")
+    expect(page).to have_current_path(library_path(sort: "recently_updated"))
+    expect(page).to have_product_card(products[14], exact_text: true)
+
+    visit library_path(page: 99)
+    expect(page).to have_text("Showing 16-17 of 17 products")
+    expect(page).to have_product_card(products[16], exact_text: true)
+  end
+
   describe "bundle purchases" do
     let(:purchase) { create(:purchase, purchaser: @user, link: create(:product, :bundle)) }
     before do
