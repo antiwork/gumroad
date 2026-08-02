@@ -814,7 +814,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000026) do
     t.index ["product_id"], name: "index_custom_fields_products_on_product_id"
   end
 
-  create_table "dashboard_nav_promotions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+  create_table "dashboard_nav_promotions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.string "nav_item", null: false
     t.datetime "created_at", null: false
@@ -1767,7 +1767,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_06_000026) do
     t.index ["product_id"], name: "index_product_integrations_on_product_id"
   end
 
-  create_table "product_permalink_redirects", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+  create_table "product_permalink_redirects", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "product_id", null: false
     t.bigint "seller_id", null: false
     t.string "permalink", null: false
