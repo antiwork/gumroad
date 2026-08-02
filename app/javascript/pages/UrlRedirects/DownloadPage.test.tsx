@@ -37,6 +37,7 @@ const pageProps = () => ({
     rich_content_pages: [],
     last_content_page_id: null,
     license: null,
+    bundle_products: [],
     content_items: [
       {
         type: "file",
