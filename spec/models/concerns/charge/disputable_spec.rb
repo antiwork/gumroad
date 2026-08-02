@@ -1915,6 +1915,26 @@ describe Charge::Disputable, :vcr do
             expect(first_purchase.reload.chargeback_reversed).to be(false)
             expect(second_purchase.reload.chargeback_reversed).to be(false)
           end
+
+          it "rolls back the lost transition when a purchase write raises, so a redelivery can retry it" do
+            allow_any_instance_of(Purchase).to receive(:mark_product_purchases_as_not_chargeback_reversed!) do |purchase|
+              raise ActiveRecord::RecordInvalid.new(purchase) if purchase.id == second_purchase.id
+            end
+
+            expect { charge.handle_event(charge_flip_event) }.to raise_error(ActiveRecord::RecordInvalid)
+
+            expect(charge.reload.dispute.state).to eq("won")
+            expect(first_purchase.reload.chargeback_reversed).to be(true)
+            expect(charge.dispute_reversed_at).to be_present
+
+            allow_any_instance_of(Purchase).to receive(:mark_product_purchases_as_not_chargeback_reversed!).and_call_original
+            charge.handle_event(charge_flip_event)
+
+            expect(charge.reload.dispute.state).to eq("lost")
+            expect(first_purchase.reload.chargeback_reversed).to be(false)
+            expect(second_purchase.reload.chargeback_reversed).to be(false)
+            expect(charge.dispute_reversed_at).to be_nil
+          end
         end
       end
     end
