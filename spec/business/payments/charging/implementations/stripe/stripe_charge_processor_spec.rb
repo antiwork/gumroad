@@ -4428,7 +4428,7 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
     end
 
     it "differs between two evidence rows" do
-      other_purchase = create(:free_purchase, link: create(:physical_product))
+      other_purchase = create(:free_purchase)
       create(:dispute_formalized, purchase: other_purchase)
       DisputeEvidence.create_from_dispute!(other_purchase.dispute.reload)
 
