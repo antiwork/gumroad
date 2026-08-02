@@ -185,9 +185,8 @@ describe Api::Mobile::UrlRedirectsController do
     end
 
     it "does not stream content for an inactive membership" do
-      subscription = create(:subscription, link: product)
-      purchase = create(:purchase, link: product, subscription:)
-      blocked_url_redirect = create(:url_redirect, link: product, purchase:)
+      purchase = create(:membership_purchase)
+      blocked_url_redirect = create(:url_redirect, link: purchase.link, purchase:)
       allow_any_instance_of(Subscription).to receive(:grant_access_to_product?).and_return(false)
 
       expect do
