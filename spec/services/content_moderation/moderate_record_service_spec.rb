@@ -978,6 +978,21 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(message).to start_with("This product can’t be saved")
     end
 
+    it "tells the seller to change the image, not to retry, when the block is an unreviewable payload" do
+      # The input is static, so the transient "try again in a few minutes" copy
+      # sent sellers into an infinite retry loop (gumroad-private#1695).
+      message = described_class.seller_message(
+        [ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON],
+        "page"
+      )
+
+      expect(message).to eq(
+        "This page includes an image in a format we can’t review (such as an SVG data URL or a very large inline image), " \
+        "so we can’t publish it as is. Re-encode that image as a regular PNG, JPEG, GIF, or WebP file and try again."
+      )
+      expect(message).not_to include("temporary issue")
+    end
+
     it "explains what is missing for an off-platform fulfillment flag" do
       message = described_class.seller_message(["off_platform_fulfillment: buyer must DM on Telegram"], "product")
 

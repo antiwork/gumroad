@@ -115,8 +115,15 @@ class ContentModeration::ModerateRecordService
   def self.seller_message(reasons, noun, title: nil)
     rs = Array(reasons)
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
+    unsupported = ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
+    elsif rs.any? && rs.all? { |r| r.to_s.include?(unsupported) }
+      # Unlike the transient branch above, retrying can never fix this: the
+      # image itself is something our review can’t read, so the seller has to
+      # change it and the copy has to say so.
+      "This #{noun} includes an image in a format we can’t review (such as an SVG data URL or a very large inline image), " \
+      "so we can’t publish it as is. Re-encode that image as a regular PNG, JPEG, GIF, or WebP file and try again."
     elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
       "This #{noun} has more images than we can review, so we can’t publish it as is. " \
       "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \

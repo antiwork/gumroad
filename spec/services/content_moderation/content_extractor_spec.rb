@@ -271,6 +271,103 @@ RSpec.describe ContentModeration::ContentExtractor do
                                                                           ])
     end
 
+    it "re-encodes a percent-encoded raster data URL into the base64 form the classifier can review" do
+      page = page_for(custom_html: <<~HTML)
+        <style>.tile { background-image: url("data:image/png,%89PNG%0D%0A") }</style>
+      HTML
+
+      # The moderations endpoint only accepts base64 data URLs; sending the
+      # percent-encoded form is a guaranteed 400 that blocks the page forever.
+      # Same bytes, reviewable encoding.
+      expect(extractor.extract_from_page(page).image_urls).to eq([
+                                                                   "data:image/png;base64,#{Base64.strict_encode64("\x89PNG\r\n".b)}",
+                                                                 ])
+    end
+
+    it "reviews a self-contained SVG data URL as markup text instead of blocking the page on it" do
+      # The feTurbulence film-grain trick (gumroad-private#1695): the standard
+      # way generated pages paint noise textures. No moderation endpoint reads
+      # SVG in any encoding, but this one provably references no other image,
+      # so its markup is reviewed through the text strategies instead.
+      grain = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E" \
+              "%3Cfilter id='grainy'%3E%3CfeTurbulence baseFrequency='0.9'/%3E%3C/filter%3E" \
+              "%3Crect width='100' height='100' filter='url(%23grainy)'/%3E%3C/svg%3E"
+      page = page_for(custom_html: <<~HTML)
+        <style>.grain::before { background-image: url("#{grain}") }</style>
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to be_empty
+      expect(result.text).to include("feTurbulence")
+    end
+
+    it "reviews a base64 SVG data URL's text the same way, including words rendered by <text>" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><text>buy illegal things</text></svg>)
+      page = page_for(custom_html: <<~HTML)
+        <img src="data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}">
+      HTML
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to be_empty
+      expect(result.text).to include("buy illegal things")
+    end
+
+    it "keeps an SVG that embeds another image on the image list, where full coverage blocks it" do
+      # An SVG-as-image renders embedded data: payloads, so excluding this one
+      # would display a raster no strategy ever reviewed.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><image href="data:image/png;base64,AAAA"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      result = extractor.extract_from_page(page)
+
+      expect(result.image_urls).to eq([url])
+      expect(result.text).not_to include("AAAA")
+    end
+
+    it "keeps an SVG whose foreignObject could render arbitrary HTML" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>anything</div></foreignObject></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+    end
+
+    it "keeps an SVG that references anything outside itself" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><use href="https://elsewhere.example/sprite.svg#icon"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+    end
+
+    it "keeps an SVG whose CSS hides a nested payload behind an escape" do
+      # `\\64 ata:` tokenizes to `data:` — the same escape reading css_image_urls
+      # does for the page's own CSS applies inside a candidate SVG.
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><rect style="mask-image:url(\\64 ata:image/png;base64,AAAA)"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+    end
+
+    it "keeps an SVG that hides a nested payload behind an XML entity" do
+      svg = %(<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="href" to="&#100;ata:image/png;base64,AAAA"/></svg>)
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64(svg)}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+    end
+
+    it "keeps a data URL whose payload is not the SVG it claims to be" do
+      url = "data:image/svg+xml;base64,#{Base64.strict_encode64("<html><p>not svg</p></html>")}"
+      page = page_for(custom_html: %(<img src="#{url}">))
+
+      expect(extractor.extract_from_page(page).image_urls).to eq([url])
+    end
+
     it "extracts images painted by CSS, which render without any img tag" do
       page = page_for(custom_html: <<~HTML)
         <div style="background-image: url('https://cdn.example.com/inline.png')">Studio</div>

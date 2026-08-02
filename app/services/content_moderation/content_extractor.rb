@@ -20,6 +20,11 @@ class ContentModeration::ContentExtractor
   # publishing surface's abuse is most likely to be carried by.
   MAX_PAGE_LINK_TEXT_LENGTH = 5_000
 
+  # Budget for the source of inline SVG images reviewed as text (see
+  # `partition_page_images`). Its own slice, like links, so SVG markup can
+  # neither starve the prose nor be starved by it.
+  MAX_PAGE_SVG_TEXT_LENGTH = 5_000
+
   # How many remote images one page may carry and still be moderated. Every image
   # inside this budget IS moderated; a page carrying more is rejected rather than
   # approved on a subset. Sized so the worst case is a handful of batched requests
@@ -67,25 +72,29 @@ class ContentModeration::ContentExtractor
     links = strip_seller_first_party_urls(link_targets(document).join(" "), page.seller)
     prose = strip_seller_first_party_urls("Title: #{page.title} #{document.text}".squish, page.seller)
 
-    # Truncate each part on its own so neither can starve the other, and cut on a
+    # Every image the RENDERED page displays, not a subset: the service rejects a
+    # page carrying more than MAX_PAGE_IMAGE_URLS rather than narrowing here, so
+    # it needs the real count.
+    #
+    # Images come from the sanitized document while the text comes from the raw
+    # one, and the asymmetry is deliberate: text hidden in a tag the sanitizer
+    # drops still says something, but an image in one is never displayed, so
+    # counting it would reject a page over a limit it does not really reach.
+    image_urls, svg_sources = partition_page_images(page_image_urls(rendered_document(page)))
+    svg_text = strip_seller_first_party_urls(svg_sources.join(" ").squish, page.seller)
+
+    # Truncate each part on its own so none can starve the others, and cut on a
     # whitespace boundary so a bisected word or URL can't manufacture a token the
     # blocklist's word-boundary matching would then match.
     text = "#{truncate_on_boundary(links, MAX_PAGE_LINK_TEXT_LENGTH)} " \
-           "#{truncate_on_boundary(prose, MAX_PAGE_TEXT_LENGTH)}".squish
+           "#{truncate_on_boundary(prose, MAX_PAGE_TEXT_LENGTH)} " \
+           "#{truncate_on_boundary(svg_text, MAX_PAGE_SVG_TEXT_LENGTH)}".squish
 
     Result.new(
       text: text,
-      # Every image the RENDERED page displays, not a subset: the service rejects a
-      # page carrying more than MAX_PAGE_IMAGE_URLS rather than narrowing here, so
-      # it needs the real count. Deterministically ordered so a re-save moderates
-      # the same images in the same batches.
-      #
-      # Images come from the sanitized document while the text above comes from the
-      # raw one, and the asymmetry is deliberate: text hidden in a tag the
-      # sanitizer drops still says something, but an image in one is never
-      # displayed, so counting it would reject a page over a limit it does not
-      # really reach.
-      image_urls: ContentModeration::ImageSelection.ordered(page_image_urls(rendered_document(page)))
+      # Deterministically ordered so a re-save moderates the same images in the
+      # same batches.
+      image_urls: ContentModeration::ImageSelection.ordered(image_urls)
     )
   end
 
@@ -149,12 +158,12 @@ class ContentModeration::ContentExtractor
     # nothing.
     #
     # Remote URLs the classifier fetches itself; `data:` images are passed through
-    # as the base64 payload, which the moderations endpoint accepts in place of a
-    # URL, and which is also permitted by the sanitizer and the page CSP. Relative
-    # paths have no absolute form here, so they are left out rather than sent as
-    # URLs that would 400 the call. Oversized inline payloads are NOT filtered
-    # out: ClassifierStrategy refuses them and counts them unmoderated, which
-    # blocks the page, where dropping them here would publish it.
+    # (reshaped by `partition_page_images`, which the page caller applies), since
+    # the sanitizer and the page CSP permit them. Relative paths have no absolute
+    # form here, so they are left out rather than sent as URLs that would 400 the
+    # call. Oversized inline payloads are NOT filtered out: ClassifierStrategy
+    # refuses them and counts them unmoderated, which blocks the page, where
+    # dropping them here would publish it.
     def page_image_urls(document)
       sources = document.css("img[src], video[poster]").flat_map do |node|
         [node["src"], node["poster"]]
@@ -180,6 +189,136 @@ class ContentModeration::ContentExtractor
 
     def inline_image_url?(value)
       value.downcase.start_with?("data:image/")
+    end
+
+    # The moderations endpoint only reads base64 raster data URLs, so inline
+    # images are reshaped into what it can actually review — otherwise a static
+    # payload it rejects blocks the page on every save, forever.
+    #
+    #   - A percent-encoded raster payload is re-encoded to base64: same bytes,
+    #     the encoding the endpoint demands.
+    #   - An SVG is unreviewable by the endpoint in ANY encoding, but it is not
+    #     opaque either: it renders only in image contexts here (img/srcset/
+    #     poster/CSS — the sanitizer leaves `data:` nowhere navigable), where
+    #     browsers block external loads. So an SVG that provably references no
+    #     other image is reviewed as what it is — markup — through the text
+    #     strategies, and never sent to the image endpoint.
+    #   - Everything else (an SVG that could smuggle raster content, unsupported
+    #     raster types, malformed payloads) stays in the image list unchanged:
+    #     the classifier refuses it and the page blocks, now with copy naming
+    #     the image rather than a fictitious temporary outage.
+    #
+    # Returns [image_urls, svg_sources].
+    def partition_page_images(urls)
+      image_urls = []
+      svg_sources = []
+
+      urls.each do |url|
+        parsed = url.downcase.start_with?("data:") ? parse_data_url(url) : nil
+        if parsed.nil?
+          image_urls << url
+        elsif parsed[:content_type] == "image/svg+xml"
+          source = decode_data_url_payload(parsed).force_encoding(Encoding::UTF_8).scrub
+          if self_contained_svg?(source)
+            svg_sources << source
+          else
+            image_urls << url
+          end
+        elsif PERMITTED_IMAGE_TYPES.include?(parsed[:content_type]) && !parsed[:base64]
+          image_urls << "data:#{parsed[:content_type]};base64,#{Base64.strict_encode64(decode_data_url_payload(parsed))}"
+        else
+          image_urls << url
+        end
+      end
+
+      [image_urls.uniq, svg_sources.uniq]
+    end
+
+    def parse_data_url(url)
+      header, comma, payload = url.partition(",")
+      return nil if comma.empty?
+
+      parameters = header.delete_prefix("data:").split(";").map { |part| part.strip.downcase }
+      { content_type: parameters.shift.to_s, base64: parameters.include?("base64"), payload: }
+    end
+
+    # Percent-decoding is lenient — a `%` not followed by two hex digits stays
+    # literal — because that is how browsers read a data URL payload, and a
+    # strict decoder would refuse payloads they render (`width='100%'` written
+    # unencoded is routine in generated SVG). Binary either way; SVG callers
+    # re-tag the encoding themselves.
+    def decode_data_url_payload(parsed)
+      if parsed[:base64]
+        Base64.decode64(parsed[:payload])
+      else
+        parsed[:payload].b.gsub(/%(\h{2})/) { $1.hex.chr }
+      end
+    end
+
+    # Whether this SVG can be reviewed as pure markup: it must be unable to pull
+    # in ANY other image. Checked structurally where references can actually
+    # load (href, CSS url()), plus a blanket rejection of `data:` anywhere in
+    # decoded attribute or text content so a nested payload can't ride in
+    # through a vector the structural checks didn't model (SMIL values, future
+    # attributes). Every rejection fails closed — the SVG stays on the image
+    # list and blocks the page — so being over-strict here costs a seller an
+    # actionable error, never a bypass.
+    def self_contained_svg?(source)
+      document = Nokogiri::XML(source)
+      return false unless document.root&.name&.casecmp?("svg")
+
+      document.traverse do |node|
+        if node.element?
+          # image/feImage paint another image by design; foreignObject renders
+          # arbitrary HTML (browsers do so even inside <img>).
+          return false if %w[image feimage foreignobject script].include?(node.name.downcase)
+
+          node.attribute_nodes.each do |attribute|
+            value = attribute.value.to_s
+            return false if value.match?(/data:/i)
+
+            case attribute.name.downcase
+            when "href"
+              return false unless value.strip.start_with?("#")
+            when "style"
+              return false unless css_references_all_local?(value)
+            else
+              # FuncIRI presentation attributes (fill, filter, mask, …). No CSS
+              # escapes here — attributes are already entity-decoded by Nokogiri.
+              value.scan(/url\(\s*(["']?)(.*?)\1\s*\)/im) do |_quote, target|
+                return false unless target.strip.start_with?("#")
+              end
+            end
+          end
+        elsif node.text? || node.cdata?
+          return false if node.content.match?(/data:/i)
+          return false if node.parent&.name&.casecmp?("style") && !css_references_all_local?(node.content)
+        end
+      end
+
+      true
+    end
+
+    # Whether every reference this CSS can load points inside the document.
+    # Token-level, so CSS escapes (`\64 ata:`) read as a browser reads them;
+    # @import is rejected outright — a self-contained SVG has no business
+    # importing a stylesheet.
+    def css_references_all_local?(css)
+      tokens = Crass::Tokenizer.tokenize(css.to_s)
+      tokens.each_with_index do |token, index|
+        case token[:node]
+        when :url, :bad_url
+          return false unless token[:value].to_s.strip.start_with?("#")
+        when :function
+          if token[:name].to_s.casecmp?("url")
+            argument = tokens[(index + 1)..].find { |candidate| candidate[:node] != :whitespace }
+            return false unless argument && argument[:node] == :string && argument[:value].to_s.strip.start_with?("#")
+          end
+        when :at_keyword
+          return false if token[:value].to_s.casecmp?("import")
+        end
+      end
+      true
     end
 
     # `srcset` is a comma-separated candidate list, each entry a URL followed by an
