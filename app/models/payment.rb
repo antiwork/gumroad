@@ -315,6 +315,15 @@ class Payment < ApplicationRecord
       FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.include?(failure_reason)
   end
 
+  # True when PayPal has locked or deactivated the receiving account. Only PayPal can lift that, so
+  # the fix copy has to start there rather than in our payout settings — and must not blame the
+  # account's country, which is not what failed.
+  # See Payment::FailureReason::LOCKED_ACCOUNT_PAYPAL_FAILURE_REASONS.
+  def locked_account_paypal_failure?
+    processor == PayoutProcessorType::PAYPAL &&
+      FailureReason::LOCKED_ACCOUNT_PAYPAL_FAILURE_REASONS.include?(failure_reason)
+  end
+
   # True when there is no payout method left to point the seller at: PayPal refuses the country on
   # the account's address, and bank transfer is not offered in the seller's. Read off the terminal
   # list rather than naming 3148, but the copy it selects only holds while that list stays
@@ -348,6 +357,14 @@ class Payment < ApplicationRecord
   def terminal_paypal_failure_seller_solution
     fix = if paypal_failure_without_available_payout_rail?
       FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_SOLUTION_NO_PAYOUT_RAIL
+    elsif locked_account_paypal_failure?
+      # Only PayPal can unlock the account, so neither branch sends the seller after a
+      # differently-registered PayPal account — the country was never the problem.
+      if user.can_setup_bank_payouts?
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_LOCKED_ACCOUNT_WITH_BANK
+      else
+        FailureReason::TERMINAL_PAYPAL_FAILURE_SELLER_FIX_LOCKED_ACCOUNT_PAYPAL_ONLY
+      end
     elsif repairable_in_place_paypal_failure?
       # The seller can clear this on the account they already use, so lead with that — see
       # Payment::FailureReason::REPAIRABLE_IN_PLACE_PAYPAL_FAILURE_REASONS.
