@@ -43,10 +43,10 @@ describe ApplicationController do
       expect(response).to redirect_to(login_path)
     end
 
-    it "signs the user out without redirecting on the API host, where /login does not exist" do
+    it "signs the user out without redirecting where login is not routed, e.g. the API host" do
       sign_in user
       user.update!(last_active_sessions_invalidated_at: 1.day.from_now)
-      @request.host = VALID_API_REQUEST_HOSTS.first
+      @request.host = API_DOMAIN.split(":").first
       index
       expect(response).to be_successful
       expect(controller.send(:current_user)).to be_nil

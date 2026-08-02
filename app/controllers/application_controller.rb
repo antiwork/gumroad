@@ -278,12 +278,11 @@ class ApplicationController < ActionController::Base
 
       sign_out
 
-      # Cookies are set for `.gumroad.com`, so a browser session cookie also travels to the API
-      # host — and on Android the app's WebView cookie jar is shared with `fetch`. `/login` does
-      # not exist on the API host, so redirecting there answers an OAuth-token API call with a
-      # 404 for a page it never asked for. Token auth runs after this, and is unaffected by the
-      # cookie session being signed out, so let the request continue instead.
-      return if VALID_API_REQUEST_HOSTS.include?(request.host)
+      # The session cookie is scoped to `.gumroad.com`, so it also travels to the API host, where
+      # `login_path` is not routed at all — redirecting there answers a token-authenticated API
+      # call with a 404 for a page it never asked for. Doorkeeper runs after this and ignores the
+      # cookie session, so continue instead and let token auth answer.
+      return unless GumroadDomainConstraint.matches?(request)
 
       flash[:warning] = "We're sorry; you have been logged out. Please login again."
       redirect_to login_path
