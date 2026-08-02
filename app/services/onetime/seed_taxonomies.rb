@@ -23,7 +23,10 @@ class Onetime::SeedTaxonomies
   end
 
   def process
-    before = Taxonomy.pluck(:slug)
+    # Slugs are unique per parent, not globally (illustrator lives under both print-and-packaging
+    # and mockups), so a slug-keyed diff silently drops any created row whose slug already exists
+    # in another branch. Diff on ids, which are the only identity that cannot collide.
+    before_ids = Taxonomy.pluck(:id)
 
     # The seed file only reveals what it would write by writing, so the dry run applies it inside
     # a transaction and rolls back. Reporting against TAXONOMY_LABELS instead would overstate the
@@ -31,7 +34,7 @@ class Onetime::SeedTaxonomies
     created = nil
     Taxonomy.transaction do
       load(SEED_FILE.to_s, true)
-      created = Taxonomy.pluck(:slug) - before
+      created = Taxonomy.where.not(id: before_ids).map { _1.ancestry_path.join("/") }.sort
       raise ActiveRecord::Rollback if dry_run
     end
 
