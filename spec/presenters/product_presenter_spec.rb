@@ -848,15 +848,15 @@ describe ProductPresenter do
             earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(membership.user.timezone).iso8601,
             profile_sections: [],
             taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
-          taxonomy_attributes: TaxonomyAttribute.active_ordered.map do |attribute|
-            {
-              taxonomy_id: attribute.taxonomy_id.to_s,
-              name: attribute.name,
-              label: attribute.label,
-              value_type: attribute.value_type,
-              values: attribute.normalized_options,
-            }
-          end,
+            taxonomy_attributes: TaxonomyAttribute.active_ordered.map do |attribute|
+              {
+                taxonomy_id: attribute.taxonomy_id.to_s,
+                name: attribute.name,
+                label: attribute.label,
+                value_type: attribute.value_type,
+                values: attribute.normalized_options,
+              }
+            end,
             custom_domain_verification_status: nil,
             sales_count_for_inventory: 0,
             successful_sales_count: 0,
@@ -1095,15 +1095,15 @@ describe ProductPresenter do
             earliest_membership_price_change_date: BaseVariant::MINIMUM_DAYS_TIL_EXISTING_MEMBERSHIP_PRICE_CHANGE.days.from_now.in_time_zone(new_product.user.timezone).iso8601,
             profile_sections: [],
             taxonomies: Discover::TaxonomyPresenter.new.taxonomies_for_category_picker,
-          taxonomy_attributes: TaxonomyAttribute.active_ordered.map do |attribute|
-            {
-              taxonomy_id: attribute.taxonomy_id.to_s,
-              name: attribute.name,
-              label: attribute.label,
-              value_type: attribute.value_type,
-              values: attribute.normalized_options,
-            }
-          end,
+            taxonomy_attributes: TaxonomyAttribute.active_ordered.map do |attribute|
+              {
+                taxonomy_id: attribute.taxonomy_id.to_s,
+                name: attribute.name,
+                label: attribute.label,
+                value_type: attribute.value_type,
+                values: attribute.normalized_options,
+              }
+            end,
             custom_domain_verification_status: nil,
             sales_count_for_inventory: 0,
             successful_sales_count: 0,
