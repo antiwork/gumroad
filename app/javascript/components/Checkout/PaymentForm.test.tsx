@@ -158,19 +158,37 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("scans the whole document so fields flagged outside the payment form (tip, gift) are found", () => {
-    // The tip and gift inputs render as siblings of PaymentForm in Checkout/index.tsx.
-    const tipField = <input aria-label="Custom tip" aria-invalid="true" data-testid="tip-outside-payment-form" />;
+  // Mirrors Checkout/index.tsx: tip and gift inputs render as siblings of PaymentForm, all of them
+  // inside the [data-checkout-scope] wrapper. `before` renders outside that wrapper, standing in
+  // for the rest of the page.
+  const renderCheckoutPage = ({
+    before,
+    siblings,
+    value,
+  }: {
+    before?: React.ReactNode;
+    siblings?: React.ReactNode;
+    value: State;
+  }) =>
     render(
       <LoggedInUserProvider value={null}>
-        {tipField}
-        <StateContext.Provider
-          value={[state({ status: { type: "input", errors: new Set(["tip"]) }, validationFailedCount: 1 }), vi.fn()]}
-        >
-          <PaymentForm />
-        </StateContext.Provider>
+        {before}
+        <div data-checkout-scope>
+          {siblings}
+          <StateContext.Provider value={[value, vi.fn()]}>
+            <PaymentForm />
+          </StateContext.Provider>
+        </div>
       </LoggedInUserProvider>,
     );
+
+  const tipField = <input aria-label="Custom tip" aria-invalid="true" data-testid="tip-outside-payment-form" />;
+
+  it("scans the whole checkout so fields flagged outside the payment form (tip, gift) are found", () => {
+    renderCheckoutPage({
+      siblings: tipField,
+      value: state({ status: { type: "input", errors: new Set(["tip"]) }, validationFailedCount: 1 }),
+    });
 
     const field = screen.getByTestId("tip-outside-payment-form");
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -181,27 +199,52 @@ describe("PaymentForm validation-failure feedback", () => {
   it("sends the buyer to the first unmet field in page order, not the first one inside the form", () => {
     // Tip and gift render before PaymentForm in Checkout/index.tsx. When both a tip and a custom
     // field are flagged, the earlier tip field must win — a form-subtree-first scan would skip it.
-    const tipField = <input aria-label="Custom tip" aria-invalid="true" data-testid="tip-outside-payment-form" />;
-    render(
-      <LoggedInUserProvider value={null}>
-        {tipField}
-        <StateContext.Provider
-          value={[
-            state({
-              status: { type: "input", errors: new Set(["tip", "customFields.field-1"]) },
-              validationFailedCount: 1,
-            }),
-            vi.fn(),
-          ]}
-        >
-          <PaymentForm />
-        </StateContext.Provider>
-      </LoggedInUserProvider>,
-    );
+    renderCheckoutPage({
+      siblings: tipField,
+      value: state({
+        status: { type: "input", errors: new Set(["tip", "customFields.field-1"]) },
+        validationFailedCount: 1,
+      }),
+    });
 
     expect(screen.getByLabelText("Nickname").getAttribute("aria-invalid")).toBe("true");
     const field = screen.getByTestId("tip-outside-payment-form");
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(field);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("ignores an invalid control outside the checkout, however early it sits in the page", () => {
+    // A page-wide scan would hand focus to this instead, leaving the buyer's actual blocker
+    // unfocused and off-screen.
+    renderCheckoutPage({
+      before: <input aria-label="Unrelated" aria-invalid="true" data-testid="outside-checkout" />,
+      value: failedState(1),
+    });
+
+    const field = screen.getByLabelText("Nickname");
+    expect(screen.getByTestId("outside-checkout").getAttribute("aria-invalid")).toBe("true");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(field);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("skips a disabled invalid control and lands on the one the buyer can act on", () => {
+    renderCheckoutPage({
+      siblings: <input aria-label="Disabled tip" aria-invalid="true" disabled data-testid="disabled-field" />,
+      value: failedState(1),
+    });
+
+    const field = screen.getByLabelText("Nickname");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(field);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("still scans its own subtree when rendered with no checkout ancestor (preview dashboard)", () => {
+    renderPaymentForm(failedState(1));
+
+    const field = screen.getByLabelText("Nickname");
     expect(scrollIntoView.mock.instances[0]).toBe(field);
     expect(document.activeElement).toBe(field);
   });

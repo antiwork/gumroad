@@ -1795,6 +1795,12 @@ const PaymentMethodsSection = ({
   );
 };
 
+// `hidden`/`display: none` controls cannot take focus, so scrolling to one would leave the buyer
+// staring at a page with nothing visibly wrong. `checkVisibility` is unimplemented in the test DOM;
+// treating that as visible keeps the scan honest there — the tests assert placement, not layout.
+const isFocusable = (input: HTMLInputElement) =>
+  !input.disabled && (typeof input.checkVisibility === "function" ? input.checkVisibility() : true);
+
 export const PaymentForm = ({
   className,
   notice,
@@ -1816,15 +1822,22 @@ export const PaymentForm = ({
     action: "checkout",
   });
 
+  const paymentFormRef = React.useRef<HTMLDivElement | null>(null);
+
   // Keyed on validationFailedCount because a refused submit goes "input" → "input" (see the
   // State field's comment in payment.ts).
   React.useEffect(() => {
     if (state.status.type !== "input") return;
+    const root = paymentFormRef.current;
+    if (!root) return;
+    // Widen past this form to the checkout root so tip and gift errors — which render above it —
+    // are reachable, but no further: an unrelated invalid control elsewhere on the page would
+    // otherwise win document order and steal the buyer's focus. The preview dashboard renders
+    // PaymentForm with no checkout ancestor, hence the fallback.
+    const scope = root.closest("[data-checkout-scope]") ?? root;
     // Stripe nests the input inside aria-invalid, hence the second query selector.
     const selector = "input[aria-invalid=true], [aria-invalid=true] input";
-    // Document-wide, not scoped to this form: tip and gift errors flag inputs that render before
-    // it, and the buyer must land on the first unmet field in page order.
-    const invalidInput = document.querySelector<HTMLInputElement>(selector);
+    const invalidInput = [...scope.querySelectorAll<HTMLInputElement>(selector)].find(isFocusable);
     if (!invalidInput) return;
     invalidInput.scrollIntoView({ behavior: "smooth", block: "center" });
     invalidInput.focus({ preventScroll: true });
@@ -1860,7 +1873,7 @@ export const PaymentForm = ({
   const isPayPalAvailable = useIsPayPalAvailable();
 
   return (
-    <div className={`flex flex-col gap-6 ${className}`} aria-label="Payment form">
+    <div className={`flex flex-col gap-6 ${className}`} aria-label="Payment form" ref={paymentFormRef}>
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!isFreePurchase ? (
