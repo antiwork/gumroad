@@ -13,7 +13,18 @@ describe("Analytics chart chunking", () => {
   it("keeps the chart out of the page's static imports", async () => {
     const source = (await import("$app/components/Analytics/index.tsx?raw")).default;
 
-    expect(source).not.toMatch(/^import\s[^;]*\bSalesChart\b[^;]*from\s+"\$app\/components\/Analytics\/SalesChart"/mu);
+    // Any static specifier resolving to SalesChart puts vendor-charts back on the blocking path,
+    // whatever path spelling it uses. A type-only specifier list is erased at build time and is
+    // therefore harmless, so it is the one form allowed through.
+    const staticImports = [...source.matchAll(/^(?:import|export)\s([^;]*?)from\s+"[^"]*\/SalesChart"/gmu)];
+    const valueImports = staticImports.filter(([, specifiers = ""]) =>
+      specifiers
+        .replace(/[{}]/gu, "")
+        .split(",")
+        .some((s) => s.trim() !== "" && !s.trim().startsWith("type ")),
+    );
+
+    expect(valueImports).toHaveLength(0);
     expect(source).toContain("LazySalesChart");
   });
 

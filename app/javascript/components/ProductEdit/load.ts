@@ -2,8 +2,6 @@ import { lazy, useEffect, useState } from "react";
 
 import { fetchWithOneRetry } from "$app/utils/lazy_chunk";
 
-export { fetchWithOneRetry };
-
 // The product editor is by far the largest page in the dashboard: it carries the rich text editor,
 // the file uploader, and the live product preview. Two things follow from that, and this module
 // owns both.

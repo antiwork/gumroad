@@ -33,6 +33,15 @@ const MAX_DATE_RANGE_DAYS = 366;
 // Must match CreatorAnalytics::Sales::MAX_HOURLY_DATE_RANGE_DAYS on the backend.
 const MAX_HOURLY_DATE_RANGE_DAYS = 7;
 
+// Shown both while the data is in flight and, on a cold cache, while the chart's own code arrives.
+// Identical markup in both places makes that handoff invisible: one continuous spinner.
+const ChartLoadingPlaceholder = () => (
+  <InputGroup>
+    <LoadingSpinner />
+    Loading charts...
+  </InputGroup>
+);
+
 export type Product = {
   name: string;
   id: string;
@@ -215,14 +224,7 @@ const Analytics = ({
           {mainData ? (
             <>
               <SalesChartBoundary>
-                <React.Suspense
-                  fallback={
-                    <InputGroup>
-                      <LoadingSpinner />
-                      Loading charts...
-                    </InputGroup>
-                  }
-                >
+                <React.Suspense fallback={<ChartLoadingPlaceholder />}>
                   <LazySalesChart
                     data={mainData.dailyTotal}
                     startDate={mainData.startDate}
@@ -237,10 +239,7 @@ const Analytics = ({
             </>
           ) : (
             <>
-              <InputGroup>
-                <LoadingSpinner />
-                Loading charts...
-              </InputGroup>
+              <ChartLoadingPlaceholder />
               <InputGroup>
                 <LoadingSpinner />
                 Loading referrers...
