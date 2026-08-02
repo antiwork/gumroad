@@ -347,16 +347,13 @@ class Charge::CreateService
   end
 
   def direct_listed_presentment_processor_args(eligibility_decision)
+    # No blank check: perform either raises (caught below) or returns a populated Result.
     presentment_result = Charge::DirectListedPresentment.new(
       charge:,
       purchases:,
       gumroad_amount_cents:,
       currency: eligibility_decision.currency
     ).perform
-    if presentment_result.blank?
-      Rails.logger.info("Buyer currency presentment fallback for charge #{charge.external_id}: direct_listed_presentment_failed")
-      return {}
-    end
 
     @presentment_currency_attempted = presentment_result.processor_currency
 
@@ -462,6 +459,15 @@ class Charge::CreateService
     Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{e.class} #{e.message}")
   end
 
+  # Keys on the Stripe FX quote id, which is fresh per quote and therefore per attempt, so a
+  # retry of the same create is idempotent while a re-quote after a decline is not.
+  #
+  # The direct-listed lane deliberately gets NO key. The obvious substitute — external id +
+  # currency, as Charge::MethodForcedPresentment.idempotency_key_for uses — is stable across
+  # attempts on this lane, because the charge row is found-or-created per seller and no
+  # ConfirmationToken scopes it the way Order::PreparePaymentIntentService scopes the
+  # method-forced key. Stripe would then replay a declined intent for 24h and the buyer could
+  # not retry their card at all. Duplicate intents are recoverable; a locked-out buyer is not.
   def payment_intent_idempotency_key(presentment_args)
     stripe_fx_quote_id = presentment_args[:stripe_fx_quote_id]
     return if stripe_fx_quote_id.blank?

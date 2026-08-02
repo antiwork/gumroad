@@ -412,6 +412,23 @@ class Checkout::BuyerCurrencyEligibility
                                                                 purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
                                                                 self.class.listed_currency_direct_charge_enabled?(seller)
 
+      # A shape whose later charges are fixed at signup cannot use this lane yet. The fixing
+      # is derived from the charge presentment's fx_rate (FixLaterChargePresentmentService
+      # #presentment_terms), and this lane records none because it mints no quote — so the
+      # signup would charge the listed currency and every renewal after it would find no
+      # stored row and fall back to canonical USD. That is the mid-subscription currency
+      # switch #subscription_renewal_with_stored_amount? exists to prevent. Lifting this
+      # needs a fixing written from `rate_converted_to_usd`.
+      return fallback(:listed_currency_is_buyer_currency) if purchases.any? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? }
+
+      # Same divergence that makes BuyerCurrencyQuote refuse to quote a non-USD listing
+      # carrying a tip or shipping: the surcharge request the buyer's summary was rendered
+      # from and the order builder this lane charges convert those components at different
+      # points and disagree. The quote lane can afford to merely withhold the token because
+      # `verify!` would catch the mismatch; here there is no token and no verification, so an
+      # unexcluded cart would charge the divergent total silently.
+      return fallback(:listed_currency_is_buyer_currency) if purchases.any? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+
       # No settlement gate applies: the marker only predicts FX quote failures, and this
       # lane mints no quote because the listed price is already in the buyer's currency.
       return eligible(currency: buyer_currency, direct_listed_amount: true)

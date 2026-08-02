@@ -418,6 +418,41 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(off_session_decision.fallback_reason).to eq(:off_session)
   end
 
+  it "falls back for a membership priced in the buyer's currency, whose renewals have no stored presentment" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_currency_type: Currency::CAD)
+    purchase.update!(link: membership,
+                     displayed_price_currency_type: Currency::CAD,
+                     is_original_subscription_purchase: true,
+                     subscription: create(:subscription, link: membership, user: purchase.purchaser))
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  ensure
+    Feature.deactivate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+  end
+
+  it "falls back when a buyer-currency purchase carries a tip" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD)
+    create(:tip, purchase:, value_cents: 200)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
+  it "falls back when a buyer-currency purchase carries shipping" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
+                     displayed_price_currency_type: Currency::CAD,
+                     shipping_cents: 300)
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
   it "does not apply the FX-quote settlement gate to direct listed charging" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     merchant_account.record_settlement_currency_mismatch!(Currency::CAD)

@@ -354,6 +354,8 @@ describe Charge::CreateService, :vcr do
                                                         processor_currency: Currency::CAD,
                                                         processor_gumroad_amount_cents: 2_40,
                                                         stripe_fx_quote_id: nil)
+      # Deliberate: a stable key on this lane would make Stripe replay a declined intent for
+      # 24h (see Charge::CreateService#payment_intent_idempotency_key).
       expect(captured_intent_args[:keyword]).not_to have_key(:idempotency_key)
       expect(purchase.error_code).to be_nil
       expect(purchase.errors[:base]).to be_empty
