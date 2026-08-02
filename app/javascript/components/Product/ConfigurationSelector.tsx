@@ -238,7 +238,10 @@ export const applySelection = (product: Product, discount: Discount | null, sele
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const maxQuantity = getMaxQuantity(product, selectedOption);
   const priceCents = basePriceCents + (selectedOption ? computeOptionPrice(selectedOption, selection.recurrence) : 0);
-  const applicableDiscount = hasMetDiscountConditions(discount, selection.quantity) ? discount : null;
+  const applicableDiscount =
+    discount && hasMetDiscountConditions(discount, selection.quantity)
+      ? withConfiguredOncePerCartAmount(discount)
+      : null;
   const discountedPrice = computeSelectionDiscountedPrice(priceCents, applicableDiscount, product, selection.quantity);
   const discountedTotalCents =
     applicableDiscount?.type === "fixed" && applicableDiscount.once_per_cart && !discountedPrice.ppp

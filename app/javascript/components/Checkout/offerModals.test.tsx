@@ -154,6 +154,36 @@ describe("checkout offer modals", () => {
     expect(comparison.value).toBe(900);
   });
 
+  it("reprices a selected option with the configured cart discount", () => {
+    const option: Product["options"][number] = {
+      id: "option-id",
+      name: "Upgrade",
+      quantity_left: null,
+      description: "",
+      price_difference_cents: 1_000,
+      recurrence_price_values: null,
+      is_pwyw: false,
+      duration_in_minutes: null,
+      upsell_offered_variant_id: null,
+    };
+    const selection = {
+      rent: false,
+      optionId: option.id,
+      price: { error: false, value: null },
+      quantity: 1,
+      recurrence: null,
+      callStartTime: null,
+      payInInstallments: false,
+    };
+    const partiallyAllocatedDiscount = { ...discount, cents: 1_000, once_per_cart_amount_cents: 1_500 };
+
+    expect(applySelection(product({ options: [option] }), partiallyAllocatedDiscount, selection)).toMatchObject({
+      priceCents: 2_000,
+      discountedPriceCents: 500,
+      discountedTotalCents: 500,
+    });
+  });
+
   it("shows the line total for a multi-quantity once-per-cart upsell", () => {
     const itemProduct = product();
     const item = cartItem(itemProduct, { quantity: 2 });

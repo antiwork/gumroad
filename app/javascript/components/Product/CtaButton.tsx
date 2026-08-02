@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { trackUserProductAction } from "$app/data/user_action_event";
+import type { Discount } from "$app/parsers/checkout";
 import { CustomButtonTextOption } from "$app/parsers/product";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
@@ -13,6 +14,7 @@ import {
   buyerLocalContextFor,
   hasMetDiscountConditions,
   PriceSelection,
+  withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -58,6 +60,14 @@ const ctaNames = {
   tip_prompt: "Tip",
 };
 export const getCtaName = (cta: CustomButtonTextOption) => ctaNames[cta];
+
+export const getUndiscountedPWYWPrice = (discountedPrice: number, discount: Discount, quantity: number) => {
+  const configuredDiscount = withConfiguredOncePerCartAmount(discount);
+  if (configuredDiscount.type === "percent") return discountedPrice / ((100 - configuredDiscount.percents) / 100.0);
+  return !configuredDiscount.once_per_cart || quantity === 1
+    ? discountedPrice + configuredDiscount.cents
+    : discountedPrice;
+};
 
 const PARAMETERS_NOT_INHERITED_FROM_URL = new Set([
   "code",
@@ -113,8 +123,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
       if (pppDiscounted && product.ppp_details) {
         price /= product.ppp_details.factor;
       } else if (discountCode?.valid && hasMetDiscountConditions(discountCode.discount, selection.quantity)) {
-        if (discountCode.discount.type === "percent") price /= (100 - discountCode.discount.percents) / 100.0;
-        else if (!discountCode.discount.once_per_cart || selection.quantity === 1) price += discountCode.discount.cents;
+        price = getUndiscountedPWYWPrice(price, discountCode.discount, selection.quantity);
       }
 
       url.searchParams.set("price", Math.round(price).toString());
