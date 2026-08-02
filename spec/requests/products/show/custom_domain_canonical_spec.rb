@@ -26,16 +26,17 @@ describe "Product page canonical URL on a custom domain", type: :request do
     expect(response.body).not_to include("seller.example.com")
   end
 
-  # /l/:permalink resolves globally, so another seller's product is reachable over this domain.
-  # Canonicalizing it here would hand this domain Google's copy of someone else's page.
-  it "keeps the subdomain canonical for a product whose seller does not own this domain" do
+  # LinksController#ensure_domain_belongs_to_seller already refuses another seller's product on
+  # this domain, so the page never renders and there is no canonical to get wrong. Pinned here
+  # because custom_domain_host_for_meta's seller check is only defence in depth behind this 404 —
+  # if this guard ever relaxes, the canonical must still not follow the request's host.
+  it "refuses a product whose seller does not own this domain" do
     other_product = create(:product, user: create(:user, username: "otherseller"), name: "Someone Else's")
 
     get "http://seller.example.com/l/#{other_product.unique_permalink}"
 
-    expect(response).to be_successful
-    expect(response.body).to include(%(href="#{other_product.long_url}"))
-    expect(response.body).not_to include(%(href="http://seller.example.com/l/))
+    expect(response).to have_http_status(:not_found)
+    expect(response.body).not_to include(%(href="http://seller.example.com/l/#{other_product.unique_permalink}"))
   end
 
   context "with a product that emits JSON-LD" do
