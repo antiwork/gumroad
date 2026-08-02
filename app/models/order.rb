@@ -62,10 +62,6 @@ class Order < ApplicationRecord
     @_successful_charges ||= charges.select { _1.successful_purchases.any? }
   end
 
-  def unsubscribe_buyer
-    purchase_as_orderable&.unsubscribe_buyer
-  end
-
   # Called from Purchase when a purchase transitions to a successful state. The
   # `after_save` hook above never fires for real checkouts because the order row is
   # saved once at creation, while its purchases are still in progress — purchases
