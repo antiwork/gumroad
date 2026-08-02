@@ -64,7 +64,7 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
       receive(:perform).with(disputed_purchase).and_return("Sample uncategorized text")
     )
     allow(DisputeEvidence::GenerateAccessActivityLogsService).to(
-      receive(:perform).with(disputed_purchase).and_return("Sample activity logs")
+      receive(:perform).with(disputed_purchase, other_purchases: []).and_return("Sample activity logs")
     )
     dispute_evidence = DisputeEvidence.create_from_dispute!(disputed_purchase.dispute)
 
@@ -617,6 +617,7 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
           total_transaction_cents: 100_00,
           link: create(:physical_product, name: "Shipped headliner"),
           email: "customer@example.com",
+          full_name: "John Example",
           street_address: "1 Representative Rd",
           city: "Berkeley",
           state: "CA",
