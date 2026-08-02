@@ -1,4 +1,16 @@
-import { Bell, Box, ChevronDown, ChevronUp, Copy, Envelope, FileDetail, Grid, Plus, Trash } from "@boxicons/react";
+import {
+  Bell,
+  Box,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  CopyPlus,
+  Envelope,
+  FileDetail,
+  Grid,
+  Plus,
+  Trash,
+} from "@boxicons/react";
 import { EditorContent } from "@tiptap/react";
 import { isEqual, sortBy } from "lodash-es";
 import * as React from "react";
@@ -200,6 +212,7 @@ const SectionRow = ({
   disabled,
   shouldFocusHeader,
   updateSection,
+  onDuplicate,
   onDelete,
 }: {
   section: Section;
@@ -207,6 +220,7 @@ const SectionRow = ({
   disabled: boolean;
   shouldFocusHeader: boolean;
   updateSection: (section: Section) => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) => {
   const uid = React.useId();
@@ -239,11 +253,19 @@ const SectionRow = ({
         <ReorderingHandle disabled={disabled} />
         {SECTION_TYPE_ICONS[section.type]}
         <h3>{sectionTitle}</h3>
+        {/* A named section otherwise shows only its own heading, so several sections on one page
+            read as a list of unrelated titles with no clue which block each one labels. */}
+        {section.header ? <small>{SECTION_TYPE_LABELS[section.type]}</small> : null}
       </RowContent>
       <RowActions>
         <WithTooltip tip="Copy link">
           <Button size="icon" onClick={copyLink} aria-label="Copy link">
             <Copy className="size-5" />
+          </Button>
+        </WithTooltip>
+        <WithTooltip tip="Duplicate">
+          <Button size="icon" onClick={onDuplicate} disabled={disabled} aria-label="Duplicate section">
+            <CopyPlus className="size-5" />
           </Button>
         </WithTooltip>
         <DrawerToggle
@@ -692,7 +714,6 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
         return {
           ...commonProps,
           type,
-          header: `Subscribe to receive email updates from ${props.creator_profile.name}.`,
           button_label: "Subscribe",
         };
       case "SellerProfileFeaturedProductSection":
@@ -719,6 +740,27 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
     );
     setLastAddedSectionId(section.id);
     setSections((currentSections) => [...currentSections, section]);
+    setSelectedTab(nextTabs.find((tab) => tab.id === selectedTab.id) ?? selectedTab);
+    setTabs(nextTabs);
+  };
+
+  const duplicateSection = (sectionId: string) => {
+    if (disabled || !selectedTab) return;
+
+    const original = sections.find((section) => section.id === sectionId);
+    if (!original) return;
+
+    const copy = { ...original, id: GuidGenerator.generate() };
+    const nextTabs = tabs.map((tab) => {
+      if (tab.id !== selectedTab.id) return tab;
+      const index = tab.sections.indexOf(sectionId);
+      if (index < 0) return tab;
+      const nextSections = [...tab.sections];
+      nextSections.splice(index + 1, 0, copy.id);
+      return { ...tab, sections: nextSections };
+    });
+    setLastAddedSectionId(copy.id);
+    setSections((currentSections) => [...currentSections, copy]);
     setSelectedTab(nextTabs.find((tab) => tab.id === selectedTab.id) ?? selectedTab);
     setTabs(nextTabs);
   };
@@ -786,6 +828,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
               disabled={disabled}
               shouldFocusHeader={section.id === lastAddedSectionId}
               updateSection={updateSection}
+              onDuplicate={() => duplicateSection(section.id)}
               onDelete={() => setDeletionModalSectionId(section.id)}
             />
           ))}

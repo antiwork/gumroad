@@ -685,7 +685,6 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
               return {
                 ...commonProps,
                 type,
-                header: `Subscribe to receive email updates from ${state.creator_profile.name}.`,
                 button_label: "Subscribe",
               };
             case "SellerProfileFeaturedProductSection":
