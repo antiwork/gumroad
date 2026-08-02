@@ -37,7 +37,7 @@ module Charge::Disputable
         # and sort_by is not stable, so a tie at the maximum picked an arbitrary row between runs —
         # and this choice decides which purchase's facts go to the card network on a submission we
         # only get to make once.
-        selected_purchases.max_by { [_1.total_transaction_cents, _1.id] }
+        selected_purchases.min_by { [-_1.total_transaction_cents, _1.id] }
       else
         disputed_purchases.first
       end

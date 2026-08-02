@@ -190,6 +190,26 @@ describe Charge::Disputable, :vcr do
           expect(charge.purchase_for_dispute_evidence).to eq @regular_purchase
         end
       end
+
+      context "when two purchases tie at the highest amount" do
+        before do
+          @first = create(:purchase, total_transaction_cents: 15_00)
+          @second = create(:purchase, total_transaction_cents: 15_00)
+          charge.purchases << @second
+          charge.purchases << @first
+        end
+
+        it "resolves deterministically to the lowest id rather than whichever row came back first" do
+          expect(charge.purchase_for_dispute_evidence).to eq [@first, @second].min_by(&:id)
+        end
+
+        it "returns the same purchase however the constituents are ordered" do
+          reversed = Charge.find(charge.id)
+          allow(reversed).to receive(:disputed_purchases).and_return([@second, @first])
+
+          expect(reversed.purchase_for_dispute_evidence).to eq charge.purchase_for_dispute_evidence
+        end
+      end
     end
   end
 

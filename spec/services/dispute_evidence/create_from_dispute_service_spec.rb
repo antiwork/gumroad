@@ -548,4 +548,116 @@ describe DisputeEvidence::CreateFromDisputeService, :vcr, :versioning do
       end
     end
   end
+
+  describe "structured shipping slots on a combined charge" do
+    let(:digital_product) { create(:product, name: "Digital headliner") }
+    let(:physical_product) { create(:physical_product, name: "Shipped sibling") }
+
+    # The representative: highest amount, so purchase_for_dispute_evidence picks it, and digital,
+    # so it has no shipment at all.
+    let(:representative) do
+      create(:purchase, total_transaction_cents: 100_00, link: digital_product, email: "customer@example.com")
+    end
+
+    let(:shipped_sibling) do
+      create(
+        :purchase,
+        total_transaction_cents: 10_00,
+        link: physical_product,
+        email: "customer@example.com",
+        full_name: "John Example",
+        street_address: "500 Sibling Way",
+        city: "Oakland",
+        state: "CA",
+        zip_code: "94607",
+        country: "United States"
+      )
+    end
+
+    let!(:sibling_shipment) do
+      create(
+        :shipment,
+        carrier: "UPS",
+        tracking_number: "1Z999AA10123456784",
+        purchase: shipped_sibling,
+        ship_state: "shipped",
+        shipped_at: DateTime.parse("2023-02-10 14:55:32")
+      )
+    end
+
+    let(:charge) do
+      charge = create(:charge)
+      charge.purchases << shipped_sibling
+      charge.purchases << representative
+      charge
+    end
+
+    let(:dispute) { create(:dispute_on_charge, charge:) }
+
+    before do
+      expect(charge.purchase_for_dispute_evidence).to eq representative
+      allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).and_return(sample_image)
+      allow(DisputeEvidence::GenerateUncategorizedTextService).to receive(:perform).and_return("text")
+      allow(DisputeEvidence::GenerateAccessActivityLogsService).to receive(:perform).and_return("logs")
+    end
+
+    it "fills all four slots from the sibling that shipped, not the unshipped representative" do
+      dispute_evidence = DisputeEvidence.create_from_dispute!(dispute)
+
+      expect(dispute_evidence.shipped_at).to eq(sibling_shipment.shipped_at)
+      expect(dispute_evidence.shipping_carrier).to eq("UPS")
+      expect(dispute_evidence.shipping_tracking_number).to eq("1Z999AA10123456784")
+      expect(dispute_evidence.shipping_address).to eq("500 Sibling Way, Oakland, CA, 94607, United States")
+    end
+
+    context "when the representative itself shipped" do
+      let(:representative) do
+        create(
+          :purchase,
+          total_transaction_cents: 100_00,
+          link: create(:physical_product, name: "Shipped headliner"),
+          email: "customer@example.com",
+          street_address: "1 Representative Rd",
+          city: "Berkeley",
+          state: "CA",
+          zip_code: "94702",
+          country: "United States"
+        )
+      end
+
+      let!(:representative_shipment) do
+        create(
+          :shipment,
+          carrier: "FedEx",
+          tracking_number: "123456789012",
+          purchase: representative,
+          ship_state: "shipped",
+          shipped_at: DateTime.parse("2023-03-01 09:00:00")
+        )
+      end
+
+      it "keeps the representative's shipment rather than preferring a sibling" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(dispute)
+
+        expect(dispute_evidence.shipping_carrier).to eq("FedEx")
+        expect(dispute_evidence.shipping_tracking_number).to eq("123456789012")
+        expect(dispute_evidence.shipped_at).to eq(representative_shipment.shipped_at)
+        expect(dispute_evidence.shipping_address).to eq("1 Representative Rd, Berkeley, CA, 94702, United States")
+      end
+    end
+
+    context "when no constituent shipped" do
+      let!(:sibling_shipment) { nil }
+      let(:shipped_sibling) { create(:purchase, total_transaction_cents: 10_00, link: digital_product, email: "customer@example.com") }
+
+      it "leaves every slot empty" do
+        dispute_evidence = DisputeEvidence.create_from_dispute!(dispute)
+
+        expect(dispute_evidence.shipping_address).to be_nil
+        expect(dispute_evidence.shipped_at).to be_nil
+        expect(dispute_evidence.shipping_carrier).to be_nil
+        expect(dispute_evidence.shipping_tracking_number).to be_nil
+      end
+    end
+  end
 end

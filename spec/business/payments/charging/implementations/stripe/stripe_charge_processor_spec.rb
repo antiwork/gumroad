@@ -544,7 +544,7 @@ describe StripeChargeProcessor, :vcr do
       ].join("\n\n")
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
-        evidence: hash_including({
+        hash_including(evidence: hash_including({
                                    billing_address: dispute_evidence.billing_address,
                                    customer_email_address: dispute_evidence.customer_email,
                                    customer_name: dispute_evidence.customer_name,
@@ -560,7 +560,8 @@ describe StripeChargeProcessor, :vcr do
                                    refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
                                    cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
                                    refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
-                                 })
+                                 })),
+        hash_including(:idempotency_key)
       ).and_call_original
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
     end
@@ -570,7 +571,8 @@ describe StripeChargeProcessor, :vcr do
       stripe_charge.refresh
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
-        evidence: hash_including({ receipt: "receipt_file" })
+        hash_including(evidence: hash_including({ receipt: "receipt_file" })),
+        hash_including(:idempotency_key)
       )
 
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -584,7 +586,8 @@ describe StripeChargeProcessor, :vcr do
       stripe_charge.refresh
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
-        evidence: hash_including({ customer_communication: "customer_communication_file" })
+        hash_including(evidence: hash_including({ customer_communication: "customer_communication_file" })),
+        hash_including(:idempotency_key)
       )
 
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -596,7 +599,8 @@ describe StripeChargeProcessor, :vcr do
         stripe_charge.refresh
         expect(Stripe::Dispute).to receive(:update).with(
           stripe_charge.dispute,
-          evidence: hash_including({ refund_policy: "refund_policy_file" })
+          hash_including(evidence: hash_including({ refund_policy: "refund_policy_file" })),
+          hash_including(:idempotency_key)
         )
 
         subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -621,7 +625,8 @@ describe StripeChargeProcessor, :vcr do
         stripe_charge.refresh
         expect(Stripe::Dispute).to receive(:update).with(
           stripe_charge.dispute,
-          evidence: hash_including({ cancellation_policy: "cancellation_policy_file" })
+          hash_including(evidence: hash_including({ cancellation_policy: "cancellation_policy_file" })),
+          hash_including(:idempotency_key)
         )
 
         subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -4358,7 +4363,7 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
   def evidence_sent_to_stripe
     DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
     sent = nil
-    allow(Stripe::Dispute).to receive(:update) { |_id, evidence:| sent = evidence }
+    allow(Stripe::Dispute).to receive(:update) { |_id, params, _opts| sent = params[:evidence] }
     described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
     sent
   end
@@ -4381,5 +4386,44 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
 
     expect(evidence[:uncategorized_text]).to_not include("shipment tracking URL")
     expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
+  end
+
+  describe "idempotency key" do
+    # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob retries five
+    # times, so the key is what stops a retry after a landed call spending the submission again.
+    def submit_and_capture_options
+      DisputeEvidence.create_from_dispute!(disputed_purchase.dispute.reload)
+      captured = nil
+      allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| captured = opts }
+      described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+      captured
+    end
+
+    it "sends one derived from the evidence row" do
+      options = submit_and_capture_options
+
+      expect(options[:idempotency_key]).to include(disputed_purchase.dispute.reload.dispute_evidence.external_id)
+    end
+
+    it "is stable across two submissions of the same payload" do
+      first = submit_and_capture_options
+      second = nil
+      allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| second = opts }
+      described_class.new.fight_chargeback("ch_test", disputed_purchase.dispute.reload.dispute_evidence)
+
+      expect(second[:idempotency_key]).to eq(first[:idempotency_key])
+    end
+
+    it "changes when the seller's statement changes between attempts" do
+      first = submit_and_capture_options
+
+      evidence_row = disputed_purchase.dispute.reload.dispute_evidence
+      evidence_row.update!(reason_for_winning: "The buyer signed for the parcel.")
+      second = nil
+      allow(Stripe::Dispute).to receive(:update) { |_id, _params, opts| second = opts }
+      described_class.new.fight_chargeback("ch_test", evidence_row)
+
+      expect(second[:idempotency_key]).to_not eq(first[:idempotency_key])
+    end
   end
 end
